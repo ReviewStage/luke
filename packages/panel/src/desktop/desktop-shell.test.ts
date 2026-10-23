@@ -145,6 +145,8 @@ function shellProps(
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      away: undefined,
+      onLeave: ignore,
     },
     sidebar: {
       collapsed: true,
@@ -229,7 +231,7 @@ test("while Settings is still loading its frame stands, a page of placeholder se
       placeholder?.textContent,
       placeholder?.querySelectorAll(".luke-settings-section-card").length,
     ],
-    [true, "Loading Settings", 2],
+    [true, "Loading Settings", 1],
   );
 
   act(() => {
@@ -796,6 +798,22 @@ test("the Automations page's sidebar row and its command stand with no experimen
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
 });
 
+test("⇧⌘B opens the Tasks page, bringing the Tasks tab forward from Settings, and the Tasks row names the chord", async () => {
+  handState({});
+  const went: string[] = [];
+  const boardView = { ...tasksControl().boardView, onOpen: () => went.push("tasks page") };
+  mount(false, false, { boardView }, PANEL_TAB.SETTINGS, (tab) => went.push(tab));
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.TASKS), true);
+  assert.deepEqual(went, [PANEL_TAB.TASKS, "tasks page"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const page = mount(false);
+  await settle();
+  assert.equal(placeRow(page, "Tasks")?.getAttribute("aria-keyshortcuts"), "Meta+Shift+B");
+});
+
 test("while the Automations pages are still loading their frame stands the list as quiet rows, and Escape closes Automations as the list does once it stands", async () => {
   const closed: string[] = [];
   const automationsView = {
@@ -973,6 +991,8 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      away: undefined,
+      onLeave: ignore,
     },
     sidebar: {
       collapsed: folded,
@@ -1358,6 +1378,87 @@ test("the sign-in, which needs the network, says over it when the Mac is offline
 
   assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
   assert.equal(titleBarOffline(container)?.textContent, "Offline");
+});
+
+test("on a phone an open task leads its own row with the way back the window's history names, in the sidebar toggle's place, and a wide window keeps the toggle", async () => {
+  const left: string[] = [];
+  const render = (away: Parameters<typeof DesktopShell>[0]["history"]["away"], room: ShellRoom) => {
+    const container = document.body.appendChild(document.createElement("div"));
+    root = createRoot(container);
+    const tasks = tasksControl({
+      page: TASKS_PAGE.DOCUMENT,
+      region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    });
+    const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, {});
+    act(() =>
+      root?.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(DesktopShell, {
+            ...props,
+            history: { ...props.history, away, onLeave: () => left.push("left") },
+            room,
+          }),
+        ),
+      ),
+    );
+    return container;
+  };
+  const back = (page: HTMLElement) =>
+    page.querySelector<HTMLButtonElement>(".task-head .phone-head-start button") ??
+    assert.fail("a way back");
+
+  const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
+  await settle();
+  assert.equal(back(fromInbox).getAttribute("aria-label"), "Back to Inbox");
+  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
+  act(() => back(fromInbox).click());
+  assert.deepEqual(left, ["left"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const fromNowhere = render(undefined, SHELL_ROOM.NARROW);
+  await settle();
+  assert.equal(
+    back(fromNowhere).getAttribute("aria-label"),
+    "Back to Tasks",
+    "with no page behind, the Tasks page",
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const wide = render({ title: { label: "Inbox" } }, SHELL_ROOM.WIDE);
+  await settle();
+  assert.equal(wide.querySelector(".task-head"), null);
+  assert.ok(
+    wide.querySelector(".desktop-shell > .title-bar-controls"),
+    "the sidebar's toggle stands",
+  );
+});
+
+test("on a phone an open task, which draws no sidebar toggle, still answers the sidebar's chord with the drawer", async () => {
+  let toggled = 0;
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...shellProps(tasks, PANEL_TAB.TASKS, ignore, { onToggle: () => (toggled += 1) }),
+          room: SHELL_ROOM.NARROW,
+        }),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls"), null);
+  act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
+  assert.equal(toggled, 1);
 });
 
 /** A finger's swipe from `from` to `to` across the screen, at the height of the page's middle. */

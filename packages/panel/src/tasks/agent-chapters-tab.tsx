@@ -228,6 +228,90 @@ const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
 const SKELETON_ROWS = ["80%", "65%", "72%", "50%"] as const;
 const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
 
+/** The chapters' body: the rail, its strip, and the chapter being read, side by side, clipped at its edges as the rail slides. */
+function ChaptersBody({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
+      {children}
+    </Fill>
+  );
+}
+
+/** The rail's own pane and list, which the chapters' rows and their placeholder rows both stand in. */
+function ChapterRailFrame({
+  pane,
+  leaving = false,
+  children,
+}: {
+  pane?: React.Ref<HTMLElement> | undefined;
+  leaving?: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <nav
+      ref={pane}
+      className="chapter-rail"
+      aria-label={CHAPTERS_WORDS.RAIL}
+      data-leaving={leaving ? "" : undefined}
+      inert={leaving}
+    >
+      <ScrollArea>
+        <Stack
+          as={LAYOUT_ELEMENT.OL}
+          gap={GAP.NONE}
+          inset={INSET.COLUMN}
+          className="chapter-rail-list"
+        >
+          {children}
+        </Stack>
+      </ScrollArea>
+    </nav>
+  );
+}
+
+/** The chapter being read, beside the rail, named by its heading. */
+function ChapterReading({
+  labelledBy,
+  children,
+}: {
+  labelledBy?: string | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-labelledby={labelledBy}>
+      {children}
+    </Fill>
+  );
+}
+
+/**
+ * The chapters while they are made, which `label` names to a reader: rows in
+ * the rail's own pane where the chapters' rows will stand, and lines in the
+ * chapter's own section where the first chapter will be read.
+ */
+function ChaptersSkeleton({ label }: { label: string }): React.JSX.Element {
+  return (
+    <SkeletonRegion label={label}>
+      <ChaptersBody>
+        <ChapterRailFrame>
+          {SKELETON_ROWS.map((width) => (
+            <li key={width} className="chapter-rail-skeleton-row">
+              <Skeleton width={width} />
+            </li>
+          ))}
+        </ChapterRailFrame>
+        <ChapterReading>
+          <div className="chapters-skeleton-reading">
+            {SKELETON_LINES.map((width) => (
+              <Skeleton key={width} width={width} />
+            ))}
+          </div>
+        </ChapterReading>
+      </ChaptersBody>
+    </SkeletonRegion>
+  );
+}
+
 /**
  * Chapters being made: blocks where the rail and the chapter will stand,
  * and how long it has been, counted only while the view is shown, since the
@@ -266,20 +350,7 @@ function Generating({
           </Button>
         )}
       </p>
-      <SkeletonRegion label={words}>
-        <div className="chapters-skeleton">
-          <div className="chapters-skeleton-rail">
-            {SKELETON_ROWS.map((width) => (
-              <Skeleton key={width} width={width} />
-            ))}
-          </div>
-          <div className="chapters-skeleton-reading">
-            {SKELETON_LINES.map((width) => (
-              <Skeleton key={width} width={width} />
-            ))}
-          </div>
-        </div>
-      </SkeletonRegion>
+      <ChaptersSkeleton label={words} />
     </Fill>
   );
 }
@@ -378,52 +449,34 @@ function ChapterRail({
   onChoose: (at: number) => void;
 }): React.JSX.Element {
   return (
-    <nav
-      ref={pane}
-      className="chapter-rail"
-      aria-label={CHAPTERS_WORDS.RAIL}
-      data-leaving={leaving ? "" : undefined}
-      inert={leaving}
-    >
-      <ScrollArea>
-        <Stack
-          as={LAYOUT_ELEMENT.OL}
-          gap={GAP.NONE}
-          inset={INSET.COLUMN}
-          className="chapter-rail-list"
-        >
-          {rows.map((row, index) => {
-            const risk = row.chapter.risk === null ? undefined : RISK_WORDS[row.chapter.risk];
-            const done = viewed(row.paths);
-            return (
-              <li key={index}>
-                <Tooltip label={row.chapter.title}>
-                  <NavItem
-                    icon={<RiskMark risk={row.chapter.risk} />}
-                    current={index === at ? NAV_CURRENT.PAGE : undefined}
-                    detail={
-                      stale ? undefined : (
-                        <LinesChanged
-                          additions={row.lines.additions}
-                          deletions={row.lines.deletions}
-                        />
-                      )
-                    }
-                    count={stale ? undefined : { value: row.threads, noun: CHAPTERS_WORDS.threads }}
-                    mark={done ? <CheckIcon aria-hidden="true" /> : undefined}
-                    aria-label={CHAPTERS_WORDS.row(index + 1, row.chapter.title, risk, done)}
-                    onClick={() => onChoose(index)}
-                  >
-                    <span className="chapter-row-number">{index + 1}</span>
-                    {row.chapter.title}
-                  </NavItem>
-                </Tooltip>
-              </li>
-            );
-          })}
-        </Stack>
-      </ScrollArea>
-    </nav>
+    <ChapterRailFrame pane={pane} leaving={leaving}>
+      {rows.map((row, index) => {
+        const risk = row.chapter.risk === null ? undefined : RISK_WORDS[row.chapter.risk];
+        const done = viewed(row.paths);
+        return (
+          <li key={index}>
+            <Tooltip label={row.chapter.title}>
+              <NavItem
+                icon={<RiskMark risk={row.chapter.risk} />}
+                current={index === at ? NAV_CURRENT.PAGE : undefined}
+                detail={
+                  stale ? undefined : (
+                    <LinesChanged additions={row.lines.additions} deletions={row.lines.deletions} />
+                  )
+                }
+                count={stale ? undefined : { value: row.threads, noun: CHAPTERS_WORDS.threads }}
+                mark={done ? <CheckIcon aria-hidden="true" /> : undefined}
+                aria-label={CHAPTERS_WORDS.row(index + 1, row.chapter.title, risk, done)}
+                onClick={() => onChoose(index)}
+              >
+                <span className="chapter-row-number">{index + 1}</span>
+                {row.chapter.title}
+              </NavItem>
+            </Tooltip>
+          </li>
+        );
+      })}
+    </ChapterRailFrame>
   );
 }
 
@@ -644,7 +697,7 @@ function ChaptersReading({
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
       </p>
-      <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
+      <ChaptersBody>
         {slide.drawn || over ? (
           <ChapterRail
             rows={rows}
@@ -657,7 +710,7 @@ function ChaptersReading({
           />
         ) : null}
         <ChapterStrip rows={rows} at={at} viewed={viewed} onOpen={toggleRail} />
-        <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-labelledby={headingId}>
+        <ChapterReading labelledBy={headingId}>
           <header className="chapter-head">
             <ScrollArea size={SCROLL_SIZE.CONTENT}>
               <div className="chapter-head-body">
@@ -804,8 +857,8 @@ function ChaptersReading({
               </Button>
             </Tooltip>
           </footer>
-        </Fill>
-      </Fill>
+        </ChapterReading>
+      </ChaptersBody>
     </Fill>
   );
 }

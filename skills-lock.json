@@ -1,29 +1,11 @@
 {
   "version": 1,
   "skills": {
-    "db-migrations": {
-      "source": "lobehub/lobehub",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/db-migrations/SKILL.md",
-      "computedHash": "1e60cecad798361629fbb944b28dc26bb18da5f71a20bd3d956747d7e37d5d6e"
-    },
-    "drizzle": {
-      "source": "lobehub/lobehub",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/drizzle/SKILL.md",
-      "computedHash": "a51a3da4e421ae171d1b3aea0953cd63241b48a5f2fff59ad7ed0f6ff6d9a459"
-    },
     "effect-ts": {
       "source": "Effect-TS/skills",
       "sourceType": "github",
       "skillPath": "skills/effect-ts/SKILL.md",
       "computedHash": "6bdb9b95aa83071eca2f67ae947b7d398a22e9e6e08f6cfa35de9516b03efa6e"
-    },
-    "testing": {
-      "source": "lobehub/lobehub",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/testing/SKILL.md",
-      "computedHash": "6fdad0ed59741cbe9e38792bc7bbb5c768393844cc7eec334d2c6fcf991fa394"
     }
   }
 }

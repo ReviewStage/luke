@@ -84,9 +84,9 @@ export function avatarStanding(avatar: AvatarState): boolean {
 }
 
 /**
- * Whether the avatar's tile is up at the top of the call's Call tab: while
- * the avatar is starting or live, and once it ended for a reason the tile offers
- * to restart it from. Read beside whether the call stands, which the tile
+ * Whether the avatar's tile is up in the tab of the agent the call is
+ * into: while the avatar is starting or live, and once it ended for a
+ * reason the tile offers to restart it from. Read beside whether the call stands, which the tile
  * never outlives.
  */
 export function avatarTiled(avatar: AvatarState): boolean {

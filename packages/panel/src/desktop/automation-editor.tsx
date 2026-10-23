@@ -304,7 +304,11 @@ const HOURLY_MINUTES = [0, 15, 30, 45] as const;
 const TIME_ZONES = timeZoneNames();
 
 /** What a short menu says where a search matches nothing, which it has no search to say. */
-const NO_MATCH = "Nothing matches.";
+const NO_MATCH = {
+  DAYS: "No days match",
+  TIMES: "No times match",
+  AGENTS: "No agents match",
+} as const;
 
 /** Why a save the service refused did not land, as the line under the name says it. */
 const SAVE_REFUSAL_WORDS = {
@@ -409,7 +413,7 @@ function OwnerRow({
           />
         ),
       }))}
-      noMatch="No owner matches"
+      noMatch="No owners match"
       onPick={(id) => {
         const picked = parse(id);
         if (picked !== undefined) onOwner(picked);
@@ -669,7 +673,7 @@ function ScheduleRows({
                       value={String(schedule.weekday)}
                       valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
                       rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
-                      noMatch={NO_MATCH}
+                      noMatch={NO_MATCH.DAYS}
                       onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
                     />
                   ) : null}
@@ -683,7 +687,7 @@ function ScheduleRows({
                         id: String(minute),
                         label: hourlyLabel(minute),
                       }))}
-                      noMatch={NO_MATCH}
+                      noMatch={NO_MATCH.TIMES}
                       onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
                     />
                   ) : (
@@ -801,6 +805,7 @@ function EditorToolbar({
   running,
   onRunNow,
   runs,
+  narrow,
 }: {
   automation: AutomationSummary | undefined;
   /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
@@ -817,6 +822,8 @@ function EditorToolbar({
   running: boolean;
   onRunNow: () => void;
   runs: RunsControl;
+  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
+  narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
   const status =
@@ -837,7 +844,7 @@ function EditorToolbar({
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
           </nav>
-          {codeReview ? <ExperimentTag /> : null}
+          {codeReview ? <ExperimentTag narrow={narrow} /> : null}
         </div>
         <div className="desktop-toolbar-actions">
           {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
@@ -1594,7 +1601,7 @@ function AgentRow({
           "No agents of this workspace work in it yet."
         ) : undefined
       }
-      noMatch={NO_MATCH}
+      noMatch={NO_MATCH.AGENTS}
       error={problem}
       onPick={(agentId) => onDraft({ agentId })}
     />
@@ -2118,6 +2125,7 @@ export function AutomationEditor({
             screen: narrow ? runsScreen : undefined,
             onPress: toggleRuns,
           }}
+          narrow={narrow}
         />
         <div ref={editorLayout} className="automation-editor-layout">
           <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">

@@ -1,14 +1,13 @@
 /**
  * turn-rows.ts -- what every transcript's turn shares: how its calls are named on their rows, and how its rows fold.
  *
- * Two tabs draw a model's turns, the Call tab the brain's and an
- * agent's tab a coding agent's, each from the message its journal stored,
- * and each reads it into blocks of its own. What they share is decided
- * here, so the two never drift: a call is one of a few kinds, each with
- * the verb its row says and whether its subject is code; and a turn's
- * blocks fold the way the Call tab folded them (Stagent's walk, Stage's chat
- * panel): calls and subagents next to one another, and the reasoning
- * between and beside them, are one group that is open while it is the
+ * An agent's tab draws a coding agent's turns from the message its
+ * journal stored, read into blocks of its own. What every transcript
+ * shares is decided here, so none drifts: a call is one of a few kinds,
+ * each with the verb its row says and whether its subject is code; and a
+ * turn's blocks fold one way (Stagent's walk, Stage's chat panel): calls
+ * and subagents next to one another, and the reasoning between and beside
+ * them, are one group that is open while it is the
  * turn's latest work on a turn that moves and folded once the model moved
  * on, its line counting the calls and subagents and never the thoughts;
  * and a finished turn folds everything ahead of its last words into one
@@ -529,7 +528,7 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
 }
 
 /**
- * A turn's blocks as the rows a tab draws, folded the Call tab's way:
+ * A turn's blocks as the rows a tab draws, folded:
  * calls grouped, and, once the turn is done, everything ahead of its last
  * words, or all of it where they were said aloud, folded into one line
  * saying what it holds, each call inside it on a row of its own. A lead

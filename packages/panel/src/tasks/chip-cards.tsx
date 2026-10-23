@@ -30,16 +30,17 @@ import { useTaskMentions } from "./task-mentions.js";
  * same card's head with the section's heading or the version under it in
  * the agents' stead; a page's is its tab's, its title, its version, and
  * when it last moved over a preview of it (`page-card.tsx`), a plan's page
- * read from what the window holds, and the page of an agent on no task,
- * which the window holds nothing of, read as the card is first hung (`AgentPageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
+ * read from what the window holds where the plan is open, and the page of
+ * any other plan or of an agent on no task, which the window holds nothing
+ * of, read as the card is first hung (`ReadPageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
  * its question and that it waits on the team, and when it was asked; an
  * automation's is its card, the workspace's automations read as the card is
  * first hung where no directory around it reads them yet. Everything else
  * is read from main's document and the directories around the chip, so a
  * chip asks nothing as it is drawn. A place the window does not hold, a
- * plan of another account's or a page of a plan not open, keeps the chip's
- * own card, its glyph and name, as does an agent's page the read does not
- * find, the page of an agent the reader cannot reach among them.
+ * plan of another account's, keeps the chip's own card, its glyph and
+ * name, as does a page the read does not find, the page of a plan or an
+ * agent the reader cannot reach among them.
  */
 
 /** What a plan's card is made from where a chip hangs it: the window's plans, as the shell holds them. */
@@ -153,10 +154,10 @@ export function VersionChipCard({
   );
 }
 
-/** An agent's pages as the service answered them; nothing where it refused, or the agent is not the reader's to reach. */
-function agentPages(agentId: string): Effect.Effect<readonly PageLine[] | undefined> {
+/** The pages of a plan or of an agent on no task as the service answered them; nothing where it refused, or the place is not the reader's to reach. */
+function placePages(place: PagePlace): Effect.Effect<readonly PageLine[] | undefined> {
   return Effect.promise(() =>
-    askAct(ACT_KIND.TASKS_PAGES, { agentId }).then(
+    askAct(ACT_KIND.TASKS_PAGES, place).then(
       (answer) => ("pages" in answer ? answer.pages : undefined),
       () => undefined,
     ),
@@ -164,14 +165,37 @@ function agentPages(agentId: string): Effect.Effect<readonly PageLine[] | undefi
 }
 
 /** One agent's pages, read once for every card hung of it while one stands. */
-const agentPagesAtom = Atom.family((agentId: string) => rendererRuntime.atom(agentPages(agentId)));
+const agentPagesAtom = Atom.family((agentId: string) =>
+  rendererRuntime.atom(placePages({ agentId })),
+);
+
+/** One plan's pages where the window does not hold them, read once for every card hung of it while one stands. */
+const taskPagesAtom = Atom.family((taskId: string) => rendererRuntime.atom(placePages({ taskId })));
+
+/** A page among pages read as its card is hung; `fallback` while the read is out, and where it failed or holds no such page. */
+function ReadPageChipCard({
+  place,
+  read,
+  pageId,
+  fallback,
+}: {
+  place: PagePlace;
+  read: AsyncResult.AsyncResult<readonly PageLine[] | undefined>;
+  pageId: string;
+  fallback: ReactNode;
+}): ReactNode {
+  const page = AsyncResult.isSuccess(read)
+    ? read.value?.find((each) => each.id === pageId)
+    : undefined;
+  if (page === undefined) return fallback;
+  return <PageCard place={place} page={page} />;
+}
 
 /**
  * The card of a page of an agent on no task, the page's own card as a
  * plan's page hangs it, read by the agent's pages (`ACT_KIND.TASKS_PAGES`)
  * as it is first hung and never as the chip is drawn, so words full of
- * chips ask nothing until one is looked at; `fallback` while the read is
- * out, and where it failed or holds no such page.
+ * chips ask nothing until one is looked at.
  */
 function AgentPageChipCard({
   agentId,
@@ -183,14 +207,29 @@ function AgentPageChipCard({
   fallback: ReactNode;
 }): ReactNode {
   const read = useAtomValue(agentPagesAtom(agentId));
-  const page = AsyncResult.isSuccess(read)
-    ? read.value?.find((each) => each.id === pageId)
-    : undefined;
-  if (page === undefined) return fallback;
-  return <PageCard place={{ agentId }} page={page} />;
+  return <ReadPageChipCard place={{ agentId }} read={read} pageId={pageId} fallback={fallback} />;
 }
 
-/** A page of a plan's card, where the page is one of the open plan's, the only ones the window holds; else `fallback`. */
+/** The card of a page of a plan not open, read by the plan's pages as it is first hung, as an agent's page is. */
+function ReadTaskPageChipCard({
+  taskId,
+  pageId,
+  fallback,
+}: {
+  taskId: string;
+  pageId: string;
+  fallback: ReactNode;
+}): ReactNode {
+  const read = useAtomValue(taskPagesAtom(taskId));
+  return <ReadPageChipCard place={{ taskId }} read={read} pageId={pageId} fallback={fallback} />;
+}
+
+/**
+ * A page of a plan's card: the open plan's from the pages the window holds,
+ * live as they move, and any other plan's read as it is first hung, so a
+ * page's bar in an Inbox item or another task's transcript hangs the card
+ * its tab hangs; `fallback` where neither finds the page.
+ */
 function TaskPageChipCard({
   taskId,
   pageId,
@@ -201,8 +240,10 @@ function TaskPageChipCard({
   fallback: ReactNode;
 }): ReactNode {
   const tasks = useAppSlice(APP_SLICE.TASKS);
-  const held = tasks?.activeTaskId === taskId ? tasks.pages : undefined;
-  const page = held?.find((each) => each.id === pageId);
+  if (tasks?.activeTaskId !== taskId) {
+    return <ReadTaskPageChipCard taskId={taskId} pageId={pageId} fallback={fallback} />;
+  }
+  const page = tasks.pages?.find((each) => each.id === pageId);
   if (page === undefined) return fallback;
   return <PageCard place={{ taskId }} page={page} />;
 }

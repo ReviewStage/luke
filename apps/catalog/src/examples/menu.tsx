@@ -12,6 +12,9 @@ import {
   EllipsisIcon,
   FolderIcon,
   GAP,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
   IconButton,
   Inline,
   LIST_VARIANT,
@@ -42,8 +45,8 @@ import { CatalogSection } from "../section";
 /**
  * menu.tsx -- a menu dropped from a ⋯ with glyphs, shortcuts, a dimmed item
  * and a red one ruled apart; one of settings in submenus; one with a heading
- * and a footer, its long words cut short; one a right-click hangs at the
- * pointer; a searchable menu's pinned rows, steered from its field: one
+ * and a footer, its long words fading where cut; people whose items hang
+ * their cards beside them; one a right-click hangs at the pointer; a searchable menu's pinned rows, steered from its field: one
  * opening a list beside it, a switch, and one that does not apply now; and
  * the menu's surface under lists an app hangs and keys itself: an `@` list
  * narrowed under its kind's crumb, edge to edge, one press inset, as
@@ -140,6 +143,48 @@ function AccountMenu(): React.JSX.Element {
               { label: "Settings", hint: "⌘,", onSelect: ignore },
             ],
             [{ label: "Sign out", onSelect: ignore }],
+          ]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** A people filter: each person's item hangs their card beside it while the pointer rests there, a long name fading where cut. */
+function PeopleMenu(): React.JSX.Element {
+  const menu = useMenu(true);
+  const person = (name: string, email: string, note: string) => ({
+    label: name,
+    detail: email,
+    icon: <UserIcon />,
+    card: (
+      <HoverCard>
+        <HoverCardHead name={name} sub={email} />
+        <HoverCardNote>{note}</HoverCardNote>
+      </HoverCard>
+    ),
+    onSelect: ignore,
+  });
+  return (
+    <>
+      <Button icon={<UserIcon />} {...menu.trigger(dropBelowStart)}>
+        People
+      </Button>
+      {menu.drawn && (
+        <Menu
+          label="People"
+          menu={menu.drawn}
+          groups={[
+            [{ label: "Anyone", onSelect: ignore }],
+            [
+              person("Ada Lovelace", "ada@analytical-engine.example", "Owner, since March."),
+              person(
+                "Augusta Ada King, Countess of Lovelace and Patron of the Analytical Engine",
+                "augusta.ada.king@countess-of-lovelace.example",
+                "Member, with three tasks open.",
+              ),
+            ],
           ]}
           onClose={menu.close}
         />
@@ -256,6 +301,7 @@ function MenuExample(): React.JSX.Element {
           <TaskMenu />
           <ViewMenu />
           <AccountMenu />
+          <PeopleMenu />
         </Inline>
       </CatalogSection>
       <CatalogSection id="menu-pointer" title="At the pointer">

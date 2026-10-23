@@ -7,7 +7,6 @@ import {
   BackIcon,
   COLLECTION_STATE,
   CollectionPage,
-  ComposeIcon,
   commandKeyshortcuts,
   DetailPage,
   DrawerScrim,
@@ -20,8 +19,10 @@ import {
   PANE_PIN_ELEMENT,
   PanePin,
   ScrollArea,
-  SettingsPage,
-  SettingsSectionsSkeleton,
+  SETTINGS_ROW_MARK_WIDTH,
+  SETTINGS_SKELETON_CONTROL,
+  SettingsPageSkeleton,
+  type SettingsSectionSkeletonShape,
   Shortcut,
   SidebarIcon,
   Skeleton,
@@ -31,6 +32,7 @@ import {
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
@@ -72,12 +74,14 @@ import { DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { useLukeOperator } from "./luke-operator.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
+import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
+import { awayBack } from "./task-pane-switcher.js";
 import { useSummaryPin } from "./task-summary.js";
 import { useWindowTitle } from "./window-title.js";
 
@@ -249,7 +253,14 @@ function VersionHistoryLoading({
  * Escape pressed in that frame closes Automations as the list would rather
  * than falling through to the task behind it.
  */
-function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+function AutomationsLoading({
+  onExit,
+  narrow,
+}: {
+  onExit: () => void;
+  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
+  narrow: boolean;
+}): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
   return (
     <CollectionPage
@@ -265,7 +276,7 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
             >
               Automations
             </OneLine>
-            <ExperimentTag />
+            <ExperimentTag narrow={narrow} />
           </div>
         </header>
       }
@@ -276,14 +287,29 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
 }
 
 /**
- * How wide the placeholder title stands while Settings' chunk loads: a short
- * page name's, five controls' height across. Note that it is a length rather
- * than a share, because the title's line is only as wide as what it holds.
+ * The sections that stand while Settings' chunk loads, in the shape of the
+ * Account page Settings opens on: who is signed in, their face leading; the
+ * GitHub token, its mark leading; and Delete account. Note that they are not
+ * read from the page itself, because that would draw its chunk in with this one.
  */
-const SETTINGS_SKELETON_TITLE = "calc(5 * var(--luke-control-height))";
-
-/** How many rows each placeholder section stands while Settings' chunk loads. */
-const SETTINGS_SKELETON = [3, 2] as const;
+const SETTINGS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
+  {
+    headed: true,
+    rows: [
+      {
+        described: true,
+        mark: actorMarkWidth(ACTOR_SIZE.CARD),
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      {
+        described: false,
+        mark: SETTINGS_ROW_MARK_WIDTH,
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
+    ],
+  },
+];
 
 /**
  * What stands while Settings' chunk loads: its frame, the page list's column
@@ -308,9 +334,7 @@ function SettingsLoading({
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
-        <SettingsPage title={<Skeleton width={SETTINGS_SKELETON_TITLE} />}>
-          <SettingsSectionsSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
-        </SettingsPage>
+        <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
       </section>
     </div>
   );
@@ -349,6 +373,12 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
   );
 }
 
+/** The sidebar's chord alone, where its toggle is not drawn, as on a phone's task, whose header stands in its place, though the drawer is still there to open. */
+function SidebarChord({ sidebar }: { sidebar: SidebarCollapse }): null {
+  useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
+  return null;
+}
+
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
  * task, Settings, the Inbox, the tab closed latest, opened again on its
@@ -384,6 +414,15 @@ function usePlaceCommands(
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           tasks.inboxView.onOpen();
+        }
+      : undefined,
+  );
+  useAppCommand(
+    APP_COMMAND.TASKS,
+    pastGate && tasks.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.boardView.onOpen();
         }
       : undefined,
   );
@@ -462,25 +501,6 @@ function usePlaceCommands(
   );
 }
 
-/**
- * The sidebar's New task, kept in reach while the sidebar is folded: an icon
- * beside the toggle, the way a chat app keeps its compose button beside its
- * own. It asks for exactly what the sidebar's button asks for: the New task
- * dialog, over whatever stands.
- */
-function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element {
-  return (
-    <Tooltip label="New task" command={APP_COMMAND.NEW_TASK}>
-      <IconButton
-        icon={<ComposeIcon />}
-        label="New task"
-        disabled={!tasks.signedIn}
-        onClick={tasks.onNewTask}
-      />
-    </Tooltip>
-  );
-}
-
 /** The voice's notice line, one element for every draw, which reads the line where it is drawn (`WindowVoiceNotice`). */
 const NOTICE_STRIP = <WindowVoiceNotice />;
 
@@ -490,7 +510,7 @@ const NOTICE_STRIP = <WindowVoiceNotice />;
  * the call bar. A tab standing behind another chosen tab, or under a side
  * panel filling the window, is not on screen.
  */
-function callTabShown(tasks: TasksControl, calling: string | undefined): boolean {
+function callingTabShown(tasks: TasksControl, calling: string | undefined): boolean {
   const { mainTabs, sidePanel } = tasks;
   const tab = mainTabs.tab;
   return (
@@ -699,7 +719,11 @@ export function DesktopShell({
   const calling = useCallingAgent();
   // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
   const chatSurface = useChatSurface(tasks);
-  const callShown = taskDrawn && callTabShown(tasks, calling);
+  const callShown = taskDrawn && callingTabShown(tasks, calling);
+  // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
+  const awayLabel = awayBack(history.away, history.onLeave).label;
+  const { onLeave } = history;
+  const away = useMemo(() => ({ label: awayLabel, onPress: onLeave }), [awayLabel, onLeave]);
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (
@@ -822,7 +846,7 @@ export function DesktopShell({
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
-  // A phone's task is headed by its three views, which stand for the panel's toggle (`task-pane-switcher.tsx`).
+  // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
     (planToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
@@ -844,6 +868,8 @@ export function DesktopShell({
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks, chatOn);
+  // A phone's Inbox, Tasks page, and Chat, each on its list, head themselves with one row of their own (`phone-head.tsx`).
+  const placeHeaded = barShown && (inboxOpen || boardOpen || chatOpen);
   return (
     <div
       ref={shell}
@@ -884,7 +910,7 @@ export function DesktopShell({
                 />
               </PageFind>
             ) : inboxOpen ? (
-              <DesktopInbox tasks={tasks} listing={sharedListing} />
+              <DesktopInbox tasks={tasks} listing={sharedListing} room={room} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage
@@ -925,7 +951,14 @@ export function DesktopShell({
                 at={automationsPlaceKey(tasks.automationsView.place)}
                 active={tasks.shown}
               >
-                <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
+                <Suspense
+                  fallback={
+                    <AutomationsLoading
+                      onExit={tasks.automationsView.onClose}
+                      narrow={room === SHELL_ROOM.NARROW}
+                    />
+                  }
+                >
                   <AutomationsPage tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
@@ -936,6 +969,7 @@ export function DesktopShell({
                 notice={noticeInColumn ? NOTICE_STRIP : undefined}
                 summary={summary}
                 room={room}
+                away={away}
               />
             )}
           </ChipCards>
@@ -960,11 +994,17 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
-        <SidebarToggle sidebar={sidebar} />
-        {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
-        {sidebar.collapsed ? <OfflineMark /> : null}
-      </PanePin>
+      {/* A phone's task and its places head themselves with one row of their own (`phone-head.tsx`), the task's way back
+          or the place's one control where these stood; the places bar's More opens the drawer the toggle did. */}
+      {room === SHELL_ROOM.NARROW && (taskDrawn || placeHeaded) ? (
+        <SidebarChord sidebar={sidebar} />
+      ) : (
+        <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
+          <SidebarToggle sidebar={sidebar} />
+          {sidebar.collapsed ? <NewTaskButton tasks={tasks} /> : null}
+          {sidebar.collapsed ? <OfflineMark /> : null}
+        </PanePin>
+      )}
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle

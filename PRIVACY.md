@@ -1,9 +1,33 @@
 # Privacy
 
-Last updated: 16 October 2026
+Last updated: 23 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
+
+## In short
+
+- **What Luke stores.** On your Mac, only its window layout and the messages
+  you have not sent yet. On our service: your account, your tasks and their
+  plans, your agents' transcripts, and your conversation. Coding agents work
+  in sandboxes on our service, not on your Mac. See [What we
+  collect](#what-we-collect) and [Storage](#storage).
+- **Models run on your keys.** Voice and dictation go to OpenAI, and coding
+  agents go to Anthropic or OpenAI, on the API key or subscription you
+  saved, never ours.
+- **Who else gets data.** GitHub for your repositories. Vercel runs our
+  service and the sandboxes, and Neon hosts our database. PostHog gets usage
+  data and screen recordings with every word masked. Sentry gets crash,
+  error, and performance reports, which leave out what a model was sent or
+  answered. Any integration you connect gets what your agents ask it. See
+  [Who we send it to](#who-we-send-it-to).
+- **Commands on your Mac.** Coding agents can run commands on your Mac, and
+  what those commands print leaves it. See "Commands agents run on your Mac"
+  under [What we collect](#what-we-collect).
+- **Off switches.** Turn off "Share usage data" in Settings › Account, turn
+  off "Let agents run commands on this Mac", disconnect any integration, or
+  delete your account, which erases what our service keeps under it. See
+  [Your choices](#your-choices).
 
 ## What we collect
 
@@ -295,9 +319,13 @@ references to lines of its repository (a path, the lines, and the commit,
 never the lines themselves), and how it asks to be answered, with any options
 or form fields. An item may carry a picture the agent took in its sandbox,
 such as a screenshot of a page it rendered, with the agent's description of
-up to 300 characters: our service reads the file from the sandbox, keeps the
-image, up to 1.5 MB, in our database beside the item, and serves it only to
-Luke signed in as you. Items and their pictures are stored under your account
+up to 300 characters, or a short video it recorded there of what it did, such
+as clicking through a form it built: our service reads the file from the
+sandbox, keeps the image, up to 1.5 MB, or the video, a WebM of up to 4 MB,
+which plays where the item draws it, in our database beside the item, and
+serves it only to Luke signed in as you. A video is what the agent's own
+screen showed while it recorded, so it can hold whatever that screen did; it
+is left out of the screen recording as the pictures are. Items and their pictures are stored under your account
 and readable by our own operators, like the agent's transcript. The agent can
 change or withdraw an item, and our service keeps each as it last stood; a
 picture goes when the item stops naming it. Your answer, and any note, is
@@ -341,7 +369,10 @@ also ask for an answer, with the answer and who gave it stored beside it. A
 message may carry pictures, each up to 1.5 MB, which our service keeps beside
 the message: one an agent took in its sandbox, which our service reads from
 the sandbox, one a person posted from Luke's window, or one an agent passes on
-from what it was sent. Every
+from what it was sent. A coding agent's message may also carry a short video
+it recorded in its sandbox, a WebM of up to 4 MB, kept the same way, which
+plays in the chat, is left out of the screen recording, and is never handed
+to a coding agent told of the message, which is told only that it is there. Every
 message is stored under the workspace and readable by our own
 operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
@@ -1063,7 +1094,8 @@ never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text. Each count also carries Luke's version, whether
 it is a released build or a development one, and which deployment of our
-service recorded it.
+service recorded it. Settings › Account › "Share usage data" turns these
+counts off (see "Your choices").
 
 Our service also counts, under the same account, the work done through it:
 a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
@@ -1142,7 +1174,10 @@ sandbox's snapshot is deleted, and once the agent stops it our service keeps the
 video, a WebM of up to 4 MB, beside the transcript as it keeps a screenshot,
 shown to the same members, readable by our operators, and deleted with the
 transcript on the same terms; the model is told it was kept, never handed the
-video, and the screen recording leaves out its player. Apart from such a
+video, and the screen recording leaves out its player. The agent may also post
+such a recording to the task's inbox or its workspace's chat, where it is kept
+and shown as any video an agent posts there is (see "A task's inbox" and "A
+workspace's chat"). Apart from such a
 recording, the page and its live-view frames
 are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can
@@ -1205,29 +1240,32 @@ browser's or app's user agent, and the query's text; every line they log;
 counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
 address a request came from. Luke's agents send what Sentry's SDK collects by
-default: every error they did not handle or that ended work they started
-apart from a turn, with its message, stack trace, the lines of code around it,
-and the values of local variables, apart from a tool's refusal the agent was
-handed back to go on from, which its agent trace still shows; performance
-traces of each request they answer, each database query, and each request they
-make, with their headers, bodies, addresses, the names of their query
-parameters, and database query parameters,
-and the IP address a request came from; every line they log; and Sentry's
-agent traces of each turn: the instructions and messages sent to the model
-(which include the plan, the conversation, what was said on a call, and what
-the agents and their workers read, such as code, a command's output from your Mac, and
-an integration's answer), the model's replies, and each tool call with its
-arguments and result. In what the agents send, Sentry replaces a value whose
+default, apart from request bodies and what a model is sent or answers: every
+error they did not handle or that ended work they started apart from a turn,
+with its message, stack trace, the lines of code around it, and the values of
+local variables, apart from a tool's refusal the agent was handed back to go
+on from, which its agent trace still shows; performance traces of each
+request they answer, each database query, and each request they make, with
+their headers, addresses, the names of their query parameters, and database
+query parameters, and the IP address a request came from; every line they
+log; and Sentry's agent traces of each turn, which name the model and each
+tool called and say how long each call took, how many tokens it used, and
+whether it failed. Neither the agents nor the web functions send Sentry the
+instructions or messages sent to a model (the plan, the conversation, what was
+said on a call, or what the agents read, such as code, a command's output from
+your Mac, or an integration's answer), a model's replies, or a tool call's
+arguments or result. The words of an error, a log line, or a local variable
+can still quote what an agent was working on, such as the path of a file a
+tool could not find. In what the agents send, Sentry replaces a value whose
 name looks like a credential (such as `auth`, `token`, `secret`, `password`,
 `key`, or `session`) before it leaves, but not a credential written in free
-text, such as a key pasted into a conversation. In the address of a request
+text, such as a key in an error's words. In the address of a request
 that the web functions or the agents give on a trace, an error, a breadcrumb,
 or a log line, the value of each query parameter and the fragment are replaced,
 and so is any part of its path shaped like a credential, such as a long token;
 the scheme, the host, the rest of the path, and the parameters' names are sent
-as the request carried them. An address written elsewhere, such as in a header,
-the words of an error or a log line, a tool call, or a message to the model, is
-sent as it was written. Terminal
+as the request carried them. An address written elsewhere, such as in a header
+or the words of an error or a log line, is sent as it was written. Terminal
 tabs' bytes are not sent. What reaches
 Sentry is kept under Sentry's retention, not tied to your account, and is not
 erased when you delete your account.
@@ -1583,6 +1621,13 @@ and error, performance, and agent reports by Sentry.
 ## Your choices
 
 - Sign out of your Luke account to turn voice off.
+- Turn off Settings › Account › "Share usage data" to stop Luke sending the
+  usage counts it makes (see "Usage data"); what is waiting to be sent is
+  dropped, and nothing more is sent until you turn it on again. It is set on
+  each Mac, and in each browser, apart. It is on by default in the Luke you
+  download, and off in a Luke you build and run from its source, which sends
+  no usage counts unless you turn it on. It does not stop the counts our
+  service makes of the work done through it.
 - Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
   coding agents running commands on that Mac; it is set on each Mac apart, and
   signing out stops it too.

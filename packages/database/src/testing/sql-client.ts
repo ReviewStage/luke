@@ -127,7 +127,7 @@ const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
 
 /**
  * A database of the test's own, carrying every migration, over whichever
- * dialect this run was pointed at: lobehub's `getTestDB`, answered as the
+ * dialect this run was pointed at: a `getTestDB`, answered as the
  * layer a test provides rather than a handle it awaits, since every
  * statement here is an effect that reads its client and database from the
  * fiber.

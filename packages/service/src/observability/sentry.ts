@@ -17,11 +17,15 @@
  * model as the call's result, which the AI SDK integration would capture as
  * unhandled; it stays a breadcrumb and an errored span.
  *
- * Note that the options are Sentry's defaults but for that filter and one
- * more: its `dataCollection` is left as the SDK ships it, which `PRIVACY.md`
- * describes, while every address a span, an event, or a log line carries
- * leaves with its query's values and its credential-shaped path segments
- * redacted. A deployment without
+ * Note that the options are Sentry's defaults but for that filter and two
+ * more: no model's inputs or outputs leave, so an agent's turn reaches Agent
+ * Tracing as its spans, timings, models, tools, and token counts, without the
+ * instructions, messages, tool arguments, tool results, or replies, and no
+ * request's body leaves either; and every
+ * address a span, an event, or a log line carries leaves with its query's
+ * values and its credential-shaped path segments redacted. The rest of
+ * `dataCollection` is left as the SDK ships it, which `PRIVACY.md` describes.
+ * A deployment without
  * `SENTRY_DSN` starts the SDK disabled, and every layer here then sends
  * nothing.
  */
@@ -72,6 +76,72 @@ const TRACES_SAMPLE_RATE = 0.1;
 
 /** What a process of this deployment starts Sentry with; a test adds its own transport. */
 export type SentryOptions = Sentry.NodeOptions;
+
+/**
+ * The span attributes that carry what a model was handed or answered, as
+ * Sentry's AI integrations, the AI SDK's telemetry, and eve's own agent spans
+ * name them. Sentry's `dataCollection.genAI` keeps its own integrations from
+ * writing them, but eve writes its agent spans by its own trace policy, which
+ * records content for a public audience, onto whatever tracer Sentry
+ * registered, so they are dropped again as a span leaves.
+ */
+const MODEL_CONTENT_ATTRIBUTES: ReadonlySet<string> = new Set([
+  "agent.approval.request",
+  "agent.approval.response",
+  "agent.channel.delivery.input",
+  "agent.session.title",
+  "ai.documents",
+  "ai.embedding",
+  "ai.embeddings",
+  "ai.input_messages",
+  "ai.prompt",
+  "ai.prompt.messages",
+  "ai.prompt.toolChoice",
+  "ai.prompt.tools",
+  "ai.ranking",
+  "ai.raw_prompting",
+  "ai.response.files",
+  "ai.response.object",
+  "ai.response.reasoning",
+  "ai.response.text",
+  "ai.response.toolCalls",
+  "ai.response.tool_calls",
+  "ai.response.tool_results",
+  "ai.search_results",
+  "ai.texts",
+  "ai.toolCall.args",
+  "ai.toolCall.result",
+  "ai.tool_calls",
+  "ai.value",
+  "ai.values",
+  "gen_ai.embeddings.input",
+  "gen_ai.input.messages",
+  "gen_ai.memory.query.text",
+  "gen_ai.memory.records",
+  "gen_ai.output.messages",
+  "gen_ai.prompt",
+  "gen_ai.request.available_tools",
+  "gen_ai.request.messages",
+  "gen_ai.response.object",
+  "gen_ai.response.text",
+  "gen_ai.response.tool_calls",
+  "gen_ai.system.message",
+  "gen_ai.system_instructions",
+  "gen_ai.text_completion",
+  "gen_ai.tool.call.arguments",
+  "gen_ai.tool.call.result",
+  "gen_ai.tool.definitions",
+  "gen_ai.tool.input",
+  "gen_ai.tool.message",
+  "gen_ai.tool.output",
+]);
+
+/** Attributes without any a model was handed or answered, and with their addresses scrubbed. */
+function scrubbedSpanAttributes<Attributes extends object>(attributes: Attributes): Attributes {
+  const kept = Object.entries(attributes).filter(([name]) => !MODEL_CONTENT_ATTRIBUTES.has(name));
+  // SAFETY: only whole entries are dropped, and every attribute a span or a trace context carries is optional.
+  return scrubbedAttributes(Object.fromEntries(kept) as Attributes);
+}
 
 /** The mechanism the AI SDK's Sentry integration captures a failed tool call under, and the tag naming the tool. */
 const AI_TOOL_ERROR = {
@@ -169,7 +239,7 @@ function scrubbedEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
       },
     }),
     ...(trace?.data && {
-      contexts: { ...contexts, trace: { ...trace, data: scrubbedAttributes(trace.data) } },
+      contexts: { ...contexts, trace: { ...trace, data: scrubbedSpanAttributes(trace.data) } },
     }),
     ...(breadcrumbs && {
       breadcrumbs: breadcrumbs.map((crumb) =>
@@ -193,6 +263,11 @@ export function sentryOptions(): SentryOptions {
     // hour in production, which a plan's span quota does not hold. Errors,
     // logs, and check-ins are not sampled by this.
     tracesSampleRate: TRACES_SAMPLE_RATE,
+    // Note that this outranks a model call's own telemetry asking to record, in an eve root,
+    // and is read by every AI integration Sentry ships (the AI SDK's, MCP's, OpenAI's, Anthropic's).
+    // Note that no request body is kept either, because what is posted to an agent is a
+    // message it hands the model, and an eve root would attach it to an error's report.
+    dataCollection: { genAI: { inputs: false, outputs: false }, httpBodies: [] },
     beforeSend: (event, hint) => {
       const kept = dropAnsweredToolRefusals(event, hint);
       return kept && scrubbedEvent(kept);
@@ -202,7 +277,7 @@ export function sentryOptions(): SentryOptions {
     // its HTTP integrations, never over the spans Effect's HTTP client and server open.
     beforeSendSpan: Sentry.withStreamedSpan((span) => ({
       ...span,
-      attributes: scrubbedAttributes(span.attributes),
+      attributes: scrubbedSpanAttributes(span.attributes),
     })),
     beforeSendLog: (log) =>
       log.attributes ? { ...log, attributes: scrubbedAttributes(log.attributes) } : log,

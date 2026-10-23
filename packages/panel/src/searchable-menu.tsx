@@ -30,10 +30,12 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useSt
  * A command menu: a search field as the first row, focused as the menu
  * opens and filtering as it is typed in; under it the rows, each an icon,
  * a name, a muted detail where the row has one, the shortcut that does the
- * same where there is one, and an end slot the check stands in where it is
- * the one chosen; a name or a detail cut short by the menu's width ends
- * in an ellipsis, in a list that scrolls past a bounded height, the rows
- * of a section under its heading, a row that opens a submenu ending in a
+ * same where there is one, the row's own end marks after that, such as a
+ * teammate's face and a failed agent's mark, and an end slot the check
+ * stands in where it is the one chosen; a name or a detail cut short by
+ * the menu's width fades where it is cut, in a list that scrolls past a
+ * bounded height, the rows of a section under its heading, a row that
+ * opens a submenu ending in a
  * chevron; and under the list, pinned where the scrolling cannot
  * take them, the rows the owner wants always on screen, such as the page
  * on GitHub or the effort an agent will run at. A pinned row is a press of
@@ -91,6 +93,10 @@ export interface MenuRow {
   searchOnly?: boolean | undefined;
   /** Rows the row opens beside itself rather than being picked, as a pinned row's submenu: where a new Browser tab opens. */
   submenu?: Submenu | undefined;
+  /** The card hung beside the row while the pointer rests on it, as ⌘K hangs an agent's: an agent's own card. */
+  card?: React.ReactNode;
+  /** Marks at the row's end, after its shortcut, as ⌘K's rows end: a teammate's face, a failed agent's mark. */
+  end?: React.ReactNode;
 }
 
 /** A run of matching rows under one heading, or under none, each with its place among the matches. */
@@ -176,7 +182,10 @@ function firstOpen(rows: readonly MenuRow[]): number {
 }
 
 /** The rows whose label, terms, or section hold every word of the query, case aside; for no query, every row not kept for a search. */
-function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string): readonly Row[] {
+export function matchingRows<Row extends MenuRow>(
+  rows: readonly Row[],
+  query: string,
+): readonly Row[] {
   const words = query.toLowerCase().split(/\s+/u).filter(Boolean);
   if (words.length === 0) return rows.filter((row) => row.searchOnly !== true);
   return rows.filter((row) => {
@@ -213,11 +222,18 @@ function highlightOver(input: {
   return input.first;
 }
 
-/** What a row prints at its end: why it cannot be picked now, its shortcut, or nothing. */
+/** What a row prints at its end: why it cannot be picked now or its shortcut, then its own marks; or nothing. */
 function rowHint(row: MenuRow): React.ReactNode {
-  if (row.disabled !== undefined) return row.disabled;
-  if (row.command === undefined) return undefined;
-  return <Shortcut chord={APP_SHORTCUTS[row.command].chord} />;
+  const said =
+    row.disabled ??
+    (row.command === undefined ? undefined : <Shortcut chord={APP_SHORTCUTS[row.command].chord} />);
+  if (row.end === undefined || row.end === null) return said;
+  return (
+    <>
+      {said}
+      {row.end}
+    </>
+  );
 }
 
 /**
@@ -237,6 +253,7 @@ function optionGroups(rows: readonly MenuRow[], value: string | undefined): Comb
       disabled: row.disabled !== undefined,
       opens: row.submenu !== undefined,
       current: value === undefined ? undefined : row.id === value,
+      card: row.card,
     })),
   }));
 }

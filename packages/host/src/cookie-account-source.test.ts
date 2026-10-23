@@ -1041,7 +1041,8 @@ const machineOver = (stateRoot: string, accountSource: Layer.Layer<AccountSource
       }),
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-    Layer.succeed(AppIdentity, { appVersion: "0.2.0", packaged: false }),
+    // Packaged, as a browser tab is, so usage data is shared and the counts are sent.
+    Layer.succeed(AppIdentity, { appVersion: "0.2.0", packaged: true }),
     accountSource,
     NodeFileSystem.layer,
     NodePath.layer,

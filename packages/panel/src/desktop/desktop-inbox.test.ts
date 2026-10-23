@@ -15,6 +15,7 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
+  type CodingAgentInboxStartParams,
   type CodingAgentListAnswer,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
@@ -26,6 +27,7 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_FILE_TYPE,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
@@ -334,6 +336,9 @@ beforeEach(() => {
   // Note that the Inbox opens on All here, so the tests of what an item shows meet settled
   // items too; the tests of the scopes clear it to meet the Inbox as a fresh profile opens it.
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+  // Note that it groups by task here too, so the tests of a task's group meet its header; a
+  // fresh profile groups by nothing.
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("plan"));
   inboxes = new Map([
     [BILLING.id, [THRESHOLD, RETRY]],
     [INVITES.id, [EXPIRY]],
@@ -587,7 +592,7 @@ function mount(
       },
     });
     if (sidebar) return createElement(SharedListing, { tasks: control });
-    const inbox = createElement(DesktopInbox, { tasks: control });
+    const inbox = createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
     return withSidebar
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
       : inbox;
@@ -2216,6 +2221,93 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
 });
 
+test("a recording an agent's words draw plays in its own player, left out of the replay and of the viewer's walk, beside the picture drawn with it", async () => {
+  const [still, video] = [
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c90",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c91",
+  ];
+  const address = (attachmentId: string) =>
+    inboxAttachmentAddress(
+      { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+      attachmentId,
+      "acme",
+    );
+  const created: string[] = [];
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = (blob: Blob) => {
+    created.push(blob.type);
+    return `blob:video-${String(created.length)}`;
+  };
+  URL.revokeObjectURL = () => undefined;
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value:
+          request.payload.attachmentId === video
+            ? { contentType: INBOX_FILE_TYPE.WEBM, base64: "GkXfow==" }
+            : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      });
+    },
+  });
+  try {
+    const message: InboxMessage = {
+      ...threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000060",
+        "agent",
+        `The invite, and how it is sent.\n\n![The email](${address(still)}) ![Inviting a member](${address(video)} "The invite flow")`,
+        1_000,
+      ),
+      files: [
+        { attachmentId: still, name: "email.png", mediaType: INBOX_IMAGE_TYPE.PNG },
+        { attachmentId: video, name: "flow.webm", mediaType: INBOX_FILE_TYPE.WEBM },
+      ],
+    };
+    const pane = await mountThread(threadItem([message]));
+    await settle();
+
+    const player = pane.querySelector("video");
+    assert.ok(player, "the recording is played, not drawn");
+    assert.equal(player.getAttribute("src"), "blob:video-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: The invite flow");
+    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM]);
+    assert.equal(pane.querySelectorAll("video").length, 1, "the recording stands once");
+    assert.deepEqual(
+      [...pane.querySelectorAll('[aria-label="Attached files"] > *')].map(
+        (each) => each.textContent,
+      ),
+      [],
+      "the recording the words draw is not named again as a file over them",
+    );
+    assert.equal(
+      pane.querySelector('button[aria-label="Enlarge Inviting a member"]'),
+      null,
+      "no press opens a recording as a picture",
+    );
+    const press = pane.querySelector<HTMLButtonElement>('button[aria-label="Enlarge The email"]');
+    assert.ok(press, "the picture beside it still opens");
+    act(() => press.click());
+    assert.equal(
+      document.querySelector('[role="dialog"] .luke-zoom-image')?.getAttribute("alt"),
+      "The email.png",
+      "the viewer opens on the picture",
+    );
+    assert.equal(
+      document.querySelector('[role="dialog"] .attachment-viewer-place'),
+      null,
+      "the viewer walks the picture alone",
+    );
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
+});
+
 test("a thread draws a comment's files over its words: an agent's pictures stand once, where its words draw them, one they do not draw over them, and a member's picture and file over their words, the viewer walking each picture once", async () => {
   const [before, after, unnamed, mine, spec] = [
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c80",
@@ -2716,30 +2808,32 @@ test("the sidebar's Inbox counts the open items alone, as before, where main car
   );
 });
 
-test("a fresh profile opens the Inbox on To do, grouped by task, its head naming no scope, a settled item left out until All is chosen, which the head then names", async () => {
+test("a fresh profile opens the Inbox on To do, grouped by nothing, None first and checked under Group by, its head naming no scope, a settled item left out until All is chosen, which the head then names", async () => {
   window.localStorage.clear();
   const { page } = mount();
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
-  assert.deepEqual(listed(page), [
-    "# Invites",
-    "▸ *Expire after 7 days?",
-    "# Billing usage alerts",
-    "*Alert at 80%?",
-  ]);
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  act(() => options?.click());
+  act(() => viewItem("Group by").click());
+  const groupings = [...document.querySelectorAll('[role^="menuitem"]')]
+    .filter((each) => ["None", "Task", "Person", "Status"].includes(each.textContent ?? ""))
+    .map((each) => `${each.textContent}:${each.getAttribute("aria-checked")}`);
+  assert.deepEqual(groupings, ["None:true", "Task:false", "Person:false", "Status:false"]);
+  act(() => options?.click());
   showScope(page, "All");
   assert.equal(headTitle(page), "Inbox · All");
   assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
     "How is a failed email retried?",
-    "*Alert at 80%?",
-    "# Invites",
     "▸ *Expire after 7 days?",
+    "*Alert at 80%?",
   ]);
 });
 
 test("a task done or canceled keeps its items listed and counted as any other's, each row wearing its task's status, its card's task chip wearing it too, and a row of an agent with no task wearing none; no scope offers an archive", async () => {
   window.localStorage.clear();
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("plan"));
   agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
   const { page } = mount(
     [
@@ -6105,40 +6199,39 @@ test("on All, every item settled and read is drawn gray, and what waits or is un
   assert.equal(rowMuted(page, "Expire after 7 days?"), false, "settled, but unread");
 });
 
-test("an answer moves no row while the list is shown, under either sort and every grouping, and the list sorts anew once the Inbox is left and come back to", async () => {
-  const groupings = ["plan", "person", "status", "newest"] as const;
-  const sorts = ["latest", "oldest"] as const;
-  for (const grouping of groupings) {
-    for (const sort of sorts) {
-      window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
-      window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
-      window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
-      const { page } = mount();
-      await settle();
-      const { answer } = gatedAnswers();
-      act(() => rowNamed(page, "Alert at 80%?").click());
-      await settle();
-      const before = placesOf(page);
+// One test per grouping and sort, each mounting the Inbox once, so a loaded shard times a
+// quarter-second mount rather than the eight of them together.
+const ANSWER_VIEWS = ["plan", "person", "status", "newest"].flatMap((grouping) =>
+  ["latest", "oldest"].map((sort) => ({ grouping, sort })),
+);
 
-      answerWithNote(page, "Use 90%");
-      await settle();
-      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
-      await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
-      await settle();
-      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
-      assert.equal(rowMuted(page, "Alert at 80%?"), true);
+test.for(ANSWER_VIEWS)(
+  "an answer moves no row while the list is shown, under $grouping grouping and $sort sort, and the list sorts anew once the Inbox is left and come back to",
+  async ({ grouping, sort }) => {
+    window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+    window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
+    window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+    const { page } = mount();
+    await settle();
+    const { answer } = gatedAnswers();
+    act(() => rowNamed(page, "Alert at 80%?").click());
+    await settle();
+    const before = placesOf(page);
 
-      act(() => setInboxOpen(false));
-      act(() => setInboxOpen(true));
-      await settle();
-      assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+    answerWithNote(page, "Use 90%");
+    await settle();
+    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
+    await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
+    await settle();
+    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
+    assert.equal(rowMuted(page, "Alert at 80%?"), true);
 
-      act(() => root?.unmount());
-      root = undefined;
-      document.body.innerHTML = "";
-    }
-  }
-});
+    act(() => setInboxOpen(false));
+    act(() => setInboxOpen(true));
+    await settle();
+    assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+  },
+);
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
   const { page } = mount();
@@ -7563,7 +7656,7 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-test("a replaced or withdrawn ask draws no card: its controls as it offered them, dimmed, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or why it was withdrawn, or the member who closed the item where no reason was said", async () => {
+test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or that it was withdrawn with why under it, or the member who closed the item where no reason was said", async () => {
   const withdrawnId = "e1b2c3d4-0000-4000-8000-000000000020";
   const closedId = "e1b2c3d4-0000-4000-8000-000000000021";
   const shown = threadItem(
@@ -7587,17 +7680,18 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
 
   assert.deepEqual(askBoxes(pane), [], "no settled ask draws a card");
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
-  for (const [id, settled, words] of [
-    [ASKING_ID, "replaced", "Replaced by a newer question"],
-    [withdrawnId, "withdrawn", "Withdrawn: Product picked 14 days."],
-    [closedId, "withdrawn", "Charles Pan · Resolved without an answer"],
+  for (const [id, settled, words, why] of [
+    [ASKING_ID, "replaced", "Replaced by a newer question", null],
+    [withdrawnId, "withdrawn", "Withdrawn", "Product picked 14 days."],
+    [closedId, "withdrawn", "Charles Pan · Resolved without an answer", null],
   ] as const) {
     const message =
       pane.querySelector(`[data-message-id="${id}"]`) ??
       assert.fail(`the ${settled} ask's message`);
     const offered =
-      message.querySelector<HTMLElement>("[data-inbox-replaced] .inbox-ask-replaced-controls") ??
-      assert.fail(`the ${settled} ask keeps its controls`);
+      message.querySelector<HTMLElement>(
+        "[data-inbox-replaced] .inbox-ask-replaced-controls [data-stepped-back]",
+      ) ?? assert.fail(`the ${settled} ask keeps its controls, stepped back`);
     const options = [...offered.querySelectorAll<HTMLElement>("[role='radio']")];
     assert.deepEqual(
       options.map((option) =>
@@ -7624,10 +7718,15 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     assert.deepEqual(
       [...message.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
         marker.dataset.inboxSettled,
-        wordsOf(marker),
+        wordsOf(marker.querySelector(".luke-badge")),
       ]),
       [[settled, words]],
       "the agent's message ends with the marker saying so",
+    );
+    assert.equal(
+      wordsOf(message.querySelector("[data-inbox-settled] [data-inbox-withdrawn-why]")),
+      why,
+      "with why it was withdrawn under the pill, where its agent said",
     );
   }
 
@@ -7712,10 +7811,15 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     null,
     "a withdrawn ask of words alone draws no card",
   );
-  assert.equal(
-    wordsOf(takenBack?.querySelector('[data-inbox-settled="withdrawn"]') ?? null),
-    "Withdrawn: Found it in the README.",
-    "and ends with the withdrawn marker alone",
+  assert.deepEqual(
+    [
+      wordsOf(takenBack?.querySelector('[data-inbox-settled="withdrawn"] .luke-badge')),
+      wordsOf(
+        takenBack?.querySelector('[data-inbox-settled="withdrawn"] [data-inbox-withdrawn-why]'),
+      ),
+    ],
+    ["Withdrawn", "Found it in the README."],
+    "and ends with the withdrawn marker alone, why under its pill",
   );
 });
 
@@ -8278,6 +8382,65 @@ function paneTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items .inbox-subject-title")?.textContent;
 }
 
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, and the ⋯ opens the search and View options' own menu, so nothing is lost", async () => {
+  const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".inbox-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["New task", "More"],
+  );
+  assert.match(head.querySelector("h1")?.textContent ?? "", /^Inbox/);
+  assert.equal(magnifier(page), null, "no magnifier of its own");
+
+  const more = () =>
+    head.querySelector<HTMLButtonElement>('[aria-label="More"]') ?? assert.fail("the ⋯ stands");
+  const pick = (name: string) => {
+    act(() => more().click());
+    const item = [
+      ...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'),
+    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+    assert.ok(item, `the ⋯ offers ${name}`);
+    act(() => item.click());
+  };
+  act(() => more().click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
+      (each) => each.textContent,
+    ),
+    ["New thread", "Search inbox", "View options"],
+    "the ⋯ holds what the wide head draws as buttons",
+  );
+  act(() => more().click());
+  pick("View options");
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
+    "View options' own menu stands",
+  );
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  pick("Search inbox");
+  const field = page.querySelector<HTMLInputElement>(
+    '.inbox-head input[aria-label="Search inbox"]',
+  );
+  assert.ok(field, "the search opens");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(
+    document.activeElement,
+    more(),
+    "Escape folds it and hands the keyboard back to the ⋯",
+  );
+
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="New task"]')?.click());
+  assert.equal(asked.newTasks, 1);
+});
+
 test("the list's magnifier opens a search in the Inbox's name that narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties and folds it, handing the keyboard back to the magnifier", async () => {
   const { page } = mount();
   await settle();
@@ -8347,4 +8510,363 @@ test("with the inbox-first sidebar, a press on View options while the search sta
 
   assert.equal(options.isConnected, true, "the button pressed is the one still standing");
   assert.equal(viewItem("To do").getAttribute("role")?.startsWith("menuitem"), true);
+});
+
+/** The thread a New thread starts, as the service hands it back: the reader's words its first message, settled on their own nod. */
+const STARTED: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-0000000000f1", "Annual plan copy", 9_000),
+  key: "annual-plan-copy",
+  response: { type: INBOX_RESPONSE.NONE },
+  needsReply: false,
+  status: INBOX_STATUS.ANSWERED,
+  answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+  settledAt: 9_000,
+  thread: [
+    {
+      id: "e1b2c3d4-0000-4000-8000-0000000000f2",
+      author: INBOX_MESSAGE_AUTHOR.MEMBER,
+      member: READER,
+      text: "Draft the annual plan's line too.",
+      createdAt: 9_000,
+    },
+  ],
+};
+
+/**
+ * Every thread the pane starts, written down and answered as the service
+ * starts it, the task's inbox then holding it; the workspace's newest agents
+ * read as `agents`, and those a search names as `found` answers its words.
+ */
+function heldStarts(
+  agents: readonly CodingAgentSummary[],
+  found: (words: string) => readonly CodingAgentSummary[] = () => [],
+): CodingAgentInboxStartParams[] {
+  const sent: CodingAgentInboxStartParams[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+        const { words } = request.payload;
+        const value = { agents: words === undefined ? agents : found(words) };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
+      sent.push(request.payload);
+      inboxes.set(BILLING.id, [STARTED, ...(inboxes.get(BILLING.id) ?? [])]);
+      pushAgain();
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { item: STARTED } });
+    },
+  });
+  return sent;
+}
+
+test("New thread in the Inbox's head opens a draft in the pane, To naming the agent of the item read; Send starts the thread with that agent, once however often it is pressed, and the Inbox then opens the thread it started, the reader's words its first message", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const starts = heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+
+  const compose = page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]');
+  assert.ok(compose, "the head offers New thread");
+  act(() => compose.click());
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(pane.getAttribute("aria-label"), "New thread");
+  assert.equal(
+    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
+    "To: Alerts",
+    "To names the agent of the item that was read",
+  );
+  const send = () =>
+    pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+    assert.fail("the box has a Send");
+  assert.equal(send().disabled, true, "a draft with no words sends nothing");
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  assert.equal(send().disabled, false, "To and words light Send, the subject being optional");
+
+  const subject =
+    pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
+    assert.fail("the draft has a Subject");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(subject, "Annual plan copy");
+    subject.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => send().click());
+  await settle();
+
+  assert.deepEqual(
+    starts.map(({ agentId, title, text, attachments }) => ({ agentId, title, text, attachments })),
+    [
+      {
+        agentId: AGENT.id,
+        title: "Annual plan copy",
+        text: "Draft the annual plan's line too.",
+        attachments: undefined,
+      },
+    ],
+  );
+  const opened = itemPane(page);
+  assert.equal(
+    opened.getAttribute("aria-label"),
+    "Annual plan copy",
+    "the thread it started opens",
+  );
+  assert.match(opened.textContent ?? "", /Draft the annual plan's line too\./u);
+});
+
+test("Discard takes a New thread away and shows the item it stood over again, as pressing a row does", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  const compose = () =>
+    page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+    assert.fail("the head offers New thread");
+
+  act(() => compose().click());
+  await settle();
+  const discard = [...itemPane(page).querySelectorAll("button")].find(
+    (button) => button.textContent === "Discard",
+  );
+  assert.ok(discard);
+  act(() => discard.click());
+  await settle();
+  assert.equal(itemPane(page).getAttribute("aria-label"), THRESHOLD.title);
+
+  act(() => compose().click());
+  await settle();
+  act(() => rowNamed(page, RETRY.title).click());
+  await settle();
+  assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
+});
+
+/** The menu To opens, as a reader sees it: each task's heading, then each agent's name and what it says beside it. */
+function toMenuRows(): string[] {
+  const menu = document.querySelector('[role="dialog"][aria-label="To"]');
+  assert.ok(menu, "To's menu is open");
+  return [
+    ...menu.querySelectorAll('.luke-combobox-heading, .menu-row-list-heading, [role="option"]'),
+  ].map((node) => {
+    if (!node.matches('[role="option"]')) return `# ${node.textContent}`;
+    const name = node.querySelector(".luke-combobox-option-label")?.textContent ?? "";
+    const detail = node.querySelector(".luke-combobox-option-detail")?.textContent;
+    return detail === undefined ? name : `${name} · ${detail}`;
+  });
+}
+
+test("To lists the workspace's agents as one list, newest first, each in its tab's look and named as its tab is, its task beside it as the @ menu says it, No task for one on none, and nothing where the task only says the agent's name again", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const MAYA: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
+    planId: INVITES.id,
+    title: "Move the frontend into shared components",
+  };
+  const LONE: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b23",
+    planId: null,
+    title: "Nightly dependency sweep",
+  };
+  const NAMESAKE: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b24",
+    title: BILLING.name,
+  };
+  heldStarts([NAMESAKE, LONE, MAYA, AGENT]);
+  const { page } = mount();
+  await settle();
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const to =
+    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
+    assert.fail("the draft has To");
+  act(() => to.click());
+  await settle();
+
+  assert.deepEqual(toMenuRows(), [
+    BILLING.name,
+    "Nightly dependency sweep · No task",
+    `Move the frontend into shared components · ${INVITES.name}`,
+    `Alerts · ${BILLING.name}`,
+  ]);
+});
+
+test("To's rows keep no check's room while no agent is chosen, and each hangs its agent's card while the pointer rests on it, as ⌘K's rows do", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map();
+  heldStarts([AGENT]);
+  const { page } = mount([], { standing: [BILLING], holding: [] });
+  await settle();
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const to =
+    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
+    assert.fail("the draft has To");
+  assert.equal(to.getAttribute("aria-label"), "To: Choose an agent");
+  act(() => to.click());
+  await settle();
+
+  const option =
+    document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
+    assert.fail("To lists the agent");
+  assert.equal(
+    option.querySelector(".luke-combobox-option-end"),
+    null,
+    "no row keeps a check's room",
+  );
+  restOn(option);
+  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Alerts");
+  assert.match(
+    card.textContent ?? "",
+    new RegExp(`On ${BILLING.name}`, "u"),
+    "the card stands whole as it is hung, its task named, as ⌘K's does, with nothing read",
+  );
+});
+
+/** Opens a New thread from the Inbox's head, then its To menu, and hands back the draft's pane. */
+async function openTo(page: HTMLElement): Promise<HTMLElement> {
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const pane = itemPane(page);
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
+      assert.fail("the draft has To")
+    ).click(),
+  );
+  await settle();
+  return pane;
+}
+
+test("a To row ends in its starter's face where a teammate started the agent and in nothing for the reader's own, then in the failed mark where its turn failed", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const THEIRS: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b25",
+    title: "Seat limits",
+    status: CODING_AGENT_STATUS.FAILED,
+    startedBy: TEAMMATE,
+  };
+  heldStarts([THEIRS, { ...AGENT, startedBy: READER }]);
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+
+  const ends = [
+    ...document.querySelectorAll('[role="dialog"][aria-label="To"] [role="option"]'),
+  ].map((option) => {
+    const end = option.querySelector(".luke-combobox-option-hint");
+    return [
+      option.querySelector(".luke-combobox-option-label")?.textContent,
+      ...[...(end?.children ?? [])].map((mark) =>
+        mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
+      ),
+    ];
+  });
+  assert.deepEqual(ends, [["Seat limits", "face person", "failed-mark"], ["Alerts"]]);
+});
+
+test("a word typed in To asks the service for the agents it names, so one past the workspace's newest is found, picked, and sent to", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const OLDER: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b26",
+    planId: INVITES.id,
+    title: "Seat limits",
+  };
+  const searched: string[] = [];
+  const starts = heldStarts([AGENT], (words) => {
+    searched.push(words);
+    return words === "seat" ? [OLDER] : [];
+  });
+  const { page } = mount();
+  await settle();
+  const pane = await openTo(page);
+
+  const search =
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
+    assert.fail("To's menu has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, "seat");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(searched, ["seat"], "the words reach the service");
+  assert.deepEqual(toMenuRows(), [`Seat limits · ${INVITES.name}`]);
+
+  act(() =>
+    (
+      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
+      assert.fail("To lists the agent found")
+    ).click(),
+  );
+  await settle();
+  assert.equal(
+    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
+    "To: Seat limits",
+  );
+  typeInComposer(pane, "Raise the seat limit.");
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    starts.map(({ agentId }) => agentId),
+    [OLDER.id],
+  );
+});
+
+test("an agent of the workspace's newest stays found by every word its row shows, its name and its task, though the service finds nothing for the words", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const searched: string[] = [];
+  heldStarts([AGENT], (words) => {
+    searched.push(words);
+    return [];
+  });
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+
+  const search =
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
+    assert.fail("To's menu has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, "billing alerts");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(searched, ["billing alerts"]);
+  assert.deepEqual(toMenuRows(), [`Alerts · ${BILLING.name}`]);
 });

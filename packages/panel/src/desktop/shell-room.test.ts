@@ -119,8 +119,8 @@ function resizeStage(width: number): void {
   act(() => relayout());
 }
 
-/** The window as the panel's root draws it: the stage measured, its room, and the real sidebar and side panel over the task open on its page. */
-function Window(): React.JSX.Element {
+/** The window as the panel's root draws it: the stage measured, its room, and the real sidebar and side panel over the task open on its page, or the page it rests on with none. */
+function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
   const sidebar = useSidebarCollapse(false, stage.compact);
@@ -131,7 +131,7 @@ function Window(): React.JSX.Element {
     tab,
     onTabChange: setTab,
     tasks: tasksControl({
-      page: TASKS_PAGE.DOCUMENT,
+      page: onTask ? TASKS_PAGE.DOCUMENT : TASKS_PAGE.HOME,
       region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
       sidePanel,
     }),
@@ -143,6 +143,8 @@ function Window(): React.JSX.Element {
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      away: undefined,
+      onLeave: ignore,
     },
     sidebar,
     room,
@@ -152,8 +154,8 @@ function Window(): React.JSX.Element {
   return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);
 }
 
-/** The window on a stage of a width, the open task's page drawn. */
-function mount(width: number): HTMLElement {
+/** The window on a stage of a width, the open task's page drawn, or the page it rests on with none. */
+function mount(width: number, onTask = true): HTMLElement {
   stageWidth = width;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -163,7 +165,7 @@ function mount(width: number): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window, { onTask }))));
   return container;
 }
 
@@ -233,16 +235,19 @@ test("a stage narrowed below 640 stands the window as one pane, and only at 672 
   assert.equal(roomOf(page), "wide", "a stage narrowed within the band stays wide");
 });
 
-/** The phone's view of the task named `name`, from the bar heading it in the panel's toggle's place. */
+/** The phone's view of the task named `name`, from the ⋯ heading it in the panel's toggle's place, its menu opened to find it. */
 function paneView(page: HTMLElement, name: string): HTMLElement {
-  const view = [...page.querySelectorAll<HTMLElement>('.task-pane-switcher [role="radio"]')].find(
+  const more = page.querySelector<HTMLButtonElement>('.task-head [aria-label="Task actions"]');
+  assert.ok(more, "the task's header holds its ⋯");
+  if (more.getAttribute("aria-expanded") !== "true") act(() => more.click());
+  const view = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
     (each) => each.textContent === name,
   );
   assert.ok(view, `the task's ${name} view stands`);
   return view;
 }
 
-test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, the task's views standing for its toggle", () => {
+test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, the task's header standing for its toggle and the sidebar's", () => {
   const page = mount(PHONE);
   assert.equal(roomOf(page), "narrow");
   // A first launch opens the panel, which the narrow stage holds full screen.
@@ -250,7 +255,12 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   assert.equal(
     page.querySelector('.title-bar-controls[data-edge="end"]'),
     null,
-    "the views stand for the toggle",
+    "the header stands for the toggle",
+  );
+  assert.equal(
+    page.querySelector(".desktop-shell > .title-bar-controls"),
+    null,
+    "the header's way back stands for the sidebar's toggle and New task",
   );
   // Note that the panel opens on the board, which is a tab past the plan, so Activity is the view standing.
   assert.equal(paneView(page, "Activity").getAttribute("aria-checked"), "true");
@@ -262,17 +272,18 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
     "a stage widened again hands the panel back beside the document",
   );
   assert.equal(panelToggle(page).getAttribute("aria-label"), "Hide panel");
-  assert.equal(page.querySelector(".task-pane-switcher"), null, "a wide stage draws no views");
+  assert.equal(page.querySelector(".task-head"), null, "a wide stage draws no header of its own");
 
   resizeStage(PHONE);
-  act(() => paneView(page, "Agents").click());
+  const agents = paneView(page, "Agents");
+  act(() => agents.click());
   assert.equal(page.querySelector("aside.side-panel"), null, "Agents shuts the panel");
   assert.equal(paneView(page, "Agents").getAttribute("aria-checked"), "true");
 });
 
 test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggle opens it over the work, and a press outside puts it away", () => {
   const sheets = layContainersAt({});
-  const page = mount(PHONE);
+  const page = mount(PHONE, false);
   const shell = page.querySelector(".desktop-shell") ?? assert.fail("the shell stands");
   assert.deepEqual(
     [getComputedStyle(shell).gridTemplateColumns, getComputedStyle(sidebarOf(page)).position],
@@ -307,15 +318,14 @@ test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggl
   sheets.remove();
 });
 
-test("a phone's drawer is modal: while it stands over the work, the work and the task's views are inert, and put away they answer again", () => {
-  const page = mount(PHONE);
+test("a phone's drawer is modal: while it stands over the work, the work is inert, and put away it answers again", () => {
+  const page = mount(PHONE, false);
   const main = page.querySelector<HTMLElement>("main.desktop-main") ?? assert.fail("the work");
   assert.equal(main.hasAttribute("inert"), false, "with the drawer away the work answers");
 
   act(() => sidebarToggle(page).click());
   assert.equal(sidebarStanding(page), "drawer");
   assert.equal(main.hasAttribute("inert"), true, "the work behind the drawer is inert");
-  assert.equal(paneView(page, "Plan").closest<HTMLElement>("[inert]") !== null, true);
   assert.equal(
     sidebarToggle(page).closest("[inert]"),
     null,
@@ -357,7 +367,7 @@ function historyArrows(page: HTMLElement): boolean {
 
 test("a phone's browser tab draws no Back and Forward in the drawer's head, its browser's own walking the history; a wide one keeps them", () => {
   inBrowserTab();
-  const page = mount(PHONE);
+  const page = mount(PHONE, false);
   act(() => sidebarToggle(page).click());
   assert.equal(historyArrows(page), false);
 
@@ -366,7 +376,7 @@ test("a phone's browser tab draws no Back and Forward in the drawer's head, its 
 });
 
 test("a phone's installed app, with no browser around it, keeps Back and Forward in the drawer's head", () => {
-  const page = mount(PHONE);
+  const page = mount(PHONE, false);
   act(() => sidebarToggle(page).click());
   assert.equal(historyArrows(page), true);
 });
@@ -381,7 +391,7 @@ test("Escape puts a phone's drawer away and gives the keyboard back to the work 
     if (this.closest("[inert]") !== null) return;
     focus.call(this, options);
   });
-  const page = mount(PHONE);
+  const page = mount(PHONE, false);
   const work =
     page.querySelector<HTMLElement>("main.desktop-main button:not([disabled])") ??
     assert.fail("the work holds a button");

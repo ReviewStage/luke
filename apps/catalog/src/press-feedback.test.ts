@@ -128,11 +128,12 @@ function pressables(page: HTMLElement): HTMLElement[] {
   });
 }
 
-/** Whether `element` refuses a press, as an unavailable control does. */
+/** Whether `element` refuses a press, as an unavailable control does, or a read-only one recording a choice made. */
 function refuses(element: HTMLElement): boolean {
   return (
-    element.matches(":disabled, [aria-disabled='true'], [inert] *, [inert]") ||
-    element.closest("fieldset:disabled") !== null
+    element.matches(
+      ":disabled, [aria-disabled='true'], [aria-readonly='true'], [inert] *, [inert]",
+    ) || element.closest("fieldset:disabled") !== null
   );
 }
 

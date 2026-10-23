@@ -1,4 +1,4 @@
-import type { AdminDayAccount } from "@luke/features/admin-answer-wire";
+import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ } from "@luke/features/admin-wire";
 import {
   DATA_TABLE_COLUMN_KIND,
@@ -8,27 +8,47 @@ import {
 } from "@luke/ui";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { formatCount, formatDayHeading } from "@luke/ui/time-format";
-import { AccountCell } from "../accounts-table/accounts-table.js";
+import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
-import { AdminSection, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card.js";
+import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
 import { AdminViewOptions, Refreshing } from "../chrome/controls.js";
 import { DayNote } from "../chrome/notes.js";
 import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
+import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { dayReadQuery } from "../routing.js";
-import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
 import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 const DAY_ERROR = "The day endpoint did not answer.";
 
-/** One day's own sections. */
-const DAY_SHAPES: readonly SkeletonShape[] = [
-  { kind: SKELETON_SHAPE.HEADING, label: "Hosted tier · this day" },
-  { kind: SKELETON_SHAPE.STAT_CARDS, count: 2, columns: 2 },
-  { kind: SKELETON_SHAPE.HEADING, label: "Accounts active this day" },
-  { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 1 },
-];
+/** How many accounts the table's skeleton stands a row for, about a quiet day's. */
+const ACCOUNT_SKELETON_ROWS = 5;
+
+/** The day's account column, the one whose cell is an account's. */
+const ACCOUNT_COLUMN = "account";
+
+/**
+ * The day's two cards, each saying under its figure that the day is still
+ * filling where it is today, and nothing where it is past.
+ */
+function dayStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>[] {
+  const soFar = stillFilling ? () => "so far today" : undefined;
+  return [
+    {
+      key: "accounts",
+      label: () => "Active accounts",
+      value: (detail) => formatCount(detail.totals.accounts),
+      hint: soFar,
+    },
+    {
+      key: "calls",
+      label: () => "Hosted calls",
+      value: (detail) => formatCount(detail.totals.calls),
+      hint: soFar,
+    },
+  ];
+}
 
 /** The day's two columns: who called, and how many times. */
 function dayAccountColumns(
@@ -36,7 +56,7 @@ function dayAccountColumns(
 ): readonly DataTableColumn<AdminDayAccount>[] {
   return [
     {
-      key: "account",
+      key: ACCOUNT_COLUMN,
       label: "Account",
       cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
     },
@@ -72,6 +92,57 @@ function DayAccountsTable({
       minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
       onRowPress={(row) => onOpen(row.id)}
     />
+  );
+}
+
+/**
+ * The day's sections under its toolbar, drawn from `detail` once it is read
+ * and as their skeletons until then. Whether the day is still filling is
+ * known from `day` before the answer, by the clock, and from the answer's
+ * own instant once it lands.
+ */
+function DaySections({
+  day,
+  detail,
+  onOpenAccount,
+}: {
+  day: string;
+  detail: AdminDayDetail | undefined;
+  onOpenAccount: (id: string) => void;
+}): React.JSX.Element {
+  const stillFilling = partialDayKey([{ day }], detail?.generatedAt ?? Date.now()) !== undefined;
+  return (
+    <>
+      <AdminSection title="Hosted tier · this day">
+        <StatCards layout={STAT_LAYOUT.ROW} stats={dayStats(stillFilling)} data={detail} />
+      </AdminSection>
+
+      <AdminSection title="Accounts active this day">
+        {detail === undefined ? (
+          <DataTableSkeleton
+            label="Accounts active this day"
+            columns={dayAccountColumns(onOpenAccount)}
+            rows={ACCOUNT_SKELETON_ROWS}
+            minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+            cells={{ [ACCOUNT_COLUMN]: <AccountCellSkeleton /> }}
+          />
+        ) : (
+          <>
+            <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
+            {detail.accounts.length > 0 ? (
+              <DayNote
+                truncatedTo={
+                  detail.totals.accounts > detail.accounts.length
+                    ? detail.accounts.length
+                    : undefined
+                }
+                totalAccounts={detail.totals.accounts}
+              />
+            ) : null}
+          </>
+        )}
+      </AdminSection>
+    </>
   );
 }
 
@@ -112,12 +183,9 @@ export function DayScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title={formatDayHeading(day)}
-          back={back}
-          controls={controls}
-          shapes={DAY_SHAPES}
-        />,
+        <PageSkeleton title={formatDayHeading(day)} back={back} controls={controls}>
+          <DaySections day={day} detail={undefined} onOpenAccount={onOpenAccount} />
+        </PageSkeleton>,
       );
     case "signed-out":
       return gate.signedOut();
@@ -134,52 +202,13 @@ export function DayScreen({
           />
         </AdminPage>,
       );
-    case "ready": {
-      const detail = state.value;
-      const stillFilling = partialDayKey([{ day: detail.day }], detail.generatedAt) !== undefined;
-      const soFar = stillFilling ? "so far today" : undefined;
-
+    case "ready":
       return frame(
-        <AdminPage title={formatDayHeading(detail.day)} back={back} controls={controls}>
+        <AdminPage title={formatDayHeading(state.value.day)} back={back} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <AdminSection title="Hosted tier · this day">
-              {/* Note that each card shares the row from nothing up but never
-            shrinks below its own figure, so the pair stacks once a figure
-            needs the room rather than overflowing its card. */}
-              <div className={STAT_ROW}>
-                <div className={STAT_CELL}>
-                  <StatCard
-                    label="Active accounts"
-                    value={formatCount(detail.totals.accounts)}
-                    hint={soFar}
-                  />
-                </div>
-                <div className={STAT_CELL}>
-                  <StatCard
-                    label="Hosted calls"
-                    value={formatCount(detail.totals.calls)}
-                    hint={soFar}
-                  />
-                </div>
-              </div>
-            </AdminSection>
-
-            <AdminSection title="Accounts active this day">
-              <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
-              {detail.accounts.length > 0 ? (
-                <DayNote
-                  truncatedTo={
-                    detail.totals.accounts > detail.accounts.length
-                      ? detail.accounts.length
-                      : undefined
-                  }
-                  totalAccounts={detail.totals.accounts}
-                />
-              ) : null}
-            </AdminSection>
+            <DaySections day={state.value.day} detail={state.value} onOpenAccount={onOpenAccount} />
           </Refreshing>
         </AdminPage>,
       );
-    }
   }
 }

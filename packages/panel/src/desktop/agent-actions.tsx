@@ -78,8 +78,8 @@ export function rowDoors(doors: AgentDoors): RowDoors {
 export interface AgentTerminalDoors {
   /** Shows the agent's own Terminal tab in the side panel, adding no shell; none where the platform runs no terminals. */
   readonly onOpenTerminal: ((agentId: string) => void) | undefined;
-  /** Runs the agent's pushed branch in a terminal of this Mac in the side panel, which its Pull request tab's Run offers (`side-panel.tsx`); none where no repository is known or the platform has no Mac terminal. */
-  readonly onOpenOnMac: ((agentId: string) => void) | undefined;
+  /** Runs a pushed branch in the agent's terminal of this Mac in the side panel, which every Pull request tab's Run offers (`side-panel.tsx`): the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
+  readonly onOpenOnMac: ((agentId: string, number?: number) => void) | undefined;
   /** Whether the platform runs terminals, which ⌘J and New terminal stand on. */
   readonly terminals: boolean;
 }
@@ -128,8 +128,13 @@ export function useAgentTerminalDoors(
     onOpenOnMac:
       repository == null || !macTerminal
         ? undefined
-        : (agentId) => {
-            sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
+        : (agentId, number) => {
+            sidePanel.onChoose({
+              macTerminal: agentId,
+              repository,
+              asked: Date.now(),
+              ...(number === undefined ? undefined : { number }),
+            });
             onShown();
           },
   };

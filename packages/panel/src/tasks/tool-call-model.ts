@@ -61,7 +61,7 @@ import { askHeadWords } from "./inbox-ask-words.js";
  * Pure decisions over the tool part the SDK stored: the row's kind and
  * subject are read from the call's input alone, so a row drawn while the
  * call runs does not change shape when its answer lands, and the kind's
- * verb is `turn-rows.ts`'s, the same the Call tab says, but for a command
+ * verb is `turn-rows.ts`'s, but for a command
  * the model said the purpose of, whose line says that instead; the body's two
  * blocks are read from the input and the output in the tool's own terms
  * (a command, a patch, a file's words) where the tool is one eve gives the

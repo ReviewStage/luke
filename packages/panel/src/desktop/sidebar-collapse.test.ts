@@ -137,6 +137,8 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
         steps: { back: [], forward: [] },
         onGoTo: ignore,
         onLeaveVersionHistory: ignore,
+        away: undefined,
+        onLeave: ignore,
       },
       sidebar,
       room: stage.room,

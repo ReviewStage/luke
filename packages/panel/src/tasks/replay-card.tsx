@@ -13,17 +13,15 @@ import {
   DisclosureSummary,
   Inline,
   OneLine,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TextButton,
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -69,13 +67,9 @@ import { useOpenPlace } from "./use-open-link.js";
  * steps, one row each, each opening onto its words exactly as the agent was
  * handed them, under a row that draws the earlier ones a page at a time,
  * and a foot naming the branch and the pull request the source published,
- * where known, and the way to the source's whole transcript: at the message
- * it was forked at, or its tab for a continuation, whose log keeps to its
- * end. The model is `replay-card-model.ts`.
+ * where known. The source's whole transcript is a press of its chip away.
+ * The model is `replay-card-model.ts`.
  */
-
-/** What the foot's way to the source's whole transcript says. */
-const FULL_TRANSCRIPT_WORDS = "Open the full transcript";
 
 /**
  * Where an agent's replay card stands: the agents of its task, archived ones
@@ -361,24 +355,21 @@ function ReplaySteps({
   );
 }
 
-/** The foot: the branch and pull request the source published, where known, and the way to its whole transcript. */
+/** The foot: the branch and pull request the source published, where known; nothing, rule and all, where neither is. */
 function ReplayFoot({
   agentId,
   place,
-  onOpenTranscript,
 }: {
   agentId: string;
   place: ReplayPlace;
-  onOpenTranscript: (() => void) | undefined;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const published = usePublished(agentId, place.readPublished);
   const doors = useMentionDoors();
   const pullRequest = published?.pullRequest ?? place.pullRequests.get(agentId);
   const branch = published?.branch ?? undefined;
   const words =
-    pullRequest === undefined || pullRequest === null
-      ? undefined
-      : `#${pullRequest.number} ${pullRequest.title}`;
+    pullRequest === undefined || pullRequest === null ? undefined : pullRequestLabelOf(pullRequest);
+  if (branch === undefined && words === undefined) return null;
   return (
     <div className="replay-foot">
       {branch === undefined ? null : (
@@ -400,13 +391,6 @@ function ReplayFoot({
               {words}
             </TextLink>
           )}
-        </span>
-      )}
-      {onOpenTranscript === undefined ? null : (
-        <span className="ml-auto text-foreground" data-replay-open="">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onOpenTranscript}>
-            {FULL_TRANSCRIPT_WORDS} ›
-          </TextButton>
         </span>
       )}
     </div>
@@ -432,7 +416,7 @@ export function ReplayCard({
   /** The task the agents are of, under which a message of the source is opened; none where they are of none. */
   taskId: string | undefined;
 }): React.JSX.Element {
-  const { agentId, messageId } = replay;
+  const { agentId } = replay;
   const source = useSource(agentId, place);
   const listed = place.agents.some((each) => each.id === agentId);
   const tile = place.tile(agentId) ?? unlistedActor(agentId, source);
@@ -461,15 +445,6 @@ export function ReplayCard({
                 ? { kind: LINK_PLACE.AGENT, agentId }
                 : { kind: LINK_PLACE.AGENT, planId: taskId, agentId },
             );
-  const onOpenTranscript =
-    messageId !== undefined && openPlace !== undefined
-      ? () =>
-          openPlace(
-            taskId === undefined
-              ? { kind: LINK_PLACE.MESSAGE, agentId, messageId }
-              : { kind: LINK_PLACE.MESSAGE, planId: taskId, agentId, messageId },
-          )
-      : openSource;
   const left = leftOutLine(replay);
   const summary = summaryLine(replay);
   return (
@@ -508,7 +483,7 @@ export function ReplayCard({
             </Text>
           )}
           <ReplaySteps steps={replay.steps} readerId={place.readerId} />
-          <ReplayFoot agentId={agentId} place={place} onOpenTranscript={onOpenTranscript} />
+          <ReplayFoot agentId={agentId} place={place} />
         </PlanContent>
       </Plan>
       {starter === undefined && sentAt === undefined ? null : (

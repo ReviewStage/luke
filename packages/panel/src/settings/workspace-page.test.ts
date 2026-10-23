@@ -753,6 +753,12 @@ const placeholderOf = (within: Element) => {
     : [status.textContent, status.querySelectorAll(".luke-settings-row").length];
 };
 
+/** The boxes the first settings row in `within` is built of, in order, its words and blocks aside. */
+const rowBoxes = (within: Element) =>
+  [...(within.querySelector(".luke-settings-row")?.querySelectorAll("[class]") ?? [])]
+    .map((element) => element.getAttribute("class") ?? "")
+    .filter((name) => name.startsWith("luke-settings-row"));
+
 /** The workspace's name, as the identity row's label says it. */
 const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
 
@@ -1075,6 +1081,7 @@ test("while the members are being read the rest of the page stands, a placeholde
     members: placeholderOf(members),
     identityHeld: identity(container).closest('[aria-busy="true"]') !== null,
   };
+  const placeholderBoxes = rowBoxes(members);
   await settle();
 
   assert.deepEqual(whileReading, { members: ["Loading the members", 3], identityHeld: false });
@@ -1087,6 +1094,8 @@ test("while the members are being read the rest of the page stands, a placeholde
   await settle();
   assert.ok(memberNamed(container, "Sam"));
   assert.equal(busy(container), false);
+  // A member's placeholder stood in the boxes of the row that landed: its face, its email, its role.
+  assert.deepEqual(placeholderBoxes, rowBoxes(section(container, SETTINGS_SECTION.MEMBERS)));
 });
 
 test("before the workspaces are read, placeholder sections stand in the page's shape, saying what is read", () => {
@@ -1110,8 +1119,19 @@ test("before the workspaces are read, placeholder sections stand in the page's s
     ),
   );
 
-  assert.deepEqual(placeholderOf(container), ["Loading your workspaces", 5]);
-  assert.equal(container.querySelectorAll('[role="status"] .luke-settings-section-card').length, 3);
+  // The identity unheaded, the members, and a row to each integration the page draws.
+  const sections = [...container.querySelectorAll('[role="status"] .luke-settings-section')].map(
+    (group) => [
+      group.querySelector(".luke-settings-section-head") !== null,
+      group.querySelectorAll(".luke-settings-row").length,
+    ],
+  );
+  assert.deepEqual(placeholderOf(container)?.[0], "Loading your workspaces");
+  assert.deepEqual(sections, [
+    [false, 1],
+    [true, 1],
+    [true, 3],
+  ]);
 });
 
 test("an admin is offered Remove for a member but not for the owner, and Remove asks before it removes", async () => {
@@ -1130,9 +1150,7 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
     [{ workspaceId: ACME.id, userId: MEMBER.userId }],
   );
   assert.equal(
-    [...page.querySelectorAll(".menu-row")].some((each) =>
-      each.textContent?.includes("Sam"),
-    ),
+    [...page.querySelectorAll(".menu-row")].some((each) => each.textContent?.includes("Sam")),
     false,
   );
 });
@@ -1198,7 +1216,10 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
       { workspaceId: ACME.id, userId: MEMBER.userId, role: WORKSPACE_ROLE.ADMIN },
     ],
   ]);
-  assert.equal(memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent, "Admin");
+  assert.equal(
+    memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent,
+    "Admin",
+  );
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
 });
 
@@ -1221,7 +1242,10 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
-  assert.equal(memberNamed(page, "Ola").querySelector(".luke-settings-row-value")?.textContent, "Owner");
+  assert.equal(
+    memberNamed(page, "Ola").querySelector(".luke-settings-row-value")?.textContent,
+    "Owner",
+  );
 });
 
 test("an admin of the account's own first workspace is never offered Make owner, since it is named for its creator", async () => {
@@ -1400,7 +1424,10 @@ test("a members read sent before a role change and landing after it does not put
   release();
   await settle();
 
-  assert.equal(memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent, "Admin");
+  assert.equal(
+    memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent,
+    "Admin",
+  );
 });
 
 test("an admin's leave says the invitations they sent stay valid, and a member's, who sends none, says nothing of them", async () => {
@@ -1848,7 +1875,8 @@ function chooseRole(form: HTMLElement, words: string): void {
 
 /** Types an address, chooses a role, and presses Invite in the page's form, as many times as asked before any answer. */
 async function invite(page: HTMLElement, email: string, role: string, presses = 1): Promise<void> {
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   const address = form.querySelector("input") ?? assert.fail("no address field");
   const roleWords = role === WORKSPACE_ROLE.ADMIN ? "Admin" : "Member";
   act(() => {
@@ -1938,7 +1966,8 @@ test("the owner invites an address as a role, sees it pending with its link to c
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   const before = roleChip(form).textContent;
   act(() => roleChip(form).click());
   const offered = roleItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
@@ -1961,7 +1990,8 @@ test("an invitation's role is a field chip, Member by default, whose menu checks
 
 test("an admin's role menu offers Admin dimmed, since only the owner invites admins, and an admin invites a member", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   act(() => roleChip(form).click());
   const admin = roleItems().find((item) => item.textContent?.startsWith("Admin"));
   const offered = [
@@ -2030,7 +2060,7 @@ test("an invitation's answer that lands after the stream told a newer list does 
   assert.deepEqual(invitationRows(page), []);
 });
 
-test("Cancel invitation sends nothing while an invitation is on its way", async () => {
+test("Cancel invitation, drawn red, sends nothing while an invitation is on its way", async () => {
   invitations = [
     {
       id: "inv-sam",
@@ -2055,6 +2085,7 @@ test("Cancel invitation sends nothing while an invitation is on its way", async 
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
       (each) => each.textContent === "Cancel invitation",
     ) ?? assert.fail("no Cancel invitation");
+  assert.equal(cancel.dataset.danger, "true", "Cancel invitation is drawn red");
   act(() => cancel.click());
   release();
   await settle();
@@ -2278,10 +2309,7 @@ test("the Sentry row reads again as the window comes forward: an install made on
   });
   await settle();
 
-  assert.deepEqual(before, [
-    "Sentry",
-    "Not installed.",
-  ]);
+  assert.deepEqual(before, ["Sentry", "Not installed."]);
   assert.deepEqual(installed, ["Sentry", "Installed · acme"]);
   assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
 });
@@ -2327,10 +2355,7 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   act(() => button(row, "Install for workspace").click());
   await settle();
 
-  assert.deepEqual(before, [
-    "Sentry",
-    "Not installed.",
-  ]);
+  assert.deepEqual(before, ["Sentry", "Not installed."]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
@@ -2356,10 +2381,7 @@ test("an installed workspace's Sentry names its organization, its ⋯ disconnect
       { workspaceId: ACME.id, installationId: "installation-1" },
     ],
   ]);
-  assert.deepEqual(after, [
-    "Sentry",
-    "Not installed.",
-  ]);
+  assert.deepEqual(after, ["Sentry", "Not installed."]);
   assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed · acme"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });

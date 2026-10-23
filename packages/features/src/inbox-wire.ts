@@ -8,6 +8,7 @@ import {
   hasWordsOrFiles,
 } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { linkLabels } from "./mention-link.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import {
   CODE_PATH_MAX_CHARS,
@@ -15,6 +16,7 @@ import {
   commitShaSchema,
   workspaceIdSchema,
 } from "./task-wire.js";
+import { WEBM_TYPE } from "./video-signature.js";
 
 /**
  * inbox-wire.ts -- the developer's inbox: what a task's coding agents need of the developer, posted by the agents and answered on the desktop.
@@ -140,6 +142,13 @@ export const INBOX_BOUNDS = {
    * one a screenshot at a screen's own scale fits under.
    */
   MAX_IMAGE_BYTES: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  /**
+   * The most bytes one video may hold: a WebM the agent recorded of what it
+   * did, held to the bound a transcript keeps one under, which the
+   * recorder in its sandbox fits a recording to and which a function's
+   * answer serves whole.
+   */
+  MAX_VIDEO_BYTES: 4_000_000,
   /** The most characters a label may spell: a link's, an option's, a field's, a select's option, or a box's placeholder. */
   MAX_LABEL_CHARS: 160,
   /** The most options a choice or a select may offer: a choice a person makes at a glance. */
@@ -215,6 +224,18 @@ export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_
 
 /** An image's media type as the wire carries it: one of the three the service keeps. */
 export const inboxImageTypeSchema = EffectSchema.Literals(Object.values(INBOX_IMAGE_TYPE));
+
+/**
+ * The types a file of an item's may be kept and served under: any a
+ * message's file travels as, or a WebM the agent recorded of what it did and
+ * drew in its words as it draws a picture.
+ */
+export const INBOX_FILE_TYPE = {
+  ...CODING_AGENT_ATTACHMENT_TYPE,
+  WEBM: WEBM_TYPE,
+} as const;
+
+export type InboxFileType = (typeof INBOX_FILE_TYPE)[keyof typeof INBOX_FILE_TYPE];
 
 /** The responses an item asks for, each answered its own way. */
 export const INBOX_RESPONSE = {
@@ -1011,6 +1032,82 @@ export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
 /** What a member's message comes back as: the item as it then stands, its thread with the message on it, and, where the message answered the thread's open ask, the transaction it was taken in. */
 export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema, ...writtenIn });
+
+/**
+ * A thread a member starts with an agent, as a new mail is written: the
+ * agent it goes to, its subject, and its first message, which is a member's
+ * message as `inboxMessageRequestSchema` bounds one, words or files or both
+ * and never neither. The service mints the thread's key from its subject, so
+ * a member never names one the agent already keeps.
+ */
+export const inboxStartRequestSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  /** The thread's subject; absent where the member wrote none, which its first message's first line stands for (`inboxStartTitle`). */
+  title: EffectSchema.optionalKey(
+    EffectSchema.Trim.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_TITLE_CHARS),
+    ),
+  ),
+  text: inboxMessageRequestSchema.fields.text,
+  attachments: inboxMessageRequestSchema.fields.attachments,
+  clientKey: inboxMessageRequestSchema.fields.clientKey,
+}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
+
+export type InboxStartRequest = typeof inboxStartRequestSchema.Type;
+
+/** The longest title a thread's first line stands for its subject in, cut on a word where one ends near it. */
+const STARTED_TITLE_CHARS = 60;
+
+/** The title of a thread started with no subject where its message holds neither words nor a file. */
+const STARTED_TITLE_FALLBACK = "New thread";
+
+/** A code fence's line, which opens or closes a block and says nothing itself, its language among it. */
+const CODE_FENCE = /^\s*(?:```|~~~)/u;
+
+/** A thematic break's line, three or more of one of its marks alone, which separates and says nothing. */
+const THEMATIC_BREAK = /^\s*([-*_])(?:[ \t]*\1){2,}\s*$/u;
+
+/**
+ * A line of Markdown as plain words: its heading, quote, or list mark, each
+ * link as its label or its mention's name (`linkLabels`), and no emphasis
+ * or code marks, an underscore inside a word, as an identifier's, kept;
+ * nothing for a code fence's line or a thematic break's.
+ */
+function plainLine(line: string): string {
+  if (CODE_FENCE.test(line) || THEMATIC_BREAK.test(line)) return "";
+  return linkLabels(line.replace(/!\[/gu, "["))
+    .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
+    .replace(/[*`~]/gu, "")
+    .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/** Words cut to a title's short line, on a word where one ends near the cut. */
+function shortTitle(words: string): string {
+  if (words.length <= STARTED_TITLE_CHARS) return words;
+  const cut = words.slice(0, STARTED_TITLE_CHARS);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > STARTED_TITLE_CHARS / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * The title of a thread a member started: the subject they wrote, or,
+ * where they wrote none, the first line of their message that says
+ * anything, as plain words, or the name of its first file where it holds
+ * no words, each cut to a short line on a word.
+ */
+export function inboxStartTitle(
+  request: Pick<InboxStartRequest, "title" | "text" | "attachments">,
+): string {
+  if (request.title !== undefined) return request.title;
+  const line = request.text
+    .split("\n")
+    .map(plainLine)
+    .find((each) => each !== "");
+  return shortTitle(line ?? request.attachments?.[0]?.name ?? STARTED_TITLE_FALLBACK);
+}
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({

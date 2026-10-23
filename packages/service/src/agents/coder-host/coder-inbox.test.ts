@@ -6,13 +6,18 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
-import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_BOUNDS,
+} from "@luke/features/coding-agent-wire";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_FILE_TYPE,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
@@ -21,6 +26,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { paddedTo, webmBytes } from "@luke/wire/testing";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../../core.js";
@@ -455,6 +461,72 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
+    "a recording a body draws is kept as a WebM past a picture's and a file's bound and read back as one, and a desktop before version 5 is shown no image block for it",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        // Past a message's file bound too, which the item's table held a recording to before.
+        const recording = paddedTo(webmBytes(1280, 800), CODING_AGENT_BOUNDS.MAX_PDF_BYTES + 1);
+        const sandbox = sandboxWith({ "/tmp/video/flow.webm": recording });
+
+        const posted = yield* post(
+          agent,
+          { ...QUEUE, body: '![Inviting a member](/tmp/video/flow.webm "The invite flow")' },
+          sandbox,
+        );
+
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const item = yield* onlyItem(agent);
+        const [message] = item.thread ?? [];
+        assert.deepEqual(
+          message?.files?.map((file) => [file.name, file.mediaType]),
+          [["flow.webm", INBOX_FILE_TYPE.WEBM]],
+        );
+        const kept = yield* readInboxAttachment(
+          agent.userId,
+          item.id,
+          message?.files?.[0]?.attachmentId ?? "",
+        );
+        assert.deepEqual(
+          Option.map(kept, (file) => [file.contentType, file.bytes.byteLength]),
+          Option.some([INBOX_FILE_TYPE.WEBM, recording.byteLength]),
+        );
+        assert.ok(
+          item.blocks.every((block) => block.type !== INBOX_BLOCK.IMAGE),
+          "an old desktop would draw a video as a broken picture",
+        );
+      }),
+  );
+
+  it.effect(
+    "a picture past a picture's bound, a recording past a video's, and one that states no size are refused with the path named",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const sandbox = sandboxWith({
+          "shots/huge.png": paddedTo(PNG, INBOX_BOUNDS.MAX_IMAGE_BYTES + 1),
+          "/tmp/video/long.webm": paddedTo(webmBytes(1280, 800), INBOX_BOUNDS.MAX_VIDEO_BYTES + 1),
+          "/tmp/video/flow.mkv": webmBytes(640, 480, "matroska"),
+        });
+        const tooLarge =
+          "Not posted: a picture names a file larger than 1.5 MB, or a video larger than 4.0 MB; render it smaller, or record a shorter flow:";
+        const refusals = [
+          ["shots/huge.png", `${tooLarge} shots/huge.png`],
+          ["/tmp/video/long.webm", `${tooLarge} /tmp/video/long.webm`],
+          [
+            "/tmp/video/flow.mkv",
+            "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image, or a WebM video that states its size: /tmp/video/flow.mkv",
+          ],
+        ] as const;
+        for (const [path, reason] of refusals) {
+          const refused = yield* post(agent, { ...QUEUE, body: `![Shot](${path})` }, sandbox);
+          assert.equal(refusalOf(refused), reason);
+        }
+        assert.deepEqual(yield* taskInboxItems(agent.userId, agent.taskId), []);
+      }),
+  );
+
+  it.effect(
     "a post drawing a picture that is missing, no image, or one past the count is refused with the path named, and writes nothing",
     () =>
       Effect.gen(function* () {
@@ -474,7 +546,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           ],
           [
             drawing("notes.txt"),
-            "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image: notes.txt",
+            "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image, or a WebM video that states its size: notes.txt",
           ],
           [
             drawing(...Array.from({ length: 9 }, (_none, at) => `shots/${at}.png`)),

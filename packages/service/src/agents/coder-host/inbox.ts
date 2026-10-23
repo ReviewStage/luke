@@ -1,7 +1,6 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
-import { sniffImageType } from "@luke/features/image-signature";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ANSWER_LEAD,
@@ -43,7 +42,11 @@ import {
 } from "../../inbox/inbox-store.js";
 import { noticedForOperator } from "../operator-notice.js";
 import { CODER } from "./bounds.js";
-import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from "./inbox-image.js";
+import {
+  type InboxSandboxDoor,
+  readSandboxMedia,
+  type SandboxImageRefusals,
+} from "./inbox-image.js";
 
 /**
  * inbox.ts -- the coding agent's three inbox tools: post a message on a thread of the developer's inbox, withdraw a thread's open ask, and read every thread back.
@@ -79,6 +82,9 @@ import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from 
 /** The inbox's picture bound in megabytes, as the words the model reads say it. */
 const MAX_PICTURE_MB = (INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1);
 
+/** The inbox's video bound in megabytes, as the words the model reads say it. */
+const MAX_VIDEO_MB = (INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1);
+
 /** The tools as the model is shown them (`apps/dev/tools/`): each one's name, words, and input. */
 export const INBOX_TOOLS = {
   POST: {
@@ -94,7 +100,8 @@ export const INBOX_TOOLS = {
       "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
       `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
       `Draw a picture where it belongs, such as a screenshot of a UI you rendered, as ![alt](<path> "caption"): path is the file's path in your sandbox, ` +
-      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
+      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a recording of a flow, which plays there, ` +
+      `at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
       "alt says in a sentence what it shows, and pictures written next to each other stand side by side. " +
       "ask is what the message asks of them, which ends it: " +
       `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several, and recommended then takes a list of the labels you recommend; ` +
@@ -223,16 +230,13 @@ const SETTLED_MESSAGES_TOLD = 3;
 const readPost = readEither(inboxThreadPostInputSchema, { excess: EXCESS_KEYS.DROP });
 const readWithdraw = readEither(inboxWithdrawInputSchema, { excess: EXCESS_KEYS.DROP });
 
-/** How a post's picture is read from the sandbox: held to the inbox's picture bound, and refused in a post's own words. */
-const PICTURE_TERMS: SandboxImageTerms = {
-  maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
-  sniff: sniffImageType,
-  refusals: {
-    NO_FILE: "Not posted: a picture names no file in your sandbox:",
-    NOT_IMAGE: "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image:",
-    TOO_LARGE: `Not posted: a picture names a file larger than ${MAX_PICTURE_MB} MB; render it smaller, or at one screen scale:`,
-    UNREADABLE: "Not posted: a picture's file could not be read from your sandbox:",
-  },
+/** Why a post's picture was not read from the sandbox, in a post's own words; each is followed by the path. */
+const PICTURE_REFUSALS: SandboxImageRefusals = {
+  NO_FILE: "Not posted: a picture names no file in your sandbox:",
+  NOT_IMAGE:
+    "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image, or a WebM video that states its size:",
+  TOO_LARGE: `Not posted: a picture names a file larger than ${MAX_PICTURE_MB} MB, or a video larger than ${MAX_VIDEO_MB} MB; render it smaller, or record a shorter flow:`,
+  UNREADABLE: "Not posted: a picture's file could not be read from your sandbox:",
 };
 
 /** Who wrote a message, as the agent reads it: itself, or the member by name, or a former member whose account is gone. */
@@ -470,7 +474,7 @@ function bodyPictures(
   return Effect.gen(function* () {
     const read: InboxBodyPicture[] = [];
     for (const path of paths) {
-      const image = yield* readSandboxImage(sandbox, CODER.CHECKOUT_PATH, path, PICTURE_TERMS);
+      const image = yield* readSandboxMedia(sandbox, CODER.CHECKOUT_PATH, path, PICTURE_REFUSALS);
       if (Result.isFailure(image)) return Result.fail(image.failure);
       read.push({ ...image.success, path, name: posix.basename(path) || path });
     }

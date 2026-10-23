@@ -6,7 +6,7 @@
  * window reporting it is refused: the voice window would mute Luke's direct
  * audio on a `LIVE` it was told by anything but the window playing the
  * avatar. The tile's Video off and Video on turn it off and on from either
- * window that draws it, the panel (the Call tab and its call card) and the
+ * window that draws it, the panel (the agent's tab and its call card) and the
  * floating call window, and from no other. The feed is the voice window's
  * alone, and reaches the panel only while there is an avatar to lip-sync it.
  * The call window's view of the video is signalled between the two windows

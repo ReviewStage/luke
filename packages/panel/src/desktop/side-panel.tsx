@@ -16,7 +16,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
   CloseIcon,
   CollapseIcon,
   EmptyState,
@@ -24,7 +23,6 @@ import {
   ErrorState,
   ExpandIcon,
   Fill,
-  FoldingButton,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
@@ -35,6 +33,8 @@ import {
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
+  RowHint,
+  RowHintOptions,
   SCROLL_SIZE,
   ScrollArea,
   SidePanelIcon,
@@ -70,6 +70,7 @@ import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import {
   Fragment,
+  type ReactNode,
   Suspense,
   useCallback,
   useEffect,
@@ -102,7 +103,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
-import { TaskChipCard } from "../tasks/chip-cards.js";
+import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import {
   browserOf,
   CloudBrowserDraftPane,
@@ -127,7 +128,7 @@ import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
-import { PageCard } from "../tasks/page-card.js";
+import { PageCard, PageNameCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
@@ -176,6 +177,7 @@ import { paneTiming } from "./pane-motion.js";
 import {
   type AddEntry,
   AddTabButton,
+  contentActionGroups,
   DoorsTab,
   type HeldTranscripts,
   type TabDoors,
@@ -188,6 +190,23 @@ import {
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
+
+/**
+ * What a phone's header is handed of the tab the panel shows (`task-pane-switcher.tsx`):
+ * what it is called, and, read as the header's ⋯ opens, what it offers on what
+ * it shows, which its own ⋯ offers where the panel's bar stands.
+ */
+export interface ShownTab {
+  readonly label: string;
+  readonly groups: () => MenuAction[][];
+}
+
+/** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
+interface StripActivity {
+  readonly slot: HTMLElement | null;
+  readonly onListed: (listed: boolean) => void;
+  readonly onShown: (shown: ShownTab | undefined) => void;
+}
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
@@ -204,7 +223,7 @@ import { TabStrip } from "./tab-strip.js";
  * opened, at the strip's end, and a task that has used none, and has no agent, says
  * so in the panel's body under the "+". The task's coding agents follow, one tab each, named by model and wearing
  * its harness's mark for where the agent stands; after them stand the subagents opened from
- * the Call tab, the "+", or a delegation's row in an agent's tab, one tab
+ * the "+" or a delegation's row in an agent's tab, one tab
  * each, named by job. A draft agent opened from the "+" stands after the
  * agents until its first message starts it. Every tab closes, and closing
  * an agent's or a subagent's closes only the view: the agent goes on as it
@@ -734,7 +753,7 @@ function terminalOffers(
 const noFocusMove = () => undefined;
 
 /** One tab the strip draws: the tab, how it looks, how it closes, and how its transcript is copied. */
-interface DrawnTab {
+export interface DrawnTab {
   tab: SidePanelTab;
   look: TabLook;
   /** Closes the tab, as its × does. */
@@ -1059,10 +1078,8 @@ function PanelTabs({
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
   inboxDrafted: boolean;
-  /** Where a phone's Activity lists the tabs in the strip's place, and how a row's press leaves the list; none where the strip is the way between them. */
-  activity?:
-    | { readonly slot: HTMLElement | null; readonly onListed: (listed: boolean) => void }
-    | undefined;
+  /** Where a phone's Activity lists the tabs in the strip's place, how a row's press leaves the list, and where the tab shown is handed on; none where the strip is the way between them. */
+  activity?: StripActivity | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -1131,6 +1148,7 @@ function PanelTabs({
           : undefined,
     };
   };
+  useShownTab(activity?.onShown, strip, doorsOf);
   return (
     <div className="side-panel-tabs">
       {activity?.slot
@@ -1151,7 +1169,7 @@ function PanelTabs({
             key={tabKey(entry.tab)}
             look={entry.look}
             doors={doorsOf(entry, at)}
-            slot={actionsSlot}
+            slot={activity === undefined ? actionsSlot : null}
           />
         ))}
       </TabStrip>
@@ -1170,13 +1188,39 @@ function PanelTabs({
 }
 
 /**
+ * Hands a phone's header the tab the strip shows, past the plan, which the
+ * header names itself by: its name as it changes, and what it offers on what
+ * it shows, read as the header's ⋯ opens, since those actions are made anew
+ * on every draw; and none once no tab past the plan is shown, or the strip
+ * is gone.
+ */
+function useShownTab(
+  onShown: ((shown: ShownTab | undefined) => void) | undefined,
+  strip: readonly DrawnTab[],
+  doorsOf: (entry: DrawnTab, at: number) => TabDoors,
+): void {
+  const at = strip.findIndex((entry) => entry.look.selected);
+  const chosen = strip[at];
+  const groups = useRef<MenuAction[][]>([]);
+  useLayoutEffect(() => {
+    groups.current = chosen === undefined ? [] : contentActionGroups(doorsOf(chosen, at));
+  });
+  const label =
+    chosen === undefined || chosen.tab === SIDE_PANEL_TAB.PLAN ? undefined : chosen.look.label;
+  useEffect(() => {
+    onShown?.(label === undefined ? undefined : { label, groups: () => groups.current });
+  }, [onShown, label]);
+  useEffect(() => () => onShown?.(undefined), [onShown]);
+}
+
+/**
  * A phone's Activity: every tab the panel holds but the plan's, each a row of
  * its glyph, its name, and what its tab says after it, newest arrivals in
  * the strip's own order, a press showing it across the panel; under them,
  * what the "+" offers, as the empty panel offers it, since a phone draws no
  * "+". With nothing open past the plan it says so over the offers.
  */
-function ActivityList({
+export function ActivityList({
   strip,
   offers,
   onListed,
@@ -1205,24 +1249,31 @@ function ActivityList({
           // Note that the open tabs are dense rows, as the offers under them (`MenuRowList`) are, so both read down one edge in one type.
           <List label="Activity" density={LIST_DENSITY.DENSE}>
             {open.map((entry) => (
-              <ListRow
-                key={tabKey(entry.tab)}
-                leading={entry.look.icon}
-                title={entry.look.label}
-                meta={entry.look.detail}
-                unread={entry.look.unread}
-                actions={
-                  <IconButton
-                    icon={<CloseIcon />}
-                    label={`Close ${entry.look.label}`}
-                    onClick={entry.close}
-                  />
-                }
-                onPress={() => {
-                  onListed(false);
-                  entry.look.onSelect();
-                }}
-              />
+              // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
+              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card} cardBeside>
+                <ListRow
+                  leading={entry.look.icon}
+                  title={entry.look.label}
+                  meta={entry.look.detail}
+                  unread={entry.look.unread}
+                  hint={
+                    entry.look.card === undefined
+                      ? undefined
+                      : { Hint: RowHint, label: entry.look.label }
+                  }
+                  actions={
+                    <IconButton
+                      icon={<CloseIcon />}
+                      label={`Close ${entry.look.label}`}
+                      onClick={entry.close}
+                    />
+                  }
+                  onPress={() => {
+                    onListed(false);
+                    entry.look.onSelect();
+                  }}
+                />
+              </RowHintOptions>
             ))}
           </List>
         )}
@@ -1427,13 +1478,16 @@ export interface TaskCards {
 /**
  * The cards a transcript's rows hang, each the card of the tab the row
  * opens: a call about an agent the agent's (`agent-ref.tsx`), code shown
- * the file's, with Luke's note on the lines (`file-ref.tsx`), and a
- * subagent's row its worker's, read as its tab reads its own, `chosen`
- * telling whether that tab is the one shown, whose transcript follows the
- * run. A call's own rows name no worker, and hang none for one. An agent's
- * transcript also names the task whose plan it was handed, by `task`, and
- * every transcript names an agent a call is about by its tab's tile and
- * name, by `agent`.
+ * the file's, with Luke's note on the lines (`file-ref.tsx`), a page shown
+ * or read the page's, previewing it, as its tab and its chip hang it
+ * (`page-card.tsx`), and a subagent's row its worker's, read as its tab
+ * reads its own, `chosen` telling whether that tab is the one shown, whose
+ * transcript follows the run. A call's own rows name no worker, and hang
+ * none for one. An agent's transcript also names the task whose plan it was
+ * handed, by `task`, and every transcript names an agent a call is about by
+ * its tab's tile and name, by `agent`. Every kind of target is answered by
+ * name, so a kind added to `TOOL_TARGET` is a choice made here of the card
+ * its row hangs rather than a hint it falls back to unseen.
  */
 export function taskCards(input: {
   agents: CodingAgentsControl;
@@ -1441,19 +1495,39 @@ export function taskCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** Every code Luke showed on the task, whose note on a `show_code` call's lines its row's card says. */
   shownCode: readonly TaskCodeShowing[];
+  /** What the transcript's pages stand on, its task or its agent on no task, which a page's row reads its card from; none where its rows open no page. */
+  pages: PagePlace | undefined;
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
-  const { agents, held, chosen, shownCode, task } = input;
-  const target = (opened: ToolTarget) => {
-    if (opened.kind === TOOL_TARGET.SHOWN_CODE) {
-      const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
-      return <FileCard path={opened.ref.path} note={note} />;
+  const { agents, held, chosen, shownCode, pages, task } = input;
+  const target = (opened: ToolTarget, name?: string): ReactNode => {
+    switch (opened.kind) {
+      case TOOL_TARGET.SHOWN_CODE: {
+        const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
+        return <FileCard path={opened.ref.path} note={note} />;
+      }
+      case TOOL_TARGET.AGENT: {
+        const tab = { agent: opened.agent };
+        const subject = agentSubject(agents, opened.agent, held, chosen(tab));
+        return <AgentCard subject={subject} models={agents.models} />;
+      }
+      case TOOL_TARGET.PAGE:
+        return pages === undefined ? undefined : (
+          <PageChipCard
+            place={pages}
+            pageId={opened.page}
+            fallback={<PageNameCard name={name} />}
+          />
+        );
+      // Note that these tabs hang a pill or a card the row has no read of yet, so the row's hint says what it opens.
+      case TOOL_TARGET.BOARD:
+      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.INBOX:
+      case TOOL_TARGET.CHAT:
+      case TOOL_TARGET.TASK:
+        return undefined;
     }
-    if (opened.kind !== TOOL_TARGET.AGENT) return undefined;
-    const tab = { agent: opened.agent };
-    const subject = agentSubject(agents, opened.agent, held, chosen(tab));
-    return <AgentCard subject={subject} models={agents.models} />;
   };
   // An agent the plan lists is named on a call's row as its tab wears it; one it does not is left to the call's answer.
   const agent = (agentId: string) => {
@@ -1601,8 +1675,8 @@ function TabContent({
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
-  /** Runs an agent's branch in a terminal of this Mac in this panel, which its Pull request tab's Run offers; none where no repository is known or the platform has no Mac terminal. */
-  onRunOnMac: ((agentId: string) => void) | undefined;
+  /** Runs a branch in an agent's terminal of this Mac in this panel, which every Pull request tab's Run offers: the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
+  onRunOnMac: ((agentId: string, number?: number) => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const directory = useMemberDirectory();
@@ -1683,12 +1757,8 @@ function TabContent({
             view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
             onView={(view) => onPullRequestView(tab, view)}
             onActions={(actions) => onTabActions(tab, actions)}
-            // Note that Run reads the agent's own branch, so a tab naming another pull request by its number offers none.
-            onRun={
-              onRunOnMac === undefined || tab.number !== undefined
-                ? undefined
-                : () => onRunOnMac(tab.changes)
-            }
+            // Note that Run reads the branch of the pull request the tab shows: the agent's own, or the one its number names.
+            onRun={onRunOnMac === undefined ? undefined : () => onRunOnMac(tab.changes, tab.number)}
           />
         </Suspense>
       </PullRequestsOnGitHub>
@@ -2080,11 +2150,19 @@ export function SidePanel({
    * A phone's Activity (`task-pane-switcher.tsx`): whether the panel lists
    * its tabs rather than showing one, and the way to ask for the list or
    * leave it. Where it is handed and the panel stands only full screen, the
-   * strip and its "+" are not drawn, the list standing for both, and a tab
-   * shown but the plan leads the bar with the way back to the list; none
-   * beside anything but a task's page.
+   * panel's bar is not drawn, the list standing for its strip and its "+",
+   * and the phone's header for the rest: the way back to the list, the tab's
+   * name, and its ⋯, which the tab shown is handed up for; none beside
+   * anything but a task's page.
    */
-  activity?: { readonly listed: boolean; readonly onListed: (listed: boolean) => void } | undefined;
+  activity?:
+    | {
+        readonly listed: boolean;
+        readonly onListed: (listed: boolean) => void;
+        /** Hands the header the tab shown past the plan, or none (`ShownTab`). */
+        readonly onShown: (shown: ShownTab | undefined) => void;
+      }
+    | undefined;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
@@ -2295,45 +2373,40 @@ export function SidePanel({
       banner={banner}
       switched={switched}
       tabs={
-        <>
-          {switched && !listing && tab !== SIDE_PANEL_TAB.PLAN ? (
-            <FoldingButton
-              label="Activity"
-              icon={<BackIcon />}
-              onClick={() => activity.onListed(true)}
-            />
-          ) : null}
-          <PanelTabs
-            panel={panel}
-            holder={holder}
-            taskId={taskId}
-            keys={keys && focused}
-            unread={unread}
-            agents={agents}
-            subagents={subagents}
-            files={files}
-            changes={changes}
-            pages={pageTabs}
-            terminals={terminals}
-            cloudBrowsers={cloudBrowsers}
-            shown={shownCode ?? []}
-            repository={repository}
-            offers={offers}
-            held={drawnTranscripts}
-            actionsSlot={actionsSlot}
-            handed={handed}
-            onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
-            shownAgent={shownAgent}
-            inboxWaiting={inbox?.waiting ?? 0}
-            inboxDrafted={inbox?.drafted ?? false}
-            task={task}
-            activity={
-              switched
-                ? { slot: listing ? activitySlot : null, onListed: activity.onListed }
-                : undefined
-            }
-          />
-        </>
+        <PanelTabs
+          panel={panel}
+          holder={holder}
+          taskId={taskId}
+          keys={keys && focused}
+          unread={unread}
+          agents={agents}
+          subagents={subagents}
+          files={files}
+          changes={changes}
+          pages={pageTabs}
+          terminals={terminals}
+          cloudBrowsers={cloudBrowsers}
+          shown={shownCode ?? []}
+          repository={repository}
+          offers={offers}
+          held={drawnTranscripts}
+          actionsSlot={actionsSlot}
+          handed={handed}
+          onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
+          shownAgent={shownAgent}
+          inboxWaiting={inbox?.waiting ?? 0}
+          inboxDrafted={inbox?.drafted ?? false}
+          task={task}
+          activity={
+            switched
+              ? {
+                  slot: listing ? activitySlot : null,
+                  onListed: activity.onListed,
+                  onShown: activity.onShown,
+                }
+              : undefined
+          }
+        />
       }
       actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
     >
@@ -2463,7 +2536,7 @@ function PanelFrame({
   actions: React.ReactNode;
   /** Drawn under the row while the panel fills the window and covers what draws it otherwise. */
   banner?: React.ReactNode;
-  /** Whether a phone's views of the task stand for the strip, which is then not drawn (`task-pane-switcher.tsx`). */
+  /** Whether a phone's header stands for the bar, which is then not drawn (`task-pane-switcher.tsx`). */
   switched?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {

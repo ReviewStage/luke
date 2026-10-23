@@ -64,6 +64,7 @@ import {
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
   type CodingAgentInboxScope,
+  type CodingAgentInboxStartParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -89,6 +90,7 @@ import {
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentReviewOptionsAnswerView,
+  type CodingAgentRewindParams,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -714,6 +716,8 @@ export interface HostOperator {
   codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
+  codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
@@ -882,6 +886,10 @@ export interface HostOperator {
   /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
   codingAgentInboxMessage(
     params: CodingAgentInboxMessageParams,
+  ): Effect.Effect<CodingAgentInboxMessagedView>;
+  /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
+  codingAgentInboxStart(
+    params: CodingAgentInboxStartParams,
   ): Effect.Effect<CodingAgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   codingAgentInboxReadState(
@@ -2077,6 +2085,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
+    codingAgentRewind: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_REWIND, {
+          agentId: params.agentId,
+          messageId: params.messageId,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
     codingAgentArchive: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
@@ -2438,6 +2454,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
           ...(params.answers === undefined ? undefined : { answers: params.answers }),
           ...(params.revision === undefined ? undefined : { revision: params.revision }),
+        }),
+        codingAgentAnswer(codingAgentInboxMessagedViewSchema),
+      ),
+    codingAgentInboxStart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
+          agentId: params.agentId,
+          ...(params.title === undefined ? undefined : { title: params.title }),
+          text: params.text,
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
+          clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxMessagedViewSchema),
       ),

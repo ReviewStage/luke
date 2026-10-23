@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import { Tooltip } from "../tooltip/hint.js";
 import {
   MENU_ITEM_MARK,
   Menu,
@@ -23,7 +25,9 @@ import {
  * and takes no press where it does not apply now. A touch held still on
  * what a right-click opens a menu on opens the same menu at the touch,
  * once, and its release makes no click; a touch that moves or lets go
- * first, and a mouse held down, open nothing.
+ * first, and a mouse held down, open nothing. A label and a detail cut
+ * short fade out, and an item hangs its card beside itself on rest, which
+ * leaves the menu its focus, its arrows, and a press on the card.
  */
 
 declare global {
@@ -207,6 +211,130 @@ test("a press elsewhere closes the menu and takes nothing it was offered", () =>
   });
   expect(openMenu()).toBeNull();
   expect(chosen).toEqual([]);
+});
+
+/** Stands in for the browser's ResizeObserver, which jsdom lacks and a card places itself by, reporting a box once as it is observed, as a first layout would. */
+function standInResizeObserver(): void {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class implements ResizeObserver {
+      constructor(private readonly heard: ResizeObserverCallback) {}
+      observe(): void {
+        this.heard([], this);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+}
+
+/** Every line's words measured wider than its box, as a narrow menu cuts a long name. */
+function cutEveryLine(): void {
+  standInResizeObserver();
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(120);
+}
+
+test("a label and a detail the menu cuts short fade out at their end rather than end in an ellipsis", () => {
+  cutEveryLine();
+  mount(
+    createElement(Harness, {
+      groups: [
+        [
+          {
+            label: "Analytical Engine Society of Greater London",
+            detail: "ada.lovelace@analytical-engine.example",
+            onSelect: () => undefined,
+          },
+        ],
+      ],
+    }),
+  );
+  press(button("More"));
+  const item = openMenu()?.querySelector('[role="menuitem"]');
+  const lines = [
+    ...(item?.querySelectorAll(".luke-menu-item-label, .luke-menu-item-detail") ?? []),
+  ];
+  expect(
+    lines.map((line) => [line.getAttribute("data-end"), line.getAttribute("data-overflow")]),
+  ).toEqual([
+    ["fade", "true"],
+    ["fade", "true"],
+  ]);
+});
+
+test("an item with a card hangs it while the pointer rests on it, and the menu keeps its focus, its arrows, and a press on the card", () => {
+  standInResizeObserver();
+  mount(
+    createElement(Harness, {
+      groups: [
+        [
+          { label: "Rename", onSelect: () => undefined },
+          {
+            label: "Ada Lovelace",
+            card: createElement("p", { className: "person-card" }, "Ada's card"),
+            onSelect: () => undefined,
+          },
+          { label: "Archive", onSelect: () => undefined },
+        ],
+      ],
+    }),
+  );
+  press(button("More"));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  pointerMove(null, button("Ada Lovelace"));
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  const card = document.querySelector<HTMLElement>(".person-card");
+  expect(card?.textContent).toBe("Ada's card");
+  expect(focused()).toBe("Rename");
+
+  act(() => {
+    card?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+  });
+  expect(openMenu()).not.toBeNull();
+
+  key("ArrowDown");
+  expect(focused()).toBe("Ada Lovelace");
+  key("ArrowDown");
+  expect(focused()).toBe("Archive");
+});
+
+test("a card hung from a control on an item's card is the menu's too, so a press on it leaves the menu standing", () => {
+  standInResizeObserver();
+  const agentCard = createElement(Tooltip, {
+    label: "Builder",
+    card: createElement("p", { className: "agent-card" }, "Builder's card"),
+    children: createElement("button", { type: "button", onClick: () => undefined }, "Builder"),
+  });
+  mount(
+    createElement(Harness, {
+      groups: [
+        [
+          { label: "Rename", onSelect: () => undefined },
+          { label: "Ada Lovelace", card: agentCard, onSelect: () => undefined },
+        ],
+      ],
+    }),
+  );
+  press(button("More"));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  pointerMove(null, button("Ada Lovelace"));
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  pointerMove(button("Ada Lovelace"), button("Builder"));
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  const nested = document.querySelector<HTMLElement>(".agent-card");
+  expect(nested?.textContent).toBe("Builder's card");
+
+  act(() => {
+    nested?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+  });
+  expect(openMenu()).not.toBeNull();
 });
 
 test("a dimmed item is unavailable and takes no press", () => {

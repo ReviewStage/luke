@@ -1,12 +1,13 @@
 import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
-import { FILL_ELEMENT, Fill, useSecond } from "@luke/ui";
+import { useSecond } from "@luke/ui";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
 import { type AgentCallDoors, CallButton } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { TranscriptCards } from "./agent-tab.js";
+import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { agentTabLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
@@ -195,24 +196,16 @@ export function DraftAgentTab({
 
   if (control.onUnarchive !== undefined) {
     return (
-      <Fill
-        as={FILL_ELEMENT.SECTION}
-        className="agent-tab ph-no-capture"
-        aria-label={TAB_WORDS.NEW_AGENT}
-      >
-        <footer className="agent-tab-foot">
+      <AgentTabFrame label={TAB_WORDS.NEW_AGENT}>
+        <AgentTabFoot>
           <ArchivedComposerNote onUnarchive={control.onUnarchive} />
-        </footer>
-      </Fill>
+        </AgentTabFoot>
+      </AgentTabFrame>
     );
   }
 
   return (
-    <Fill
-      as={FILL_ELEMENT.SECTION}
-      className="agent-tab ph-no-capture"
-      aria-label={TAB_WORDS.NEW_AGENT}
-    >
+    <AgentTabFrame label={TAB_WORDS.NEW_AGENT}>
       {sentAt === undefined || fork === undefined ? null : (
         <ConversationEmptyState>
           <StartingLine
@@ -221,7 +214,7 @@ export function DraftAgentTab({
           />
         </ConversationEmptyState>
       )}
-      <footer className="agent-tab-foot">
+      <AgentTabFoot>
         {fork === undefined ? null : (
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
         )}
@@ -262,7 +255,7 @@ export function DraftAgentTab({
             ) : undefined
           }
         />
-      </footer>
-    </Fill>
+      </AgentTabFoot>
+    </AgentTabFrame>
   );
 }

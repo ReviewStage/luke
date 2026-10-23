@@ -47,6 +47,7 @@ import {
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentReviewOptionsAnswerView,
+  type CodingAgentRewindParams,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -93,6 +94,7 @@ export interface AgentProceduresDependencies {
     codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentEnsureOperator(
@@ -354,6 +356,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return yield* notedAgent(host.codingAgentStop(input));
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_REWIND]: actPort[AGENT_ACT_KIND.CODING_AGENTS_REWIND].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* notedAgent(host.codingAgentRewind(input));
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE].effect(

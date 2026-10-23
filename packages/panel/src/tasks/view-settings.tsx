@@ -82,7 +82,7 @@ const FONT_SIZE_OPTIONS = DIFF_FONT_SIZES.map((size) => ({ value: size, label: `
 const MINIMIZE_CHORD = FILES_CHANGED_SHORTCUTS[FILES_CHANGED_KEY.MINIMIZE_COMMENTS].chord;
 
 /** What a picker of themes says where its search matches none. */
-const NO_THEME = "No theme matches.";
+const NO_THEME = "No themes match";
 
 /** The option a value is among `options`, which a pop-up's pick is read back through. */
 function optionOf<Value extends string>(

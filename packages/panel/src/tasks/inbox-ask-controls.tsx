@@ -811,12 +811,14 @@ export function AnsweredCard({
 /** What an ask's line says of one answered, where the answer itself is not drawn beside it. */
 export const ANSWERED = "Answered";
 
-/** What an ask's line says of one taken back, before why. */
+/** What an ask's line says of one taken back. */
 const WITHDRAWN = "Withdrawn";
 
 /**
- * How a withdrawn ask's line reads: why it was taken back, or, where none
- * was said, who closed it without answering, where that is known.
+ * How a withdrawn ask's line reads, after a slashed circle: "Withdrawn"
+ * where its agent said why, the why standing apart (`WithdrawnWhy`) so a
+ * long one never wraps inside the line, or, where none was said, who closed
+ * it without answering, where that is known.
  */
 export function WithdrawnWords({
   reason,
@@ -829,7 +831,8 @@ export function WithdrawnWords({
   if (reason !== undefined) {
     return (
       <span className="inbox-ask-standing">
-        {WITHDRAWN}: {reason}
+        <CircleSlashIcon aria-hidden="true" />
+        {WITHDRAWN}
       </span>
     );
   }
@@ -845,6 +848,17 @@ export function WithdrawnWords({
         </ActorLine>
       )}
     </span>
+  );
+}
+
+/** Why an ask was taken back, as a muted sentence under its line; nothing where none was said. */
+export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.JSX.Element | null {
+  if (reason === undefined) return null;
+  return (
+    // Note that its words may be quoted into a reply, as the agent's own words may.
+    <p className="inbox-ask-why" data-inbox-withdrawn-why="" {...{ [REPLY_SCOPE]: "" }}>
+      {reason}
+    </p>
   );
 }
 

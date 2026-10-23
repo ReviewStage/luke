@@ -70,7 +70,7 @@ import { useAppCommand } from "../app-commands.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useColumnSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
+import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
@@ -96,9 +96,10 @@ import { previewWords } from "./chat-preview.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { type MenuAsk, PhoneHead, PlaceMore, useAskedMenu, useMenuAsk } from "./phone-head.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
-import { TaskStatusMark, taskCardOf } from "./task-card.js";
+import { TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -616,7 +617,7 @@ function RailRow({
       card={placeCard(tasks, row, actorOf)}
       end={
         task !== undefined ? (
-          <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
+          <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
         ) : row.between.length > 0 || row.other?.agent === undefined ? undefined : (
           // An agent the reader writes with wears where it stands at the row's end, as its sidebar row does.
           agentEndMark(row.other.agent, false)
@@ -1069,7 +1070,7 @@ function ChatView({
       <div className="chat-view">
         <nav className="chat-rail" aria-label={CHAT_LIST} style={{ width: railWidth }}>
           {/* Note that New channel stands but takes no press until the chat is read, since a channel opened against no chat would go nowhere. */}
-          <RailBar onNew={undefined} viewOptions={undefined} />
+          <RailBar onNew={undefined} viewOptions={undefined} narrow={room === SHELL_ROOM.NARROW} />
           {standIn}
         </nav>
         {dialogs.dialog}
@@ -1121,9 +1122,11 @@ function ChatView({
         style={{ width: railWidth }}
       >
         <RailBar
+          narrow={room === SHELL_ROOM.NARROW}
           onNew={dialogs.askNew}
-          viewOptions={
+          viewOptions={(asked) => (
             <ChatViewOptions
+              asked={asked}
               shown={view.open}
               archived={showArchived}
               onArchived={setShowArchived}
@@ -1132,7 +1135,7 @@ function ChatView({
                 view.onRead(places.flatMap((each) => (each.unread > 0 ? [each.channel.id] : [])))
               }
             />
-          }
+          )}
         />
         <ScrollArea fade={SCROLL_FADE.START}>
           <div className="chat-rail-body">
@@ -1186,11 +1189,66 @@ function ChatView({
 function RailBar({
   onNew,
   viewOptions,
+  narrow,
 }: {
   /** Opens New channel's question; none while no chat is read, which leaves the press disabled. */
   onNew: (() => void) | undefined;
-  viewOptions: React.ReactNode;
+  /** The view's menu, drawn with the button it drops from, or, on a phone, opened from the ⋯ as it asks (`phone-head.tsx`). */
+  viewOptions:
+    | ((asked: { readonly ask: MenuAsk | undefined } | undefined) => React.ReactNode)
+    | undefined;
+  /** Whether the room is a phone's, which heads Chat as it heads every place: New channel, the title centred, and a ⋯ holding the rest. */
+  narrow: boolean;
 }): React.JSX.Element {
+  const asked = useMenuAsk();
+  const feedback = useSendFeedbackItem(EXPERIMENT.CHAT);
+  const newChannel = (
+    <Tooltip label={NEW_CHANNEL}>
+      <IconButton
+        icon={<PlusIcon />}
+        label={NEW_CHANNEL}
+        disabled={onNew === undefined}
+        onClick={onNew}
+      />
+    </Tooltip>
+  );
+  if (narrow) {
+    return (
+      <>
+        <PhoneHead
+          place="chat-rail"
+          start={newChannel}
+          title={
+            <>
+              <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
+              <ExperimentTag narrow />
+            </>
+          }
+          end={
+            <PlaceMore
+              shown
+              groups={(opener) =>
+                [
+                  viewOptions === undefined
+                    ? []
+                    : [
+                        {
+                          label: VIEW_OPTIONS,
+                          icon: <SlidersHorizontalIcon />,
+                          opens: true,
+                          onSelect: () => asked.onAsk(opener),
+                        },
+                      ],
+                  [feedback],
+                ].filter((group) => group.length > 0)
+              }
+            />
+          }
+        />
+        {viewOptions?.({ ask: asked.ask })}
+      </>
+    );
+  }
   return (
     <header className="desktop-toolbar chat-rail-bar">
       <div className="desktop-toolbar-heading">
@@ -1201,18 +1259,11 @@ function RailBar({
         >
           {CHAT_LIST}
         </OneLine>
-        <ExperimentTag />
+        <ExperimentTag narrow={narrow} />
       </div>
       <div className="desktop-toolbar-actions">
-        {viewOptions}
-        <Tooltip label={NEW_CHANNEL}>
-          <IconButton
-            icon={<PlusIcon />}
-            label={NEW_CHANNEL}
-            disabled={onNew === undefined}
-            onClick={onNew}
-          />
-        </Tooltip>
+        {viewOptions?.(undefined)}
+        {newChannel}
         <SendFeedbackButton experiment={EXPERIMENT.CHAT} />
       </div>
     </header>
@@ -1226,19 +1277,25 @@ function ChatViewOptions({
   onArchived,
   unread,
   onMarkAll,
+  asked,
 }: {
   shown: boolean;
   archived: boolean;
   onArchived: (archived: boolean) => void;
   unread: boolean;
   onMarkAll: () => void;
+  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`); none elsewhere. */
+  asked: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   return (
     <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-      </Tooltip>
+      {asked === undefined ? (
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+        </Tooltip>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}

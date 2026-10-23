@@ -932,6 +932,49 @@ function SectionDates({
   return <WordsDatesContext.Provider value={door}>{children}</WordsDatesContext.Provider>;
 }
 
+/** A plan's body, in the plan's type at its page's measure: the column its head and its blocks stand in. */
+export function PlanBodyColumn({
+  ref,
+  children,
+}: {
+  ref?: React.Ref<HTMLDivElement> | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div ref={ref} className={BODY_CLASS}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The head of a page drawn as a plan, Settings › Plan template: its name in
+ * the title's place with the page's actions on its line, then its last edit
+ * and its note, which the page and its placeholder both draw.
+ */
+export function PlanPageHead({
+  name,
+  actions,
+  edited,
+  note,
+}: {
+  name: string;
+  actions: React.ReactNode;
+  edited?: React.ReactNode;
+  note: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <header className="task-page-head">
+      <div className="task-title-line">
+        <TaskTitle name={name} />
+        {actions}
+      </div>
+      {edited}
+      {note}
+    </header>
+  );
+}
+
 /**
  * The task's document: its name as the title over its text. `live` is the
  * task's call in progress, which keeps the caret waiting where the typing
@@ -972,6 +1015,7 @@ export const PlanBody = memo(function PlanBody({
   agents,
   standing: taskStanding,
   underTitle,
+  titleActions = true,
 }: {
   task: Task;
   live: boolean;
@@ -996,6 +1040,8 @@ export const PlanBody = memo(function PlanBody({
   standing?: TaskStandingDoor;
   /** What the task's own page draws under its status and priority, over its byline, as its linked issues; nothing elsewhere. */
   underTitle?: React.ReactNode;
+  /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
+  titleActions?: boolean;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -1288,7 +1334,7 @@ export const PlanBody = memo(function PlanBody({
     );
   const titled = editable && onRename !== undefined;
   const titleMenu =
-    linked === undefined || page !== undefined ? null : (
+    !titleActions || linked === undefined || page !== undefined ? null : (
       <TitleMenu
         linked={linked}
         // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
@@ -1306,7 +1352,7 @@ export const PlanBody = memo(function PlanBody({
     >
       <DocumentScroll ref={scroller}>
         {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
-        <div ref={bodyHost} className={BODY_CLASS}>
+        <PlanBodyColumn ref={bodyHost}>
           <WordsDatePickerRoom>
             {taskStanding === undefined || page !== undefined ? null : (
               <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
@@ -1329,14 +1375,12 @@ export const PlanBody = memo(function PlanBody({
             ) : page === undefined ? (
               attributed(<TaskTitle name={task.name} />, null, titleMenu)
             ) : (
-              <header className="task-page-head">
-                <div className="task-title-line">
-                  <TaskTitle name={task.name} />
-                  {page.actions}
-                </div>
-                {editedNote}
-                {page.note}
-              </header>
+              <PlanPageHead
+                name={task.name}
+                actions={page.actions}
+                edited={editedNote}
+                note={page.note}
+              />
             )}
             {page === undefined ? (
               <>
@@ -1381,7 +1425,7 @@ export const PlanBody = memo(function PlanBody({
               />
             )}
           </WordsDatePickerRoom>
-        </div>
+        </PlanBodyColumn>
       </DocumentScroll>
     </PlanPictures>
   );

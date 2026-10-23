@@ -30,6 +30,13 @@
   }
 }
 
+/* The way back of `luke-card-grow`, for a card leaving where it opened. */
+@keyframes luke-card-shrink {
+  to {
+    transform: scale(0.97);
+  }
+}
+
 /* Centred on its own width by a transform, so the keyframe holds the centring. */
 @keyframes luke-scale-in-centered-x {
   from {

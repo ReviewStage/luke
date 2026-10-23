@@ -9,8 +9,23 @@ import {
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
   shownShortcutGroups,
+  WRITING_ACTIONS_LISTED,
+  WRITING_GROUP_TITLE,
+  WRITING_SHORTCUTS,
+  type WritingAction,
+  type WritingShortcut,
 } from "@luke/settings/shortcuts";
-import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection, Shortcut } from "@luke/ui";
+import {
+  SETTINGS_ROW_DENSITY,
+  SettingsRow,
+  SettingsSection,
+  Shortcut,
+  TEXT_ELEMENT,
+  TEXT_FONT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 
 /**
  * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts, grouped as the menu bar groups them, listed to be found rather than changed.
@@ -33,7 +48,10 @@ import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection, Shortcut } from "@l
  * in a wrapper wearing its search anchor, because the shared row takes no
  * attribute of a caller's.
  *
- * Files changed's own keys follow under a group of their own, read from the
+ * Writing follows them, read from the vocabulary the editors bind their
+ * chords from: each mark and block with the Markdown typed in text that makes
+ * it, where there is one, and its chord, where it has one. Files changed's
+ * own keys follow under a group of their own, read from the
  * table the view's handler answers to (`changes-list.tsx`), the order its
  * `?` sheet lists them in, and Chapters' after them (`agent-chapters-tab.tsx`).
  */
@@ -57,6 +75,18 @@ export function WindowShortcutSections({
           ))}
         </SettingsSection>
       ))}
+      <SettingsSection title={WRITING_GROUP_TITLE}>
+        {WRITING_ACTIONS_LISTED.map((action) => (
+          <div key={action} {...searchAnchorProps(action)}>
+            <SettingsRow
+              density={SETTINGS_ROW_DENSITY.LIST}
+              label={WRITING_SHORTCUTS[action].label}
+            >
+              {() => <WritingKeys action={action} />}
+            </SettingsRow>
+          </div>
+        ))}
+      </SettingsSection>
       <SettingsSection title={FILES_CHANGED_GROUP_TITLE}>
         {FILES_CHANGED_KEYS_LISTED.map((key) => (
           <div key={key} {...searchAnchorProps(key)}>
@@ -78,6 +108,26 @@ export function WindowShortcutSections({
           </div>
         ))}
       </SettingsSection>
+    </>
+  );
+}
+
+/** A writing action's Markdown rule, set as the code it is, then its chord: whichever of the two it has. */
+function WritingKeys({ action }: { action: WritingAction }): React.JSX.Element {
+  const { markdown, chord }: WritingShortcut = WRITING_SHORTCUTS[action];
+  return (
+    <>
+      {markdown === undefined ? null : (
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.LABEL}
+          tone={TEXT_TONE.MUTED}
+          font={TEXT_FONT.MONO}
+        >
+          {markdown}
+        </Text>
+      )}
+      {chord === undefined ? null : <Shortcut value chord={chord} spoken />}
     </>
   );
 }

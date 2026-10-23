@@ -10,6 +10,7 @@ import {
   recordingBytesOf,
   recordingStartOf,
   recordingStopOf,
+  SANDBOX_RECORDING,
   startRecording,
   stopRecording,
 } from "./sandbox-recorder.js";
@@ -65,16 +66,23 @@ test("a stop's run is the video's length and size, a known failure, or an encode
   }
 });
 
-test("a read prints the video as base64 under the capability drop, and its run is the bytes or nothing", () => {
+test("a read prints the video's absolute path, then the video as base64, under the capability drop, and its run is the path and the bytes or nothing", () => {
   const ask = readRecording(4_000_000);
   const video = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3]);
+  const path = `/home/vercel-sandbox/${SANDBOX_RECORDING.VIDEO}`;
+  const printed = `${path}\n${Buffer.from(video).toString("base64")}`;
 
   assert.equal(ask.command, "setpriv");
   assert.ok(
     ask.args.includes("4000001"),
     "it reads one byte past the bound, so a larger file shows",
   );
-  assert.deepEqual(recordingBytesOf(run(Buffer.from(video).toString("base64")), 4_000_000), video);
+  assert.deepEqual(recordingBytesOf(run(printed), 4_000_000), { path, bytes: video });
   assert.equal(recordingBytesOf(run("", RECORDING_READ_EXIT.NO_VIDEO), 4_000_000), undefined);
-  assert.equal(recordingBytesOf(run(Buffer.from(video).toString("base64")), 6), undefined);
+  assert.equal(recordingBytesOf(run(printed), 6), undefined);
+  assert.equal(
+    recordingBytesOf(run(Buffer.from(video).toString("base64")), 4_000_000),
+    undefined,
+    "a read naming no path is no video an agent can post",
+  );
 });

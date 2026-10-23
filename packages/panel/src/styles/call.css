@@ -171,15 +171,13 @@ html.call-window[data-pointer-stale="true"]
   -webkit-app-region: no-drag;
 }
 
-/* The Call tab's tile on the card, over the plan's name: the card's own
+/* The tile on the card, over the plan's name: the card's own
    width at 16:9, so it grows the card by a picture and no more, on a
    smaller corner inside the card's, with no margin of its own beside the
    card's gap. The picture and the controls under it are one card, so it
    reads as the call card grown into a picture rather than a second one. */
 .call-card .call-video-tile {
   width: 100%;
-  max-height: none;
-  margin: 0;
   aspect-ratio: 16 / 9;
   border-radius: var(--luke-radius-8);
 }
@@ -196,46 +194,20 @@ html.call-window[data-pointer-stale="true"]
   bottom: var(--luke-space-4);
 }
 
-/* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
-   the top of the call's Call tab, on the card's ground, border, and
-   corner, so the tile reads as the call card grown into a picture. It
-   keeps its height as the transcript under it scrolls. Its shape follows
-   the room the window leaves it: square, as the stock avatars' picture
-   is, where the tab is narrow for its height, and wider, up to 16:9, as
-   the window grows shorter, so the whole picture is always drawn and a
-   wide, short tab still leaves the transcript room. It follows the tab's
-   width, centred over the transcript, up to 560px (off-scale: about the
-   stock avatars' own resolution, past which a larger tile only draws a
-   softer face), and stands no taller than two fifths of the stage; it is
-   never wider than 16:9 at that height, and 240px is as narrow as its
-   still frame stays readable, so on a stage too short for that (a phone
-   with its keyboard up) it keeps 240px's 16:9 height, 135px, rather than
-   flattening into a band. */
-.call-video-tile {
-  width: min(
-    100% -
-    2 *
-    var(--luke-space-16),
-    560px,
-    max(240px, calc(var(--luke-stage-height) * 0.4 * 16 / 9))
-  );
-  margin: var(--luke-space-4) auto var(--luke-space-8);
-}
-
-/* Square at its width, held to two fifths of the stage's height, which
-   leaves it wider than square where the room is short. Note that its
+/* The video tile (`call/call-video-tile.tsx`): Luke's avatar, on the
+   card's ground, border, and corner, so the tile reads as the call card
+   grown into a picture. Its size is the surface's: 16:9 on the call card,
+   and the frame an agent's tab draws it in (desktop.css). Note that its
    least height is zero rather than its content's, which a box with a
    ratio takes by default unless it scrolls, so the picture inside never
-   holds it taller than that. The fill's layer is the tile's own, so it
-   stands over the tile's ground and under the picture. */
+   holds it taller than its surface gives it. The fill's layer is the
+   tile's own, so it stands over the tile's ground and under the picture. */
 .call-video-tile {
   position: relative;
   flex: none;
   overflow: clip;
   box-sizing: border-box;
   min-height: 0;
-  max-height: max(135px, calc(var(--luke-stage-height) * 0.4));
-  aspect-ratio: 1;
   isolation: isolate;
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-14);

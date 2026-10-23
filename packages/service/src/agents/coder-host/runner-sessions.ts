@@ -99,6 +99,10 @@ import {
   type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+import {
+  clearNativeRewindHanded,
+  readNativeRewind,
+} from "@luke/database/models/conversation-rewind";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
@@ -245,11 +249,12 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   readonly launch: (
     agent: CodingAgent,
   ) => Effect.Effect<HarnessLaunch, E | LaunchRefused, RunnerServices>;
-  /** The config line of a launch, resuming the harness's session where one is named. */
+  /** The config line of a launch, resuming the harness's session where one is named, cut before the line a rewind dropped where one waits. */
   readonly config: (
     agent: CodingAgent,
     resume: string | undefined,
     firstSequence: number,
+    rewindBefore: string | undefined,
   ) => Effect.Effect<RunnerConfig, LaunchRefused>;
   /** The checkout's folders the harness finds a repository's skills in, whose names it keeps over an installed skill's. */
   readonly skillRoots: readonly string[];
@@ -794,7 +799,12 @@ export const runnerSessions = <
               firstSequence,
             }),
           );
-          const config = yield* harness.config(agent, resume, firstSequence);
+          // A rewind's cut is handed to the launch that resumes the harness's session, and let go once
+          // the runner has it; a fresh session never heard the line it names.
+          const target = { userId, conversationId: agent.conversationId };
+          const rewind = Option.getOrUndefined(yield* readNativeRewind(target));
+          const rewindBefore = resume === undefined ? undefined : rewind;
+          const config = yield* harness.config(agent, resume, firstSequence, rewindBefore);
           yield* api
             .writeStdin(sandbox.running, commandId, `${line(config)}${line(first.line)}`)
             .pipe(
@@ -805,6 +815,7 @@ export const runnerSessions = <
                 ]),
               ),
             );
+          if (rewind !== undefined) yield* clearNativeRewindHanded(agent.conversationId, rewind);
         }).pipe(
           Effect.tapError(() =>
             Effect.ignore(
@@ -1170,6 +1181,46 @@ export const runnerSessions = <
         return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
       });
 
+    /**
+     * The session's runner ended, under the agent's runner lease, so the
+     * next message relaunches it: a Stop written to it, its exit waited for
+     * at most `CODER.RUNNER_HALT`, its command ended where it still runs and
+     * waited for again, its bearer let go, so nothing it posts on the way
+     * down is taken, and the sandbox's tags cleared of it. Note that the tags
+     * are what say a runner runs (`liveRunner`), and Vercel may still answer
+     * a command it was just told to end as running, so a message sent next
+     * would otherwise be written to a runner on its way down and lost. A
+     * session no runner runs in has nothing to end.
+     */
+    const haltHolding = (sessionId: string, conversationId: string) =>
+      Effect.gen(function* () {
+        const found = yield* sandboxOf(api, sessionId);
+        if (Option.isNone(found)) return;
+        const agent = yield* agentOf(conversationId);
+        if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) return;
+        const live = yield* liveRunner(api, found.value);
+        if (live === undefined) return;
+        yield* api.writeStdin(
+          live.sandboxSessionId,
+          live.commandId,
+          line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
+        );
+        // Note that a read of the exit answers null for a command still running once its own wait is up.
+        const exited = api
+          .commandExit(live.sandboxSessionId, live.commandId)
+          .pipe(Effect.timeoutOption(CODER.RUNNER_HALT));
+        const stopped = yield* exited;
+        if (Option.isNone(stopped) || stopped.value === null) {
+          yield* api.kill(live.sandboxSessionId, live.commandId);
+          yield* exited;
+        }
+        yield* recordCodingAgentRunnerToken(userId, agent.id, null);
+        yield* api.updateTags(found.value.name, {
+          [SESSION_TAG]: sessionId,
+          [RUNNER_TAG.AGENT]: agent.id,
+        });
+      });
+
     /** A change of model or effort, under the agent's runner lease. */
     const retuneHolding = (sessionId: string, conversationId: string) =>
       Effect.gen(function* () {
@@ -1299,6 +1350,21 @@ export const runnerSessions = <
 
       // The runner posts its events to Luke itself, so there is no stream of a session's to follow here.
       stream: () => Stream.empty,
+
+      halt: (sessionId, conversationId) =>
+        Effect.gen(function* () {
+          const { id } = yield* agentOf(conversationId);
+          yield* holdingRunner(id, haltHolding(sessionId, conversationId));
+          return true;
+        }).pipe(
+          Effect.catch((failure) =>
+            Effect.as(
+              Effect.logWarning(`A ${harness.name} halt failed: ${describeFailure(failure)}`),
+              false,
+            ),
+          ),
+          Effect.provideContext(context),
+        ),
 
       // A change of model or effort goes to a runner that runs as the harness's `model` lines alone,
       // which it takes at its next model call; a runner not up takes it at the next message's launch.

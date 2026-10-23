@@ -37,6 +37,7 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
       "Ask Luke",
       "Inbox",
+      "Tasks",
       "Automations",
       "-",
       "Back",
@@ -54,6 +55,7 @@ describe("the menu bar's gate", () => {
       (command) => command !== APP_COMMAND.INBOX && command !== APP_COMMAND.ASK_LUKE,
     );
     assert.deepEqual(labelsOf(withoutInbox, "Go"), [
+      "Tasks",
       "Automations",
       "-",
       "Back",
@@ -69,6 +71,7 @@ describe("the menu bar's gate", () => {
       (command) =>
         command !== APP_COMMAND.ASK_LUKE &&
         command !== APP_COMMAND.INBOX &&
+        command !== APP_COMMAND.TASKS &&
         command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), [

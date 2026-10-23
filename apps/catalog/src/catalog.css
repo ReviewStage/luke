@@ -562,7 +562,7 @@ body {
 }
 
 /* A row's item that takes the room its row leaves. */
-.catalog-grow {
+.catalog-skeleton-grow {
   flex: 1;
 }
 
