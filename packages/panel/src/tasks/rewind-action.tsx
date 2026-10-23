@@ -34,7 +34,7 @@ export const REWIND_ACTION = {
 export type RewindAction = (typeof REWIND_ACTION)[keyof typeof REWIND_ACTION];
 
 /** What the actions say. */
-export const REWIND_WORDS = {
+const REWIND_WORDS = {
   EDIT: "Edit",
   REVERT: "Revert to here",
 } as const;

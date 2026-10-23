@@ -7,6 +7,7 @@ import type {
   ReactNode,
 } from "react";
 import { pulseOnPress } from "../../press-pulse.js";
+import { useClipped } from "../../use-clipped.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { Tooltip } from "../tooltip/hint.js";
 
@@ -25,8 +26,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * does, words that wash under the pointer as a byline's actor does, or a
  * pill on a raised fill as a mention is drawn in prose. An inert pill on a
  * row that is itself a button lifts with that row's hover, since its fill
- * is the row's hover fill. The name gives way before anything else: cut at
- * its end, or at its start for a path, so a file's own name stays in sight.
+ * is the row's hover fill. The name gives way before anything else: fading
+ * out where it is cut, at its end, or at its start for a path, so a file's
+ * own name stays in sight.
  *
  * What is drawn here is the token. Its hint, the pill or card hung while the
  * pointer rests on it and when that shows and goes, is the window's tooltip
@@ -119,6 +121,7 @@ function InlineRefRoot({
   ...rest
 }: InlineRefFace & InlineRefHintProps & DataAttributes): React.JSX.Element {
   const linkAddress = useLinkAddress(linkHref);
+  const [measured, clipped] = useClipped(label);
   const face = (
     <>
       {glyph === undefined ? null : (
@@ -127,10 +130,12 @@ function InlineRefRoot({
         </span>
       )}
       <span
+        ref={measured}
         className={labelHidden ? "luke-visually-hidden" : "luke-inline-ref-label"}
         data-name={name}
+        data-overflow={String(clipped)}
       >
-        {/* Note that a path is isolated, so the cut at its start never reorders it. */}
+        {/* Note that a path is isolated, so the fade at its start never reorders it. */}
         {name === INLINE_REF_NAME.PATH ? <bdi>{label}</bdi> : label}
       </span>
       {state === undefined || state === null || labelHidden ? null : (

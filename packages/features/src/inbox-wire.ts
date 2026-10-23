@@ -429,7 +429,7 @@ const inboxPostBlockSchema = EffectSchema.Union([
 export type InboxPostBlock = typeof inboxPostBlockSchema.Type;
 
 /** An item's context as the agent posts it: its blocks in order, few. */
-export const inboxPostBlocksSchema = EffectSchema.Array(inboxPostBlockSchema).check(
+const inboxPostBlocksSchema = EffectSchema.Array(inboxPostBlockSchema).check(
   EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
 );
 

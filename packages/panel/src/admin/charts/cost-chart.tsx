@@ -3,16 +3,10 @@
  */
 
 import { type AdminCostDay, COST_SOURCE, type CostSource } from "@luke/features/admin-cost-wire";
-import { formatCompact, formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@luke/ui/chart";
-import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
-import { formatDayTick } from "@luke/ui/time-format";
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
+import { formatCompact } from "@luke/ui/admin-format";
+import type { ChartConfig } from "@luke/ui/chart";
+import { DailyBars } from "@luke/ui/daily-bars";
+import { seriesHasNoData } from "@luke/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";
 
@@ -81,59 +75,22 @@ export function CostChart({
     );
   }
 
-  const partialDay = partialDayKey(daily, generatedAt);
   const data = daily.map((day) => ({
     day: day.day,
     ...Object.fromEntries(SOURCES.map((source) => [source, day[source]])),
   }));
   return (
     <ChartFrame title={COST_TITLE} legend={<CostLegend />}>
-      <ChartContainer
+      <DailyBars
         config={COST_CHART}
-        className="aspect-auto w-full"
-        style={{ height: COST_PLOT_HEIGHT }}
-      >
-        <BarChart data={data}>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            minTickGap={32}
-            tickFormatter={formatDayTick}
-          />
-          <YAxis
-            width={56}
-            tickLine={false}
-            axisLine={false}
-            tickFormatter={(value: number) => `$${formatCompact(value)}`}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                labelFormatter={(value) => formatTooltipDay(String(value), partialDay)}
-              />
-            }
-          />
-          {SOURCES.map((source, index) => (
-            <Bar
-              key={source}
-              dataKey={source}
-              stackId="spend"
-              fill={COST_CHART[source].color}
-              radius={index === SOURCES.length - 1 ? barTopRadius() : 0}
-            >
-              {daily.map((point) => (
-                <Cell
-                  key={point.day}
-                  fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
-                />
-              ))}
-            </Bar>
-          ))}
-        </BarChart>
-      </ChartContainer>
+        data={data}
+        series={SOURCES.map((source) => ({ key: source, fill: COST_CHART[source].color }))}
+        stack="spend"
+        axis={{ width: 56, tickFormatter: (value: number) => `$${formatCompact(value)}` }}
+        height={COST_PLOT_HEIGHT}
+        radius={barTopRadius()}
+        generatedAt={generatedAt}
+      />
     </ChartFrame>
   );
 }

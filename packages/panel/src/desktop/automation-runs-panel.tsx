@@ -26,6 +26,7 @@ import {
   LIST_ROW_CURRENT,
   List,
   ListRow,
+  PageToolbar,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -106,7 +107,7 @@ export const STANDING_GLYPH = {
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
 
 /** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
-export function FiringGlyph({
+function FiringGlyph({
   of,
 }: {
   of: AutomationFiring | AutomationTrigger;
@@ -380,11 +381,13 @@ export function AutomationRunsScreen({
       aria-label="Runs"
       hidden={hidden}
     >
-      <header className="desktop-toolbar">
-        <div className="automation-runs-back">
-          <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
-        </div>
-      </header>
+      <PageToolbar
+        lead={
+          <div className="automation-runs-back">
+            <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
+          </div>
+        }
+      />
       <RunsBody {...shown} />
     </Fill>
   );

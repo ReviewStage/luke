@@ -127,12 +127,17 @@ function LinkChip({
       ) : (
         <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />
       )}
-      <span className="new-task-issue-key">
-        {github ? `#${link.issue.number}` : link.issue.identifier}
-      </span>
-      <OneLine className="new-task-issue-title" words={link.issue.title}>
-        {link.issue.title}
-      </OneLine>
+      {/* Note that the repository is in the tooltip, because the chip reads `#N title` as every chip of an issue does. */}
+      <Tooltip label={github ? `${link.issue.repository}#${link.issue.number}` : undefined}>
+        <span className="new-task-issue-name">
+          <span className="new-task-issue-key">
+            {github ? `#${link.issue.number}` : link.issue.identifier}
+          </span>
+          <OneLine className="new-task-issue-title" words={link.issue.title}>
+            {link.issue.title}
+          </OneLine>
+        </span>
+      </Tooltip>
       <span className="new-task-issue-relation">
         <Tooltip label={RELATION_DETAIL[link.relation]}>
           <Chip

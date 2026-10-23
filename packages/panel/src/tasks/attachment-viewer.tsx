@@ -20,6 +20,8 @@ import {
   Tooltip,
   useImageZoom,
   usePictureExpand,
+  VIDEO_PLAYER_PLACE,
+  VideoPlayer,
   ZoomImage,
 } from "@luke/ui";
 import {
@@ -35,13 +37,16 @@ import { FileTypeIcon } from "./file-type-icon.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
- * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file drawn as every code is, or any other file by its icon with a way to save it.
+ * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a video played there, a text file drawn as every code is, or any other file by its icon with a way to save it.
  *
  * A picture opens fitted to the window, or at its own pixels where the place
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage).
+ * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
+ * such as one an agent recorded and opened from its Expand,
+ * plays at once as large as the card lets it, with the player's own
+ * controls, Full screen among them (`@luke/ui`'s VideoPlayer).
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
@@ -83,7 +88,7 @@ const ZOOM_CHORD = {
 /** No notes on a file of a message. */
 const NO_NOTES: readonly WholeFileNote[] = [];
 
-/** One more thing the viewer's picture may be given to: its button's words and glyph, and what a press does with the file shown. */
+/** One more thing the viewer's picture or video may be given to: its button's words and glyph, and what a press does with the file shown. */
 export interface ViewerAction {
   readonly label: string;
   readonly icon: React.ReactNode;
@@ -151,7 +156,7 @@ function HeaderButton({
   );
 }
 
-/** The file shown: the picture, its text drawn as every code is, or the icon, name, and size over Download. */
+/** The file shown: the picture, the video playing, its text drawn as every code is, or the icon, name, and size over Download. */
 function AttachmentBody({
   file,
   base64,
@@ -167,6 +172,13 @@ function AttachmentBody({
     return (
       <div ref={zoom.frameRef} className="attachment-viewer-body">
         <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
+      </div>
+    );
+  }
+  if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
+    return (
+      <div className="attachment-viewer-body">
+        <VideoPlayer dataUrl={file.url} label={file.name} place={VIDEO_PLAYER_PLACE.VIEWER} />
       </div>
     );
   }
@@ -216,7 +228,7 @@ export function AttachmentViewer({
   /** Shows the message's file at this place. */
   onAt: (at: number) => void;
   onClose: () => void;
-  /** One more thing a picture shown may be given to, named in the header before Download; none where the place opening the viewer offers nothing. */
+  /** One more thing a picture or a video shown may be given to, named in the header before Download; none where the place opening the viewer offers nothing. */
   action?: ViewerAction | undefined;
   /** A quiet line the place says of the file shown, after its size, such as who last edited a plan's picture; none where it says nothing. */
   note?: React.ReactNode;
@@ -242,6 +254,7 @@ export function AttachmentViewer({
   // keyboard's focus out of the card.
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
   const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+  const video = attachmentView(file) === ATTACHMENT_VIEW.VIDEO;
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -250,6 +263,9 @@ export function AttachmentViewer({
       return;
     }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    // Note that an arrow on a video or a field, such as a video's scrubber, moves it rather than walking away from it.
+    if (event.target instanceof HTMLVideoElement || event.target instanceof HTMLInputElement)
+      return;
     event.preventDefault();
     walk(event.key === "ArrowLeft" ? -1 : 1);
   };
@@ -314,7 +330,7 @@ export function AttachmentViewer({
               />
             </>
           ) : null}
-          {action === undefined || !image ? null : (
+          {action === undefined || !(image || video) ? null : (
             <Button icon={action.icon} onClick={() => action.onPress(file)}>
               {action.label}
             </Button>

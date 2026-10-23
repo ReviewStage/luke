@@ -32,7 +32,7 @@ import type {
   WorkspacePeopleFollow,
   WorkspacePeopleFollowed,
 } from "@luke/features/tasks-view";
-import { Effect, MutableHashMap, Option, Queue, Semaphore, Stream } from "effect";
+import { Effect, Option, Stream } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
@@ -41,7 +41,12 @@ import {
 } from "../acts.js";
 import { WORKSPACE_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
-import { streamed } from "./followed-stream.js";
+import {
+  openRefollows,
+  type RefollowedDependencies,
+  refollowedStream,
+  streamed,
+} from "./followed-stream.js";
 
 /**
  * workspace-procedures.ts -- the panel's asks of the host about the account's workspaces.
@@ -159,99 +164,39 @@ function isBrowserAddress(url: string): boolean {
 }
 
 /** One kind of a workspace's follow, as a stream of it reads the host: its follow, its let-go, and its words. */
-interface WorkspaceFollowSide<View> {
+function workspaceSide<View>(side: {
   readonly follow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
   readonly unfollow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
   readonly onChanged: (
     listener: (changed: { readonly workspaceId: string; readonly view: View }) => void,
   ) => () => void;
-}
-
-/**
- * A workspace's followed read for one stream a window holds open: the host
- * follows it afresh as the stream opens, so the window hears where it
- * stands, and lets it go once the last stream of it closes. Every word the
- * host tells of the workspace reaches every stream of it.
- */
-function followedStream<View>(
-  side: WorkspaceFollowSide<View>,
-  open: MutableHashMap.MutableHashMap<string, number>,
-  turn: Semaphore.Semaphore,
-  scope: WorkspacePeopleFollow,
-): Stream.Stream<View> {
-  const { workspaceId } = scope;
-  return Stream.callback<View>((queue) =>
-    Effect.gen(function* () {
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          side.onChanged((changed) => {
-            if (changed.workspaceId === workspaceId) Queue.offerUnsafe(queue, changed.view);
-          }),
-        ),
-        (stop) => Effect.sync(stop),
-      );
-      // Note that each count change and its ask of the host take the workspace's turn, so a last
-      // stream's unfollow reaches the host before a new stream's follow, never after it.
-      yield* Effect.acquireRelease(
-        turn.withPermit(
-          Effect.andThen(
-            Effect.sync(() =>
-              MutableHashMap.set(
-                open,
-                workspaceId,
-                Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 0) + 1,
-              ),
-            ),
-            side.follow(scope),
-          ),
-        ),
-        () =>
-          turn.withPermit(
-            Effect.suspend(() => {
-              const left = Option.getOrElse(MutableHashMap.get(open, workspaceId), () => 1) - 1;
-              if (left > 0) {
-                MutableHashMap.set(open, workspaceId, left);
-                return Effect.void;
-              }
-              MutableHashMap.remove(open, workspaceId);
-              return side.unfollow(scope);
-            }),
-          ),
-      );
-    }),
-  );
+}): RefollowedDependencies<
+  WorkspacePeopleFollow,
+  { readonly workspaceId: string; readonly view: View },
+  View
+> {
+  return {
+    ...side,
+    valueOf: (changed, scope) =>
+      changed.workspaceId === scope.workspaceId ? Option.some(changed.view) : Option.none(),
+  };
 }
 
 export function workspaceProcedures(dependencies: WorkspaceProceduresDependencies) {
   const { host, openExternal } = dependencies;
-  /** How many streams stand open of each workspace's people, and of its invitations, so the host lets each go only with the last. */
-  const openPeople = MutableHashMap.empty<string, number>();
-  const openInvitations = MutableHashMap.empty<string, number>();
-  const people: WorkspaceFollowSide<TasksWorkspaceMembersAnswer> = {
+  /** The streams standing open of each workspace's people, and of its invitations, so the host lets each go only with the last, and hears each one's follows and unfollows in the order its streams opened and closed. */
+  const openPeople = openRefollows<string>();
+  const openInvitations = openRefollows<string>();
+  const people = workspaceSide<TasksWorkspaceMembersAnswer>({
     follow: host.workspacePeopleFollow,
     unfollow: host.workspacePeopleUnfollow,
     onChanged: host.onWorkspacePeopleChanged,
-  };
-  const invitations: WorkspaceFollowSide<TasksWorkspaceInvitationsAnswer> = {
+  });
+  const invitations = workspaceSide<TasksWorkspaceInvitationsAnswer>({
     follow: host.workspaceInvitationsFollow,
     unfollow: host.workspaceInvitationsUnfollow,
     onChanged: host.onWorkspaceInvitationsChanged,
-  };
-  /** One turn per workspace a window has followed, of its people and of its invitations, so the host hears each one's follows and unfollows in the order its streams opened and closed. */
-  const turns = {
-    people: new Map<string, Semaphore.Semaphore>(),
-    invitations: new Map<string, Semaphore.Semaphore>(),
-  };
-  const turnOf = (
-    made: Map<string, Semaphore.Semaphore>,
-    workspaceId: string,
-  ): Semaphore.Semaphore => {
-    const standing = made.get(workspaceId);
-    if (standing !== undefined) return standing;
-    const turn = Semaphore.makeUnsafe(1);
-    made.set(workspaceId, turn);
-    return turn;
-  };
+  });
   return {
     [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_CREATE].effect(
       function* ({ input, context, errors }) {
@@ -395,7 +340,7 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return streamed(
           yield* Stream.toAsyncIterableEffect(
-            followedStream(people, openPeople, turnOf(turns.people, input.workspaceId), input),
+            refollowedStream(people, openPeople, input.workspaceId, input),
           ),
         );
       },
@@ -407,12 +352,7 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return streamed(
         yield* Stream.toAsyncIterableEffect(
-          followedStream(
-            invitations,
-            openInvitations,
-            turnOf(turns.invitations, input.workspaceId),
-            input,
-          ),
+          refollowedStream(invitations, openInvitations, input.workspaceId, input),
         ),
       );
     }),

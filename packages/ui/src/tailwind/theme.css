@@ -8,6 +8,11 @@
    vocabulary, no app maps a name to a role of its own, and no second gray or
    hairline is invented. Only the tokens something draws with. */
 @theme inline {
+  /* Note that Tailwind's numeric scale (`p-4`, `gap-2`) is a multiple of
+     one step, which it measures in rem; the step is the base scale's 4px
+     here, because the desktop's root type is 13px, under which a rem step
+     would put every numeric utility off the scale. */
+  --spacing: var(--luke-space-4);
   --font-mono: var(--luke-font-mono);
   --color-background: var(--luke-color-overlay);
   --color-foreground: var(--luke-color-text);
@@ -23,9 +28,169 @@
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
 
+  /* The overlays' roles (`../shadcn/dialog.tsx`, `popover.tsx`, `tooltip.tsx`,
+     `hover-card.tsx`): the dimmed window, the surface a card or a menu
+     stands on and its hairline, the dark pill, their corners, lifts, and
+     layers, the measures a dialog's card stands at, and the words a hover
+     card says in. A width is the role's measure held inside its room. */
+  --color-scrim: var(--luke-color-scrim);
+  --color-popover: var(--luke-color-overlay);
+  --color-popover-foreground: var(--luke-color-text);
+  --color-border-strong: var(--luke-color-border-strong);
+  --color-subtle-foreground: var(--luke-color-text-subtle);
+  --color-fill-strong: var(--luke-color-fill-strong);
+  --color-danger: var(--luke-color-danger-text);
+  --color-tooltip: var(--luke-color-tooltip);
+  --color-tooltip-foreground: var(--luke-color-tooltip-text);
+  --color-tooltip-edge: var(--luke-color-tooltip-edge);
+  --radius-dialog: var(--luke-dialog-radius);
+  --radius-menu: var(--luke-menu-radius);
+  --radius-menu-row: var(--luke-menu-row-radius);
+  --radius-tooltip: var(--luke-tooltip-radius);
+  --shadow-dialog: var(--luke-dialog-shadow);
+  --shadow-dialog-drop: var(--luke-dialog-drop-shadow);
+  --shadow-menu: var(--luke-menu-shadow);
+  --shadow-tooltip: var(--luke-tooltip-shadow);
+  --z-index-dialog: var(--luke-z-dialog);
+  --z-index-tooltip: var(--luke-z-tooltip);
+  --spacing-dialog-inset: var(--luke-dialog-inset);
+  --spacing-dialog-action-gap: var(--luke-dialog-action-gap);
+  --spacing-dialog-action: var(--luke-dialog-action-width);
+  --spacing-dialog-room: var(--luke-dialog-room);
+  --spacing-card-inset-snug: var(--luke-card-inset-snug);
+  --spacing-dialog-reach: var(--luke-space-12);
+  --spacing-menu-inset: var(--luke-menu-inset);
+  --spacing-menu-row: var(--luke-menu-row-height);
+  --spacing-menu-glyph: var(--luke-menu-glyph);
+  --spacing-icon-gap: var(--luke-icon-gap);
+  --spacing-control-gap: var(--luke-control-gap);
+  --spacing-viewport-top: var(--luke-viewport-top);
+  --spacing-keyboard-inset: var(--luke-keyboard-inset);
+  --spacing-tooltip-card-inline: calc(var(--luke-menu-inset) + var(--luke-space-8));
+  --spacing-popover-room: var(--luke-popover-room, none);
+  --spacing-hover-card-glyph: var(--luke-hover-card-glyph);
+  --spacing-hover-card-list: var(--luke-hover-card-list-height);
+  --container-dialog-confirm: min(var(--luke-dialog-confirm-width), 100%);
+  --container-dialog-wide: min(var(--luke-dialog-wide-width), 100%);
+  --container-dialog-composer: min(var(--luke-dialog-composer-width), 100%);
+  --container-dialog-composer-reach: calc(100% + 2 * var(--luke-space-12));
+  --container-dialog-media-min: min(var(--luke-dialog-media-min-width), 100%);
+  --container-dialog-media-max: min(var(--luke-dialog-media-max-width), 100%);
+  --container-tooltip: var(--luke-tooltip-max-width);
+  --container-tooltip-card: var(--luke-tooltip-card-width);
+  --text-body: var(--luke-type-body-size);
+  --text-body--line-height: var(--luke-type-body-leading);
+  --text-caption: var(--luke-type-caption-size);
+  --text-caption--line-height: var(--luke-type-caption-leading);
+  --leading-caption: var(--luke-type-caption-leading);
+  --text-section: var(--luke-type-section-size);
+  --text-section--line-height: var(--luke-type-section-leading);
+  --text-hover-card-name: var(--luke-hover-card-name-size);
+  --text-hover-card-sub: var(--luke-hover-card-sub-size);
+  --text-hover-card-code: var(--luke-hover-card-code-size);
+  --text-hover-card-coarse: var(--luke-hover-card-coarse-size);
+  --font-sans: var(--luke-font-sans);
+  --ease-motion-exit: var(--luke-motion-exit);
+  --ease-pane: var(--luke-motion-pane);
+
+  /* The overlays' motion, spent from the motion tokens, which reduced motion
+     and a capture run already hold still: a dialog's dimmed window fades in,
+     its card fades and rises, and swells for a dismissal it holds back or
+     shakes for an act refused (each listing the entrance, because a name
+     dropped and named again replays); a hung panel arrives and drops as a
+     menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
+     out once seen. */
+  --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) ease-out;
+  --animate-dialog-in:
+    luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
+    luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast);
+  --animate-dialog-nudge:
+    luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
+    luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast),
+    luke-dialog-nudge var(--luke-duration-fast) var(--luke-spring-fast);
+  --animate-dialog-shake:
+    luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
+    luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast),
+    luke-dialog-shake var(--luke-duration-fast) var(--luke-motion-exit);
+  --animate-menu-in:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-tooltip-in:
+    luke-tooltip-fade var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-tooltip-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-tooltip-leave: luke-tooltip-leave var(--luke-duration-exit) var(--luke-motion-exit)
+    forwards;
+
+  @keyframes luke-dialog-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-dialog-rise {
+    from {
+      transform: scale(0.96);
+    }
+  }
+
+  @keyframes luke-dialog-nudge {
+    40% {
+      transform: scale(1.02);
+    }
+  }
+
+  @keyframes luke-dialog-shake {
+    20% {
+      transform: translateX(-6px);
+    }
+    40% {
+      transform: translateX(6px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(4px);
+    }
+  }
+
+  @keyframes luke-tooltip-fade {
+    from {
+      visibility: hidden;
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-tooltip-grow {
+    from {
+      transform: scale(0.96);
+    }
+  }
+
+  @keyframes luke-tooltip-leave {
+    to {
+      opacity: 0;
+    }
+  }
+
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's
      own literal. */
   --default-transition-duration: var(--luke-duration-quick);
   --default-transition-timing-function: var(--luke-spring);
+}
+
+/* A composer's dialog card on a phone's screen (`../shadcn/dialog.tsx`): a
+   root that measures its own room says so in `data-luke-room` (the panel's
+   `stage-room.ts`), and one that says nothing is answered by the dimmed
+   window's own width. */
+@custom-variant room-narrow {
+  :root[data-luke-room="narrow"] & {
+    @slot;
+  }
+  @container luke-dialog-room (max-width: 639px) {
+    :root:not([data-luke-room]) & {
+      @slot;
+    }
+  }
 }

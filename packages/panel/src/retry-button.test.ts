@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RetryButton } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { RetryButton } from "./retry-button.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { restOn } from "./testing/hint-rest.js";
 

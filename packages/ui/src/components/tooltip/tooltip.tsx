@@ -1,6 +1,6 @@
-import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { visibleViewport } from "../../visible-viewport.js";
+import { type PointerEvent, type ReactNode, useRef } from "react";
+import { HoverCard, HoverCardContent } from "../../shadcn/hover-card.js";
+import { Tooltip, TooltipContent } from "../../shadcn/tooltip.js";
 
 /**
  * tooltip.tsx -- a hover hint as it is drawn: a small dark pill naming a control and its shortcut, or a light card saying more, hung beside the control it names.
@@ -9,15 +9,19 @@ import { visibleViewport } from "../../visible-viewport.js";
  * window ends, so it never covers what it names; a card hangs from the
  * control's start the same way, or beside it, past its end or before its
  * start where the window ends, as a list row's card hangs so it covers none
- * of the rows under it. Either is measured before it is painted, so it is
- * drawn once and where it fits, and placed again only when it resizes.
+ * of the rows under it. Either is held a margin inside the window, placed
+ * by shadcn/ui's Base UI tooltip and hover card (`../../shadcn/tooltip.tsx`,
+ * `hover-card.tsx`), which keep it unseen until it is placed and place it
+ * again as it, its control, or the window moves or resizes.
  *
  * What is drawn here is the hint alone. When it shows and when it goes, the
  * wait before it, the warm spell after it, and the linger that lets the
  * pointer cross onto a card, are `Tooltip`'s (`hint.tsx`): it mounts the hint once the
  * wait is over, hands it the control it stands for and how it is on its
  * way out (`leaving`), and is told when the pointer arrives on a card,
- * presses it, or chooses one of its buttons or links.
+ * presses it, or chooses one of its buttons or links. So Base UI's root
+ * stands open for as long as the hint is mounted, with no trigger of its
+ * own, and what it hears as a dismissal is left to `Tooltip`.
  *
  * A pill takes no presses, so it never stands between the pointer and the
  * control beside it. A card is a surface the pointer crosses onto: its words
@@ -30,33 +34,15 @@ import { visibleViewport } from "../../visible-viewport.js";
  * a pointer resting there; its press still does.
  */
 
-/** The gap between a control and its hint, and the hint's least distance from the window's edge, in CSS pixels. */
-const TOOLTIP_GAP = 6;
-const TOOLTIP_MARGIN = 6;
-
 /** What a card holds that a press chooses. */
 const CARD_CHOICE = "button, a[href]";
 
-/** Which side of its control a hint hangs on. */
-const TOOLTIP_SIDE = {
-  BELOW: "below",
-  ABOVE: "above",
-  /** Beside the control, past its end. */
-  END: "end",
-  /** Beside the control, before its start, where the window ends past it. */
-  START: "start",
-} as const;
+/** How a hint keeps inside the window: turning to the other side where its own ends, and pushed along it where it runs past an edge. */
+const HINT_COLLISION = { side: "flip", align: "shift", fallbackAxisSide: "none" } as const;
 
-type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
-
-/** How a hint hangs: a pill centred on its control, a card from its start, or a card beside it. */
-const TOOLTIP_HANG = {
-  PILL: "pill",
-  CARD: "card",
-  CARD_BESIDE: "card-beside",
-} as const;
-
-type TooltipHang = (typeof TOOLTIP_HANG)[keyof typeof TOOLTIP_HANG];
+/** The pill's chord, muted against the pill's own dark fill rather than the window's (`hint.tsx`). */
+export const TOOLTIP_CHORD =
+  "luke-tooltip-chord [--luke-shortcut-ink:var(--luke-color-tooltip-chord)]";
 
 /** What every hint is handed: the control it stands for, and how it shows and goes. */
 interface TooltipBase {
@@ -70,104 +56,13 @@ interface TooltipBase {
   ref?: ((element: HTMLElement | null) => void) | undefined;
 }
 
-interface TooltipPlace {
-  left: number;
-  top: number;
-  side: TooltipSide;
-}
-
-/** Whether two places draw the hint alike, so a measure that moves nothing renders nothing. */
-function samePlace(a: TooltipPlace | undefined, b: TooltipPlace): boolean {
-  return a !== undefined && a.left === b.left && a.top === b.top && a.side === b.side;
-}
-
-/** `value` held a margin inside the edges `low` and `high`, for a hint `size` long. */
-function clampTo(value: number, size: number, low: number, high: number): number {
-  return Math.max(low + TOOLTIP_MARGIN, Math.min(value, high - size - TOOLTIP_MARGIN));
-}
-
-/**
- * Where a hint of this size goes for its control: below it, or above where
- * the window ends; centred on it, or from its start for a card. A card hung
- * beside its control stands past the control's end, level with its top and
- * held inside the window, or before its start where the window ends past
- * the control, as a menu turns at the screen's edge.
- */
-function placeHint(anchor: HTMLElement, hint: HTMLElement, hang: TooltipHang): TooltipPlace {
-  const at = anchor.getBoundingClientRect();
-  // Note that its layout size is read rather than its box, because the box
-  // is still scaled short by the fade it waits to play.
-  const width = hint.offsetWidth;
-  const height = hint.offsetHeight;
-  const seen = visibleViewport();
-  if (hang === TOOLTIP_HANG.CARD_BESIDE) {
-    const top = clampTo(at.top, height, seen.top, seen.bottom);
-    const past = at.right + TOOLTIP_GAP;
-    const before = at.left - TOOLTIP_GAP - width;
-    if (past + width > seen.right - TOOLTIP_MARGIN && before >= seen.left + TOOLTIP_MARGIN) {
-      return { left: before, top, side: TOOLTIP_SIDE.START };
-    }
-    return { left: clampTo(past, width, seen.left, seen.right), top, side: TOOLTIP_SIDE.END };
-  }
-  const below = at.bottom + TOOLTIP_GAP;
-  const fits = below + height <= seen.bottom - TOOLTIP_MARGIN;
-  const left = hang === TOOLTIP_HANG.PILL ? at.left + at.width / 2 - width / 2 : at.left;
-  return {
-    left: clampTo(left, width, seen.left, seen.right),
-    top: fits ? below : at.top - TOOLTIP_GAP - height,
-    side: fits ? TOOLTIP_SIDE.BELOW : TOOLTIP_SIDE.ABOVE,
-  };
-}
-
-/**
- * The hint's element, placed for its control once measured before it is
- * painted, and again only when its size changes from the one it was placed
- * at, never for the observer's first report of the size already measured.
- */
-function useHintPlace(
-  anchor: HTMLElement,
-  hang: TooltipHang,
-  hold: ((element: HTMLElement | null) => void) | undefined,
-): readonly [(node: HTMLDivElement | null) => void, TooltipPlace | undefined] {
-  const element = useRef<HTMLDivElement | null>(null);
-  const [at, setAt] = useState<TooltipPlace | undefined>(undefined);
-  const drawn = useCallback(
-    (node: HTMLDivElement | null) => {
-      element.current = node;
-      hold?.(node);
-    },
-    [hold],
-  );
-  useLayoutEffect(() => {
-    const hint = element.current;
-    if (hint === null) return;
-    let size = { width: hint.offsetWidth, height: hint.offsetHeight };
-    const place = placeHint(anchor, hint, hang);
-    setAt((was) => (samePlace(was, place) ? was : place));
-    // Note that it is placed again as it resizes, because a card grows as a
-    // read it made lands, and must stay inside the window as it does.
-    const observer = new ResizeObserver(() => {
-      const now = { width: hint.offsetWidth, height: hint.offsetHeight };
-      if (now.width === size.width && now.height === size.height) return;
-      size = now;
-      const moved = placeHint(anchor, hint, hang);
-      setAt((was) => (samePlace(was, moved) ? was : moved));
-    });
-    observer.observe(hint);
-    return () => observer.disconnect();
-  }, [anchor, hang]);
-  return [drawn, at];
-}
-
-/** The marks every hint's element carries, which its stylesheet draws from. */
-function hintMarks(base: TooltipBase, at: TooltipPlace | undefined) {
+/** The marks every hint carries, which its look draws from: its id, and how it is leaving, inert meanwhile. */
+function hintMarks(base: TooltipBase) {
   return {
     id: base.id,
-    "data-placed": String(at !== undefined),
-    "data-side": at?.side ?? TOOLTIP_SIDE.BELOW,
+    ref: base.ref,
     "data-leaving": base.leaving === true ? "" : undefined,
     inert: base.leaving === true,
-    style: at === undefined ? undefined : { left: at.left, top: at.top },
   } as const;
 }
 
@@ -181,13 +76,18 @@ export function TooltipPill({
   /** The control's chord, drawn after its name in the pill's muted ink. */
   shortcut?: ReactNode;
 }): React.JSX.Element {
-  const [drawn, at] = useHintPlace(base.anchor, TOOLTIP_HANG.PILL, base.ref);
-  return createPortal(
-    <div ref={drawn} role="tooltip" className="luke-tooltip" {...hintMarks(base, at)}>
-      {label}
-      {shortcut}
-    </div>,
-    document.body,
+  return (
+    <Tooltip open>
+      <TooltipContent
+        anchor={base.anchor}
+        collisionAvoidance={HINT_COLLISION}
+        role="tooltip"
+        {...hintMarks(base)}
+      >
+        {label}
+        {shortcut}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -210,34 +110,38 @@ export function TooltipCard({
   onChoice?: () => void;
   children: ReactNode;
 }): React.JSX.Element {
-  const hang = beside ? TOOLTIP_HANG.CARD_BESIDE : TOOLTIP_HANG.CARD;
-  const [drawn, at] = useHintPlace(base.anchor, hang, base.ref);
-  return createPortal(
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a card's own button's or link's, bubbled up, which its keys press as well.
-    <div
-      ref={drawn}
-      role="tooltip"
-      className="luke-tooltip luke-tooltip-card ph-no-capture"
-      {...hintMarks(base, at)}
-      onPointerEnter={(event) => {
-        if (event.pointerType !== "touch") onHover?.(true);
-      }}
-      onPointerLeave={(event) => {
-        if (event.pointerType !== "touch") onHover?.(false);
-      }}
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        onPress?.();
-      }}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (event.target instanceof Element && event.target.closest(CARD_CHOICE) !== null) {
-          onChoice?.();
-        }
-      }}
-    >
-      {children}
-    </div>,
-    document.body,
+  // Note that each card stands in a portal node of its own, and React tells
+  // a card hung over another of one pointer crossing once for each portal
+  // node the move bubbles through, so a crossing already told is heard once.
+  const told = useRef<Event | undefined>(undefined);
+  const hover = (over: boolean, event: PointerEvent<HTMLElement>) => {
+    if (event.pointerType === "touch" || event.nativeEvent === told.current) return;
+    told.current = event.nativeEvent;
+    onHover?.(over);
+  };
+  return (
+    <HoverCard open>
+      <HoverCardContent
+        anchor={base.anchor}
+        side={beside ? "inline-end" : "bottom"}
+        collisionAvoidance={HINT_COLLISION}
+        role="tooltip"
+        {...hintMarks(base)}
+        onPointerEnter={(event) => hover(true, event)}
+        onPointerLeave={(event) => hover(false, event)}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onPress?.();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (event.target instanceof Element && event.target.closest(CARD_CHOICE) !== null) {
+            onChoice?.();
+          }
+        }}
+      >
+        {children}
+      </HoverCardContent>
+    </HoverCard>
   );
 }
