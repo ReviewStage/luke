@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { AdminMetrics } from "@luke/features/admin-answer-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -127,11 +130,71 @@ test("a window with no accounts says so instead of drawing a grid", () => {
   expect(page.textContent).toBe("No accounts created in the last 8 weeks yet.");
 });
 
-test("a strong cell's words take the palette's ink on a fill, never the ground, which is pale in the light theme", () => {
-  const page = render(RETENTION);
+/** The web palettes the admin page is drawn in, by theme, as `@luke/ui`'s `palettes.css` writes them. */
+const PALETTES = readFileSync(
+  path.join(import.meta.dirname, "../../../ui/src/tokens/palettes.css"),
+  "utf8",
+);
+const WEB_THEMES = {
+  light: '[data-luke-profile="web"][data-luke-theme="light"] {',
+  dark: '[data-luke-profile="web"][data-luke-theme="dark"] {',
+} as const;
 
-  const [strong] = cellsReading(page, "100%");
-  const [weak] = cellsReading(page, "25%");
-  expect(strong?.style.color).toBe("var(--luke-color-on-accent)");
-  expect(weak?.style.color).toBe("var(--luke-color-text)");
+/** A palette value in one theme's rule, an `#rgb`, `#rrggbb`, or `rgba()` as red, green, blue, alpha. */
+function tokenOf(theme: keyof typeof WEB_THEMES, name: string): number[] {
+  const start = PALETTES.indexOf(WEB_THEMES[theme]);
+  const rule = PALETTES.slice(start, PALETTES.indexOf("\n}", start));
+  const value = new RegExp(`${name}: ([^;]+);`).exec(rule)?.[1] ?? "";
+  const short = /^#([0-9a-f]{3})$/i.exec(value)?.[1];
+  const hex = short
+    ? [...short].map((digit) => digit + digit).join("")
+    : /^#([0-9a-f]{6})$/i.exec(value)?.[1];
+  if (hex) return [0, 2, 4].map((at) => Number.parseInt(hex.slice(at, at + 2), 16)).concat(1);
+  const rgba = /^rgba?\((.*)\)$/.exec(value)?.[1];
+  expect(rgba, `${name} in ${theme}`).toBeDefined();
+  return (rgba ?? "").split(",").map(Number).concat(1).slice(0, 4);
+}
+
+/** `top` laid over the opaque `ground` at `top`'s alpha, as a browser composites it. */
+function over(top: number[], ground: number[]): number[] {
+  const alpha = top[3] ?? 1;
+  return [0, 1, 2].map((at) => (top[at] ?? 0) * alpha + (ground[at] ?? 0) * (1 - alpha));
+}
+
+/** The WCAG 2 contrast ratio of two opaque colours. */
+function contrastOf(a: number[], b: number[]): number {
+  const luminance = (colour: number[]) =>
+    [0.2126, 0.7152, 0.0722].reduce((sum, weight, at) => {
+      const channel = (colour[at] ?? 0) / 255;
+      const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      return sum + weight * linear;
+    }, 0);
+  const [lighter = 0, darker = 0] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+test("every share's words read at AA on its cell, on the admin card, in both themes", () => {
+  const cells = Array.from({ length: 21 }, (_, step) => ({
+    offset: step,
+    activeAccounts: step,
+    share: step / 20,
+    inProgress: false,
+  }));
+  const page = render({ weeks: 21, cohorts: [{ weekStart: "2026-09-28", size: 20, cells }] });
+
+  const drawn = Array.from(page.querySelectorAll<HTMLElement>("div[title]")).filter((cell) =>
+    cell.getAttribute("style")?.includes("color-mix"),
+  );
+  expect(drawn.length).toBeGreaterThan(10);
+  for (const theme of ["light", "dark"] as const) {
+    const card = tokenOf(theme, "--luke-color-surface");
+    for (const cell of drawn) {
+      const style = cell.getAttribute("style") ?? "";
+      const fill = Number(/(\d+)%, transparent/.exec(style)?.[1]) / 100;
+      const ink = /color: var\((--luke-color-[\w-]+)\)/.exec(style)?.[1] ?? "";
+      const ground = over([...tokenOf(theme, "--luke-color-chart-1").slice(0, 3), fill], card);
+      const ratio = contrastOf(over(tokenOf(theme, ink), ground), ground);
+      expect(ratio, `${cell.textContent} in ${theme} reads ${ink}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
 });
