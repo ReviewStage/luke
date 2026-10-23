@@ -3280,21 +3280,9 @@ ul.actor-stack {
   max-width: calc(10 * var(--luke-space-16));
 }
 
-/* A form's text field is the composer's own field (`inbox-form-text.tsx`)
-   drawn at a text field's size: a field's ground in a hairline, its line
-   at the field's insets, growing a line at a time to eight, and the
-   focused field's ground once the caret is in it, as a text field's is. */
-.inbox-field-composer {
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  transition: background-color var(--luke-duration-hover) ease;
-}
-
-.inbox-field-composer:focus-within {
-  background: var(--luke-color-input-focus);
-}
-
+/* A form's text field is the composer's own field (`inbox-form-text.tsx`) in
+   a field's frame, its line at the field's insets, growing a line at a time
+   to eight. */
 .inbox-field-composer .agent-composer-field {
   --agent-composer-field-block: calc(2 * var(--luke-space-6));
 }

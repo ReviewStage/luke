@@ -44,6 +44,7 @@ import {
   IconButton,
   LINE_BUTTON_LOOK,
   LineButton,
+  MENU_SURFACE_FLOW,
   MenuSurface,
   SCROLL_FADE,
   ScrollArea,
@@ -1675,6 +1676,7 @@ export function PlanCommentLayer({
   const bubbleDrawn =
     bubble === undefined ? null : (
       <MenuSurface
+        flow={MENU_SURFACE_FLOW.TOOLBAR}
         className="comment-bubble"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}

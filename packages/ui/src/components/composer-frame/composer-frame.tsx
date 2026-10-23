@@ -10,16 +10,17 @@ import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "re
  * window's message box, a card on the sidebar's ground at a card's corner,
  * as an agent's box, the Inbox's, and a thread's reply stand; a field on the
  * page's ground at a control's corner, as a comment is answered in a card's
- * well; or bare, no frame at all, where the card around it is the frame, as a
+ * well; as a text field is drawn (`INPUT`), on the input's own ground and edge, brightening once the caret is in it, where a form asks for words; or bare, no frame at all, where the card around it is the frame, as a
  * thread's first comment is. The note a box gives way to stands on the same
  * frame, so it stands where the box stood. It is a form where it sends and a
  * div where it does not (`COMPOSER_ELEMENT`).
  */
 
-/** How a composer stands: the window's message box, a field in a card's well, or no frame of its own. */
+/** How a composer stands: the window's message box, a field in a card's well, a text field's ground, or no frame of its own. */
 export const COMPOSER_LOOK = {
   CARD: "card",
   FIELD: "field",
+  INPUT: "input",
   BARE: "bare",
 } as const;
 

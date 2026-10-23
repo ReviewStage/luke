@@ -27,6 +27,8 @@ import {
   Stack,
   TEXT_FIELD_TYPE,
   TextField,
+  COMPOSER_LOOK,
+  ComposerFrame,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { CheckIcon, CircleSlashIcon, Undo2Icon } from "lucide-react";
@@ -191,7 +193,7 @@ function AnsweredText({
   words: string;
 }): React.JSX.Element {
   return (
-    <div className="inbox-field-composer" data-read-only="">
+    <ComposerFrame look={COMPOSER_LOOK.INPUT} className="inbox-field-composer" data-read-only="">
       {/* biome-ignore lint/a11y/useSemanticElements: the words hold mention chips, which no native field can, and speak as the read-only field they stand for. */}
       <div
         className="inbox-words inbox-field-words"
@@ -204,7 +206,7 @@ function AnsweredText({
       >
         {words === "" ? null : <SentWords text={words} />}
       </div>
-    </div>
+    </ComposerFrame>
   );
 }
 
