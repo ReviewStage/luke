@@ -2,7 +2,6 @@
  * phone-tab.ts -- a tab's body drawn as a phone's side panel draws it: in a narrow room, under the door its header's ⋯ is handed what the body offers (`strip-tabs.tsx`'s `useTabActions`), that offer held to be read and pressed.
  */
 
-import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { HandTabActionsContext, type TabActionGroups } from "../desktop/strip-tabs.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -26,7 +25,8 @@ export function onPhone(element: React.ReactNode): {
   let held: TabActionGroups | undefined;
   const find = (label: string) => {
     const found = (held ?? []).flat().find((each) => each.label === label);
-    assert.ok(found, `the ⋯ offers ${label}`);
+    // Note that this throws rather than asserting, because a module the panel's bundle could reach names no `node:` module (`repository-checks.sh`).
+    if (found === undefined) throw new Error(`the ⋯ offers no ${label}`);
     return found;
   };
   return {
