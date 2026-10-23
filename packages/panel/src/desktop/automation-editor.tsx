@@ -140,6 +140,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
+import { matchingRows } from "../searchable-menu.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
@@ -1556,7 +1557,7 @@ function AgentRow({
   problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const { agents, found, models, searchAgents } = choices;
+  const { agents, found, models, searched: words, searchAgents } = choices;
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const known = useKnownNames();
   const place = useAgentRowPlace();
@@ -1577,7 +1578,21 @@ function AgentRow({
     mentionableAgent(agent, known.tasks, drawn.models),
   );
   const searched = found?.map((agent) => mentionableAgent(agent, known.tasks, drawn.models));
-  const listed = searched ?? offered;
+  // Note that the newest are matched here too, because the service matches an agent by its
+  // title and its task, not by a name its row takes from its model.
+  const matched = new Set(
+    matchingRows(
+      offered.map((agent) => agentMenuRow(agent, drawn)),
+      words,
+    ).map((row) => row.id),
+  );
+  const listed =
+    words === ""
+      ? offered
+      : [
+          ...offered.filter((agent) => matched.has(agent.id)),
+          ...(searched ?? []).filter((agent) => !matched.has(agent.id)),
+        ];
   const chosen =
     offered.find((agent) => agent.id === draft.agentId) ??
     searched?.find((agent) => agent.id === draft.agentId) ??
@@ -1609,7 +1624,7 @@ function AgentRow({
       rows={rows}
       placeholder="Search agents"
       note={
-        found !== undefined ? undefined : agents === undefined ? (
+        words !== "" ? undefined : agents === undefined ? (
           <Spinner delay label="Loading agents" />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."

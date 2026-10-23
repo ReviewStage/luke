@@ -39,6 +39,8 @@ export interface RunChoices {
   readonly agents: AgentsRead;
   /** The agents on the repository the last search found, standing until the next answers; nothing while no word is searched. */
   readonly found: readonly CodingAgentSummary[] | undefined;
+  /** The words the agents are being searched for, trimmed; empty while none is typed. */
+  readonly searched: string;
   /** Searches the agents on the repository for the words, or, with none, stops searching. */
   readonly searchAgents: (words: string) => void;
 }
@@ -124,6 +126,7 @@ export function useRunChoices(input: {
     defaultFailed,
     agents,
     found: asked === "" ? undefined : found,
+    searched: asked,
     searchAgents: setWords,
   };
 }

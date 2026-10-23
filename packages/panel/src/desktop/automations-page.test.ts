@@ -2134,6 +2134,29 @@ test("a word typed in the Agent picker asks the service for the repository's age
   ]);
 });
 
+test("a word typed in the Agent picker keeps the newest agents whose rows hold it, so one named by its model stays where the service matches no model", async () => {
+  const UNTITLED = { ...CI_DIGEST, title: null } as const;
+  workspaceAgents = [UNTITLED, { ...CI_DIGEST, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27" }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+  const [named] = agentRows();
+  assert.ok(named?.name, "the untitled agent is drawn under a name of its own");
+
+  type(
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
+    named.name.toLowerCase(),
+  );
+  await settle();
+
+  assert.deepEqual(
+    agentRows().map((row) => row.name),
+    [named.name],
+  );
+});
+
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
