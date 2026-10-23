@@ -2151,7 +2151,7 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
   assert.equal(teammates.title, null, "a refused archive renames nothing");
 });
 
-test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, stamps no archive and leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
+test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
@@ -2176,21 +2176,11 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     },
     already,
   });
-  // The archive stamp is read off the row itself, since the store reads it no longer.
   const standing = async () => {
     const read = Option.getOrThrow(
       await database.run(readTask(agents.teammates.userId, tasks.billing)),
     ).task;
-    const [row] = await database.run(
-      Database.use((db) =>
-        db.select({ archivedAt: task.archivedAt }).from(task).where(eq(task.id, tasks.billing)),
-      ),
-    );
-    return {
-      status: read.status,
-      archivedAt: row?.archivedAt ?? undefined,
-      finished: read.completedAt !== undefined,
-    };
+    return { status: read.status, finished: read.completedAt !== undefined };
   };
   const archive = (archived: boolean, key: string) =>
     call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, archived }, key);
@@ -2204,11 +2194,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       : [];
 
   assert.deepEqual(await archive(true, "call-1"), answered(TASK_STATUS.CANCELED, false));
-  assert.deepEqual(await standing(), {
-    status: TASK_STATUS.CANCELED,
-    archivedAt: undefined,
-    finished: true,
-  });
+  assert.deepEqual(await standing(), { status: TASK_STATUS.CANCELED, finished: true });
   assert.equal(
     await agentArchive(),
     null,
@@ -2227,11 +2213,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     await archive(false, "call-3"),
     answered(TASK_STATUS.IN_PROGRESS, false, assignee),
   );
-  assert.deepEqual(await standing(), {
-    status: TASK_STATUS.IN_PROGRESS,
-    archivedAt: undefined,
-    finished: false,
-  });
+  assert.deepEqual(await standing(), { status: TASK_STATUS.IN_PROGRESS, finished: false });
 
   await database.run(
     recordCodingAgentPublished(agents.teammates.userId, agents.teammates.id, {

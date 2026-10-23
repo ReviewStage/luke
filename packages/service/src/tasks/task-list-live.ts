@@ -57,9 +57,10 @@ export interface TaskListLiveStatements {
 /**
  * The plans the account reaches, each with the reader's own pin and its
  * owner's name. Note that `archivedAt` is still answered, as null, because
- * a desktop build still running decodes a row without it as no row: no
- * plan is archived any more, and the column is read by nothing. It goes
- * once no running build requires it.
+ * a desktop from before #4541 decodes a row without it as no row: no
+ * plan is archived any more, and the column is dropped. The key goes with
+ * the minimum supported desktop version, not with a service deploy, since a
+ * desktop stays old far longer than a service build runs.
  */
 function tasksStatement(userId: string) {
   return queryBuilder
