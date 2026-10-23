@@ -331,6 +331,7 @@ test("a message's preview says its words without the marks a message box writes,
     "Run a*b*c and x ** y as written",
   );
   assert.equal(plainWords("Keep \\*word\\* as typed"), "Keep \\*word\\* as typed");
+  assert.equal(plainWords("A **a\\]b** and *foo\\\\* said"), "A a]b and foo\\ said");
 });
 
 test("a plan edit's row sums its notes by what each did, and shows them as JSON", () => {
