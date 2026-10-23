@@ -170,6 +170,8 @@ export function useAgentComposer(input: {
   send: MessageSender;
   /** Who pays for the agent, which a plan's refusal names; none for an agent from before payers. */
   payer?: CodingAgentPayer | undefined;
+  /** The teammate who started the agent (`teammateStarter`), whose own credentials a refusal names; none for the reader's own. */
+  starter?: string | undefined;
   /** The service said where the agent stands now, which is newer than the list. */
   onStatus: (agentId: string, run: AgentRun) => void;
 }): HeldComposer {
@@ -224,7 +226,12 @@ export function useAgentComposer(input: {
       // A line a row has already read back reached the agent whatever the answer said: the
       // row stands, so there is nothing to send again and nothing to put back in the box.
       if (!heldNow.current.sent.some((each) => each.id === line.id)) return;
-      const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);
+      const note = messageFailureNote(
+        answer,
+        latest.current.taskId,
+        latest.current.payer,
+        latest.current.starter,
+      );
       // A refusal for good closes the box, and the line stays where it went, marked as not
       // delivered, its words kept in the agent's draft for Continue with every other line that
       // did not go, ahead of what the box holds, which is newer.
