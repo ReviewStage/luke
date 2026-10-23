@@ -366,7 +366,11 @@ test("an Enter an input method is composing sends nothing, and Shift+Enter is a 
 });
 
 test("on a coarse pointer Enter is a new line in the box, and Send sends the lines", async () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
   const box = await mounted();
   typeInComposer(box.container, "Fix the bug");
   pressInComposer(box.container, "Enter");

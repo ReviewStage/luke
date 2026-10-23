@@ -49,7 +49,6 @@ import {
   type ComposerMark,
   type ComposerQuote,
   type ComposerTrigger,
-  type MentionDrawer,
   type MentionNode,
 } from "./contract.js";
 import {
@@ -316,7 +315,10 @@ function paragraphsOf(schema: Schema, text: string, chipping: Chipping): PmNode[
   for (const line of text.split(NEWLINE)) {
     const lineEnd = lineStart + line.length;
     const chips = tokens.filter((each) => each.start >= lineStart && each.end <= lineEnd);
-    const atoms = chips.map((each) => ({ start: each.start - lineStart, end: each.end - lineStart }));
+    const atoms = chips.map((each) => ({
+      start: each.start - lineStart,
+      end: each.end - lineStart,
+    }));
     const children = readInline(line, atoms).map((span) =>
       span.kind === INLINE_SPAN.ATOM
         ? (chips.find((each) => each.start === lineStart + span.from)?.node(schema) ??
@@ -1033,6 +1035,8 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     element: host,
     // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`: the desktop's `renderer/index.html` and the web's `vercel.json`) refuses; the owner's stylesheet styles the box instead.
     injectCSS: false,
+    // Note that pasted words are read as the box reads its own (`clipboardTextParser`), so no paste rule makes a link of a bare address or bold of `__init__`; a link pasted over words selected still links them.
+    enablePasteRules: false,
     extensions: [
       ...composerExtensions(props, (name) => state.skills.has(name)),
       Extension.create({ name: "composerGuard", addProseMirrorPlugins: () => [guard] }),

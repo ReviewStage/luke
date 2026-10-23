@@ -1417,7 +1417,11 @@ test("where the editor's bundle could not be loaded, a reply's quote is written 
 });
 
 test("on a coarse pointer the plain field's Enter is a new line, its return key says so, and ⌘+Enter posts", async () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
   const { field, sent } = await plainChat();
   assert.equal(field.getAttribute("enterkeyhint"), "enter");
   writeInto(field, "ship it");

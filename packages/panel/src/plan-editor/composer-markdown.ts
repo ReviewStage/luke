@@ -213,7 +213,11 @@ function emphasis(reading: Reading, delimiters: Delimiter[], bottom: number): vo
     if (opener === undefined) break;
     const use = closing.char === TILDE || (opener.length >= 2 && closing.length >= 2) ? 2 : 1;
     const name =
-      closing.char === TILDE ? INLINE_MARK.STRIKE : use === 2 ? INLINE_MARK.BOLD : INLINE_MARK.ITALIC;
+      closing.char === TILDE
+        ? INLINE_MARK.STRIKE
+        : use === 2
+          ? INLINE_MARK.BOLD
+          : INLINE_MARK.ITALIC;
     const start = opener.at + opener.length;
     reading.ranges.push({ start, end: closing.at, mark: { name } });
     drop(reading, start - use, start);
@@ -349,7 +353,7 @@ export function readInline(line: string, atoms: readonly LineRange[]): InlineSpa
   const reading: Reading = {
     line,
     atoms: new Map(atoms.map((atom) => [atom.start, atom.end])),
-    dropped: new Array<boolean>(line.length).fill(false),
+    dropped: Array.from({ length: line.length }, () => false),
     ranges: [],
     codes: [],
   };

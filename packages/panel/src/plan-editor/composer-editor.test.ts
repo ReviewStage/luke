@@ -629,7 +629,8 @@ test("a mark's Markdown typed becomes the mark, its delimiters gone from the wor
 
 test("a message that comes back reads its Markdown back into marks, and reads out as it came", () => {
   const box = mounted("");
-  const message = "Go **now**, *gently*, ~~not~~ `make it` per [the guide](https://example.com/guide) ***both*** ways";
+  const message =
+    "Go **now**, *gently*, ~~not~~ `make it` per [the guide](https://example.com/guide) ***both*** ways";
 
   box.handle.replace(message);
 
@@ -730,4 +731,19 @@ test("⌘K over words selected opens the owner's link field and links them, and 
   assert.equal(box.drafts.at(-1), "Read the [guide](https://example.com/guide)");
   box.handle.toggleMark("writing-bold");
   assert.equal(box.drafts.at(-1), "Read the [**guide**](https://example.com/guide)");
+});
+
+test("pasted Markdown lands as its marks, a bare address pasted stays the words it is, and one pasted over words selected links them", () => {
+  const box = mounted("");
+
+  paste(box.host, "Ship **it** in my __init__ at https://example.com/a");
+  assert.equal(box.drafts.at(-1), "Ship **it** in my __init__ at https://example.com/a");
+  assert.deepEqual(marked(box.host), { strong: ["it"] });
+
+  box.select(1 + "Ship ".length, 1 + "Ship it".length);
+  paste(box.host, "https://example.com/b");
+  assert.equal(
+    box.drafts.at(-1),
+    "Ship [**it**](https://example.com/b) in my __init__ at https://example.com/a",
+  );
 });

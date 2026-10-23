@@ -1354,6 +1354,13 @@ const LINE_MARKS = /^(?:#{1,6}|>|[-*+]|\d+[.)])\s+/u;
  */
 const INLINE_MARKS = /\*\*|`/gu;
 
+/**
+ * Words wrapped in one `*` or in `~~`, italic or struck, which plain words
+ * say without the marks. Note that a `*` standing between spaces, as in
+ * `5 * 3`, wraps nothing and stays.
+ */
+const WRAPPING_MARKS = /(\*|~~)(?=\S)(.+?)(?<=\S)\1/gu;
+
 /** A markdown fence's opening or closing line, which plain words leave out. */
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
 
@@ -1370,7 +1377,10 @@ export function cardTitle(text: string): string {
 
 function plainLine(line: string): string {
   // A link is said by its name, as its chip names it, never its destination (`linkLabels`).
-  return linkLabels(line.trim().replace(LINE_MARKS, "")).replace(INLINE_MARKS, "").trim();
+  return linkLabels(line.trim().replace(LINE_MARKS, ""))
+    .replace(INLINE_MARKS, "")
+    .replace(WRAPPING_MARKS, "$2")
+    .trim();
 }
 
 /**
