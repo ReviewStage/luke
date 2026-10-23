@@ -1576,6 +1576,7 @@ export function useCodingAgents(input: {
   // A start reads the agents as they stand when it is pressed, so the doors to it stand across draws.
   const steadyStartPrompt = useSteadyDoor(startPrompt);
   const steadyStartFork = useSteadyDoor(startFork);
+  const steadyContinueAgent = useSteadyDoor(continueAgent);
 
   const readInboxImage = useCallback<InboxImageReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
@@ -1612,7 +1613,7 @@ export function useCodingAgents(input: {
     readModels,
     readDefault,
     onUnarchive: undefined,
-    continueAgent: startsFrom ? continueAgent : undefined,
+    continueAgent: startsFrom ? steadyContinueAgent : undefined,
     start: {
       available: taskId !== undefined && repository !== null,
       reason: startReason(taskId, repository),
