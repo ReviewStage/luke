@@ -734,6 +734,24 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
   assert.equal(document.getElementById(hint)?.textContent, "Modified");
 });
 
+test("a file's header leads with its type's icon after its status letter, and its folder and name fade out where the row cuts them rather than ending in an ellipsis", async () => {
+  files = [changed("packages/panel/src/tasks/changes-list.tsx")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("packages/panel/src/tasks/changes-list.tsx"));
+  const head = header("packages/panel/src/tasks/changes-list.tsx");
+
+  const letter = head.querySelector(".file-view-status") ?? assert.fail("the letter stands");
+  assert.equal(
+    letter.nextElementSibling?.tagName.toLowerCase(),
+    "svg",
+    "the file's icon follows the letter",
+  );
+  const cut = [".diff-list-folder", ".diff-list-name"].map((part) =>
+    head.querySelector(part)?.getAttribute("data-end"),
+  );
+  assert.deepEqual(cut, ["fade", "fade"]);
+});
+
 test("a finger's arrival on a header draws none of it anew, so iOS spends no tap on the fold", async () => {
   files = [changed("a.ts")];
   await drawTab();

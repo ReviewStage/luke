@@ -13,12 +13,10 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { sessionSandboxCleanup } from "../schemas/session-sandbox.js";
 
-type CleanupFailure = QueryError | Schema.SchemaError;
-
-type CleanupEffect<A> = Effect.Effect<A, CleanupFailure, DatabaseServices>;
+type CleanupEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const insertSessions = SqlSchema.void({
   Request: Schema.Array(Schema.String),

@@ -6,6 +6,7 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   Button,
   EDITABLE_BLOCK_KIND,
@@ -20,6 +21,7 @@ import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAppCommand } from "../app-commands.js";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
 import { DiagramPreview } from "../plan-diagram.js";
 import {
@@ -33,9 +35,11 @@ import {
   type PlanEditorModule,
   type PlanEditorPlacement,
   type PlanEditorProps,
+  SLASH_INSERT,
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { RetryButton } from "../retry-button.js";
+import { useBlockPicker } from "./block-picker.js";
 import { useEditorPictures } from "./editor-pictures.js";
 import {
   type MentionDoors,
@@ -44,6 +48,7 @@ import {
   retargetedMention,
 } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
+import { useSelectionToolbar } from "./selection-toolbar.js";
 import { useTaskMentions } from "./task-mentions.js";
 import { useKnownNames } from "./use-known-names.js";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing.js";
@@ -73,7 +78,12 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * A save's merged answer is taken into the open editor block by block, and
  * the notetaker's drafts never redraw it. A Mermaid code block's diagram is
  * previewed under it, drawn here as the read view draws it
- * (`../plan-diagram.tsx`), so the editor's bundle carries no Mermaid. The editor stands under
+ * (`../plan-diagram.tsx`), so the editor's bundle carries no Mermaid. Words
+ * selected raise the format toolbar over them (`./selection-toolbar.tsx`),
+ * with Turn into and, where the plan takes comments, Comment, in place of the
+ * read view's Comment bubble; a `/` at a line's start or after a space opens
+ * the block menu under it (`./block-picker.tsx`), which stands aside while
+ * the `@` list stands, as the toolbar stands aside for either. The editor stands under
  * `ph-no-capture`, and its words are document text, which the recording masks.
  */
 
@@ -666,6 +676,20 @@ function MountedPlanEditor({
           ? undefined
           : (element, diagram) =>
               latest.current.drawDiagram?.(element, diagram) ?? (() => undefined),
+      format:
+        latest.current.format === undefined
+          ? undefined
+          : {
+              onFormat: (format) => latest.current.format?.onFormat(format),
+              onLink: () => latest.current.format?.onLink(),
+            },
+      blocks:
+        latest.current.blocks === undefined
+          ? undefined
+          : {
+              onTrigger: (trigger) => latest.current.blocks?.onTrigger(trigger),
+              onKey: (event) => latest.current.blocks?.onKey(event) ?? false,
+            },
     });
     handle.current = mounted;
     return () => {
@@ -742,7 +766,8 @@ function DocumentNote({
  * The whole text in its editor, in place of its drawn sections, which stand
  * as `drawn` until the editor's bundle has loaded. `hostOf` names the block
  * of a section, which the keyboard goes back to as the editor finishes.
- * Focus leaving the editor closes it, unless it moved to its own buttons.
+ * Focus leaving the editor closes it, unless it moved to its own buttons or
+ * to the menu its toolbar dropped.
  */
 export function PlanDocumentEditor({
   task,
@@ -754,6 +779,7 @@ export function PlanDocumentEditor({
   scroller,
   handle,
   closedOn,
+  onComment,
 }: {
   task: Task;
   editor: DocumentEditor;
@@ -768,6 +794,8 @@ export function PlanDocumentEditor({
   handle: React.RefObject<PlanEditorHandle | undefined>;
   /** Where the words the caret stood on are left as the editor closes, for the drawn text to keep them where they stood (`useWordsKeptOnClose`). */
   closedOn?: React.RefObject<PlacedWords | undefined> | undefined;
+  /** Starts a thread on the words selected, as the toolbar's Comment over them does; none where the plan takes no comments here. */
+  onComment?: (() => void) | undefined;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
   // Note that this runs before the editor itself is taken down, so its caret is still measured.
@@ -863,11 +891,34 @@ export function PlanDocumentEditor({
       agents: page?.agents,
       readAgents: page?.readAgents,
       pullRequests: page?.pullRequests,
+      shownCode: page?.shownCode,
+      openFiles: page?.openFiles,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,
     onChoose: (mention) => handle.current?.chooseMention(mention),
   });
+  const mentioning = picker.aria["aria-expanded"] === "true";
+  // A `/` opens the block menu under it, which stands aside while the `@` list stands; its Picture opens the chooser Insert image opens.
+  const blocks = useBlockPicker({
+    room,
+    offers: { pictures: pictures.choose !== undefined, mentions: mentions !== undefined },
+    held: mentioning,
+    onChoose: (block) => {
+      handle.current?.insertBlock(block);
+      if (block === SLASH_INSERT.PICTURE) pictures.choose?.();
+    },
+  });
+  // The words selected raise the format toolbar over them, which stands aside while the `@` list or the block menu stands.
+  const toolbar = useSelectionToolbar({
+    editor: handle,
+    room,
+    blocks: true,
+    onComment,
+    held: mentioning || blocks.open,
+  });
+  // While the toolbar stands, its Comment's command starts the thread as a press on it does.
+  useAppCommand(APP_COMMAND.COMMENT_ON_SELECTION, toolbar.standing ? onComment : undefined);
   if (!AsyncResult.isSuccess(module)) {
     return (
       <section ref={room} className={`${EDITOR_ROOM_CLASS} ph-no-capture`} aria-busy="true">
@@ -907,6 +958,8 @@ export function PlanDocumentEditor({
           },
     drawDiagram: diagrams.draw,
     pictures: pictures.pictures,
+    format: toolbar.doors,
+    blocks: { onTrigger: blocks.onTrigger, onKey: blocks.onKey },
   };
   return (
     <section
@@ -914,10 +967,13 @@ export function PlanDocumentEditor({
       className={`${EDITOR_ROOM_CLASS} ph-no-capture`}
       aria-label="Editing the plan"
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) once(doors.onLeave);
+        const into = event.relatedTarget;
+        if (!event.currentTarget.contains(into) && !toolbar.holds(into)) once(doors.onLeave);
       }}
     >
       <MountedPlanEditor module={module.value} props={props} handle={handle} />
+      {toolbar.drawn}
+      {blocks.menu}
       <DocumentNote editor={editor} editing={editing} />
       {pictures.drawn}
       {mentions === undefined ? null : picker.menu}

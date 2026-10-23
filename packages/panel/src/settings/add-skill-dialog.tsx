@@ -34,6 +34,7 @@ import {
   FileText,
   FormField,
   GAP,
+  GlyphSlot,
   INSET,
   Inline,
   JUSTIFY,
@@ -57,6 +58,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { rendererPause } from "../renderer-runtime.js";
+import { SkillMark } from "../tasks/skill-ref.js";
 import {
   ADD_SKILL_SCREEN,
   addSkillScreen,
@@ -193,6 +195,9 @@ function SkillName({
   const warnings = ratings ? auditParts(candidate).filter((part) => part.warn) : [];
   return (
     <Inline gap={GAP.ICON}>
+      <GlyphSlot>
+        <SkillMark />
+      </GlyphSlot>
       <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN}>
         {title}
       </Text>

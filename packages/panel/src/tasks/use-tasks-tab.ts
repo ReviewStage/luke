@@ -27,7 +27,6 @@ import {
   type CodeRef,
   type Task,
   type TaskStanding,
-  type TaskStatus,
   type TaskSummary,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
@@ -583,16 +582,11 @@ export interface NewTaskCardKept {
 /**
  * What a start comes from beyond its name, repository, and workspace: the
  * Linear and GitHub issues it links, each with its relation, the agent New
- * task's composer starts on its words in the task's own start (`handed`),
- * the words File for later keeps as the task's brief (`brief`), trimmed and
- * none where blank, and where it starts (`status`).
+ * task's composer starts on its words in the task's own start (`handed`).
  */
 export interface NewTaskStart {
   readonly issues?: readonly TaskIssueChoice[];
   readonly handed?: NewTaskAgent;
-  readonly brief?: string;
-  /** Where the task starts: to do where none is named, or the backlog for one New task files for later. */
-  readonly status?: TaskStatus;
   /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
   readonly card?: NewTaskCardKept;
 }
@@ -824,9 +818,8 @@ export interface TasksControl {
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
     /**
      * Starts the task on the repository given, or none, in the workspace
-     * given, with an empty plan and no call, linking the issues picked, with
-     * the brief File for later keeps where words were written, which closes
-     * the dialog and opens the task; with an agent handed over it opens the
+     * given, with an empty plan and no call, linking the issues picked,
+     * which closes the dialog and opens the task; with an agent handed over it opens the
      * task on a draft agent's tab holding the agent's prompt, files, and
      * model, which starts the agent at once; answers why the task did not
      * start, or nothing once it has.
@@ -2819,8 +2812,7 @@ export function useTasksTab(input: {
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens no call, and
   // names no planning, so the task opens on an empty plan rather than the
-  // template. File for later hands its words over as the task's brief, and a
-  // blank brief is not sent. New task starts the task
+  // template. New task starts the task
   // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).
@@ -2876,8 +2868,6 @@ export function useTasksTab(input: {
       ...(from.issues === undefined || from.issues.length === 0
         ? undefined
         : { issues: from.issues }),
-      ...(from.brief === undefined || from.brief.trim() === "" ? undefined : { brief: from.brief }),
-      ...(from.status === undefined ? undefined : { status: from.status }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(

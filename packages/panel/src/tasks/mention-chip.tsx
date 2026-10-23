@@ -61,7 +61,6 @@ import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-edit
 import { APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
 import {
   AutomationChipCard,
-  InboxItemChipCard,
   PageChipCard,
   PersonChipCard,
   SectionChipCard,
@@ -78,6 +77,7 @@ import {
 import { FileCard } from "./file-ref.js";
 import { shortCommit } from "./file-tab-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
+import { InboxItemChipCard, InboxItemChipGlyph } from "./inbox-item-chip.js";
 import { IssueMark } from "./issue-mark.js";
 import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card.js";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
@@ -191,6 +191,8 @@ export interface MentionDoors {
   readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
   /** One of the plan's agents as its chip wears it; none where the place knows the plan's agents not. */
   readonly agentOf?: ((agentId: string) => MentionedAgentLook) | undefined;
+  /** The card a pull request one of the plan's agents opened hangs on its Pull request tab, by any link to it; none for any other, or where the place knows the plan's agents not. */
+  readonly pullRequestOf?: ((url: string) => ReactNode | undefined) | undefined;
 }
 
 /** An agent as its chip wears it: its tile, and the card its tab hangs. */
@@ -429,7 +431,7 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
   return `${span} at ${shortCommit(lines.commit)}`;
 }
 
-/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, a provider's page's key and state with what a pull request's notes say, and why it is gone where it is. */
+/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's or a pull request's Pull request tab's where the place has one, or its glyph and whole name, a provider's page's key and state with what a pull request's notes say, and why it is gone where it is. */
 function MentionCard({
   mention,
   target,
@@ -477,6 +479,10 @@ function MentionCard({
       ? doors.agentOf?.(mention.agentId)?.card
       : undefined;
   if (tabCard !== undefined) return tabCard;
+  // A pull request one of the plan's agents opened hangs its Pull request tab's card, as the tab does.
+  const changesCard =
+    mention.kind === MENTION_KIND.LINK ? doors.pullRequestOf?.(mention.url) : undefined;
+  if (changesCard !== undefined) return changesCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state, doors.taskId, standing);
   const card = (
@@ -872,8 +878,9 @@ function PlaceGlyph({
       return <CommentsIcon />;
     case LINK_PLACE.MESSAGE:
       return <MessageSquareIcon aria-hidden="true" />;
-    case LINK_PLACE.INBOX:
     case LINK_PLACE.INBOX_ITEM:
+      return <InboxItemChipGlyph place={place} />;
+    case LINK_PLACE.INBOX:
       return <InboxIcon aria-hidden="true" />;
     case LINK_PLACE.AUTOMATIONS:
       return <ZapIcon aria-hidden="true" />;
@@ -998,7 +1005,7 @@ function PlaceCard({
     case LINK_PLACE.PERSON:
       return <PersonChipCard userId={place.userId} workspace={workspace} fallback={fallback} />;
     case LINK_PLACE.INBOX_ITEM:
-      return <InboxItemChipCard itemId={place.itemId} fallback={fallback} />;
+      return <InboxItemChipCard place={place} fallback={fallback} />;
     case LINK_PLACE.AUTOMATION:
     case LINK_PLACE.AUTOMATION_RUN:
       return (

@@ -12,17 +12,20 @@ import type { PageLine } from "@luke/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { ChipCards } from "../tasks/chip-cards.js";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
+import { editorBundleLanded } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -112,6 +115,10 @@ const FUNNEL: PageLine = {
 
 const roots: Root[] = [];
 
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
 beforeEach(() => {
   installScrollIntoView();
   handCapabilities(DESKTOP_CAPABILITIES);
@@ -133,7 +140,7 @@ async function settle(): Promise<void> {
  * The task open on its own tab, a working agent's tab and a draft's beside
  * it, and the side panel open with the done agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
-async function mount(): Promise<HTMLElement> {
+async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -142,7 +149,10 @@ async function mount(): Promise<HTMLElement> {
     page: TASKS_PAGE.DOCUMENT,
     tasks: [SUMMARY],
     activeTaskId: TASK.id,
-    region: { kind: DOCUMENT_REGION.READY, task: TASK },
+    region: {
+      kind: DOCUMENT_REGION.READY,
+      task: { ...TASK, document: { ...TASK.document, body: shown.body ?? TASK.document.body } },
+    },
     mainTabs: {
       ...base.mainTabs,
       tabs: [{ agent: WORKING.id }, { draft: DRAFT }],
@@ -152,7 +162,7 @@ async function mount(): Promise<HTMLElement> {
     sidePanel: {
       ...base.sidePanel,
       open: true,
-      tab: SIDE_PANEL_TAB.CODE,
+      tab: shown.tab ?? SIDE_PANEL_TAB.CODE,
       changes: [{ changes: DONE.id }],
       terminals: [{ terminal: WORKING.id }],
       pages: [{ page: FUNNEL.id }],
@@ -299,6 +309,52 @@ test("the side panel's Plan tab hangs the task's card, as its sidebar row does",
   assert.ok(card, "the task's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
+});
+
+test("the side panel's Inbox tab hangs what waits on the developer, as the plan's summary row does", async () => {
+  const panel = (await mount()).querySelector(".side-panel-tabs");
+  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
+    (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === "Inbox",
+  );
+  assert.ok(tab, "the strip has the Inbox tab");
+  restOn(tab);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.ok(card, "the Inbox's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Inbox");
+  assert.ok(card.querySelector(".luke-hover-card-corner")?.textContent, "it says how many wait");
+});
+
+test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {
+  const url = "https://github.com/acme/relay/pull/42";
+  const container = await mount({
+    body: `## Goal\n\nShip it with [@#42](${url}) once ${url}/files is green.\n`,
+    tab: SIDE_PANEL_TAB.PLAN,
+  });
+  const tab = [...container.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
+    (each) => each.querySelector(".luke-tab-label")?.textContent === "#42 Expire invitations",
+  );
+  const [chip, files] = container.querySelectorAll<HTMLElement>(
+    'button[data-mention-ref][data-kind="link"]',
+  );
+  const cardOf = (control: HTMLElement | undefined) => {
+    assert.ok(control, "the pull request is named");
+    restOn(control);
+    const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+    const look = {
+      card: card?.hasAttribute("data-tab-card"),
+      name: card?.querySelector(".luke-hover-card-name")?.textContent,
+      agent: card?.querySelector(".luke-hover-card-sub")?.textContent,
+    };
+    act(() => {
+      control.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+    return look;
+  };
+
+  const own = cardOf(tab);
+  assert.deepEqual(own, { card: true, name: "Expire invitations", agent: DONE.title });
+  assert.deepEqual(cardOf(chip), own, "the chip hangs the tab's card");
+  assert.deepEqual(cardOf(files), own, "a link to its files hangs it too");
 });
 
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {

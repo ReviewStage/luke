@@ -5,7 +5,7 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment, type SandboxRecord } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
-import { browserSessionOf } from "@luke/service/agents/browser/agent-browser";
+import { type AgentBrowser, browserSessionOf } from "@luke/service/agents/browser/agent-browser";
 import {
   BROWSER_TOOL,
   type BrowserToolResult,
@@ -62,6 +62,7 @@ import { memoryOnFor } from "@luke/service/agents/memory-tools";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { hostedEnvironment } from "@luke/service/environment";
+import type { WebServices } from "@luke/service/runtime";
 import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
 import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
@@ -87,7 +88,7 @@ import { runAgent } from "./runtime.js";
  * because eve loads the authored files as modules and the environment read
  * is a `Config` over `process.env`, which suspends on nothing. The edge's
  * own runner is handed down too: eve's door holds a promise, and it runs on
- * it, so nothing under `server/hosted/` keeps a runner of its own. The
+ * it, so nothing under `packages/service/` keeps a runner of its own. The
  * worker's authored files and the delegation tool run what they need
  * through the doors below rather than at edges of their own.
  */
@@ -323,6 +324,30 @@ export function turnMessage(
   );
 }
 
+type ConversationAdmission = Effect.Success<ReturnType<CoderHost["admit"]>>;
+
+/**
+ * One call run under the agent's session, for a tool that runs here rather
+ * than at an edge of its own: `run` on what the host admitted, or `refused`
+ * in the host's words where it admits nothing.
+ */
+function admitted<A, E>(
+  auth: SessionAuth,
+  sessionId: string,
+  refused: (reason: Result.Result.Failure<ConversationAdmission>) => A,
+  run: (
+    session: Result.Result.Success<ConversationAdmission>,
+  ) => Effect.Effect<A, E, WebServices | AgentBrowser>,
+): Promise<A> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admission = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admission)) return refused(admission.failure);
+      return yield* run(admission.success);
+    }),
+  );
+}
+
 /** One `edit_plan` call's notes taken into the agent's plan, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
 export function editPlanNotes(
   auth: SessionAuth,
@@ -331,12 +356,8 @@ export function editPlanNotes(
   takenInTurn: number,
   sandbox: InboxSandboxDoor,
 ): Promise<PlanEditResult> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
-      return yield* host.editPlan(admitted.success, input, takenInTurn, sandbox);
-    }),
+  return admitted(auth, sessionId, planEditRejected, (session) =>
+    host.editPlan(session, input, takenInTurn, sandbox),
   );
 }
 
@@ -346,12 +367,8 @@ export function runPullRequestTool(
   sessionId: string,
   input: UnparsedWireValue,
 ): Promise<PullRequestToolResult> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return pullRequestRejected(admitted.failure);
-      return yield* host.openPullRequest(admitted.success, input);
-    }),
+  return admitted(auth, sessionId, pullRequestRejected, (session) =>
+    host.openPullRequest(session, input),
   );
 }
 
@@ -361,13 +378,7 @@ export function runInboxTool(
   sessionId: string,
   call: InboxCall,
 ): Promise<InboxToolResult> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
-      return yield* host.inbox(admitted.success, call);
-    }),
-  );
+  return admitted(auth, sessionId, inboxRejected, (session) => host.inbox(session, call));
 }
 
 /** One `look_at_picture` call run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
@@ -376,12 +387,8 @@ export function lookAtPlanPicture(
   sessionId: string,
   input: UnparsedWireValue,
 ): Promise<PictureLookResult> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return pictureNotLooked(admitted.failure);
-      return yield* host.lookAtPicture(admitted.success, input);
-    }),
+  return admitted(auth, sessionId, pictureNotLooked, (session) =>
+    host.lookAtPicture(session, input),
   );
 }
 
@@ -396,28 +403,41 @@ export function runCommentTool(
   name: CommentToolName,
   input: UnparsedWireValue,
 ): Promise<WireRecord> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return commentToolRejected(admitted.failure);
-      return yield* host.comment(admitted.success, name, input);
-    }),
+  return admitted(auth, sessionId, commentToolRejected, (session) =>
+    host.comment(session, name, input),
   );
 }
 
 /** One call of the agent's tools about the workspace's coding agents, run under its session, for the tool, which runs here rather than at an edge of its own. */
-export function runAgentTool(
+function runAgentTool(
   auth: SessionAuth,
   sessionId: string,
   call: AgentToolCall,
 ): Promise<WireRecord> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return agentToolRejected(admitted.failure);
-      return yield* host.agentTools(admitted.success, call);
-    }),
-  );
+  return admitted(auth, sessionId, agentToolRejected, (session) => host.agentTools(session, call));
+}
+
+/**
+ * One of the agent's tools about the workspace's coding agents, the planning
+ * model's own too (`packages/service/src/agents/coding-agent-tools.ts`), run
+ * through `runAgentTool` under eve's id for the call, so a call run again
+ * does its work once.
+ */
+export function agentToolFor(
+  tool: AgentToolCall["tool"],
+  spec: { readonly description: string; readonly inputSchema: Schema.Top },
+) {
+  return defineTool({
+    description: spec.description,
+    inputSchema: emitJsonSchema(spec.inputSchema),
+    execute: async (input, ctx) =>
+      // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
+      runAgentTool(ctx.session.auth, ctx.session.id, {
+        tool,
+        input: unparsedWire(input as WireBoundaryInput),
+        callId: ctx.callId,
+      }),
+  });
 }
 
 /** One call of the agent's chat tools run under its session, for the tool, which runs here rather than at an edge of its own. */
@@ -426,13 +446,7 @@ export function runChatTool(
   sessionId: string,
   call: ChatCall,
 ): Promise<ChatToolResult> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return chatRejected(admitted.failure);
-      return yield* host.chat(admitted.success, call);
-    }),
-  );
+  return admitted(auth, sessionId, chatRejected, (session) => host.chat(session, call));
 }
 
 /** One `show_page` call run under the agent's session, its path read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
@@ -442,12 +456,8 @@ export function runShowPageTool(
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
 ): Promise<WireRecord> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
-      return yield* host.showPage(admitted.success, input, sandbox);
-    }),
+  return admitted(auth, sessionId, showPageRejected, (session) =>
+    host.showPage(session, input, sandbox),
   );
 }
 
@@ -458,12 +468,8 @@ export function runShowCodeTool(
   input: UnparsedWireValue,
   sandbox: () => Promise<RepositorySandbox>,
 ): Promise<WireRecord> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return showCodeRejected(admitted.failure);
-      return yield* host.showCode(admitted.success, input, sandbox);
-    }),
+  return admitted(auth, sessionId, showCodeRejected, (session) =>
+    host.showCode(session, input, sandbox),
   );
 }
 
@@ -474,14 +480,11 @@ export function runBoardTool(
   tool: BoardTool,
   input: UnparsedWireValue,
 ): Promise<WireRecord> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.failure };
-      }
-      return yield* host.board(admitted.success, tool, input);
-    }),
+  return admitted(
+    auth,
+    sessionId,
+    (reason): WireRecord => ({ status: ACTION_RESULT_STATUS.REJECTED, reason }),
+    (session) => host.board(session, tool, input),
   );
 }
 
@@ -520,12 +523,8 @@ export function runShowImageTool(
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
 ): Promise<WireRecord> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return showImageRejected(admitted.failure);
-      return yield* host.showImage(admitted.success, input, sandbox);
-    }),
+  return admitted(auth, sessionId, showImageRejected, (session) =>
+    host.showImage(session, input, sandbox),
   );
 }
 

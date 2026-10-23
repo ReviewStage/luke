@@ -173,17 +173,17 @@ test("the workspace's skills come before the account's own, by name, each with i
   );
 
   assert.deepEqual(
-    groups.workspace.map((row) => [row.skill.name, row.badge, row.line]),
+    groups.workspace.map((row) => [row.skill.name, row.source, row.line]),
     [
-      ["release-notes", "Workspace", "acme/agent-skills @ 3f9c2e1 · by you"],
-      ["triage", "Workspace", "pasted · by Dean"],
+      ["release-notes", "workspace", "acme/agent-skills @ 3f9c2e1 · by you"],
+      ["triage", "workspace", "pasted · by Dean"],
     ],
   );
   assert.deepEqual(
-    groups.personal.map((row) => [row.skill.name, row.badge, row.line, row.fromGitHub]),
+    groups.personal.map((row) => [row.skill.name, row.source, row.line, row.fromGitHub]),
     [
-      ["alpha", "Personal", "acme/agent-skills @ 3f9c2e1", true],
-      ["zeta", "Personal", "pasted", false],
+      ["alpha", "personal", "acme/agent-skills @ 3f9c2e1", true],
+      ["zeta", "personal", "pasted", false],
     ],
   );
 });

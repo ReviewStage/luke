@@ -10,7 +10,7 @@ import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { planTemplateRevision } from "../schemas/plan-template-revision.js";
 import { InstantColumnSchema } from "./columns.js";
 import { PLAN_REVISION } from "./plan-revisions.js";
@@ -41,8 +41,6 @@ export interface TemplateSaveRecord {
   readonly after: string | null;
   readonly restoredFrom?: number;
 }
-
-type RevisionFailure = QueryError | Schema.SchemaError;
 
 const RevisionRowSchema = Schema.Struct({
   seq: Schema.Number,
@@ -134,7 +132,7 @@ const RevisionLineRowSchema = Schema.Struct({
 export function readTemplateAt(
   userId: string,
   at: Date,
-): Effect.Effect<Option.Option<string | null>, RevisionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<string | null>, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const held = yield* findTemplateHeldAt({ userId, at });
     const found = Option.isSome(held) ? held : yield* findFirstTemplate(userId);
@@ -268,7 +266,7 @@ function joins(newest: RevisionRow, record: TemplateSaveRecord, now: Date): bool
  */
 export function recordTemplateRevision(
   record: TemplateSaveRecord,
-): Effect.Effect<void, RevisionFailure, DatabaseServices> {
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { userId, before, after } = record;
@@ -317,7 +315,7 @@ export function recordTemplateRevision(
 export function listTemplateRevisions(
   userId: string,
   before?: number,
-): Effect.Effect<PlanTemplateRevisionsAnswer, RevisionFailure, DatabaseServices> {
+): Effect.Effect<PlanTemplateRevisionsAnswer, StoreFailure, DatabaseServices> {
   return Effect.map(findRevisionLines({ userId, before: before ?? null }), (rows) => {
     const page = rows.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
     const revisions = page.map(
@@ -343,7 +341,7 @@ export function listTemplateRevisions(
 export function readTemplateRevisionContent(
   userId: string,
   seq: number,
-): Effect.Effect<Option.Option<string | null>, RevisionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<string | null>, StoreFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, seqs: [seq] }), (rows) =>
     Option.map(Option.fromNullishOr(rows[0]), (row) => row.document),
   );
@@ -360,7 +358,7 @@ export function readTemplateRevision(
   seq: number,
 ): Effect.Effect<
   Option.Option<PlanTemplateRevisionAnswer["revision"]>,
-  RevisionFailure,
+  StoreFailure,
   DatabaseServices
 > {
   return Effect.map(findRevisionContents({ userId, seqs: [seq - 1, seq] }), (rows) => {

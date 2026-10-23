@@ -10,7 +10,7 @@ import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { and, asc, count, eq, exists, inArray, max, type SQL } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { task } from "../schemas/task.js";
 import { taskIssue } from "../schemas/task-issue.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -37,7 +37,7 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * an effect over the ambient `SqlClient` and names no database of its own.
  */
 
-export type TaskIssueStoreFailure = QueryError | Schema.SchemaError;
+export type TaskIssueStoreFailure = StoreFailure;
 
 /** The task links `TASK_BOUNDS.MAX_ISSUES` issues already; nothing was written. */
 export class TaskIssuesFull extends Data.TaggedError("TaskIssuesFull") {}

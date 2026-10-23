@@ -155,7 +155,10 @@ import {
  * bubble that rises over them, or from the button a block shows at its end
  * under the pointer, which comments on the whole block; while the bubble
  * stands, ⌥⌘M starts it as a press on the bubble does
- * (`APP_COMMAND.COMMENT_ON_SELECTION`). Its words are
+ * (`APP_COMMAND.COMMENT_ON_SELECTION`). In the open editor the format
+ * toolbar over the words selected takes the bubble's place, its Comment
+ * starting the thread (`useEditorComment`), so two surfaces never stand over
+ * one selection. Its words are
  * measured in the plan's Markdown by laying the words drawn over the
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
@@ -1529,6 +1532,11 @@ export function PlanCommentLayer({
         setBubble(undefined);
         return;
       }
+      // Note that in the editor the format toolbar over the words starts their thread, so no bubble stands beside it.
+      if (editor !== undefined) {
+        setBubble(undefined);
+        return;
+      }
       const range = selection.getRangeAt(0);
       const start = range.startContainer.parentElement?.closest<HTMLElement>(`.${unitClass}`);
       const end = range.endContainer.parentElement?.closest<HTMLElement>(`.${unitClass}`);
@@ -1542,20 +1550,6 @@ export function PlanCommentLayer({
       const below =
         coarsePointerNow() && box.bottom + BUBBLE_ROOM_TOUCH <= visibleViewport().bottom;
       const top = (below ? box.bottom : box.top) - own.top;
-      // In the editor the words are measured through it, and its selection is left as it stands.
-      if (editor !== undefined) {
-        setBubble({
-          top,
-          left: box.left - own.left,
-          below,
-          start: () => {
-            const span = editor.current?.selectionSpan();
-            if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.WORDS));
-            setBubble(undefined);
-          },
-        });
-        return;
-      }
       const index = [...element.querySelectorAll(`.${unitClass}`)].indexOf(start);
       const section = sections[index];
       const quote = selection.toString().trim();
@@ -1819,6 +1813,19 @@ export function PlanCommentLayer({
 }
 
 const PendingSetter = createContext<(pending: PendingThread | undefined) => void>(() => undefined);
+
+/**
+ * Starts a thread on the words selected in the open editor, measured through
+ * it and its selection left as it stands, as the format toolbar's Comment
+ * over them does; nothing where none are selected.
+ */
+export function useEditorComment(editor: RefObject<PlanEditorHandle | undefined>): () => void {
+  const setPending = useContext(PendingSetter);
+  return () => {
+    const span = editor.current?.selectionSpan();
+    if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.WORDS));
+  };
+}
 
 /** Holds which thread is open and the one being started, for the marks, the margin, and the Comments tab under it. */
 export function CommentFocusScope({

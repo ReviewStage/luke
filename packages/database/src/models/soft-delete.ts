@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, isNull, lte, notExists, or } from "drizzle-orm";
 import { DateTime, Duration, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { conversations } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { voiceSessions } from "../schemas/voice.js";
@@ -32,8 +32,6 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 /** How long a cleared conversation's rows stand before the purge takes them. */
 export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days(30));
 
-type ClearFailure = QueryError | Schema.SchemaError;
-
 /** The most calls one sweep removes, so a backlog is worked through a sweep at a time rather than in one statement. */
 const DELETED_TASK_CALLS_PER_SWEEP = 200;
 
@@ -60,7 +58,7 @@ const purgeRows = SqlSchema.findAll({
  */
 export function purgeClearedConversations(
   now: Date,
-): Effect.Effect<number, ClearFailure, DatabaseServices> {
+): Effect.Effect<number, StoreFailure, DatabaseServices> {
   const edge = new Date(now.getTime() - CLEARED_CONVERSATION_RETENTION_MS);
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -110,7 +108,7 @@ const findChildren = SqlSchema.findAll({
  */
 export function stampConversationsDeleted(
   conversationIds: readonly string[],
-): Effect.Effect<void, ClearFailure, DatabaseServices> {
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
   if (conversationIds.length === 0) return Effect.void;
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -166,6 +164,6 @@ const purgeCallRows = SqlSchema.findAll({
  */
 export function purgeDeletedTaskCalls(
   liveEdge: Date,
-): Effect.Effect<number, ClearFailure, DatabaseServices> {
+): Effect.Effect<number, StoreFailure, DatabaseServices> {
   return Effect.map(purgeCallRows(liveEdge), (rows) => rows.length);
 }

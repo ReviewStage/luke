@@ -57,7 +57,7 @@ import {
   useEditReader,
 } from "./edit-ref.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
-import { PlanCommentLayer, useCommentFocus } from "./plan-comments.js";
+import { PlanCommentLayer, useCommentFocus, useEditorComment } from "./plan-comments.js";
 import {
   DocumentBlock,
   EditableTitle,
@@ -151,6 +151,9 @@ export interface SectionLinks {
   readonly reveal: SectionReveal | undefined;
   /** The document showed the section `reveal` asked for, so the ask can be let go. */
   readonly onRevealed?: ((ask: number) => void) | undefined;
+  /** The task's agents and their pull requests as their tabs hang them, which a chip naming one hangs (`MentionDoors`); none where the page knows the task's agents not. */
+  readonly agentOf?: MentionDoors["agentOf"];
+  readonly pullRequestOf?: MentionDoors["pullRequestOf"];
 }
 
 /** One ask to show a section by its anchor, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
@@ -576,6 +579,9 @@ function useMentionChips(
   const latest = useRef(links);
   latest.current = links;
   const opensFiles = links?.onOpenFile !== undefined;
+  // Note that these two are steady doors, the same across draws, so the chips are drawn again only when one comes or goes.
+  const agentOf = links?.agentOf;
+  const pullRequestOf = links?.pullRequestOf;
   const taskId = linked?.taskId;
   const workspace = linked?.place.workspace ?? "";
   const repository = linked?.place.repository ?? null;
@@ -590,9 +596,11 @@ function useMentionChips(
       onOpenFile: opensFiles
         ? (path, lines) => latest.current?.onOpenFile?.(path, lines)
         : undefined,
+      agentOf,
+      pullRequestOf,
     };
     return { link: mentionLinkDrawer(doors), doors };
-  }, [opensFiles, taskId, workspace, repository, anchorKey]);
+  }, [opensFiles, agentOf, pullRequestOf, taskId, workspace, repository, anchorKey]);
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
@@ -1206,6 +1214,8 @@ export const PlanBody = memo(function PlanBody({
     textSections.every((section, at) => section.text === views[at]?.words)
       ? textSections
       : undefined;
+  // The toolbar over the editor's words selected starts a thread on them where the plan's comments are drawn.
+  const commentOnWords = useEditorComment(editorHandle);
   const edited = lastEditOf(task);
   // A task item is ticked from the drawn plan while its words stand whole and
   // no editor is open, and saved through the editor's own door.
@@ -1411,6 +1421,7 @@ export const PlanBody = memo(function PlanBody({
                 scroller={scroller}
                 handle={editorHandle}
                 closedOn={closedOn}
+                onComment={drawnSections === undefined ? undefined : commentOnWords}
               />
             )}
             {comments === undefined || !commentsHere || drawnSections === undefined ? null : (

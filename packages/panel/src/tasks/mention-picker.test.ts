@@ -12,6 +12,7 @@ import { afterEach, test } from "vitest";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
 import { NO_TASK } from "./task-mentions.js";
 
@@ -208,4 +209,14 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
     kind: MENTION_KIND.TASK,
     taskId: "plan-421",
   });
+});
+
+test("a person's row in the @ list hangs their card while the pointer rests on it", () => {
+  const { picker, page } = mounted();
+  act(() => picker().onTrigger(word("mar")));
+  const row = page.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "Maria is listed");
+  restOn(row);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Maria Chen");
 });

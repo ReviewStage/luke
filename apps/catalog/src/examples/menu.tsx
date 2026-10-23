@@ -20,6 +20,7 @@ import {
   LIST_VARIANT,
   List,
   ListRow,
+  MENU_DETAIL,
   MENU_ITEM_MARK,
   MENU_SURFACE_FLOW,
   MENU_SURFACE_INSET,
@@ -151,12 +152,13 @@ function AccountMenu(): React.JSX.Element {
   );
 }
 
-/** A people filter: each person's item hangs their card beside it while the pointer rests there, a long name fading where cut. */
+/** A people filter: each person's item, their email beside their name, hangs their card beside it while the pointer rests there, a long name fading where cut. */
 function PeopleMenu(): React.JSX.Element {
   const menu = useMenu(true);
   const person = (name: string, email: string, note: string) => ({
     label: name,
     detail: email,
+    detailPlace: MENU_DETAIL.BESIDE,
     icon: <UserIcon />,
     card: (
       <HoverCard>

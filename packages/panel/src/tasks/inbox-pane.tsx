@@ -118,7 +118,7 @@ import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
 import { type FormTextDoors, InboxFormText } from "./inbox-form-text.js";
-import { HolderGlyph } from "./inbox-list.js";
+import { HolderGlyph } from "./inbox-item-parts.js";
 import {
   answerOf,
   askNumberedPick,

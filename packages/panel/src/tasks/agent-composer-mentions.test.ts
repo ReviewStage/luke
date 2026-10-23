@@ -27,8 +27,9 @@ import {
   type MentionPlace,
   mentionMarkdown,
 } from "@luke/features/mention-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
@@ -187,17 +188,17 @@ function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly Co
   );
 }
 
-/** The workspace's members, as its Members list reads them: the reader, and a teammate. */
+/** The workspace's members, as its Members list reads them: a teammate, then the reader. */
 const READER_ID = "u_reader";
 const DANA_ID = "u_dana";
 const MEMBERS: readonly WorkspaceMember[] = [
+  { userId: DANA_ID, name: "Dana Reyes", email: "dana@example.com", role: WORKSPACE_ROLE.ADMIN },
   {
     userId: READER_ID,
     name: "Charles Pan",
     email: "charles@example.com",
     role: WORKSPACE_ROLE.OWNER,
   },
-  { userId: DANA_ID, name: "Dana Reyes", email: "dana@example.com", role: WORKSPACE_ROLE.ADMIN },
 ];
 
 /** Every act the panel told the main process, in order. */
@@ -315,7 +316,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
 const SELF_ID = "agent-1";
 
 /** A page an agent showed on the plan, and two of its agents, the box's own among them. */
-const PAGE = { id: "page-1", title: "Invites by week" };
+const PAGE = { id: "page-1", title: "Invites by week", version: 1, at: 1_000 };
 const STORE_AGENT = {
   id: "agent-2",
   name: "Wire the desktop",
@@ -982,6 +983,121 @@ test("an @ row for an agent hangs the agent's own card while the pointer rests o
   assert.equal(told.length, reads, "the card is drawn from the agent the list read");
 });
 
+/** Luke's note on a file of the repository, as he showed its lines at `commit`. */
+function shownAt(commit: string, note: string, at: number): TaskCodeShowing {
+  return {
+    callId: `c-${commit}`,
+    turnId: "t",
+    shownAt: at,
+    code: {
+      ref: { path: "apps/web/rollout-store.ts", startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      commit,
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+      note,
+    },
+  };
+}
+
+/** The card an @ row hangs once the pointer rests on it, as the list is drawn for the page given. */
+async function cardOfRow(page: TaskMentionsValue, typed: string, section: string) {
+  const { container } = await box(page);
+  typeInComposer(container, typed);
+  await settle();
+  const option =
+    container.querySelector<HTMLElement>(
+      `.mention-menu [aria-label="${section}"] [role="option"]`,
+    ) ?? assert.fail(`the list offers a row under ${section}`);
+  restOn(option);
+  return {
+    option,
+    card: document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card"),
+  };
+}
+
+test("an @ row for a file hangs the file's card with Luke's newest note, read at the commit an open tab of it is pinned to", async () => {
+  const shownCode = [
+    shownAt("aaaa111", "Fix parsing", 1_000),
+    shownAt("bbbb222", "Add logging", 2_000),
+  ];
+
+  const pinned = await cardOfRow(
+    {
+      ...planPage([]),
+      shownCode,
+      openFiles: [{ path: "apps/web/rollout-store.ts", commit: "aaaa111" }],
+    },
+    "See @rollout-store",
+    "Files and folders",
+  );
+  assert.equal(
+    pinned.card.querySelector(".luke-hover-card-name")?.textContent,
+    "apps/web/rollout-store.ts",
+  );
+  assert.equal(pinned.card.querySelector(".luke-hover-card-note")?.textContent, "Fix parsing");
+});
+
+test("an @ row for a file with no tab open of it hangs the note of Luke's newest showing", async () => {
+  const { card } = await cardOfRow(
+    {
+      ...planPage([]),
+      shownCode: [
+        shownAt("aaaa111", "Fix parsing", 1_000),
+        shownAt("bbbb222", "Add logging", 2_000),
+      ],
+    },
+    "See @rollout-store",
+    "Files and folders",
+  );
+
+  assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, "Add logging");
+});
+
+test("an @ row for a file Luke showed no note on hangs the file's card with its path alone", async () => {
+  const { card } = await cardOfRow(planPage([]), "See @rollout-store", "Files and folders");
+
+  assert.equal(
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    "apps/web/rollout-store.ts",
+  );
+  assert.equal(card.querySelector(".luke-hover-card-note"), null);
+});
+
+test("an @ row for a page says its version where it has more than one, else its age, and hangs the page's card", async () => {
+  const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+  fakeAppPlatform({ ...DESKTOP_LINKS, pageFrameUrl });
+
+  const later = await cardOfRow(
+    { ...planPage([]), pages: [{ ...PAGE, version: 3, at: threeHoursAgo }] },
+    "See @invites",
+    "Pages",
+  );
+  assert.equal(
+    later.option.querySelector(".luke-combobox-option-detail")?.textContent,
+    "Version 3",
+  );
+  assert.equal(
+    later.card.querySelector("[data-page-card] .luke-hover-card-name")?.textContent,
+    PAGE.title,
+  );
+  assert.match(later.card.textContent ?? "", /Version 3/u);
+});
+
+test("an @ row for a page still on its first version says how long ago it was written in place of the version", async () => {
+  const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+  fakeAppPlatform({ ...DESKTOP_LINKS, pageFrameUrl });
+
+  const { option } = await cardOfRow(
+    { ...planPage([]), pages: [{ ...PAGE, version: 1, at: threeHoursAgo }] },
+    "See @invites",
+    "Pages",
+  );
+
+  assert.equal(option.querySelector(".luke-combobox-option-detail")?.textContent, "3h");
+});
+
 test("a sent mention of an agent of another task or none hangs a card naming where it works, never the task page's own card for an id it has no tab of", () => {
   const mention = (agentId: string, taskId: string | undefined) =>
     mentionMarkdown(
@@ -1454,7 +1570,7 @@ function peopleListed(container: HTMLElement): [string, string, string | null][]
   );
 }
 
-test("an @ among the workspace's members offers its people, the reader as You, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
+test("an @ among the workspace's members offers its people, the reader first as You and the rest by name with their email, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
   const { container } = await memberBox();
 
   typeInComposer(container, "See @");

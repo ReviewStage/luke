@@ -19,6 +19,7 @@ import { CHOICE_BAR_EXAMPLE } from "./examples/choice-bar";
 import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
+import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
@@ -65,6 +66,7 @@ import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
+import { RECT_FLOAT_EXAMPLE } from "./examples/rect-float";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
 import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
@@ -131,6 +133,7 @@ export const EXAMPLES: readonly Example[] = [
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  COMMAND_ASK_EXAMPLE,
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
@@ -165,6 +168,7 @@ export const EXAMPLES: readonly Example[] = [
   FORMAT_TOOLBAR_EXAMPLE,
   BLOCK_MENU_EXAMPLE,
   LINK_FIELD_EXAMPLE,
+  RECT_FLOAT_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,

@@ -109,12 +109,13 @@ import {
   automationRunsLiveStatements,
   automationsLiveStatements,
 } from "../automations/automation-live.js";
-import { unparsedWire, wireUuidSchema } from "../core.js";
+import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import {
@@ -142,15 +143,6 @@ const LIVE_POLL_HOLD = { LOOK: Duration.seconds(1), HOLD: Duration.seconds(25) }
 
 /** How many of a read's parts are sealed or read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
 const LIVE_PART_CONCURRENCY = 3;
-
-/** The id a query named, where it is a UUID; any other names no row, and is not found. */
-const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
 
 /**
  * Each part sealed and the address to subscribe at; or, where the reader
@@ -308,7 +300,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     automationRuns: signedIn.automationRuns.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const automationId = yield* rowIdOf(input.id);
+      const automationId = yield* pathUuid(input.id);
       const automation = yield* hostedStoreOrUnavailable(
         readAutomation(context.userId, automationId),
       );
@@ -319,7 +311,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     taskBoard: signedIn.taskBoard.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statement = boardLiveStatement(context.userId, taskId);
@@ -328,7 +320,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskRecordLiveStatements(context.userId, taskId);
@@ -337,7 +329,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     taskPages: signedIn.taskPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskPagesLiveStatements(context.userId, taskId);
@@ -346,7 +338,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const agentId = yield* rowIdOf(input.id);
+      const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = agentPagesLiveStatements(context.userId, agentId);
@@ -355,7 +347,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskHistoryLiveStatements(context.userId, taskId);
@@ -364,7 +356,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statement = taskBrowserTabsLiveStatement(context.userId, taskId);
@@ -398,7 +390,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = taskInboxLiveStatements(context.userId, taskId);
@@ -407,7 +399,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     agentInbox: signedIn.agentInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const agentId = yield* rowIdOf(input.id);
+      const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = memberAgentInboxLiveStatements(context.userId, agent.value.id);

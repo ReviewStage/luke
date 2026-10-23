@@ -15,6 +15,11 @@ import { cssCustomProperties } from "../../css.js";
  * `--luke-loop-motion` under reduced motion and a capture run. The blocks are
  * decoration: the region around them says what is being read, to a
  * reader and to nobody else.
+ *
+ * Only a component named `*Skeleton` draws these, through the components
+ * the loaded surface draws with, so the blocks stand in the surface's own
+ * boxes rather than a copy of them (`anti-slop/skeleton-through-components`,
+ * root AGENTS.md's Layout).
  */
 
 /**

@@ -2,11 +2,12 @@
  * popover-place.ts -- where a popover stands against its anchor inside its room, worked out from their boxes alone.
  *
  * The anchored popover (`anchored-popover.tsx`) measures its anchor, its
- * room, and itself, and asks this where to stand: above its anchor unless
- * only below has room for it, or, where neither side has, on the side with
- * more, at the edge its owner asked for unless only the other keeps it
- * inside, else pushed back inside, never wider than the room leaves, and
- * told the height its side leaves it.
+ * room, and itself, and asks this where to stand, as the layer laid by a box
+ * in the window does (`../rect-float/rect-float.tsx`): on the side asked,
+ * above unless told otherwise, unless only the other side has room for it,
+ * or, where neither side has, on the side with more, at the edge its owner
+ * asked for unless only the other keeps it inside, else pushed back inside,
+ * never wider than the room leaves, and told the height its side leaves it.
  */
 
 /** Which side of its anchor a popover hangs on. */
@@ -15,7 +16,7 @@ export const POPOVER_SIDE = {
   BELOW: "below",
 } as const;
 
-type PopoverSide = (typeof POPOVER_SIDE)[keyof typeof POPOVER_SIDE];
+export type PopoverSide = (typeof POPOVER_SIDE)[keyof typeof POPOVER_SIDE];
 
 /** Which of its anchor's edges a popover lines up with: the leading one, growing rightward, or the trailing one, growing leftward. */
 export const POPOVER_ALIGN = {
@@ -53,9 +54,10 @@ function clamp(value: number, low: number, high: number): number {
 
 /**
  * Where a popover of this width and height stands against its anchor in
- * its room: above unless only below has room for it, or, where neither
- * side has, on the side with more, at the asked edge unless only the other
- * keeps it inside, else pushed back inside.
+ * its room: on the side asked, above where none is, unless only the other
+ * side has room for it, or, where neither side has, on the side with more,
+ * at the asked edge unless only the other keeps it inside, else pushed
+ * back inside.
  */
 export function popoverPlace(input: {
   anchor: Box;
@@ -63,6 +65,7 @@ export function popoverPlace(input: {
   width: number;
   height: number;
   align: PopoverAlign;
+  side?: PopoverSide | undefined;
 }): PopoverPlace {
   const { anchor, room, align } = input;
   const width = Math.min(input.width, room.right - room.left - 2 * POPOVER_MARGIN);
@@ -76,9 +79,14 @@ export function popoverPlace(input: {
   const left = fits(asked) ? asked : fits(other) ? other : clamp(asked, low, high);
   const above = anchor.top - room.top - POPOVER_GAP - POPOVER_MARGIN;
   const below = room.bottom - anchor.bottom - POPOVER_GAP - POPOVER_MARGIN;
-  const fitsBelow = above < input.height && below >= input.height;
-  const neither = above < input.height && below < input.height;
-  const side = fitsBelow || (neither && below > above) ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE;
+  const wanted = input.side ?? POPOVER_SIDE.ABOVE;
+  const [own, across, turned] =
+    wanted === POPOVER_SIDE.ABOVE
+      ? [above, below, POPOVER_SIDE.BELOW]
+      : [below, above, POPOVER_SIDE.ABOVE];
+  // Note that it turns only where its own side cannot hold it and the other holds it, or holds more of it.
+  const turns = own < input.height && (across >= input.height || across > own);
+  const side = turns ? turned : wanted;
   const inset = align === POPOVER_ALIGN.START ? left - anchor.left : anchor.right - left - width;
   return { side, inset, width, room: Math.max(side === POPOVER_SIDE.BELOW ? below : above, 0) };
 }

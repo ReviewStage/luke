@@ -29,7 +29,7 @@ import { disposeWebRuntime } from "../server/runtime.js";
 /**
  * The web runtime's layer names a database, so building it needs a connection
  * string. `pg` connects on its first query and nothing here queries, so this
- * one is never dialled — the placeholder `tests/web-runtime.test.ts` and
+ * one is never dialled — the placeholder `tests/auth-app.test.ts` and
  * `auth:generate` use for the same reason.
  */
 const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke";

@@ -4,11 +4,11 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
+import { DocumentIcon, useMinute } from "@luke/ui";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
-import { HashIcon, InboxIcon } from "lucide-react";
+import { HashIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { askAct } from "../act.js";
 import { AutomationCard, actorCard } from "../actor-ref.js";
@@ -33,7 +33,7 @@ import { useTaskMentions } from "./task-mentions.js";
  * read from what the window holds where the plan is open, and the page of
  * any other plan or of an agent on no task, which the window holds nothing
  * of, read as the card is first hung (`ReadPageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
- * its question and that it waits on the team, and when it was asked; an
+ * its Inbox row's own card (`inbox-item-chip.tsx`); an
  * automation's is its card, the workspace's automations read as the card is
  * first hung where no directory around it reads them yet. Everything else
  * is read from main's document and the directories around the chip, so a
@@ -71,9 +71,6 @@ function versionWords(revision: number): string {
 
 /** What an automation's card opens: nothing, since the chip it hangs from opens the automation. */
 const OPEN_NOTHING = (): void => undefined;
-
-/** What an Inbox item still waiting says of where it stands. */
-const WAITING_WORDS = "Waiting for an answer";
 
 /**
  * The heading a section's anchor names in a plan the window holds the
@@ -326,33 +323,6 @@ export function PersonChipCard({
     <WorkspaceDirectory workspace={named}>
       <MemberCard userId={userId} fallback={fallback} />
     </WorkspaceDirectory>
-  );
-}
-
-/** An Inbox item's card: its question, that it waits for an answer, and when it was asked, where the window holds it waiting; else `fallback`. */
-export function InboxItemChipCard({
-  itemId,
-  fallback,
-}: {
-  itemId: string;
-  fallback: ReactNode;
-}): ReactNode {
-  const inbox = useAppSlice(APP_SLICE.INBOX);
-  const now = useMinute();
-  const item = [
-    ...(inbox?.waiting ?? []).flatMap((task) => task.items),
-    ...(inbox?.taskless ?? []),
-  ].find((each) => each.id === itemId);
-  if (item === undefined) return fallback;
-  return (
-    <HoverCard data-inbox-item-card="">
-      <HoverCardHead
-        glyph={<InboxIcon aria-hidden="true" />}
-        name={item.title}
-        corner={<Time at={item.postedAt} now={now} hint={false} />}
-      />
-      <HoverCardNote>{WAITING_WORDS}</HoverCardNote>
-    </HoverCard>
   );
 }
 

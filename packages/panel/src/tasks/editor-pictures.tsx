@@ -355,6 +355,8 @@ export interface EditorPictures {
   readonly drawn: ReactNode;
   /** Whether a picture laid in is still on its way to being kept, which the editor stays open for, since only it can lay in the address that comes back. */
   readonly sending: boolean;
+  /** Opens the chooser Insert image opens, as the `/` menu's Picture does; none where the text takes no pictures. */
+  readonly choose: (() => void) | undefined;
 }
 
 /**
@@ -470,7 +472,8 @@ export function useEditorPictures(
     multiple: true,
     onFiles: (files) => handle.current?.insertPictures([...files]),
   });
-  useAppCommand(APP_COMMAND.INSERT_PICTURE, workspace === undefined ? undefined : chooser.open);
+  const choose = workspace === undefined ? undefined : chooser.open;
+  useAppCommand(APP_COMMAND.INSERT_PICTURE, choose);
   const portals = drawn.map((each) =>
     createPortal(
       each.picture.upload === "" ? (
@@ -498,6 +501,7 @@ export function useEditorPictures(
   return {
     pictures: pictures.current,
     sending: [...uploads.values()].some((upload) => upload.kind === UPLOAD.SENDING),
+    choose,
     drawn: (
       <>
         {portals}

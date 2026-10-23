@@ -36,7 +36,12 @@ import {
  * the resize is measured.
  */
 
-export { POPOVER_ALIGN, type PopoverAlign } from "./popover-place.js";
+export {
+  POPOVER_ALIGN,
+  POPOVER_SIDE,
+  type PopoverAlign,
+  type PopoverSide,
+} from "./popover-place.js";
 
 /** What a popover keeps within: its marked room cut to what is seen of the window, or what is seen of the window alone. */
 export const POPOVER_BOUNDS = {

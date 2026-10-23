@@ -444,7 +444,9 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
       words:
         row.querySelector(".agent-servers-problem, .agent-servers-waiting")?.textContent ??
         undefined,
-      buttons: [...row.querySelectorAll("button")].map((button) => button.textContent),
+      buttons: [...row.querySelectorAll(".luke-list-row-actions button")].map(
+        (button) => button.textContent,
+      ),
     };
   };
 
