@@ -6,7 +6,7 @@ import {
   isVideoDataUrl,
   PictureTile,
   Spinner,
-  VideoStill,
+  VideoPlayer,
 } from "@luke/ui";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 import { ImageOffIcon } from "lucide-react";
@@ -20,10 +20,11 @@ import { ImageOffIcon } from "lucide-react";
  * of the screen recording (`ph-no-capture`), because a picture can hold
  * words and the recording carries none (`session-replay.ts`), and because a
  * `data:` address is megabytes of attribute a recording has no use for even
- * masked. A video an agent recorded is drawn the same way, as its still
- * (`@luke/ui`'s `VideoStill`), and the same press opens it, where the viewer
- * plays it. Nothing here knows whose picture it is; the place drawing one
- * hands its state and what a press does.
+ * masked. A video an agent recorded plays in its place instead
+ * (`@luke/ui`'s `VideoPlayer`), with the player's own controls, Full screen
+ * among them, since a press on a video plays it; what a press on a picture
+ * opens is its Expand. Nothing here knows whose picture it is; the place
+ * drawing one hands its state and what a press does.
  */
 
 /** What a picture that is not there says, after its alt text where it has any. */
@@ -54,33 +55,32 @@ export function PictureBlock({
     caption === undefined || caption === "" ? null : (
       <span className="picture-caption">{caption}</span>
     );
-  const video = state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url);
+  // A video plays where it stands, and what a press on a picture opens is its Expand.
+  if (state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url)) {
+    return (
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind} data-video="">
+        <VideoPlayer dataUrl={state.url} label={alt} onExpand={onOpen} />
+        {said}
+      </span>
+    );
+  }
   // A picture with nothing to open on a press is drawn as itself, no button.
   if (state.kind === PICTURE_STATE.READY && onOpen === undefined) {
     return (
-      <span
-        ref={ref}
-        className="picture-block ph-no-capture"
-        data-state={state.kind}
-        data-video={video ? "" : undefined}
-      >
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
         <Card
           as={CARD_ELEMENT.SPAN}
           corner={CARD_CORNER.CONTROL}
           padding={CARD_PADDING.FLUSH}
           className="picture-frame"
         >
-          {video ? (
-            <VideoStill dataUrl={state.url} label={alt} />
-          ) : (
-            <img
-              className="picture-image"
-              src={state.url}
-              alt={alt}
-              decoding="async"
-              draggable={false}
-            />
-          )}
+          <img
+            className="picture-image"
+            src={state.url}
+            alt={alt}
+            decoding="async"
+            draggable={false}
+          />
         </Card>
         {said}
       </span>
@@ -89,12 +89,7 @@ export function PictureBlock({
   if (state.kind === PICTURE_STATE.READY) {
     const open = onOpen;
     return (
-      <span
-        ref={ref}
-        className="picture-block ph-no-capture"
-        data-state={state.kind}
-        data-video={video ? "" : undefined}
-      >
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
         <PictureTile
           name={alt}
           onOpen={(event) => {
@@ -109,17 +104,13 @@ export function PictureBlock({
             padding={CARD_PADDING.FLUSH}
             className="picture-frame"
           >
-            {video ? (
-              <VideoStill dataUrl={state.url} label={alt} />
-            ) : (
-              <img
-                className="picture-image"
-                src={state.url}
-                alt={alt}
-                decoding="async"
-                draggable={false}
-              />
-            )}
+            <img
+              className="picture-image"
+              src={state.url}
+              alt={alt}
+              decoding="async"
+              draggable={false}
+            />
           </Card>
         </PictureTile>
         {said}

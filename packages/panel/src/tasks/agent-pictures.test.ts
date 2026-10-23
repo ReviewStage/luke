@@ -380,6 +380,7 @@ test("a recording and a set shown after it stay out of every fold of the finishe
   URL.revokeObjectURL = () => undefined;
   try {
     const video = { ...picture(1278, 598), mediaType: CONVERSATION_MEDIA_TYPE.WEBM };
+    const still = picture(1200, 720);
     const { container } = await drawn(
       finished([
         toolPart("bash", "call-serve", { command: "pnpm dev" }, { exitCode: 0 }),
@@ -402,11 +403,16 @@ test("a recording and a set shown after it stay out of every fold of the finishe
             tabs: [],
           },
         ),
-        shown("call-shown-after", [picture(1200, 720)]),
+        shown("call-shown-after", [still]),
         text("The preview opens from the header."),
       ]),
       false,
-      () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
+      (id) =>
+        Promise.resolve(
+          id === video.id
+            ? { contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }
+            : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" },
+        ),
     );
 
     const player = container.querySelector("video");
@@ -450,7 +456,7 @@ test("the viewer opened on the first picture to land reaches the rest as their r
   assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 3");
 });
 
-test("a WebM the agent showed stands as its still in the set beside the picture shown with it, left out of the replay, and the viewer plays it", async () => {
+test("a WebM the agent showed plays where it stands, above the picture shown with it, left out of the replay, and its Expand opens the viewer over both", async () => {
   const created: string[] = [];
   const revoked: string[] = [];
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
@@ -489,27 +495,27 @@ test("a WebM the agent showed stands as its still in the set beside the picture 
         ),
     );
 
-    const frame = container.querySelector("video");
-    assert.ok(frame, "the video is drawn by its own first frame");
-    assert.equal(frame.getAttribute("src"), "blob:video-1");
-    assert.equal(frame.hasAttribute("controls"), false, "the still plays nothing where it stands");
-    assert.ok(frame.closest(".ph-no-capture"), "the still is left out of the replay");
+    const inline = container.querySelector("video");
+    assert.ok(inline, "the video plays where it stands");
+    assert.equal(inline.getAttribute("src"), "blob:video-1");
+    assert.equal(inline.hasAttribute("controls"), true, "with the player's own controls");
+    assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
+    assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.deepEqual(
-      [...container.querySelectorAll(".picture-set-tiles button")].map((tile) =>
-        tile.getAttribute("aria-label"),
-      ),
-      ["Enlarge Inviting a member", "Enlarge The invite sent"],
-      "the video and the picture stand side by side as one set",
+      [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
+      ["data:image/png;base64,iVBORw=="],
+      "the picture shown with it is drawn as one picture alone is",
     );
     assert.deepEqual(read.sort(), [video.id, still.id].sort());
 
     act(() =>
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Enlarge Inviting a member"]')
+      inline
+        .closest(".picture-block")
+        ?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]')
         ?.click(),
     );
     const player = document.querySelector('[role="dialog"] video');
-    assert.ok(player, "a press opens the viewer, which plays the video");
+    assert.ok(player, "its Expand opens the viewer, which plays the video");
     assert.equal(player.hasAttribute("controls"), true, "with the player's own controls");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
     assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 2");
@@ -529,7 +535,7 @@ test("a WebM the agent showed stands as its still in the set beside the picture 
   }
 });
 
-test("a recording a finished browser call kept stands as its still under its row, out of the turn's fold, its caption under it, and the viewer plays it", async () => {
+test("a recording a finished browser call kept plays under its row, out of the turn's fold, its caption under it, and its Expand opens the viewer", async () => {
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
   URL.createObjectURL = () => "blob:recording-1";
@@ -574,23 +580,25 @@ test("a recording a finished browser call kept stands as its still under its row
       () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
     );
 
-    const frame = container.querySelector("video");
-    assert.ok(frame, "the recording stands though the work before it folded");
-    assert.equal(frame.getAttribute("src"), "blob:recording-1");
-    assert.ok(frame.closest(".ph-no-capture"));
+    const inline = container.querySelector("video");
+    assert.ok(inline, "the recording plays though the work before it folded");
+    assert.equal(inline.getAttribute("src"), "blob:recording-1");
+    assert.equal(inline.hasAttribute("controls"), true);
+    assert.ok(inline.closest(".ph-no-capture"));
     assert.equal(
-      frame.closest(".picture-block")?.querySelector(".picture-caption")?.textContent,
+      inline.closest(".picture-block")?.querySelector(".picture-caption")?.textContent,
       "Inviting a member",
     );
     assert.deepEqual(read, [video.id]);
 
     act(() =>
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Enlarge Inviting a member"]')
+      inline
+        .closest(".picture-block")
+        ?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]')
         ?.click(),
     );
     const player = document.querySelector('[role="dialog"] video');
-    assert.ok(player, "a press opens the viewer, which plays the recording");
+    assert.ok(player, "its Expand opens the viewer, which plays the recording");
     assert.equal(player.hasAttribute("controls"), true);
   } finally {
     URL.createObjectURL = own.create;

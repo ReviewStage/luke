@@ -1,31 +1,45 @@
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { useEffect, useState } from "react";
-import { PlayIcon } from "../../face/glyphs.js";
+import { useEffect, useRef, useState } from "react";
+import { ExpandIcon } from "../../face/glyphs.js";
+import { notePictureOrigin } from "../../picture-expand.js";
+import { BUTTON_SIZE, BUTTON_VARIANT, IconButton } from "../button/button.js";
+import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
- * video-player.tsx -- a video an agent recorded of what it did, drawn where a picture of it would be, and played in the file viewer it opens, as a picture is enlarged there.
+ * video-player.tsx -- a video an agent recorded of what it did, played where a picture of it would be drawn, in its transcript, its inbox item, and its task's chat, and in the file viewer an Expand opens.
  *
- * Where a picture would be drawn, in a transcript, an inbox item, or a
- * task's chat, a video is its still (`VideoStill`): its first frame, a play
- * mark over it, and how long it runs, which the place wraps in the same
- * press a picture's tile is (`PictureTile`), so a video opens as a picture
- * does. The viewer plays it (`VideoPlayer`) as large as the card lets it,
- * at once and muted, with the browser's own controls, Full screen among
- * them; the viewer's header has the one Download, so the controls offer none.
+ * Where a picture would be drawn, the video plays in place (`INLINE`), in a
+ * frame that hugs it at its own shape up to its column's width, with the
+ * browser's own controls, Full screen among them, so a press plays it rather
+ * than enlarging it as a picture's does. A place that has a viewer to open
+ * hands `onExpand`, and an Expand button stands in the frame's corner while
+ * the pointer is over it or the keyboard is in it; a press pauses the video
+ * here and opens the viewer, which grows from the frame as it grows from a
+ * picture's tile. In the viewer (`VIEWER`) the video plays at once, as large
+ * as the card lets it, and offers no Download, which the viewer's header has.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
  * reads hold (`picture-cache.ts`, the inbox's and the chat's own), and play
- * from a `blob:` address made of them here and let go of as the video goes,
+ * from a `blob:` address made of them here and let go of as the player goes,
  * because neither window's content policy lets media load from a `data:`
- * address, where both allow `blob:`. What holds either keeps it out of the
- * screen recording, as it keeps a picture (`ph-no-capture`).
+ * address, where both allow `blob:`. What holds the player keeps it out of
+ * the screen recording, as it keeps a picture (`ph-no-capture`).
  */
 
-/** What a video is named for a reader, its words after it. */
+/** What the player is named for a reader, its words after it. */
 const VIDEO_LABEL = "Video";
 
-/** The seconds in a minute, for how long a video runs. */
-const MINUTE_S = 60;
+/** What the corner's button is named, and its hint. */
+const EXPAND_LABEL = "Expand";
+
+/** Where a video plays: in place of a picture, or in the file viewer. */
+export const VIDEO_PLAYER_PLACE = {
+  INLINE: "inline",
+  VIEWER: "viewer",
+} as const;
+
+export type VideoPlayerPlace = (typeof VIDEO_PLAYER_PLACE)[keyof typeof VIDEO_PLAYER_PLACE];
 
 /** A video's size in pixels, as its file states it. */
 export interface VideoSize {
@@ -43,20 +57,9 @@ export function isVideoDataUrl(dataUrl: string): boolean {
   return dataUrlMediaType(dataUrl) === CONVERSATION_MEDIA_TYPE.WEBM;
 }
 
-/** How long a video runs, as a player says it: minutes and two-digit seconds. */
-function runningTime(seconds: number): string {
-  const whole = Math.round(seconds);
-  return `${String(Math.floor(whole / MINUTE_S))}:${String(whole % MINUTE_S).padStart(2, "0")}`;
-}
-
-/** What a reader is told a video is: its words after "Video", or "Video" alone. */
-function videoLabel(label: string): string {
-  return label === "" ? VIDEO_LABEL : `${VIDEO_LABEL}: ${label}`;
-}
-
 /**
  * The `blob:` address a video's `data:` URL plays from, made from its bytes
- * here and let go of as the video goes: neither window's policy lets media
+ * here and let go of as the player goes: neither window's policy lets media
  * load from a `data:` address, nor fetch one, where both allow `blob:`.
  */
 function useBlobUrl(dataUrl: string): string | undefined {
@@ -71,86 +74,82 @@ function useBlobUrl(dataUrl: string): string | undefined {
   return url;
 }
 
-/**
- * A video drawn where a picture would be: its first frame at its own shape,
- * a play mark over it, and how long it runs once its file says. Nothing
- * here plays; the place wraps it in the press that opens the viewer.
- */
-export function VideoStill({
-  dataUrl,
-  label,
-  fill = false,
-}: {
-  dataUrl: string;
-  /** What the video shows, in words: its caption or its alt text; empty where it has none. */
-  label: string;
-  /** Whether it fills the frame its place gives it, as a set's tile does, rather than standing at its own size. */
-  fill?: boolean | undefined;
-}): React.JSX.Element {
-  const url = useBlobUrl(dataUrl);
-  const [seconds, setSeconds] = useState<number>();
-  return (
-    <span className="luke-video-still" data-fill={fill} role="img" aria-label={videoLabel(label)}>
-      {url === undefined ? null : (
-        // Note that the still carries no captions track, because an agent's recording of its screen has no sound.
-        <video
-          className="luke-video-still-video"
-          src={url}
-          aria-hidden="true"
-          muted
-          playsInline
-          preload="metadata"
-          tabIndex={-1}
-          onLoadedMetadata={(event) => {
-            const duration = event.currentTarget.duration;
-            if (Number.isFinite(duration)) setSeconds(duration);
-          }}
-        />
-      )}
-      <span className="luke-video-still-play" aria-hidden="true">
-        <PlayIcon />
-      </span>
-      {seconds === undefined ? null : (
-        <span className="luke-video-still-time" aria-hidden="true">
-          {runningTime(seconds)}
-        </span>
-      )}
-    </span>
-  );
-}
-
-/**
- * A video played in the file viewer: as large as the card lets it at its
- * own shape, playing at once and muted, with the browser's own controls,
- * Full screen among them, and no Download, which the viewer's header has.
- */
+/** A video played in place of a picture or in the viewer, with the browser's own controls. */
 export function VideoPlayer({
   dataUrl,
   label,
   size,
+  place = VIDEO_PLAYER_PLACE.INLINE,
+  onExpand,
 }: {
   dataUrl: string;
   /** What the video shows, in words: its caption, its alt text, or its file's name; empty where it has none. */
   label: string;
-  /** Its size in pixels, where the place drawing it knows it. */
+  /** Its size in pixels, where the place drawing it knows it, so the frame holds its shape before its first frame. */
   size?: VideoSize | undefined;
-}): React.JSX.Element | null {
+  /** Where it plays, which sets how large it stands and whether it starts at once. */
+  place?: VideoPlayerPlace | undefined;
+  /** Opens the video in the viewer; without one, no Expand stands in its corner. */
+  onExpand?: (() => void) | undefined;
+}): React.JSX.Element {
   const url = useBlobUrl(dataUrl);
-  if (url === undefined) return null;
+  const video = useRef<HTMLVideoElement>(null);
+  const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
+  const expand = () => {
+    const shown = video.current;
+    if (shown !== null) {
+      shown.pause();
+      notePictureOrigin(shown);
+    }
+    onExpand?.();
+  };
+  const player =
+    url === undefined ? null : (
+      // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
+      <video
+        ref={video}
+        className="luke-video-player-video"
+        src={url}
+        width={size?.width}
+        height={size?.height}
+        aria-label={label === "" ? VIDEO_LABEL : `${VIDEO_LABEL}: ${label}`}
+        controls
+        controlsList={viewer ? "nodownload" : undefined}
+        autoPlay={viewer}
+        muted
+        playsInline
+        preload={viewer ? "auto" : "metadata"}
+      />
+    );
+  // In the viewer the card around it is the viewer's own.
+  if (viewer)
+    return (
+      <span className="luke-video-player" data-place={place}>
+        {player}
+      </span>
+    );
   return (
-    // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
-    <video
+    <Card
+      as={CARD_ELEMENT.SPAN}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
       className="luke-video-player"
-      src={url}
-      width={size?.width}
-      height={size?.height}
-      aria-label={videoLabel(label)}
-      controls
-      controlsList="nodownload"
-      autoPlay
-      muted
-      playsInline
-      preload="auto"
-    />
+      data-place={place}
+    >
+      {player}
+      {onExpand === undefined ? null : (
+        <span className="luke-video-player-expand">
+          <Tooltip label={EXPAND_LABEL}>
+            <IconButton
+              icon={<ExpandIcon />}
+              label={EXPAND_LABEL}
+              variant={BUTTON_VARIANT.INK}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={expand}
+            />
+          </Tooltip>
+        </span>
+      )}
+    </Card>
   );
 }

@@ -1839,7 +1839,7 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
   );
 });
 
-test("a recording a message carries stands as its still, left out of the replay, and opens the viewer a picture does, which plays it", async () => {
+test("a recording a message carries plays where it stands, left out of the replay, and its Expand opens the viewer a picture does, which plays it", async () => {
   const created: string[] = [];
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
@@ -1865,16 +1865,15 @@ test("a recording a message carries stands as its still, left out of the replay,
     await settle();
 
     const posted = [...page.querySelectorAll(".chat-message")].at(-1);
-    const frame = posted?.querySelector("video");
-    assert.ok(frame, "the recording is drawn by its own first frame");
-    assert.equal(frame.getAttribute("src"), "blob:video-1");
-    assert.equal(frame.hasAttribute("controls"), false, "the still plays nothing where it stands");
-    assert.ok(frame.closest(".ph-no-capture"), "the still is left out of the replay");
-    const press = posted?.querySelector<HTMLButtonElement>(
-      'button[aria-label="Enlarge invite-flow.webm"]',
-    );
-    assert.ok(press, "the recording opens as a picture does");
-    act(() => press.click());
+    const inline = posted?.querySelector("video");
+    assert.ok(inline, "the recording plays where the message draws it");
+    assert.equal(inline.getAttribute("src"), "blob:video-1");
+    assert.equal(inline.hasAttribute("controls"), true, "with the player's own controls");
+    assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.equal(posted?.querySelector('button[aria-label^="Enlarge"]'), null);
+    const expand = posted?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
+    assert.ok(expand, "the recording's Expand opens the viewer");
+    act(() => expand.click());
     await settle();
 
     const player = document.querySelector('[role="dialog"] video');

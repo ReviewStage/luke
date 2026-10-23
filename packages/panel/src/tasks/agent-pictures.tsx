@@ -24,7 +24,6 @@ import {
   Card,
   GAP,
   Inline,
-  isVideoDataUrl,
   LAYOUT_ELEMENT,
   PictureTile,
   SPINNER_SIZE,
@@ -33,7 +32,6 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  VideoStill,
 } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -77,11 +75,13 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * walking the set, or the call's pictures, from it, with Add to plan
  * beside Download where the transcript is drawn on a plan's page. A WebM
  * the agent recorded, shown as a picture or answered by its browser's
- * `stop_recording`, is drawn as one too, as its still with a play mark
- * (`@luke/ui`'s `VideoStill`), and opens the same viewer, which plays it,
- * Full screen among its controls. An image a line handed the agent, which its row names by
- * the picture it was kept as rather than carrying its bytes, is read the
- * same way and drawn among the line's files (`MessageFileChips`).
+ * `stop_recording`, plays where it stands instead, its own block above the
+ * call's pictures, with the player's own controls, Full screen among them
+ * (`@luke/ui`'s `VideoPlayer`); its Expand opens the same viewer over the
+ * call's videos and pictures, which plays it there. An image a line handed
+ * the agent, which its row names by the picture it was kept as rather than
+ * carrying its bytes, is read the same way and drawn among the line's files
+ * (`MessageFileChips`).
  * Everything here is left out of the screen recording, as the tab around
  * it is.
  */
@@ -267,11 +267,8 @@ function ShownOne({
   );
 }
 
-/** What a tile shows: the picture or a video's still, the spinner while it is read, or the glyph where it is gone. */
+/** What a tile shows: the picture, the spinner while it is read, or the glyph where it is gone. */
 function TileFace({ state, words }: { state: PictureState | undefined; words: string }): ReactNode {
-  if (state?.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url)) {
-    return <VideoStill dataUrl={state.url} label={words} fill />;
-  }
   if (state?.kind === PICTURE_STATE.READY) {
     return (
       <img
@@ -394,7 +391,19 @@ export function ShownPictures({
   return <ShownSet door={door} shown={all} />;
 }
 
-/** The pictures and videos of a `show_image` call: one as its own block, several as one set. */
+/** Whether a shown file was kept as a video, played where it stands rather than drawn in a set. */
+function isShownVideo(
+  shown: ShownPicture,
+): shown is ShownPicture & { readonly picture: KeptPicture } {
+  return shown.picture !== undefined && isVideoType(shown.picture.mediaType);
+}
+
+/**
+ * The pictures and videos of a `show_image` call, or a browser call's
+ * recordings: each video played as its own block, then one picture as its
+ * own block or several as one set, and one viewer over them all, which a
+ * picture's press and a video's Expand open alike.
+ */
 function ShownSet({
   door,
   shown,
@@ -409,6 +418,30 @@ function ShownSet({
       : [{ picture: each.picture, words: each.caption === "" ? each.name : each.caption }],
   );
   const openAt = (id: string) => open(kept, id);
+  const videos = shown.filter(isShownVideo);
+  const stills = shown.filter((each) => !isShownVideo(each));
+  return (
+    <>
+      {videos.map((each, index) => (
+        // Note that a video's place among the call's is its identity: a call never reorders.
+        <ShownOne key={index} door={door} shown={each} onOpen={() => openAt(each.picture.id)} />
+      ))}
+      {stills.length === 0 ? null : <ShownStills door={door} shown={stills} openAt={openAt} />}
+      {viewer}
+    </>
+  );
+}
+
+/** The pictures of a call that are no video: one as its own block, several as one set. */
+function ShownStills({
+  door,
+  shown,
+  openAt,
+}: {
+  door: AgentPictureDoor;
+  shown: readonly ShownPicture[];
+  openAt: (id: string) => void;
+}): ReactNode {
   const [only] = shown;
   if (shown.length === 1 && only !== undefined && only.picture === undefined) {
     const caption = only.caption === "" ? undefined : only.caption;
@@ -418,12 +451,7 @@ function ShownSet({
   }
   if (shown.length === 1 && only?.picture !== undefined) {
     const picture = only.picture;
-    return (
-      <>
-        <ShownOne door={door} shown={{ ...only, picture }} onOpen={() => openAt(picture.id)} />
-        {viewer}
-      </>
-    );
+    return <ShownOne door={door} shown={{ ...only, picture }} onOpen={() => openAt(picture.id)} />;
   }
   const many = shown.length > SET_FEW;
   const drawn = shown.slice(0, SET_SHOWN);
@@ -452,7 +480,6 @@ function ShownSet({
             : [<UnseenPicture key={each.picture.id} door={door} picture={each.picture} />],
         )}
       {many ? <figcaption className="picture-caption">{setCount(shown.length)}</figcaption> : null}
-      {viewer}
     </figure>
   );
 }

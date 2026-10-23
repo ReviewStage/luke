@@ -2224,7 +2224,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
 });
 
-test("a recording an agent's words draw stands as its still, left out of the replay, and opens the viewer a picture does, which plays it and walks on to the picture drawn with it", async () => {
+test("a recording an agent's words draw plays where it stands, left out of the replay, and its Expand opens the viewer a picture does, which plays it and walks on to the picture drawn with it", async () => {
   const [still, video] = [
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c90",
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c91",
@@ -2273,11 +2273,12 @@ test("a recording an agent's words draw stands as its still, left out of the rep
     const pane = await mountThread(threadItem([message]));
     await settle();
 
-    const frame = pane.querySelector("video");
-    assert.ok(frame, "the recording is drawn by its own first frame");
-    assert.equal(frame.getAttribute("src"), "blob:video-1");
-    assert.equal(frame.hasAttribute("controls"), false, "the still plays nothing where it stands");
-    assert.ok(frame.closest(".ph-no-capture"), "the still is left out of the replay");
+    const inline = pane.querySelector("video");
+    assert.ok(inline, "the recording plays where its words draw it");
+    assert.equal(inline.getAttribute("src"), "blob:video-1");
+    assert.equal(inline.hasAttribute("controls"), true, "with the player's own controls");
+    assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
+    assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.equal(pane.querySelectorAll("video").length, 1, "the recording stands once");
     assert.deepEqual(
       [...pane.querySelectorAll('[aria-label="Attached files"] > *')].map(
@@ -2286,12 +2287,16 @@ test("a recording an agent's words draw stands as its still, left out of the rep
       [],
       "the recording the words draw is not named again as a file over them",
     );
-    const press = pane.querySelector<HTMLButtonElement>(
-      'button[aria-label="Enlarge Inviting a member"]',
+    assert.equal(
+      pane.querySelector('button[aria-label="Enlarge Inviting a member"]'),
+      null,
+      "a press on the recording plays it rather than enlarging it",
     );
-    assert.ok(press, "the recording opens as a picture does");
-    assert.ok(press.contains(frame));
-    act(() => press.click());
+    const expand = inline
+      .closest(".picture-block")
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
+    assert.ok(expand, "the recording's Expand opens the viewer");
+    act(() => expand.click());
     await settle();
 
     const card = document.querySelector('[role="dialog"]');

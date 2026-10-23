@@ -20,6 +20,7 @@ import {
   Tooltip,
   useImageZoom,
   usePictureExpand,
+  VIDEO_PLAYER_PLACE,
   VideoPlayer,
   ZoomImage,
 } from "@luke/ui";
@@ -43,7 +44,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
  * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
- * such as one an agent recorded and opened from its still as a picture is,
+ * such as one an agent recorded and opened from its Expand,
  * plays at once as large as the card lets it, with the player's own
  * controls, Full screen among them (`@luke/ui`'s VideoPlayer).
  *
@@ -177,7 +178,7 @@ function AttachmentBody({
   if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
     return (
       <div className="attachment-viewer-body">
-        <VideoPlayer dataUrl={file.url} label={file.name} />
+        <VideoPlayer dataUrl={file.url} label={file.name} place={VIDEO_PLAYER_PLACE.VIEWER} />
       </div>
     );
   }
