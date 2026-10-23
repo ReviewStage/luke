@@ -88,9 +88,11 @@ function mountPlayer(onExpand?: () => void) {
   standInMedia(video);
   const frame = video.parentElement;
   if (frame === null) throw new Error("the video stands in a frame");
-  const press = (key: string, on: HTMLElement = frame) =>
+  const press = (key: string, on: HTMLElement = frame, repeat = false) =>
     act(() =>
-      on.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })),
+      on.dispatchEvent(
+        new KeyboardEvent("keydown", { key, repeat, bubbles: true, cancelable: true }),
+      ),
     );
   const toggleLabel = () =>
     container
@@ -135,4 +137,17 @@ test("Space on one of the bar's buttons is the button's, and other keys pass on 
   press("Escape");
   press("Tab");
   expect(reached).toEqual([" ", "Escape", "Tab"]);
+});
+
+test("a held Space or K plays or pauses once, while a held arrow goes on seeking", () => {
+  const { press, toggleLabel, seekAt } = mountPlayer();
+  press("k");
+  for (const _ of [1, 2, 3]) press("k", undefined, true);
+  expect(toggleLabel()).toBe("Pause");
+  press(" ");
+  for (const _ of [1, 2, 3, 4]) press(" ", undefined, true);
+  expect(toggleLabel()).toBe("Play");
+  press("ArrowRight");
+  press("ArrowRight", undefined, true);
+  expect(seekAt()).toBe("10");
 });

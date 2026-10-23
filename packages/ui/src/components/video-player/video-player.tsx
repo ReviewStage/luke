@@ -178,7 +178,8 @@ function playerKey(event: React.KeyboardEvent<HTMLElement>, video: HTMLVideoElem
   const onButton = event.target instanceof HTMLButtonElement;
   const seek = SEEK_KEYS.get(event.key);
   if (TOGGLE_KEYS.has(event.key) && !(onButton && event.key === " ")) {
-    toggleOf(video);
+    // A held key plays or pauses once, not again with each repeat; a held arrow goes on seeking.
+    if (!event.repeat) toggleOf(video);
   } else if (seek !== undefined) {
     const end = Number.isFinite(video.duration) ? video.duration : video.currentTime;
     video.currentTime = Math.min(end, Math.max(0, video.currentTime + seek));
