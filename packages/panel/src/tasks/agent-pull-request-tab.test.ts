@@ -2504,12 +2504,28 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
       { ...none, press: "Remove from queue", look: "outline", chevron: false },
     ],
     [
-      "auto-merge on",
-      merging(MERGE_STATE.BLOCKED, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
+      "auto-merge on, waiting on its checks, which its press says",
+      merging(MERGE_STATE.BLOCKED, {
+        checks: CHECK_SUMMARY.PENDING,
+        autoMerge: { method: MERGE_METHOD.SQUASH },
+      }),
+      { ...none, press: "Disable auto-merge", look: "outline", chevron: false },
+    ],
+    [
+      "auto-merge on, about to merge",
+      merging(MERGE_STATE.CLEAN, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
+      { ...none, press: "Disable auto-merge", look: "outline", chevron: false },
+    ],
+    [
+      "auto-merge on, a review required",
+      merging(MERGE_STATE.BLOCKED, {
+        review: REVIEW_DECISION.REVIEW_REQUIRED,
+        autoMerge: { method: MERGE_METHOD.SQUASH },
+      }),
       {
-        chip: "Auto-merge on",
-        tone: "working",
-        sentence: "Auto-merge is on (squash). Merging is blocked by a required review or check",
+        chip: "Review required",
+        tone: "attention",
+        sentence: "Auto-merge is on (squash). A required review is missing",
         press: "Disable auto-merge",
         look: "outline",
         chevron: false,
