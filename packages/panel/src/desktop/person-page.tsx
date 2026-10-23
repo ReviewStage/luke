@@ -18,6 +18,8 @@ import {
   ONE_LINE_ELEMENT,
   OneLine,
   PAGE_FRAME,
+  RowHint,
+  RowHintOptions,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -54,9 +56,10 @@ import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
-import { lineSubject } from "../tasks/agent-ref.js";
+import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { holderName, INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
+import { agentEndMark } from "../tasks/tab-look.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -197,24 +200,29 @@ function AgentRow({
 }): React.JSX.Element {
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
+  const card = <AgentCard subject={subject} models={tasks.agents.models} />;
   return (
-    <ListRow
-      leading={
-        <span className="home-row-picture">
-          <ActorMark actor={subject.tile} />
-        </span>
-      }
-      title={subject.name}
-      meta={
-        <span className="home-row-meta">
-          <OneLine className="home-row-context" words={task.name}>
-            {task.name}
-          </OneLine>
-          {agent.at === undefined ? null : <Time at={agent.at} now={now} />}
-        </span>
-      }
-      onPress={() => tasks.onShowAgent(task.id, agent.id)}
-    />
+    <RowHintOptions card={card} cardBeside>
+      <ListRow
+        leading={
+          <span className="home-row-picture">
+            <ActorMark actor={subject.tile} />
+          </span>
+        }
+        title={subject.name}
+        hint={{ Hint: RowHint, label: subject.name }}
+        meta={
+          <span className="home-row-meta">
+            <OneLine className="home-row-context" words={task.name}>
+              {task.name}
+            </OneLine>
+            {agentEndMark(agent, false)}
+            {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
+          </span>
+        }
+        onPress={() => tasks.onShowAgent(task.id, agent.id)}
+      />
+    </RowHintOptions>
   );
 }
 
