@@ -64,6 +64,12 @@
     outline: none;
   }
 
+  /* A secret of many lines, its characters drawn as discs as a password
+     field's are; the engine still holds and pastes what was typed. */
+  textarea.luke-text-field[data-masked="true"] {
+    -webkit-text-security: disc;
+  }
+
   .luke-text-field[data-font="mono"] {
     font-family: var(--luke-font-mono);
   }

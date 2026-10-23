@@ -28,7 +28,9 @@ import type { FieldControl } from "../form-field/form-field.js";
  * A number field holds a number, or nothing while it is empty or holds what
  * is not yet one (a lone minus sign), as the browser reads it; a busy text
  * area, its words on their way somewhere, takes no typing and answers
- * neither Escape nor ⌘Return until it is not.
+ * neither Escape nor ⌘Return until it is not. A masked text area draws its
+ * characters as discs, as a password field does, keeping a secret's line
+ * breaks, which a one-line password field would drop.
  */
 
 /** What a one-line field holds: words, a search, an address, a secret, a time of day, or a number. */
@@ -277,6 +279,7 @@ export function TextField({
 export function TextArea({
   rows = 4,
   grow = false,
+  masked = false,
   look = TEXT_AREA_LOOK.WELL,
   growLimit = TEXT_AREA_GROW_LIMIT.NOTE,
   enterKeyHint,
@@ -292,6 +295,8 @@ export function TextArea({
   rows?: number;
   /** Whether it grows with its words from `rows` tall, rather than standing at that height. */
   grow?: boolean;
+  /** Whether its characters are drawn as discs, as a password field draws them, for a secret of many lines such as a certificate. */
+  masked?: boolean;
   /** How it stands; in a field's well where none is named. */
   look?: TextAreaLook | undefined;
   /** How far it grows, where it may; to the profile's tallest note where none is named. */
@@ -314,6 +319,7 @@ export function TextArea({
       className="luke-text-field"
       rows={rows}
       data-grow={grow}
+      data-masked={masked || undefined}
       data-look={look}
       data-grow-limit={grow ? growLimit : undefined}
       enterKeyHint={enterKeyHint}

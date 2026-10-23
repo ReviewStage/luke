@@ -219,6 +219,8 @@ const MAC_GROUP_READS: ReadonlySet<string> = new Set([
 function answer(request: Asked): Promise<Answered> {
   sent.push(request);
   switch (request.kind) {
+    case ACT_KIND.WORKSPACE_ENVIRONMENT_READ:
+      return Promise.resolve(done({ entries: [] }));
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
       if (refuseMembersRead) {
         return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
@@ -985,6 +987,7 @@ test("the chosen team workspace's members are listed with their email and role, 
       .map((request) => request.kind),
     [
       ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ,
+      ACT_KIND.WORKSPACE_ENVIRONMENT_READ,
       ACT_KIND.WORKSPACE_PEOPLE,
       ACT_KIND.WORKSPACE_MEMBERS_READ,
     ],
@@ -1917,6 +1920,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
           request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_ENVIRONMENT_READ &&
           !MAC_GROUP_READS.has(request.kind),
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
