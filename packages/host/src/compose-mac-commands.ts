@@ -19,6 +19,7 @@ import { MAC_COMMAND_MODE, type MacCommandMode } from "@luke/settings";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
+  Clock,
   Config,
   Deferred,
   Duration,
@@ -123,8 +124,8 @@ export interface MacCommandsDependencies {
   accountId: () => string | undefined;
   /** How Settings lets agents run commands on this Mac, read as each follow begins, on every beat, and as each claimed command is about to run. */
   mode: Effect.Effect<MacCommandMode>;
-  /** Writes the setting to Always allow: the prompt's Always allow, which also runs the command asked. */
-  allowAlways: Effect.Effect<void>;
+  /** Writes the setting to Always allow, answering whether the write landed: the prompt's Always allow, which also runs the command asked. */
+  allowAlways: Effect.Effect<boolean>;
   client: MacCommandClient;
   /** Realtime's client at an address, where the deployment follows over Realtime; Realtime's own outside a test. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
@@ -150,6 +151,11 @@ const DECLINED: MacCommandRefusal = {
 const UNANSWERED: MacCommandRefusal = {
   refused:
     "Not run: the developer did not answer in time whether to allow this command on their Mac.",
+};
+
+/** What a command asked under an account that signed out before it was answered answers. */
+const ACCOUNT_CHANGED: MacCommandRefusal = {
+  refused: "Not run: the account signed in on the developer's Mac changed before it was allowed.",
 };
 
 /** What a command of a kind this Mac cannot run answers, such as one a newer service queued. */
@@ -194,10 +200,10 @@ export function composeMacCommands(
     const openLive = dependencies.openLive ?? openRealtimeClient;
     const decode = Schema.decodeUnknownOption(macCommandsLiveRowsSchema);
     const readAnswer = readEither(macCommandAnswerSchema);
-    /** The asks waiting on the developer, by the command's id, the earliest asked first. */
+    /** The asks waiting on the developer, by the command's id, the earliest asked first, each with the account it was claimed for. */
     const asks = new Map<
       string,
-      { ask: MacCommandAsk; decided: Deferred.Deferred<MacCommandDecision> }
+      { ask: MacCommandAsk; userId: string; decided: Deferred.Deferred<MacCommandDecision> }
     >();
 
     const tellAsks = () =>
@@ -208,21 +214,27 @@ export function composeMacCommands(
 
     /**
      * The developer's answer to one claimed shell command, asked of the
-     * panel and waited for until the command's own timeout has passed; no
-     * answer by then is a denial of its own kind. The ask is withdrawn
-     * however the wait ends, an interruption included, so a prompt never
-     * outlives its command.
+     * panel and waited for until `deadline`, the command's own timeout
+     * past the claim; no answer by then is a denial of its own kind. The
+     * ask is withdrawn however the wait ends, an interruption included, so
+     * a prompt never outlives its command.
      */
-    const consent = (command: MacShellCommand): Effect.Effect<MacCommandDecision | undefined> =>
+    const consent = (
+      command: MacShellCommand,
+      userId: string,
+      deadline: number,
+    ): Effect.Effect<MacCommandDecision | undefined> =>
       Effect.gen(function* () {
         const decided = yield* Deferred.make<MacCommandDecision>();
         asks.set(command.id, {
           ask: { id: command.id, command: command.command, askedAt: kernel.now() },
+          userId,
           decided,
         });
         tellAsks();
+        const now = yield* Clock.currentTimeMillis;
         return yield* Deferred.await(decided).pipe(
-          Effect.timeoutOption(Duration.seconds(command.timeoutSeconds)),
+          Effect.timeoutOption(Duration.millis(Math.max(0, deadline - now))),
           Effect.map(Option.getOrUndefined),
           Effect.ensuring(
             Effect.sync(() => {
@@ -232,6 +244,14 @@ export function composeMacCommands(
           ),
         );
       });
+
+    /** The asks of any account but the one signed in, let go: their prompts come down, and their calls hear nothing from this Mac. */
+    const withdrawOtherAccounts = Effect.gen(function* () {
+      const signedIn = dependencies.accountId();
+      for (const held of asks.values()) {
+        if (held.userId !== signedIn) yield* Deferred.interrupt(held.decided);
+      }
+    });
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideService(call, HttpClient.HttpClient, http);
@@ -256,22 +276,36 @@ export function composeMacCommands(
     /**
      * One claimed command as the setting now says: run, or under Ask every
      * time, a shell command run only once the developer allows it, and
-     * answered as declined or unanswered otherwise. Note that the wait for
-     * the answer is interruptible inside the claim's uninterruptible
-     * region, because a gate shut meanwhile, or the quit, must not hold on
-     * a prompt nobody will answer; the service answers the call on its own
-     * clock then.
+     * answered as declined or unanswered otherwise. The command's own
+     * timeout is one deadline from the claim, over the wait for the answer
+     * and the run together, so a command allowed late runs in what is left
+     * of it, because the service waits for the result only that long past
+     * queueing and a result after that is lost. Note that the wait for the
+     * answer is interruptible inside the claim's uninterruptible region,
+     * because a gate shut meanwhile, or the quit, must not hold on a prompt
+     * nobody will answer; the service answers the call on its own clock
+     * then. An Always allow the setting could not keep still runs the
+     * command, which the developer allowed, and is reported, since the next
+     * command asks again.
      */
-    const decided = (command: MacCommandRead) =>
+    const decided = (command: MacCommandRead, userId: string) =>
       Effect.gen(function* () {
         if ((yield* mode) !== MAC_COMMAND_MODE.ASK || !isMacShellCommand(command)) {
           return yield* run(command);
         }
-        const decision = yield* Effect.interruptible(consent(command));
+        const deadline =
+          (yield* Clock.currentTimeMillis) +
+          Duration.toMillis(Duration.seconds(command.timeoutSeconds));
+        const decision = yield* Effect.interruptible(consent(command, userId, deadline));
         if (decision === undefined) return yield* settled(command.id, UNANSWERED);
         if (decision === MAC_COMMAND_DECISION.DENY) return yield* settled(command.id, DECLINED);
-        if (decision === MAC_COMMAND_DECISION.ALLOW_ALWAYS) yield* allowAlways;
-        yield* run(command);
+        if (dependencies.accountId() !== userId) return yield* settled(command.id, ACCOUNT_CHANGED);
+        if (decision === MAC_COMMAND_DECISION.ALLOW_ALWAYS && !(yield* allowAlways)) {
+          report("the Always allow setting could not be saved; the next command asks again");
+        }
+        const left = Math.ceil((deadline - (yield* Clock.currentTimeMillis)) / 1000);
+        if (left < 1) return yield* settled(command.id, UNANSWERED);
+        yield* run({ ...command, timeoutSeconds: Math.min(command.timeoutSeconds, left) });
       });
 
     /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting not Never. */
@@ -293,7 +327,7 @@ export function composeMacCommands(
      * command the service granted is this Mac's alone to answer, and a follow
      * ended mid-claim would otherwise leave its call waiting out its time.
      */
-    const claimed = (running: FiberSet.FiberSet, command: MacCommandRead) =>
+    const claimed = (running: FiberSet.FiberSet, userId: string, command: MacCommandRead) =>
       Effect.gen(function* () {
         const answer = yield* asked(client.claim(command.id)).pipe(
           Effect.repeat({
@@ -308,7 +342,7 @@ export function composeMacCommands(
           yield* asked(client.settle(answer.id, SWITCHED_OFF));
           return;
         }
-        yield* FiberSet.run(running, decided(answer));
+        yield* FiberSet.run(running, decided(answer, userId));
       }).pipe(Effect.uninterruptible);
 
     /**
@@ -344,7 +378,9 @@ export function composeMacCommands(
           Effect.gen(function* () {
             const fresh = commands.filter((command) => !tried.has(command.id));
             tried = new Set(commands.map((command) => command.id));
-            for (const command of fresh) yield* FiberSet.run(running, claimed(running, command));
+            for (const command of fresh) {
+              yield* FiberSet.run(running, claimed(running, userId, command));
+            }
           });
         const rows = liveRows(
           {
@@ -371,10 +407,12 @@ export function composeMacCommands(
      * read asked again after a pause where the service did not answer it or
      * signed the session out; with the gate shut, every command still
      * running stopped (its process group killed as its scope closes) and a
-     * rest.
+     * rest. Every turn begins by letting go of the asks of any account but
+     * the one signed in, since a follow ends as the account changes.
      */
     const turn = (running: FiberSet.FiberSet) =>
       Effect.gen(function* () {
+        yield* withdrawOtherAccounts;
         if (!(yield* gateOpen)) {
           yield* FiberSet.clear(running);
           return yield* Effect.sleep(IDLE);

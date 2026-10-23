@@ -227,7 +227,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
           ),
-          allowAlways: Effect.asVoid(
+          allowAlways: Effect.map(
             settings.settingsWrite(
               () =>
                 settings.store.set(APP_SETTING_SCHEMA.macCommands.field, MAC_COMMAND_MODE.ALWAYS),
@@ -235,6 +235,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
               "Could not save that setting on this system.",
               undefined,
             ),
+            (saved) => saved.reason === undefined,
           ),
           client: new HostedMacCommandClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,

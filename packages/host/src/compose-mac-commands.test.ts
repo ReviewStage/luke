@@ -165,13 +165,15 @@ function scriptedService(
   };
 }
 
-const machine = (spawner: ReturnType<typeof scriptedSpawner>) =>
+const machine = (spawner: ReturnType<typeof scriptedSpawner>, reported: string[]) =>
   Layer.mergeAll(
     Layer.succeed(
       Environment,
       ConfigProvider.fromEnvRecord({ HOME: "/Users/developer", SHELL: "/bin/bash" }),
     ),
-    reporterLayer(() => undefined),
+    reporterLayer((line) => {
+      reported.push(line);
+    }),
     spawner.layer,
     noNetwork,
   );
@@ -184,6 +186,8 @@ interface Gate {
   mode: MacCommandMode;
   signedIn: boolean;
   account?: string;
+  /** Whether the prompt's Always allow fails to keep the setting, as a file that cannot be written does. */
+  saveFails?: boolean;
 }
 
 /**
@@ -198,6 +202,7 @@ const subject = (
 ) => {
   const told: { readonly id: string; readonly command: string }[][] = [];
   const written: MacCommandMode[] = [];
+  const reported: string[] = [];
   const emit = (kind: GatewayEventKind, payload: WireValue) => {
     if (kind !== GATEWAY_EVENT.MAC_COMMAND_ASKS_CHANGED || !isRecord(payload)) return;
     const asks = Array.isArray(payload.asks) ? payload.asks : [];
@@ -216,15 +221,18 @@ const subject = (
       accountId: () => gate.account ?? ACCOUNT,
       mode: Effect.sync(() => gate.mode),
       allowAlways: Effect.sync(() => {
+        if (gate.saveFails === true) return false;
         written.push(MAC_COMMAND_MODE.ALWAYS);
         gate.mode = MAC_COMMAND_MODE.ALWAYS;
+        return true;
       }),
       client: service.client,
-    }).pipe(Effect.provide(machine(spawner))),
+    }).pipe(Effect.provide(machine(spawner, reported))),
     (composer) => ({
       composer,
       told,
       written,
+      reported,
       /** The asks waiting as last told. */
       asks: () => told.at(-1) ?? [],
       answer: (id: string, decision: MacCommandDecision) =>
@@ -446,10 +454,11 @@ const askedFor = (
   service: ReturnType<typeof scriptedService>,
   spawner: ReturnType<typeof scriptedSpawner>,
   commands: readonly MacCommand[],
+  gate: Gate = { mode: MAC_COMMAND_MODE.ASK, signedIn: true },
 ) =>
   Effect.gen(function* () {
     for (const command of commands) service.queue(command, NOW);
-    const built = yield* subject(service, spawner, { mode: MAC_COMMAND_MODE.ASK, signedIn: true });
+    const built = yield* subject(service, spawner, gate);
     yield* built.composer.lifetime;
     yield* settled;
     return built;
@@ -591,5 +600,80 @@ it.effect(
           assert.equal(service.settledResults.has(COMMAND.id), false, "the first still waits");
         }),
       );
+    }),
+);
+
+it.effect(
+  "a command allowed late runs in what is left of its timeout, so its result still reaches the call",
+  () =>
+    Effect.gen(function* () {
+      // A command that would run for twenty seconds, allowed with ten left of its sixty.
+      const spawner = scriptedSpawner(() => ({ exitCode: 0, after: "20 seconds" }));
+      const service = scriptedService();
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const built = yield* askedFor(service, spawner, [COMMAND]);
+          yield* TestClock.adjust("50 seconds");
+          yield* settled;
+          yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);
+          yield* settled;
+          assert.equal(spawner.spawned.length, 1, "it runs");
+          yield* TestClock.adjust("15 seconds");
+          yield* settled;
+        }),
+      );
+      const answered = service.settledResults.get(COMMAND.id);
+      assert.ok(answered !== undefined && "timedOut" in answered, "the call hears what it did");
+      assert.equal(answered.timedOut, true, "killed as the command's own timeout ran out");
+      assert.notEqual(spawner.spawned[0]?.ended, "running");
+    }),
+);
+
+it.effect(
+  "an Always allow the setting could not keep still runs the command, and is reported",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const built = yield* askedFor(service, spawner, [COMMAND], {
+            mode: MAC_COMMAND_MODE.ASK,
+            signedIn: true,
+            saveFails: true,
+          });
+          yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ALWAYS);
+          yield* settled;
+          assert.deepEqual(built.written, []);
+          assert.ok(service.settledResults.has(COMMAND.id), "the command allowed ran");
+          assert.ok(built.reported.some((line) => line.includes("Always allow")));
+        }),
+      );
+    }),
+);
+
+it.effect(
+  "an ask of an account that signed out is withdrawn, and an answer after the switch runs nothing",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      const gate: Gate = { mode: MAC_COMMAND_MODE.ASK, signedIn: true, account: ACCOUNT };
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const built = yield* askedFor(service, spawner, [COMMAND], gate);
+          assert.equal(built.asks().length, 1);
+          gate.account = "user-other";
+          // The beat ends the follow, and the next turn lets the ask go.
+          yield* TestClock.adjust("15 seconds");
+          yield* settled;
+          assert.deepEqual(built.asks(), []);
+          assert.deepEqual(yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE), {
+            answered: false,
+          });
+        }),
+      );
+      assert.deepEqual(spawner.spawned, []);
+      assert.equal(service.settledResults.has(COMMAND.id), false);
     }),
 );
