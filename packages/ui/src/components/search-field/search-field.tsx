@@ -1,3 +1,4 @@
+import { countWords, TERM } from "@luke/features/words";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
 import { isComposingKey } from "../../composing-key.js";
@@ -69,7 +70,10 @@ type SearchEnd =
 function tallyLine(tally: SearchTally): string {
   if (tally.count === 0) return "No results";
   const count = tally.more === true ? `${tally.count}+` : String(tally.count);
-  return tally.at === undefined ? `${count} results` : `${tally.at + 1} of ${count}`;
+  if (tally.at !== undefined) return `${tally.at + 1} of ${count}`;
+  return tally.more === true
+    ? `${count} ${TERM.RESULT.many}`
+    : countWords(tally.count, TERM.RESULT);
 }
 
 /** A search named `label`, holding `value`, answering its keys with the callbacks given. */

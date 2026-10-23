@@ -1512,7 +1512,7 @@ test("another member's automation says which servers its creator switched off, o
 
   assert.match(
     page.textContent ?? "",
-    /Its creator's connected servers, but Sentry, Notion \(account 2\) switched off\./u,
+    /Its creator's connected servers, but Sentry and Notion \(account 2\) switched off\./u,
   );
   assert.equal(
     [...page.querySelectorAll("button")].find(
