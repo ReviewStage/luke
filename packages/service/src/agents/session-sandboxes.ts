@@ -47,8 +47,9 @@ import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
 import { boundSnapshotRetention } from "./sandbox-retention.js";
 import {
   deploymentOidcToken,
-  RUNNING_STATUS,
+  SANDBOX_STATUS,
   SandboxUnavailable,
+  UP_STATUSES,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "./vercel-sandbox-api.js";
@@ -69,9 +70,6 @@ const ARCHIVE_STOP = {
   /** How many agents of an archived task are stopped at once. */
   CONCURRENCY: 5,
 } as const;
-
-/** The states a sandbox is up in, which a stop ends; any other is stopped, stopping, or never came up. */
-const UP_STATUSES: ReadonlySet<string> = new Set(["pending", "running"]);
 
 export interface SessionSandboxesService {
   /**
@@ -100,12 +98,12 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
         let extended = 0;
         for (const sandbox of sandboxes) {
           const running = sandbox.currentSessionId;
-          if (sandbox.status !== RUNNING_STATUS || running === undefined) continue;
+          if (sandbox.status !== SANDBOX_STATUS.RUNNING || running === undefined) continue;
           yield* capSandboxTimeout(api, sandbox);
           yield* boundSnapshotRetention(api, sandbox);
           const lifetime = yield* api.getSession(running);
           // The sandbox's record can lag its session's, which is the one whose end counts.
-          if (lifetime === undefined || lifetime.status !== RUNNING_STATUS) continue;
+          if (lifetime === undefined || lifetime.status !== SANDBOX_STATUS.RUNNING) continue;
           const extension = keepAliveExtension(lifetime, yield* Clock.currentTimeMillis);
           if (extension === undefined) continue;
           yield* api.extendTimeout(running, extension);

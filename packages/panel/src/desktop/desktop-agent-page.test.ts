@@ -47,7 +47,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
@@ -81,7 +81,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { focusRestOn } from "../testing/hint-rest.js";
+import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { bundleLanded } from "../testing/side-bundles.js";
@@ -96,10 +96,26 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
 /**
- * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
+ * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone. Drawn again over the same agent, the page draws none of its links again.
  *
  * The service is a script at the act boundary; synthetic agents and words throughout.
  */
+
+/** How many times a part opening links was drawn. */
+const linkDraws = vi.hoisted(() => ({ count: 0 }));
+
+// Note that the wrapper opens links as the real opener does and only counts,
+// because what is under test is whether the page draws its links again.
+vi.mock("../tasks/use-open-link.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../tasks/use-open-link.js")>();
+  return {
+    ...actual,
+    useOpenLink: () => {
+      linkDraws.count += 1;
+      return actual.useOpenLink();
+    },
+  };
+});
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -1462,7 +1478,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
       chip?.querySelector(".luke-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
-    ["#2905", "Open", PULL_REQUEST_STATE.OPEN],
+    ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
   );
 });
 
@@ -1926,6 +1942,133 @@ test("an @ in the agent's box names an archived agent by its task's name, read f
   );
 });
 
+test("an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents", async () => {
+  installEditorLayout();
+  installScrollIntoView();
+  pages = [{ agent: { ...PAGE, repository: null } }];
+  workspace = [
+    {
+      id: "3c3c3c3c-0000-4000-8000-000000000000",
+      planId: null,
+      model: PAGE.model,
+      effort: PAGE.effort,
+      title: "Bill by seat",
+      createdAt: 1,
+      status: CODING_AGENT_STATUS.COMPLETED,
+      turnId: null,
+    },
+  ];
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+
+  typeInComposer(page, "Ask @bill");
+  await settle();
+
+  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
+  assert.deepEqual(
+    rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
+    ["Bill by seat"],
+  );
+});
+
+test("on the page of an agent working in no repository, a GitHub page of a file or a folder in its words is that file's or folder's chip, of the repository its address names, and opens on GitHub", async () => {
+  pages = [{ agent: { ...PAGE, repository: null } }];
+  const file = "https://github.com/acme/relay/blob/HEAD/src/store.ts";
+  const folder = "https://github.com/acme/relay/tree/HEAD/src";
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Where is it?" }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: `In [@store.ts](${file}), under [@src](${folder}).` }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+  const chips = [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
+
+  assert.deepEqual(
+    chips.map((chip) => [
+      chip.dataset.kind,
+      chip.querySelector(".luke-inline-ref-label")?.textContent,
+    ]),
+    [
+      ["file", "store.ts"],
+      ["folder", "src"],
+    ],
+  );
+  const [fileChip, folderChip] = chips;
+  assert.ok(fileChip && folderChip);
+  restOn(fileChip);
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
+  assert.deepEqual(
+    [
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      card?.querySelector(".luke-hover-card-sub")?.textContent,
+    ],
+    ["src/store.ts", "acme/relay"],
+  );
+  act(() => fileChip.click());
+  act(() => folderChip.click());
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
+    [{ url: file }, { url: folder }],
+  );
+});
+
+test("a chip in the agent's words naming the pull request it opened, or a page under it, hangs its Pull request tab's card, as on a task", async () => {
+  const url = "https://github.com/acme/relay/pull/2911";
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url,
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: `Opened [@#2911](${url}), its [@files](${url}/files).` }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+  const chips = [...page.querySelectorAll(".agent-page [data-mention-ref]")];
+  assert.equal(chips.length, 2, "the pull request and its files are chips");
+
+  for (const chip of chips) {
+    restOn(chip);
+    const card = [...document.querySelectorAll(".luke-tooltip-card .luke-hover-card")].at(-1);
+    assert.equal(card?.hasAttribute("data-tab-card"), true, "the card is its tab's");
+    assert.equal(
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      "Await the payment mock",
+    );
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+  }
+});
+
 /** The page's dialog's button with these words, or a failure saying the dialog offers none. */
 function dialogAnswer(words: string): HTMLButtonElement {
   const question =
@@ -2074,4 +2217,55 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   // No File tab reads a repository no task names, so the card offers no way into one.
   assert.ok(panel.querySelector(".code-card"), "the code's card stands");
   assert.equal(panel.querySelector(".code-card [aria-label^='Open ']"), null);
+});
+
+test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "text",
+            text: "Opened [@relay#2911](https://github.com/acme/relay/pull/2911) after reading [the docs](https://vitest.dev/guide/).",
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const tasks = tasksControl({ workspaces: [ACME] });
+  const openLink = (_link: ReadLink) => undefined;
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  // Note that each draw is a new tree over the same tasks, as the window draws the page again on a delivery that moved nothing of it.
+  const draw = () =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(OpenLinkProvider, {
+            value: openLink,
+            children: createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID }),
+          }),
+        ),
+      ),
+    );
+  draw();
+  await settle();
+  assert.ok(
+    container.querySelector(".agent-page [data-mention-ref]"),
+    "the agent's words are drawn, their chip among them",
+  );
+
+  linkDraws.count = 0;
+  draw();
+  await settle();
+
+  assert.equal(linkDraws.count, 0);
 });

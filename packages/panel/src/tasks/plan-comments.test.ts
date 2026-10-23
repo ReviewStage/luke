@@ -20,9 +20,10 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -32,6 +33,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
+import { relayout } from "../testing/resize-observer.js";
 import { PlanBody } from "./plan-body.js";
 import { CommentFocusScope, PlanCommentsTab } from "./plan-comments.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -44,7 +46,8 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
  * nothing and listed under Resolved in the Comments tab, where Reopen
  * brings it back, and no mark on a page that is not the plan's own; and
  * ⌥⌘M starts a thread on the words selected, as the bubble over them does.
- * Synthetic plan and threads.
+ * The margin is measured again as a card is resized, and never on a draw
+ * that moves nothing it stands on. Synthetic plan and threads.
  */
 
 // Landed before any field renders, as the panel lands it after its first paint.
@@ -1356,10 +1359,7 @@ test("a reply carries the files picked into its field, and a comment's files are
     container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`) ?? assert.fail("no card");
 
   const sent = [...card.querySelectorAll('.comment-files [aria-label="Attached files"] > li')];
-  assert.deepEqual(
-    sent.map((chip) => chip.getAttribute("title")),
-    ["expiry.txt"],
-  );
+  assert.deepEqual(sent.map(attachmentChipName), ["expiry.txt"]);
   assert.deepEqual(read, [fileId]);
   const words = card.querySelector(".comment-entry .comment-words");
   assert.ok(sent[0] && words);
@@ -1371,9 +1371,7 @@ test("a reply carries the files picked into its field, and a comment's files are
   const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
   await pickFiles(field, [new File(["Steps to reproduce\n"], "steps.txt", { type: "text/plain" })]);
   assert.deepEqual(
-    [...field.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
-      chip.getAttribute("title"),
-    ),
+    [...field.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName),
     ["steps.txt"],
   );
   await post(field.querySelector("textarea") ?? assert.fail("no textarea"), "Repro attached.");
@@ -1499,4 +1497,80 @@ test("on the plan's page the date chip in the reader's own comment, its thread o
   await act(async () => undefined);
 
   assert.ok(container.querySelector('[role="dialog"]'), "the picker is open");
+});
+
+/** The margin's cards' tops, in the order drawn, as their slots stand them. */
+function slotTops(container: HTMLElement): number[] {
+  return [...container.querySelectorAll<HTMLElement>(".comment-margin .comment-slot")].map((slot) =>
+    Number(/translateY\((-?[\d.]+)px\)/.exec(slot.style.transform)?.[1]),
+  );
+}
+
+/** Stands every card of the margin `height` tall, as `heights.card` says when read, since jsdom lays nothing out. */
+function cardsTall(heights: { card: number }): () => void {
+  const offset = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.classList.contains("comment-slot") ? heights.card : 0;
+    },
+  });
+  return () => {
+    if (offset !== undefined) Object.defineProperty(HTMLElement.prototype, "offsetHeight", offset);
+    else Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+  };
+}
+
+test("a card that grows with nothing drawn again moves the card under it down, in the frame after", () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
+  const heights = { card: 40 };
+  const restore = cardsTall(heights);
+  try {
+    const { container } = wide(() => drawn("page"));
+    assert.deepEqual(slotTops(container), [0, 48]);
+
+    heights.card = 120;
+    wide(() => {
+      act(() => relayout());
+      act(() => {
+        for (const heard of frames.splice(0)) heard(0);
+      });
+    });
+
+    assert.deepEqual(slotTops(container), [0, 128]);
+  } finally {
+    restore();
+    vi.restoreAllMocks();
+  }
+});
+
+test("the margin drawn again for the pointer on a thread's words measures none of its cards again", () => {
+  const heights = { card: 40 };
+  let measured = 0;
+  const restore = cardsTall({
+    get card() {
+      measured += 1;
+      return heights.card;
+    },
+  });
+  try {
+    const { container } = wide(() => drawn("page"));
+    const mark = container.querySelector<HTMLElement>(
+      `mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`,
+    );
+    measured = 0;
+
+    wide(() => act(() => mark?.dispatchEvent(new Event("pointerover", { bubbles: true }))));
+
+    assert.equal(
+      container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`)?.dataset
+        .pointed,
+      "true",
+      "the margin is drawn again, its card marked",
+    );
+    assert.equal(measured, 0);
+  } finally {
+    restore();
+  }
 });

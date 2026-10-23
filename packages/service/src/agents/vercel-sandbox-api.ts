@@ -46,8 +46,23 @@ import { jsonOf } from "../http/http-effect.js";
 /** The tag eve sets on every session's sandbox, its value the session's id; a sandbox Luke opens itself carries it too. */
 export const SESSION_TAG = "sessionId";
 
-/** The status a sandbox is up in, which the list of running sandboxes filters on. */
-export const RUNNING_STATUS = "running";
+/** The statuses Vercel names a sandbox by that Luke reads: up in `running`, which the list of running sandboxes filters on. */
+export const SANDBOX_STATUS = {
+  PENDING: "pending",
+  RUNNING: "running",
+  STOPPING: "stopping",
+  STOPPED: "stopped",
+  SNAPSHOTTING: "snapshotting",
+} as const;
+
+/** The statuses a sandbox is up in, or on its way up. */
+export const UP_STATUSES: ReadonlySet<string> = new Set([
+  SANDBOX_STATUS.PENDING,
+  SANDBOX_STATUS.RUNNING,
+]);
+
+/** The policy with no credential on it, as Vercel's API takes it: eve's default, the open internet. */
+export const OPEN_INTERNET_POLICY = { mode: "allow-all" } as const;
 
 /** Vercel's answer for a sandbox, session, or snapshot already gone. */
 export const NOT_FOUND_STATUS = 404;
@@ -874,7 +889,7 @@ export function vercelSandboxApi(
             // Note that the API takes a status filter only under a sort by creation, and `sortOrder` is `asc` or `desc`, `desc` where left out; its cursor is opaque, the `pagination.next` of the page before (https://vercel.com/docs/rest-api/sandboxes/list-sandboxes).
             sortBy: "createdAt",
             sortOrder: order,
-            status: RUNNING_STATUS,
+            status: SANDBOX_STATUS.RUNNING,
             ...(cursor === undefined ? undefined : { cursor }),
           });
           const listed = yield* callApi(
@@ -1057,7 +1072,7 @@ export function vercelSandboxApi(
               resources: { vcpus: ask.vcpus },
               keepLastSnapshots: ask.keepLastSnapshots,
               env: ask.env,
-              networkPolicy: { mode: "allow-all" },
+              networkPolicy: OPEN_INTERNET_POLICY,
             }),
           );
           const created = yield* callApi(client, SANDBOX_CALL.CREATE, request);
@@ -1156,7 +1171,7 @@ export function vercelSandboxApi(
               tags: ask.tags,
               timeout: ask.timeoutMs,
               resources: { vcpus: ask.vcpus },
-              networkPolicy: { mode: "allow-all" },
+              networkPolicy: OPEN_INTERNET_POLICY,
             }),
           );
           const created = yield* callApi(client, SANDBOX_CALL.CREATE, request);

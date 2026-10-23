@@ -43,7 +43,7 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
-  RUNNING_STATUS,
+  SANDBOX_STATUS,
   SESSION_TAG,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -109,7 +109,8 @@ interface NativeSandbox {
 function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
   if (!sandbox.name.startsWith(SANDBOX_NAME)) return undefined;
   // A page may name a sandbox that stopped since it was asked for, as Vercel recovers overdue sessions.
-  if (sandbox.status !== RUNNING_STATUS || sandbox.currentSessionId === undefined) return undefined;
+  if (sandbox.status !== SANDBOX_STATUS.RUNNING || sandbox.currentSessionId === undefined)
+    return undefined;
   const agentId = sandbox.tags?.[RUNNER_TAG.AGENT];
   const sessionId = sandbox.tags?.[SESSION_TAG];
   if (agentId === undefined || sessionId === undefined) return undefined;
@@ -127,7 +128,7 @@ const movedOn = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
     const [fresh] = yield* api.listTagged(sandbox.sessionId);
     if (
       fresh === undefined ||
-      fresh.status !== RUNNING_STATUS ||
+      fresh.status !== SANDBOX_STATUS.RUNNING ||
       fresh.currentSessionId !== sandbox.running
     ) {
       return true;
@@ -147,7 +148,7 @@ const movedOn = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
 const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
   Effect.gen(function* () {
     const [fresh] = yield* api.listTagged(sandbox.sessionId);
-    if (fresh?.status !== RUNNING_STATUS || fresh.currentSessionId !== sandbox.running) {
+    if (fresh?.status !== SANDBOX_STATUS.RUNNING || fresh.currentSessionId !== sandbox.running) {
       return undefined;
     }
     const runner = taggedRunner(fresh);

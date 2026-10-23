@@ -11,8 +11,10 @@ import {
 import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -205,6 +207,20 @@ const STATE: AppStateSnapshot = (() => {
   };
 })();
 
+/** The plan's agent's message asking a choice, open until the reader answers it. */
+const ASKING = {
+  id: "e7a1c3d5-2b4f-4e6a-8c9d-0f1e2d3c4b5a",
+  author: INBOX_MESSAGE_AUTHOR.AGENT,
+  text: "Expired invite links pile up.",
+  ask: {
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "Keep them a week" }, { label: "Drop them at once" }],
+    recommended: "Keep them a week",
+    status: INBOX_ASK_STATUS.OPEN,
+  },
+  createdAt: AT,
+} as const;
+
 /** An item of the plan's agent, open and asking a choice, as the service answers one. */
 const WAITING: InboxItem = {
   id: ITEM_ID,
@@ -213,14 +229,9 @@ const WAITING: InboxItem = {
   revision: 1,
   version: INBOX_WIRE_VERSION,
   title: "Keep expired links?",
-  blocks: [],
-  response: {
-    type: INBOX_RESPONSE.CHOICE,
-    options: [{ label: "Keep them a week" }, { label: "Drop them at once" }],
-    recommended: "Keep them a week",
-  },
   needsReply: true,
   status: INBOX_STATUS.OPEN,
+  thread: [ASKING],
   postedAt: AT,
   updatedAt: AT,
 };
@@ -236,7 +247,17 @@ const ANSWERED: InboxItem = {
   status: INBOX_STATUS.ANSWERED,
   settledAt: AT,
   answeredBy: { userId: DEAN, name: "Dean Stratakos" },
-  answer: { reply: INBOX_REPLY.CHOSE, choices: ["Keep them a week"] },
+  thread: [
+    { ...ASKING, ask: { ...ASKING.ask, status: INBOX_ASK_STATUS.ANSWERED } },
+    {
+      id: "f8b2d4e6-3c5a-4f7b-9d0e-1a2b3c4d5e6f",
+      author: INBOX_MESSAGE_AUTHOR.MEMBER,
+      member: { userId: DEAN, name: "Dean Stratakos" },
+      text: "",
+      answers: { ask: ASKING.id, reply: INBOX_REPLY.CHOSE, choices: ["Keep them a week"] },
+      createdAt: AT,
+    },
+  ],
 };
 
 /** An item of the agent on no task, answered too. */

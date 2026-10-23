@@ -22,6 +22,7 @@ import {
 import {
   Cause,
   Clock,
+  DateTime,
   Duration,
   Effect,
   type Fiber,
@@ -632,7 +633,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     events: readonly LiveBrainRunEvent[],
   ) {
     if (events.length === 0) return;
-    const at = told.ended ? new Date(yield* Clock.currentTimeMillis) : undefined;
+    const at = told.ended ? yield* DateTime.nowAsDate : undefined;
     for (const event of events) emit(event);
     Queue.offerUnsafe(
       checkpoints,

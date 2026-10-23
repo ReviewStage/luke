@@ -2687,28 +2687,14 @@ ul.actor-stack {
   border-right: 1px solid var(--luke-color-border);
 }
 
-/* The list's search, open, stands in its head's name and takes the room the
-   name had, on the page's bar and in the sidebar's head alike. */
+/* The list's search stands under a page's head (`inbox-list.tsx`'s
+   `ListSearch`), always, as Settings' does, on the column's inset so its
+   magnifier stands over the rows' glyphs; nothing in the head moves as it is
+   used, so it has no motion of its own. The sidebar's unfolds from its
+   magnifier instead (`@luke/ui`'s `FoldingSearch`). */
 .inbox-search {
-  min-width: 0;
-  flex: 1;
-  animation:
-    inbox-search-unfold var(--luke-duration-pane) var(--luke-motion-pane),
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-pane);
-}
-
-/* Opening, the field unfolds leftward from where the magnifier stood at its
-   end, over the name it takes the place of: revealed rather than stretched,
-   so its words never squash. It is uncovered a little past its edge, so the
-   focus ring the caret brings is never clipped on the way. Reduced motion
-   zeroes the durations (`base.css`), so it then simply stands. */
-@keyframes inbox-search-unfold {
-  from {
-    clip-path: inset(0 0 0 100%);
-  }
-  to {
-    clip-path: inset(calc(-1 * var(--luke-space-4)));
-  }
+  display: block;
+  padding: 0 var(--column-inset) var(--luke-space-8);
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle
@@ -5999,6 +5985,13 @@ ul.actor-stack {
   flex: none;
   width: 12px;
   height: 12px;
+}
+
+.new-task-issue-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
 }
 
 .new-task-issue-key {

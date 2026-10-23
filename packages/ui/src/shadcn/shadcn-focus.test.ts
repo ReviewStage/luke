@@ -18,7 +18,9 @@ const SHADCN = new URL("./", import.meta.url);
 const RING_UTILITY = /(?:^|[\s"'`])(?:[\w-]+:)*(?:outline-none|outline-hidden|ring-\d|ring-ring)\b/;
 
 test("no vendored shadcn component hides the window's focus ring or draws its own", () => {
-  const sources = readdirSync(SHADCN).filter((name) => name.endsWith(".tsx"));
+  const sources = readdirSync(SHADCN).filter(
+    (name) => name.endsWith(".tsx") || (name.endsWith(".ts") && !name.endsWith(".test.ts")),
+  );
   assert.ok(sources.length > 0, "the shadcn folder holds components");
   for (const name of sources) {
     const source = readFileSync(new URL(name, SHADCN), "utf8");

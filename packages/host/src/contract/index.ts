@@ -40,7 +40,6 @@ import { workspaceActsContract } from "./workspaces.js";
 export {
   MAC_COMMAND_DECISION,
   type MacCommandAnswer,
-  type MacCommandAsk,
   type MacCommandDecision,
 } from "../mac-command-ask.js";
 export type { ChatShown } from "./agents.js";

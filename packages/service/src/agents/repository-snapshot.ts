@@ -42,6 +42,7 @@ import { cloneRepository, type RepositorySandbox, snapshotRecordOf } from "./rep
 import {
   deploymentOidcToken,
   type ListedSandbox,
+  SANDBOX_STATUS,
   SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -149,17 +150,17 @@ function readOf(found: ListedSandbox | undefined, now: number): RepositorySnapsh
   const built = builtAt(found);
   if (built !== undefined) {
     // Note that a snapshot taken once the build was marked holds the whole checkout, and a stopped sandbox's current one is the last taken.
-    const usable = found.status === "stopped" && found.currentSnapshotId !== undefined;
+    const usable = found.status === SANDBOX_STATUS.STOPPED && found.currentSnapshotId !== undefined;
     if (usable && !olderThan(now, built, REPOSITORY_SNAPSHOT.MAX_AGE)) {
       return { state: REPOSITORY_SNAPSHOT_STATE.READY, snapshotId: found.currentSnapshotId };
     }
     // Being snapshotted: the build that marked it is still taking it.
-    if (found.status === "snapshotting" || found.status === "stopping") {
+    if (found.status === SANDBOX_STATUS.SNAPSHOTTING || found.status === SANDBOX_STATUS.STOPPING) {
       return { state: REPOSITORY_SNAPSHOT_STATE.BUILDING };
     }
     return { state: REPOSITORY_SNAPSHOT_STATE.WANTED, stale: found };
   }
-  return found.status === "running" &&
+  return found.status === SANDBOX_STATUS.RUNNING &&
     !olderThan(now, found.createdAt, REPOSITORY_SNAPSHOT.BUILD_GRACE)
     ? { state: REPOSITORY_SNAPSHOT_STATE.BUILDING }
     : { state: REPOSITORY_SNAPSHOT_STATE.WANTED, stale: found };

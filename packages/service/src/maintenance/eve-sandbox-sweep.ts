@@ -43,7 +43,7 @@ import type { HttpClient } from "effect/http";
 import {
   deploymentOidcToken,
   type ListedSandbox,
-  RUNNING_STATUS,
+  SANDBOX_STATUS,
   SESSION_TAG,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -127,7 +127,8 @@ interface EveSandbox {
 function eveSandboxOf(sandbox: ListedSandbox): EveSandbox | undefined {
   if (!sandbox.name.startsWith(EVE_SESSION_SANDBOX_NAME)) return undefined;
   // A page may name a sandbox that stopped since it was asked for, as Vercel recovers overdue sessions.
-  if (sandbox.status !== RUNNING_STATUS || sandbox.currentSessionId === undefined) return undefined;
+  if (sandbox.status !== SANDBOX_STATUS.RUNNING || sandbox.currentSessionId === undefined)
+    return undefined;
   const sessionId = sandbox.tags?.[SESSION_TAG];
   if (sessionId === undefined) return undefined;
   return { sessionId, running: sandbox.currentSessionId };
@@ -139,7 +140,7 @@ const movedOn = (api: VercelSandboxApi, sandbox: EveSandbox) =>
     api.listTagged(sandbox.sessionId),
     ([fresh]) =>
       fresh === undefined ||
-      fresh.status !== RUNNING_STATUS ||
+      fresh.status !== SANDBOX_STATUS.RUNNING ||
       fresh.currentSessionId !== sandbox.running,
   ).pipe(Effect.orElseSucceed(() => true));
 

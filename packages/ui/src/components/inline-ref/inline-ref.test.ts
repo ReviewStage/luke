@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, cloneElement, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { DocumentIcon } from "../../face/glyphs.js";
 import { INLINE_REF_LOOK, INLINE_REF_NAME, InlineRef, type InlineRefHint } from "./inline-ref.js";
 
@@ -44,6 +44,8 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   delete document.body.dataset.hinted;
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** Draws `element` and answers its container. */
@@ -154,4 +156,40 @@ test("its hint is handed the card the place gives in place of its name", () => {
     }),
   );
   assert.equal(view.querySelector("output")?.textContent, "The agent's card");
+});
+
+test("a name fades out only while its box cuts it short", () => {
+  const fires: (() => void)[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      readonly #fire: () => void;
+      constructor(fire: () => void) {
+        this.#fire = fire;
+      }
+      observe(): void {
+        fires.push(this.#fire);
+      }
+      disconnect(): void {}
+    },
+  );
+  const view = draw(
+    createElement(InlineRef, {
+      look: INLINE_REF_LOOK.PILL,
+      label: "A very long agent name",
+      hint: false,
+    }),
+  );
+  const name = view.querySelector(".luke-inline-ref-label") ?? assert.fail("the name");
+  const measure = (scrollWidth: number, clientWidth: number) => {
+    vi.spyOn(name, "scrollWidth", "get").mockReturnValue(scrollWidth);
+    vi.spyOn(name, "clientWidth", "get").mockReturnValue(clientWidth);
+    act(() => {
+      for (const fire of fires) fire();
+    });
+  };
+  measure(100, 100);
+  assert.equal(name.getAttribute("data-overflow"), "false");
+  measure(200, 100);
+  assert.equal(name.getAttribute("data-overflow"), "true");
 });

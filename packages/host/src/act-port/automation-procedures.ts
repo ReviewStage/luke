@@ -52,7 +52,10 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function automationProcedures(dependencies: AutomationProceduresDependencies) {
   const { host } = dependencies;
   /** How many streams stand open of each list or history, so the host lets one go only with the last. */
-  const openFollows: OpenFollows<AutomationFollowed["view"]> = MutableHashMap.empty();
+  const openFollows: OpenFollows<
+    AutomationFollowed["view"],
+    Pick<AutomationFollow, "kind" | "id">
+  > = MutableHashMap.empty();
   return {
     [AUTOMATION_ACT_KIND.AUTOMATIONS_LIST]: actPort[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST].effect(
       function* ({ input, context, errors }) {
@@ -102,7 +105,7 @@ export function automationProcedures(dependencies: AutomationProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const views = followedStream(
         {
-          keyOf: (scope: AutomationFollow) => `${scope.kind}:${scope.id}`,
+          keyOf: (scope: AutomationFollow) => ({ kind: scope.kind, id: scope.id }),
           follow: host.automationsFollow,
           unfollow: host.automationsUnfollow,
           onChanged: host.onAutomationsChanged,

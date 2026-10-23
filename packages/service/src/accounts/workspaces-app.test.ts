@@ -22,7 +22,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationScope,
 } from "@luke/features/automation-wire";
-import { INBOX_REPLY, INBOX_RESPONSE } from "@luke/features/inbox-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@luke/features/inbox-wire";
 import {
   workspaceInvitationAnswerSchema,
   workspaceInvitationsAnswerSchema,
@@ -52,7 +52,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { answerInboxItem, postInboxItem } from "../inbox/inbox-store.js";
+import { answerInboxAsk, INBOX_ASK_ANSWER, postInboxThread } from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
@@ -1188,17 +1188,24 @@ it.effect(
           prompt: "Sweep the flaky tests.",
         });
         const agent = { userId: ada, taskId: null, agentId: Option.getOrThrow(started).agent.id };
-        const posted = yield* postInboxItem(agent, {
+        const posted = yield* postInboxThread(agent, {
           key: "branch-protection",
           title: "Require a review on main",
-          response: { type: INBOX_RESPONSE.TODO },
+          body: "Turn on a required review for main in the repository's settings.",
+          ask: { type: INBOX_ASK.DO, steps: [] },
           needsReply: false,
         });
         assert.ok(Result.isSuccess(posted));
-        const done = { reply: INBOX_REPLY.DONE } as const;
-        assert.ok(
-          Option.isSome(yield* answerInboxItem(lin, posted.success.id, 1, done, randomUUID())),
+        const ask = posted.success.thread?.find(
+          (message) => message.ask?.status === INBOX_ASK_STATUS.OPEN,
         );
+        assert.ok(ask !== undefined);
+        const done = yield* answerInboxAsk(lin, posted.success.id, {
+          answers: { ask: ask.id, reply: INBOX_REPLY.DONE },
+          text: "",
+          clientKey: randomUUID(),
+        });
+        assert.equal(Option.getOrThrow(done).outcome, INBOX_ASK_ANSWER.TAKEN);
         yield* leaving(plugin, lin, acme);
 
         const answered = yield* readMembers(seams, ada, membersAt(acme));

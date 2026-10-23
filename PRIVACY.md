@@ -217,13 +217,18 @@ task's plan, Luke re-encodes it on your Mac to at most 1.5 MB and sends it
 to our service, which keeps it in our database beside the task, under the
 task rather than your account, with which member added it. A coding agent on
 the task may add a picture too: a PNG, JPEG, or WebP file of at most 1.5 MB in
-its sandbox, such as a screenshot it took of what it built, which our service
+its sandbox, such as a screenshot it took of what it built, or a short video it
+recorded there of what it did, a WebM of up to 4 MB, which our service
 reads from the sandbox and keeps the same way, as added by the member the
 agent's turn runs for, with the plan's history naming the agent. The plan's text
 names the picture by an address on tryluke.dev; our service serves its bytes
 only to Luke signed in as a member of the task's workspace, and opening the
 address in a browser shows a page that opens the task in Luke and nothing of
 the picture. Every member of the workspace sees it, as they see the plan.
+A video an agent showed you can also be added to the plan from the file
+viewer's Add to plan, which sends it as it is, never re-encoded, up to 3.3 MB.
+A plan holds at most ten videos, which play where they stand in its text and
+are left out of the screen recording as its pictures are.
 Pictures are stored as sent and readable by our own operators, like the plan.
 The coding agents read the plan with each picture's line, its address, its
 alt text, and its caption, but not the picture. A coding agent on the task
@@ -232,7 +237,9 @@ words are not enough, read as the member the turn runs
 for, which sends the picture to the model that looked; our service keeps
 only that it looked in the agent's transcript, not
 the picture, though the model's session history may keep it (see "Who we send
-it to"). A picture stays as long as the task does, even once the plan no
+it to"). A coding agent never looks at one of the plan's videos: our service
+refuses the look, so no model is handed a video, and the agent reads only its
+alt text and caption. A picture stays as long as the task does, even once the plan no
 longer shows it, so every earlier version still shows its pictures; one no save of the
 plan ever showed, pasted and undone, is deleted a day after it was sent.
 Deleting the task deletes its pictures; deleting your account leaves the
@@ -443,7 +450,8 @@ same way, beside the agent's transcript or the worker's, and the model is told
 only that they were shown, never handed the pictures or the videos back. A
 video is what the agent's own screen showed while it recorded, so it can hold
 whatever that screen did; it is left out of the screen recording as the
-pictures are. A coding agent's kept pictures, and its workers', are served only
+pictures are, and may be added to the task's plan (see "A plan's pictures").
+A coding agent's kept pictures, and its workers', are served only
 to Luke signed in as a member of the workspace who can read the agent. Kept
 pictures are readable by our own operators, like the transcript, and go
 when it does.
@@ -1176,9 +1184,10 @@ video, a WebM of up to 4 MB, beside the transcript as it keeps a screenshot,
 shown to the same members, readable by our operators, and deleted with the
 transcript on the same terms; the model is told it was kept, never handed the
 video, and the screen recording leaves out its player. The agent may also post
-such a recording to the task's inbox or its workspace's chat, where it is kept
-and shown as any video an agent posts there is (see "A task's inbox" and "A
-workspace's chat"). Apart from such a
+such a recording to the task's inbox or its workspace's chat, or add it to the
+task's plan, where it is kept and shown as any video an agent posts or adds
+there is (see "A task's inbox", "A workspace's chat", and "A plan's
+pictures"). Apart from such a
 recording, the page and its live-view frames
 are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can
