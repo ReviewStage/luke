@@ -25,6 +25,7 @@ import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
+import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FACTS_EXAMPLE } from "./examples/facts";
@@ -191,4 +192,5 @@ export const EXAMPLES: readonly Example[] = [
   PORTAL_FENCE_EXAMPLE,
   REMOTE_SURFACE_EXAMPLE,
   MARKDOWN_EXAMPLE,
+  EDITABLE_DOCUMENT_EXAMPLE,
 ];
