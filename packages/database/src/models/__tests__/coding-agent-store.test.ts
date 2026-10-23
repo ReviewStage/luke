@@ -2143,41 +2143,6 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
   );
 });
 
-it.layer(getTestDB())("the coding-agent store's agent names", (it) => {
-  it.effect("no agent is given a human name, so every one goes by its title", () =>
-    Effect.gen(function* () {
-      const starter = yield* openAccount;
-      const workspace = yield* openWorkspace(starter);
-      const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
-      const run = { title: "Flaky tests", model: "anthropic/claude-opus-5.5", effort: "high" };
-      const onTask = yield* createCodingAgent(starter, {
-        ...run,
-        taskId: task.id,
-        planSnapshot: "# Billing",
-        prompt: null,
-        idempotencyKey: randomUUID(),
-        repository: "acme/api",
-      });
-      const onNoTask = yield* createCodingAgent(starter, {
-        ...run,
-        taskId: null,
-        organizationId: workspace,
-        planSnapshot: null,
-        prompt: "Sweep the flaky tests.",
-        idempotencyKey: randomUUID(),
-        repository: "acme/api",
-      });
-
-      for (const started of [onTask, onNoTask]) {
-        const agent = Option.getOrThrow(started).agent;
-        const read = Option.getOrThrow(yield* readCodingAgent(starter, agent.id));
-        assert.equal(read.personaName, null);
-        assert.equal(read.title, "Flaky tests");
-      }
-    }),
-  );
-});
-
 it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
   it.effect(
     "a line written answers the transaction that wrote it, and one already standing under its key answers none",

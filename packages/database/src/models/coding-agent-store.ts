@@ -193,8 +193,6 @@ export interface CodingAgent {
   readonly startBranch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
-  /** A human name the agent once went by; null for every agent now, which goes by its title, the column kept until it is dropped. */
-  readonly personaName: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
   /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
@@ -361,7 +359,6 @@ const CODING_AGENT_COLUMNS = {
   branch: codingAgent.branch,
   startBranch: codingAgent.startBranch,
   title: codingAgent.title,
-  personaName: codingAgent.personaName,
   archivedAt: codingAgent.archivedAt,
   archivedBy: codingAgent.archivedBy,
   disabledServers: codingAgent.disabledServers,
@@ -400,7 +397,6 @@ const CODING_AGENT_LINE_COLUMNS = {
   branch: codingAgent.branch,
   startBranch: codingAgent.startBranch,
   title: codingAgent.title,
-  personaName: codingAgent.personaName,
   archivedAt: codingAgent.archivedAt,
   archivedBy: codingAgent.archivedBy,
   disabledServers: codingAgent.disabledServers,
@@ -505,7 +501,6 @@ const CodingAgentRowSchema = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   startBranch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
-  personaName: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   archivedBy: ArchivedByColumnSchema,
   disabledServers: DisabledServersColumnSchema,

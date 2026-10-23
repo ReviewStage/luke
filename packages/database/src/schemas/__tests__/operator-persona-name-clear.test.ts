@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
-import { createCodingAgent, readCodingAgent } from "../../models/coding-agent-store.js";
+import { createCodingAgent } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
 import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
 import { user } from "../auth.js";
@@ -75,7 +75,13 @@ it.layer(getTestDB())("the operator persona-name migration", (it) => {
       for (const statement of yield* migrationStatements(MIGRATION)) yield* sql.unsafe(statement);
 
       const nameOf = (agentId: string) =>
-        Effect.map(readCodingAgent(owner, agentId), (read) => Option.getOrThrow(read).personaName);
+        Effect.map(
+          db
+            .select({ personaName: codingAgent.personaName })
+            .from(codingAgent)
+            .where(eq(codingAgent.id, agentId)),
+          ([row]) => row?.personaName,
+        );
       assert.equal(yield* nameOf(operator.id), null);
       assert.equal(yield* nameOf(coder.id), "Maya");
     }),

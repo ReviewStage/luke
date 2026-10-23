@@ -529,22 +529,6 @@ function tasklessAgent(
   };
 }
 
-it.effect("an agent given a human name announces its end by that name, ahead of its title", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    const notices = yield* f.notices;
-    f.focus(false);
-    const named = (status: CodingAgentStatus) =>
-      tasklessAgent(status, { personaName: "Maya Chen" });
-
-    notices.observeTaskless([named(CODING_AGENT_STATUS.RUNNING)]);
-    notices.observeTaskless([named(CODING_AGENT_STATUS.COMPLETED)]);
-    yield* settled;
-
-    assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: "Maya Chen finished" }]);
-  }),
-);
-
 it.effect(
   "an automation's agent with no plan, held from the plan list, announces its end under the automation's name, its click opening its own page",
   () =>
@@ -578,7 +562,6 @@ it.effect(
           automationId: null,
           repository: null,
           title: null,
-          personaName: "Luke",
           ...patch,
         });
       const said = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";

@@ -82,7 +82,6 @@ function agentLine(
     line: {
       id: agent.id,
       title: agent.title,
-      ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
       ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
       model: agent.model,
       effort: agent.effort,

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
-import { createCodingAgent, readCodingAgent } from "../../models/coding-agent-store.js";
+import { createCodingAgent } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
 import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
 import { user } from "../auth.js";
@@ -13,10 +14,10 @@ import { codingAgent } from "../coding-agent.js";
 
 /**
  * The migration that clears the human names coding agents were given, over a
- * database holding named agents: every name is cleared, so each agent goes by
- * its title again, and the title is kept. The migration's own statements are
- * run over it, as the migrator runs them. Synthetic accounts and rows
- * throughout.
+ * database holding named agents: every name is cleared and every title kept,
+ * and an archive an agent made under its human name names it by its title,
+ * or its model, instead. The migration's own statements are run over it, as
+ * the migrator runs them. Synthetic accounts and rows throughout.
  */
 
 const MIGRATION = "20261023144245_agent_persona_name_clear";
@@ -30,46 +31,71 @@ const openAccount = Effect.gen(function* () {
 });
 
 it.layer(getTestDB())("the agent persona-name migration", (it) => {
-  it.effect("clears every agent's human name and keeps its title", () =>
-    Effect.gen(function* () {
-      const db = yield* Database;
-      const sql = yield* SqlClient.SqlClient;
-      const owner = yield* openAccount;
-      const workspace = yield* openWorkspace(owner);
-      const task = yield* createTask(owner, { organizationId: workspace, name: "Billing" });
-      const start = (title: string) =>
-        createCodingAgent(owner, {
-          taskId: task.id,
-          planSnapshot: "# Billing",
-          prompt: null,
-          title,
-          idempotencyKey: randomUUID(),
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          repository: "acme/api",
-        }).pipe(Effect.map((started) => Option.getOrThrow(started).agent));
-      const invoices = yield* start("Invoice emails");
-      const refunds = yield* start("Refund webhook");
-      // The agents as ones made before stood: given a first name, as every agent was.
-      for (const [agent, name] of [
-        [invoices, "Maya"],
-        [refunds, "Theo"],
-      ] as const) {
-        yield* db
-          .update(codingAgent)
-          .set({ personaName: name })
-          .where(eq(codingAgent.id, agent.id));
-      }
+  it.effect(
+    "clears every agent's human name, keeps its title, and renames an archive an agent made under its name",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const sql = yield* SqlClient.SqlClient;
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Billing" });
+        const start = (title: string | undefined) =>
+          createCodingAgent(owner, {
+            taskId: task.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            ...(title === undefined ? undefined : { title }),
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/api",
+          }).pipe(Effect.map((started) => Option.getOrThrow(started).agent.id));
+        const invoices = yield* start("Invoice emails");
+        const untitled = yield* start(undefined);
+        const archivedByName = yield* start("Refund webhook");
+        const archivedByTitle = yield* start("Refund retries");
+        // The agents as ones made before stood: given a first name, as every agent was.
+        const named = (agentId: string, personaName: string) =>
+          db.update(codingAgent).set({ personaName }).where(eq(codingAgent.id, agentId));
+        yield* named(invoices, "Maya");
+        yield* named(untitled, "Theo");
+        // An archive each named its archiver as it then stood: by its human name, and by its title.
+        const archivedBy = (agentId: string, agentName: string) =>
+          db
+            .update(codingAgent)
+            .set({
+              archivedAt: new Date(),
+              archivedBy: {
+                by: CODING_AGENT_ARCHIVER.AGENT,
+                userId: owner,
+                agentId: invoices,
+                agentName,
+                reason: "Its pull request merged.",
+              },
+            })
+            .where(eq(codingAgent.id, agentId));
+        yield* archivedBy(archivedByName, "Maya");
+        yield* archivedBy(archivedByTitle, "Invoice emails");
 
-      for (const statement of yield* migrationStatements(MIGRATION)) yield* sql.unsafe(statement);
+        for (const statement of yield* migrationStatements(MIGRATION)) yield* sql.unsafe(statement);
 
-      const read = (agentId: string) =>
-        Effect.map(readCodingAgent(owner, agentId), (found) => {
-          const agent = Option.getOrThrow(found);
-          return [agent.personaName, agent.title];
-        });
-      assert.deepEqual(yield* read(invoices.id), [null, "Invoice emails"]);
-      assert.deepEqual(yield* read(refunds.id), [null, "Refund webhook"]);
-    }),
+        const read = (agentId: string) =>
+          Effect.map(
+            db
+              .select({
+                personaName: codingAgent.personaName,
+                title: codingAgent.title,
+                archiver: codingAgent.archivedBy,
+              })
+              .from(codingAgent)
+              .where(eq(codingAgent.id, agentId)),
+            ([row]) => [row?.personaName, row?.title, row?.archiver?.agentName],
+          );
+        assert.deepEqual(yield* read(invoices), [null, "Invoice emails", undefined]);
+        assert.deepEqual(yield* read(untitled), [null, null, undefined]);
+        assert.deepEqual(yield* read(archivedByName), [null, "Refund webhook", "Invoice emails"]);
+        assert.deepEqual(yield* read(archivedByTitle), [null, "Refund retries", "Invoice emails"]);
+      }),
   );
 });
