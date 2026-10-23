@@ -162,7 +162,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
 
       assert.equal(answer.status, ACTION_RESULT_STATUS.REJECTED);
       assert.equal(answer.reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
-      assert.deepEqual(yield* listMemories(workspaceId), []);
+      assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
     }),
   );
 
@@ -179,7 +179,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
         yield* writeTurn(agent, { sender: undefined }, []);
 
         assert.equal((yield* remember(agent)).reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
-        assert.deepEqual(yield* listMemories(workspaceId), []);
+        assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
       }),
   );
 
@@ -191,7 +191,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
       const answer = yield* remember(agent);
 
       assert.equal(answer.reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
-      assert.deepEqual(yield* listMemories(workspaceId), []);
+      assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
     }),
   );
 
@@ -206,7 +206,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
           const answer = yield* remember(agent);
 
           assert.equal(answer.reason, MEMORY_PROVENANCE_REFUSAL.WEB_READ, read);
-          assert.deepEqual(yield* listMemories(workspaceId), []);
+          assert.deepEqual(yield* listMemories(workspaceId, agent.userId), []);
         }
       }),
   );
@@ -220,7 +220,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
 
       assert.equal(answer.outcome, MEMORY_OUTCOME.KEPT);
       assert.deepEqual(
-        (yield* listMemories(workspaceId)).map((kept) => kept.text),
+        (yield* listMemories(workspaceId, agent.userId)).map((kept) => kept.text),
         [FACT],
       );
     }),

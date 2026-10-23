@@ -2583,7 +2583,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               assert.ok(Result.isSuccess(starting));
               return (yield* host.seed(starting.success)) ?? "";
             });
-          const call = { workspaceId: workspace, userId };
+          const call = { workspaceId: workspace, userId, readsPrivate: false };
           yield* runRemember(call, { text: kept.tests });
           yield* TestClock.adjust("1 second");
           yield* runRemember(call, { text: kept.deploys });
