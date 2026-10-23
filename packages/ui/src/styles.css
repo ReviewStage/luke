@@ -96,5 +96,6 @@
 @import "./components/settings-row/settings-row.css";
 @import "./components/auth-page/auth-page.css";
 @import "./components/glyph-slot/glyph-slot.css";
+@import "./components/corner-count/corner-count.css";
 /* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

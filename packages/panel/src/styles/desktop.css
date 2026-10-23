@@ -2512,7 +2512,7 @@ ul.actor-stack {
 }
 
 /* A tool its server gave no title is called by its name, in the code face. */
-:is(.integration-tool-title, .integration-tool-detail-title)[data-name="true"] {
+:is(.integration-tool-title, .integration-tool-detail-title).integration-tool-code {
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
 }
@@ -2990,8 +2990,8 @@ ul.actor-stack {
 }
 
 /* A task's card leads with where it stands (`task-card.tsx`): its key, its
-   status, and its priority, each a small chip of its mark and its words,
-   as the task page's head chips say them. */
+   status, its priority, and who is on it, each `@luke/ui`'s Badge of its
+   mark and its words, as the task page's head chips say them. */
 .task-card-standing {
   display: flex;
   flex-wrap: wrap;
@@ -3007,24 +3007,6 @@ ul.actor-stack {
   flex-wrap: nowrap;
   align-items: center;
   font-size: var(--luke-type-caption-size);
-}
-
-/* A chip is never wider than the card. */
-.task-card-chip {
-  --luke-glyph-size: var(--luke-type-caption-size);
-  display: inline-flex;
-  box-sizing: border-box;
-  max-width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  white-space: nowrap;
 }
 
 /* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
@@ -4761,7 +4743,7 @@ ul.actor-stack {
 /* Who wrote it stands as a box of its own over a revision's sections, a
    flex item there and a block inside the press that opens where it was
    written, so it is its own box that cuts the name and fades it
-   (`fading-words.tsx`), never the press's ellipsis around an inline line. */
+   (`@luke/ui`'s OneLine), never the press's ellipsis around an inline line. */
 .version-sections-head .version-row-author {
   display: block;
 }
@@ -5443,33 +5425,6 @@ ul.actor-stack {
 
 /* The window's one strip is `@luke/ui`'s Tabs (tab-strip.tsx), drawn alike
    in the plan's column and the side panel, folding as the room says. */
-
-/* A label cut short fades out over its last `--label-fade` rather than
-   ending in an ellipsis, as a browser's tab does (`@luke/ui`'s `tabs.css`),
-   and so does a subagent's job, and every name, title, and place the shell and the sidebar cut to
-   their line (`fading-words.tsx`). Only a label measured cut short
-   (use-clipped.ts) fades, so a short one ends on its last letter. The mask
-   fades the words themselves, so it reads alike over every fill a tab or a
-   row wears, at rest, hovered, chosen, or dragged. */
-.task-summary-label[data-overflow="true"],
-.subagent-job[data-overflow="true"],
-.workspace-ref-name[data-overflow="true"],
-.sidebar-task-repository[data-overflow="true"],
-.home-row-context[data-overflow="true"],
-.inbox-next-title[data-overflow="true"],
-.agent-origin-subject[data-overflow="true"],
-.integration-tool-title[data-overflow="true"],
-.integration-tool-id[data-overflow="true"],
-.integration-tool-detail-title[data-overflow="true"],
-.integration-tool-detail-name[data-overflow="true"],
-.automation-owner-name[data-overflow="true"],
-.automation-crumb[data-overflow="true"],
-.chat-byline-where[data-overflow="true"],
-.version-row-author[data-overflow="true"],
-.new-task-issue-title[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
-  text-overflow: clip;
-}
 
 /* A card's corner leading with a pull request's mark sets it inline, so the
    corner keeps the head's baseline. */

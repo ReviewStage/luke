@@ -1,5 +1,4 @@
-import { DisclosureChevron, GlyphSlot } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import { DisclosureChevron, GlyphSlot, OneLine } from "@luke/ui";
 import type { ReactNode } from "react";
 import {
   Fold,
@@ -67,12 +66,14 @@ export type TaskTitleProps = {
 
 /** The plan's title on the header, cut to the line, behind its label where it has one. */
 export function PlanTitle({ label, children }: TaskTitleProps): ReactNode {
-  const [box, clipped] = useClipped(label === undefined ? children : `${label} · ${children}`);
   return (
-    <span ref={box} className="plan-card-title" data-overflow={String(clipped)}>
+    <OneLine
+      className="plan-card-title"
+      words={label === undefined ? children : `${label} · ${children}`}
+    >
       {label === undefined ? null : <span className="plan-card-label">{label} · </span>}
       <span className="plan-card-name">{children}</span>
-    </span>
+    </OneLine>
   );
 }
 

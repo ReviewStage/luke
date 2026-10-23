@@ -76,9 +76,9 @@ test("a task's card leads with its key, its status, its priority, and who is on 
     ]),
     [
       ["key", "ACME-42"],
-      ["task-card-chip", "In progress"],
-      ["task-card-chip", "High"],
-      ["task-card-chip", "No assignee"],
+      ["luke-badge", "In progress"],
+      ["luke-badge", "High"],
+      ["luke-badge", "No assignee"],
     ],
     "the key as plain words, as every place draws a key, then the status, priority, and assignee chips",
   );
@@ -91,7 +91,9 @@ test("a task's card leads with its key, its status, its priority, and who is on 
 
 test("a task's card says who is on it by face and name, or the dashed mark where no one is, as a fact rather than a picker", () => {
   const assignee = (task: TaskSummary) => {
-    const chip = drawn(task).querySelector<HTMLElement>("[data-task-card-assignee]");
+    const chip = [
+      ...drawn(task).querySelectorAll<HTMLElement>(".task-card-standing > .luke-badge"),
+    ].at(-1);
     assert.ok(chip, "the assignee's chip stands");
     return [chip.textContent, chip.querySelector(".actor-mark")?.getAttribute("data-kind")];
   };

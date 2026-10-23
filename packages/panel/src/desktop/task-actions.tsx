@@ -17,6 +17,7 @@ import {
   LIST_ROW_INK,
   ListRow,
   MarkDoneIcon,
+  OneLine,
   PinIcon,
   ProviderMark,
   RowHint,
@@ -57,7 +58,6 @@ import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { DraftMark } from "../draft-mark.js";
-import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
@@ -696,7 +696,9 @@ export function SidebarTask({
             rename.editing ? null : (
               <span className="sidebar-task-time">
                 {repository === undefined ? null : (
-                  <FadingWords className="sidebar-task-repository" words={repository} />
+                  <OneLine className="sidebar-task-repository" words={repository}>
+                    {repository}
+                  </OneLine>
                 )}
                 {worn === undefined ? null : worn.assignee === undefined ? (
                   <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />

@@ -23,6 +23,8 @@ import {
   List,
   ListRow,
   type ListRowHint,
+  ONE_LINE_ELEMENT,
+  OneLine,
   ScrollArea,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -30,7 +32,6 @@ import {
   Tooltip,
 } from "@luke/ui";
 import { cloneElement, createContext, useContext } from "react";
-import { FADING_ELEMENT, FadingWords } from "./fading-words.js";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
 
@@ -158,17 +159,20 @@ export function IntegrationToolList({
               ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
               title={
                 <span className="integration-tool-name">
-                  <FadingWords
-                    className="integration-tool-title"
-                    data-name={namedApart(tool) ? undefined : "true"}
+                  <OneLine
+                    className={
+                      namedApart(tool)
+                        ? "integration-tool-title"
+                        : "integration-tool-title integration-tool-code"
+                    }
                     words={toolTitle(tool)}
                   >
                     <Highlighted text={toolTitle(tool)} tokens={tokens} />
-                  </FadingWords>
+                  </OneLine>
                   {namedApart(tool) ? (
-                    <FadingWords className="integration-tool-id" words={tool.name}>
+                    <OneLine className="integration-tool-id" words={tool.name}>
                       <Highlighted text={tool.name} tokens={tokens} />
-                    </FadingWords>
+                    </OneLine>
                   ) : null}
                   <ToolBadge tool={tool} />
                 </span>
@@ -307,18 +311,25 @@ export function IntegrationToolDetail({
             />
           </Tooltip>
         ) : null}
-        <FadingWords
-          as={FADING_ELEMENT.H2}
-          className="integration-tool-detail-title"
-          data-name={namedApart(tool) ? undefined : "true"}
+        <OneLine
+          as={ONE_LINE_ELEMENT.H2}
+          className={
+            namedApart(tool)
+              ? "integration-tool-detail-title"
+              : "integration-tool-detail-title integration-tool-code"
+          }
           words={title}
-        />
+        >
+          {title}
+        </OneLine>
         {namedApart(tool) ? (
-          <FadingWords
-            as={FADING_ELEMENT.CODE}
+          <OneLine
+            as={ONE_LINE_ELEMENT.CODE}
             className="integration-tool-detail-name"
             words={tool.name}
-          />
+          >
+            {tool.name}
+          </OneLine>
         ) : null}
       </header>
       {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}

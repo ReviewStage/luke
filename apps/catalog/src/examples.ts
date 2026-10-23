@@ -18,6 +18,7 @@ import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
+import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
@@ -165,4 +166,5 @@ export const EXAMPLES: readonly Example[] = [
   SETTINGS_ROW_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
   GLYPH_SLOTS_EXAMPLE,
+  CORNER_COUNTS_EXAMPLE,
 ];

@@ -7,8 +7,7 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
-import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton, Tooltip } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton, OneLine, Tooltip } from "@luke/ui";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -223,7 +222,6 @@ export function AttachmentViewer({
   const titleId = useId();
   const file = files[at];
   const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
-  const [titleBox, titleClipped] = useClipped(file?.name ?? "");
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -257,13 +255,8 @@ export function AttachmentViewer({
       >
         <header className="attachment-viewer-header">
           <FileTypeIcon name={file.name} />
-          <h2
-            ref={titleBox}
-            id={titleId}
-            className="attachment-viewer-title"
-            data-overflow={String(titleClipped)}
-          >
-            {file.name}
+          <h2 id={titleId} className="attachment-viewer-title">
+            <OneLine>{file.name}</OneLine>
           </h2>
           <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
           {note === undefined || note === null ? null : (

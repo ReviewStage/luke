@@ -23,6 +23,7 @@ export * from "./components/combobox/combobox.js";
 export * from "./components/combobox/use-combobox-field.js";
 export * from "./components/command-link/command-link.js";
 export * from "./components/confirm-dialog/confirm-dialog.js";
+export * from "./components/corner-count/corner-count.js";
 export * from "./components/data-table/data-table.js";
 export * from "./components/detail-page/detail-page.js";
 export * from "./components/dialog/dialog.js";

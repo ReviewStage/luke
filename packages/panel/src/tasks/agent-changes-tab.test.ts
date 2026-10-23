@@ -1930,12 +1930,16 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   press(listBox(), { key: "i" });
   await flush();
   const chip =
-    note().querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("a chip stands");
+    note().querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
+    assert.fail("a chip stands");
   assert.equal(chip.getAttribute("aria-label"), "1 comment by octo · 1 open, show");
   assert.equal(note().querySelector(".drawn-thread"), null, "minimized, the thread is put away");
   press(document.body, { key: "i" });
   await flush();
-  assert.ok(note().querySelector(".diff-thread-chip"), "outside the view, I is not the view's");
+  assert.ok(
+    note().querySelector(".diff-thread-chip-row > summary"),
+    "outside the view, I is not the view's",
+  );
 
   // A find looking through the tab reads the put-away thread's words, and opens the line it brings into view.
   await redraw({ threads, finding: true });
@@ -1948,7 +1952,7 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   act(() => reveal(match, slot));
   await flush();
   assert.equal(
-    note().querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
+    note().querySelector(".diff-thread-chip-row > summary")?.getAttribute("aria-label"),
     "1 comment by octo · 1 open, hide",
   );
   assert.equal(
@@ -1959,7 +1963,11 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
 
   press(listBox(), { key: "i" });
   await flush();
-  assert.equal(note().querySelector(".diff-thread-chip"), null, "I again draws every thread whole");
+  assert.equal(
+    note().querySelector(".diff-thread-chip-row > summary"),
+    null,
+    "I again draws every thread whole",
+  );
 });
 
 test("minimized, the threads on no line take a row of their own for their chip, which has no line to float over", async () => {
@@ -2028,7 +2036,7 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
   assert.equal(
     lastDrawn()
       .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
-      .querySelector(".diff-thread-chip")
+      .querySelector(".diff-thread-chip-row > summary")
       ?.getAttribute("aria-label"),
     "1 comment by octo · 1 open, show",
   );
