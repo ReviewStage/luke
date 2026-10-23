@@ -29,6 +29,7 @@ import { repositoryPinsContract } from "./repository-pins.js";
 import { taskFilesContract } from "./task-files.js";
 import { taskSectionsContract } from "./task-sections.js";
 import { tasksContract } from "./tasks.js";
+import { workspaceEnvironmentContract } from "./workspace-environment.js";
 import { workspaceGithubContract } from "./workspace-github.js";
 import { workspaceInvitationsContract } from "./workspace-invitations.js";
 import { workspaceLinearContract } from "./workspace-linear.js";
@@ -68,6 +69,7 @@ export const hostedContract = {
   repositoryPins: repositoryPinsContract,
   taskFiles: taskFilesContract,
   taskSections: taskSectionsContract,
+  workspaceEnvironment: workspaceEnvironmentContract,
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,
   workspaceLinear: workspaceLinearContract,

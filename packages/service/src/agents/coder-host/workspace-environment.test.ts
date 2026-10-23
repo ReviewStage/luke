@@ -36,14 +36,13 @@ const KEK = {
 } as const;
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };

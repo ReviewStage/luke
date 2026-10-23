@@ -140,7 +140,6 @@ import {
   timeWithLead,
   turnKindWords,
 } from "./turn-context.js";
-import { CODER_TOOL } from "./tool-set.js";
 import {
   NO_SHELL_ENVIRONMENT,
   type ShellEnvironment,

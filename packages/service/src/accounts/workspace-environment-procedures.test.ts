@@ -17,16 +17,16 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
-import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { workspaceEnvironmentApp } from "./workspace-environment-app.js";
+import { hostedAnswer } from "../testing/hosted-route.js";
+import { workspaceEnvironmentProcedures } from "./workspace-environment-procedures.js";
 
 /**
- * A workspace's environment, answered by the group the way a function
- * answers it, over a real dialect: any member reads the list, an owner or
+ * A workspace's environment, answered by its procedures the way the hosted
+ * function answers them, over a real dialect: any member reads the list, an owner or
  * admin alone saves or removes, a variable is answered with its value and
  * a secret by its hint alone, every value is kept sealed, a value the ring
  * can no longer open is answered unreadable, and a workspace the account is
@@ -46,14 +46,13 @@ const KEK = {
 const SECRET = "sk_test_0000000000000000wxyz";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -95,18 +94,18 @@ const openWorkspace = (options: { ring?: string } = {}) =>
     const admin = yield* openAccount(workspace, WORKSPACE_ROLE.ADMIN);
     const plain = yield* openAccount(workspace, WORKSPACE_ROLE.MEMBER);
     const outsider = yield* openAccount(undefined, WORKSPACE_ROLE.MEMBER);
-    const app = workspaceEnvironmentApp({
+    const procedures = workspaceEnvironmentProcedures({
       resolveUserId: (incoming) =>
         Effect.succeed(
           Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
         ),
     });
-    const ask = (request: Request, ring = options.ring) => answer(app, request, ring);
+    const ask = (request: Request, ring = options.ring) => answer(procedures, request, ring);
     return { workspace, owner, admin, plain, outsider, ask };
   });
 
 const answer = (
-  app: ReturnType<typeof workspaceEnvironmentApp>,
+  procedures: ReturnType<typeof workspaceEnvironmentProcedures>,
   request: Request,
   ring: string | undefined,
 ) =>
@@ -116,21 +115,16 @@ const answer = (
       ...NO_ENVIRONMENT,
       providerKeyEncryptionKeys: ring === undefined ? undefined : Redacted.make(ring),
     };
-    // The handler runs on the router's own fiber, so it is handed the test's clock and services.
+    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, environment),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      app.pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
+    const response = yield* hostedAnswer({ workspaceEnvironment: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+    // SAFETY: the procedures answer JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body, text } satisfies Answer;
   });
@@ -138,7 +132,7 @@ const answer = (
 function post(path: string, userId: string, body: WireBoundaryInput) {
   return new Request(new URL(path, ORIGIN), {
     method: "POST",
-    headers: { authorization: `Bearer ${userId}` },
+    headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 }

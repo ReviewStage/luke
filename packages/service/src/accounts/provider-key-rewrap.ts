@@ -15,6 +15,11 @@ import {
   rewrapProviderKeyRow,
 } from "@luke/database/models/provider-key-store";
 import type { TaskStoreEffect } from "@luke/database/models/task-store";
+import {
+  listEveryWorkspaceEnvironmentRow,
+  rewrapWorkspaceEnvironmentRow,
+  sealedOf,
+} from "@luke/database/models/workspace-environment-store";
 import { Effect, type Redacted, Result } from "effect";
 import {
   bearerMatchesSecret,
@@ -23,11 +28,6 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
-import {
-  listEveryWorkspaceEnvironmentRow,
-  rewrapWorkspaceEnvironmentRow,
-  sealedOf,
-} from "@luke/database/models/workspace-environment-store";
 
 /**
  * provider-key-rewrap.ts -- every stored provider key, GitHub token, and workspace environment value moved onto the ring's current key-encryption key.

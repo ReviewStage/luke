@@ -1,9 +1,19 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "d4e48434-ebcf-4b6d-9720-99124aebdd00",
-  "prevIds": ["85531fbc-10c0-4fbc-b9b3-0005a0add2af"],
+  "id": "56d13162-d319-494e-bd7d-8c196cb1bfd0",
+  "prevIds": [
+    "3ed5c9c2-843a-4ff6-9e23-615c04d7a647",
+    "8d35b69b-dfa7-4de8-97d9-cab5044868e7",
+    "be9f5cfe-72db-4cd1-a5ba-86e5a61f3644"
+  ],
   "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "account_chatgpt_host",
+      "entityType": "tables",
+      "schema": "public"
+    },
     {
       "isRlsEnabled": false,
       "name": "account_provider_key",
@@ -12,7 +22,19 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "agent_browser_tab",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "agent_pin",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "attachment",
       "entityType": "tables",
       "schema": "public"
     },
@@ -120,12 +142,6 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "chat_attachment",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "chat_channel",
       "entityType": "tables",
       "schema": "public"
@@ -168,7 +184,13 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "conversation_attachment",
+      "name": "coding_agent_runner_lease",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "coding_agent_wakeup",
       "entityType": "tables",
       "schema": "public"
     },
@@ -198,13 +220,19 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "inbox_item",
+      "name": "github_personal_token",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "inbox_attachment",
+      "name": "github_repository_read",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "inbox_item",
       "entityType": "tables",
       "schema": "public"
     },
@@ -222,13 +250,31 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "installed_skill",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "installed_skill_file",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "integration_connection",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "issue",
+      "name": "integration_install_intent",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "integration_installation",
       "entityType": "tables",
       "schema": "public"
     },
@@ -246,13 +292,19 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "personal_workspace",
+      "name": "operator_notice",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "plan_attachment",
+      "name": "operator_wake",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "personal_workspace",
       "entityType": "tables",
       "schema": "public"
     },
@@ -294,7 +346,7 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "preview_fork",
+      "name": "pull_request_chapters",
       "entityType": "tables",
       "schema": "public"
     },
@@ -354,7 +406,25 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "task_number_counter",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "task_issue",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "task_pin",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "agent_section_entry",
       "entityType": "tables",
       "schema": "public"
     },
@@ -367,6 +437,12 @@
     {
       "isRlsEnabled": false,
       "name": "task_section_entry",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "token_pull_request_poll",
       "entityType": "tables",
       "schema": "public"
     },
@@ -413,6 +489,51 @@
       "schema": "public"
     },
     {
+      "isRlsEnabled": false,
+      "name": "workspace_token_repository",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_chatgpt_host"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ext_agent_host_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_chatgpt_host"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_chatgpt_host"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -434,6 +555,19 @@
       "generated": null,
       "identity": null,
       "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'api_key'",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -532,6 +666,45 @@
     {
       "type": "timestamp with time zone",
       "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "access_expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "for_agents",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "limit_resets_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
@@ -541,6 +714,240 @@
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "target_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "address",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "''",
+      "generated": null,
+      "identity": null,
+      "name": "title",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "opened_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "opened_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "driver_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "last_acted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cursor_x",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cursor_y",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cursor_kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cursor_viewport_w",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cursor_viewport_h",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cursor_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_browser_tab"
     },
     {
       "type": "text",
@@ -593,6 +1000,266 @@
       "entityType": "columns",
       "schema": "public",
       "table": "agent_pin"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "chat_message_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "inbox_item_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "inbox_message_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "plan_comment_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "position",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "content_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sha256",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "width",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "height",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "byte_count",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "bytea",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "bytes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "saved_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
     },
     {
       "type": "text",
@@ -3166,97 +3833,6 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "message_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "content_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "byte_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "type": "bytea",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
       "table": "chat_channel"
     },
     {
@@ -3351,6 +3927,19 @@
       "table": "chat_channel"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "purpose",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "chat_channel"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -3437,32 +4026,6 @@
       "generated": null,
       "identity": null,
       "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "task_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "handle",
       "entityType": "columns",
       "schema": "public",
       "table": "chat_member"
@@ -3871,6 +4434,19 @@
       "table": "workspace_chat"
     },
     {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "revision",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_chat"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -4042,7 +4618,7 @@
     {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -4100,6 +4676,19 @@
       "generated": null,
       "identity": null,
       "name": "title",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "persona_name",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"
@@ -4213,6 +4802,58 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
+      "default": "'app'",
+      "generated": null,
+      "identity": null,
+      "name": "github_access",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payer",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runner_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'coder'",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
@@ -4291,26 +4932,13 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "user_id",
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "conversation_attachment"
+      "table": "coding_agent_runner_lease"
     },
     {
       "type": "uuid",
@@ -4320,88 +4948,10 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "conversation_id",
+      "name": "holder",
       "entityType": "columns",
       "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sha256",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "content_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "width",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "height",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "byte_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "bytea",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
+      "table": "coding_agent_runner_lease"
     },
     {
       "type": "timestamp with time zone",
@@ -4411,10 +4961,88 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "prompt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "due_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
       "name": "created_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "conversation_attachment"
+      "table": "coding_agent_wakeup"
     },
     {
       "type": "text",
@@ -4690,6 +5318,201 @@
       "table": "github_installation"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "key_version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sealed_data_key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sealed_token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "hint",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "github_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "github_login",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "repository",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "readable",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "checked_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -4911,6 +5734,19 @@
       "table": "inbox_item"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "closed_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "inbox_item"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -4965,171 +5801,15 @@
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "task_id",
+      "name": "open_ask_message_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "item_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "message_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'image'",
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "position",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "content_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "byte_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "bytea",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_attachment"
+      "table": "inbox_item"
     },
     {
       "type": "uuid",
@@ -5262,6 +5942,32 @@
       "table": "inbox_message"
     },
     {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ask",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "inbox_message"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "answers",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "inbox_message"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -5286,6 +5992,240 @@
       "entityType": "columns",
       "schema": "public",
       "table": "inbox_message"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "owner_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "installed_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "scope",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "user_invocable",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "source",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "computed_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill_file"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "skill_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill_file"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "path",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill_file"
+    },
+    {
+      "type": "bytea",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "bytes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill_file"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sha256",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill_file"
     },
     {
       "type": "text",
@@ -5444,17 +6384,43 @@
       "table": "integration_connection"
     },
     {
-      "type": "uuid",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "gen_random_uuid()",
+      "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
+      "name": "state_hash",
       "entityType": "columns",
       "schema": "public",
-      "table": "issue"
+      "table": "integration_install_intent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_install_intent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_install_intent"
     },
     {
       "type": "text",
@@ -5467,124 +6433,137 @@
       "name": "organization_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "number",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "''",
-      "generated": null,
-      "identity": null,
-      "name": "description",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'backlog'",
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'none'",
-      "generated": null,
-      "identity": null,
-      "name": "priority",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "creator_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "archived_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "issue"
+      "table": "integration_install_intent"
     },
     {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "now()",
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_install_intent"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
       "generated": null,
       "identity": null,
       "name": "created_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "issue"
+      "table": "integration_install_intent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "external_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_label",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "linked_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
     },
     {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "now()",
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
       "generated": null,
       "identity": null,
       "name": "updated_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "issue"
+      "table": "integration_installation"
     },
     {
       "type": "uuid",
@@ -5616,6 +6595,19 @@
       "type": "text",
       "typeSchema": null,
       "notNull": true,
+      "dimensions": 0,
+      "default": "'shell'",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "mac_command"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -5704,6 +6696,149 @@
       "table": "mac_command_listener"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "operator_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "read_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "operator_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "woken_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -5741,110 +6876,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "personal_workspace"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "task_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "content_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "byte_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "type": "bytea",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "saved_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "plan_attachment"
     },
     {
       "type": "uuid",
@@ -6187,12 +7218,25 @@
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
       "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_page_version"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "plan_page_version"
@@ -6608,6 +7652,19 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "chapters_model",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_preference"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "plan_template",
       "entityType": "columns",
       "schema": "public",
@@ -6653,6 +7710,19 @@
       "table": "account_preference"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -6660,10 +7730,140 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
+      "name": "organization_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "preview_fork"
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "repository",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "pull_request_number",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "base_sha",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "head_sha",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "failure_kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "model",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "chapters",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "claim",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "requested_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
     },
     {
       "type": "timestamp with time zone",
@@ -6673,10 +7873,49 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "prepared_at",
+      "name": "started_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "preview_fork"
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "finished_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pull_request_chapters"
     },
     {
       "type": "text",
@@ -7004,6 +8243,19 @@
       "table": "asks"
     },
     {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "joined_after_step",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "asks"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -7168,6 +8420,58 @@
       "generated": null,
       "identity": null,
       "name": "expects_completion",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runtime",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "native_session",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "native_sequence",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "native_projection",
       "entityType": "columns",
       "schema": "public",
       "table": "conversations"
@@ -7732,6 +9036,84 @@
       "table": "task"
     },
     {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "number",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'todo'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'none'",
+      "generated": null,
+      "identity": null,
+      "name": "priority",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "assignee_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'developer'",
+      "generated": null,
+      "identity": null,
+      "name": "creator_actor",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "creator_agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
       "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
@@ -7771,27 +9153,14 @@
       "table": "task"
     },
     {
-      "type": "jsonb",
+      "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
-      "default": null,
+      "default": "'app'",
       "generated": null,
       "identity": null,
-      "name": "linear_issue",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "issue_id",
+      "name": "github_access",
       "entityType": "columns",
       "schema": "public",
       "table": "task"
@@ -7830,20 +9199,20 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "archived_at",
+      "name": "completed_at",
       "entityType": "columns",
       "schema": "public",
       "table": "task"
     },
     {
-      "type": "uuid",
+      "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "conversation_id",
+      "name": "archived_at",
       "entityType": "columns",
       "schema": "public",
       "table": "task"
@@ -7973,6 +9342,201 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_number_counter"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_number",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_number_counter"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "external_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "repository",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "number",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "url",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "title",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'closes'",
+      "generated": null,
+      "identity": null,
+      "name": "relation",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "linked_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "user_id",
       "entityType": "columns",
       "schema": "public",
@@ -8016,6 +9580,71 @@
       "entityType": "columns",
       "schema": "public",
       "table": "task_pin"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "coding_agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "section_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "position",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
     },
     {
       "type": "uuid",
@@ -8172,6 +9801,110 @@
       "entityType": "columns",
       "schema": "public",
       "table": "task_section_entry"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "pull_request",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "etags",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_review_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_comment_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "head_sha",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "check_conclusion",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "next_poll_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
     },
     {
       "type": "text",
@@ -8429,6 +10162,19 @@
       "generated": null,
       "identity": null,
       "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "voice_sessions"
@@ -8863,6 +10609,127 @@
       "table": "workspace_integration_connection"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "repository",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "target_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_browser_tab_conversation_target",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "task_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_browser_tab_task_created",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
       "nameExplicit": true,
       "columns": [
         {
@@ -8882,6 +10749,160 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_pin"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "chat_message_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"chat_message_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_chat_message",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "inbox_item_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"inbox_item_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_inbox_item",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "inbox_message_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"inbox_message_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_inbox_message",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "plan_comment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"plan_comment_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_plan_comment",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "sha256",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_conversation_sha256",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "task_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"task_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_task",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "(\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0) and \"saved_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_unsaved",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
     },
     {
       "nameExplicit": true,
@@ -8984,6 +11005,34 @@
       "method": "btree",
       "concurrently": false,
       "name": "member_userId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "member"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "member_userId_organizationId_idx",
       "entityType": "indexes",
       "schema": "public",
       "table": "member"
@@ -9524,27 +11573,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "message_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_attachment_message",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "organization_id",
           "isExpression": false,
           "asc": true,
@@ -9664,34 +11692,6 @@
           "opclass": null
         },
         {
-          "value": "handle",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" <> 'planner'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_member_organization_handle",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "kind",
           "isExpression": false,
           "asc": true,
@@ -9761,27 +11761,6 @@
       "method": "btree",
       "concurrently": false,
       "name": "chat_member_agent",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "task_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"task_id\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_member_task",
       "entityType": "indexes",
       "schema": "public",
       "table": "chat_member"
@@ -10063,6 +12042,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_conversation",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "organization_id",
           "isExpression": false,
           "asc": true,
@@ -10083,6 +12083,34 @@
       "method": "btree",
       "concurrently": false,
       "name": "coding_agent_org_created",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"task_id\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_org_taskless_created",
       "entityType": "indexes",
       "schema": "public",
       "table": "coding_agent"
@@ -10112,14 +12140,7 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "conversation_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "sha256",
+          "value": "runner_token_hash",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -10127,14 +12148,84 @@
         }
       ],
       "isUnique": true,
+      "where": "\"runner_token_hash\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_runner_token_hash",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"kind\" = 'operator' and \"archived_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_member_operator",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "due_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
       "where": null,
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "conversation_attachment_conversation_sha256",
+      "name": "coding_agent_wakeup_due",
       "entityType": "indexes",
       "schema": "public",
-      "table": "conversation_attachment"
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_wakeup_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
     },
     {
       "nameExplicit": true,
@@ -10266,6 +12357,34 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"status\" = 'open' and \"task_id\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "inbox_item_org_open_taskless_updated",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "inbox_item"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "user_id",
           "isExpression": false,
           "asc": true,
@@ -10296,48 +12415,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "inbox_item"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "item_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "inbox_attachment_item",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "message_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "inbox_attachment_message",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "inbox_attachment"
     },
     {
       "nameExplicit": true,
@@ -10422,6 +12499,90 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "inbox_message"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "owner_user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"scope\" = 'personal'",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "installed_skill_personal_name",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"scope\" = 'workspace'",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "installed_skill_workspace_name",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "skill_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "path",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "installed_skill_file_path",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "installed_skill_file"
     },
     {
       "nameExplicit": true,
@@ -10537,41 +12698,6 @@
           "asc": true,
           "nullsFirst": false,
           "opclass": null
-        },
-        {
-          "value": "number",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "issue_org_number",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "issue"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
         }
       ],
       "isUnique": false,
@@ -10579,10 +12705,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "issue_org_updated",
+      "name": "integration_installation_organization_id_idx",
       "entityType": "indexes",
       "schema": "public",
-      "table": "issue"
+      "table": "integration_installation"
     },
     {
       "nameExplicit": true,
@@ -10616,7 +12742,49 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "task_id",
+          "value": "operator_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "kind",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"read_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_notice_unread",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "operator_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "at",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -10628,16 +12796,16 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "plan_attachment_task",
+      "name": "operator_notice_operator_at",
       "entityType": "indexes",
       "schema": "public",
-      "table": "plan_attachment"
+      "table": "operator_notice"
     },
     {
       "nameExplicit": true,
       "columns": [
         {
-          "value": "created_at",
+          "value": "agent_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -10645,14 +12813,63 @@
         }
       ],
       "isUnique": false,
-      "where": "\"saved_at\" is null",
+      "where": null,
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "plan_attachment_unsaved",
+      "name": "operator_notice_agent",
       "entityType": "indexes",
       "schema": "public",
-      "table": "plan_attachment"
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "operator_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_wake_operator_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_wake_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_wake"
     },
     {
       "nameExplicit": true,
@@ -10779,6 +12996,111 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "plan_page_version"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "plan_page_version_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "plan_page_version"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "repository",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "pull_request_number",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "head_sha",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "pull_request_chapters_head",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "repository",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "pull_request_number",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "started_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "pull_request_chapters_latest",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "pull_request_chapters"
     },
     {
       "nameExplicit": true,
@@ -11015,6 +13337,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "runtime_session_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"runtime_session_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "conversations_runtime_session",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "conversation_id",
           "isExpression": false,
           "asc": true,
@@ -11035,6 +13378,34 @@
       "method": "btree",
       "concurrently": false,
       "name": "messages_conversation_revision",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "seq",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "(\"role\" = 'user' and \"turn_id\" is null)",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "messages_awaiting_line",
       "entityType": "indexes",
       "schema": "public",
       "table": "messages"
@@ -11183,7 +13554,42 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "issue_id",
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "number",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "task_organization_number",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "assignee_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -11195,10 +13601,73 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "task_issue",
+      "name": "task_organization_assignee",
       "entityType": "indexes",
       "schema": "public",
       "table": "task"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "task_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "provider",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "external_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "task_issue_task_provider_external",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "external_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "task_issue_provider_external",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "task_issue"
     },
     {
       "nameExplicit": true,
@@ -11220,6 +13689,48 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "task_pin"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "coding_agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_section_entry_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "section_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_section_entry_section",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_section_entry"
     },
     {
       "nameExplicit": true,
@@ -11358,6 +13869,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "voice_sessions_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "detached_at",
           "isExpression": false,
           "asc": true,
@@ -11397,6 +13929,47 @@
       "table": "workspace_integration_connection"
     },
     {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "lower(\"repository\")",
+          "isExpression": true,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "workspace_token_repository_organization_repository",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "account_chatgpt_host_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "account_chatgpt_host"
+    },
+    {
       "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
@@ -11408,6 +13981,58 @@
       "entityType": "fks",
       "schema": "public",
       "table": "account_provider_key"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["conversation_id"],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_browser_tab_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["task_id"],
+      "schemaTo": "public",
+      "tableTo": "task",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_browser_tab_task_id_task_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["opened_by_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "agent_browser_tab_opened_by_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["driver_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "agent_browser_tab_driver_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_browser_tab"
     },
     {
       "nameExplicit": false,
@@ -11434,6 +14059,110 @@
       "entityType": "fks",
       "schema": "public",
       "table": "agent_pin"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "attachment_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["task_id"],
+      "schemaTo": "public",
+      "tableTo": "task",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_task_id_task_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["chat_message_id"],
+      "schemaTo": "public",
+      "tableTo": "chat_message",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_chat_message_id_chat_message_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["inbox_item_id"],
+      "schemaTo": "public",
+      "tableTo": "inbox_item",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_inbox_item_id_inbox_item_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["inbox_message_id"],
+      "schemaTo": "public",
+      "tableTo": "inbox_message",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_inbox_message_id_inbox_message_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["conversation_id"],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["plan_comment_id"],
+      "schemaTo": "public",
+      "tableTo": "plan_comment",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_plan_comment_id_plan_comment_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
     },
     {
       "nameExplicit": false,
@@ -11781,32 +14510,6 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "chat_attachment_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["message_id"],
-      "schemaTo": "public",
-      "tableTo": "chat_message",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "chat_attachment_message_id_chat_message_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
       "name": "chat_channel_organization_id_organization_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -11899,19 +14602,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "chat_member_agent_id_coding_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["task_id"],
-      "schemaTo": "public",
-      "tableTo": "task",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "chat_member_plan_id_plan_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "chat_member"
@@ -12113,29 +14803,29 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["user_id"],
+      "columns": ["agent_id"],
       "schemaTo": "public",
-      "tableTo": "user",
+      "tableTo": "coding_agent",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "conversation_attachment_user_id_user_id_fkey",
+      "name": "coding_agent_runner_lease_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "conversation_attachment"
+      "table": "coding_agent_runner_lease"
     },
     {
       "nameExplicit": false,
-      "columns": ["conversation_id"],
+      "columns": ["agent_id"],
       "schemaTo": "public",
-      "tableTo": "conversations",
+      "tableTo": "coding_agent",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "conversation_attachment_conversation_id_conversations_id_fkey",
+      "name": "coding_agent_wakeup_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "conversation_attachment"
+      "table": "coding_agent_wakeup"
     },
     {
       "nameExplicit": false,
@@ -12223,6 +14913,32 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "github_personal_token_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "github_personal_token"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "github_repository_read_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "inbox_item_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
@@ -12282,68 +14998,29 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["user_id"],
+      "columns": ["closed_by"],
       "schemaTo": "public",
       "tableTo": "user",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "inbox_attachment_user_id_user_id_fk",
+      "onDelete": "SET NULL",
+      "name": "inbox_item_closed_by_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "inbox_attachment"
+      "table": "inbox_item"
     },
     {
       "nameExplicit": false,
-      "columns": ["task_id"],
-      "schemaTo": "public",
-      "tableTo": "task",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "inbox_attachment_plan_id_plan_id_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "inbox_attachment_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["item_id"],
-      "schemaTo": "public",
-      "tableTo": "inbox_item",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "inbox_attachment_item_id_inbox_item_id_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "inbox_attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["message_id"],
+      "columns": ["open_ask_message_id"],
       "schemaTo": "public",
       "tableTo": "inbox_message",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "inbox_attachment_message_id_inbox_message_id_fkey",
+      "onDelete": "SET NULL",
+      "name": "inbox_item_open_ask_message_id_inbox_message_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "inbox_attachment"
+      "table": "inbox_item"
     },
     {
       "nameExplicit": false,
@@ -12399,6 +15076,58 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["owner_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "installed_skill_owner_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["installed_by_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "installed_skill_installed_by_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "installed_skill_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["skill_id"],
+      "schemaTo": "public",
+      "tableTo": "installed_skill",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "installed_skill_file_skill_id_installed_skill_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "installed_skill_file"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -12412,29 +15141,55 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "integration_install_intent_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "integration_install_intent"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "issue_organization_id_organization_id_fkey",
+      "name": "integration_install_intent_organization_id_organization_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "issue"
+      "table": "integration_install_intent"
     },
     {
       "nameExplicit": false,
-      "columns": ["creator_id"],
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "integration_installation_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["linked_by_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "issue_creator_id_user_id_fkey",
+      "name": "integration_installation_linked_by_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "issue"
+      "table": "integration_installation"
     },
     {
       "nameExplicit": false,
@@ -12464,6 +15219,71 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["operator_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_notice_operator_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_notice_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["task_id"],
+      "schemaTo": "public",
+      "tableTo": "task",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "operator_notice_task_id_task_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["operator_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_wake_operator_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_wake_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -12487,32 +15307,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "personal_workspace"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["task_id"],
-      "schemaTo": "public",
-      "tableTo": "task",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "plan_attachment_plan_id_plan_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "plan_attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "plan_attachment_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "plan_attachment"
     },
     {
       "nameExplicit": false,
@@ -12607,6 +15401,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "plan_page_version_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_page_version"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["task_id"],
       "schemaTo": "public",
       "tableTo": "task",
@@ -12669,6 +15476,32 @@
       "entityType": "fks",
       "schema": "public",
       "table": "account_preference"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "pull_request_chapters_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "pull_request_chapters"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["requested_by"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "pull_request_chapters_requested_by_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "pull_request_chapters"
     },
     {
       "nameExplicit": false,
@@ -12854,26 +15687,26 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["issue_id"],
+      "columns": ["assignee_id"],
       "schemaTo": "public",
-      "tableTo": "issue",
+      "tableTo": "user",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "task_issue_id_issue_id_fkey",
+      "name": "task_assignee_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "task"
     },
     {
       "nameExplicit": false,
-      "columns": ["conversation_id"],
+      "columns": ["creator_agent_id"],
       "schemaTo": "public",
-      "tableTo": "conversations",
+      "tableTo": "coding_agent",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "plan_conversation_id_conversations_id_fk",
+      "name": "task_creator_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "task"
@@ -12890,6 +15723,45 @@
       "entityType": "fks",
       "schema": "public",
       "table": "task_board"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "task_number_counter_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "task_number_counter"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["task_id"],
+      "schemaTo": "public",
+      "tableTo": "task",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "task_issue_task_id_task_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "task_issue"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["linked_by"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "task_issue_linked_by_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "task_issue"
     },
     {
       "nameExplicit": false,
@@ -12916,6 +15788,45 @@
       "entityType": "fks",
       "schema": "public",
       "table": "task_pin"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_section_entry_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["coding_agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_section_entry_coding_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["section_id"],
+      "schemaTo": "public",
+      "tableTo": "task_section",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_section_entry_section_id_task_section_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_section_entry"
     },
     {
       "nameExplicit": false,
@@ -12984,6 +15895,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "token_pull_request_poll_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -13043,6 +15967,19 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "voice_sessions_user_id_user_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "voice_sessions_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "voice_sessions"
@@ -13113,9 +16050,35 @@
       "table": "workspace_integration_connection"
     },
     {
-      "columns": ["user_id", "provider"],
       "nameExplicit": false,
-      "name": "account_provider_key_user_id_provider_pk",
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "workspace_token_repository_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["added_by_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "workspace_token_repository_added_by_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "columns": ["user_id", "provider", "kind"],
+      "nameExplicit": true,
+      "name": "account_provider_key_pkey",
       "entityType": "pks",
       "schema": "public",
       "table": "account_provider_key"
@@ -13143,6 +16106,22 @@
       "entityType": "pks",
       "schema": "public",
       "table": "admin_favorite"
+    },
+    {
+      "columns": ["user_id", "repository"],
+      "nameExplicit": false,
+      "name": "github_repository_read_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "columns": ["provider", "external_id"],
+      "nameExplicit": false,
+      "name": "integration_installation_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "integration_installation"
     },
     {
       "columns": ["task_id", "seq"],
@@ -13175,6 +16154,14 @@
       "entityType": "pks",
       "schema": "public",
       "table": "task_pin"
+    },
+    {
+      "columns": ["user_id", "coding_agent_id"],
+      "nameExplicit": false,
+      "name": "agent_section_entry_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "agent_section_entry"
     },
     {
       "columns": ["user_id", "task_id"],
@@ -13215,6 +16202,30 @@
       "entityType": "pks",
       "schema": "public",
       "table": "workspace_integration_connection"
+    },
+    {
+      "columns": ["user_id"],
+      "nameExplicit": false,
+      "name": "account_chatgpt_host_pkey",
+      "schema": "public",
+      "table": "account_chatgpt_host",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "agent_browser_tab_pkey",
+      "schema": "public",
+      "table": "agent_browser_tab",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "attachment_pkey",
+      "schema": "public",
+      "table": "attachment",
+      "entityType": "pks"
     },
     {
       "columns": ["id"],
@@ -13355,14 +16366,6 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "chat_attachment_pkey",
-      "schema": "public",
-      "table": "chat_attachment",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
       "name": "chat_channel_pkey",
       "schema": "public",
       "table": "chat_channel",
@@ -13409,11 +16412,19 @@
       "entityType": "pks"
     },
     {
+      "columns": ["agent_id"],
+      "nameExplicit": false,
+      "name": "coding_agent_runner_lease_pkey",
+      "schema": "public",
+      "table": "coding_agent_runner_lease",
+      "entityType": "pks"
+    },
+    {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "conversation_attachment_pkey",
+      "name": "coding_agent_wakeup_pkey",
       "schema": "public",
-      "table": "conversation_attachment",
+      "table": "coding_agent_wakeup",
       "entityType": "pks"
     },
     {
@@ -13441,19 +16452,19 @@
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
+      "columns": ["user_id"],
       "nameExplicit": false,
-      "name": "inbox_item_pkey",
+      "name": "github_personal_token_pkey",
       "schema": "public",
-      "table": "inbox_item",
+      "table": "github_personal_token",
       "entityType": "pks"
     },
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "inbox_attachment_pkey",
+      "name": "inbox_item_pkey",
       "schema": "public",
-      "table": "inbox_attachment",
+      "table": "inbox_item",
       "entityType": "pks"
     },
     {
@@ -13475,17 +16486,33 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "installed_skill_pkey",
+      "schema": "public",
+      "table": "installed_skill",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "installed_skill_file_pkey",
+      "schema": "public",
+      "table": "installed_skill_file",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "integration_connection_pkey",
       "schema": "public",
       "table": "integration_connection",
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
+      "columns": ["state_hash"],
       "nameExplicit": false,
-      "name": "issue_pkey",
+      "name": "integration_install_intent_pkey",
       "schema": "public",
-      "table": "issue",
+      "table": "integration_install_intent",
       "entityType": "pks"
     },
     {
@@ -13505,19 +16532,27 @@
       "entityType": "pks"
     },
     {
-      "columns": ["user_id"],
+      "columns": ["id"],
       "nameExplicit": false,
-      "name": "personal_workspace_pkey",
+      "name": "operator_notice_pkey",
       "schema": "public",
-      "table": "personal_workspace",
+      "table": "operator_notice",
       "entityType": "pks"
     },
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "plan_attachment_pkey",
+      "name": "operator_wake_pkey",
       "schema": "public",
-      "table": "plan_attachment",
+      "table": "operator_wake",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["user_id"],
+      "nameExplicit": false,
+      "name": "personal_workspace_pkey",
+      "schema": "public",
+      "table": "personal_workspace",
       "entityType": "pks"
     },
     {
@@ -13555,9 +16590,9 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "preview_fork_pkey",
+      "name": "pull_request_chapters_pkey",
       "schema": "public",
-      "table": "preview_fork",
+      "table": "pull_request_chapters",
       "entityType": "pks"
     },
     {
@@ -13625,11 +16660,35 @@
       "entityType": "pks"
     },
     {
+      "columns": ["organization_id"],
+      "nameExplicit": false,
+      "name": "task_number_counter_pkey",
+      "schema": "public",
+      "table": "task_number_counter",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "task_issue_pkey",
+      "schema": "public",
+      "table": "task_issue",
+      "entityType": "pks"
+    },
+    {
       "columns": ["id"],
       "nameExplicit": false,
       "name": "task_section_pkey",
       "schema": "public",
       "table": "task_section",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["agent_id"],
+      "nameExplicit": false,
+      "name": "token_pull_request_poll_pkey",
+      "schema": "public",
+      "table": "token_pull_request_poll",
       "entityType": "pks"
     },
     {
@@ -13654,6 +16713,14 @@
       "name": "voice_sessions_pkey",
       "schema": "public",
       "table": "voice_sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "workspace_token_repository_pkey",
+      "schema": "public",
+      "table": "workspace_token_repository",
       "entityType": "pks"
     },
     {
@@ -13774,11 +16841,39 @@
       "entityType": "uniques"
     },
     {
-      "value": "octet_length(\"bytes\") <= 1500000",
-      "name": "chat_attachment_bytes_bound",
+      "value": "(num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 1 or (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0)) and (\"inbox_message_id\" is null or \"inbox_item_id\" is not null)",
+      "name": "attachment_one_owner",
       "entityType": "checks",
       "schema": "public",
-      "table": "chat_attachment"
+      "table": "attachment"
+    },
+    {
+      "value": "(\"chat_message_id\" is null or octet_length(\"bytes\") <= 1500000) and (\"conversation_id\" is null or octet_length(\"bytes\") <= 4000000) and (not (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\", \"plan_comment_id\") = 0) or octet_length(\"bytes\") <= 1500000)",
+      "name": "attachment_bytes_bound",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "value": "\"plan_comment_id\" is null or (\"task_id\" is not null and \"organization_id\" is not null and \"name\" is not null and \"position\" is not null and octet_length(\"bytes\") <= 3000000)",
+      "name": "attachment_plan_comment_file",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "value": "\"conversation_id\" is null or (\"sha256\" is not null and \"width\" is not null and \"height\" is not null)",
+      "name": "attachment_conversation_picture",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "value": "(\"inbox_item_id\" is null and \"kind\" is null) or (\"inbox_item_id\" is not null and ((\"kind\" = 'image' and octet_length(\"bytes\") <= 1500000 and \"name\" is null and \"position\" is null and \"inbox_message_id\" is null) or (\"kind\" = 'answer' and octet_length(\"bytes\") <= 3000000 and \"name\" is not null and \"position\" is not null and \"inbox_message_id\" is null) or (\"kind\" = 'message' and octet_length(\"bytes\") <= 3000000 and \"name\" is not null and \"position\" is not null and \"inbox_message_id\" is not null)))",
+      "name": "attachment_inbox_kind",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attachment"
     },
     {
       "value": "(\"kind\" = 'dm') = (\"name\" is null)\n        and (\"kind\" = 'dm') = (\"dm_a_member_id\" is not null and \"dm_b_member_id\" is not null)\n        and (\"dm_a_member_id\" is null or \"dm_a_member_id\" < \"dm_b_member_id\")",
@@ -13788,7 +16883,7 @@
       "table": "chat_channel"
     },
     {
-      "value": "(\"kind\" = 'human') = (\"user_id\" is not null)\n        and (\"agent_id\" is null or \"kind\" = 'agent')\n        and (\"task_id\" is null or \"kind\" = 'planner')",
+      "value": "(\"kind\" = 'human') = (\"user_id\" is not null)\n        and (\"agent_id\" is null or \"kind\" = 'agent')",
       "name": "chat_member_id_of_kind",
       "entityType": "checks",
       "schema": "public",
@@ -13802,25 +16897,46 @@
       "table": "chat_message"
     },
     {
-      "value": "octet_length(\"bytes\") <= 4000000",
-      "name": "conversation_attachment_bytes_bound",
+      "value": "(\"scope\" = 'personal' and \"owner_user_id\" is not null and \"organization_id\" is null) or (\"scope\" = 'workspace' and \"organization_id\" is not null and \"owner_user_id\" is null)",
+      "name": "installed_skill_scope_owner",
       "entityType": "checks",
       "schema": "public",
-      "table": "conversation_attachment"
+      "table": "installed_skill"
     },
     {
-      "value": "(\"kind\" = 'image' and octet_length(\"bytes\") <= 1500000 and \"name\" is null and \"position\" is null and \"message_id\" is null) or (\"kind\" = 'answer' and octet_length(\"bytes\") <= 3000000 and \"name\" is not null and \"position\" is not null and \"message_id\" is null) or (\"kind\" = 'message' and octet_length(\"bytes\") <= 3000000 and \"name\" is not null and \"position\" is not null and \"message_id\" is not null)",
-      "name": "inbox_attachment_kind_bound",
+      "value": "char_length(\"name\") <= 64 and \"name\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'",
+      "name": "installed_skill_name_rule",
       "entityType": "checks",
       "schema": "public",
-      "table": "inbox_attachment"
+      "table": "installed_skill"
     },
     {
-      "value": "octet_length(\"bytes\") <= 1500000",
-      "name": "plan_attachment_bytes_bound",
+      "value": "\"path\" <> '' and left(\"path\", 1) <> '/' and \"path\" !~ '(^|/)\\.\\.?(/|$)' and position(chr(92) in \"path\") = 0",
+      "name": "installed_skill_file_relative",
       "entityType": "checks",
       "schema": "public",
-      "table": "plan_attachment"
+      "table": "installed_skill_file"
+    },
+    {
+      "value": "octet_length(\"bytes\") <= 1048576 and (\"path\" <> 'SKILL.md' or octet_length(\"bytes\") <= 65536)",
+      "name": "installed_skill_file_bytes_bound",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "installed_skill_file"
+    },
+    {
+      "value": "\"task_id\" is not null or \"agent_id\" is not null",
+      "name": "plan_page_version_owner",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "plan_page_version"
+    },
+    {
+      "value": "\"provider\" <> 'github' or (\"repository\" is not null and \"number\" is not null)",
+      "name": "task_issue_github_numbered",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "task_issue"
     }
   ],
   "renames": []

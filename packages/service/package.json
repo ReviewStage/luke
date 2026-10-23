@@ -11,7 +11,6 @@
     "./accounts/own-api-key": "./src/accounts/own-api-key.js",
     "./accounts/provider-key-rewrap": "./src/accounts/provider-key-rewrap.js",
     "./accounts/provider-keys-app": "./src/accounts/provider-keys-app.js",
-    "./accounts/workspace-environment-app": "./src/accounts/workspace-environment-app.js",
     "./accounts/workspace-members": "./src/accounts/workspace-members.js",
     "./accounts/workspaces-app": "./src/accounts/workspaces-app.js",
     "./admin/admin-access": "./src/admin/admin-access.js",
