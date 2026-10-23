@@ -13,6 +13,10 @@ import {
   ATTACHMENT_CHIP_STATE,
   AttachmentChip,
   type AttachmentChipState,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
   PictureTile,
   SPINNER_SIZE,
   Spinner,
@@ -328,14 +332,20 @@ function SetTile({
             )
           }
         >
-          <span className="picture-set-frame" style={{ aspectRatio: aspect }}>
+          <Card
+            as={CARD_ELEMENT.SPAN}
+            corner={CARD_CORNER.CONTROL}
+            padding={CARD_PADDING.FLUSH}
+            className="picture-set-frame"
+            style={{ aspectRatio: aspect }}
+          >
             {shown.picture === undefined ? (
               <TileFace state={undefined} words={words} />
             ) : (
               <TilePicture door={door} picture={shown.picture} words={words} />
             )}
             {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
-          </span>
+          </Card>
         </PictureTile>
       </Tooltip>
     </span>
@@ -387,7 +397,10 @@ function VideoPlayer({
 }): ReactNode {
   const url = useBlobUrl(dataUrl);
   return (
-    <span
+    <Card
+      as={CARD_ELEMENT.SPAN}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
       className="picture-frame"
       style={{ aspectRatio: `${String(picture.width)} / ${String(picture.height)}` }}
     >
@@ -405,7 +418,7 @@ function VideoPlayer({
           preload="metadata"
         />
       )}
-    </span>
+    </Card>
   );
 }
 

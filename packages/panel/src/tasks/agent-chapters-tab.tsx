@@ -12,6 +12,11 @@ import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings
 import {
   BUTTON_VARIANT,
   Button,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_TONE,
@@ -452,7 +457,13 @@ function KeyChangeItem({
 }): React.JSX.Element {
   const first = firstLineRef(change.lineRefs, paths);
   return (
-    <li className="chapter-key-change">
+    <Card
+      as={CARD_ELEMENT.LI}
+      look={CARD_LOOK.OUTLINE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      className="chapter-key-change"
+    >
       <div className="chapter-key-change-words">
         <TranscriptWords text={change.content} />
       </div>
@@ -463,7 +474,7 @@ function KeyChangeItem({
           {lineRefLabel(first)}
         </TextButton>
       )}
-    </li>
+    </Card>
   );
 }
 

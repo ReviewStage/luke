@@ -1,9 +1,11 @@
 /* card.css -- a card's edge, corner, and ground, and the room inside it for
-   each padding choice; what it holds sets itself. */
+   each padding choice; what it holds sets itself. A card standing in running
+   words (a span) is still a block. */
 
 @layer components {
   .luke-card {
     position: relative;
+    display: block;
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-card-radius);
     background: var(--luke-color-surface);
@@ -11,9 +13,20 @@
   }
 
   /* Note that a flush card clips what it holds, because content drawn to its
-     edge would otherwise paint square corners over the card's round ones. */
+     edge would otherwise paint square corners over the card's round ones; it
+     clips without becoming a scroller, so a focus inside never scrolls it. */
   .luke-card[data-padding="flush"] {
-    overflow: hidden;
+    overflow: clip;
+    padding: 0;
+  }
+
+  /* A ring inside a card that clips is drawn inside its control, where the
+     clip cannot cut it. */
+  .luke-card[data-padding="flush"]:not([data-look="raised"]) {
+    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  }
+
+  .luke-card[data-padding="none"] {
     padding: 0;
   }
 
@@ -23,6 +36,26 @@
 
   .luke-card[data-padding="compact"] {
     padding: var(--luke-card-inset-compact) var(--luke-card-inset);
+  }
+
+  .luke-card[data-corner="control"] {
+    border-radius: var(--luke-control-radius);
+  }
+
+  .luke-card[data-look="tint"] {
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-card[data-look="code"] {
+    background: var(--luke-color-code-ground);
+  }
+
+  .luke-card[data-look="outline"] {
+    background: none;
+  }
+
+  .luke-card[data-dashed="true"] {
+    border-style: dashed;
   }
 
   .luke-card[data-look="raised"] {

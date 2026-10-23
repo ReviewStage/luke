@@ -1,10 +1,13 @@
 import {
+  BoardIcon,
   CircleCheckIcon,
   DISCLOSURE_BODY,
+  DISCLOSURE_LOOK,
   DISCLOSURE_SUMMARY,
   Disclosure,
   DisclosureAction,
   DisclosureBody,
+  DisclosureChevron,
   DisclosureSummary,
   EllipsisIcon,
   FoldChevronIcon,
@@ -20,8 +23,9 @@ import { CatalogSection } from "../section";
  * disclosures.tsx -- a fold closed and open, its body indented under the
  * summary's words or flush with the row, a fold whose holder keeps its
  * state, a summary long enough to wrap in a pane narrower than its words,
- * a summary holding a control that is pressed without folding it, and a
- * chip at the end of its row counting the threads it folds.
+ * a summary holding a control that is pressed without folding it, a
+ * chip at the end of its row counting the threads it folds, and a fold
+ * drawn as a card, its chevron leading its head or ending it.
  */
 
 /** A fold whose summary ends with a ⋯ in its action slot, which counts its presses rather than folding the row. */
@@ -155,6 +159,32 @@ function Disclosures(): React.JSX.Element {
       <CatalogSection id="disclosure-chip" title="Chip at the row's end">
         <div className="catalog-frame catalog-frame-wide">
           <ChipDisclosure />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="disclosure-card" title="A card, its head the line it shows closed">
+        <div className="catalog-frame catalog-frame-wide">
+          <Stack>
+            <Disclosure look={DISCLOSURE_LOOK.CARD} defaultOpen>
+              <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
+                <DisclosureChevron />
+                <span>Plan · Fix token refresh on wake</span>
+              </DisclosureSummary>
+              <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
+                <Text>Refresh the token before the first request after the Mac wakes.</Text>
+              </DisclosureBody>
+            </Disclosure>
+            <Disclosure look={DISCLOSURE_LOOK.CARD}>
+              <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
+                <BoardIcon />
+                <span>2 of 5 done</span>
+                <DisclosureChevron />
+              </DisclosureSummary>
+              <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
+                <Text>Write the failing test</Text>
+                <Text>Refresh on wake</Text>
+              </DisclosureBody>
+            </Disclosure>
+          </Stack>
         </div>
       </CatalogSection>
       <CatalogSection id="disclosure-long" title="Long summary, narrow pane">

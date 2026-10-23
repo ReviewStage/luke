@@ -3,11 +3,23 @@
    until the pointer is over them; its body, in its caller's type, indented
    past the chevron or flush with the row; and the motion a press plays as
    the body lands or leaves, which any fold built on `useDisclosureFold`
-   shares. */
+   shares. A fold may stand as a card: on the hover's wash inside a hairline,
+   its head the one line it shows closed and its body under a hairline. */
 
 @layer components {
   .luke-disclosure {
     min-width: 0;
+  }
+
+  /* A card, clipped to its corners so its head's hover fill follows them and
+     a ring inside it is drawn inside its control, in the caption's type. */
+  .luke-disclosure[data-look="card"] {
+    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+    overflow: clip;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-fill-hover);
+    font-size: var(--luke-type-caption-size);
   }
 
   .luke-disclosure-summary {
@@ -60,6 +72,25 @@
 
   .luke-disclosure-summary[data-look="chip"]:hover {
     background: var(--luke-color-surface);
+  }
+
+  /* A card's head: a 32px line in the card's own ink, inset as its body is,
+     its corners the card's clip. */
+  .luke-disclosure-summary[data-look="head"] {
+    height: 32px;
+    min-height: 0;
+    padding: 0 var(--luke-space-12);
+    border-radius: 0;
+    color: inherit;
+  }
+
+  /* A finger's press is 44px tall, so on a coarse pointer a card's head
+     stands that tall, its words still centred. */
+  @media (pointer: coarse) {
+    .luke-disclosure-summary[data-look="head"] {
+      height: auto;
+      min-height: 44px;
+    }
   }
 
   .luke-disclosure-summary[data-look="chip"] > svg {
@@ -130,6 +161,12 @@
 
   .luke-disclosure-body[data-inset="flush"] {
     padding: var(--luke-space-4);
+  }
+
+  /* Under a card's head, past the hairline under it, at the head's inset. */
+  .luke-disclosure-body[data-inset="card"] {
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border-top: 1px solid var(--luke-color-border);
   }
 
   /* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in

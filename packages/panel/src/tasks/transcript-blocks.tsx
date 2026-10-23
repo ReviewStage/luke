@@ -22,6 +22,9 @@ import {
   type TurnRow,
 } from "@luke/features/turn-rows";
 import {
+  DISCLOSURE_BODY,
+  DISCLOSURE_LOOK,
+  DISCLOSURE_SUMMARY,
   Disclosure,
   DisclosureBody,
   DisclosureChevron,
@@ -113,7 +116,7 @@ import {
   type ExtraProps,
 } from "streamdown";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref.js";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
+import { FoldBody } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning.js";
 import {
@@ -1189,7 +1192,7 @@ function SentCall({
         subjectIsCode={line.code}
         subjectInBody
       />
-      <FoldBody className="tool-body tool-sent-words">
+      <ToolContent name="tool-sent-words">
         {sent.words === undefined ? null : (
           <div className="tool-sent-block">
             <TranscriptWords text={sent.words} />
@@ -1201,7 +1204,7 @@ function SentCall({
             <TranscriptWords text={sent.note} />
           </div>
         )}
-      </FoldBody>
+      </ToolContent>
     </Tool>
   );
 }
@@ -1341,8 +1344,8 @@ export function TranscriptTodosDock({
   focus: string | undefined;
 }): ReactNode {
   return (
-    <Fold className="todos-dock" data-todos-dock="" aria-label="To-dos">
-      <FoldSummary className="todos-dock-head">
+    <Disclosure look={DISCLOSURE_LOOK.CARD} data-todos-dock="" aria-label="To-dos">
+      <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
         <GlyphSlot>
           <ListTodoIcon />
         </GlyphSlot>
@@ -1360,11 +1363,11 @@ export function TranscriptTodosDock({
         <span className="todos-dock-chevron">
           <DisclosureChevron />
         </span>
-      </FoldSummary>
-      <FoldBody className="todos-dock-body">
+      </DisclosureSummary>
+      <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
         <TodoItems todos={todos} live />
-      </FoldBody>
-    </Fold>
+      </DisclosureBody>
+    </Disclosure>
   );
 }
 
