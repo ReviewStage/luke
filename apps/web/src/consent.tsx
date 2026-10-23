@@ -2,11 +2,11 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { LANDING_TONE } from "@luke/features/landing-outcome";
 import { AuthMark, AuthPage } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
-import { StrictMode, useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
 import { openLukeFromMac } from "./open-luke";
 import "./styles.css";
+import { mountPrerenderedPage } from "./mount-page";
 
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
@@ -45,10 +45,4 @@ function Consent(): React.JSX.Element {
 
 startSiteAnalytics();
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-createRoot(rootElement).render(
-  <StrictMode>
-    <Consent />
-  </StrictMode>,
-);
+mountPrerenderedPage(<Consent />);
