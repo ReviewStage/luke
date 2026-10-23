@@ -270,42 +270,50 @@ export function Disclosure({
   );
 }
 
-/** How a summary is drawn: the quiet row with its chevron, or the file row, whose own controls stand in it and which a rule closes under while the fold is open. */
+/**
+ * How a summary is drawn: the quiet row with its chevron; the file row, whose
+ * own controls stand in it and which a rule closes under while the fold is
+ * open; or a chip at the end of its row, on the surface inside a hairline,
+ * saying in its glyphs and a count what it folds (a line's review threads).
+ */
 export const DISCLOSURE_SUMMARY = {
   QUIET: "quiet",
   ROW: "row",
+  CHIP: "chip",
 } as const;
 export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DISCLOSURE_SUMMARY];
 
 type DisclosureSummaryProps = {
-  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. */
+  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. `CHIP` draws none either, its glyphs saying what it folds. */
   look?: DisclosureSummaryLook;
   children: ReactNode;
-} & Omit<
-  ComponentPropsWithoutRef<"summary">,
-  "className" | "style" | "children" | "onClick" | "aria-expanded"
->;
+} & Omit<ComponentPropsWithoutRef<"summary">, "className" | "style" | "children" | "aria-expanded">;
 
-/** The one line a closed fold shows, which opens and closes it: the chevron, then the caller's glyph and words. */
+/** The one line a closed fold shows, which opens and closes it: the chevron, then the caller's glyph and words; a press is heard by the caller, a hint's, before it folds. */
 export function DisclosureSummary({
   look = DISCLOSURE_SUMMARY.QUIET,
+  onClick,
   children,
   ...props
 }: DisclosureSummaryProps): React.JSX.Element {
   const { open } = useDisclosureState();
-  const click = useDisclosureSummaryClick();
+  const toggle = useDisclosureSummaryClick();
+  const click = (event: MouseEvent<HTMLElement>) => {
+    onClick?.(event);
+    toggle(event);
+  };
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a summary is the platform's own disclosure control, focusable and opened by Enter and Space; the click it already takes is routed to React's state.
     // biome-ignore lint/a11y/useAriaPropsSupportedByRole: a summary is exposed as its details' disclosure button, which takes aria-expanded; the rule's table gives the element no role.
     <summary
       {...props}
       className="luke-disclosure-summary"
-      data-look={look === DISCLOSURE_SUMMARY.ROW ? look : undefined}
+      data-look={look === DISCLOSURE_SUMMARY.QUIET ? undefined : look}
       tabIndex={look === DISCLOSURE_SUMMARY.ROW ? -1 : props.tabIndex}
       aria-expanded={open}
       onClick={click}
     >
-      {look === DISCLOSURE_SUMMARY.ROW ? null : <DisclosureChevron />}
+      {look === DISCLOSURE_SUMMARY.QUIET ? <DisclosureChevron /> : null}
       {children}
     </summary>
   );

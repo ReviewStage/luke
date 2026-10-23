@@ -110,7 +110,6 @@ import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
-import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -880,7 +879,9 @@ export function InboxItemRow({
             <span className="home-row-meta">
               {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
               {context === undefined ? null : (
-                <FadingWords className="home-row-context" words={context} />
+                <OneLine className="home-row-context" words={context}>
+                  {context}
+                </OneLine>
               )}
               {starter === undefined || !face ? null : (
                 <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />

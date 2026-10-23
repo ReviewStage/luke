@@ -32,6 +32,7 @@ import {
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
+  OneLine,
   TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
@@ -80,7 +81,6 @@ import { TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { FadingWords } from "../fading-words.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
@@ -1032,11 +1032,16 @@ function OriginSubject({
   const words =
     subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
   const { url } = subject;
-  if (url === undefined) return <FadingWords className="agent-origin-subject" words={words} />;
+  if (url === undefined)
+    return (
+      <OneLine className="agent-origin-subject" words={words}>
+        {words}
+      </OneLine>
+    );
   const chip = linkChip(url, words, doors);
   if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
-    <FadingWords className="agent-origin-subject" words={words}>
+    <OneLine className="agent-origin-subject" words={words}>
       <TextLink
         href={url}
         look={TEXT_LINK_LOOK.UNDERLINED}
@@ -1047,7 +1052,7 @@ function OriginSubject({
       >
         {words}
       </TextLink>
-    </FadingWords>
+    </OneLine>
   );
 }
 

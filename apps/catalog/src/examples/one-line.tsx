@@ -1,6 +1,7 @@
 /**
  * one-line.tsx -- words held to one line in a narrow column, ending in a
- * fade and in an ellipsis, and a short line that ends on its last letter;
+ * fade and in an ellipsis, a pane's heading and a name in the code face,
+ * and a short line that ends on its last letter;
  * the pointer resting on a line cut short reads it whole in the window's
  * tooltip (`wholeWordsHint`).
  */
@@ -24,6 +25,8 @@ function OneLines(): React.JSX.Element {
           >
             {ADDRESS}
           </OneLine>
+          <OneLine as={ONE_LINE_ELEMENT.H2}>Release notifications for every workspace</OneLine>
+          <OneLine as={ONE_LINE_ELEMENT.CODE}>linear_create_issue_with_attachments</OneLine>
           <OneLine as={ONE_LINE_ELEMENT.SMALL} hint={wholeWordsHint("sam@relay.dev")}>
             sam@relay.dev
           </OneLine>

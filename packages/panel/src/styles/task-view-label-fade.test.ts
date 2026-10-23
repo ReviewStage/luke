@@ -128,7 +128,7 @@ const SITES = [
     draw: (words: string) =>
       drawn(
         createElement(PullRequestLabels, { labels: [{ name: words, color: "0e8a16" }] }),
-        ".pull-request-label-name",
+        ".luke-badge-line",
       ),
   },
 ];
@@ -145,7 +145,7 @@ for (const site of SITES) {
 
 test("a pull request's label pill keeps its own edge and fill whole while its name fades", () => {
   const name = SITES[2]?.draw(LONG) ?? assert.fail("the pill's name");
-  const pill = name.closest<HTMLElement>(".pull-request-label") ?? assert.fail("the pill");
+  const pill = name.closest<HTMLElement>(".luke-badge") ?? assert.fail("the pill");
   assert.equal(ending(name).fades, true);
   assert.equal(ending(pill).fades, false);
 });

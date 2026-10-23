@@ -1,10 +1,10 @@
 import type { ReviewThread } from "@luke/features/coding-agent-wire";
-import { Tooltip } from "@luke/ui";
+import { DISCLOSURE_SUMMARY, DisclosureSummary, Tooltip } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { CircleCheckIcon, CircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { useNamer } from "./pull-request-people.js";
 
 /**
@@ -84,7 +84,7 @@ export function MinimizedChip({
       onOpenChange={onShown}
     >
       <Tooltip label={shown ? CHIP_WORDS.HIDE_HINT : CHIP_WORDS.SHOW_HINT}>
-        <FoldSummary className="diff-thread-chip" aria-label={label}>
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.CHIP} aria-label={label}>
           {resolved === undefined ? null : resolved ? (
             <CircleCheckIcon className="diff-thread-chip-resolved" aria-hidden="true" />
           ) : (
@@ -92,7 +92,7 @@ export function MinimizedChip({
           )}
           <span className="diff-thread-chip-faces">{faces}</span>
           {count}
-        </FoldSummary>
+        </DisclosureSummary>
       </Tooltip>
       <FoldBody className="diff-thread-chip-threads">{children}</FoldBody>
     </Fold>

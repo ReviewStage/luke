@@ -1148,7 +1148,8 @@ test("the description, a comment, a review, and a thread comment wear their reac
     [...(under?.querySelectorAll(REACTION_PILL) ?? [])].map((pill) => [
       pill.textContent,
       pill.getAttribute("aria-label"),
-      pill.getAttribute("aria-pressed") ?? pill.getAttribute("data-mine"),
+      pill.getAttribute("aria-pressed") ??
+        String(pill.querySelector('.luke-badge[data-lit="true"]') !== null),
     ]);
   assert.deepEqual(pills(tab.querySelector('[aria-label="Description"]')), [
     ["👍12", "Charles Pan, you, and 10 more reacted with thumbs up", "true"],
@@ -2808,20 +2809,34 @@ test("its labels stand under the title in their GitHub colours, a fill with word
         }),
     }),
   );
-  const labels = [...tab.querySelectorAll<HTMLElement>(".pull-request-header .pull-request-label")];
+  const labels = [
+    ...tab.querySelectorAll<HTMLElement>(".pull-request-header .pull-request-label > .luke-badge"),
+  ];
   const colour = (at: number, property: string) =>
     labels[at]?.style.getPropertyValue(property) ?? assert.fail(`label ${at} stands`);
   assert.deepEqual(
     labels.map((label) => label.textContent),
     ["bug", "needs review", "blocked", "odd"],
   );
-  assert.equal(colour(0, "--label-fill-light"), "#d73a4a");
-  assert.equal(colour(0, "--label-words-light"), "#ffffff", "a dark fill is written on in white");
-  assert.equal(colour(1, "--label-words-light"), "#24292f", "a light fill is written on dark");
-  assert.equal(colour(0, "--label-fill-dark"), "#d73a4a20");
-  assert.equal(colour(1, "--label-words-dark"), "#fbca04", "a light colour reads as it is");
-  assert.equal(colour(2, "--label-words-dark"), "#999999", "black is lifted to read on the dark");
-  assert.equal(colour(3, "--label-fill-light"), "", "a colour spelled otherwise draws no fill");
+  assert.equal(colour(0, "--luke-badge-fill-light"), "#d73a4a");
+  assert.equal(
+    colour(0, "--luke-badge-words-light"),
+    "#ffffff",
+    "a dark fill is written on in white",
+  );
+  assert.equal(colour(1, "--luke-badge-words-light"), "#24292f", "a light fill is written on dark");
+  assert.equal(colour(0, "--luke-badge-fill-dark"), "#d73a4a20");
+  assert.equal(colour(1, "--luke-badge-words-dark"), "#fbca04", "a light colour reads as it is");
+  assert.equal(
+    colour(2, "--luke-badge-words-dark"),
+    "#999999",
+    "black is lifted to read on the dark",
+  );
+  assert.equal(
+    colour(3, "--luke-badge-fill-light"),
+    "",
+    "a colour spelled otherwise draws no fill",
+  );
 });
 
 test("a pull request with no labels spends no line on them: its label picker stands beside the reviewers' picker, and its labels, once it has some, close that same line", async () => {
@@ -3756,7 +3771,9 @@ test("Files changed draws each review thread under its line, its comments throug
   );
   assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
   await minimize();
-  const chip = note.querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("a chip stands");
+  const chip =
+    note.querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
+    assert.fail("a chip stands");
   assert.equal(chip.getAttribute("aria-label"), "1 comment by Charles Pan · 1 open, show");
   assert.equal(
     note.querySelector(".pull-request-thread-comment"),
@@ -3767,7 +3784,7 @@ test("Files changed draws each review thread under its line, its comments throug
   await settle();
   assert.ok(note.querySelector(".pull-request-thread-comment"), "the chip shows the line's thread");
   assert.equal(
-    note.querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
+    note.querySelector(".diff-thread-chip-row > summary")?.getAttribute("aria-label"),
     "1 comment by Charles Pan · 1 open, hide",
   );
 });
@@ -3861,7 +3878,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
   act(() => minimize.click());
   await settle();
   const chip =
-    note.querySelector<HTMLElement>(".diff-thread-chip") ??
+    note.querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
     assert.fail("the threads are minimized");
   const litFrom = () => lists.at(-1)?.selected?.selection.start;
   act(() => {
@@ -3890,7 +3907,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     shown.dispatchEvent(
       new MouseEvent("mouseout", {
         bubbles: true,
-        relatedTarget: note.querySelector(".diff-thread-chip"),
+        relatedTarget: note.querySelector(".diff-thread-chip-row > summary"),
       }),
     );
   });

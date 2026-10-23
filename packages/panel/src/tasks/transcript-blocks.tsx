@@ -32,6 +32,7 @@ import {
   InlineRef,
   LineButton,
   LineSummary,
+  OneLine,
   ProviderMark,
   Shimmer,
   TEXT_ELEMENT,
@@ -45,7 +46,6 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-m
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -1427,16 +1427,13 @@ export function TranscriptSubagent({
   card,
   body,
 }: TranscriptSubagentProps): ReactNode {
-  const [words, clipped] = useClipped(job);
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
       <GlyphSlot>
         <SubagentMark model={pair?.choice.model} />
       </GlyphSlot>
-      <span ref={words} className="subagent-job" data-overflow={String(clipped)}>
-        {job}
-      </span>
+      <OneLine className="subagent-job">{job}</OneLine>
       {pair === undefined ? null : (
         <span className="subagent-pair" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />

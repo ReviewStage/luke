@@ -31,6 +31,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import {
   AnchoredPopover,
+  Badge,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
@@ -185,8 +186,8 @@ function ReactionPill({
     <li>
       <Tooltip label={words}>
         {press === undefined ? (
-          <span className="pull-request-reaction" data-mine={mine} role="img" aria-label={words}>
-            {inner}
+          <span className="pull-request-reaction" role="img" aria-label={words}>
+            <Badge lit={mine}>{inner}</Badge>
           </span>
         ) : (
           <Chip

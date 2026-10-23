@@ -1129,8 +1129,8 @@
 }
 
 /* A call's ends (../tasks/call-card.tsx): a rule across the log carrying a
-   pill in its middle, on no band of its own, so it reads as one of the
-   transcript's dividers, only louder. The pill says what happened in the
+   badge in its middle, on no band of its own, so it reads as one of the
+   transcript's dividers, only louder. The badge says what happened in the
    body ink and when in the muted one. */
 .call-marker {
   display: flex;
@@ -1149,16 +1149,20 @@
   background: var(--luke-color-border);
 }
 
+/* The pill is `@luke/ui`'s Badge, in the live green while the call stands;
+   its words keep to one line, cut short rather than wrapped. */
 .call-marker-pill {
-  display: inline-flex;
+  display: flex;
   min-width: 0;
   flex: 0 1 auto;
+  margin: 0;
+}
+
+.call-marker-line {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: var(--luke-space-6);
-  margin: 0;
-  padding: var(--luke-space-2) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-full);
   white-space: nowrap;
 }
 
@@ -1174,21 +1178,8 @@
 }
 
 .call-marker-icon {
-  display: inline-flex;
-  width: 14px; /* off-scale: the voice mark at the pill's words */
-  height: 14px;
+  display: flex;
   flex: none;
-  color: var(--luke-color-text-muted);
-}
-
-.call-marker-icon > svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* A standing call's waveform wears the live green, as its Live mark does. */
-.call-marker-icon[data-live] {
-  color: var(--luke-color-complete);
 }
 
 /* "Live": a dot and the word in the live green. */
@@ -3148,32 +3139,6 @@
   margin: 0;
 }
 
-/* The pending comments the member's review holds, counted at the corner of
-   the bar's Review glyph as stage-cli's badge counts them, so the count
-   stands on the press whether its word is drawn or folded away. */
-.pull-request-review-mark {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-}
-
-.pull-request-review-count {
-  position: absolute;
-  top: calc(-1 * var(--luke-space-8));
-  inset-inline-start: calc(100% - var(--luke-space-6));
-  min-width: var(--luke-space-16);
-  padding: 0 var(--luke-space-4);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-accent);
-  box-shadow: 0 0 0 2px var(--luke-color-ground);
-  color: var(--luke-color-on-accent);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-semibold);
-  line-height: var(--luke-space-16);
-  text-align: center;
-}
-
 .pull-request-review-foot {
   display: flex;
   justify-content: flex-end;
@@ -3287,10 +3252,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Its labels under the title, each a pill in its GitHub colour
-   (`pull-request-labels.tsx`): a tint with its words in the colour on the
-   dark ground, a solid fill on the light one; one whose colour GitHub
-   spelled otherwise stands quiet. */
+/* Its labels under the title, each `@luke/ui`'s Badge filled with its
+   GitHub colour (`pull-request-labels.tsx`), never wider than the row. */
 .pull-request-labels {
   display: flex;
   flex-wrap: wrap;
@@ -3301,31 +3264,9 @@
 }
 
 .pull-request-label {
+  display: flex;
+  min-width: 0;
   max-width: 100%;
-  overflow: hidden;
-  padding: 1px var(--luke-space-8);
-  border: 1px solid;
-  border-color: light-dark(
-    var(--label-edge-light, var(--luke-color-border)),
-    var(--label-edge-dark, var(--luke-color-border))
-  );
-  border-radius: var(--luke-radius-full);
-  background: light-dark(var(--label-fill-light, transparent), var(--label-fill-dark, transparent));
-  color: light-dark(
-    var(--label-words-light, var(--luke-color-text-muted)),
-    var(--label-words-dark, var(--luke-color-text-muted))
-  );
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-caption-leading);
-  white-space: nowrap;
-}
-
-/* A label's name is cut by a box of its own inside the pill, so its fade
-   (below) leaves the pill's edge and fill whole. */
-.pull-request-label-name {
-  display: block;
-  overflow: hidden;
 }
 
 /* The labels at the end of the header's line of people, after the
@@ -3696,7 +3637,7 @@
 }
 
 /* A line's review threads minimized to one chip (minimized-threads.tsx), as
-   stage-cli draws them: the chip, its fold's summary, floats up over the end
+   stage-cli draws them: the chip, its fold's summary, stands up over the end
    of the line in a row of no height while closed, so the diff reads as if the
    line held no comments, and a note holding the fold alone keeps no padding
    of its own. Open, the chip stands at the end of its own row over the
@@ -3710,45 +3651,20 @@
   padding-block: 0;
 }
 
+/* The fold lays its chip, `@luke/ui`'s chip summary, at the end of its
+   row: closed, in a row of no height, its foot just over the line's own;
+   open, over the threads it shows. */
 .diff-thread-chip-row {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
 }
 
 .diff-thread-chip-row:not([open], [data-above]) {
   height: 0;
-}
-
-.diff-thread-chip {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  width: fit-content;
-  margin-inline-start: auto;
-  padding: var(--luke-space-2) var(--luke-space-6);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.diff-thread-chip:hover {
-  color: var(--luke-color-text);
-}
-
-.diff-thread-chip-row:not([open], [data-above]) > .diff-thread-chip {
-  position: absolute;
-  right: 0;
-  bottom: var(--luke-space-2);
-}
-
-.diff-thread-chip-row[open] > .diff-thread-chip {
-  margin-bottom: var(--luke-space-4);
-}
-
-.diff-thread-chip > svg {
-  width: var(--luke-space-12);
-  height: var(--luke-space-12);
+  flex-direction: row;
+  align-items: flex-end;
+  translate: 0 calc(-1 * var(--luke-space-2));
 }
 
 .diff-thread-chip-faces {
@@ -3937,25 +3853,10 @@
   color: var(--luke-color-text-subtle);
 }
 
-/* A state the card is in, in its tone's tint, as a badge is drawn. */
-.annotation-card-chip {
-  --annotation-chip-ink: var(--luke-color-text-muted);
-  display: inline-flex;
+/* A state the card is in, `@luke/ui`'s Badge, never giving way. */
+.annotation-card-state {
+  display: flex;
   flex: none;
-  align-items: center;
-  padding: 0 var(--luke-space-6);
-  border-radius: var(--luke-radius-full);
-  background: color-mix(in srgb, var(--annotation-chip-ink) 12%, transparent);
-  color: color-mix(in srgb, var(--annotation-chip-ink) 80%, var(--luke-color-text));
-  font-weight: var(--luke-weight-medium);
-}
-
-.annotation-card-chip[data-tone="attention"] {
-  --annotation-chip-ink: var(--luke-color-attention);
-}
-
-.annotation-card-chip[data-tone="complete"] {
-  --annotation-chip-ink: var(--luke-color-complete);
 }
 
 .annotation-card-count {
@@ -4027,22 +3928,6 @@
 /* The replies a read left on GitHub, in the words' column. */
 .annotation-card-more {
   margin: var(--luke-space-8) 0 0 calc(var(--annotation-face) + var(--annotation-gap));
-}
-
-/* A narrow card: the age steps out, a state is a dot whose word is its hint
-   and stays its name, and the count drops its word, so the head keeps to
-   its one line. */
-@container annotation (max-width: 439px) {
-  .annotation-card-time {
-    display: none;
-  }
-
-  .annotation-card-chip {
-    width: var(--luke-space-8);
-    height: var(--luke-space-8);
-    padding: 0;
-    background: var(--annotation-chip-ink);
-  }
 }
 
 /* A thread's ⋯ stands at the end of its head. */
@@ -4138,8 +4023,7 @@
 /* The reactions under a description or a comment, as GitHub draws them:
    a row of pills, each its emoji and how many gave it, the reader's own lit.
    A pill the reader may press is `@luke/ui`'s compact filter Chip; one they
-   may not is a count drawn here in the same look, lit in the accent as a
-   pressed one is. */
+   may not is a Badge, lit in the ink as a pressed one is. */
 .pull-request-reactions {
   display: flex;
   flex-wrap: wrap;
@@ -4156,16 +4040,7 @@
 }
 
 .pull-request-reaction {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-2) var(--luke-space-8);
-  border: 1px solid var(--luke-color-chip-edge);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-chip);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+  display: flex;
 }
 
 .pull-request-reaction-count {
@@ -4189,14 +4064,6 @@
 .pull-request-reaction-emoji {
   font-size: var(--luke-type-dialog-size);
   line-height: 1;
-}
-
-/* The reader's own reaction, where it cannot be pressed, stands as a
-   pressed compact filter does, in the ink. */
-.pull-request-reaction[data-mine="true"] {
-  border-color: var(--luke-color-ink);
-  background: var(--luke-color-ink);
-  color: var(--luke-color-ink-inverse);
 }
 
 /* The comment box at the foot of the Conversation
@@ -4417,7 +4284,7 @@ ol.transcript-list {
 
 /* Note that a chip after the label gives way first, since a name cut at its
    end still reads. */
-.tool-label[data-chipped] {
+.tool-label-chipped {
   flex-shrink: 0;
 }
 
@@ -4450,11 +4317,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* The subject takes what is left of the line and fades where the line cuts
-   it, over the last `--label-fade` as a cut label's (desktop.css). Note
-   that it is drawn without measuring the words, unlike a label's
-   (`use-clipped.ts`), because the subject's box takes the line's whole rest
-   whatever it holds, so words that stop short end before the fade begins,
-   and words still streaming in reach it without a resize to measure. */
+   it, over the last `--label-fade` as a cut label's (`@luke/ui`'s OneLine).
+   Note that it is drawn without measuring the words, unlike a label's,
+   because the subject's box takes the line's whole rest whatever it holds,
+   so words that stop short end before the fade begins, and words still
+   streaming in reach it without a resize to measure. */
 .tool-subject {
   min-width: 0;
   flex: 1 1 0;
@@ -4463,41 +4330,16 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   white-space: nowrap;
 }
 
-/* A label of the task's views cut short fades out over its last
-   `--label-fade` rather than ending in an ellipsis, as a tab's does
-   (desktop.css). Only one measured cut short (`use-clipped.ts`) fades,
-   because each box ends where its words do, so a fade always on would eat
-   a short label's last letters. */
-.tool-label[data-overflow="true"],
-.plan-card-title[data-overflow="true"],
-.replay-card-title[data-overflow="true"],
-.page-view-title[data-overflow="true"],
-.terminal-tab-agent[data-overflow="true"],
-.agent-servers-name[data-overflow="true"],
-.agent-servers-page-title[data-overflow="true"],
-.pull-request-label-name[data-overflow="true"],
-.attachment-viewer-title[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
-}
-
-/* A label's name stands in its own direction (`<bdi>`), so a right-to-left
-   one is cut at its left and fades there. */
-.pull-request-label-name:dir(rtl)[data-overflow="true"] {
-  mask-image: linear-gradient(to right, transparent, #000 var(--label-fade));
-}
-
 .tool-subject[data-code] {
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
 }
 
+/* Where the call ran, `@luke/ui`'s Badge at the line's end, never giving
+   way. */
 .tool-place {
-  flex-shrink: 0;
-  padding-inline: var(--luke-space-4);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
+  display: flex;
+  flex: none;
 }
 
 /* The body under an open line, set in past its icon: a card holding the

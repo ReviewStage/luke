@@ -229,7 +229,8 @@ test("the lines a File tab was opened on are lit, and an agent's note stands und
 test("with Minimize inline comments on, an agent's note stands behind a chip with the mark, which shows it, and I in the tab turns the setting", async () => {
   handSettings({ diffMinimizeComments: true });
   const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
-  const chip = () => noteSlot(container).querySelector<HTMLElement>(".diff-thread-chip");
+  const chip = () =>
+    noteSlot(container).querySelector<HTMLElement>(".diff-thread-chip-row > summary");
 
   assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, show");
   assert.ok(chip()?.querySelector(".luke-face"));

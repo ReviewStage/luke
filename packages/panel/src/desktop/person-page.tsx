@@ -51,7 +51,6 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
-import { FadingWords } from "../fading-words.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
@@ -208,7 +207,9 @@ function AgentRow({
       title={subject.name}
       meta={
         <span className="home-row-meta">
-          <FadingWords className="home-row-context" words={task.name} />
+          <OneLine className="home-row-context" words={task.name}>
+            {task.name}
+          </OneLine>
           {agent.at === undefined ? null : <Time at={agent.at} now={now} />}
         </span>
       }
@@ -362,10 +363,12 @@ function AutomationRow({
       title={automation.name}
       meta={
         <span className="home-row-meta">
-          <FadingWords
+          <OneLine
             className="home-row-context"
             words={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-          />
+          >
+            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
+          </OneLine>
         </span>
       }
       onPress={onOpen}

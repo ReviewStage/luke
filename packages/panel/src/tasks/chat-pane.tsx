@@ -76,7 +76,6 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
-import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { SendingAgent } from "./agent-ref.js";
@@ -740,9 +739,7 @@ function Byline({
           <ActorRef actor={actor} nameOnly />
         )}
       </span>
-      {where === undefined ? null : (
-        <FadingWords className="chat-byline-where">{where}</FadingWords>
-      )}
+      {where === undefined ? null : <OneLine className="chat-byline-where">{where}</OneLine>}
       <Time className="chat-time" at={at} />
       {action}
     </div>
