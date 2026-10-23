@@ -955,8 +955,8 @@
   outline: none;
 }
 
-/* A replay card's foot: the branch, the pull request, and the way to the
-   whole transcript, over a dashed rule. */
+/* A replay card's foot: the branch and the pull request, over a dashed
+   rule. */
 .replay-foot {
   display: flex;
   flex-wrap: wrap;
