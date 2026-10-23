@@ -1379,6 +1379,9 @@ importers:
 
   tools/codex-probe:
     dependencies:
+      '@luke/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
       '@luke/service':
         specifier: workspace:*
         version: link:../../packages/service
