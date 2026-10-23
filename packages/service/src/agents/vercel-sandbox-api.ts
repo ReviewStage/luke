@@ -40,7 +40,8 @@ import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
+import { EXCESS_KEYS, unparsedWire } from "../core.js";
+import { jsonOf } from "../http/http-effect.js";
 
 /** The tag eve sets on every session's sandbox, its value the session's id; a sandbox Luke opens itself carries it too. */
 export const SESSION_TAG = "sessionId";
@@ -786,12 +787,6 @@ function callApi(
     Effect.scoped,
     Effect.mapError((cause) => new SandboxUnavailable({ call, detail: causeDetail(cause) })),
   );
-}
-
-/** A body's JSON, or nothing a reader takes where it is none. */
-function jsonOf(text: string): UnparsedWireValue {
-  const parsed = Result.try(() => JSON.parse(text));
-  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
 }
 
 /**

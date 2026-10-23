@@ -13,16 +13,9 @@
   --color-foreground: var(--luke-color-text);
   --color-muted: var(--luke-color-fill-hover);
   --color-muted-foreground: var(--luke-color-text-muted);
-  --color-secondary: var(--luke-color-fill-strong);
-  --color-secondary-foreground: var(--luke-color-text);
   --color-primary: var(--luke-color-text);
   --color-primary-foreground: var(--luke-color-ink-inverse);
   --color-border: var(--luke-color-border);
-  --color-selected-edge: var(--luke-color-border-selected);
-  --color-card: var(--luke-color-sidebar);
-  --color-well: var(--luke-color-well);
-  --color-luke: var(--voice-luke);
-  --color-danger: var(--luke-color-danger-text);
   /* The switch's own inks, which the palette keeps apart from the accent. */
   --color-switch-track: var(--luke-color-switch-track);
   --color-switch-on: var(--luke-color-switch-on);

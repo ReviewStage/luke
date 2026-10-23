@@ -45,6 +45,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import {
   readCodingAgentOfConversation,
   takeCodingAgentMentionedServers,
@@ -70,7 +71,6 @@ import {
   type IntegrationConnect,
 } from "../../integrations/integration-connect.js";
 import {
-  INTEGRATION_ROW_STATUS,
   type IntegrationConnectionRow,
   readIntegrationConnections,
 } from "../../integrations/integration-store.js";

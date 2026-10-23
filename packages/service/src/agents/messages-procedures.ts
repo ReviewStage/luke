@@ -63,11 +63,12 @@ import { readEither } from "@luke/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
 import { Effect, Option, Result, Schema } from "effect";
-import { unparsedWire, wireUuidSchema } from "../core.js";
+import { unparsedWire } from "../core.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
@@ -110,18 +111,9 @@ export interface MessagesProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
 }
 
-/** The row an id names, or none where it is no UUID. */
-const uuidNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
-
 /** The agent the path names, where the account is a member of its workspace, its conversation targeted under the member who started it; not found otherwise. */
 const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, id: string) {
-  const agentId = yield* uuidNamed(id);
+  const agentId = yield* pathUuid(id);
   const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const target: ConversationTarget = {
@@ -218,7 +210,7 @@ const partAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   message: string,
   index: string,
 ) {
-  const messageId = yield* uuidNamed(message);
+  const messageId = yield* pathUuid(message);
   const at = yield* indexNamed(index);
   const part = yield* hostedStoreOrUnavailable(wholePartOf(target, CODER_TOOL_SET, messageId, at));
   if (Option.isNone(part) || !isRecord(part.value)) {

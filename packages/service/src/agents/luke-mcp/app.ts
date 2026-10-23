@@ -42,7 +42,13 @@ import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { EXCESS_KEYS, isRecord, type UnparsedWireValue, type WireRecord } from "@luke/wire";
+import {
+  EXCESS_KEYS,
+  HTTP_METHOD,
+  isRecord,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -110,8 +116,6 @@ const SERVER_VERSION = "1.0.0";
 
 /** The most a request body may hold: past every tool input's own bound, and under the platform's. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 /** The header a client names the negotiated protocol version in, on every request after `initialize`. */
 const PROTOCOL_VERSION_HEADER = "mcp-protocol-version";

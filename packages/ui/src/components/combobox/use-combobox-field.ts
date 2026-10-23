@@ -1,4 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { isComposingKey } from "../../composing-key.js";
 
 /**
  * use-combobox-field.ts -- the keys and the names of a field that steers a list while the caret stays in it, which `Combobox` and the desktop's searchable menu share.
@@ -37,14 +38,6 @@ export type ComboboxKey = ReactKeyboardEvent<HTMLElement> | KeyboardEvent;
 export interface ComboboxField {
   readonly field: ComboboxFieldProps;
   readonly onKeyDown: (event: ComboboxKey) => boolean;
-}
-
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: ComboboxKey): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  const native = "nativeEvent" in event ? event.nativeEvent : event;
-  return native.isComposing || event.keyCode === 229;
 }
 
 /**
@@ -100,7 +93,7 @@ export function useComboboxField(input: {
   const onKeyDown = (event: ComboboxKey): boolean => {
     // Note that an Escape an input method is composing with is kept from the
     // surface behind even with the list shut, because it cancels candidates.
-    const ime = composing(event);
+    const ime = isComposingKey(event);
     if (event.key === "Escape" && (open || ime)) event.stopPropagation();
     if (ime) return false;
     const moved = open

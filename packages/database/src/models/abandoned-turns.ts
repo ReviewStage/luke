@@ -72,6 +72,17 @@ const AbandonedTurnRowSchema = Schema.Struct({
   cancelRequestedAt: Schema.NullOr(Schema.Date),
 });
 
+/** What every read of turns to settle selects: a lost turn and when a Stop was asked of it. */
+const ABANDONED_TURN_COLUMNS = {
+  id: turns.id,
+  userId: turns.userId,
+  conversationId: turns.conversationId,
+  cancelRequestedAt: turns.cancelRequestedAt,
+};
+
+/** A turn joined to the conversation it stands in. */
+const TURN_CONVERSATION = eq(conversations.id, turns.conversationId);
+
 /** The running turns started before the instant of their conversation's kind, or whose Stop was asked before its own instant, longest running first, of conversations still standing; a cleared conversation's turns go with its purge. */
 const abandonedTurns = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -84,14 +95,9 @@ const abandonedTurns = SqlSchema.findAll({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({
-          id: turns.id,
-          userId: turns.userId,
-          conversationId: turns.conversationId,
-          cancelRequestedAt: turns.cancelRequestedAt,
-        })
+        .select(ABANDONED_TURN_COLUMNS)
         .from(turns)
-        .innerJoin(conversations, eq(conversations.id, turns.conversationId))
+        .innerJoin(conversations, TURN_CONVERSATION)
         .where(
           and(
             eq(turns.status, TURN_STATUS.RUNNING),
@@ -133,14 +139,9 @@ const endedSessionTurns = SqlSchema.findAll({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({
-          id: turns.id,
-          userId: turns.userId,
-          conversationId: turns.conversationId,
-          cancelRequestedAt: turns.cancelRequestedAt,
-        })
+        .select(ABANDONED_TURN_COLUMNS)
         .from(turns)
-        .innerJoin(conversations, eq(conversations.id, turns.conversationId))
+        .innerJoin(conversations, TURN_CONVERSATION)
         .where(
           and(
             eq(conversations.runtimeSessionId, request.runtimeSessionId),
@@ -179,14 +180,9 @@ const agentRunningTurns = SqlSchema.findAll({
   execute: ({ conversationId }) =>
     Database.use((db) =>
       db
-        .select({
-          id: turns.id,
-          userId: turns.userId,
-          conversationId: turns.conversationId,
-          cancelRequestedAt: turns.cancelRequestedAt,
-        })
+        .select(ABANDONED_TURN_COLUMNS)
         .from(turns)
-        .innerJoin(conversations, eq(conversations.id, turns.conversationId))
+        .innerJoin(conversations, TURN_CONVERSATION)
         .where(
           and(
             eq(turns.conversationId, conversationId),

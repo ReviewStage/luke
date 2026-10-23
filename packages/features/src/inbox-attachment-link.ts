@@ -1,6 +1,7 @@
 import { isLinkHome, LINK_HOME } from "./link-home.js";
 import { type LINK_PLACE, type LinkPlace, linkOf } from "./luke-link.js";
 import { insideCode } from "./mention-link.js";
+import { parsedUrl } from "./parsed-url.js";
 
 /**
  * inbox-attachment-link.ts -- a picture in an Inbox item's Markdown as its address on tryluke.dev: written, read back, and found in the item's words.
@@ -68,15 +69,6 @@ export type InboxItemPlace = Extract<LinkPlace, { readonly kind: typeof LINK_PLA
 export interface InboxAttachmentRef {
   readonly itemId: string;
   readonly attachmentId: string;
-}
-
-/** The address parsed, or nothing for text that is no URL; a constructor, since `URL.canParse` is missing from Safari before 17. */
-function parsedUrl(address: string): URL | undefined {
-  try {
-    return new URL(address);
-  } catch {
-    return undefined;
-  }
 }
 
 /** The picture's address: the item's own link under the workspace given, its id after it. */

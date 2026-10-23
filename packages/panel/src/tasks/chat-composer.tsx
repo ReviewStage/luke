@@ -36,6 +36,7 @@ import {
   type MentionNode,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
+import { useFileDrop } from "../use-file-drop.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -114,11 +115,6 @@ const PICKS_IMAGES = "image/*";
 
 /** Why a file that is no image did not come, in the words the box's note says. */
 const NOT_IMAGE = (name: string) => `${name} can't be attached. Attach images.`;
-
-/** Whether a drag carries files, which is all the card takes from one. */
-function carriesFiles(event: React.DragEvent): boolean {
-  return event.dataTransfer.types.includes("Files");
-}
 
 /** What the box says where a post of its words would address more members than a post tells. */
 const CROWDED = `Only ${CHAT_BOUNDS.MAX_STEERS_PER_POST} members are notified of a post.`;
@@ -431,7 +427,7 @@ function EditorChatComposer({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
-  const [dropping, setDropping] = useState(false);
+  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
   const {
     draft,
     setDraft,
@@ -491,30 +487,14 @@ function EditorChatComposer({
     onChoose: (mention) => editor.current?.chooseMention(mention),
   });
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
       ref={card}
       className="agent-composer chat-composer"
       data-compact={String(compact === true)}
-      onDragOver={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        // A drag moving onto one of the card's own children has not left it.
-        const into = event.relatedTarget;
-        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(false);
-        attach(Array.from(event.dataTransfer.files));
-      }}
+      {...fileDrop.target}
     >
       <PromptInput
-        dropping={dropping}
+        dropping={fileDrop.dropping}
         onSubmit={() => {
           refocus.current = card.current?.contains(document.activeElement) === true;
           send();

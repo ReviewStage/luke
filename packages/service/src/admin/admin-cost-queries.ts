@@ -24,18 +24,7 @@ import {
   COST_SOURCE,
 } from "@luke/features/admin-cost-wire";
 import type { AdminMetricsScope, AdminMetricsWindow } from "@luke/features/admin-wire";
-import {
-  and,
-  count,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNotNull,
-  type SQLWrapper,
-  sql,
-  sum,
-} from "drizzle-orm";
+import { and, count, eq, gt, gte, isNotNull, type SQLWrapper, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -49,12 +38,13 @@ import {
   priceCostUsage,
   topCostAccountIds,
 } from "./admin-cost.js";
+import { dayStart } from "./admin-metrics.js";
 import {
   AdminMetricsScopeSchema,
   AggregateColumnSchema,
+  findAccountFaces,
   keptByScope,
   NullableAggregateColumnSchema,
-  UserRoleSchema,
 } from "./admin-queries.js";
 
 const UsageFilterSchema = Schema.Struct({
@@ -272,30 +262,6 @@ const findMergedPullRequests = SqlSchema.findAll({
     ),
 });
 
-const findAccounts = SqlSchema.findAll({
-  Request: Schema.Array(Schema.String),
-  Result: Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    email: Schema.String,
-    image: Schema.NullOr(Schema.String),
-    role: UserRoleSchema,
-  }),
-  execute: (ids) =>
-    Database.use((db) =>
-      db
-        .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-        })
-        .from(user)
-        .where(inArray(user.id, [...ids])),
-    ),
-});
-
 function secondsRows(
   source: AdminCostSecondsRow["source"],
   rows: readonly (typeof SecondsRowSchema.Type & { model?: string | null })[],
@@ -321,7 +287,7 @@ export function readAdminCostUsage(input: {
   return Effect.gen(function* () {
     const fetchStartDay = costWindowKeys(input.now, input.windowDays).prior[0] ?? "";
     const filter: UsageFilter = {
-      fetchStart: new Date(`${fetchStartDay}T00:00:00.000Z`),
+      fetchStart: dayStart(fetchStartDay),
       fetchStartDay,
       scope: input.scope,
       userId: input.userId ?? null,
@@ -375,7 +341,7 @@ export function readAdminCost(input: {
     const offered = Result.isSuccess(read) ? read.success : [];
     const priced = priceCostUsage(usage, offered);
     const ids = topCostAccountIds(priced, input.now, input.windowDays);
-    const rows = ids.length === 0 ? [] : yield* findAccounts(ids);
+    const rows = ids.length === 0 ? [] : yield* findAccountFaces(ids);
     const accounts = new Map<string, AdminCostAccountInfo>(
       rows.map((row) => [
         row.id,

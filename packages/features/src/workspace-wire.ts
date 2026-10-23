@@ -1,8 +1,13 @@
-import { Schema as EffectSchema, Result } from "effect";
-import { Base64 } from "effect/encoding";
+import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { sniffImageType } from "./image-signature.js";
 import { LINEAR_BOUNDS, linearIdentifierSchema } from "./linear-wire.js";
+import {
+  PICTURE_TYPE,
+  type Picture,
+  type PictureType,
+  pictureOfDataUrl,
+  pictureTypeSchema,
+} from "./picture-wire.js";
 import { countedNumber } from "./service-wire.js";
 import { workspaceIdSchema } from "./task-wire.js";
 
@@ -137,20 +142,16 @@ export const WORKSPACE_BOUNDS = {
 } as const;
 
 /**
- * The image types a workspace's photo may be: kept as a `data:` URL of one
- * of them, served as its bytes under it, and drawn by a window from a `data:`
- * URL of its own making.
+ * The image types a workspace's photo may be: a picture's (`picture-wire.ts`),
+ * kept as a `data:` URL of one of them, served as its bytes under it, and drawn
+ * by a window from a `data:` URL of its own making.
  */
-export const WORKSPACE_PHOTO_TYPE = {
-  PNG: "image/png",
-  JPEG: "image/jpeg",
-  WEBP: "image/webp",
-} as const;
+export const WORKSPACE_PHOTO_TYPE = PICTURE_TYPE;
 
-export type WorkspacePhotoType = (typeof WORKSPACE_PHOTO_TYPE)[keyof typeof WORKSPACE_PHOTO_TYPE];
+export type WorkspacePhotoType = PictureType;
 
 /** A workspace photo's media type as the wire carries it. */
-export const workspacePhotoTypeSchema = EffectSchema.Literals(Object.values(WORKSPACE_PHOTO_TYPE));
+export const workspacePhotoTypeSchema = pictureTypeSchema;
 
 export const WORKSPACE_PHOTO_BOUNDS = {
   /**
@@ -161,32 +162,17 @@ export const WORKSPACE_PHOTO_BOUNDS = {
   MAX_BYTES: 100_000,
 } as const;
 
-/** A photo as a `data:` URL spells it: its media type, then its bytes in base64. */
-const PHOTO_DATA_URL = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/u;
-
-const isPhotoType = EffectSchema.is(workspacePhotoTypeSchema);
-
 /** A workspace's photo, as its bytes under its media type. */
-export interface WorkspacePhoto {
-  readonly contentType: WorkspacePhotoType;
-  readonly bytes: Uint8Array;
-}
+export type WorkspacePhoto = Picture;
 
 /**
  * The photo a `data:` URL holds, where its type is one of
- * `WORKSPACE_PHOTO_TYPE` and its base64 reads; nothing for any other text.
- * The one reading of a photo's URL, for the photo set and the photo kept.
+ * `WORKSPACE_PHOTO_TYPE` and its bytes read as that image; nothing for any
+ * other text. The one reading of a photo's URL, for the photo set and the
+ * photo kept.
  */
-export function workspacePhotoOfDataUrl(text: string): WorkspacePhoto | undefined {
-  const [, contentType, base64] = PHOTO_DATA_URL.exec(text) ?? [];
-  if (contentType === undefined || base64 === undefined || !isPhotoType(contentType)) {
-    return undefined;
-  }
-  const bytes = Base64.decode(base64);
-  // Note that the bytes must be the image the label names, because a tile draws them as one.
-  if (Result.isFailure(bytes) || sniffImageType(bytes.success) !== contentType) return undefined;
-  return { contentType, bytes: bytes.success };
-}
+export const workspacePhotoOfDataUrl: (text: string) => WorkspacePhoto | undefined =
+  pictureOfDataUrl;
 
 /** A photo to set, as the `data:` URL it is kept as: one `workspacePhotoOfDataUrl` reads, within `WORKSPACE_PHOTO_BOUNDS.MAX_BYTES`. */
 const workspacePhotoUrlSchema = EffectSchema.String.check(

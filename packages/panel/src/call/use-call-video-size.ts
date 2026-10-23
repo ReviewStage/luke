@@ -9,8 +9,9 @@
  * is read.
  */
 
-import { Option, Schema } from "effect";
+import { Schema } from "effect";
 import { useCallback, useState } from "react";
+import { readKept, writeKept } from "../kept-storage.js";
 
 /**
  * The video's heights in CSS pixels: the least at which Luke's face still
@@ -26,8 +27,6 @@ export const CALL_VIDEO_HEIGHT = {
 /** Where the height is kept in the renderer's storage. */
 const STORAGE_KEY = "luke.callVideoHeight";
 
-const decodeHeight = Schema.decodeUnknownOption(Schema.FiniteFromString);
-
 /** A height held to the video's bounds, in whole pixels. */
 function clampCallVideoHeight(height: number): number {
   return Math.min(CALL_VIDEO_HEIGHT.MAX, Math.max(CALL_VIDEO_HEIGHT.MIN, Math.round(height)));
@@ -35,14 +34,8 @@ function clampCallVideoHeight(height: number): number {
 
 /** The kept height, or the default where none is kept, it no longer reads, or storage refuses the read. */
 function readHeight(): number {
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    // The default stands.
-  }
   return clampCallVideoHeight(
-    Option.getOrElse(decodeHeight(stored), () => CALL_VIDEO_HEIGHT.DEFAULT),
+    readKept(STORAGE_KEY, Schema.FiniteFromString, CALL_VIDEO_HEIGHT.DEFAULT),
   );
 }
 
@@ -52,12 +45,7 @@ export function useCallVideoHeight(): { height: number; onResize: (height: numbe
   const onResize = useCallback((asked: number) => {
     const kept = clampCallVideoHeight(asked);
     setHeight(kept);
-    // A write that fails costs only the preference, so it is not worth a word on screen.
-    try {
-      window.localStorage.setItem(STORAGE_KEY, String(kept));
-    } catch {
-      // The video keeps the height it holds.
-    }
+    writeKept(STORAGE_KEY, Schema.FiniteFromString, kept);
   }, []);
   return { height, onResize };
 }

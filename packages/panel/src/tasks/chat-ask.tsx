@@ -7,7 +7,7 @@ import {
   type ChatResponse,
   knownResponse,
 } from "@luke/features/chat-wire";
-import type { InboxAsk } from "@luke/features/inbox-wire";
+import { type InboxAsk, inboxResponseAsk } from "@luke/features/inbox-wire";
 import {
   CARD_LOOK,
   CARD_PADDING,
@@ -33,7 +33,6 @@ import {
   chatAnswers,
   chatAskHolds,
   chatAskMissing,
-  chatAskOf,
   chatAskReply,
   chatAskWaitsOn,
   chatNumberedPick,
@@ -422,7 +421,7 @@ export function AskCard({
       </div>
     );
   }
-  const asked = chatAskOf(response);
+  const asked = inboxResponseAsk(response);
   const mine = message.authorId === chat.self;
   const answerable = open && !mine && answers;
   const named = chatAskWaitsOn(chat, message);

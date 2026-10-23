@@ -32,7 +32,7 @@ import {
   invalid,
   RefusedRefusal,
 } from "@luke/gateway";
-import { type UnparsedWireValue, unparsedWire, type WireValue } from "@luke/wire";
+import { unparsedWire, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
   Data,
@@ -41,7 +41,7 @@ import {
   FiberMap,
   Result,
   Schedule,
-  type Schema,
+  Schema,
   type Scope,
   Stream,
 } from "effect";
@@ -199,16 +199,11 @@ interface Connection {
 /** The most typing a reopening connection holds for its next socket; typing past it is let go, as a terminal far behind would. */
 const TYPED_WHILE_AWAY_MAX_BYTES = 64 * 1024;
 
-const readServiceFrame = readEither(terminalRelayServiceFrameSchema);
+const readServiceFrame = readEither(Schema.fromJsonString(terminalRelayServiceFrameSchema));
 
 /** A text frame as the relay's own, or nothing where it is not JSON this build reads. */
 function serviceFrame(text: string) {
-  try {
-    const parsed: UnparsedWireValue = unparsedWire(JSON.parse(text));
-    return Result.getOrUndefined(readServiceFrame(parsed));
-  } catch {
-    return undefined;
-  }
+  return Result.getOrUndefined(readServiceFrame(unparsedWire(text)));
 }
 
 /** The relay's resize frame for a connection's size as it stands. */

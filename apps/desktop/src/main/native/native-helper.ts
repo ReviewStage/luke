@@ -36,8 +36,8 @@ function nativeDirectory(): string {
   return resolvedNativeDirectory;
 }
 
-/** The one path resolver for executable helpers. */
-function nativeHelperPath(binary: string): string {
+/** The one path resolver for the native files beside the app: its executable helpers and its addon. */
+export function nativeHelperPath(binary: string): string {
   return path.join(nativeDirectory(), binary);
 }
 

@@ -1255,6 +1255,41 @@ test("Search lists the listed workspace's plans first, then every other workspac
   );
 });
 
+test("a task's key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
+  const stage = { id: "workspace-stage", name: "Stage", role: WORKSPACE_ROLE.OWNER, github: null };
+  const task = (number: number, name: string) => ({
+    id: `task-${number}`,
+    workspaceId: stage.id,
+    number,
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "stage/luke",
+  });
+  const sent: string[] = [];
+  openPalette(
+    tasksControl({
+      workspaces: [stage],
+      workspace: stage,
+      tasks: [task(421, "Cut the release"), task(42, "Billing usage alerts from the meter")],
+      onSelect: (taskId) => {
+        sent.push(taskId);
+      },
+    }),
+  );
+  chooseFilter("Tasks");
+  type("stag-42");
+
+  assert.deepEqual(rows(), [
+    "Billing usage alerts from the meter · stage/luke",
+    "Cut the release · stage/luke",
+  ]);
+  type("STAG-421");
+  assert.deepEqual(rows()[0], "Cut the release · stage/luke");
+  press("Cut the release · stage/luke");
+  assert.deepEqual(sent, ["task-421"]);
+});
+
 test("a task wears who is on it at its row's end, a teammate by face, no one on the dashed mark, the reader nothing, and is found by its assignee's name or its creator's, which the row then says", () => {
   const charles = { userId: "user-charles", name: "Charles Pan" };
   const dean = { userId: "user-dean", name: "Dean Stratakos" };

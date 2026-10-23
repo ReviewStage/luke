@@ -9,6 +9,7 @@ import {
 } from "./integration-wire.js";
 import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
+import { parsedUrl } from "./parsed-url.js";
 import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
 
 /**
@@ -452,20 +453,6 @@ function decodedSteps(steps: readonly string[]): string | undefined {
 /** A target's path read back from its steps, its leading slash and, for a folder, its trailing one taken off. */
 function decodedPath(pathname: string): string | undefined {
   return decodedSteps(pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/"));
-}
-
-/**
- * A target read as an address, or nothing where it is none. Note that it is
- * `new URL` caught rather than `URL.parse`, because the web app
- * reads a link in whatever browser opened it, and Safari before 18 has no
- * `URL.parse`.
- */
-function parsedUrl(target: string): URL | undefined {
-  try {
-    return new URL(target);
-  } catch {
-    return undefined;
-  }
 }
 
 /** A heading's anchor before it is told apart from an earlier heading's: GitHub's spelling of it. */

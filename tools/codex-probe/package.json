@@ -9,6 +9,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@luke/credentials": "workspace:*",
     "@luke/service": "workspace:*",
     "@luke/wire": "workspace:*",
     "@vercel/sandbox": "3.8.0"

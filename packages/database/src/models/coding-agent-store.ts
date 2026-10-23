@@ -44,7 +44,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
 import {
@@ -158,10 +158,8 @@ import type { ConversationTarget } from "./writer.js";
  * database of its own.
  */
 
-type CodingAgentStoreFailure = QueryError | Schema.SchemaError;
-
 /** What a coding agent store operation answers: an effect over the ambient client, composed into whatever called it. */
-export type CodingAgentStoreEffect<A> = Effect.Effect<A, CodingAgentStoreFailure, DatabaseServices>;
+export type CodingAgentStoreEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /** One coding agent as the service holds it: what the tabs read, and what the agent's own turns run on. */
 export interface CodingAgent {
@@ -1761,7 +1759,7 @@ const deleteConversationRow = SqlSchema.void({
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
-): Effect.Effect<Option.Option<CodingAgentStarted>, CodingAgentStoreFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<CodingAgentStarted>, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -1854,9 +1852,7 @@ export function discardCodingAgent(
 /** What a delete that stopped the agent first tells it. */
 export interface CodingAgentDeleteGuard<R> {
   /** Whether the agent, read under its conversation's lock, still stands as the caller's Stop left it; false refuses the delete. */
-  readonly standsStopped: (
-    agent: CodingAgent,
-  ) => Effect.Effect<boolean, CodingAgentStoreFailure, R>;
+  readonly standsStopped: (agent: CodingAgent) => Effect.Effect<boolean, StoreFailure, R>;
   /** Run under that lock before anything is deleted, given the agent's conversation, as a task's delete runs its own. */
   readonly beforeDelete: TaskDeleteGuard<R>["beforeDelete"];
 }
@@ -1920,7 +1916,7 @@ export function deleteCodingAgent<R = never>(
   guard: CodingAgentDeleteGuard<R>,
 ): Effect.Effect<
   Option.Option<{ readonly txid: string }>,
-  CodingAgentStoreFailure | TaskAgentUnstopped,
+  StoreFailure | TaskAgentUnstopped,
   DatabaseServices | R
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -2266,7 +2262,7 @@ export function dispatchMentioningServers<E, R>(
   agentId: string,
   mentioned: readonly string[],
   dispatch: Effect.Effect<boolean, E, R>,
-): Effect.Effect<boolean, E | CodingAgentStoreFailure, R | DatabaseServices> {
+): Effect.Effect<boolean, E | StoreFailure, R | DatabaseServices> {
   if (mentioned.length === 0) return dispatch;
   return Effect.gen(function* () {
     const locked = yield* lockReachableMentionedServers({ userId, agentId });
