@@ -412,14 +412,15 @@ function ShownSet({
   shown: readonly ShownPicture[];
 }): ReactNode {
   const { open, viewer } = useViewer(door);
-  const kept = shown.flatMap((each) =>
+  const videos = shown.filter(isShownVideo);
+  const stills = shown.filter((each) => !isShownVideo(each));
+  // Note that the viewer walks them in the order they are drawn, videos first, rather than the order the call named them.
+  const kept = [...videos, ...stills].flatMap((each) =>
     each.picture === undefined
       ? []
       : [{ picture: each.picture, words: each.caption === "" ? each.name : each.caption }],
   );
   const openAt = (id: string) => open(kept, id);
-  const videos = shown.filter(isShownVideo);
-  const stills = shown.filter((each) => !isShownVideo(each));
   return (
     <>
       {videos.map((each, index) => (

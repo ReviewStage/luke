@@ -535,6 +535,69 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
   }
 });
 
+test("a call that shows a recording between two pictures draws it first, and the viewer walks the call as it is drawn", async () => {
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = () => "blob:interleaved-1";
+  URL.revokeObjectURL = () => undefined;
+  try {
+    const before = picture(1200, 720);
+    const video = { ...picture(1280, 800), mediaType: CONVERSATION_MEDIA_TYPE.WEBM };
+    const after = picture(1200, 720);
+    const { container } = await drawn(
+      finished([
+        toolPart(
+          "show_image",
+          "call-interleaved",
+          {
+            images: [
+              { path: "shots/before.png", caption: "Before" },
+              { path: "/tmp/video/flow.webm", caption: "The flow" },
+              { path: "shots/after.png", caption: "After" },
+            ],
+          },
+          { status: "accepted", pictures: [before, video, after] },
+        ),
+      ]),
+      false,
+      (id) =>
+        Promise.resolve(
+          id === video.id
+            ? { contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }
+            : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" },
+        ),
+    );
+
+    act(() =>
+      container
+        .querySelector("video")
+        ?.closest(".picture-block")
+        ?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]')
+        ?.click(),
+    );
+    const shownNow = () => [
+      document.querySelector('[role="dialog"] .attachment-viewer-title')?.textContent,
+      document.querySelector('[role="dialog"] .attachment-viewer-place')?.textContent,
+    ];
+    const next = () =>
+      act(() =>
+        document
+          .querySelector('[role="dialog"]')
+          ?.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
+          ),
+      );
+    assert.deepEqual(shownNow(), ["The flow.webm", "1 of 3"]);
+    next();
+    assert.deepEqual(shownNow(), ["Before.png", "2 of 3"]);
+    next();
+    assert.deepEqual(shownNow(), ["After.png", "3 of 3"]);
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
+});
+
 test("a recording a finished browser call kept plays under its row, out of the turn's fold, its caption under it, and its Expand opens the viewer", async () => {
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
