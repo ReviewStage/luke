@@ -8,6 +8,11 @@
    vocabulary, no app maps a name to a role of its own, and no second gray or
    hairline is invented. Only the tokens something draws with. */
 @theme inline {
+  /* Note that Tailwind's numeric scale (`p-4`, `gap-2`) is a multiple of
+     one step, which it measures in rem; the step is the base scale's 4px
+     here, because the desktop's root type is 13px, under which a rem step
+     would put every numeric utility off the scale. */
+  --spacing: var(--luke-space-4);
   --font-mono: var(--luke-font-mono);
   --color-background: var(--luke-color-overlay);
   --color-foreground: var(--luke-color-text);
