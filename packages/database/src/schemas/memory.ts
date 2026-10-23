@@ -20,7 +20,7 @@ import { organization, user } from "./auth.js";
  * row, and the row leaves with its workspace.
  *
  * A private memory is the one exception to all of that: `private_to` names
- * the one member whose agents recall it, the member's own preferences and
+ * the one member whose operator recalls it, the member's own preferences and
  * what they are juggling, and no teammate reads, corrects, or forgets it. It
  * is that member's, not the workspace's, so it leaves with their account.
  */

@@ -6,6 +6,7 @@ import {
   rememberMemory,
   type StoredMemory,
 } from "@luke/database/models/memory-store";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { MEMORY_BOUNDS, memoryIdSchema } from "@luke/features/memory-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { describeWire } from "@luke/wire/effect";
@@ -14,6 +15,7 @@ import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from ".
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
+  AGENT_CALLER,
   type CodingAgentCall,
   type CodingAgentToolServices,
   callerUserId,
@@ -30,8 +32,11 @@ import {
  * the service's own record of the agent (`runAgentRemember`,
  * `runAgentRecall`); the model names neither, so no input carries a
  * workspace or an account. Every member's agents in the workspace share the
- * one memory, but for a memory kept `private`, which only its member's own
- * agents recall, and no agent of another workspace reads it. Only a root coding
+ * one memory, and no agent of another workspace reads it. A memory kept
+ * `private` is its member's alone, so only their operator keeps and recalls
+ * one: its transcript is the one no teammate reads, where a coder's is read
+ * by every member of the workspace, so a coder neither keeps a private memory
+ * nor is ever answered one (`MemoryCall.readsPrivate`). Only a root coding
  * agent is offered them, never a worker handed one job, since what the
  * workspace keeps is the judgment of an agent that heard its developer. A
  * memory is prior context, not a rule: the developer's words now win, and a
@@ -45,10 +50,12 @@ import {
  * embedding stands behind it.
  */
 
-/** What a memory call acts in: the agent's workspace, and the member whose words it keeps. */
+/** What a memory call acts in: the agent's workspace, the member whose words it keeps, and whether it reaches their private memories. */
 export interface MemoryCall {
   readonly workspaceId: string;
   readonly userId: string;
+  /** Whether the agent's transcript is its member's alone, their operator's, the one place a private memory may be recalled into. */
+  readonly readsPrivate: boolean;
 }
 
 const MEMORY_TOOL_BOUNDS = {
@@ -129,7 +136,7 @@ const REMEMBER_INPUT = Schema.Struct({
     describeWire(
       Schema.Boolean,
       "True to keep it for the developer alone, such as their own preferences or what they are " +
-        "juggling, so only their own agents recall it; leave it out for what the workspace shares.",
+        "juggling, so only their operator recalls it; leave it out for what the workspace shares.",
     ),
   ),
 });
@@ -162,6 +169,10 @@ const MEMORY_REFUSAL = {
     "Correct an existing memory with replaces instead.",
   UNAVAILABLE: "Memory is unavailable right now; carry on without it.",
   OFF: "Memory is off for this agent's developer; carry on without it.",
+  PRIVATE:
+    "Not remembered: only the developer's operator keeps a private memory, because their " +
+    "teammates can read this agent's transcript. Keep it shared if the team should know it, " +
+    "and otherwise leave it.",
 } as const;
 
 /** The tools as a coding agent is offered them: each its name, its words, and its input schema. */
@@ -171,9 +182,9 @@ export const REMEMBER_TOOL = {
     "Keep a fact or convention for the workspace's later work, in any repository. Every member " +
     "of the workspace shares what you keep: a decision the team settled, how the team builds, " +
     "tests, or ships, a constraint someone stated, or a fact you confirmed in the code that a " +
-    "later agent would otherwise have to rediscover. Set private for what is the developer's " +
-    "alone, such as their own preferences or what they are juggling: only their own agents " +
-    "recall it. Keep only what was settled, will still hold next time, and helps the team or, " +
+    "later agent would otherwise have to rediscover. As the developer's operator, set private " +
+    "for what is theirs alone, such as their own preferences or what they are juggling: only " +
+    "their operator recalls it, and no other agent keeps one. Keep only what was settled, will still hold next time, and helps the team or, " +
     "kept private, the developer, never a guess, an idea still being weighed, this task's own " +
     "detail, a remark about one member kept shared, or anything that would be a credential, " +
     "key, token, or password. When what was said contradicts a memory recall answered, pass " +
@@ -188,7 +199,8 @@ export const RECALL_TOOL = {
   name: AGENT_TOOL.RECALL,
   description:
     "Search what the workspace's agents remembered: the settled facts and conventions every " +
-    "member shares, and the developer's own private memories, each marked private. Call it once the task comes into focus, with a few words for the " +
+    "member shares, and, for the developer's operator alone, their private memories, each " +
+    "marked private. Call it once the task comes into focus, with a few words for the " +
     "area at hand, and again when a new area comes up; with no query it answers the memories " +
     "kept most recently. Treat what it answers as prior context, not as rules: the developer's " +
     "words now win, and a memory they contradict is corrected with " +
@@ -262,6 +274,11 @@ function rankMemories(
     .map((scored) => scored.memory);
 }
 
+/** Whose private memories a call reads: its member's where it reaches them, and none otherwise, which reads the shared ones alone. */
+function readerOf(call: MemoryCall): string | null {
+  return call.readsPrivate ? call.userId : null;
+}
+
 /** A store that could not be reached is the one refusal, logged for the operator and said to the model, so the turn carries on. */
 const orUnavailable = <R>(
   effect: Effect.Effect<WireRecord, StoreFailure, R>,
@@ -278,10 +295,14 @@ export function runRemember(
   const asked = readRemember(input);
   if (Result.isFailure(asked)) return Effect.succeed(rejected(MEMORY_REFUSAL.UNREADABLE_REMEMBER));
   const { text, replaces, private: privately = false } = asked.success;
+  if (privately && !call.readsPrivate) return Effect.succeed(rejected(MEMORY_REFUSAL.PRIVATE));
   if (looksLikeCredential(text)) return Effect.succeed(rejected(MEMORY_REFUSAL.CREDENTIAL));
   return orUnavailable(
     Effect.map(
-      rememberMemory(call.workspaceId, call.userId, text, replaces, privately),
+      rememberMemory(call.workspaceId, call.userId, text, replaces, {
+        privately,
+        readsPrivate: call.readsPrivate,
+      }),
       (outcome): WireRecord => {
         switch (outcome.kind) {
           case MEMORY_OUTCOME.NOT_FOUND:
@@ -308,7 +329,7 @@ export function runRecall(
   const asked = readRecall(input);
   if (Result.isFailure(asked)) return Effect.succeed(rejected(MEMORY_REFUSAL.UNREADABLE_RECALL));
   return orUnavailable(
-    Effect.map(listMemories(call.workspaceId, call.userId), (memories) => ({
+    Effect.map(listMemories(call.workspaceId, readerOf(call)), (memories) => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       memories: rankMemories(memories, asked.success.query).map(memoryRecord),
       total: memories.length,
@@ -335,7 +356,11 @@ function agentMemory(
       if (!(yield* memoryOnFor(userId))) return rejected(MEMORY_REFUSAL.OFF);
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) return rejected(MEMORY_REFUSAL.UNAVAILABLE);
-      return yield* run({ workspaceId: workspace.value, userId });
+      // Note that only an operator reaches private memories, because a coder's transcript is read by every member of the workspace.
+      const readsPrivate =
+        call.caller.kind === AGENT_CALLER.AGENT &&
+        call.caller.agent.kind === CODING_AGENT_KIND.OPERATOR;
+      return yield* run({ workspaceId: workspace.value, userId, readsPrivate });
     }),
   );
 }

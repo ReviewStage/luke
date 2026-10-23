@@ -4341,6 +4341,28 @@ test("while its starter has Memory off, a coding agent's remember and recall are
   );
 });
 
+test("a private memory is kept and recalled by its member's operator alone: their own coding agent, whose transcript teammates read, is never answered it and may not keep one", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const luke = await operatorOn(agents.caller.userId, workspaceId);
+  const preference = "Wants a one-line summary before any merge.";
+  await turnMemoryOn(agents.caller.userId);
+  const asLuke = await peerCaller(host, luke, eve.services);
+  const asCoder = await peerCaller(host, agents.caller, eve.services);
+
+  const kept = await asLuke(CODER_TOOL.REMEMBER, { text: preference, private: true });
+  const refused = await asCoder(CODER_TOOL.REMEMBER, { text: "Prefers tabs.", private: true });
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.deepEqual(recalledWords(await asLuke(CODER_TOOL.RECALL, { query: "summary" })), [
+    preference,
+  ]);
+  assert.deepEqual(recalledWords(await asCoder(CODER_TOOL.RECALL, { query: "summary" })), []);
+  assert.deepEqual(recalledWords(await asCoder(CODER_TOOL.RECALL, {})), []);
+});
+
 test("remember and recall are a coding agent's alone, never a worker's", () => {
   assert.deepEqual(
     [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL].map((tool) => [

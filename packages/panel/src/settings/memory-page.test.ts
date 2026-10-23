@@ -248,7 +248,7 @@ test("a private memory is marked Only you, a shared one is not, and its Forget s
       ) ?? assert.fail("no Forget in the ⋯")
     ).click(),
   );
-  assert.match(dialog().textContent ?? "", /None of your agents will recall it/u);
+  assert.match(dialog().textContent ?? "", /Your Luke will not recall it again/u);
 });
 
 test("a memory whose member's account is gone reads as kept by a former member", async () => {

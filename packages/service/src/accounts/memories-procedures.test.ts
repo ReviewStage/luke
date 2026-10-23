@@ -70,7 +70,8 @@ const openTeam = Effect.gen(function* () {
       ),
   });
   const ask = (request: Request) => answer(procedures, request);
-  const keep = (userId: string, text: string) => runRemember({ workspaceId, userId }, { text });
+  const keep = (userId: string, text: string) =>
+    runRemember({ workspaceId, userId, readsPrivate: false }, { text });
   return { owner, teammate, outsider, workspaceId, ask, keep };
 });
 
@@ -153,7 +154,10 @@ it.layer(getTestDB())("the memories procedures", (it) => {
       Effect.gen(function* () {
         const { owner, teammate, workspaceId, ask, keep } = yield* openTeam;
         yield* keep(owner, TESTS_RUN);
-        yield* runRemember({ workspaceId, userId: teammate }, { text: DEPLOYS, private: true });
+        yield* runRemember(
+          { workspaceId, userId: teammate, readsPrivate: true },
+          { text: DEPLOYS, private: true },
+        );
 
         const asTeammate = memoriesOf(yield* ask(readMemories(teammate, workspaceId))).memories;
         const privateOne = asTeammate.find((memory) => memory.private);
@@ -196,7 +200,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         const ownForgotten = yield* ask(forget(teammate, workspaceId, deploys.id));
         const again = yield* ask(forget(teammate, workspaceId, deploys.id));
         const recalled = yield* runRecall(
-          { workspaceId, userId: owner },
+          { workspaceId, userId: owner, readsPrivate: false },
           { query: "deployments release" },
         );
         const byOwner = yield* ask(forget(owner, workspaceId, testsRun.id));

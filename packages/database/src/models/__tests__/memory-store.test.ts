@@ -65,7 +65,7 @@ function keptId(outcome: MemoryOutcome): string {
   return outcome.memory.id;
 }
 
-const wordsOf = (workspaceId: string, readerId: string) =>
+const wordsOf = (workspaceId: string, readerId: string | null) =>
   Effect.map(listMemories(workspaceId, readerId), (memories) => memories.map((kept) => kept.text));
 
 it.layer(getTestDB())("the workspace's memory store", (it) => {
@@ -293,7 +293,9 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
       Effect.gen(function* () {
         const { owner, teammate, workspaceId } = yield* openTeam;
         yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined);
-        const kept = yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined, true);
+        const kept = yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined, {
+          privately: true,
+        });
         const id = keptId(kept);
 
         assert.equal(kept.kind, MEMORY_OUTCOME.KEPT);
@@ -312,6 +314,14 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
           MEMORY_FORGET.FORGOTTEN,
         );
         assert.ok((yield* wordsOf(workspaceId, teammate)).includes(TESTS_RUN));
+        // A read for no reader, and a keep whose agent reaches no private memory, see the shared ones alone, the member's own included.
+        assert.deepEqual(yield* wordsOf(workspaceId, null), [DEPLOYS]);
+        assert.equal(
+          (yield* rememberMemory(workspaceId, teammate, DEPLOYS_CORRECTED, id, {
+            readsPrivate: false,
+          })).kind,
+          MEMORY_OUTCOME.NOT_FOUND,
+        );
 
         const corrected = yield* rememberMemory(workspaceId, teammate, DEPLOYS_CORRECTED, id);
         assert.equal(corrected.kind, MEMORY_OUTCOME.CORRECTED);
@@ -331,8 +341,12 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         const { owner, teammate, workspaceId } = yield* openTeam;
         const shared = keptId(yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined));
 
-        const kept = yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined, true);
-        const again = yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined, true);
+        const kept = yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined, {
+          privately: true,
+        });
+        const again = yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined, {
+          privately: true,
+        });
         assert.equal(kept.kind, MEMORY_OUTCOME.KEPT);
         assert.notEqual(keptId(kept), shared);
         assert.equal(again.kind, MEMORY_OUTCOME.ALREADY_KEPT);
@@ -340,7 +354,9 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
 
         // A correction of either into the other's words leaves both standing, each as private or shared as before.
         const ownPrivate = keptId(
-          yield* rememberMemory(workspaceId, owner, DEPLOYS_CORRECTED, undefined, true),
+          yield* rememberMemory(workspaceId, owner, DEPLOYS_CORRECTED, undefined, {
+            privately: true,
+          }),
         );
         const sharedCorrected = yield* rememberMemory(
           workspaceId,
@@ -378,7 +394,7 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         const db = yield* Database;
         const { owner, teammate, workspaceId } = yield* openTeam;
         yield* rememberMemory(workspaceId, teammate, DEPLOYS, undefined);
-        yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined, true);
+        yield* rememberMemory(workspaceId, teammate, TESTS_RUN, undefined, { privately: true });
 
         yield* deleteAccount(teammate);
 

@@ -817,7 +817,7 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
   }
 });
 
-test("with Memory on, the operator is told to keep the developer's own preferences and what they are juggling private, and a coder only that a memory may be private", () => {
+test("with Memory on, the operator is told to keep the developer's own preferences and what they are juggling private, and a coder that it keeps and recalls none", () => {
   const memorySection = (kind: CodingAgentKind) => {
     const on = coderInstructions(
       null,
@@ -840,7 +840,7 @@ test("with Memory on, the operator is told to keep the developer's own preferenc
 
   assert.ok(operator.includes("Keep the developer's own preferences and what they are juggling"));
   assert.ok(operator.includes("as private memories, with private set"));
-  assert.ok(coder.includes("Set private on a memory that is the developer's alone"));
+  assert.ok(coder.includes("you are never answered one, and you never set private"));
   assert.ok(!coder.includes("what they are juggling"));
 });
 

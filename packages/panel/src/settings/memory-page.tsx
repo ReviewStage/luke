@@ -58,7 +58,7 @@ function noteFor(workspace: Workspace): string {
   return (
     `As they work in ${workspace.name}, Luke's coding agents keep the facts and conventions ` +
     "you settle and recall them in the workspace's later tasks. Everyone in the workspace " +
-    "shares these memories, except those marked Only you, which only your own agents recall. " +
+    "shares these memories, except those marked Only you, which only your Luke recalls. " +
     "What you say now always wins, and an agent corrects a memory it contradicts. Forget " +
     "anything that is wrong or no longer true."
   );
@@ -121,7 +121,7 @@ function MemoryRow({
         question={{
           title: "Forget this memory?",
           body: memory.private
-            ? "None of your agents will recall it in any later task in this workspace."
+            ? "Your Luke will not recall it again in this workspace."
             : "No agent will recall it in any later task in this workspace, for anyone.",
           verb: "Forget",
           running: "Forgetting…",

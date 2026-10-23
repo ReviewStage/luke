@@ -1458,9 +1458,13 @@ Like the workspace's git history it outlives that member: leaving keeps it,
 and deleting the account sets `user_id` null, read as a former member.
 
 A memory kept with `remember`'s `private` is the one exception: `private_to`
-names the one member whose agents recall it and who reads and forgets it in
-Settings, and to every other member, an owner or admin included, its id names
-nothing. It is that member's, not the workspace's, so its foreign key cascades
+names the one member whose operator recalls it and who reads and forgets it
+in Settings, and to every other member, an owner or admin included, its id
+names nothing. Only the member's operator keeps or recalls one
+(`MemoryCall.readsPrivate`), because an operator's transcript is its member's
+alone (`agentNoTeammatesOperator`) while a coder's is read by every member, so
+a coder's recall reads the shared memories alone and its `private` is
+refused. It is that member's, not the workspace's, so its foreign key cascades
 and it leaves with their account. Recall and Settings read through
 `listMemories(workspaceId, readerId)`, which answers the shared memories and
 the reader's own private ones; the same words stand once only within one

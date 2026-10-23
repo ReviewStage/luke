@@ -86,6 +86,12 @@ export type MemoryOutcome =
   | { readonly kind: MemoryWritten; readonly memory: StoredMemory }
   | { readonly kind: typeof MEMORY_OUTCOME.NOT_FOUND | typeof MEMORY_OUTCOME.FULL };
 
+/** How a keep stands to private memories: whether it keeps one, and whether the keeper's agent reaches private memories at all, which only the member's operator does. */
+export interface MemoryKeep {
+  readonly privately?: boolean;
+  readonly readsPrivate?: boolean;
+}
+
 /** Who asks to forget: the member, and whether they own or administer the workspace. */
 export interface MemoryForgetter {
   readonly userId: string;
@@ -126,9 +132,9 @@ const findMemories = SqlSchema.findAll({
     ),
 });
 
-/** The workspace's memories one member reads: the shared ones and their own private ones. */
+/** The workspace's memories one member reads: the shared ones and their own private ones, or the shared ones alone for no reader. */
 const findReadableMemories = SqlSchema.findAll({
-  Request: Schema.Struct({ organizationId: Schema.String, readerId: Schema.String }),
+  Request: Schema.Struct({ organizationId: Schema.String, readerId: Schema.NullOr(Schema.String) }),
   Result: MemoryRowSchema,
   execute: (read) =>
     Database.use((db) =>
@@ -138,7 +144,9 @@ const findReadableMemories = SqlSchema.findAll({
         .where(
           and(
             eq(memory.organizationId, read.organizationId),
-            or(isNull(memory.privateTo), eq(memory.privateTo, read.readerId)),
+            read.readerId === null
+              ? isNull(memory.privateTo)
+              : or(isNull(memory.privateTo), eq(memory.privateTo, read.readerId)),
           ),
         )
         .orderBy(desc(memory.updatedAt), desc(memory.createdAt)),
@@ -262,10 +270,14 @@ function readableBy(kept: StoredMemory, readerId: string): boolean {
   return kept.privateTo === null || kept.privateTo === readerId;
 }
 
-/** The workspace's memories one member reads, the shared and their own private ones, most recently kept or corrected first. */
+/**
+ * The workspace's memories one member reads, the shared and their own
+ * private ones, most recently kept or corrected first; with no reader, the
+ * shared ones alone, for a read whose answer teammates may see.
+ */
 export function listMemories(
   organizationId: string,
-  readerId: string,
+  readerId: string | null,
 ): MemoryStoreEffect<readonly StoredMemory[]> {
   return Effect.map(findReadableMemories({ organizationId, readerId }), (rows) =>
     rows.map(storedOf),
@@ -274,25 +286,30 @@ export function listMemories(
 
 /**
  * Keeps one memory in the workspace as the member's words, private to them
- * where `privately`, or corrects the one `replaces` names, and answers what
- * that came to. The words are taken as handed: the caller holds them to the
- * bound and to what may be kept at all. A new memory past the bound, or a
- * correction of a memory the member does not read, writes nothing.
+ * where `keep.privately`, or corrects the one `replaces` names, and answers
+ * what that came to. The words are taken as handed: the caller holds them to
+ * the bound and to what may be kept at all. A new memory past the bound, or a
+ * correction of a memory the keeper does not read, writes nothing; a keeper
+ * whose agent reaches no private memory (`keep.readsPrivate` false) reads
+ * none, even its own member's.
  */
 export function rememberMemory(
   organizationId: string,
   userId: string,
   text: string,
   replaces: string | undefined,
-  privately = false,
+  keep: MemoryKeep = {},
 ): MemoryStoreEffect<MemoryOutcome> {
+  const { privately = false, readsPrivate = true } = keep;
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const workspace = yield* lockWorkspace(organizationId);
         if (Option.isNone(workspace)) return { kind: MEMORY_OUTCOME.NOT_FOUND } as const;
         const every = (yield* findMemories(organizationId)).map(storedOf);
-        const readable = every.filter((kept) => readableBy(kept, userId));
+        const readable = every.filter((kept) =>
+          readsPrivate ? readableBy(kept, userId) : kept.privateTo === null,
+        );
         const now = yield* DateTime.nowAsDate;
         // Note that words are the same only within one visibility, because folding would publish a private memory or hide a shared one.
         const sameIn = (privateTo: string | null) =>
