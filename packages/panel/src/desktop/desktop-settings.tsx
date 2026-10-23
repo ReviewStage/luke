@@ -20,6 +20,7 @@ import {
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
+  PageToolbar,
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
@@ -123,9 +124,9 @@ function SettingsPageRow({
 function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.Element {
   if (onList === undefined) return <div className="desktop-drag-strip" />;
   return (
-    <header className="desktop-toolbar">
-      <FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />
-    </header>
+    <PageToolbar
+      lead={<FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />}
+    />
   );
 }
 

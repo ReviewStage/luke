@@ -35,10 +35,17 @@ import type {
   CodingAgentPictureParams,
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
-import { Effect, MutableHashMap, Option, Queue, Semaphore, Stream } from "effect";
+import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
-import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
+import {
+  followedStream,
+  type OpenFollows,
+  openRefollows,
+  type RefollowedDependencies,
+  refollowedStream,
+  streamed,
+} from "./followed-stream.js";
 
 /** What the Inbox and chat procedures reach: the host's asks of the service. */
 export interface AgentInboxProceduresDependencies {
@@ -88,75 +95,20 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
   return actor.panel ? Effect.void : Effect.fail(refused());
 }
 
-/**
- * A workspace's chat for one stream a panel holds open: the host follows it
- * as the first stream of it opens, so the panel hears it whole, and lets it
- * go once the last stream of it closes. Every change the host tells of it
- * reaches every stream of it.
- */
-function chatChanges(
-  host: AgentInboxProceduresDependencies["host"],
-  open: Map<string, number>,
-  turns: Semaphore.Semaphore,
-  workspaceId: string,
-): Stream.Stream<CodingAgentChatAnswerView> {
-  return Stream.callback<CodingAgentChatAnswerView>((queue) =>
-    Effect.gen(function* () {
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          host.onChatChanged((changed) => {
-            if (changed.workspaceId === workspaceId) Queue.offerUnsafe(queue, changed.chat);
-          }),
-        ),
-        (stop) => Effect.sync(stop),
-      );
-      // Note that each count change and its ask of the host take a turn, so a last stream's
-      // unfollow reaches the host before a new stream's follow, never after it.
-      yield* Effect.acquireRelease(
-        turns.withPermit(
-          Effect.suspend(() => {
-            const standing = open.get(workspaceId) ?? 0;
-            open.set(workspaceId, standing + 1);
-            // Note that a later stream asks the host again too, so it hears the chat whole at once.
-            return host.codingAgentChatFollow(workspaceId);
-          }),
-        ),
-        () =>
-          turns.withPermit(
-            Effect.suspend(() => {
-              const left = (open.get(workspaceId) ?? 1) - 1;
-              if (left > 0) {
-                open.set(workspaceId, left);
-                return Effect.void;
-              }
-              open.delete(workspaceId);
-              return host.codingAgentChatUnfollow(workspaceId);
-            }),
-          ),
-      );
-    }),
-  );
-}
-
 export function agentInboxProcedures(dependencies: AgentInboxProceduresDependencies) {
   const { host } = dependencies;
-  /** How many streams stand open of each workspace's chat, so the host lets one go only with the last. */
-  const openChats = new Map<string, number>();
+  /** The streams standing open of each workspace's chat, so the host lets one go only with the last, in the order they opened and closed, and one workspace's slow ask never holds another's. */
+  const openChats = openRefollows<string>();
   /** Every inbox a window holds a stream open of, so the host lets one go only with the last. */
-  const openInboxes: OpenFollows<CodingAgentInboxChanged["inbox"]> = MutableHashMap.empty();
-  /**
-   * One turn at a time for a chat stream's follow or unfollow, per workspace,
-   * so the host hears a workspace's in the order its streams opened and
-   * closed and one workspace's slow ask never holds another's. Note that a
-   * turn is kept once made: one per workspace the window has followed.
-   */
-  const chatTurns = new Map<string, Semaphore.Semaphore>();
-  const turnOf = (workspaceId: string): Semaphore.Semaphore => {
-    const standing = chatTurns.get(workspaceId);
-    if (standing !== undefined) return standing;
-    const made = Semaphore.makeUnsafe(1);
-    chatTurns.set(workspaceId, made);
-    return made;
+  const openInboxes: OpenFollows<CodingAgentInboxChanged["inbox"], CodingAgentInboxScope> =
+    MutableHashMap.empty();
+  // Note that a later stream asks the host again too, so it hears the chat whole at once.
+  const chat: RefollowedDependencies<string, CodingAgentChatChanged, CodingAgentChatAnswerView> = {
+    follow: host.codingAgentChatFollow,
+    unfollow: host.codingAgentChatUnfollow,
+    onChanged: host.onChatChanged,
+    valueOf: (changed, workspaceId) =>
+      changed.workspaceId === workspaceId ? Option.some(changed.chat) : Option.none(),
   };
   return {
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actPort[
@@ -165,7 +117,7 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const changes = followedStream(
         {
-          keyOf: (scope: CodingAgentInboxScope) => `${scope.kind}:${scope.id}`,
+          keyOf: (scope: CodingAgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
           follow: host.codingAgentInboxFollow,
           unfollow: host.codingAgentInboxUnfollow,
           onChanged: host.onInboxChanged,
@@ -245,7 +197,7 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const changes = chatChanges(host, openChats, turnOf(input.workspaceId), input.workspaceId);
+      const changes = refollowedStream(chat, openChats, input.workspaceId, input.workspaceId);
       return streamed(yield* Stream.toAsyncIterableEffect(changes));
     }),
   };

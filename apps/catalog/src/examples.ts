@@ -56,6 +56,7 @@ import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
+import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PANE_PINS_EXAMPLE } from "./examples/pane-pins";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
@@ -175,6 +176,7 @@ export const EXAMPLES: readonly Example[] = [
   ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
+  PAGE_TOOLBAR_EXAMPLE,
   PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PRESS_SHORTCUTS_EXAMPLE,
