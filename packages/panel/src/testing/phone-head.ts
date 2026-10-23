@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { act } from "react";
 
 /**
@@ -25,9 +24,8 @@ export function readPhoneHead(root: ParentNode, place: string): ReadPhoneHead {
   const heads = [...root.querySelectorAll<HTMLElement>(`header.phone-head.${place}-head`)].filter(
     (each) => each.closest("[hidden]") === null,
   );
-  assert.equal(heads.length, 1, `one ${place} header stands`);
   const [head] = heads;
-  assert.ok(head);
+  if (head === undefined || heads.length !== 1) throw new Error(`one ${place} header stands`);
   const [start, middle, end] = head.children;
   return {
     start: namesIn(start),
@@ -41,7 +39,7 @@ export function pressInPhoneHead(root: ParentNode, place: string, label: string)
   const button = [
     ...root.querySelectorAll<HTMLButtonElement>(`header.phone-head.${place}-head button`),
   ].find((each) => each.closest("[hidden]") === null && each.getAttribute("aria-label") === label);
-  assert.ok(button, `the ${place} header offers ${label}`);
+  if (button === undefined) throw new Error(`the ${place} header offers ${label}`);
   act(() => button.click());
 }
 
@@ -62,6 +60,6 @@ export function chooseMenuItem(label: string): void {
   const item = [
     ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
   ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === label);
-  assert.ok(item, `${label} is in the menu`);
+  if (item === undefined) throw new Error(`${label} is in the menu`);
   act(() => item.click());
 }
