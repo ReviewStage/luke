@@ -5433,13 +5433,18 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The shared composer card (../ai-elements/prompt-input.tsx): one card on
    the sidebar's ground inside a hairline; under its field, the foot with
    the owner's controls at its left and the round submit at its right. */
+/* The composer is a card of fresh paper lying on the sheet, its corner the
+   dialog's, lifted by a soft shadow rather than ringed by a dark edge. */
 .prompt-input {
   display: flex;
   width: 100%;
   flex-direction: column;
   border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-sidebar);
+  border-radius: var(--luke-dialog-radius);
+  background: var(--luke-color-surface);
+  box-shadow:
+    0 1px 2px var(--luke-color-shadow-soft),
+    0 12px 32px -16px var(--luke-color-shadow);
 }
 
 .prompt-input-footer {
