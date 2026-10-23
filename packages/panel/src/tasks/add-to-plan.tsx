@@ -12,6 +12,7 @@ import {
   type TasksEditAnswer,
 } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { isVideoDataUrl } from "@luke/ui";
 import { keepPictureRead } from "@luke/ui/picture-cache";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
@@ -22,13 +23,15 @@ import type { ViewerAction } from "./attachment-viewer.js";
 import { useTaskMentions } from "./task-mentions.js";
 
 /**
- * add-to-plan.tsx -- a picture an agent showed, added to the plan it works on: kept on the plan as a picture of its own and written at the end of its text, as the developer's edit, with Undo.
+ * add-to-plan.tsx -- a picture or a recording an agent showed, added to the plan it works on: kept on the plan as one of its own and written at the end of its text, as the developer's edit, with Undo.
  *
  * The picture is the agent's, read from its transcript, so it is kept on the
  * plan again, as a picture pasted from another plan is, and the plan's
- * readers see it on the plan's own terms. The Mac re-encodes it to the plan's
- * bound first (`encodeImage`), since an agent's picture may be larger than a
- * plan's may. The line is written at the end of the plan's text, a paragraph
+ * readers see it on the plan's own terms. The Mac re-encodes a picture to
+ * the plan's bound first (`encodeImage`), since an agent's picture may be
+ * larger than a plan's may. A recording is kept as it is, never re-encoded,
+ * where it is no larger than a video sent to the plan may be
+ * (`PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES`), and the plan plays it in place. The line is written at the end of the plan's text, a paragraph
  * of its own, through the same edit a developer's save is; an edit that
  * meets the text moved on is written again on the text as it stands. Note
  * that it is never written at the editor's caret, because the plan's editor
@@ -47,7 +50,9 @@ const ADD_WORDS = {
   ADDING: "Adding to the plan…",
   ADDED: "Added to the plan",
   NOT_A_PICTURE: "This picture could not be added to the plan.",
+  VIDEO_TOO_LARGE: `This video is over ${String(PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES / 1_000_000)} MB, more than a plan can be sent.`,
   TOO_MANY: "This plan already holds as many pictures as it can.",
+  TOO_MANY_VIDEOS: "This plan already holds as many videos as it can.",
   NOT_SAVED: "The plan could not be saved just now.",
   UNDONE: "Taken out of the plan",
   NOT_UNDONE: "The plan changed since, so the picture stays in it.",
@@ -61,6 +66,30 @@ function fileOf(chip: FileChip): File {
   const base64 = chip.url.slice(chip.url.indexOf(",") + 1);
   const bytes = Uint8Array.from(atob(base64), (letter) => letter.charCodeAt(0));
   return new File([bytes], chip.name, { type: chip.mediaType });
+}
+
+/** Why a keep failed, in the toast's words. */
+const KEEP_FAILED_WORDS = {
+  [PICTURE_KEEP_FAILURE.TOO_MANY]: ADD_WORDS.TOO_MANY,
+  [PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS]: ADD_WORDS.TOO_MANY_VIDEOS,
+  [PICTURE_KEEP_FAILURE.NOT_FOUND]: ADD_WORDS.NOT_SAVED,
+  [PICTURE_KEEP_FAILURE.UNANSWERED]: ADD_WORDS.NOT_SAVED,
+} as const;
+
+/**
+ * The `data:` URL the file is kept on the plan as, or why it cannot be: a
+ * recording as it is, within a sent video's bound, and a picture re-encoded
+ * within a picture's.
+ */
+async function keptUrlOf(chip: FileChip): Promise<{ url: string } | { refused: string }> {
+  if (isVideoDataUrl(chip.url)) {
+    return fileOf(chip).size > PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES
+      ? { refused: ADD_WORDS.VIDEO_TOO_LARGE }
+      : { url: chip.url };
+  }
+  const encoded = await encodeImage(fileOf(chip), PICTURE_BOUNDS.MAX_BYTES);
+  if (encoded === undefined) return { refused: ADD_WORDS.NOT_A_PICTURE };
+  return { url: `data:${encoded.mediaType};base64,${encoded.base64}` };
 }
 
 /** A picture's words: the name the viewer saves it by, without its extension. */
@@ -107,19 +136,15 @@ export function useAddToPlan(): ViewerAction | undefined {
       const settle = working(ADD_WORDS.ADDING);
       const failed = (words: string) =>
         settle({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-      const encoded = await encodeImage(fileOf(chip), PICTURE_BOUNDS.MAX_BYTES);
-      if (encoded === undefined) return failed(ADD_WORDS.NOT_A_PICTURE);
-      const url = `data:${encoded.mediaType};base64,${encoded.base64}`;
+      const keeping = await keptUrlOf(chip);
+      if ("refused" in keeping) return failed(keeping.refused);
+      const { url } = keeping;
       const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
         () => ({
           failure: PICTURE_KEEP_FAILURE.UNANSWERED,
         }),
       );
-      if ("failure" in kept) {
-        return failed(
-          kept.failure === PICTURE_KEEP_FAILURE.TOO_MANY ? ADD_WORDS.TOO_MANY : ADD_WORDS.NOT_SAVED,
-        );
-      }
+      if ("failure" in kept) return failed(KEEP_FAILED_WORDS[kept.failure]);
       keepPictureRead(taskId, kept.id, url);
       const address = planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace);
       const line = taskPictureLine(wordsOf(chip), address);
