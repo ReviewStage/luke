@@ -376,20 +376,24 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
     }),
   );
 
-  it.effect("a developer's line kept before senders were counts as another account's", () =>
-    Effect.gen(function* () {
-      const { starter, workspace } = yield* people;
-      const agent = yield* openAgent(starter, workspace);
-      const target = { userId: starter, conversationId: agent.conversationId };
-      yield* sendLine(starter, agent.conversationId, 1, undefined, MESSAGE_ROLE.ASSISTANT);
-      assert.equal(yield* heardFromAnotherAccount(target), false, "the model's own reply");
-      yield* sendLine(starter, agent.conversationId, 2);
-      assert.equal(
-        yield* heardFromAnotherAccount(target),
-        true,
-        "a line nothing says whose it was",
-      );
-    }),
+  it.effect(
+    "a developer's line kept before senders were counts as another account's, all but the opening prompt",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const agent = yield* openAgent(starter, workspace);
+        const target = { userId: starter, conversationId: agent.conversationId };
+        yield* sendLine(starter, agent.conversationId, 1, undefined, MESSAGE_ROLE.ASSISTANT);
+        assert.equal(yield* heardFromAnotherAccount(target), false, "the model's own reply");
+        yield* sendLine(starter, agent.conversationId, 2);
+        assert.equal(yield* heardFromAnotherAccount(target), false, "the prompt it was started on");
+        yield* sendLine(starter, agent.conversationId, 3);
+        assert.equal(
+          yield* heardFromAnotherAccount(target),
+          true,
+          "a later line nothing says whose it was",
+        );
+      }),
   );
 
   it.effect("a worker's conversation reads the lines of the agent it was delegated from", () =>
