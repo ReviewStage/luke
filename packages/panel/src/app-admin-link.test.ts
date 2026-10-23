@@ -12,8 +12,12 @@ import { memoryHistory } from "@luke/ui/history-adapter";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { App } from "./app.js";
+// Note that the Admin place is loaded as the window loads it, on first use
+// (`pages-on-demand.ts`), so the module is read here first and its load settles
+// within the test's own ticks rather than on a clock a busy machine outruns.
+import "./desktop/desktop-admin.js";
 import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
@@ -140,7 +144,7 @@ test("an Admin link handed while the account's access is read opens the place wa
   assert.equal(adminWaits(), true, "the place waits on the read");
 
   await deliver({ ...FIRST, version: 2, access: { admin: true } });
-  await vi.waitFor(() => assert.equal(adminStands(), true, "the place stands once it is"));
+  assert.equal(adminStands(), true, "the place stands once it is");
 });
 
 test("the place waiting on the read gives the window back once it says the account is no admin", async () => {
