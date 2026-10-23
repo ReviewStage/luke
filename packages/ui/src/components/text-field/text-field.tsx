@@ -31,10 +31,9 @@ import type { FieldControl } from "../form-field/form-field.js";
  * neither Escape nor ⌘Return until it is not.
  */
 
-/** What a one-line field holds: words, a search, an address, a secret, a time of day, or a number. */
+/** What a one-line field holds: words, an address, a secret, a time of day, or a number. */
 export const TEXT_FIELD_TYPE = {
   TEXT: "text",
-  SEARCH: "search",
   EMAIL: "email",
   URL: "url",
   PASSWORD: "password",

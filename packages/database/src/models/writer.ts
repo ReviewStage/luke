@@ -1952,7 +1952,6 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
       return textDrafted(context, event);
     // The rest of the stream is the relay's, about a run's moments rather
     // than the record.
-    case BRAIN_RUN_EVENT.COMPACTION_COMPLETED:
     case BRAIN_RUN_EVENT.SLOW_STEP:
     case BRAIN_RUN_EVENT.QUESTION_QUEUED:
     case BRAIN_RUN_EVENT.QUESTION_WITHDRAWN:
