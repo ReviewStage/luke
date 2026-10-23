@@ -2060,7 +2060,7 @@ test("an invitation's answer that lands after the stream told a newer list does 
   assert.deepEqual(invitationRows(page), []);
 });
 
-test("Cancel invitation sends nothing while an invitation is on its way", async () => {
+test("Cancel invitation, drawn red, sends nothing while an invitation is on its way", async () => {
   invitations = [
     {
       id: "inv-sam",
@@ -2085,6 +2085,7 @@ test("Cancel invitation sends nothing while an invitation is on its way", async 
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
       (each) => each.textContent === "Cancel invitation",
     ) ?? assert.fail("no Cancel invitation");
+  assert.equal(cancel.dataset.danger, "true", "Cancel invitation is drawn red");
   act(() => cancel.click());
   release();
   await settle();

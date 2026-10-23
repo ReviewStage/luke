@@ -2314,7 +2314,15 @@ function offered(tab: HTMLElement): string[] {
   return labels;
 }
 
-test("a draft's pill offers Ready for review, which is asked of the service for the agent, and the tab reads the pull request again, its pill then saying it is open and offering Convert to draft", async () => {
+/** The labels the pill's menu draws red, opened and closed again. */
+function offeredRed(tab: HTMLElement): string[] {
+  act(() => pill(tab).click());
+  const labels = words(document.body, '[role="menuitem"][data-danger="true"]');
+  act(() => pill(tab).click());
+  return labels;
+}
+
+test("a draft's pill offers Ready for review, and Close pull request in red, which is asked of the service for the agent, and the tab reads the pull request again, its pill then saying it is open and offering Convert to draft", async () => {
   let reads = 0;
   const tab = await draw(
     controlAnswering(
@@ -2334,12 +2342,14 @@ test("a draft's pill offers Ready for review, which is asked of the service for 
   );
   assert.equal(pill(tab).textContent, "Draft");
   assert.deepEqual(offered(tab), ["Ready for review", "Close pull request"]);
+  assert.deepEqual(offeredRed(tab), ["Close pull request"], "closing is drawn red");
 
   await pressAction(tab, "Ready for review");
 
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW }]]);
   assert.equal(pill(tab).textContent, "Open");
   assert.deepEqual(offered(tab), ["Convert to draft", "Close pull request"]);
+  assert.deepEqual(offeredRed(tab), ["Close pull request"], "closing is drawn red");
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
 });
 

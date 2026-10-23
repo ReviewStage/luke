@@ -93,7 +93,7 @@ export interface MenuAction {
   /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
   detail?: string | undefined;
   onSelect: () => void;
-  /** Drawn red: the action cannot be taken back. */
+  /** Drawn red: the action cannot be taken back, or ends what it acts on, as closing a pull request or canceling a task does. */
   danger?: boolean;
   /** Printed muted at the item's end: the shortcut that takes the same action, as the app draws it. */
   hint?: React.ReactNode;
