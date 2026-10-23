@@ -32,11 +32,14 @@ import {
   JUSTIFY,
   LAYOUT_ELEMENT,
   PencilIcon,
+  SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
+  SETTINGS_SKELETON_CONTROL,
   SettingsFacts,
   SettingsLine,
   SettingsRow,
   SettingsRowMark,
+  type SettingsRowSkeletonShape,
   SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsSavedMark,
@@ -134,6 +137,13 @@ const HARNESS = {
     anchor: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
   },
 } as const satisfies Record<ProviderKeyProvider, unknown>;
+
+/** A harness's row while the keys are read: its mark, its name alone, and the press that connects it. */
+const KEY_ROW_SKELETON: SettingsRowSkeletonShape = {
+  described: false,
+  mark: SETTINGS_ROW_MARK_WIDTH,
+  controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+};
 
 const HARNESSES: readonly ProviderKeyProvider[] = [
   PROVIDER_KEY_PROVIDER.ANTHROPIC,
@@ -1105,7 +1115,10 @@ export function AgentAuthSection({
             </ErrorState>
           </SettingsLine>
         ) : (
-          <SettingsRowsSkeleton label="Loading your keys" rows={HARNESSES.length} marked />
+          <SettingsRowsSkeleton
+            label="Loading your keys"
+            rows={HARNESSES.map(() => KEY_ROW_SKELETON)}
+          />
         )}
       </SettingsSection>
       {open === undefined || answer === undefined ? null : (

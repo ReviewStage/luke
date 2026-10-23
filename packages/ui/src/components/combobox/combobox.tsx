@@ -2,6 +2,8 @@ import type { ComponentPropsWithRef, ReactNode, Ref } from "react";
 import { useId, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import { OneLine } from "../one-line/one-line.js";
+import { Tooltip } from "../tooltip/hint.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
 /**
@@ -86,6 +88,8 @@ export interface ComboboxOption {
    * option end in one line down it.
    */
   readonly current?: boolean | undefined;
+  /** The card hung beside the option while the pointer rests on it, as a row of ⌘K hangs its agent's; none hangs nothing. */
+  readonly card?: ReactNode;
 }
 
 /** A run of options under a heading, or under none. */
@@ -132,9 +136,14 @@ export function ComboboxOptionItem({
       {option.icon === undefined ? null : (
         <span className="luke-combobox-option-glyph">{option.icon}</span>
       )}
-      <span className="luke-combobox-option-label">{option.label}</span>
+      {/* Note that the name and its detail fade where the row cuts them short, as every cut line of the app does, rather than ending in an ellipsis. */}
+      <span className="luke-combobox-option-label">
+        <OneLine>{option.label}</OneLine>
+      </span>
       {option.detail === undefined ? null : (
-        <span className="luke-combobox-option-detail">{option.detail}</span>
+        <span className="luke-combobox-option-detail">
+          <OneLine>{option.detail}</OneLine>
+        </span>
       )}
       {option.hint === undefined ? null : (
         <span className="luke-combobox-option-hint">{option.hint}</span>
@@ -164,7 +173,7 @@ function OptionRow({
   onActive: () => void;
   onChoose: () => void;
 }): React.JSX.Element {
-  return (
+  const row = (
     <ComboboxOptionItem
       id={id}
       option={option}
@@ -172,6 +181,16 @@ function OptionRow({
       onMouseMove={active || option.disabled === true ? undefined : onActive}
       onClick={option.disabled === true ? undefined : onChoose}
     />
+  );
+  if (option.card === undefined) return row;
+  return (
+    <Tooltip
+      label={typeof option.label === "string" ? option.label : undefined}
+      card={option.card}
+      cardBeside
+    >
+      {row}
+    </Tooltip>
   );
 }
 
@@ -266,8 +285,15 @@ export function ComboboxList({
   // Note that the active option is scrolled into the list's own view by
   // hand, because the caret stays where the keys are read, which no
   // browser scrolls the list for, and `scrollIntoView` would scroll every
-  // box around it.
+  // box around it; one the pointer made active is where the pointer is, so
+  // the list stands still under it rather than scroll the row away, and
+  // the card the row hangs with it.
+  const pointed = useRef(false);
   useLayoutEffect(() => {
+    if (pointed.current) {
+      pointed.current = false;
+      return;
+    }
     const box = list.current;
     const row = at < 0 ? null : document.getElementById(comboboxOptionId(listId, at));
     if (box === null || row === null) return;
@@ -303,7 +329,10 @@ export function ComboboxList({
             id={comboboxOptionId(listId, start + index)}
             option={option}
             active={start + index === at}
-            onActive={() => onActiveChange(start + index)}
+            onActive={() => {
+              pointed.current = true;
+              onActiveChange(start + index);
+            }}
             onChoose={() => choose(start + index)}
           />
         ));

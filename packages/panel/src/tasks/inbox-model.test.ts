@@ -1989,6 +1989,35 @@ test("a comment's files are drawn after its words but for a picture its words dr
   assert.deepEqual(ids(inboxCommentFiles(files, undefined, itemId).others), [spec, drawnSpec]);
 });
 
+test("a recording an agent posted stands with a comment's pictures, never its other files: one its words draw is not named again over them, one they do not draw is played among the pictures", () => {
+  const itemId = "a1b2c3d4-0000-4000-8000-0000000000f1";
+  const place = {
+    kind: LINK_PLACE.INBOX_ITEM,
+    planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    itemId,
+  } as const;
+  const address = (attachmentId: string) => `${linkOf(place, "acme")}/files/${attachmentId}`;
+  const [drawn, loose] = [
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3ca0",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3ca1",
+  ];
+  const webm = (attachmentId: string) => ({
+    attachmentId,
+    name: `${attachmentId.slice(-2)}.webm`,
+    mediaType: "video/webm",
+  });
+  const read = inboxCommentFiles(
+    [webm(drawn), webm(loose)],
+    `The sign-up flow:\n\n![Signing up](${address(drawn)} "The flow")`,
+    itemId,
+  );
+  assert.deepEqual(
+    read.pictures.map((file) => file.attachmentId),
+    [loose],
+  );
+  assert.deepEqual(read.others, [], "no recording is named as a file");
+});
+
 /** The message with its ask standing as `status` says; the very message where it asks nothing. */
 function standing(
   message: InboxMessage,
@@ -2092,4 +2121,37 @@ test("a settled item's card names its ending in the word its line says it in: an
     "Withdrawn",
     "an agent's close before threads says why",
   );
+});
+
+test("a thread a member started reads Sent until its agent writes on it, by a reply of its own as much as by a post", () => {
+  const opener = {
+    id: "e1b2c3d4-0000-4000-8000-0000000000f2",
+    author: INBOX_MESSAGE_AUTHOR.MEMBER,
+    member: DANA,
+    text: "Draft the annual plan's line too.",
+    createdAt: 1_000,
+  };
+  const started = item({
+    id: "t1",
+    response: { type: INBOX_RESPONSE.NONE },
+    needsReply: false,
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+    thread: [opener],
+  });
+  assert.equal(inboxSettledStanding(started), "Sent");
+
+  const replied = {
+    ...started,
+    thread: [
+      opener,
+      {
+        id: "e1b2c3d4-0000-4000-8000-0000000000f3",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Two months free, billed yearly.",
+        createdAt: 2_000,
+      },
+    ],
+  };
+  assert.equal(inboxSettledStanding(replied), "Answered", "the agent's reply leaves the revision");
 });

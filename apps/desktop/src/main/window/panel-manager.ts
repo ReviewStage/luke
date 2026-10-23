@@ -200,7 +200,7 @@ export class PanelManager {
    * Keyframe's grant for the call's avatar, or nothing once its session is to
    * close. The panel runs the session wherever it is and whichever tab it
    * shows, since the avatar's voice is what the developer hears, and draws
-   * its video at the top of the Call tab.
+   * its video in the tab of the agent the call is into.
    */
   showAvatarSession(grant: AvatarGrant | undefined): void {
     this.#avatarSession = grant !== undefined;

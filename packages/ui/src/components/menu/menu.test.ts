@@ -4,6 +4,7 @@ import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import { Tooltip } from "../tooltip/hint.js";
 import {
   MENU_ITEM_MARK,
   Menu,
@@ -298,6 +299,42 @@ test("an item with a card hangs it while the pointer rests on it, and the menu k
   expect(focused()).toBe("Ada Lovelace");
   key("ArrowDown");
   expect(focused()).toBe("Archive");
+});
+
+test("a card hung from a control on an item's card is the menu's too, so a press on it leaves the menu standing", () => {
+  standInResizeObserver();
+  const agentCard = createElement(Tooltip, {
+    label: "Builder",
+    card: createElement("p", { className: "agent-card" }, "Builder's card"),
+    children: createElement("button", { type: "button", onClick: () => undefined }, "Builder"),
+  });
+  mount(
+    createElement(Harness, {
+      groups: [
+        [
+          { label: "Rename", onSelect: () => undefined },
+          { label: "Ada Lovelace", card: agentCard, onSelect: () => undefined },
+        ],
+      ],
+    }),
+  );
+  press(button("More"));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  pointerMove(null, button("Ada Lovelace"));
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  pointerMove(button("Ada Lovelace"), button("Builder"));
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  const nested = document.querySelector<HTMLElement>(".agent-card");
+  expect(nested?.textContent).toBe("Builder's card");
+
+  act(() => {
+    nested?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+  });
+  expect(openMenu()).not.toBeNull();
 });
 
 test("a dimmed item is unavailable and takes no press", () => {

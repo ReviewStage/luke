@@ -319,6 +319,18 @@ export class ProductEventSender {
     this.#armed = true;
   }
 
+  /**
+   * Stops counting mid-run, as the developer turning usage data off does:
+   * what is queued is dropped and nothing more is queued until armed again.
+   * This run's day guard goes too, so a re-arm asks the kept day again rather
+   * than taking a dropped mark for one sent.
+   */
+  disarm(): void {
+    this.#armed = false;
+    this.#queue.length = 0;
+    this.#recordedDays.clear();
+  }
+
   #allowed(): boolean {
     return this.#sends && this.#armed;
   }

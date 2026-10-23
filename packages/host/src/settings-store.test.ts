@@ -245,6 +245,8 @@ const SAMPLE_VALUE = {
   diffLigatures: true,
   diffMinimizeComments: true,
   linkOpen: LINK_OPEN.MAC_APP,
+  // A packaged build shares usage data unless told not to, so Off is the choice.
+  usageData: false,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -317,6 +319,33 @@ it.effect(
       // The theme's choice is forgotten, so it reads as no choice at all.
       assert.equal(yield* reopened.get("theme"), undefined);
       assert.equal(yield* reopened.get("zoom"), 125);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "usage data is shared by default in a packaged build, not in a run from source, and as chosen in either",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const opened = (packaged: boolean) =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: testCipher(),
+          overrides: overridesFor({}),
+          packaged,
+          fileSystem: FILE_SYSTEM,
+          path: PATH,
+        });
+      const shared = (packaged: boolean) =>
+        Effect.map(opened(packaged).snapshot(), (snapshot) => snapshot.stored.usageData);
+
+      assert.equal(yield* shared(true), true);
+      assert.equal(yield* shared(false), false);
+
+      yield* opened(false).set("usageData", true);
+      assert.equal(yield* shared(false), true);
+      yield* opened(true).set("usageData", false);
+      assert.equal(yield* shared(true), false);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 

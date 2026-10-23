@@ -1,5 +1,10 @@
 import { type ReactNode, useRef } from "react";
 import { RevealArea, revealArea } from "../reveal/reveal.js";
+import {
+  type SettingsSectionSkeletonShape,
+  SettingsSectionsSkeleton,
+} from "../settings-section/settings-section.js";
+import { Skeleton } from "../skeleton/skeleton.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
@@ -27,7 +32,18 @@ import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
  * page's whole content fills the room under the title and stands in its
  * middle. Rows scrolled up dissolve into the page's top edge rather than
  * being sliced against it, and a page at rest at its top is left whole.
+ *
+ * A page whose name is not yet known, Settings while its chunk loads, stands
+ * as a whole page of placeholders (`SettingsPageSkeleton`): the page itself,
+ * a block for its title, and its sections' blocks.
  */
+
+/**
+ * How wide a placeholder title stands: a short page name's, five controls'
+ * height across. Note that it is a length rather than a share, because the
+ * title's line is only as wide as what it holds.
+ */
+const SKELETON_TITLE_WIDTH = "calc(5 * var(--luke-control-height))";
 
 /** A column of `children`, one section each, under `title` and beside it `actions`. */
 export function SettingsPage({
@@ -61,5 +77,22 @@ export function SettingsPage({
         </RevealArea>
       </div>
     </div>
+  );
+}
+
+/** A page of placeholders while `label` is read, drawn by the page itself: a block for its title over sections of `sections`' shapes. */
+export function SettingsPageSkeleton({
+  label,
+  sections,
+}: {
+  /** What is being read, said to a reader: "Loading Settings". */
+  label: string;
+  /** The sections likely to land, each in its shape. */
+  sections: readonly SettingsSectionSkeletonShape[];
+}): React.JSX.Element {
+  return (
+    <SettingsPage title={<Skeleton width={SKELETON_TITLE_WIDTH} />}>
+      <SettingsSectionsSkeleton label={label} sections={sections} />
+    </SettingsPage>
   );
 }

@@ -17,7 +17,7 @@ import {
 import { appPlatform } from "../app-platform.js";
 
 /**
- * use-open-link.ts -- how a link in written words opens: a transcript's, the Call tab's, an agent tab's, or an Inbox item's.
+ * use-open-link.ts -- how a link in written words opens: a transcript's, an agent tab's, or an Inbox item's.
  *
  * A Luke link, the address of a task, a section, an agent, an Inbox item,
  * or any other place in Luke (`@luke/features/luke-link`), opens in the

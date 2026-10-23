@@ -15,6 +15,7 @@ import {
 } from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { pngBytes, webmBytes } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../../core.js";
@@ -34,34 +35,6 @@ import { runShowImage, SHOW_IMAGE_REFUSAL, type ShowImageBinding } from "./show-
  */
 
 const CHECKOUT = "/vercel/sandbox/repository";
-
-/** A PNG's signature and header chunk, stating the size given; the store and the reader read no further. */
-function png(width: number, height: number, mark = 0): Uint8Array {
-  const header = new Uint8Array(33);
-  header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
-  new DataView(header.buffer).setUint32(16, width);
-  new DataView(header.buffer).setUint32(20, height);
-  header[32] = mark;
-  return header;
-}
-
-/** One EBML element: its ID's bytes, its size in one byte, and its body. */
-function ebml(id: readonly number[], body: readonly number[]): number[] {
-  return [...id, 0x80 | body.length, ...body];
-}
-
-/** A Matroska file of the doctype given, whose one video track states the size, with no frames: the reader reads no further. */
-function matroska(docType: string, width: number, height: number): Uint8Array {
-  const video = ebml(
-    [0xe0],
-    [...ebml([0xb0], [width >> 8, width & 0xff]), ...ebml([0xba], [height >> 8, height & 0xff])],
-  );
-  const tracks = ebml([0x16, 0x54, 0xae, 0x6b], ebml([0xae], video));
-  return new Uint8Array([
-    ...ebml([0x1a, 0x45, 0xdf, 0xa3], ebml([0x42, 0x82], [...new TextEncoder().encode(docType)])),
-    ...ebml([0x18, 0x53, 0x80, 0x67], tracks),
-  ]);
-}
 
 /** A sandbox holding the files given by absolute path, each read as one stream. */
 function sandboxWith(files: Readonly<Record<string, Uint8Array>>): ShowImageBinding["sandbox"] {
@@ -122,8 +95,8 @@ it.layer(getTestDB())("show_image", (it) => {
       Effect.gen(function* () {
         const target = yield* openConversation;
         const sandbox = sandboxWith({
-          [`${CHECKOUT}/shots/members.png`]: png(1200, 720),
-          "/tmp/accept.png": png(390, 700),
+          [`${CHECKOUT}/shots/members.png`]: pngBytes(1200, 720),
+          "/tmp/accept.png": pngBytes(390, 700),
         });
 
         const answer = readShown(
@@ -155,7 +128,7 @@ it.layer(getTestDB())("show_image", (it) => {
         const read = yield* readConversationPicture(target.conversationId, first.id);
         assert.deepEqual(
           Option.map(read, (stored) => [...stored.bytes]),
-          Option.some([...png(1200, 720)]),
+          Option.some([...pngBytes(1200, 720)]),
         );
       }),
   );
@@ -166,9 +139,9 @@ it.layer(getTestDB())("show_image", (it) => {
       Effect.gen(function* () {
         const target = yield* openConversation;
         const tooLarge = new Uint8Array(CONVERSATION_PICTURE_BOUNDS.MAX_BYTES + 1);
-        tooLarge.set(png(10, 10));
+        tooLarge.set(pngBytes(10, 10));
         const sandbox = sandboxWith({
-          [`${CHECKOUT}/ok.png`]: png(10, 10),
+          [`${CHECKOUT}/ok.png`]: pngBytes(10, 10),
           [`${CHECKOUT}/notes.txt`]: new TextEncoder().encode("not a picture at all"),
           [`${CHECKOUT}/huge.png`]: tooLarge,
         });
@@ -206,10 +179,10 @@ it.layer(getTestDB())("show_image", (it) => {
     () =>
       Effect.gen(function* () {
         const target = yield* openConversation;
-        const recording = matroska("webm", 1280, 800);
+        const recording = webmBytes(1280, 800);
         const sandbox = sandboxWith({
           "/tmp/video/flow.webm": recording,
-          [`${CHECKOUT}/after.png`]: png(1200, 720),
+          [`${CHECKOUT}/after.png`]: pngBytes(1200, 720),
         });
 
         const answer = readShown(
@@ -245,7 +218,7 @@ it.layer(getTestDB())("show_image", (it) => {
   it.effect("a Matroska file that is no WebM is refused as no picture, naming the path", () =>
     Effect.gen(function* () {
       const target = yield* openConversation;
-      const sandbox = sandboxWith({ [`${CHECKOUT}/flow.mkv`]: matroska("matroska", 640, 480) });
+      const sandbox = sandboxWith({ [`${CHECKOUT}/flow.mkv`]: webmBytes(640, 480, "matroska") });
 
       assert.deepEqual(
         yield* show(
@@ -301,7 +274,7 @@ it.layer(getTestDB())("show_image", (it) => {
       });
       const binding = {
         target,
-        sandbox: sandboxWith({ [`${CHECKOUT}/one.png`]: png(10, 10) }),
+        sandbox: sandboxWith({ [`${CHECKOUT}/one.png`]: pngBytes(10, 10) }),
         checkout: CHECKOUT,
       };
 
@@ -334,8 +307,8 @@ it.layer(getTestDB())("show_image", (it) => {
         const binding = {
           target,
           sandbox: sandboxWith({
-            [`${CHECKOUT}/first.png`]: png(10, 10, 1),
-            [`${CHECKOUT}/second.png`]: png(10, 10, 2),
+            [`${CHECKOUT}/first.png`]: pngBytes(10, 10, 1),
+            [`${CHECKOUT}/second.png`]: pngBytes(10, 10, 2),
           }),
           checkout: CHECKOUT,
         };

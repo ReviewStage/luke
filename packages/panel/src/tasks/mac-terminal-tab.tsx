@@ -14,6 +14,7 @@ import { useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
+import { pullRequestAsked } from "./pull-request-number.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -84,7 +85,7 @@ const lastRuns = new Map<
 >();
 
 export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX.Element {
-  const { macTerminal: agentId, repository, asked } = tab;
+  const { macTerminal: agentId, repository, asked, number } = tab;
   const known = lastRuns.get(agentId);
   // Note that a press of Run in the tab counts on from the ⋯'s, so each press is a run of its own, and the tab drawn again counts on from the last run.
   const [presses, setPresses] = useState(known?.asked === asked ? known.presses : 0);
@@ -92,6 +93,9 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   const [standing, setStanding] = useState<Standing>({ kind: "starting" });
   const { act } = useAct();
   const openLink = useOpenLink();
+  // Note that the link opener is read through a ref rather than hung on the run's effect, because it is made anew whenever the listed tasks change, and the effect would tear the terminal down and draw it again each time.
+  const opensLink = useRef(openLink);
+  opensLink.current = openLink;
   const loaded = useAtomValue(useSideBundles().terminal);
   const module = Option.getOrUndefined(AsyncResult.value(loaded));
   const [element, setElement] = useState<HTMLDivElement | null>(null);
@@ -127,7 +131,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       onInput: () => undefined,
       onResize: ({ cols, rows }) =>
         port.current?.postMessage({ type: MAC_TERMINAL_PORT_MESSAGE.RESIZE, cols, rows }),
-      onLink: openLink,
+      onLink: (href) => opensLink.current(href),
     });
     const mounted = handle;
     let live = true;
@@ -140,18 +144,25 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     const again = held?.asked !== asked || held.presses !== presses;
     const reading: Promise<ReadBranch | null> = !again
       ? Promise.resolve(held)
-      : (tell("▸ Reading the agent's pushed branch…"),
-        act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }).then((answer) =>
-          "failure" in answer || answer.branch === null
-            ? null
-            : { branch: answer.branch, pullRequest: answer.pullRequest?.number ?? null },
+      : (tell(
+          number === undefined
+            ? "▸ Reading the agent's pushed branch…"
+            : `▸ Reading the branch of pull request #${number}…`,
+        ),
+        act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
+          (answer) =>
+            "failure" in answer || answer.branch === null
+              ? null
+              : { branch: answer.branch, pullRequest: answer.pullRequest?.number ?? null },
         ));
     reading
       .then((read) => {
         if (!live) return;
         if (read === null) {
           tell(
-            "This agent has pushed no branch yet. Ask it to push its work, then press Run again.",
+            number === undefined
+              ? "This agent has pushed no branch yet. Ask it to push its work, then press Run again."
+              : `Pull request #${number} could not be read from GitHub. Press Run again to retry.`,
           );
           setStanding({ kind: "idle" });
           return;
@@ -164,6 +175,8 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           repository,
           branch: read.branch,
           pullRequest: read.pullRequest,
+          // Note that a run asked for a pull request by its number runs that pull request's own head, not whatever branch now has its name.
+          pullRequestHead: number !== undefined,
           again,
           cols,
           rows,
@@ -180,7 +193,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       port.current = undefined;
       mounted.unmount();
     };
-  }, [module, element, openLink, act, agentId, repository, asked, presses]);
+  }, [module, element, act, agentId, repository, asked, number, presses]);
 
   const running = standing.kind === "running" || standing.kind === "stopping";
   const stop = () => {

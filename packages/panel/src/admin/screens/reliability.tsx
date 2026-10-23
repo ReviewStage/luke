@@ -27,6 +27,7 @@ import {
   Inline,
   List,
   ListRow,
+  Skeleton,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
@@ -34,17 +35,31 @@ import {
 } from "@luke/ui";
 import { formatShare } from "@luke/ui/admin-format";
 import { formatCount, formatDate } from "@luke/ui/time-format";
-import { AccountCell } from "../accounts-table/accounts-table.js";
+import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
-import { BreakdownChart, type BreakdownSeries } from "../charts/breakdown-chart.js";
-import { FailureRatesChart } from "../charts/failure-rates-chart.js";
-import { AdminSection, CARD_GAP, MetricCard, StatCard, StatGroup } from "../charts/stat-card.js";
+import {
+  BreakdownChart,
+  BreakdownChartSkeleton,
+  type BreakdownRow,
+  type BreakdownSeries,
+} from "../charts/breakdown-chart.js";
+import { CHART_PAIR_EVEN } from "../charts/chart-frame.js";
+import { FailureRatesChart, FailureRatesChartSkeleton } from "../charts/failure-rates-chart.js";
+import {
+  AdminSection,
+  CARD_GAP,
+  MetricCard,
+  MetricCardSkeleton,
+  STAT_LAYOUT,
+  StatCards,
+  type StatSpec,
+} from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
 import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
+import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
-import { CHART_PAIR_EVEN, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
 import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 /**
@@ -56,24 +71,19 @@ import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 const RELIABILITY_ERROR = "The reliability endpoint did not answer.";
 
-/** How many providers the health list's bones stand for, about the list a deployment draws. */
-const HEALTH_BONE_ROWS = 12;
+/** How many providers the health list's skeleton stands a row for, about the list a deployment draws. */
+const HEALTH_SKELETON_ROWS = 12;
 
-const RELIABILITY_SHAPES: readonly SkeletonShape[] = [
-  { kind: SKELETON_SHAPE.HEADING, label: "Failures" },
-  { kind: SKELETON_SHAPE.STAT_GROUP, cards: 5 },
-  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.FAILURE_RATES] },
-  { kind: SKELETON_SHAPE.HEADING, label: "Why work failed" },
-  {
-    kind: SKELETON_SHAPE.CHART,
-    plots: [SKELETON_PLOT.BREAKDOWN, SKELETON_PLOT.BREAKDOWN],
-    even: true,
-  },
-  { kind: SKELETON_SHAPE.HEADING, label: "Accounts that need attention" },
-  { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 2 },
-  { kind: SKELETON_SHAPE.HEADING, label: "System health" },
-  { kind: SKELETON_SHAPE.HEALTH, rows: HEALTH_BONE_ROWS },
-];
+/** How many accounts the attention table's skeleton stands a row for, about a usual week's. */
+const ATTENTION_SKELETON_ROWS = 5;
+
+/** The attention table's account column, the one whose cell is an account's. */
+const ATTENTION_ACCOUNT_COLUMN = "account";
+
+/** The bones standing for a badge's words and a provider's name. */
+const SKELETON_BADGE_WIDTH = "64px";
+
+const SKELETON_PROVIDER_WIDTH = "192px";
 
 /** A coding agent's failure class, as the breakdown names it. */
 const AGENT_FAILURE_LABEL = {
@@ -178,7 +188,7 @@ function attentionColumns(
 ): readonly DataTableColumn<AdminAttentionAccount>[] {
   return [
     {
-      key: "account",
+      key: ATTENTION_ACCOUNT_COLUMN,
       label: "Account",
       cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
     },
@@ -210,145 +220,292 @@ function attentionColumns(
   ];
 }
 
+/** The headline failure cards, in the order they stand. */
+const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
+  {
+    key: "luke-turns",
+    label: () => "Luke turns failed",
+    value: ({ headline }) => formatShare(share(headline.lukeTurns)),
+    hint: ({ headline, windowDays }) => ofHint(headline.lukeTurns, "turns", windowDays),
+  },
+  {
+    key: "agent-runs",
+    label: () => "Coding-agent runs failed",
+    value: ({ headline }) => formatShare(share(headline.agentRuns)),
+    hint: ({ headline, windowDays }) => ofHint(headline.agentRuns, "runs", windowDays),
+  },
+  {
+    key: "abandoned",
+    label: () => "Abandoned by the sweep",
+    value: ({ headline }) => formatCount(headline.abandonedTurns),
+    hint: () => "turns past their bound",
+  },
+  {
+    key: "calls",
+    label: () => "Calls dropped",
+    value: ({ headline }) => formatShare(share(headline.calls)),
+    hint: ({ headline, windowDays }) => ofHint(headline.calls, "calls", windowDays),
+  },
+  {
+    key: "automation-runs",
+    label: () => "Automation runs failed",
+    value: ({ headline }) => formatShare(share(headline.automationRuns)),
+    hint: ({ headline, windowDays }) => {
+      const automations = headline.automationRuns;
+      return automations.total === 0
+        ? ofHint(automations, "runs", windowDays)
+        : `+ ${formatShare(automations.skipped / automations.total)} skipped`;
+    },
+    title: ({ headline, windowDays }) => ofHint(headline.automationRuns, "runs", windowDays),
+  },
+];
+
+/** One breakdown of why work failed: its heading, its series, and its rows as the answer counts them. */
+interface Breakdown {
+  title: string;
+  series: readonly BreakdownSeries[];
+  rows: (reliability: AdminReliability) => readonly BreakdownRow[];
+  empty: string;
+}
+
+/** The two breakdowns, side by side in this order. */
+const BREAKDOWNS: readonly Breakdown[] = [
+  {
+    title: "Coding-agent failures by class",
+    series: AGENT_FAILURES_SERIES,
+    rows: (reliability) =>
+      reliability.agentFailures.map((row) => ({
+        label: AGENT_FAILURE_LABEL[row.failure],
+        counts: { count: row.count },
+      })),
+    empty: "No coding-agent run failed in this window.",
+  },
+  {
+    title: "Automation skips and failures by reason",
+    series: AUTOMATION_REASONS_SERIES,
+    rows: (reliability) =>
+      reliability.automationReasons.map((row) => ({
+        label: row.reason === null ? NO_REASON_LABEL : AUTOMATION_REASON_LABEL[row.reason],
+        counts: { skipped: row.skipped, failed: row.failed },
+      })),
+    empty: "No automation run was skipped or failed in this window.",
+  },
+];
+
+/**
+ * Where per-request error rates live, a link to the product analytics where
+ * the deployment names its console and the plain words where it does not
+ * or before the answer says.
+ */
+function AnalyticsNote({
+  consoleUrl,
+}: {
+  consoleUrl: string | null | undefined;
+}): React.JSX.Element {
+  return (
+    <Text tone={TEXT_TONE.MUTED}>
+      Per-request HTTP error rates live in{" "}
+      {consoleUrl ? (
+        <TextLink href={consoleUrl} look={TEXT_LINK_LOOK.UNDERLINED} external newTab>
+          product analytics
+        </TextLink>
+      ) : (
+        "product analytics"
+      )}
+      , not this database.
+    </Text>
+  );
+}
+
+/** What the attention table's figures mean, and where its bound cut it once the answer says so. */
+function AttentionNote({
+  attention,
+}: {
+  attention: AdminReliability["attention"] | undefined;
+}): React.JSX.Element {
+  return (
+    <Text tone={TEXT_TONE.MUTED}>
+      A broken key, integration, or GitHub installation fails the account's agents quietly. Last
+      changed is when the newest broken row last changed: a key's last answer from its provider, or
+      an integration's or installation's last update, which a sign-in retried and not finished also
+      moves. Agents failed counts the account's coding agents with a failed run in the last{" "}
+      {ADMIN_ATTENTION_AGENT_DAYS} days.
+      {attention !== undefined && attention.total > attention.accounts.length
+        ? ` Only the ${formatCount(attention.accounts.length)} newest of ${formatCount(attention.total)} are listed.`
+        : ""}
+    </Text>
+  );
+}
+
 /**
  * What the read found in the service's own rows: the failures, why they
- * happened, and the accounts that need attention. Drawn only where the
+ * happened, and the accounts that need attention, drawn from `reliability`
+ * once it is read and as their skeletons until then. Drawn only where the
  * database answered, since its silence says nothing about failures.
  */
 function ReliabilityRecords({
   reliability,
   onOpenAccount,
 }: {
-  reliability: AdminReliability;
+  reliability: AdminReliability | undefined;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
-  const { headline, windowDays } = reliability;
-  const automations = headline.automationRuns;
-  const skippedShare =
-    automations.total === 0
-      ? undefined
-      : `+ ${formatShare(automations.skipped / automations.total)} skipped`;
-
   return (
     <>
       <AdminSection title="Failures">
-        <StatGroup>
-          <StatCard
-            label="Luke turns failed"
-            value={formatShare(share(headline.lukeTurns))}
-            hint={ofHint(headline.lukeTurns, "turns", windowDays)}
-            grouped
-          />
-          <StatCard
-            label="Coding-agent runs failed"
-            value={formatShare(share(headline.agentRuns))}
-            hint={ofHint(headline.agentRuns, "runs", windowDays)}
-            grouped
-          />
-          <StatCard
-            label="Abandoned by the sweep"
-            value={formatCount(headline.abandonedTurns)}
-            hint="turns past their bound"
-            grouped
-          />
-          <StatCard
-            label="Calls dropped"
-            value={formatShare(share(headline.calls))}
-            hint={ofHint(headline.calls, "calls", windowDays)}
-            grouped
-          />
-          <StatCard
-            label="Automation runs failed"
-            value={formatShare(share(automations))}
-            hint={skippedShare ?? ofHint(automations, "runs", windowDays)}
-            title={ofHint(automations, "runs", windowDays)}
-            grouped
-          />
-        </StatGroup>
-        <FailureRatesChart daily={reliability.daily} generatedAt={reliability.generatedAt} />
-        <Text tone={TEXT_TONE.MUTED}>
-          Per-request HTTP error rates live in{" "}
-          {reliability.analyticsConsoleUrl ? (
-            <TextLink
-              href={reliability.analyticsConsoleUrl}
-              look={TEXT_LINK_LOOK.UNDERLINED}
-              external
-              newTab
-            >
-              product analytics
-            </TextLink>
-          ) : (
-            "product analytics"
-          )}
-          , not this database.
-        </Text>
+        <StatCards layout={STAT_LAYOUT.GROUP} stats={FAILURE_STATS} data={reliability} />
+        {reliability === undefined ? (
+          <FailureRatesChartSkeleton />
+        ) : (
+          <FailureRatesChart daily={reliability.daily} generatedAt={reliability.generatedAt} />
+        )}
+        <AnalyticsNote consoleUrl={reliability?.analyticsConsoleUrl} />
       </AdminSection>
 
       <AdminSection title="Why work failed">
         <div className={CHART_PAIR_EVEN}>
-          <BreakdownChart
-            title="Coding-agent failures by class"
-            series={AGENT_FAILURES_SERIES}
-            rows={reliability.agentFailures.map((row) => ({
-              label: AGENT_FAILURE_LABEL[row.failure],
-              counts: { count: row.count },
-            }))}
-            empty="No coding-agent run failed in this window."
-          />
-          <BreakdownChart
-            title="Automation skips and failures by reason"
-            series={AUTOMATION_REASONS_SERIES}
-            rows={reliability.automationReasons.map((row) => ({
-              label: row.reason === null ? NO_REASON_LABEL : AUTOMATION_REASON_LABEL[row.reason],
-              counts: { skipped: row.skipped, failed: row.failed },
-            }))}
-            empty="No automation run was skipped or failed in this window."
-          />
+          {BREAKDOWNS.map((breakdown) =>
+            reliability === undefined ? (
+              <BreakdownChartSkeleton
+                key={breakdown.title}
+                title={breakdown.title}
+                series={breakdown.series}
+              />
+            ) : (
+              <BreakdownChart
+                key={breakdown.title}
+                title={breakdown.title}
+                series={breakdown.series}
+                rows={breakdown.rows(reliability)}
+                empty={breakdown.empty}
+              />
+            ),
+          )}
         </div>
       </AdminSection>
 
       <AdminSection title="Accounts that need attention">
-        <DataTable
-          label="Accounts that need attention"
-          columns={attentionColumns(onOpenAccount)}
-          rows={reliability.attention.accounts}
-          rowKey={(row) => row.id}
-          empty="No account holds a broken key, integration, or GitHub installation."
-          minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
-          onRowPress={(row) => onOpenAccount(row.id)}
-        />
-        <Text tone={TEXT_TONE.MUTED}>
-          A broken key, integration, or GitHub installation fails the account's agents quietly. Last
-          changed is when the newest broken row last changed: a key's last answer from its provider,
-          or an integration's or installation's last update, which a sign-in retried and not
-          finished also moves. Agents failed counts the account's coding agents with a failed run in
-          the last {ADMIN_ATTENTION_AGENT_DAYS} days.
-          {reliability.attention.total > reliability.attention.accounts.length
-            ? ` Only the ${formatCount(reliability.attention.accounts.length)} newest of ${formatCount(reliability.attention.total)} are listed.`
-            : ""}
-        </Text>
+        {reliability === undefined ? (
+          <DataTableSkeleton
+            label="Accounts that need attention"
+            columns={attentionColumns(onOpenAccount)}
+            rows={ATTENTION_SKELETON_ROWS}
+            minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
+            cells={{ [ATTENTION_ACCOUNT_COLUMN]: <AccountCellSkeleton /> }}
+          />
+        ) : (
+          <DataTable
+            label="Accounts that need attention"
+            columns={attentionColumns(onOpenAccount)}
+            rows={reliability.attention.accounts}
+            rowKey={(row) => row.id}
+            empty="No account holds a broken key, integration, or GitHub installation."
+            minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
+            onRowPress={(row) => onOpenAccount(row.id)}
+          />
+        )}
+        <AttentionNote attention={reliability?.attention} />
       </AdminSection>
     </>
   );
 }
 
 /**
- * The page under its header, once the read has answered: the records where
- * the database answered its probe, and a plain word that nothing could be
- * read where it did not, with System health beneath either way.
+ * A badge while its words are read: the badge itself with a bone for its
+ * words. Note that it stands in a row of its own, whose foot is the badge's,
+ * because a bone gives the badge no words' baseline to sit on, and a badge
+ * set on its line's baseline would stand the line taller than its words do.
+ */
+function BadgeSkeleton(): React.JSX.Element {
+  return (
+    <Inline>
+      <Badge>
+        <Skeleton width={SKELETON_BADGE_WIDTH} />
+      </Badge>
+    </Inline>
+  );
+}
+
+/** The database's card while the probe's answer is read: bones for its badge and its round-trip. */
+function DatabaseCardSkeleton(): React.JSX.Element {
+  return (
+    <MetricCardSkeleton>
+      <BadgeSkeleton />
+    </MetricCardSkeleton>
+  );
+}
+
+/** The integrations' card while their list is read: a row of bones for each provider a deployment lists. */
+function IntegrationsCardSkeleton(): React.JSX.Element {
+  return (
+    <MetricCardSkeleton hint={false}>
+      <List label="Integrations">
+        {Array.from({ length: HEALTH_SKELETON_ROWS }, (_, row) => (
+          <ListRow
+            key={row}
+            title={<Skeleton width={SKELETON_PROVIDER_WIDTH} />}
+            meta={<BadgeSkeleton />}
+          />
+        ))}
+      </List>
+    </MetricCardSkeleton>
+  );
+}
+
+/** The deployment's health, the database's probe beside its integrations, once read and as skeletons until then. */
+function SystemHealth({
+  health,
+}: {
+  health: AdminReliability["systemHealth"] | undefined;
+}): React.JSX.Element {
+  return (
+    <AdminSection title="System health">
+      <div className={`grid ${CARD_GAP} min-[720px]:grid-cols-[1fr_1.4fr]`}>
+        {health === undefined ? (
+          <DatabaseCardSkeleton />
+        ) : (
+          <MetricCard
+            label="Database"
+            hint={`probe round-trip ${formatCount(health.database.latencyMs)} ms`}
+          >
+            <Inline>
+              <Badge tone={health.database.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
+                {health.database.reachable ? "Reachable" : "Unreachable"}
+              </Badge>
+            </Inline>
+          </MetricCard>
+        )}
+        {health === undefined ? (
+          <IntegrationsCardSkeleton />
+        ) : (
+          <MetricCard label="Integrations">
+            <List label="Integrations">
+              {health.integrations.map((integration) => (
+                <IntegrationRow key={integration.key} integration={integration} />
+              ))}
+            </List>
+          </MetricCard>
+        )}
+      </div>
+    </AdminSection>
+  );
+}
+
+/**
+ * The page under its header: the records where the database answered its
+ * probe, or before any answer, and a plain word that nothing could be read
+ * where it did not, with System health beneath either way.
  */
 function ReliabilityBody({
   reliability,
   onOpenAccount,
 }: {
-  reliability: AdminReliability;
+  reliability: AdminReliability | undefined;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
-  const db = reliability.systemHealth.database;
-
   return (
     <>
-      {db.reachable ? (
+      {reliability === undefined || reliability.systemHealth.database.reachable ? (
         <ReliabilityRecords reliability={reliability} onOpenAccount={onOpenAccount} />
       ) : (
         <AdminSection title="Failures">
@@ -359,25 +516,7 @@ function ReliabilityBody({
           </Card>
         </AdminSection>
       )}
-
-      <AdminSection title="System health">
-        <div className={`grid ${CARD_GAP} min-[720px]:grid-cols-[1fr_1.4fr]`}>
-          <MetricCard label="Database" hint={`probe round-trip ${formatCount(db.latencyMs)} ms`}>
-            <div>
-              <Badge tone={db.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
-                {db.reachable ? "Reachable" : "Unreachable"}
-              </Badge>
-            </div>
-          </MetricCard>
-          <MetricCard label="Integrations">
-            <List label="Integrations">
-              {reliability.systemHealth.integrations.map((integration) => (
-                <IntegrationRow key={integration.key} integration={integration} />
-              ))}
-            </List>
-          </MetricCard>
-        </div>
-      </AdminSection>
+      <SystemHealth health={reliability?.systemHealth} />
     </>
   );
 }
@@ -426,12 +565,9 @@ export function ReliabilityScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title="Reliability"
-          note={windowWords(shownWindow)}
-          controls={controls}
-          shapes={RELIABILITY_SHAPES}
-        />,
+        <PageSkeleton title="Reliability" note={windowWords(shownWindow)} controls={controls}>
+          <ReliabilityBody reliability={undefined} onOpenAccount={onOpenAccount} />
+        </PageSkeleton>,
       );
     case "signed-out":
       return gate.signedOut();

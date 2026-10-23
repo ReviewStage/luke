@@ -43,11 +43,8 @@ import type {
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-  type CodingAgentAttachmentType,
-} from "@luke/features/coding-agent-wire";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { type ConversationMediaType, isVideoType } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   type InboxItemPlace,
@@ -61,6 +58,7 @@ import {
   INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_BOUNDS,
+  INBOX_FILE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -70,7 +68,7 @@ import {
   type InboxAsk,
   type InboxAskStanding,
   type InboxBlock,
-  type InboxImageType,
+  type InboxFileType,
   type InboxItem,
   type InboxMessage,
   type InboxPost,
@@ -102,8 +100,10 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
   max,
   ne,
+  notExists,
   or,
   type SQL,
   sql,
@@ -228,9 +228,9 @@ export interface StoredInboxItem {
   readonly answerKey: string | null;
 }
 
-/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, a still's or a video's, and the bytes. */
 export interface InboxImage {
-  readonly contentType: InboxImageType;
+  readonly contentType: ConversationMediaType;
   readonly bytes: Uint8Array;
 }
 
@@ -244,13 +244,13 @@ interface MessageFile {
   /** The id it is kept under, where the message's words name it by its address; minted by the database where none is given. */
   readonly id?: string;
   readonly name: string;
-  readonly contentType: CodingAgentAttachmentType;
+  readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;
 }
 
 /** A file an item's answer carried as a read answers it: the type it travelled as, and the bytes; a picture of a block's reads the same way. */
 export interface InboxFile {
-  readonly contentType: CodingAgentAttachmentType;
+  readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;
 }
 
@@ -274,8 +274,8 @@ export interface InboxMarked {
  */
 const TXID = sql<string>`pg_current_xact_id()::text`;
 
-/** The types a file of an item's may be served under: a picture's, or any a message's file travels as. */
-const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+/** The types a file of an item's may be served under: a picture's, a video's, or any a message's file travels as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
 /** The item's own id, named by its table, since a statement over the item alone spells its columns bare and a bare id inside the files' subquery would be the file's. */
 const ITEM_ID = sql`${sql.identifier(getTableName(inboxItem))}.${sql.identifier(inboxItem.id.name)}`;
@@ -2266,17 +2266,26 @@ function pictureAddressOf(
 interface PicturesByPath {
   readonly kept: readonly PostPicture[];
   readonly idOf: (path: string) => string | undefined;
+  /** The id of a still alone, which a desktop before version 5 draws as an image block; a video it would draw as a broken picture. */
+  readonly stillOf: (path: string) => string | undefined;
 }
 
 /** The pictures handed in, each under an id minted for it, found by the path the agent's words name it by. */
 function picturesByPath(pictures: readonly InboxBodyPicture[]): PicturesByPath {
   const kept = pictures.map(({ path: _path, ...picture }) => ({ ...picture, id: randomUUID() }));
   const ids = new Map<string, string>();
+  const stills = new Set<string>();
   pictures.forEach((picture, at) => {
     const id = kept[at]?.id;
-    if (id !== undefined && !ids.has(picture.path)) ids.set(picture.path, id);
+    if (id === undefined || ids.has(picture.path)) return;
+    ids.set(picture.path, id);
+    if (!isVideoType(picture.contentType)) stills.add(picture.path);
   });
-  return { kept, idOf: (path) => ids.get(path) };
+  return {
+    kept,
+    idOf: (path) => ids.get(path),
+    stillOf: (path) => (stills.has(path) ? ids.get(path) : undefined),
+  };
 }
 
 /**
@@ -2526,10 +2535,10 @@ export function postInboxThread(
         const room = yield* roomToPost(agent, post.key, post.ask);
         if (Result.isFailure(room)) return Result.fail(room.failure);
         const now = yield* DateTime.nowAsDate;
-        const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
+        const { kept, idOf, stillOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = {
           title,
-          blocks: viewBlocks(post.body, post.ask, idOf),
+          blocks: viewBlocks(post.body, post.ask, stillOf),
           response:
             post.ask === undefined ? { type: INBOX_RESPONSE.NONE } : inboxAskResponse(post.ask),
           needsReply: post.needsReply ?? true,
@@ -3471,6 +3480,295 @@ export function postInboxMessage(
             bytes: bytesOf(file),
           })),
         ),
+  );
+}
+
+/** The longest stem a key minted from a subject keeps, leaving room for the number that sets it apart from one the agent keeps already. */
+const KEY_STEM_CHARS = INBOX_BOUNDS.MAX_KEY_CHARS - 8;
+
+/** The stem of a key minted from a subject that spells no letter or digit. */
+const KEY_STEM_FALLBACK = "thread";
+
+/** A subject as the stem of a key, spelled as an agent spells one: its letters and digits in lower case, each run of anything else one hyphen. */
+function keyStem(title: string): string {
+  const stem = title
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .slice(0, KEY_STEM_CHARS)
+    .replace(/^-+|-+$/gu, "");
+  return stem === "" ? KEY_STEM_FALLBACK : stem;
+}
+
+/** The stem, or the stem numbered from two, whichever first names no item of the agent's. */
+function freeKey(stem: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(stem)) return stem;
+  let next = 2;
+  while (taken.has(`${stem}-${next}`)) next += 1;
+  return `${stem}-${next}`;
+}
+
+/** The agent's keys that are the stem or the stem numbered, which a key minted from it must not be. Note that a stem spells no `%` or `_`, so it matches as written. */
+const findStemKeys = SqlSchema.findAll({
+  Request: Schema.Struct({ agentId: Schema.String, stem: Schema.String }),
+  Result: Schema.Struct({ key: Schema.String }),
+  execute: ({ agentId, stem }) =>
+    Database.use((db) =>
+      db
+        .select({ key: inboxItem.key })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.agentId, agentId),
+            or(eq(inboxItem.key, stem), like(inboxItem.key, `${stem}-%`)),
+          ),
+        ),
+    ),
+});
+
+/** The agent, where the member is a member of its workspace, sees it, and it is no teammate's operator, as an item of its reaches them (`itemReachableBy`). */
+const findReachedAgent = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(
+          and(
+            eq(codingAgent.id, agentId),
+            agentReachableBy(userId),
+            agentSeenBy(userId),
+            agentNoTeammatesOperator(userId),
+          ),
+        ),
+    ),
+});
+
+/** The thread the member started with the agent under the key their client sent it with: the item whose first message is theirs under it. */
+const findStartedThread = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    clientKey: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId, clientKey }) =>
+    Database.use((db) =>
+      db
+        .select({ id: inboxItem.id })
+        .from(inboxItem)
+        .innerJoin(inboxMessage, eq(inboxMessage.itemId, inboxItem.id))
+        .where(
+          and(
+            eq(inboxItem.agentId, agentId),
+            eq(inboxMessage.author, INBOX_MESSAGE_AUTHOR.MEMBER),
+            eq(inboxMessage.userId, userId),
+            eq(inboxMessage.clientKey, clientKey),
+            eq(inboxMessage.createdAt, inboxItem.postedAt),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/**
+ * A thread a member opens, written under the agent's starter as every item
+ * of the agent's is, so its tools find it under the key: settled with the
+ * member's own nod, since it asks the member nothing and waits on the
+ * agent, and with no view but its title, its words being its first message.
+ */
+const insertStartedItem = SqlSchema.findOne({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    taskId: Schema.NullOr(Schema.String),
+    organizationId: Schema.String,
+    agentId: Schema.String,
+    key: Schema.String,
+    title: Schema.String,
+    memberId: Schema.String,
+    clientKey: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ memberId, clientKey, now, ...item }) =>
+    Database.use((db) =>
+      db
+        .insert(inboxItem)
+        .values({
+          ...item,
+          revision: 1,
+          version: INBOX_WIRE_VERSION,
+          blocks: [],
+          response: { type: INBOX_RESPONSE.NONE },
+          needsReply: false,
+          status: INBOX_STATUS.ANSWERED,
+          answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+          answerKey: clientKey,
+          answeredBy: memberId,
+          postedAt: now,
+          settledAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: inboxItem.id }),
+    ),
+});
+
+/** A thread a member started, deleted with its messages and files, where it still holds nothing but their first message under the key. */
+const deleteStartedItem = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
+  execute: ({ itemId, clientKey }) =>
+    Database.use((db) => {
+      const first = db
+        .select({ one: inboxMessage.id })
+        .from(inboxMessage)
+        .where(and(eq(inboxMessage.itemId, itemId), eq(inboxMessage.clientKey, clientKey)));
+      const other = db
+        .select({ one: inboxMessage.id })
+        .from(inboxMessage)
+        .where(
+          and(
+            eq(inboxMessage.itemId, itemId),
+            or(isNull(inboxMessage.clientKey), ne(inboxMessage.clientKey, clientKey)),
+          ),
+        );
+      return db
+        .delete(inboxItem)
+        .where(and(eq(inboxItem.id, itemId), exists(first), notExists(other)));
+    }),
+});
+
+/**
+ * A thread a member opens with an agent of a workspace they are a member of
+ * and whose agent they see, as a new mail is written: an item under a key
+ * minted from its subject, past every key the agent keeps, so it never
+ * writes over one of the agent's, and the member's words and files as its
+ * first message, read for them. The agent's row is locked as its own posts
+ * lock it, so a post of its own under the minted key waits on this one. A
+ * thread started again under the client's key is the one it started, which
+ * writes nothing; nothing where the member does not reach the agent, or its
+ * starter is no longer a member of its workspace; one started again with
+ * other words or files is refused as the key reused. The item comes back
+ * as the member reads it.
+ */
+export function startInboxThread(
+  userId: string,
+  agent: InboxAgent,
+  thread: {
+    readonly title: string;
+    readonly text: string;
+    readonly clientKey: string;
+    readonly files?: readonly CodingAgentAttachment[] | undefined;
+  },
+): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
+  const { title, text, clientKey } = thread;
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const reached = yield* findReachedAgent({ userId, agentId: agent.agentId });
+        if (Option.isNone(reached)) return Option.none();
+        const locked = yield* lockAgent(agent);
+        if (Option.isNone(locked)) return Option.none();
+        const files = (thread.files ?? []).map((file) => ({
+          name: file.name,
+          contentType: file.mediaType,
+          bytes: bytesOf(file),
+        }));
+        const started = yield* findStartedThread({ userId, agentId: agent.agentId, clientKey });
+        if (Option.isSome(started)) {
+          const item = yield* itemAsWritten(userId, started.value.id);
+          const first = yield* findKeyedMessage({ itemId: item.id, clientKey });
+          // Note that other words or files under a key taken are refused, so the agent never hears what the thread does not show; the subject is not compared, since the agent may retitle the thread and the agent hears it as the thread stands.
+          const same = Option.isSome(first) && sameMessage(first.value, { userId, text, files });
+          const outcome = same ? INBOX_MESSAGE_OUTCOME.REPEATED : INBOX_MESSAGE_OUTCOME.KEY_REUSED;
+          return Option.some({ item, outcome });
+        }
+        const stem = keyStem(title);
+        const taken = yield* findStemKeys({ agentId: agent.agentId, stem });
+        const key = freeKey(stem, new Set(taken.map((row) => row.key)));
+        const now = yield* DateTime.nowAsDate;
+        const { organizationId } = locked.value;
+        const { id: itemId } = yield* insertStartedItem({
+          ...agent,
+          organizationId,
+          key,
+          title,
+          memberId: userId,
+          clientKey,
+          now,
+        }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
+        const message = yield* writtenMessage({
+          itemId,
+          author: INBOX_MESSAGE_AUTHOR.MEMBER,
+          userId,
+          text,
+          ask: null,
+          answers: null,
+          clientKey,
+          now,
+        });
+        yield* Effect.forEach(files, (file, position) =>
+          insertMessageFile({
+            userId: agent.userId,
+            taskId: agent.taskId,
+            organizationId,
+            itemId,
+            messageId: message.id,
+            ...file,
+            position,
+            now,
+          }),
+        );
+        yield* upsertRead({ userId, itemId });
+        const item = yield* itemAsWritten(userId, itemId);
+        return Option.some({ item, outcome: INBOX_MESSAGE_OUTCOME.WRITTEN });
+      }),
+    ),
+  );
+}
+
+/**
+ * A thread a member started with no subject given the title named, where
+ * it still bears the one its first message stood for, so a title its agent
+ * wrote since stands; its revision moved on, which wakes every held read of
+ * it, and its last change left as it was, so it neither moves in the list
+ * nor reads unread to the member who sent it.
+ */
+const retitleItem = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String, standing: Schema.String, title: Schema.String }),
+  execute: ({ itemId, standing, title }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({ title, revision: sql`${inboxItem.revision} + 1` })
+        .where(and(eq(inboxItem.id, itemId), eq(inboxItem.title, standing))),
+    ),
+});
+
+/** A thread started with no subject titled anew, where it still bears the title it was started under (`retitleItem`). */
+export function retitleInboxThread(
+  itemId: string,
+  standing: string,
+  title: string,
+): InboxStoreEffect<void> {
+  return title === standing ? Effect.void : retitleItem({ itemId, standing, title });
+}
+
+/**
+ * A thread the member started taken back, as a message the agent was not
+ * told is: deleted whole, where the member reaches it and it holds nothing
+ * but their first message under the key, so a thread the agent has since
+ * written on stands.
+ */
+export function withdrawInboxThread(
+  userId: string,
+  itemId: string,
+  clientKey: string,
+): InboxStoreEffect<void> {
+  return Effect.flatMap(findItem({ userId, itemId }), (found) =>
+    Option.isNone(found) ? Effect.void : deleteStartedItem({ itemId, clientKey }),
   );
 }
 

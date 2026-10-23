@@ -1773,6 +1773,39 @@ ul.actor-stack {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
+/* A New thread stands in the reading pane at the thread's own measure: To
+   and Subject each a row, its label in the caption's voice before it, the
+   subject in the body's type, and a hairline under it, as a mail's head
+   is, and the reply's box under them, growing into the room left. */
+.desktop-inbox.inbox-compose {
+  padding-block: var(--luke-space-16);
+  padding-inline: max(var(--content-inset), var(--reading-room));
+}
+
+/* To and Subject stand at the box's own width, inside its inset. */
+.inbox-compose-head {
+  padding-inline: var(--luke-space-16);
+}
+
+.inbox-compose-row {
+  display: grid;
+  min-height: var(--luke-space-48);
+  align-items: center;
+  border-bottom: 1px solid var(--luke-color-border);
+  column-gap: var(--luke-space-12);
+  grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
+}
+
+.inbox-compose-label {
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-compose-box {
+  margin-top: var(--luke-space-16);
+}
+
 /* A line written again where it stands (`edit-composer.tsx`) is already in the
    transcript's measure, so its box takes no inset of its own, and opens out of
    the bubble's corner as a card the window opens in place does. */
@@ -2122,9 +2155,6 @@ ul.actor-stack {
 .agent-call-video-frame .call-video-tile {
   width: 100%;
   height: 100%;
-  max-height: none;
-  margin: 0;
-  aspect-ratio: auto;
 }
 
 .agent-call-video .call-video-frame {
@@ -6637,7 +6667,7 @@ ul.actor-stack {
 .tasks-list {
   display: grid;
   grid-template-columns: var(--tasks-list-columns);
-  column-gap: var(--luke-space-8);
+  column-gap: var(--luke-space-12);
   row-gap: var(--luke-space-16);
   padding-bottom: var(--luke-space-24);
 }
@@ -6654,9 +6684,13 @@ ul.actor-stack {
   align-content: start;
 }
 
+/* Note that the rows take the list's column gap back, because the Stack
+   they are drawn as sets its gap to none, and a subgrid's own gap draws its
+   cells over the parent's, so a row's columns would touch. */
 .tasks-list-rows {
   margin: 0;
   padding: 0;
+  column-gap: normal;
   list-style: none;
 }
 
@@ -6733,7 +6767,9 @@ ul.actor-stack {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
-  min-height: var(--luke-control-height);
+  /* Note that a row stands a little taller than a control, so the list
+     breathes between rows rather than reading as a dense table. */
+  min-height: calc(var(--luke-control-height) + var(--luke-space-6));
   align-items: center;
   padding: var(--luke-space-2) var(--row-inset);
   border-radius: var(--luke-control-radius);
@@ -6774,7 +6810,7 @@ ul.actor-stack {
 
 .tasks-list-row[data-lifted="true"] {
   display: flex;
-  gap: var(--luke-space-8);
+  gap: var(--luke-space-12);
   background: var(--luke-color-surface);
   box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
 }

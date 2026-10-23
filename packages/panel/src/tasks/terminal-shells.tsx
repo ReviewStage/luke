@@ -33,7 +33,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
-import { type RefObject, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
@@ -94,6 +94,19 @@ function shellDetail(shell: TerminalSummary): string {
   );
 }
 
+/** The shells' list in its scroller, which the shells and their placeholder rows both stand in. */
+function ShellList({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <ScrollArea>
+      <div className="terminal-shells-rows">
+        <List label="Shell list" density={LIST_DENSITY.COMPACT}>
+          {children}
+        </List>
+      </div>
+    </ScrollArea>
+  );
+}
+
 /**
  * The list while the shells are first read: rows in a shell's own row, a
  * block where its glyph, its name, and its folder will stand, so the shells
@@ -104,20 +117,16 @@ function ShellsSkeleton(): React.JSX.Element {
   return (
     <Fill className="terminal-shells-wait">
       <SkeletonRegion label={READING_SHELLS}>
-        <ScrollArea>
-          <div className="terminal-shells-rows">
-            <List label="Shell list" density={LIST_DENSITY.COMPACT}>
-              {SKELETON_ROWS.map(({ name, detail }) => (
-                <ListRow
-                  key={name}
-                  leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
-                  title={<Skeleton width={name} />}
-                  description={<Skeleton width={detail} />}
-                />
-              ))}
-            </List>
-          </div>
-        </ScrollArea>
+        <ShellList>
+          {SKELETON_ROWS.map(({ name, detail }) => (
+            <ListRow
+              key={name}
+              leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
+              title={<Skeleton width={name} />}
+              description={<Skeleton width={detail} />}
+            />
+          ))}
+        </ShellList>
       </SkeletonRegion>
     </Fill>
   );
@@ -162,21 +171,17 @@ function ListedShells({
       </NoteLine>
     );
   return (
-    <ScrollArea>
-      <div className="terminal-shells-rows">
-        <List label="Shell list" density={LIST_DENSITY.COMPACT}>
-          {listed.terminals.map((shell) => (
-            <ShellRow
-              key={shell.id}
-              shell={shell}
-              shown={shell.id === session.shell}
-              surfaceOpen={surfaceOpen}
-              session={session}
-            />
-          ))}
-        </List>
-      </div>
-    </ScrollArea>
+    <ShellList>
+      {listed.terminals.map((shell) => (
+        <ShellRow
+          key={shell.id}
+          shell={shell}
+          shown={shell.id === session.shell}
+          surfaceOpen={surfaceOpen}
+          session={session}
+        />
+      ))}
+    </ShellList>
   );
 }
 

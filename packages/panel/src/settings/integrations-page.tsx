@@ -41,13 +41,16 @@ import {
   type InlineEditEnd,
   ProviderMark,
   ScrollArea,
+  SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
+  SETTINGS_SKELETON_CONTROL,
   SearchField,
   SettingsLine,
   SettingsRowMark,
   type SettingsRowState,
   SettingsRowStateLine,
   SettingsSection,
+  type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   Shortcut,
   SPINNER_SIZE,
@@ -173,8 +176,32 @@ const PAGE_LINE = {
   GITHUB_SIGN_IN: "Uses your GitHub sign-in",
 } as const;
 
-/** How many rows each section stands while the statuses are read: a few connected, more not. */
-const INTEGRATIONS_SKELETON = [2, 4] as const;
+/** How many of the offered providers' rows stand as connected while the statuses are read; the rest stand as not. */
+const CONNECTED_SKELETON_ROWS = 2;
+
+/**
+ * The sections that stand while the statuses are read, a row to each offered
+ * provider: a few connected, each ending in its ⋯, and the rest not, each in
+ * its Connect, every one led by its mark over its line.
+ */
+const INTEGRATIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
+  {
+    headed: true,
+    rows: INTEGRATION_PROVIDER_LIST.slice(0, CONNECTED_SKELETON_ROWS).map(() => ({
+      described: true,
+      mark: SETTINGS_ROW_MARK_WIDTH,
+      controls: [SETTINGS_SKELETON_CONTROL.MORE],
+    })),
+  },
+  {
+    headed: true,
+    rows: INTEGRATION_PROVIDER_LIST.slice(CONNECTED_SKELETON_ROWS).map(() => ({
+      described: true,
+      mark: SETTINGS_ROW_MARK_WIDTH,
+      controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+    })),
+  },
+];
 
 /** What a row offers to mend its connection, on its button or in its ⋯. */
 const ROW_ACT = {
@@ -757,11 +784,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) {
     return (
-      <SettingsSectionsSkeleton
-        label="Loading the integrations"
-        sections={INTEGRATIONS_SKELETON}
-        marked
-      />
+      <SettingsSectionsSkeleton label="Loading the integrations" sections={INTEGRATIONS_SKELETON} />
     );
   }
   const healthOf = (server: string) =>

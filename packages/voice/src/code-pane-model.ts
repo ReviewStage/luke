@@ -11,7 +11,7 @@ import {
  * code-pane-model.ts -- what the Code tab's feed says, apart from drawing it: which call each code was shown on, how a range of lines is said, the lines lit, and what its copy carries.
  */
 
-/** The calls the feed groups its code under, as the Call tab draws them. */
+/** The calls the feed groups its code under, as the agents' tabs draw them. */
 export type CodeFeedCallSource = Pick<
   TranscriptCallRow,
   "key" | "startedAt" | "live" | "lukeEnded" | "record" | "caller"
@@ -21,7 +21,7 @@ export type CodeFeedCallSource = Pick<
  * One call's run of the feed: the call's key, when it started, whether it
  * stands now, and each code shown on it, oldest first; and once the call
  * has ended, the line it closes with and what the record says of it, as
- * the Call tab closes it. A run of code shown on no call the transcript
+ * an agent's tab closes it. A run of code shown on no call the transcript
  * holds closes on nothing.
  */
 export interface CodeFeedCall {
@@ -31,7 +31,7 @@ export interface CodeFeedCall {
   readonly showings: readonly TaskCodeShowing[];
   readonly ended: string | undefined;
   readonly record: CallRecord | undefined;
-  /** The teammate whose call it was, named over its run as the Call tab names it; none for the reader's own or a turn's run. */
+  /** The teammate whose call it was, named over its run as an agent's tab names it; none for the reader's own or a turn's run. */
   readonly caller: PlanEditor | undefined;
   /** The agent on the task whose turn the run is, named over it; none for Luke's own or a call's run. */
   readonly agentId: string | undefined;

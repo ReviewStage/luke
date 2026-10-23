@@ -626,7 +626,7 @@ export const CODING_AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
-/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their title or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
+/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their shown name (`agentTabLabel`) or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
 export const CODING_AGENT_WORKSPACE_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
@@ -1887,10 +1887,9 @@ export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
 const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
-   * The turn the message is the journal of, so the Call tab knows which of
-   * the developer's lines asked for it and an agent's tab which turn a line
-   * said on a call answers (`readFrom`); absent on any other row, and from
-   * a service older than it.
+   * The turn the message is the journal of, so an agent's tab knows which
+   * turn a line said on a call answers (`readFrom`); absent on any other
+   * row, and from a service older than it.
    */
   turnId: EffectSchema.optionalKey(EffectSchema.String),
   /**

@@ -35,10 +35,12 @@ import {
   chatNoticeAsksLine,
   chatNoticeReplyLine,
   chatNoticeUnattachedLine,
+  chatNoticeVideosLine,
   MEMBER_KIND,
   type MemberKind,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_BOUNDS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { type ConversationMediaType, isVideoType } from "@luke/features/conversation-picture-wire";
 import { mentionLinksIn } from "@luke/features/mention-link";
 import { CHAT_NOTICE_FROM_CHARS } from "@luke/wire";
 import { Effect, Option, Result } from "effect";
@@ -297,10 +299,12 @@ function noticeText(
   from: string,
   channel: ChatChannelRow,
   message: ChatMessageRow,
-  unattached: readonly string[],
+  pictures: NoticePictures,
 ): string {
   const header = `${CHAT_NOTICE_LEAD} · ${from} ${whereSaid(channel, message)} (m ${message.seq}):`;
+  const { videos, unattached } = pictures;
   const closings = [
+    ...(videos.length === 0 ? [] : [chatNoticeVideosLine(videos)]),
     ...(unattached.length === 0 ? [] : [chatNoticeUnattachedLine(unattached)]),
     ...(message.ask === null ? [] : [chatNoticeAsksLine(message.ask.response.type)]),
     chatNoticeReplyLine(message.seq),
@@ -322,6 +326,16 @@ const PICTURE_EXTENSION = {
   [CHAT_IMAGE_TYPE.WEBP]: ".webp",
 } as const satisfies Record<ChatImageType, string>;
 
+/** What a notice does with a message's pictures: the stills it hands the agent, the videos it names, and the stills past what it carries, which it names too. */
+interface NoticePictures {
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly videos: readonly string[];
+  readonly unattached: readonly string[];
+}
+
+/** No pictures handed, and none named. */
+const NO_NOTICE_PICTURES: NoticePictures = { attachments: [], videos: [], unattached: [] };
+
 /** The attachment ids a message's image blocks name, each once, in the order it first shows them: two blocks of one picture name one id. */
 function pictureIdsOf(message: ChatMessageRow): readonly string[] {
   const ids = message.blocks.flatMap((block) =>
@@ -332,30 +346,34 @@ function pictureIdsOf(message: ChatMessageRow): readonly string[] {
 
 /**
  * The pictures a notice hands an agent, and the ids of the rest: the
- * message's pictures as files named by their attachment id, never a path,
+ * message's stills as files named by their attachment id, never a path,
  * taken in the order it shows them while they fit what one message to an
  * agent carries, its count and bytes together and each within an image's
  * own bound. Note that the first that does not fit ends the taking, so what is
- * attached is always the message's first pictures. A picture its blocks name
- * whose bytes the store does not keep is among the rest.
+ * attached is always the message's first stills. A video is never handed
+ * to a model, which takes no WebM, and is named apart, wherever it stands
+ * (`AGENTS.md`'s rule on recordings). A picture its blocks name whose bytes
+ * the store does not keep is among the rest.
  */
 function noticePictures(
   ids: readonly string[],
   kept: readonly {
     readonly id: string;
-    readonly contentType: ChatImageType;
+    readonly contentType: ConversationMediaType;
     readonly bytes: Uint8Array;
   }[],
-): {
-  readonly attachments: readonly CodingAgentAttachment[];
-  readonly unattached: readonly string[];
-} {
+): NoticePictures {
   const bytesOf = new Map(kept.map((picture) => [picture.id, picture]));
+  const videos = ids.filter((id) => {
+    const picture = bytesOf.get(id);
+    return picture !== undefined && isVideoType(picture.contentType);
+  });
+  const stills = ids.filter((id) => !videos.includes(id));
   const attachments: CodingAgentAttachment[] = [];
   let total = 0;
-  for (const id of ids) {
+  for (const id of stills) {
     const picture = bytesOf.get(id);
-    if (picture === undefined) break;
+    if (picture === undefined || isVideoType(picture.contentType)) break;
     const size = picture.bytes.byteLength;
     const fits =
       attachments.length < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
@@ -369,7 +387,7 @@ function noticePictures(
       data: Buffer.from(picture.bytes).toString("base64"),
     });
   }
-  return { attachments, unattached: ids.slice(attachments.length) };
+  return { attachments, videos, unattached: stills.slice(attachments.length) };
 }
 
 /**
@@ -511,11 +529,16 @@ export function tellMessage(
       ids.length === 0 || !tellsAgent
         ? []
         : yield* hostedStoreOrUnavailable(readMessagePictures(userId, organizationId, message.id));
-    const { attachments, unattached } = noticePictures(ids, kept);
+    const pictures = noticePictures(ids, kept);
     const notice = {
       message,
-      text: noticeText(names.mention(from), channel.value, message, tellsAgent ? unattached : []),
-      attachments,
+      text: noticeText(
+        names.mention(from),
+        channel.value,
+        message,
+        tellsAgent ? pictures : NO_NOTICE_PICTURES,
+      ),
+      attachments: pictures.attachments,
       from,
       fromName: names.name(from),
     };

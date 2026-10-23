@@ -547,12 +547,13 @@ const recordingStarted = Schema.Struct({
   maxSeconds: Schema.Int,
 });
 
-/** A recording stopped: how long it ran, its caption, and the video as the transcript kept it, or why it was not kept and its size. */
+/** A recording stopped: how long it ran, its caption, the absolute path the video stays at in the sandbox until the next recording, and the video as the transcript kept it, or why it was not kept and its size. */
 const recordingStopped = Schema.Struct({
   action: Schema.Literal(BROWSER_AGENT_ACTION.STOP_RECORDING),
   status: done,
   seconds: Schema.Number,
   caption: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
   picture: Schema.optionalKey(
     Schema.Struct({
       id: Schema.String,

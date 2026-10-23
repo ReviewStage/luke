@@ -3,7 +3,7 @@
  *
  * What a task's coding agents need of the developer, and what they say in
  * the workspace: a task's or an agent's inbox followed, one item answered, closed, messaged, or
- * marked, every item marked read, an item's image and an agent's picture,
+ * marked, a thread started, every item marked read, an item's image and an agent's picture,
  * and the workspace's chat read, written to, and a message's picture.
  *
  * Each output is its view schema's type side (`EffectSchema.toType`) rather
@@ -35,6 +35,7 @@ import {
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxReadStateViewSchema,
   codingAgentInboxScopeSchema,
+  codingAgentInboxStartParamsSchema,
   codingAgentPictureParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
@@ -63,6 +64,11 @@ export const agentInboxActsContract = {
     "Could not send the message on this system.",
   )
     .input(exactInput(codingAgentInboxMessageParamsSchema))
+    .output(EffectSchema.toType(codingAgentInboxMessagedViewSchema)),
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START]: actProcedure(
+    "Could not start the thread on this system.",
+  )
+    .input(exactInput(codingAgentInboxStartParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxMessagedViewSchema)),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: actProcedure(
     "Could not mark the inbox item on this system.",

@@ -20,8 +20,10 @@ import {
   PANE_PIN_ELEMENT,
   PanePin,
   ScrollArea,
-  SettingsPage,
-  SettingsSectionsSkeleton,
+  SETTINGS_ROW_MARK_WIDTH,
+  SETTINGS_SKELETON_CONTROL,
+  SettingsPageSkeleton,
+  type SettingsSectionSkeletonShape,
   Shortcut,
   SidebarIcon,
   Skeleton,
@@ -31,6 +33,7 @@ import {
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
@@ -284,14 +287,29 @@ function AutomationsLoading({
 }
 
 /**
- * How wide the placeholder title stands while Settings' chunk loads: a short
- * page name's, five controls' height across. Note that it is a length rather
- * than a share, because the title's line is only as wide as what it holds.
+ * The sections that stand while Settings' chunk loads, in the shape of the
+ * Account page Settings opens on: who is signed in, their face leading; the
+ * GitHub token, its mark leading; and Delete account. Note that they are not
+ * read from the page itself, because that would draw its chunk in with this one.
  */
-const SETTINGS_SKELETON_TITLE = "calc(5 * var(--luke-control-height))";
-
-/** How many rows each placeholder section stands while Settings' chunk loads. */
-const SETTINGS_SKELETON = [3, 2] as const;
+const SETTINGS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
+  {
+    headed: true,
+    rows: [
+      {
+        described: true,
+        mark: actorMarkWidth(ACTOR_SIZE.CARD),
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      {
+        described: false,
+        mark: SETTINGS_ROW_MARK_WIDTH,
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
+    ],
+  },
+];
 
 /**
  * What stands while Settings' chunk loads: its frame, the page list's column
@@ -316,9 +334,7 @@ function SettingsLoading({
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
-        <SettingsPage title={<Skeleton width={SETTINGS_SKELETON_TITLE} />}>
-          <SettingsSectionsSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
-        </SettingsPage>
+        <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
       </section>
     </div>
   );
@@ -398,6 +414,15 @@ function usePlaceCommands(
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           tasks.inboxView.onOpen();
+        }
+      : undefined,
+  );
+  useAppCommand(
+    APP_COMMAND.TASKS,
+    pastGate && tasks.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.boardView.onOpen();
         }
       : undefined,
   );
@@ -504,7 +529,7 @@ const NOTICE_STRIP = <WindowVoiceNotice />;
  * the call bar. A tab standing behind another chosen tab, or under a side
  * panel filling the window, is not on screen.
  */
-function callTabShown(tasks: TasksControl, calling: string | undefined): boolean {
+function callingTabShown(tasks: TasksControl, calling: string | undefined): boolean {
   const { mainTabs, sidePanel } = tasks;
   const tab = mainTabs.tab;
   return (
@@ -713,7 +738,7 @@ export function DesktopShell({
   const calling = useCallingAgent();
   // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
   const chatSurface = useChatSurface(tasks);
-  const callShown = taskDrawn && callTabShown(tasks, calling);
+  const callShown = taskDrawn && callingTabShown(tasks, calling);
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;

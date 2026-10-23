@@ -72,7 +72,6 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
-  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_WORKSPACE_QUERY,
@@ -106,15 +105,17 @@ import {
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
+  INBOX_FILE_TYPE,
   type InboxAnswerRequest,
   type InboxCloseRequest,
   type InboxMessageRequest,
   type InboxReadAllRequest,
+  type InboxStartRequest,
   inboxAnswerRequestSchema,
   inboxCloseRequestSchema,
-  inboxImageTypeSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
+  inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
@@ -339,12 +340,7 @@ export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
   return refusedAs(unparsedWire(refusal), START_REFUSALS);
 }
 
-/** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
-function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
-  return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
-}
-
-/** A transcript's picture's bytes in base64 under its type: a picture, or a WebM an agent recorded; unanswered under any other type. */
+/** A transcript's or a chat message's picture's bytes in base64 under its type: a picture, or a WebM an agent recorded; unanswered under any other type. */
 function readConversationPicture(
   response: Response,
 ): Effect.Effect<CodingAgentInboxAttachmentView> {
@@ -354,10 +350,10 @@ function readConversationPicture(
   );
 }
 
-/** The types an inbox item's attachment is served under: a block's picture's, or any a file an answer carried travelled as. */
-const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+/** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried travelled as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
-/** An inbox attachment's bytes in base64 under its type: a picture, or a file an answer carried; unanswered under any other type. */
+/** An inbox attachment's bytes in base64 under its type: a picture, a recording, or a file an answer carried; unanswered under any other type. */
 function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
 }
@@ -1177,7 +1173,7 @@ export class HostedCodingAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readImage(answer.response);
+        return readConversationPicture(answer.response);
       },
     );
   }
@@ -1496,6 +1492,23 @@ export class HostedCodingAgentClient {
         { params: { id: itemId }, body },
         HOSTED_DEADLINE.STEER,
       ),
+      INBOX_ANSWER_REFUSALS,
+    );
+  }
+
+  /**
+   * A thread the account starts with one agent, as a new mail is written:
+   * the thread as it then stands, its first message on it, where the
+   * service wrote it and handed it to the agent; the refusals a message to
+   * the agent answers with otherwise, since it reaches the agent as one.
+   */
+  startInboxThread(
+    request: InboxStartRequest,
+  ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
+    const body = wireRequestOf(inboxStartRequestSchema, request);
+    if (body === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.start, body, HOSTED_DEADLINE.STEER),
       INBOX_ANSWER_REFUSALS,
     );
   }

@@ -107,7 +107,6 @@
     flex: 0 1 auto;
     overflow: hidden;
     font-weight: var(--luke-weight-medium);
-    text-overflow: ellipsis;
   }
 
   .luke-combobox-option-detail,
@@ -128,7 +127,6 @@
     min-width: 0;
     flex: 0 1000 auto;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   /* A hint keeps a menu's distance from what stands before it, as a chord does. */

@@ -79,6 +79,7 @@ import {
   SCROLL_FADE_INSET,
   SCROLL_GUTTER,
   ScrollArea,
+  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
@@ -116,6 +117,7 @@ import {
   XIcon,
 } from "lucide-react";
 import {
+  type ComponentProps,
   createContext,
   lazy,
   type ReactNode,
@@ -210,6 +212,7 @@ import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actio
 import {
   PullRequestStateMenu,
   PullRequestTitle,
+  PullRequestTitleLine,
   PullRequestWriteNote,
   type PullRequestWrites,
   usePullRequestWrites,
@@ -260,7 +263,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * GitHub's own sentence and the presses (`merge-box.tsx`), with Preview
  * first where a deployment of its head serves an address, opening it or, for
  * several, a menu of their environments (`PreviewControl`), and Run before
- * it, which runs the agent's branch in a terminal of this Mac in the side
+ * it, which runs the shown pull request's branch in a terminal of this Mac in the side
  * panel, where the panel offers one (`onRun`). Open on GitHub
  * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
  * hands them to while it is drawn (`useHandedTabActions`). Under it one
@@ -752,35 +755,119 @@ function Checks({
       {checks.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
-        <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
+        <CheckList>
           {checks.map((check, at) => (
             // Note that two checks may share a name across Apps, so a row is keyed by its place too.
             <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
           ))}
-        </List>
+        </CheckList>
       )}
     </Section>
   );
 }
 
-/** Quiet blocks where a part's words will stand, one per width given, which `label` names to a reader. */
+/** The checks' list, which the checks and their placeholder rows both stand in. */
+function CheckList({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
+      {children}
+    </List>
+  );
+}
+
+/** How wide each placeholder check's name and App stand, as shares of their lines. */
+const CHECK_SKELETON_ROWS = [
+  { name: "55%", app: "30%" },
+  { name: "45%", app: "24%" },
+  { name: "50%", app: "28%" },
+] as const;
+
+/** How wide a placeholder check's lead stands: its App's square avatar. */
+const CHECK_SKELETON_LEAD = "16px";
+
+/** How wide each placeholder entry's lines stand, its author's in the head then its words. */
+const ENTRY_SKELETON_LINES = [
+  { by: "22%", words: ["85%", "60%"] },
+  { by: "18%", words: ["70%"] },
+] as const;
+
+/** Quiet blocks where a part's words will stand, one per width given, in the part's own type at the content inset, which `label` names to a reader. */
 function PartSkeleton({
   label,
   widths,
-  className,
 }: {
   label: string;
   widths: readonly string[];
-  className?: string;
 }): React.JSX.Element {
   return (
     <SkeletonRegion label={label}>
-      <div className={className ? `pull-request-skeleton ${className}` : "pull-request-skeleton"}>
+      <div className="pull-request-skeleton">
         {widths.map((width, at) => (
           // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
           <Skeleton key={at} width={width} />
         ))}
       </div>
+    </SkeletonRegion>
+  );
+}
+
+/** The checks while they are read: rows in a check's own list and row, a block where its avatar, its name, and its App will stand. */
+function ChecksSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={PULL_REQUEST_WORDS.READING_CHECKS}>
+      <CheckList>
+        {CHECK_SKELETON_ROWS.map(({ name, app }) => (
+          <ListRow
+            key={name}
+            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={CHECK_SKELETON_LEAD} />}
+            title={<Skeleton width={name} />}
+            description={<Skeleton width={app} />}
+          />
+        ))}
+      </CheckList>
+    </SkeletonRegion>
+  );
+}
+
+/** The conversation while it is read: entries in an entry's own card, its author's line over its words. */
+function ConversationSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={PULL_REQUEST_WORDS.READING_CONVERSATION}>
+      <EntryList>
+        {ENTRY_SKELETON_LINES.map(({ by, words }) => (
+          <EntryFrame key={by}>
+            <EntryHead>
+              <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={CHECK_SKELETON_LEAD} />
+              <Skeleton width={by} />
+            </EntryHead>
+            {words.map((width) => (
+              <Skeleton key={width} width={width} />
+            ))}
+          </EntryFrame>
+        ))}
+      </EntryList>
+    </SkeletonRegion>
+  );
+}
+
+/** The line under the title while the pull request is read, in the people line's own type and room. */
+function HeadSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={PULL_REQUEST_WORDS.READING}>
+      <PeopleLine>
+        <Skeleton width="65%" />
+      </PeopleLine>
+    </SkeletonRegion>
+  );
+}
+
+/** The title while neither the read nor Luke holds it, in the title's own line. */
+function TitleSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={PULL_REQUEST_WORDS.READING}>
+      <PullRequestTitleLine>
+        <Skeleton width="60%" />
+      </PullRequestTitleLine>
     </SkeletonRegion>
   );
 }
@@ -1257,6 +1344,32 @@ function InlineThread({
   );
 }
 
+/** The conversation's list of entries, which its entries and their placeholders both stand in. */
+function EntryList({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.CONTROL} className="pull-request-conversation">
+      {children}
+    </Stack>
+  );
+}
+
+/** One entry's card. */
+function EntryFrame({
+  children,
+  ...props
+}: Omit<ComponentProps<"li">, "className">): React.JSX.Element {
+  return (
+    <li className="pull-request-entry" {...props}>
+      {children}
+    </li>
+  );
+}
+
+/** An entry's head: who, where a review left them, and when. */
+function EntryHead({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="changes-comment-head">{children}</span>;
+}
+
 /** One comment or review: who, where a review left them, and when; then their words, and the review threads a review started. */
 function EntryCard({
   entry,
@@ -1270,19 +1383,18 @@ function EntryCard({
   const threads = entry.threads ?? [];
   const landed = useLandedEntry(entry.url);
   return (
-    <li
+    <EntryFrame
       ref={landed.ref}
-      className="pull-request-entry"
       // Note that the entry takes the focus a link to it on GitHub brings, though no key reaches it.
       tabIndex={-1}
       data-search-landed={landed.ringed ? "" : undefined}
       onAnimationEnd={landed.onAnimationEnd}
     >
-      <span className="changes-comment-head">
+      <EntryHead>
         <PersonRef person={entry.by} />
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
         <Time className="changes-comment-time" at={entry.at} now={now} />
-      </span>
+      </EntryHead>
       <EntryWords entry={entry} picture={picture} />
       <Reactions reactions={entry.reactions} subject={entry.subject} />
       {threads.length === 0 ? null : (
@@ -1298,7 +1410,7 @@ function EntryCard({
           ))}
         </Stack>
       )}
-    </li>
+    </EntryFrame>
   );
 }
 
@@ -1312,6 +1424,11 @@ interface OverviewParts {
     readonly checks: () => void;
     readonly conversation: () => void;
   };
+}
+
+/** The line under the title, in the people line's caption type: the branches, who opened it, its reviewers and labels. */
+function PeopleLine({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="changes-people pull-request-people">{children}</div>;
 }
 
 /** Under the title, one line wrapping where it must: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels; a skeleton while its read is out, and its failure with Retry. */
@@ -1329,13 +1446,7 @@ function PullRequestHead({
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
-    return (
-      <PartSkeleton
-        label={PULL_REQUEST_WORDS.READING}
-        widths={["65%"]}
-        className="pull-request-head-skeleton"
-      />
-    );
+    return <HeadSkeleton />;
   }
   if (part.kind !== PART.LANDED) {
     return <PartFailure line={PULL_REQUEST_WORDS.FAILED} onRetry={parts.ask.pullRequest} />;
@@ -1350,7 +1461,7 @@ function PullRequestHead({
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
-    <div className="changes-people pull-request-people">
+    <PeopleLine>
       <span className="pull-request-branch-row">
         <PullRequestBranches
           base={pullRequest.base}
@@ -1380,7 +1491,7 @@ function PullRequestHead({
         <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
       </span>
       <PullRequestLabels labels={pullRequest.labels ?? []} />
-    </div>
+    </PeopleLine>
   );
 }
 
@@ -1532,11 +1643,7 @@ function ChecksPart({
   return (
     <Section title="Checks">
       {part.kind === PART.PENDING ? (
-        <PartSkeleton
-          label={PULL_REQUEST_WORDS.READING_CHECKS}
-          widths={["55%", "45%", "50%"]}
-          className="pull-request-checks-skeleton"
-        />
+        <ChecksSkeleton />
       ) : (
         <PartFailure line={PULL_REQUEST_WORDS.CHECKS_FAILED} onRetry={parts.ask.checks} />
       )}
@@ -1612,10 +1719,7 @@ function ConversationPart({
     return (
       <Section title="Conversation" fold={fold} end={filterControls}>
         {part.kind === PART.PENDING ? (
-          <PartSkeleton
-            label={PULL_REQUEST_WORDS.READING_CONVERSATION}
-            widths={["35%", "85%", "70%"]}
-          />
+          <ConversationSkeleton />
         ) : (
           <PartFailure
             line={PULL_REQUEST_WORDS.CONVERSATION_FAILED}
@@ -1651,11 +1755,11 @@ function ConversationPart({
       ) : shown.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_MATCHING}</p>
       ) : (
-        <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.CONTROL} className="pull-request-conversation">
+        <EntryList>
           {shown.map((entry) => (
             <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
           ))}
-        </Stack>
+        </EntryList>
       )}
     </Section>
   );
@@ -1672,11 +1776,7 @@ function HeaderTitle({
   if (title === undefined) {
     return (
       <div className="pull-request-title-wait">
-        <PartSkeleton
-          label={PULL_REQUEST_WORDS.READING}
-          widths={["60%"]}
-          className="pull-request-title"
-        />
+        <TitleSkeleton />
       </div>
     );
   }
@@ -2250,7 +2350,7 @@ interface AgentPullRequestTabProps {
   onView: (view: PullRequestView) => void;
   /** Hears what the side panel's toolbar ⋯ offers while the tab is drawn, Open on GitHub and Refresh (`useHandedTabActions`); none where no toolbar draws them. */
   onActions?: HandTabActions | undefined;
-  /** Runs the agent's branch in a terminal of this Mac in the side panel, which the header's Run offers; none where the platform has no Mac terminal, no repository is known, or the tab names another pull request than the agent's own. */
+  /** Runs the shown pull request's branch in a terminal of this Mac in the side panel, which the header's Run offers; none where the platform has no Mac terminal or no repository is known. A fork's pull request offers none, whatever this holds. */
   onRun?: (() => void) | undefined;
 }
 
@@ -2528,7 +2628,11 @@ function PullRequestTabBody({
                     )}
                     <div className="pull-request-title-actions">
                       <PreviewControl checks={landed(parts.checks)} shown={shown} />
-                      {onRun === undefined || held === undefined ? null : (
+                      {/* Note that Run waits for the overview to say the head is the base repository's own, and a fork's pull request offers none, because a run makes its worktree on the head's branch name in the base repository's clone, where a fork's name could be another branch's. */}
+                      {onRun === undefined ||
+                      held === undefined ||
+                      overview === undefined ||
+                      overview.headOwner !== undefined ? null : (
                         <Button
                           variant={BUTTON_VARIANT.OUTLINE}
                           icon={<PlayIcon />}

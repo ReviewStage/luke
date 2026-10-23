@@ -10,6 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -81,7 +82,11 @@ afterEach(() => {
 });
 
 /** The pin's row drawn in the sidebar's list, answering its press. */
-function drawPin(pin: PinnedTab = PIN): HTMLElement {
+function drawPin(
+  pin: PinnedTab = PIN,
+  task: TaskSummary = TASK,
+  control: TasksControl = tasksControl({ tasks: [task] }),
+): HTMLElement {
   const list = document.body.appendChild(document.createElement("ul"));
   root = createRoot(list);
   act(() =>
@@ -89,9 +94,9 @@ function drawPin(pin: PinnedTab = PIN): HTMLElement {
       onRegistry(
         AtomRegistry.make(),
         createElement(SidebarPinnedTab, {
-          tasks: tasksControl({ tasks: [TASK] }),
+          tasks: control,
           pin,
-          task: TASK,
+          task,
           current: false,
           inSight: true,
           onOpen: () => undefined,
@@ -185,4 +190,126 @@ test("a pinned Plan tab hangs its task's own card, an agent's pin its own", asyn
   const taskCard = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.match(taskCard?.textContent ?? "", /Teammate invitations/u);
   assert.equal(card(), null, "no pin card stands beside it");
+});
+
+test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the grey icon and pinned label where it holds none", () => {
+  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const held: TaskSummary = {
+    ...TASK,
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 42,
+          title: "Expire invitations",
+          state: PULL_REQUEST_STATE.MERGED,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 4,
+          deletions: 1,
+          agentId: AGENT,
+        },
+      ],
+    },
+  };
+  const live = drawPin(pin, held);
+  assert.equal(live.textContent, "#42 Expire invitations");
+  assert.equal(
+    live.querySelector("[data-pull-request-mark]")?.getAttribute("data-pull-request-state"),
+    PULL_REQUEST_STATE.MERGED,
+  );
+
+  act(() => root?.unmount());
+  document.body.replaceChildren();
+  const unknown = drawPin(pin, TASK);
+  assert.equal(unknown.textContent, "#42 Old title");
+  assert.equal(unknown.querySelector("[data-pull-request-mark]"), null);
+});
+
+test("a pinned Changes tab of an agent that shares its pull request with a newer one wears the open task's read of its own", () => {
+  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const newer = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const held: TaskSummary = {
+    ...TASK,
+    agents: {
+      total: 2,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 42,
+          title: "Newer title",
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 4,
+          deletions: 1,
+          agentId: newer,
+        },
+      ],
+    },
+  };
+  const base = tasksControl({ tasks: [held] });
+  const control: TasksControl = {
+    ...base,
+    activeTaskId: TASK.id,
+    agents: {
+      ...base.agents,
+      agents: undefined,
+      pullRequests: new Map([
+        [
+          AGENT,
+          {
+            number: 42,
+            title: "Newer title",
+            url: "https://github.com/acme/relay/pull/42",
+            state: PULL_REQUEST_STATE.MERGED,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 4,
+            deletions: 1,
+            changedFiles: 1,
+          },
+        ],
+      ]),
+    },
+  };
+  const row = drawPin(pin, held, control);
+  assert.equal(row.textContent, "#42 Newer title");
+  assert.equal(
+    row.querySelector("[data-pull-request-mark]")?.getAttribute("data-pull-request-state"),
+    PULL_REQUEST_STATE.MERGED,
+  );
+});
+
+test("a pinned Changes tab naming a pull request by number keeps its pinned label where the task's pull requests stand in more than one repository, since a number names one only within its repository", () => {
+  const pin: PinnedTab = {
+    task: TASK.id,
+    tab: { changes: AGENT, number: 42 },
+    label: "#42 Old title",
+    at: 1,
+  };
+  const line = (repository: string) => ({
+    number: 42,
+    title: `Title in ${repository}`,
+    url: `https://github.com/acme/${repository}/pull/42`,
+    state: PULL_REQUEST_STATE.MERGED,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 4,
+    deletions: 1,
+  });
+  const held: TaskSummary = {
+    ...TASK,
+    agents: {
+      total: 2,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 2,
+      pullRequests: [line("old"), line("new")],
+    },
+  };
+  const row = drawPin(pin, held);
+  assert.equal(row.textContent, "#42 Old title");
+  assert.equal(row.querySelector("[data-pull-request-mark]"), null);
 });

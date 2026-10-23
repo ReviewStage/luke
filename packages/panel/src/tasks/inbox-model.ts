@@ -4,6 +4,7 @@ import {
   type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   inboxAttachmentOf,
@@ -17,7 +18,6 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
-  INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -170,7 +170,9 @@ export interface InboxCommentFiles {
  * A comment's files as they are drawn after its words, each in the order
  * attached: a picture its words already draw left out, since it stands
  * where they draw it, as an agent's pictures do, then the pictures and
- * every other file apart, as each is drawn in its own way. Note that only
+ * every other file apart, as each is drawn in its own way. A WebM an agent
+ * recorded is drawn as a picture is, played in its place (`inbox-pictures.tsx`),
+ * so one the words draw is not named again as a file. Note that only
  * a picture the words draw as one is left out (`picturesDrawn`): a file
  * they only link to, quote in code, or name as a picture though it is
  * none is still drawn here, so it can still be opened.
@@ -182,7 +184,7 @@ export function inboxCommentFiles(
 ): InboxCommentFiles {
   const picture = (file: InboxFile) =>
     attachmentView({ name: file.name, mediaType: file.mediaType, url: "" }) ===
-    ATTACHMENT_VIEW.IMAGE;
+      ATTACHMENT_VIEW.IMAGE || file.mediaType === CONVERSATION_MEDIA_TYPE.WEBM;
   const drawn = new Set(
     words === undefined ? [] : picturesDrawn(words, itemId).map((each) => each.attachmentId),
   );
@@ -509,16 +511,20 @@ export function inboxMessageOf(draft: InboxDraft): InboxMessageDraft | undefined
 /**
  * The thread an item is drawn as from version 5, or nothing where it is
  * drawn from the fields a desktop before it reads: a thread holding an ask,
- * or one a note opens, the agent's words with nothing in the item's blocks,
- * since a post that asks nothing leaves those empty. An item from before
- * version 5, whose question its blocks hold and whose thread asks nothing,
- * is drawn as it always was.
+ * one a note opens, the agent's words with nothing in the item's blocks,
+ * since a post that asks nothing leaves those empty, or one a member
+ * started, their words first, which asks nothing and holds no view either.
+ * An item from before version 5, whose question its blocks hold and whose
+ * thread asks nothing, is drawn as it always was.
  */
 export function inboxThreadOf(item: InboxItem): readonly InboxMessage[] | undefined {
   const thread = item.thread ?? [];
   if (thread.some((message) => message.ask !== undefined)) return thread;
-  const opens = thread[0]?.author === INBOX_MESSAGE_AUTHOR.AGENT;
-  return opens && item.blocks.length === 0 ? thread : undefined;
+  const opener = thread[0];
+  if (opener === undefined || item.blocks.length > 0) return undefined;
+  const opens =
+    opener.author === INBOX_MESSAGE_AUTHOR.AGENT || item.response.type === INBOX_RESPONSE.NONE;
+  return opens ? thread : undefined;
 }
 
 /** An ask this build knows, as a read carries it, with where it stands. */
@@ -1185,8 +1191,8 @@ export type InboxMedia =
 /** How many of an item's media its row shows at most, so a row stays a row. */
 const MAX_ROW_MEDIA = 4;
 
-/** The picture types a file on the thread may be drawn as, the ones an image block's attachment is kept as. */
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+/** The types a file on the thread may be drawn as a picture by: the ones an image block's attachment is kept as, or a WebM an agent recorded, played where a picture is drawn. */
+const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
 
 /** The page a link's place names as media: a task's, or an agent with no task's; none for a place that is no page. */
 function pageMediaOf(place: ReadLink["place"] | undefined): InboxMedia | undefined {
@@ -1417,9 +1423,10 @@ export function inboxSettledWords(
   return undefined;
 }
 
-/** A settled item's standing in one word: answered, resolved by a member without an answer, or withdrawn by its agent. */
+/** A settled item's standing in one word: answered, sent by the member who started it, resolved by a member without an answer, or withdrawn by its agent. */
 export const INBOX_SETTLED_STANDING = {
   ANSWERED: "Answered",
+  STARTED: "Sent",
   RESOLVED: "Resolved",
   WITHDRAWN: "Withdrawn",
 } as const;
@@ -1434,7 +1441,14 @@ export const INBOX_SETTLED_STANDING = {
 export function inboxSettledStanding(
   item: InboxItem,
 ): (typeof INBOX_SETTLED_STANDING)[keyof typeof INBOX_SETTLED_STANDING] {
-  if (item.status === INBOX_STATUS.ANSWERED) return INBOX_SETTLED_STANDING.ANSWERED;
+  if (item.status === INBOX_STATUS.ANSWERED) {
+    // A thread a member started stands settled on their own nod until its agent writes on it.
+    const thread = inboxThreadOf(item) ?? [];
+    const sent =
+      thread.length > 0 &&
+      thread.every((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER);
+    return sent ? INBOX_SETTLED_STANDING.STARTED : INBOX_SETTLED_STANDING.ANSWERED;
+  }
   if (item.closedBy !== undefined) return INBOX_SETTLED_STANDING.RESOLVED;
   const withdrawn = (inboxThreadOf(item) ?? []).some(
     (each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN,

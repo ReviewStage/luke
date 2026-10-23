@@ -1,6 +1,6 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
-import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
+import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_SIZE,
@@ -26,7 +26,7 @@ import {
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
-import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
+import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -35,6 +35,7 @@ import { ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
@@ -99,26 +100,69 @@ function pinGone(pin: PinnedTab, tasks: TasksControl): boolean {
  * kind, the Plan's its task's status, a file's path, or an agent's as its
  * tab wears it, where it stands included, wherever the window last read the
  * agent (`agent`), and otherwise at rest in the harness it ran in when it
- * was pinned.
+ * was pinned. A Changes pin wears its pull request's mark for where the
+ * task's row last read it (`pullRequest`), and a grey icon only where the
+ * row holds none.
  */
 function pinSubject(
   pin: PinnedTab,
   task: TaskSummary,
   agent: TaskAgentLine | undefined,
+  pullRequest: PinnedPullRequest | undefined,
 ): TabSubject {
   const { tab } = pin;
   if (isAgentTab(tab)) {
     const pinned = pin.model === undefined ? undefined : { model: pin.model };
     return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? pinned };
   }
-  if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES };
+  if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES, pullRequest };
   if (isFileTab(tab)) return { kind: TAB_KIND.FILE, path: tab.file };
   return { kind: TAB_KIND.PANEL, tab, plan: { name: task.name, status: task.status } };
 }
 
-/** A pin as the sidebar names it: by the label it was pinned under, but a Plan tab's by its task's name as it stands now, as the tab itself is named. */
-function namedPin(pin: PinnedTab, task: TaskSummary): PinnedTab {
-  return pin.tab === SIDE_PANEL_TAB.PLAN ? { ...pin, label: task.name } : pin;
+/** What a pin's pull request is drawn and named from: its number, title, and where it stands. */
+type PinnedPullRequest = PullRequestMarked & Pick<CodingAgentPullRequest, "title">;
+
+/** The repository a pull request's address names, without its number: what two pull requests of one repository share. */
+function repositoryOfLine(line: TaskPullRequestLine): string | undefined {
+  return line.url?.replace(/\/pull\/\d+.*$/u, "");
+}
+
+/**
+ * The pull request a pin of an agent's Changes shows, as the window last
+ * read it from GitHub. An agent's own is the open task's read of that agent
+ * where the pin is on it, else the task's row's line naming the agent. A
+ * numbered tab names another pull request of its agent's repository, which
+ * the row's lines identify by number alone, so one is taken from the row only
+ * where all its lines stand in one repository. Nothing for any other pin,
+ * or where the window cannot tell which pull request the pin is of; the pin
+ * then keeps the label and the grey icon it was pinned with.
+ */
+function pinPullRequest(
+  pin: PinnedTab,
+  task: TaskSummary,
+  tasks: TasksControl,
+): PinnedPullRequest | undefined {
+  const { tab } = pin;
+  if (!isChangesTab(tab)) return undefined;
+  const lines = task.agents?.pullRequests ?? [];
+  if (tab.number !== undefined) {
+    const sameRepository = new Set(lines.map(repositoryOfLine)).size <= 1;
+    return sameRepository ? lines.find((line) => line.number === tab.number) : undefined;
+  }
+  const own =
+    pin.task === tasks.activeTaskId ? tasks.agents.pullRequests.get(tab.changes) : undefined;
+  return own ?? lines.find((line) => line.agentId === tab.changes);
+}
+
+/** A pin as the sidebar names it: by the label it was pinned under, but a Plan tab's by its task's name and a Changes tab's by its pull request's number and title as they stand now, as the tab itself is named. */
+function namedPin(
+  pin: PinnedTab,
+  task: TaskSummary,
+  pullRequest: PinnedPullRequest | undefined,
+): PinnedTab {
+  if (pin.tab === SIDE_PANEL_TAB.PLAN) return { ...pin, label: task.name };
+  return pullRequest === undefined ? pin : { ...pin, label: pullRequestLabelOf(pullRequest) };
 }
 
 /** The agent a pin of an agent's tab or of its Changes is of; none for any other pin. */
@@ -260,6 +304,7 @@ function PinnedTabCard({
   pin,
   task,
   agent,
+  pullRequest,
   gone,
   tasks,
   onOpenTask,
@@ -267,6 +312,7 @@ function PinnedTabCard({
   pin: PinnedTab;
   task: TaskSummary;
   agent: TaskAgentLine | undefined;
+  pullRequest: PinnedPullRequest | undefined;
   gone: boolean;
   tasks: TasksControl;
   onOpenTask: () => void;
@@ -276,7 +322,10 @@ function PinnedTabCard({
   const { openGitHub, pictures } = tasks.repositories;
   return (
     <HoverCard data-pinned-tab-card="">
-      <HoverCardHead glyph={tabLook(pinSubject(pin, task, agent)).icon} name={pin.label} />
+      <HoverCardHead
+        glyph={tabLook(pinSubject(pin, task, agent, pullRequest)).icon}
+        name={pin.label}
+      />
       <HoverCardRow
         look={HOVER_CARD_ROW_LOOK.DETAIL}
         glyph={<PlanGlyph status={task.status} />}
@@ -319,7 +368,8 @@ export function SidebarPinnedTab({
   /** Opens the task the tab is of, as its own row does. */
   onOpenTask: () => void;
 }): React.JSX.Element {
-  const pin = namedPin(kept, task);
+  const livePullRequest = pinPullRequest(kept, task, tasks);
+  const pin = namedPin(kept, task, livePullRequest);
   const copied = useTranscriptCopier();
   const now = useMinute();
   const menu = useMenu(tasks.shown && inSight);
@@ -347,6 +397,7 @@ export function SidebarPinnedTab({
               pin={pin}
               task={task}
               agent={agent}
+              pullRequest={livePullRequest}
               gone={gone}
               tasks={tasks}
               onOpenTask={onOpenTask}
@@ -362,7 +413,7 @@ export function SidebarPinnedTab({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <span className="sidebar-pinned-tab-glyph">
-              {tabLook(pinSubject(pin, task, agent)).icon}
+              {tabLook(pinSubject(pin, task, agent, livePullRequest)).icon}
             </span>
           }
           title={

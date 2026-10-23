@@ -179,6 +179,7 @@ function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuA
   const cancel: MenuAction = {
     label: "Cancel task",
     icon: <TaskStandingMark status={TASK_STATUS.CANCELED} />,
+    danger: true,
     onSelect: () => tasks.onSettleTasks([task.id], SETTLED_STATUS.CANCELED),
   };
   const cancelable = settleOffered(task, SETTLED_STATUS.CANCELED);

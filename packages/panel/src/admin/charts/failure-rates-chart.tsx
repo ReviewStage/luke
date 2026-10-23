@@ -15,7 +15,7 @@ import {
 import { partialDayKey } from "@luke/ui/daily-series";
 import { formatDayTick } from "@luke/ui/time-format";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { ChartEmpty, ChartFrame, SeriesLegend } from "./chart-frame.js";
+import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
 /** The four rates, in the order the legend names them. */
 const FAILURE_RATES_CHART = {
@@ -30,6 +30,24 @@ type FailureSeries = keyof typeof FAILURE_RATES_CHART;
 // SAFETY: `Object.keys` widens the config's own keys to string.
 const SERIES = Object.keys(FAILURE_RATES_CHART) as FailureSeries[];
 
+const FAILURE_RATES_TITLE = "Failure rate per day";
+
+/** The plot's height, which the chart and its skeleton both stand. */
+const FAILURE_RATES_PLOT_HEIGHT = "14rem";
+
+/** The four kinds of work by their line's ink, in the config's order. */
+function FailureRatesLegend(): React.JSX.Element {
+  return (
+    <SeriesLegend
+      series={SERIES.map((series) => ({
+        key: series,
+        label: FAILURE_RATES_CHART[series].label,
+        color: FAILURE_RATES_CHART[series].color,
+      }))}
+    />
+  );
+}
+
 /**
  * The window's daily failure rates. A day nothing of a kind ended on is a
  * gap in that kind's line rather than a zero, and a window where nothing
@@ -42,7 +60,7 @@ export function FailureRatesChart({
   daily: readonly AdminReliabilityDay[];
   generatedAt: number;
 }): React.JSX.Element {
-  const title = "Failure rate per day";
+  const title = FAILURE_RATES_TITLE;
   const anything = daily.some((day) => SERIES.some((series) => day[series] !== null));
   if (!anything) {
     return (
@@ -54,19 +72,12 @@ export function FailureRatesChart({
 
   const partialDay = partialDayKey(daily, generatedAt);
   return (
-    <ChartFrame
-      title={title}
-      legend={
-        <SeriesLegend
-          series={SERIES.map((series) => ({
-            key: series,
-            label: FAILURE_RATES_CHART[series].label,
-            color: FAILURE_RATES_CHART[series].color,
-          }))}
-        />
-      }
-    >
-      <ChartContainer config={FAILURE_RATES_CHART} className="aspect-auto h-56 w-full">
+    <ChartFrame title={title} legend={<FailureRatesLegend />}>
+      <ChartContainer
+        config={FAILURE_RATES_CHART}
+        className="aspect-auto w-full"
+        style={{ height: FAILURE_RATES_PLOT_HEIGHT }}
+      >
         <LineChart data={[...daily]}>
           <CartesianGrid vertical={false} />
           <XAxis
@@ -105,5 +116,16 @@ export function FailureRatesChart({
         </LineChart>
       </ChartContainer>
     </ChartFrame>
+  );
+}
+
+/** The chart while the window is read: its heading and legend, which it knows, over its plot's block. */
+export function FailureRatesChartSkeleton(): React.JSX.Element {
+  return (
+    <ChartFrameSkeleton
+      title={FAILURE_RATES_TITLE}
+      legend={<FailureRatesLegend />}
+      plot={FAILURE_RATES_PLOT_HEIGHT}
+    />
   );
 }

@@ -64,6 +64,7 @@ import {
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
   type CodingAgentInboxScope,
+  type CodingAgentInboxStartParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -885,6 +886,10 @@ export interface HostOperator {
   /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
   codingAgentInboxMessage(
     params: CodingAgentInboxMessageParams,
+  ): Effect.Effect<CodingAgentInboxMessagedView>;
+  /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
+  codingAgentInboxStart(
+    params: CodingAgentInboxStartParams,
   ): Effect.Effect<CodingAgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   codingAgentInboxReadState(
@@ -2449,6 +2454,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
           ...(params.answers === undefined ? undefined : { answers: params.answers }),
           ...(params.revision === undefined ? undefined : { revision: params.revision }),
+        }),
+        codingAgentAnswer(codingAgentInboxMessagedViewSchema),
+      ),
+    codingAgentInboxStart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
+          agentId: params.agentId,
+          ...(params.title === undefined ? undefined : { title: params.title }),
+          text: params.text,
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
+          clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxMessagedViewSchema),
       ),

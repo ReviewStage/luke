@@ -147,6 +147,12 @@ export function openOnMacScript(input: {
   readonly branch: string;
   /** The pull request from the branch, whose last head is opened where GitHub deleted the branch once it merged; none where it has none. */
   readonly pullRequest?: number | null | undefined;
+  /**
+   * Whether the pull request's own head is fetched first, rather than the
+   * branch by its name: a run asked for a pull request by its number, which
+   * a later branch reusing the name must never stand in for.
+   */
+  readonly pullRequestHead?: boolean | undefined;
   /** The repository's run command on this Mac, run in the worktree; none where it has none, which the script says. */
   readonly command?: string | null | undefined;
   /** The folder an earlier Luke kept this repository's worktrees in, under its application data, whose worktree of the branch is pointed to rather than moved; none for none. */
@@ -192,6 +198,7 @@ export function openOnMacScript(input: {
     `trash=${shellQuoted(input.trash ?? "")}`,
     `earlier_names=${shellQuoted(`${path.basename(input.worktree)} ${encodeURIComponent(input.branch)}`)}`,
     `pull=${input.pullRequest == null ? "''" : shellQuoted(String(Math.trunc(input.pullRequest)))}`,
+    `pull_head=${input.pullRequestHead === true ? "1" : "''"}`,
     // Note that every step returns on failure by hand: `set -e` is ignored in a function called from an `||` list, as this one is.
     // Note that every Luke install shares the clone, so the whole of bringing a branch in, its clone, fetch, worktree and config, is done under a lock, released however it ends.
     "opened() {",
@@ -229,16 +236,23 @@ export function openOnMacScript(input: {
     '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } || return 1',
     "  fi",
     '  cd "$clone" || return 1',
-    '  echo "▸ Fetching $branch"',
-    // Note that each branch is fetched into a ref of its own, never FETCH_HEAD, which two opens of the shared clone at once would write over each other.
-    '  if git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"; then',
-    '    fetched="refs/remotes/origin/$branch"',
-    "  else",
-    // Note that GitHub deletes a pull request's branch once it merges, and keeps its last head under refs/pull for good.
-    '    [ -n "$pull" ] || return 1',
-    '    echo "▸ $branch is no longer on GitHub, as once its pull request merged; fetching the last head of pull request #$pull instead"',
+    // Note that a run asked for a pull request by its number takes that pull request's own head, which GitHub keeps for good, before any branch by name, because a branch of the same name pushed since would be another's.
+    '  if [ -n "$pull_head" ] && [ -n "$pull" ]; then',
+    '    echo "▸ Fetching the head of pull request #$pull"',
     '    git fetch origin "+refs/pull/$pull/head:refs/luke/pull/$pull" || return 1',
     '    fetched="refs/luke/pull/$pull"',
+    "  else",
+    '    echo "▸ Fetching $branch"',
+    // Note that each branch is fetched into a ref of its own, never FETCH_HEAD, which two opens of the shared clone at once would write over each other.
+    '    if git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"; then',
+    '      fetched="refs/remotes/origin/$branch"',
+    "    else",
+    // Note that GitHub deletes a pull request's branch once it merges, and keeps its last head under refs/pull for good.
+    '      [ -n "$pull" ] || return 1',
+    '      echo "▸ $branch is no longer on GitHub, as once its pull request merged; fetching the last head of pull request #$pull instead"',
+    '      git fetch origin "+refs/pull/$pull/head:refs/luke/pull/$pull" || return 1',
+    '      fetched="refs/luke/pull/$pull"',
+    "    fi",
     "  fi",
     // Note that the head is read once, in the clone, as a commit every worktree of it shares, so the worktree fetches nothing of its own.
     '  head="$(git rev-parse --verify --quiet "$fetched^{commit}")" || return 1',

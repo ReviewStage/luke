@@ -53,6 +53,8 @@ export const macTerminalOpenParamsSchema = EffectSchema.Struct({
       EffectSchema.Int.check(EffectSchema.isBetween({ minimum: 1, maximum: 2_147_483_647 })),
     ),
   ),
+  /** Whether the pull request's own head is fetched first rather than the branch by name, as a run asked for a pull request by its number is, so a later branch reusing the name is never run in its place. */
+  pullRequestHead: EffectSchema.optional(EffectSchema.Boolean),
   /** Whether this is a Run press, which starts a run anew where the last has ended; a tab drawn again over an ended run only shows it. */
   again: EffectSchema.optional(EffectSchema.Boolean),
   cols: terminalSize(1_000),

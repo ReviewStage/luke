@@ -4,10 +4,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Button } from "../button/button.js";
-import { SettingsRow } from "../settings-row/settings-row.js";
+import { SettingsRow, SettingsRowMark, SettingsRowValue } from "../settings-row/settings-row.js";
 import {
+  SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_SECTION_FRAME,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
+  type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
   SettingsSectionsSkeleton,
@@ -18,7 +21,8 @@ import {
  * names, holding its rows; a section with no heading, or an empty one, draws
  * its rows with no heading and names no region; one with no card is still
  * the region its heading names; a line in the rows' place says its note;
- * and placeholder rows and sections tell a reader what is still being read.
+ * placeholder rows and sections stand in the boxes of the ones that land,
+ * shaped as they are; and they tell a reader what is still being read.
  */
 
 declare global {
@@ -125,17 +129,79 @@ test("a line in the rows' place says its note", () => {
   expect(container.querySelector("section")?.textContent).toContain("Nobody is invited yet.");
 });
 
-test("placeholder rows tell a reader what is being read, and stand a label, a description, and a control for each row, a mark first where asked", () => {
+/** The boxes a settings row or section is built of, in order: every class of the settings family, words and blocks aside. */
+function boxes(within: Element): readonly string[] {
+  return [...within.querySelectorAll("[class]")]
+    .map((element) => element.getAttribute("class") ?? "")
+    .filter((name) => /^luke-settings-(row|section)/.test(name));
+}
+
+/** A shape's placeholder rows, drawn bare, with no region of their own. */
+function placeholderRows(rows: readonly SettingsRowSkeletonShape[]): HTMLElement {
+  return mount(createElement(SettingsRowsSkeleton, { rows }));
+}
+
+test("a placeholder row stands in the boxes of the row that lands: no description where it has none", () => {
+  const real = mount(
+    createElement(SettingsRow, {
+      label: "Delete account",
+      children: () => createElement(Button, { children: "Delete account" }),
+    }),
+  );
+  const placeholder = placeholderRows([
+    { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
+  ]);
+  expect(boxes(placeholder)).toEqual(boxes(real));
+  expect(placeholder.querySelector('[role="status"]')).toBeNull();
+});
+
+test("a placeholder row stands a mark, a description, and a value column where the row that lands has them", () => {
+  const real = mount(
+    createElement(SettingsRow, {
+      label: "Ada",
+      description: "ada@example.com",
+      leading: createElement(SettingsRowMark, { children: "A" }),
+      children: () => [
+        createElement(SettingsRowValue, { key: "role", children: "Admin" }),
+        createElement(Button, { key: "more", children: "More" }),
+      ],
+    }),
+  );
+  const placeholder = placeholderRows([
+    {
+      described: true,
+      mark: SETTINGS_ROW_MARK_WIDTH,
+      controls: [SETTINGS_SKELETON_CONTROL.VALUE, SETTINGS_SKELETON_CONTROL.MORE],
+    },
+  ]);
+  // The mark's own box is the page's to choose, so only the row's are compared.
+  expect(boxes(placeholder)).toEqual(
+    boxes(real).filter((name) => name !== "luke-settings-row-mark"),
+  );
+  expect(blocks(placeholder)).toBe(5);
+});
+
+test("placeholder rows tell a reader what is being read, a block for each word, mark, and control", () => {
   const container = mount(
     createElement(SettingsSection, {
       title: "Members",
       children: [
-        createElement(SettingsRowsSkeleton, { key: "plain", label: "Loading the keys", rows: 3 }),
+        createElement(SettingsRowsSkeleton, {
+          key: "plain",
+          label: "Loading the keys",
+          rows: Array.from({ length: 3 }, () => ({
+            described: true,
+            controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+          })),
+        }),
         createElement(SettingsRowsSkeleton, {
           key: "marked",
           label: "Loading the members",
-          rows: 2,
-          marked: true,
+          rows: Array.from({ length: 2 }, () => ({
+            described: false,
+            mark: SETTINGS_ROW_MARK_WIDTH,
+            controls: [SETTINGS_SKELETON_CONTROL.SWITCH, SETTINGS_SKELETON_CONTROL.MORE],
+          })),
         }),
       ],
     }),
@@ -149,15 +215,56 @@ test("placeholder rows tell a reader what is being read, and stand a label, a de
   expect([plain && blocks(plain), marked && blocks(marked)]).toEqual([9, 8]);
 });
 
-test("placeholder sections are one status a reader hears, a heading's block over each card and no heading or region of their own", () => {
+test("placeholder sections stand in the boxes of the sections that land, headed only where they are", () => {
+  const row = { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] };
+  const real = mount(
+    createElement("div", {
+      children: [
+        createElement(SettingsSection, {
+          key: "identity",
+          children: createElement(SettingsRow, { label: "Acme" }),
+        }),
+        createElement(SettingsSection, {
+          key: "members",
+          title: "Members",
+          children: [
+            createElement(SettingsRow, { key: "ada", label: "Ada" }),
+            createElement(SettingsRow, { key: "grace", label: "Grace" }),
+          ],
+        }),
+      ],
+    }),
+  );
+  const placeholder = mount(
+    createElement(SettingsSectionsSkeleton, {
+      label: "Loading your workspaces",
+      sections: [
+        { headed: false, rows: [row] },
+        { headed: true, rows: [row, row] },
+      ],
+    }),
+  );
+  expect(boxes(placeholder)).toEqual(boxes(real));
+});
+
+test("placeholder sections are one status a reader hears, with no heading or named region of their own", () => {
   const container = mount(
     createElement(SettingsSectionsSkeleton, {
       label: "Loading the integrations",
-      sections: [2, 3],
+      sections: [
+        {
+          headed: true,
+          rows: [
+            { described: true, controls: [] },
+            { described: true, controls: [] },
+          ],
+        },
+        { headed: false, rows: [{ described: false, controls: [SETTINGS_SKELETON_CONTROL.MORE] }] },
+      ],
     }),
   );
   const regions = container.querySelectorAll('[role="status"]');
   expect([...regions].map((region) => region.textContent)).toEqual(["Loading the integrations"]);
-  expect(container.querySelectorAll("h2, section").length).toBe(0);
-  expect(blocks(container)).toBe(2 + 5 * 3);
+  expect(container.querySelectorAll("h1, h2, h3, section[aria-labelledby]").length).toBe(0);
+  expect(blocks(container)).toBe(1 + 2 * 2 + 2);
 });

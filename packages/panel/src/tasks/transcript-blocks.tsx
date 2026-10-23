@@ -159,7 +159,7 @@ import { type CutBody, WHOLE_PART } from "./whole-parts.js";
 import { WorkingTime } from "./working-time.js";
 
 /**
- * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on the Call tab and a coding agent's tab alike.
+ * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on a coding agent's tab and a subagent's alike.
  *
  * Each tab decides what its rows say from its own wire
  * (`transcript-model.ts`, `coding-agent-model.ts` with
@@ -1428,7 +1428,7 @@ export type TranscriptSubagentProps = {
 const SUBAGENT_HINT = "Open the subagent";
 
 /**
- * A subagent's row, on the Call tab and a coding agent's tab alike, running
+ * A subagent's row on a coding agent's tab, running
  * or finished: one line drawn as a call's row is, in its muted ink, wearing
  * the mark of the harness its model runs in (the worker's robot where the
  * model is unknown), the job in the full ink as a call's verb is, fading

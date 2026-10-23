@@ -57,6 +57,8 @@ export const SETTING_SECTION = {
   DIFFS: "diffs",
   /** Where the account's Luke links open, a group of its own on Profile, under who is signed in. */
   LINKS: "links",
+  /** Whether this Luke counts how its features are used, a group of its own on Profile, under Links. */
+  PRIVACY: "privacy",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];
@@ -78,6 +80,7 @@ export const SETTING_SIDE_EFFECT = {
   LOGIN_ITEM: "login-item",
   VOICE: "voice",
   MEDIA_DUCK: "media-duck",
+  USAGE_DATA: "usage-data",
 } as const;
 
 export type SettingSideEffectId = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];

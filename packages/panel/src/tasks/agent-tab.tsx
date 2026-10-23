@@ -27,8 +27,6 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FILL_ELEMENT,
-  Fill,
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
@@ -43,6 +41,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { skillWord } from "@luke/ui/skill-mention";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import {
@@ -105,6 +104,7 @@ import { type PublishedDoors, PublishedRow } from "./agent-published.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
+import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
@@ -232,9 +232,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * agent-tab.tsx -- one coding agent's tab in the task's column: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
- * over `../ai-elements/`), the Call tab alike, from the
- * agent's stored `UIMessage`s as they are, and reads as a devtool's agent
- * pane: what it was handed opens it as a message sent to it, at a sent
+ * over `../ai-elements/`), from the agent's stored `UIMessage`s as they
+ * are, and reads as a devtool's agent pane: what it was handed opens it as a message sent to it, at a sent
  * message's measure under the line naming who sent it, a card folded under
  * its title: the plan, sent by its task, which opens the plan, beside the
  * teammate who started the agent; an automation's prompt alone, sent by the
@@ -246,7 +245,7 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * collapsible row saying what it did (`tool-call-model.ts`), with the
  * input and the answer under the row once opened and a call that ended in
  * an error marked in red, each delegation to a worker a subagent's row on
- * a line of its own, as the Call tab draws its worker's, saying the task
+ * a line of its own, saying the task
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
  * each call about something the window draws in a tab of its own, a page,
@@ -255,8 +254,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
  * docked over the composer instead while the agent works through it, and its
- * runs of calls and its finished lead folded as the Call tab folds Luke's; a message the developer sent it after the plan
- * is the developer's bubble, as the Call tab draws one, each skill it
+ * runs of calls and its finished lead folded (`turn-rows.ts`); a message
+ * the developer sent it after the plan is the developer's bubble, each skill it
  * names the chip that opens the skill's file (`skill-chip.tsx`), as a
  * "Loaded skill" row opens it too, hanging the same card; and while
  * the agent may still write, a shimmering line stands at the end saying
@@ -309,7 +308,7 @@ interface TranscriptLead {
   startingLine: string;
 }
 
-/** An agent's transcript: the plan it was handed, and the agent starting; the brain's turns on the Call tab, which open on no card, alike. */
+/** An agent's transcript: the plan it was handed, and the agent starting. */
 export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: <DocumentIcon />,
@@ -388,7 +387,8 @@ interface DelegatedWorker {
  * none, when the row's hint says what it opens.
  */
 export interface TranscriptCards {
-  readonly target: (target: ToolTarget) => ReactNode;
+  /** The card the tab `target` opens hangs, `name` being what the row calls it, which a card not yet read names it by. */
+  readonly target: (target: ToolTarget, name?: string) => ReactNode;
   readonly worker: (worker: DelegatedWorker) => ReactNode;
   /** One of the place's agents as its tab wears it, which a call about the agent names it by (`calledAgentActor`); none where the place does not list it. */
   readonly agent?: ((agentId: string) => Actor | undefined) | undefined;
@@ -759,7 +759,7 @@ function TargetCallView({
     <OpeningCallView
       part={part}
       hint={TARGET_HINT[target.kind]}
-      card={cards?.target(target)}
+      card={cards?.target(target, toolCallView(part).subject)}
       cards={cards}
       onOpen={onOpen}
     />
@@ -1034,7 +1034,9 @@ function OriginSubject({
 }): React.JSX.Element {
   const doors = useMentionDoors();
   const words =
-    subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
+    subject.title === undefined
+      ? `#${subject.number}`
+      : pullRequestLabelOf({ number: subject.number, title: subject.title });
   const { url } = subject;
   if (url === undefined)
     return (
@@ -2304,12 +2306,7 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <Fill
-      as={FILL_ELEMENT.SECTION}
-      ref={tab}
-      className="agent-tab ph-no-capture"
-      aria-label={agentTabLabel(agent, models)}
-    >
+    <AgentTabFrame ref={tab} label={agentTabLabel(agent, models)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2371,7 +2368,7 @@ function AgentTabView({
           </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
-      <footer className="agent-tab-foot">
+      <AgentTabFoot>
         {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
@@ -2417,7 +2414,7 @@ function AgentTabView({
             dictates={!onCall}
           />
         )}
-      </footer>
+      </AgentTabFoot>
       {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
       {onUnarchive !== undefined ||
       continuedNote !== undefined ||
@@ -2425,7 +2422,7 @@ function AgentTabView({
       composer.sending ? null : (
         <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
       )}
-    </Fill>
+    </AgentTabFrame>
   );
 }
 
@@ -2475,7 +2472,7 @@ const NO_RETRY = () => undefined;
 export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
   const messages = useMemo(() => agentLines([], [line]), [line]);
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="agent-tab ph-no-capture">
+    <AgentTabFrame>
       <AgentTranscriptView
         messages={messages}
         brief={CODING_AGENT_BRIEF.PROMPT}
@@ -2486,10 +2483,10 @@ export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Elemen
         onRetry={NO_RETRY}
         overComposer
       />
-      <footer className="agent-tab-foot">
+      <AgentTabFoot>
         <ComposerSkeleton />
-      </footer>
-    </Fill>
+      </AgentTabFoot>
+    </AgentTabFrame>
   );
 }
 
@@ -2843,11 +2840,7 @@ export function AgentSubagentTab({
     onHeld(callId, { ...held, subagentTitles: new Map() });
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
-    <Fill
-      as={FILL_ELEMENT.SECTION}
-      className="agent-tab ph-no-capture"
-      aria-label={cardTitle(task)}
-    >
+    <AgentTabFrame label={cardTitle(task)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2869,6 +2862,6 @@ export function AgentSubagentTab({
           </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
-    </Fill>
+    </AgentTabFrame>
   );
 }
