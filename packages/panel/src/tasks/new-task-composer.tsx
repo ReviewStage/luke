@@ -166,7 +166,7 @@ const COMPOSER_WORDS = {
 } as const;
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
-export interface AgentAsk {
+interface AgentAsk {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;

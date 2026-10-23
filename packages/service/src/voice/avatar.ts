@@ -29,7 +29,7 @@ import {
 import { AVATAR_END_REASON, type AvatarEndReason } from "@luke/database/voice-vocabulary";
 import type { VideoAvatar } from "@luke/features/video-avatar";
 import { catchAllButInterrupt, serialQueue } from "@luke/runtime/effect";
-import { Clock, Effect, Option, Result, type Scope } from "effect";
+import { DateTime, Effect, Option, Result, type Scope } from "effect";
 import {
   AVATAR_STOP_REASON,
   AVATAR_UNAVAILABLE_REASON,
@@ -102,9 +102,6 @@ export interface CallAvatar {
   readonly callClosed: Effect.Effect<void, never, DatabaseServices>;
 }
 
-/** Note that the instant is the Effect clock's, so a test drives it with `TestClock`. */
-const currentInstant = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis));
-
 /**
  * The grant as the frame the desktop reads, or nothing where Keyframe
  * answered one the desktop would refuse (a room not on `wss:`, a token past
@@ -123,7 +120,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
   let held: { readonly requestId: string; readonly rowId: string } | undefined;
   let hungUp = false;
   /** When this connection began, which bounds what a stop it holds no row for may close. */
-  const connectedAt = yield* currentInstant;
+  const connectedAt = yield* DateTime.nowAsDate;
   const failed = Effect.sync(() => log({ event: LOG_EVENT.SESSION_FAILED }));
   const queue = yield* serialQueue<DatabaseServices>({
     onDefect: () => failed,
@@ -137,7 +134,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
 
   const closeOpen = (id: string, reason: AvatarEndReason, startedBy?: Date) =>
-    Effect.flatMap(currentInstant, (endedAt) =>
+    Effect.flatMap(DateTime.nowAsDate, (endedAt) =>
       closeOpenAvatarSessionsOf({ voiceSessionId: id, endedAt, reason, startedBy }),
     );
 
@@ -162,7 +159,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       });
       if (frame === undefined)
         return yield* unavailable(requestId, AVATAR_UNAVAILABLE_REASON.ERROR);
-      const startedAt = yield* currentInstant;
+      const startedAt = yield* DateTime.nowAsDate;
       const opened = yield* openAvatarSession({
         userId,
         voiceSessionId: call,
@@ -213,7 +210,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       if (held.requestId !== frame.requestId) return;
       const id = held.rowId;
       held = undefined;
-      const endedAt = yield* currentInstant;
+      const endedAt = yield* DateTime.nowAsDate;
       yield* closeAvatarSession({ id, endedAt, reason });
     });
 

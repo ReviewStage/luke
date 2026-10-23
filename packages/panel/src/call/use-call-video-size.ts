@@ -28,7 +28,7 @@ export const CALL_VIDEO_HEIGHT = {
 const STORAGE_KEY = "luke.callVideoHeight";
 
 /** A height held to the video's bounds, in whole pixels. */
-export function clampCallVideoHeight(height: number): number {
+function clampCallVideoHeight(height: number): number {
   return Math.min(CALL_VIDEO_HEIGHT.MAX, Math.max(CALL_VIDEO_HEIGHT.MIN, Math.round(height)));
 }
 

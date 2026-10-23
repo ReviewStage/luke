@@ -35,6 +35,7 @@ import {
   NO_CONTEXT_MENU,
   OneLine,
   PAGE_FRAME,
+  PageToolbar,
   RowHint,
   RowHintOptions,
   Switch,
@@ -487,6 +488,34 @@ function ListPage({
   );
 }
 
+/** One automation's page that has no automation to show: its way back over `children`, which say why. */
+function AutomationAbsentPage({
+  onBack,
+  children,
+}: {
+  onBack: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return (
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automation"
+      toolbar={
+        <PageToolbar
+          heading={
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
+              Automations
+            </Button>
+          }
+        />
+      }
+    >
+      {children}
+    </DetailPage>
+  );
+}
+
 /** One automation's page whose list, or the workspaces it is read in, could not be read: said so, with Retry, rather than called gone. */
 function UnreadPage({
   line,
@@ -497,47 +526,21 @@ function UnreadPage({
   onBack: () => void;
   onRetry: () => void;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automation"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          </div>
-        </header>
-      }
-    >
+    <AutomationAbsentPage onBack={onBack}>
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {line}
       </ErrorState>
-    </DetailPage>
+    </AutomationAbsentPage>
   );
 }
 
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automation"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          </div>
-        </header>
-      }
-    >
+    <AutomationAbsentPage onBack={onBack}>
       <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
-    </DetailPage>
+    </AutomationAbsentPage>
   );
 }
 

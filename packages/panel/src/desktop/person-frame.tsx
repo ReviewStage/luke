@@ -5,6 +5,7 @@ import {
   ONE_LINE_ELEMENT,
   OneLine,
   PAGE_FRAME,
+  PageToolbar,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -48,7 +49,7 @@ const SKELETON_ROWS = [
 /** What the page is called where it cannot name the person yet. */
 export const PROFILE = "Profile";
 
-/** The page's toolbar: their name as the page's title, and the page's acts after it. */
+/** The page's toolbar: their name as the page's title, and the page's acts, where it has any, at its end. */
 export function PersonToolbar({
   name,
   words,
@@ -60,14 +61,14 @@ export function PersonToolbar({
   children?: ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
+    <PageToolbar
+      heading={
         <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={words}>
           {name}
         </OneLine>
-      </div>
-      {children}
-    </header>
+      }
+      actions={children}
+    />
   );
 }
 

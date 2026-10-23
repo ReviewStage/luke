@@ -32,7 +32,7 @@ export type LinkSite = (typeof LINK_SITE)[keyof typeof LINK_SITE];
 export const LINK_SITE_LIST: readonly LinkSite[] = Object.values(LINK_SITE);
 
 /** Each site's own name, as its brand spells it: what a page of it is called where its address spells nothing better. */
-export const LINK_SITE_NAME = {
+const LINK_SITE_NAME = {
   [LINK_SITE.GOOGLE_MAPS]: "Google Maps",
   [LINK_SITE.GOOGLE_DOCS]: "Google Docs",
   [LINK_SITE.GOOGLE_SHEETS]: "Google Sheets",
