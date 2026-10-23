@@ -1,0 +1,19 @@
+{
+  "apps/catalog/src/catalog.css": 2,
+  "packages/panel/src/admin/charts/chart-frame.tsx": 1,
+  "packages/panel/src/styles/desktop.css": 7,
+  "packages/panel/src/styles/tasks.css": 16,
+  "packages/ui/src/components/error-state/error-state.css": 1,
+  "packages/ui/src/components/hover-card/hover-card.tsx": 1,
+  "packages/ui/src/components/inline-edit/inline-edit.css": 1,
+  "packages/ui/src/components/menu/menu.css": 2,
+  "packages/ui/src/components/popover-panel/popover-panel.tsx": 1,
+  "packages/ui/src/components/prose/prose.css": 6,
+  "packages/ui/src/components/public-page/public-page.css": 1,
+  "packages/ui/src/components/text-field/text-field.css": 1,
+  "packages/ui/src/shadcn/calendar.ts": 3,
+  "packages/ui/src/shadcn/combobox.ts": 2,
+  "packages/ui/src/shadcn/dropdown-menu.tsx": 1,
+  "packages/ui/src/shadcn/hover-card.tsx": 1,
+  "packages/ui/src/shadcn/tooltip.tsx": 1
+}

@@ -198,6 +198,38 @@ skeleton's own, laying its blocks out, names itself one (`…-skeleton…`);
 intrinsic element inside a skeleton, and `Skeleton` or `SkeletonRegion` drawn
 outside one.
 
+### The style guard
+
+`pnpm lint` runs `tools/anti-slop/style-guard.ts`, which reads every
+stylesheet and every Tailwind class string (in `@apply`, and in the modules
+under `packages/ui/src/`, `packages/panel/src/`, and each app's `src/`, tests
+aside) and refuses a literal where a token goes. The token sheets
+(`src/tokens/`, `src/tailwind/theme.css`) and any `:root` block, where a token
+is defined, are not read. A Tailwind utility passes where this theme maps its
+name onto a token (`text-body`, `rounded-menu`, `ease-pane`, `bg-primary`) and
+is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
+`rounded-md`, `bg-red-500`).
+
+| Rule | Refuses | How to fix one |
+| --- | --- | --- |
+| `literal-colour` | A hex, `rgb()`, `hsl()`, `oklch()`, or `color()` colour, or a palette utility | Read the palette role (`--luke-color-*`, `bg-primary`); a colour the palette lacks is added to `palettes.css`. A provider mark's brand ink (`.integration-mark-*`), a mask's alpha, and a terminal's or code theme's ink (`--terminal-*`, `--code-*`, `--integration-ink-*`) pass |
+| `literal-type` | A literal `font-size`, `font-weight`, or `font`, or `text-sm`, `font-medium`, `text-[13px]` | Draw the words with `Text`, or read a type role (`--luke-type-*-size`, `--luke-weight-*`, `text-body`) |
+| `literal-radius` | A literal corner, `50%` among them, or `rounded`, `rounded-md` | Read a radius role (`--luke-control-radius`, `--luke-radius-full`, `rounded-menu`); a factor of a role (`calc(var(--luke-control-height) / 2)`) passes |
+| `ellipsis` | `text-overflow: ellipsis`, `truncate`, `text-ellipsis` | A cut line fades rather than ending in "…": mask the end it is cut at, `mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade))`, as `Chip` and `ListRow` do |
+| `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--luke-duration-*`, `--luke-*-delay`). An endless loop whose `animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion` may keep its literal |
+| `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit`, or `--luke-motion-pane`; a hover's `ease` is the default, so drop it |
+
+No comment silences it, and it refuses one that asks to
+(`style-guard-disable`); the face's generated `face/face-motion.css` is the one
+file a rule passes whole. A rule that had places left when it landed starts
+from a baseline that may only shrink: `tools/anti-slop/style-baselines/<rule>.json`
+counts each file's places, and the guard fails on a file holding more than its
+count and on a count above what the file still holds. So the change that fixes a
+place lowers its count; `node tools/anti-slop/style-guard.ts --shrink` lowers
+every count to what the files hold and never raises one. A rule that started
+clean (`literal-duration`) takes no baseline at all, and a baseline is deleted
+from nothing: once every count is gone, its file is `{}`.
+
 ### Folding in a narrow container
 
 A container short of room folds the controls in it with one inherited custom
