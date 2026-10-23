@@ -30,7 +30,9 @@ import {
   nameUntitledTask,
   readTask,
   readTaskHeader,
+  readTaskPlan,
   readTaskWorkspace,
+  savePlanText,
   TaskAssigneeNotMember,
   updateTask,
 } from "../task-store.js";
@@ -409,6 +411,28 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           repository: whole.task.repository,
           status: whole.task.status,
         });
+      }),
+  );
+
+  it.effect(
+    "a plan opened alone answers each member what the whole read does, its saved text and their own pin included, and nothing to an account outside it",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const stranger = yield* openAccount;
+        yield* savePlanText(dean, taskId, "# Plan\n\n## Goal\n\nInvite a teammate.\n");
+        yield* updateTask(charles, taskId, { pinned: true });
+
+        for (const member of [dean, charles]) {
+          const whole = Option.getOrThrow(yield* readTask(member, taskId));
+          assert.deepEqual(yield* readTaskPlan(member, taskId), Option.some(whole.task));
+        }
+        assert.notEqual(
+          Option.getOrThrow(yield* readTaskPlan(charles, taskId)).pinnedAt,
+          undefined,
+        );
+        assert.deepEqual(yield* readTaskPlan(stranger, taskId), Option.none());
+        assert.deepEqual(yield* readTaskPlan(dean, randomUUID()), Option.none());
       }),
   );
 });

@@ -1,4 +1,4 @@
-import type { DatabaseServices } from "@luke/database/core/query";
+import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
 import { settleEndedSessionTurn } from "@luke/database/models/abandoned-turns";
 import {
   type CodingAgent,
@@ -15,7 +15,7 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskPlan } from "@luke/database/models/task-store";
 import {
   type AwaitingLineMetadata,
   type ConversationTarget,
@@ -23,10 +23,10 @@ import {
   STORE_WRITE_REFUSAL,
   type StoreWriter,
 } from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { causeKind } from "@luke/runtime/effect";
+import { bothInOrder, causeKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -44,7 +44,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
+import { controlsAgent, writesToAgent } from "../agent-reach.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -247,12 +247,6 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
 
-/** The runtime the agent's conversation runs on, eve where none is recorded. */
-const runtimeOf = (userId: string, agent: CodingAgent) =>
-  Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
-    Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE,
-  );
-
 /** A steer as its sender's route reads it: what it came to, and the transaction that wrote the line, where this steer wrote it. */
 export interface SteerWritten {
   readonly outcome: SteerOutcome;
@@ -286,49 +280,67 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
 > {
   // An agent on its starter's own GitHub token takes words from its starter alone.
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  // An agent its starter's plan pays for takes words from those the plan's policy admits.
-  yield* admitsPlanWriter(userId, agent);
-  // Note that Luke's key pays for no coding agent, so one it paid for, or one on eve whose starter
-  // keeps no API key for its model now, is refused by name and never moved to another payer.
-  const routing = yield* hostedStoreOrUnavailable(readCodingAgentRouting(userId, agent.id));
-  const missing = yield* hostedStoreOrUnavailable(
-    messageCredentialMissing(agent, {
-      runtime: Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE,
-      payer: Option.isSome(routing) ? routing.value.payer : null,
-    }),
-  );
-  if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };
-  const repeated = yield* hostedStoreOrUnavailable(
-    sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
+  // The store's reads before the hand-over wait on none of each other, so they run together, and
+  // what they refuse is still answered in the order the send checks it below.
+  const read = yield* hostedStoreOrUnavailable(
+    Effect.all(
+      {
+        // Note that Luke's key pays for no coding agent, so one it paid for, or one on eve whose starter
+        // keeps no API key for its model now, is refused by name and never moved to another payer.
+        routing: Effect.flatMap(readCodingAgentRouting(userId, agent.id), (routing) =>
+          Effect.map(
+            Option.isNone(routing)
+              ? Effect.succeed(undefined)
+              : messageCredentialMissing(agent, routing.value),
+            (missing) => ({ routing, missing }),
+          ),
+        ),
+        repeated: sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
+        // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
+        held:
+          agent.taskId === null ? Effect.succeed(undefined) : readTaskPlan(userId, agent.taskId),
+        workspace: agentWorkspace(userId, agent),
+      },
+      { concurrency: READ_CONCURRENCY },
+    ),
   );
-  if (repeated) return { outcome: STEER_OUTCOME.REPEATED };
-  // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
-  const held =
-    agent.taskId === null
-      ? undefined
-      : yield* hostedStoreOrUnavailable(readTask(userId, agent.taskId));
+  // An agent its starter's plan pays for takes words from those the plan's policy admits; one the account
+  // no longer reaches is not found.
+  const { routing, missing } = read.routing;
+  if (Option.isNone(routing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (!writesToAgent(userId, agent, routing.value.payer)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
+  if (read.repeated) return { outcome: STEER_OUTCOME.REPEATED };
+  const { held, workspace } = read;
   if (held !== undefined && Option.isNone(held))
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const task = held === undefined ? undefined : Option.getOrUndefined(held);
   // An archived agent names nothing.
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const workspace = yield* hostedStoreOrUnavailable(agentWorkspace(userId, agent));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   // An agent with no repository has none for GitHub to reach.
-  if (agent.repository !== null) {
-    yield* workspaceRepository(
-      workspace.value,
-      agent.repository,
-      agentMember(agent),
-      task?.ownerId === userId ? userId : undefined,
-    );
-  }
-  const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined && !(yield* opensUnclaimed(agent))) {
-    return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-  }
+  const reach =
+    agent.repository === null
+      ? Effect.void
+      : Effect.asVoid(
+          workspaceRepository(
+            workspace.value,
+            agent.repository,
+            agentMember(agent),
+            task?.ownerId === userId ? userId : undefined,
+          ),
+        );
+  const session = Effect.gen(function* () {
+    const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
+    if (sessionId === undefined && !(yield* opensUnclaimed(agent))) {
+      return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+    }
+    return sessionId;
+  });
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
   // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention;
   // and a chat notice's links to people, agents, and Lukes name who said it and whom it addresses, members the agent reads the chat by,
@@ -336,14 +348,19 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const reviewers = line.sender.kind === MESSAGE_SENDER.GITHUB;
   const pointed =
     line.metadata?.channel === MESSAGE_CHANNEL.CHAT ? withoutMemberLinks(line.text) : line.text;
-  const reads = reviewers
-    ? NO_MENTIONED_READS
-    : yield* hostedStoreOrUnavailable(
-        readMentioned(userId, pointed, { task: task?.task, workspaceId: agent.organizationId }),
+  const mentions = reviewers
+    ? Effect.succeed(NO_MENTIONED_READS)
+    : hostedStoreOrUnavailable(
+        readMentioned(userId, pointed, { task, workspaceId: agent.organizationId }),
       );
-  const mentioned = reviewers ? undefined : mentionedContext(pointed, task?.task, reads);
-  // Read before eve is asked, so an ended session settles the turn it was running and never one begun since.
-  const running = yield* runningTurnOf(agent);
+  // GitHub's answer and the reads after it wait on none of each other, so they are asked together, and what
+  // they refuse is answered in the order they were asked one by one. The running turn is read before eve
+  // is asked, so an ended session settles the turn it was running and never one begun since.
+  const [[, sessionId], [reads, running]] = yield* bothInOrder(
+    bothInOrder(reach, session),
+    bothInOrder(mentions, runningTurnOf(agent)),
+  );
+  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
   // row names it; a repeat under the key was answered above, and the same bytes again keep nothing twice.
   const attachments = yield* hostedStoreOrUnavailable(
@@ -407,13 +424,13 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const servers =
     line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
-      : mentionedServers(line.serverWords ?? line.text, task?.task.repository ?? null);
+      : mentionedServers(line.serverWords ?? line.text, task?.repository ?? null);
   // Note that a native agent's servers are written just after its harness takes the words rather than
   // just before, still in this transaction, because a harness this function relays to (`native-relay.ts`)
   // writes the agent's row on its own connection as it launches, and would wait on this transaction's lock
   // on it until the hand-over gave up. Its runner's first events wait out the conversation's dispatch lock,
   // which this transaction holds, all the same, so the turn they are for still finds them.
-  const native = isNativeRuntime(yield* hostedStoreOrUnavailable(runtimeOf(userId, agent)));
+  const native = isNativeRuntime(routing.value.runtime);
   const handing = native
     ? Effect.flatMap(handOver, (taken) =>
         taken

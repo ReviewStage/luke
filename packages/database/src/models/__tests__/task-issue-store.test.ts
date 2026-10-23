@@ -18,7 +18,7 @@ import {
   type TaskIssueLink,
   unlinkTaskIssue,
 } from "../task-issue-store.js";
-import { createTask, listTasks, readTask } from "../task-store.js";
+import { createTask, createTaskCommitted, listTasks, readTask } from "../task-store.js";
 
 /**
  * A task's links are its workspace's: every member reads and changes them,
@@ -234,6 +234,27 @@ it.layer(getTestDB())("a task's issue links", (it) => {
         );
         yield* linked(charles, started.id, linear(1));
         assert.equal(keysOf(yield* listTaskIssues(dean, started.id)).at(-1), "ENG-1");
+      }),
+  );
+
+  it.effect(
+    "a task started with its issues answers them as a read of it finds them, and one started with none answers none",
+    () =>
+      Effect.gen(function* () {
+        const { dean, workspace } = yield* openSharedTask;
+        const made = yield* createTaskCommitted(dean, {
+          name: "Expire invites",
+          organizationId: workspace,
+          issueLinks: [github(45), linear(3)],
+        });
+        const read = Option.getOrElse(yield* readTask(dean, made.task.task.id), () =>
+          assert.fail("the task was not read"),
+        );
+        const bare = yield* createTaskCommitted(dean, { organizationId: workspace });
+
+        assert.deepEqual(keysOf(made.task.issueLinks), ["acme/relay#45", "ENG-3"]);
+        assert.deepEqual(made.task.issueLinks, read.issueLinks);
+        assert.deepEqual(bare.task.issueLinks, []);
       }),
   );
 

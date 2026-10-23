@@ -33,7 +33,10 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
-import { listProviderKeyRows, type ProviderKeyRow } from "@luke/database/models/provider-key-store";
+import {
+  listAccountProviderKeyRows,
+  type ProviderKeyRow,
+} from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
@@ -45,12 +48,7 @@ import {
 import { Data, Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
-import {
-  type AccountFastOffer,
-  type ModelCatalog,
-  providerModelOf,
-} from "../../providers/model-catalog.js";
-import { anthropicFastAccess } from "./account-keys.js";
+import { type AccountFastOffer, providerModelOf } from "../../providers/model-catalog.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
 /** No credential of the account's pays for a coding agent on the provider's models: neither its subscription, selected in Settings, nor its API key. */
@@ -99,59 +97,62 @@ const UNUSABLE_SIGN_IN: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The account's stored credentials of every kind, read once: what each
+ * decision below is made from, so a request that makes several, such as a
+ * Start's menu and its payer, reads them in one statement.
+ */
+export type AccountKeyRows = readonly ProviderKeyRow[];
+
+/** The account's credentials, as handed where a caller read them already, or read now. */
+const keyRowsOf = (
+  userId: string,
+  rows: AccountKeyRows | undefined,
+): Effect.Effect<AccountKeyRows, StoreFailure, DatabaseServices> =>
+  rows === undefined ? listAccountProviderKeyRows(userId) : Effect.succeed(rows);
+
+/**
  * The plan credential the provider's harness launches on, as the account
- * keeps it, or none, as above. A ChatGPT sign-in must also open under the
+ * keeps it among `rows`, or none, as above. A ChatGPT sign-in must also open under the
  * deployment's ring as it stands, since a row sealed under a key since
  * rotated out still reads as its last stored status.
  */
-const keptPlan = (
+function keptPlan(
   userId: string,
   provider: string,
   ring: Redacted.Redacted | undefined,
-): Effect.Effect<ProviderKeyRow | undefined, StoreFailure, DatabaseServices> =>
-  provider === MODEL_PROVIDER.ANTHROPIC
-    ? Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN), (rows) =>
-        rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC),
-      )
-    : Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH), (rows) => {
-        const parsed = ring === undefined ? undefined : parseKeyRing(ring);
-        if (parsed === undefined || Result.isFailure(parsed)) return undefined;
-        const owner = {
-          userId,
-          provider: PROVIDER_KEY_PROVIDER.OPENAI,
-          kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-        };
-        return rows.find(
-          (row) =>
-            row.provider === PROVIDER_KEY_PROVIDER.OPENAI &&
-            !UNUSABLE_SIGN_IN.has(row.status) &&
-            Result.isSuccess(openProviderKey(parsed.success, owner, row)),
-        );
-      });
+  rows: AccountKeyRows,
+): ProviderKeyRow | undefined {
+  if (provider === MODEL_PROVIDER.ANTHROPIC) {
+    return rows.find(
+      (row) =>
+        row.kind === PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN &&
+        row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    );
+  }
+  const parsed = ring === undefined ? undefined : parseKeyRing(ring);
+  if (parsed === undefined || Result.isFailure(parsed)) return undefined;
+  const owner = {
+    userId,
+    provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+  };
+  return rows.find(
+    (row) =>
+      row.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH &&
+      row.provider === PROVIDER_KEY_PROVIDER.OPENAI &&
+      !UNUSABLE_SIGN_IN.has(row.status) &&
+      Result.isSuccess(openProviderKey(parsed.success, owner, row)),
+  );
+}
 
 /** The plan's runtime and payer for a model of the provider's: Claude Code for Anthropic's, Codex for OpenAI's. */
 const onPlanOf = (provider: string): AgentRuntimeChoice =>
   provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
 
-/** Whether the account saved its own API key for the provider, which pays for its agents on eve. */
-const keepsApiKey = (
-  userId: string,
-  provider: ModelProvider,
-): Effect.Effect<boolean, StoreFailure, DatabaseServices> =>
-  Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) =>
-    rows.some((row) => row.provider === provider),
-  );
-
-/** eve on the account's own API key for the provider, or refused by name where it saved none, since Luke's key pays for no coding agent. */
-const onApiKey = Effect.fnUntraced(function* (
-  userId: string,
-  provider: ModelProvider,
-): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
-  if (!(yield* keepsApiKey(userId, provider))) {
-    return yield* Effect.fail(new AgentCredentialMissing({ provider }));
-  }
-  return ON_API_KEY;
-});
+/** Whether the account saved its own API key for the provider among `rows`, which pays for its agents on eve. */
+function keepsApiKey(provider: ModelProvider, rows: AccountKeyRows): boolean {
+  return rows.some((row) => row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === provider);
+}
 
 /** The provider of a model the catalog offers; every model a Start accepted has one, so none is a defect. */
 const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
@@ -161,27 +162,39 @@ const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
     : Effect.succeed(named.provider);
 };
 
-/** The runtime and payer of a new agent of the account's on a model of the provider's, by Settings' choice, or refused where no credential of the account's pays, as above. */
+/** The deployment's key ring a sealed sign-in opens under, where it has one. */
+const deploymentRing = Effect.map(
+  Effect.serviceOption(HostedEnvironment),
+  (environment) => Option.getOrUndefined(environment)?.providerKeyEncryptionKeys,
+);
+
+/** The runtime and payer of a new agent of the account's on a model of the provider's, by Settings' choice among `rows`, or refused where no credential of the account's pays, as above. */
 const providerRuntimeChoice = Effect.fnUntraced(function* (
   userId: string,
   provider: ModelProvider,
-): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
+  rows: AccountKeyRows,
+): Effect.fn.Return<AgentRuntimeChoice, AgentCredentialMissing> {
   const harness = Option.isSome(yield* Effect.serviceOption(NativeAgentSessions));
-  const environment = yield* Effect.serviceOption(HostedEnvironment);
-  const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
-  const plan = harness ? yield* keptPlan(userId, provider, ring) : undefined;
+  const plan = harness ? keptPlan(userId, provider, yield* deploymentRing, rows) : undefined;
   if (plan?.forAgents === true) return onPlanOf(provider);
-  const onKey = yield* onApiKey(userId, provider);
-  if (!harness) return onKey;
+  // Luke's key pays for no coding agent, so an account with no API key of the provider's is refused by name.
+  if (!keepsApiKey(provider, rows))
+    return yield* Effect.fail(new AgentCredentialMissing({ provider }));
+  if (!harness) return ON_API_KEY;
   return provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE_API_KEY : ON_CODEX_API_KEY;
 });
 
-/** The runtime and payer of a new agent of the account's on the model given, as above. */
+/**
+ * The runtime and payer of a new agent of the account's on the model given,
+ * as above, decided from `rows` where the caller read them already.
+ */
 export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   model: string,
+  rows?: AccountKeyRows,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
-  return yield* providerRuntimeChoice(userId, yield* providerOfModel(model));
+  const provider = yield* providerOfModel(model);
+  return yield* providerRuntimeChoice(userId, provider, yield* keyRowsOf(userId, rows));
 });
 
 /**
@@ -202,7 +215,8 @@ export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(functi
   if (routing.runtime !== CONVERSATION_RUNTIME.EVE && !onKey) return undefined;
   const provider = yield* providerOfModel(agent.model);
   if (routing.payer === CODING_AGENT_PAYER.LUKE) return provider;
-  return (yield* keepsApiKey(agent.userId, provider)) ? undefined : provider;
+  const rows = yield* keyRowsOf(agent.userId, undefined);
+  return keepsApiKey(provider, rows) ? undefined : provider;
 });
 
 /**
@@ -212,10 +226,12 @@ export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(functi
  */
 export const unconnectedProviders = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
+  read?: AccountKeyRows,
 ): Effect.fn.Return<ReadonlySet<ModelProvider>, StoreFailure, DatabaseServices> {
+  const rows = yield* keyRowsOf(userId, read);
   const missing = new Set<ModelProvider>();
   for (const provider of Object.values(MODEL_PROVIDER)) {
-    const paid = yield* providerRuntimeChoice(userId, provider).pipe(
+    const paid = yield* providerRuntimeChoice(userId, provider, rows).pipe(
       Effect.as(true),
       Effect.catchTag("AgentCredentialMissing", () => Effect.succeed(false)),
     );
@@ -230,8 +246,9 @@ export const markedUnconnected = /* @__PURE__ */ Effect.fnUntraced(function* <
 >(
   userId: string,
   offered: readonly Model[],
+  rows?: AccountKeyRows,
 ): Effect.fn.Return<readonly Model[], StoreFailure, DatabaseServices> {
-  const missing = yield* unconnectedProviders(userId);
+  const missing = yield* unconnectedProviders(userId, rows);
   if (missing.size === 0) return offered;
   return offered.map((model) =>
     missing.has(model.provider) ? { ...model, credentialMissing: true } : model,
@@ -246,10 +263,14 @@ export const markedUnconnected = /* @__PURE__ */ Effect.fnUntraced(function* <
  */
 export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-): Effect.fn.Return<AccountFastOffer, StoreFailure, DatabaseServices | ModelCatalog> {
-  const anthropic = yield* anthropicFastAccess(userId);
-  const environment = yield* Effect.serviceOption(HostedEnvironment);
-  const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
-  const plan = yield* keptPlan(userId, MODEL_PROVIDER.OPENAI, ring);
-  return { anthropic, chatGptPlan: plan?.forAgents === true };
+  read?: AccountKeyRows,
+): Effect.fn.Return<AccountFastOffer, StoreFailure, DatabaseServices> {
+  const rows = yield* keyRowsOf(userId, read);
+  // Whether the account's own Anthropic key may run fast mode, as its row says, readable or not.
+  const anthropic = rows.find(
+    (row) =>
+      row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC,
+  )?.fastAccess;
+  const plan = keptPlan(userId, MODEL_PROVIDER.OPENAI, yield* deploymentRing, rows);
+  return { anthropic: anthropic ?? undefined, chatGptPlan: plan?.forAgents === true };
 });
