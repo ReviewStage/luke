@@ -1,0 +1,6 @@
+/* A heading edited where it is drawn (`editable-heading.tsx`): its caret in
+   the accent and no box. */
+.luke-editable-heading {
+  caret-color: var(--luke-color-accent);
+  outline: none; /* no ring: the caret alone, edited where it is drawn */
+}

@@ -1,0 +1,12 @@
+/* reveal.css -- the box a reveal's rows stand in (reveal.tsx): a column,
+   as the rows around it stand, which the motion unrolls and rolls up as one.
+   Its rows are ruled one from the next by the card they stand in
+   (settings-section.css). */
+
+@layer components {
+  .luke-reveal {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+}

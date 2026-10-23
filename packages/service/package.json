@@ -108,6 +108,7 @@
     "./agents/native-events/runner-token-app": "./src/agents/native-events/runner-token-app.js",
     "./agents/automation-tools": "./src/agents/automation-tools.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",
+    "./agents/memory-tools": "./src/agents/memory-tools.js",
     "./agents/sandbox-pty": "./src/agents/sandbox-pty.js",
     "./agents/task-section-tools": "./src/agents/task-section-tools.js",
     "./agents/task-tools": "./src/agents/task-tools.js",

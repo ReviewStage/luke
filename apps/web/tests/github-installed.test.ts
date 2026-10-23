@@ -6,11 +6,11 @@ import { rememberReturn } from "../src/connect-return";
 
 /**
  * github-installed.test.ts -- the GitHub App's landing says where an
- * installation stands and what to do next: a confirmed one sends the
- * developer back to Luke, a refused one says why and how to try again, and
- * an address whose status the page does not know reads as an installation
- * Luke could not confirm. The page runs as it does in the browser, mounted on
- * its own `#root`.
+ * installation stands and what to do next: a confirmed one says the tab can
+ * go, a refused one says why and how to try again, and an address whose
+ * status the page does not know reads as an installation Luke could not
+ * confirm. The page runs as it does in the browser, mounted on its own
+ * `#root`.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
@@ -32,7 +32,7 @@ async function openPage(status?: string): Promise<HTMLElement> {
   return root;
 }
 
-/** What the card says, one line per element: its status word, title, and description. */
+/** What the page says, one line per element: its title and description. */
 function said(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("p, h1"))
     .map((element) => element.textContent ?? "")
@@ -44,22 +44,17 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-test("an installation sends the developer back to Luke", async () => {
+test("an installation says the tab can go", async () => {
   const page = await openPage(GITHUB_INSTALL_STATUS.INSTALLED);
 
-  expect(said(page)).toEqual([
-    "Installed",
-    "Luke can see your repositories",
-    "Return to Luke. You can close this tab.",
-  ]);
+  expect(said(page)).toEqual(["Luke can see your GitHub repositories", "You can close this tab."]);
 });
 
 test("a request to an organization's owner leaves nothing to return to", async () => {
   const page = await openPage(GITHUB_INSTALL_STATUS.REQUESTED);
 
   expect(said(page)).toEqual([
-    "Requested",
-    "Your request went to the organization's owner",
+    "Your request went to the GitHub organization's owner",
     "You can close this tab.",
   ]);
 });
@@ -68,9 +63,8 @@ test("an account another workspace holds says how to connect it here", async () 
   const page = await openPage(GITHUB_INSTALL_STATUS.ALREADY_CONNECTED);
 
   expect(said(page)).toEqual([
-    "Not connected",
     "That GitHub account is connected to another workspace",
-    "One GitHub account or organization connects to one workspace. Disconnect it there first, or choose another.",
+    "Disconnect it there first, or choose another account.",
   ]);
 });
 
@@ -78,9 +72,8 @@ test("an expired link sends the developer back to connect again", async () => {
   const page = await openPage(GITHUB_INSTALL_STATUS.EXPIRED);
 
   expect(said(page)).toEqual([
-    "Not connected",
-    "This connection link has expired",
-    "Return to Luke and choose Connect GitHub again.",
+    "This link to connect GitHub has expired",
+    "Connect GitHub again from Luke.",
   ]);
 });
 
@@ -89,9 +82,8 @@ test("an address with no status it knows reads as an unconfirmed installation", 
     const page = await openPage(status);
 
     expect(said(page)).toEqual([
-      "Not completed",
-      "Luke could not confirm the installation",
-      "Return to Luke and choose Connect GitHub again.",
+      "Luke could not confirm the GitHub installation",
+      "Connect GitHub again from Luke.",
     ]);
   }
 });
@@ -102,14 +94,13 @@ test("an installation the web app's tab left for offers the way back, with what 
   const page = await openPage(GITHUB_INSTALL_STATUS.CONNECTED);
 
   expect(said(page)).toEqual([
-    "Connected",
     "GitHub is connected to your workspace",
-    "Its repositories are available to everyone in the workspace.",
+    "Everyone in the workspace can use it.",
   ]);
   expect(
     Array.from(page.querySelectorAll("a")).map((link) => [
       link.textContent,
       link.getAttribute("href"),
     ]),
-  ).toEqual([["Back to Luke", "/settings/workspace"]]);
+  ).toEqual([["Open Luke", "/settings/workspace"]]);
 });

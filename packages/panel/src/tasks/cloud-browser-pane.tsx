@@ -236,6 +236,7 @@ function CloudBrowserBar({
           <IconButton
             icon={<RotateCwIcon aria-hidden="true" />}
             label="Reload"
+            turns
             disabled={onStep === undefined}
             onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
           />

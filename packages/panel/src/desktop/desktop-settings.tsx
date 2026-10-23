@@ -61,6 +61,7 @@ import {
   settingsSearchEntries,
 } from "../settings-search.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
@@ -211,6 +212,7 @@ export function DesktopSettings({
   const [integrationsQuery, setIntegrationsQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
   const [templateHistory, setTemplateHistory] = useState(false);
+  const experiments = useExperimentChoices();
   // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
   if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // The Integrations page's search is the page's, so turning to another page leaves it.
@@ -319,26 +321,28 @@ export function DesktopSettings({
                 {search ? (
                   <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
                 ) : (
-                  shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
-                    <section key={group} className="settings-nav-group">
-                      <GroupHeading
-                        group={group}
-                        listed={listed}
-                        capabilities={settings.capabilities}
-                      />
-                      <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
-                        {pages.map((view) => (
-                          <SettingsPageRow
-                            key={view}
-                            view={view}
-                            current={view === settings.view}
-                            note={view === SETTINGS_VIEW.VOICE ? voiceNote : undefined}
-                            onOpen={() => open(view)}
-                          />
-                        ))}
-                      </Stack>
-                    </section>
-                  ))
+                  shownSettingsPageGroups(settings.capabilities, experiments).map(
+                    ({ group, pages }) => (
+                      <section key={group} className="settings-nav-group">
+                        <GroupHeading
+                          group={group}
+                          listed={listed}
+                          capabilities={settings.capabilities}
+                        />
+                        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
+                          {pages.map((view) => (
+                            <SettingsPageRow
+                              key={view}
+                              view={view}
+                              current={view === settings.view}
+                              note={view === SETTINGS_VIEW.VOICE ? voiceNote : undefined}
+                              onOpen={() => open(view)}
+                            />
+                          ))}
+                        </Stack>
+                      </section>
+                    ),
+                  )
                 )}
               </div>
             </ScrollArea>

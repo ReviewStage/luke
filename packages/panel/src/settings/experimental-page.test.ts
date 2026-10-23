@@ -135,6 +135,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     EXPERIMENT.BROWSER,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
+    EXPERIMENT.MEMORY,
   ]);
 });
 
@@ -185,6 +186,7 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ["Browser tab"],
     ["Chat"],
     ["Video calls", "Avatar"],
+    ["Memory"],
   ]);
 
   // Every face stands open, with no menu to open first: one radio group, Atlas chosen at first.

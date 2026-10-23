@@ -1,5 +1,6 @@
 import { type Ref, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { useStagedFocus } from "./staged-focus.js";
@@ -40,7 +41,9 @@ import { useStagedFocus } from "./staged-focus.js";
  * tool of the dialog's own (attaching a screenshot) at the foot's start where
  * it has one. What it holds between them is the part that gives way and
  * scrolls, so its title and its answers stay on screen however short the
- * window is. A dialog whose head is more than words (a picture's bar, a title
+ * window is. A picture's card opened from its tile grows from the tile
+ * and goes back into it (`expand`), in place of the fade and rise every other
+ * card opens with. A dialog whose head is more than words (a picture's bar, a title
  * holding a chip) draws its own and names the card by it (`labelledBy`).
  */
 
@@ -132,6 +135,8 @@ export type DialogProps = DialogName & {
   actions?: React.ReactNode;
   /** A tool of the dialog's own at the foot's start, before its answers. */
   actionsStart?: React.ReactNode;
+  /** The tile a picture's card grows from in place of its own entrance (`usePictureExpand`); none for every other dialog. */
+  expand?: PictureExpand | undefined;
   children: React.ReactNode;
 };
 
@@ -239,6 +244,7 @@ export function Dialog({
   dropping = false,
   actions,
   actionsStart,
+  expand,
   children,
 }: DialogProps): React.JSX.Element {
   const card = useRef<HTMLDivElement | null>(null);
@@ -253,6 +259,11 @@ export function Dialog({
   useStagedFocus<HTMLElement>(initialFocus ?? card, !busy);
   useStagedFocus(card, busy);
   useRefusalShake(card, refused);
+  // Note that this runs before the card's first paint, so its own entrance
+  // is stood down before a frame of it is drawn.
+  useLayoutEffect(() => {
+    if (expand !== undefined && card.current !== null) expand.grow(card.current);
+  }, [expand]);
 
   // Note that the owner still hears a dismissal asked while the dialog is
   // at work and decides what it costs; the nudge answers it, which no owner

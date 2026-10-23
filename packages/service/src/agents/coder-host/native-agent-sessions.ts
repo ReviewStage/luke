@@ -30,6 +30,7 @@ import {
 } from "../../integrations/connection-door.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
+import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { workspaceStepOf } from "../written-mentions.js";
@@ -67,6 +68,7 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed(() => false),
     );
+    const memoryOn = yield* memoryOnFor(userId);
     const taskLink =
       agent.taskId === null
         ? null
@@ -85,6 +87,7 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       agent.githubAccess === GITHUB_ACCESS.TOKEN,
       harness,
       agent.kind,
+      memoryOn,
     );
   });
 

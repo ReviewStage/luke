@@ -16,6 +16,8 @@ export const EXPERIMENT = {
   CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
   VIDEO_CALLS: "video-calls",
+  /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
+  MEMORY: "memory",
   /** The sidebar as the Inbox: its threads under their tasks where the task list stood, the tasks left to the Tasks page. */
   INBOX_FIRST: "inbox-first",
   /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
@@ -95,6 +97,15 @@ export const EXPERIMENTS = [
       "Keyframe. Your own voice never does.",
     owner: "Charles",
     since: "2026-10-15",
+  },
+  {
+    key: EXPERIMENT.MEMORY,
+    name: "Memory",
+    detail:
+      "Your coding agents keep settled facts about how your team works and recall them in later work, " +
+      "shared across your workspace and reviewed in Settings › Memory.",
+    owner: "Dean",
+    since: "2026-10-23",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

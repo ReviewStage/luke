@@ -37,6 +37,7 @@ import {
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
+import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { READ_WEB_PAGE_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
@@ -220,6 +221,14 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.LIST_MODELS]: {
     description: LIST_MODELS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_MODELS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.REMEMBER]: {
+    description: REMEMBER_TOOL.description,
+    inputSchema: emitJsonSchema(REMEMBER_TOOL.inputSchema),
+  },
+  [CODER_TOOL.RECALL]: {
+    description: RECALL_TOOL.description,
+    inputSchema: emitJsonSchema(RECALL_TOOL.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {

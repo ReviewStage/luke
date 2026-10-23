@@ -245,6 +245,7 @@ export const PRODUCT_EXPERIMENT = {
   AUTOMATIONS: "automations",
   CODE_REVIEW: "code-review",
   VIDEO_CALLS: "video-calls",
+  MEMORY: "memory",
   /** Removed with Luke's own issues, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   ISSUES: "issues",
   /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */

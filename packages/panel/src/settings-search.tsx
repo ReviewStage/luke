@@ -219,6 +219,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    // What the workspace's agents remember, which is the workspace's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MEMORY,
+          label: "Memory",
+          page: SETTINGS_VIEW.MEMORY,
+          haystack: ["Memory", "remember recall forget facts conventions shared memory"],
+        }
+      : undefined,
     // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
@@ -376,7 +385,9 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     ];
   });
   const fixed = fixedEntries(input);
-  const pages = SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, input.capabilities));
+  const pages = SETTINGS_PAGE_LIST.filter((page) =>
+    settingsPageShown(page, input.capabilities, input.settings.experiments),
+  );
   return pages
     .flatMap((page) => [
       ...described.filter((entry) => entry.page === page),

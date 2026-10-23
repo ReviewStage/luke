@@ -150,6 +150,37 @@ describe("parseSkillPaste names a source it does not install from", () => {
   });
 });
 
+describe("parseSkillPaste reads a GitHub link pasted alone as the source it names", () => {
+  it.each([
+    ["https://github.com/o/r", github("o", "r")],
+    ["github.com/o/r", github("o", "r")],
+    ["  https://www.github.com/o/r.git\n", github("o", "r")],
+    [
+      "https://github.com/o/r/tree/main/skills/review",
+      github("o", "r", { ref: "main", path: "skills/review" }),
+    ],
+    [
+      "https://github.com/o/r/blob/v2/skills/review/SKILL.md",
+      github("o", "r", { ref: "v2", path: "skills/review" }),
+    ],
+    ["https://skills.sh/o/r/grill-me", github("o", "r", { skills: ["grill-me"] })],
+  ])("%s", (pasted, expected) => {
+    expect(parseSkillPaste(pasted)).toEqual(expected);
+  });
+
+  it("names a link to a download unsupported", () => {
+    expect(parseSkillPaste("https://github.com/o/r/archive/main.zip")).toEqual({
+      kind: "unsupported",
+      reason: "download-url",
+    });
+  });
+
+  it("takes a link among other words, or owner/repo alone, as text", () => {
+    expect(parseSkillPaste("See https://github.com/o/r for more.").kind).toBe("text");
+    expect(parseSkillPaste("o/r").kind).toBe("text");
+  });
+});
+
 describe("parseSkillPaste reads a skill's text", () => {
   it("reads the frontmatter's name and description", () => {
     const markdown =

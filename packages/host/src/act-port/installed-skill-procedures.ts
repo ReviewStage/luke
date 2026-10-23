@@ -1,12 +1,16 @@
 import type {
+  InstalledSkillContentView,
   InstalledSkillIdParams,
   InstalledSkillInstallParams,
   InstalledSkillInstallView,
   InstalledSkillListParams,
   InstalledSkillListView,
+  InstalledSkillPreviewFileParams,
+  InstalledSkillPreviewFileView,
   InstalledSkillPreviewParams,
   InstalledSkillPreviewView,
   InstalledSkillRemovedView,
+  InstalledSkillShareParams,
   InstalledSkillToggleParams,
   InstalledSkillUpdateCheckView,
   InstalledSkillUpdatedView,
@@ -18,7 +22,7 @@ import { INSTALLED_SKILL_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";
 
 /**
- * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: the skills listed, a paste previewed and installed, one toggled, checked for an update, updated, or removed.
+ * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: the skills listed, one read, a paste previewed, a previewed skill's `SKILL.md` read, a paste installed, one toggled, checked for an update, updated, shared with a workspace, or removed.
  *
  * The one check these procedures make is who asked: only a panel draws
  * Settings, so the takeover and the hidden voice window are refused in each
@@ -28,9 +32,13 @@ import { actPort } from "./base.js";
 export interface InstalledSkillProceduresDependencies {
   host: {
     installedSkillsList(params: InstalledSkillListParams): Effect.Effect<InstalledSkillListView>;
+    installedSkillsRead(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillContentView>;
     installedSkillsPreview(
       params: InstalledSkillPreviewParams,
     ): Effect.Effect<InstalledSkillPreviewView>;
+    installedSkillsPreviewFile(
+      params: InstalledSkillPreviewFileParams,
+    ): Effect.Effect<InstalledSkillPreviewFileView>;
     installedSkillsInstall(
       params: InstalledSkillInstallParams,
     ): Effect.Effect<InstalledSkillInstallView>;
@@ -43,6 +51,7 @@ export interface InstalledSkillProceduresDependencies {
     installedSkillsUpdate(
       params: InstalledSkillUpdateParams,
     ): Effect.Effect<InstalledSkillUpdatedView>;
+    installedSkillsShare(params: InstalledSkillShareParams): Effect.Effect<InstalledSkillView>;
     installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   };
 }
@@ -59,6 +68,14 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
       if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
       return yield* host.installedSkillsList(input);
     }),
+    [KIND.INSTALLED_SKILLS_READ]: actPort[KIND.INSTALLED_SKILLS_READ].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
+      return yield* host.installedSkillsRead(input);
+    }),
     [KIND.INSTALLED_SKILLS_PREVIEW]: actPort[KIND.INSTALLED_SKILLS_PREVIEW].effect(function* ({
       input,
       context,
@@ -67,6 +84,12 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
       if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
       return yield* host.installedSkillsPreview(input);
     }),
+    [KIND.INSTALLED_SKILLS_PREVIEW_FILE]: actPort[KIND.INSTALLED_SKILLS_PREVIEW_FILE].effect(
+      function* ({ input, context, errors }) {
+        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
+        return yield* host.installedSkillsPreviewFile(input);
+      },
+    ),
     [KIND.INSTALLED_SKILLS_INSTALL]: actPort[KIND.INSTALLED_SKILLS_INSTALL].effect(function* ({
       input,
       context,
@@ -94,6 +117,14 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
     }) {
       if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
       return yield* host.installedSkillsUpdate(input);
+    }),
+    [KIND.INSTALLED_SKILLS_SHARE]: actPort[KIND.INSTALLED_SKILLS_SHARE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
+      return yield* host.installedSkillsShare(input);
     }),
     [KIND.INSTALLED_SKILLS_REMOVE]: actPort[KIND.INSTALLED_SKILLS_REMOVE].effect(function* ({
       input,

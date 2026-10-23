@@ -249,8 +249,12 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_UNFOLLOW: "automations.unfollow",
   /** The skills the account sees in a workspace, the workspace's then its own, read from the service now; or why there are none. */
   INSTALLED_SKILLS_LIST: "installedSkills.list",
+  /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
+  INSTALLED_SKILLS_READ: "installedSkills.read",
   /** What a pasted `skills add` command or skill text would install, read by the service; nothing is written. */
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
+  /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
+  INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
   /** The skills a paste makes, installed for the account or its workspace, all or none; or why none were. */
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
@@ -259,6 +263,8 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
   /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
   INSTALLED_SKILLS_UPDATE: "installedSkills.update",
+  /** The account's own personal skill moved into a workspace it is a member of; the skill as it then stands, or why it is unchanged. */
+  INSTALLED_SKILLS_SHARE: "installedSkills.share",
   /** One installed skill removed with its files; or why it stands. */
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
@@ -303,6 +309,10 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_SAVE: "githubToken.save",
   /** The member's GitHub token removed on the service; none then stands. */
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
+  /** The memories Luke's agents kept in a workspace, read from the service now. */
+  MEMORIES_READ: "memories.read",
+  /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
+  MEMORIES_FORGET: "memories.forget",
   /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */

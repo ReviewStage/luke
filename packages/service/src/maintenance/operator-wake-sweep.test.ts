@@ -107,6 +107,7 @@ const openMember = Effect.gen(function* () {
       organizationId: workspace,
       planSnapshot: null,
       prompt: "Sweep the flaky tests.",
+      title: "Flaky tests",
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -171,7 +172,7 @@ it.layer(getTestDB())("the wake of an operator whose member's agent failed", (it
         yield* sweepAt(T0 + 61_000, eve);
         const woken = sentTo(eve, sessionId);
         assert.equal(woken.length, 1, woken.join("\n"));
-        assert.ok(woken[0]?.includes(`[@${agent.personaName ?? ""}]`), woken.join("\n"));
+        assert.ok(woken[0]?.includes("[@Flaky tests]"), woken.join("\n"));
 
         yield* failedAt(agent, T0 + HOUR_MS / 2);
         yield* sweepAt(T0 + HOUR_MS / 2 + 1_000, eve);

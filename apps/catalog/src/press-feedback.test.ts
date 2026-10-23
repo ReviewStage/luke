@@ -76,6 +76,8 @@ const NO_PRESS = [
   ".luke-disclosure-action",
   // A portal's fence only keeps what the controls it holds took from the tree around it (`portal-fence.tsx`).
   ".luke-portal-fence",
+  // A document's block, whose press puts a caret in its words to edit them, as a document editor does (`editable-block.tsx`).
+  ".luke-editable-block",
   // Words a hint hangs from, whose tap shows the hint rather than pressing anything (`hint.tsx`).
   ".luke-one-line",
   "span.luke-inline-ref",

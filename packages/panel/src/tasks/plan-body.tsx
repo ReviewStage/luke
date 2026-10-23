@@ -15,6 +15,7 @@ import {
 } from "@luke/features/task-wire";
 import {
   Button,
+  EDITABLE_BLOCK_CLASS,
   EllipsisIcon,
   IconButton,
   SavedTick,
@@ -58,7 +59,6 @@ import {
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import { PlanCommentLayer, useCommentFocus } from "./plan-comments.js";
 import {
-  DOCUMENT_BLOCK_CLASS,
   DocumentBlock,
   EditableTitle,
   PlanDocumentEditor,
@@ -1093,7 +1093,7 @@ export const PlanBody = memo(function PlanBody({
       const element = scroller.current;
       if (element === null || document.activeElement !== document.body) return;
       const shown = element.getBoundingClientRect();
-      const blocks = [...element.querySelectorAll<HTMLElement>(`.${DOCUMENT_BLOCK_CLASS}`)].filter(
+      const blocks = [...element.querySelectorAll<HTMLElement>(`.${EDITABLE_BLOCK_CLASS}`)].filter(
         (block) => {
           const at = block.getBoundingClientRect();
           return at.bottom > shown.top && at.top < shown.bottom;

@@ -25,13 +25,43 @@
  * element rides, opacity over `--luke-duration-quick` and its travel on
  * `--luke-spring`, rows that arrive together a `--luke-row-stagger` apart. A
  * list that was not drawn before the change, a fold opened, draws its rows
- * at once, and nothing plays the first time a list is drawn.
+ * at once, and nothing plays the first time a list is drawn. While what the
+ * lists draw is still being read (`reading`), as an Inbox's reads land one
+ * after another while the window opens, nothing a row draws is new to the
+ * reader, so a row arriving fades in where it stands, with every other
+ * arriving, rather than sliding in a stagger after the last.
+ *
+ * A change landing while rows still move, as reads landing one after
+ * another while the window opens, stops nothing under way: each place is
+ * read where the layout stands an element, not where its motion draws it, and
+ * the glide that change asks for is added onto the ones still playing
+ * (`composite: "add"`), so a row in flight carries on at the speed it had
+ * rather than stopping dead and setting off again, and a row fading in
+ * finishes its fade rather than showing at once.
  *
  * Every duration is read from the tokens where the list stands, so reduced
  * motion and a capture run, which zero them, hold the list still and let a
  * leaving row go on the frame it stopped being listed. A list wearing
  * `data-dragging` is the drag's to move while it lasts, and none of its rows
  * plays here.
+ *
+ * A list whose rows unroll (`LIST_MOTION_WAY.UNROLL`), as the rows a
+ * setting reveals under it do (`reveal.tsx`), plays one gesture each way: a
+ * row arriving is unrolled from its top edge by a clip as it fades in, on
+ * the spring the rows under it glide down on, so its clip's foot and the
+ * row under it travel as one edge; a row leaving is rolled up the same way
+ * on the exit's tokens, and the rows under it close over it on those same
+ * tokens at once, rather than after it, since what it goes into is the
+ * room they close. Where rows arrive in its place in the same change, as a
+ * choice's next rows do, they unroll on the spring as ever, and what they
+ * move glides with them.
+ *
+ * Several motions over one root, each reveal of a page playing its own,
+ * play a commit that changes more than one of them as one: each reads the
+ * places the commit started from as the first read them, and the last to
+ * hear the commit plays every exit they were handed before any glide, so a
+ * row is never glided twice, nor to a place a row leaving below it is
+ * about to give up.
  *
  * The one move the layout would still make above a leaving row is the
  * scroller's: a list scrolled to its end that grows shorter is scrolled back
@@ -83,10 +113,17 @@ const SCALED_AWAY = 0.6;
 /** The most steps rows arriving together are staggered by; the rest arrive with the last. */
 const STAGGER_STEPS = 6;
 
-/** How a row arrives and leaves: sliding in from and out toward the list's leading edge, as a list's rows do, or scaling in and out where it stands, as a row of chips does. */
+/** The clip a row unrolled away stands behind: cut from its foot to its top. */
+const ROLLED_UP = "inset(0 0 100% 0)";
+
+/** The clip a row unrolled whole stands behind. Note that it names its inset, because a clip cannot be interpolated from none. */
+const UNROLLED = "inset(0)";
+
+/** How a row arrives and leaves: sliding in from and out toward the list's leading edge, as a list's rows do, scaling in and out where it stands, as a row of chips does, or unrolling from and rolling up toward its top edge, as the rows a setting reveals do. */
 export const LIST_MOTION_WAY = {
   SLIDE: "slide",
   SCALE: "scale",
+  UNROLL: "unroll",
 } as const;
 
 export type ListMotionWay = (typeof LIST_MOTION_WAY)[keyof typeof LIST_MOTION_WAY];
@@ -136,6 +173,13 @@ interface Snapshot {
   readonly lists: Set<Element>;
 }
 
+/** What the motions over one root playing one commit share: where it started from, how many have still to hear it, and the exits handed them so far. */
+interface Batch {
+  readonly before: Snapshot;
+  waiting: number;
+  readonly leavers: Leaver[];
+}
+
 /** A leaving element as the motion takes it, and what lets its entry go. */
 interface Exit {
   readonly element: HTMLElement;
@@ -147,8 +191,8 @@ const LeavesContext = createContext<Leaves | undefined>(undefined);
 /** The exits under way, by the element leaving, stopped where its entry is listed again. */
 const exits = new WeakMap<Element, Animation>();
 
-/** The glides and arrivals under way, by the element moving, stopped where a later change moves it again. */
-const moving = new WeakMap<Element, Animation[]>();
+/** The commit each root is being played in, by the root, until the last motion over it has heard it. */
+const batches = new WeakMap<Element, Batch>();
 
 /** Whether the DOM plays motions at all. Note that a test's DOM has no animation engine, and runs none. */
 function animates(element: Element): boolean {
@@ -252,13 +296,43 @@ function moversOf(root: HTMLElement): HTMLElement[] {
   });
 }
 
-/** Where each element is drawn, from the root's top left corner, any motion under way included. */
+/**
+ * How far its own transform draws `element` from where the layout stands
+ * it, a motion under way included: the transform's translation, and what a
+ * scale about its origin moves its top left corner by.
+ */
+function shiftOf(element: Element): Point {
+  const style = getComputedStyle(element);
+  const matrix = /^matrix(3d)?\(([^)]*)\)$/u.exec(style.transform);
+  if (matrix === null) return { x: 0, y: 0 };
+  const m = (matrix[2] ?? "").split(",").map(Number);
+  const [a, d, e, f] =
+    matrix[1] === undefined ? [m[0], m[3], m[4], m[5]] : [m[0], m[5], m[12], m[13]];
+  const [originX = 0, originY = 0] = style.transformOrigin.split(" ").map(Number.parseFloat);
+  return {
+    x: (e ?? 0) + originX * (1 - (a ?? 1)),
+    y: (f ?? 0) + originY * (1 - (d ?? 1)),
+  };
+}
+
+/**
+ * Where the layout stands each element, from the root's top left corner:
+ * where it is drawn, less what its own transform and every one around it
+ * under the root draw it by, so a motion under way moves no place.
+ */
 function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element, Point> {
   const origin = root.getBoundingClientRect();
   const places = new Map<Element, Point>();
   for (const element of elements) {
     const box = element.getBoundingClientRect();
-    places.set(element, { x: box.left - origin.left, y: box.top - origin.top });
+    let x = box.left - origin.left;
+    let y = box.top - origin.top;
+    for (let at: Element | null = element; at !== null && at !== root; at = at.parentElement) {
+      const shift = shiftOf(at);
+      x -= shift.x;
+      y -= shift.y;
+    }
+    places.set(element, { x, y });
   }
   return places;
 }
@@ -295,8 +369,8 @@ function standAgain(element: HTMLElement): void {
 }
 
 /**
- * Where a leaving element stood before the commit, as a top in the box it
- * is laid out in once it leaves the layout, its list (positioned,
+ * Where the layout stood a leaving element before the commit, as a top in
+ * the box it is laid out in once it leaves the layout, its list (positioned,
  * list-motion.css): read from `before` rather than from where the commit put
  * it, since a row arriving above it in the same change moved it, and from
  * the mover that carries it, which glides it on from there. Where nothing
@@ -313,17 +387,26 @@ function standingTop(root: HTMLElement, element: HTMLElement, before: Snapshot):
 }
 
 /** Where a row stands once gone, the way it arrives and leaves, read where the list stands. */
-function awayOf(root: HTMLElement, way: ListMotionWay): string {
-  if (way === LIST_MOTION_WAY.SCALE) return `scale(${SCALED_AWAY})`;
+function awayOf(root: HTMLElement, way: ListMotionWay): Keyframe {
+  if (way === LIST_MOTION_WAY.UNROLL) return { clipPath: ROLLED_UP };
+  if (way === LIST_MOTION_WAY.SCALE) return { transform: `scale(${SCALED_AWAY})` };
   const travel = Number.parseFloat(getComputedStyle(root).getPropertyValue(TRAVEL)) || 0;
-  return `translateX(${-travel}px)`;
+  return { transform: `translateX(${-travel}px)` };
+}
+
+/** Where a row stands once it has arrived, the way it arrives and leaves. */
+function homeOf(way: ListMotionWay): Keyframe {
+  return way === LIST_MOTION_WAY.UNROLL ? { clipPath: UNROLLED } : { transform: "none" };
 }
 
 /**
- * Takes each leaving element out of the layout, laid over the place it
- * held, and slides it out, letting its entry go once that has played; at
- * once where there is to be no motion. Note that every place is read
- * before any element leaves, since each that leaves moves the rest.
+ * Takes each leaving element out of the layout, laid over the place it is
+ * drawn at, and slides it out, letting its entry go once that has played;
+ * at once where there is to be no motion. Note that every place is read
+ * before any element leaves, since each that leaves moves the rest, and
+ * that the exit takes over from whatever motion of its own was under way,
+ * so it is laid where that motion drew it rather than where the layout
+ * stood it.
  */
 function playExits(
   root: HTMLElement,
@@ -339,10 +422,11 @@ function playExits(
   const away = awayOf(root, way);
   const placed = leaving.map((each) => {
     const { element } = each;
+    const shift = shiftOf(element);
     return {
       each,
-      top: standingTop(root, element, before),
-      left: element.offsetLeft,
+      top: standingTop(root, element, before) + shift.y,
+      left: element.offsetLeft + shift.x,
       width: element.offsetWidth,
       opacity: getComputedStyle(element).opacity || "1",
     };
@@ -356,8 +440,8 @@ function playExits(
     element.style.margin = "0";
     const out = element.animate(
       [
-        { opacity, transform: "none" },
-        { opacity: 0, transform: away },
+        { opacity, ...homeOf(way) },
+        { opacity: 0, ...away },
       ],
       { ...exit, fill: "forwards" },
     );
@@ -373,29 +457,35 @@ interface MoveTiming {
   readonly arrive: KeyframeAnimationOptions | undefined;
   readonly stagger: number;
   readonly way: ListMotionWay;
+  /** Whether a row arriving travels in from where it would leave to, or only fades in where it stands. */
+  readonly travels: boolean;
+  /** What the rows a leaving row unrolled away from close over it on, where nothing arrives in its place: its exit's timing. */
+  readonly close: KeyframeAnimationOptions | undefined;
 }
 
-/** Plays a row's arrival, the way it would leave played back on the spring as it fades in, `step` staggers after the first. */
+/** Plays a row's arrival, the way it would leave played back on the spring, added onto any motion of its own, as it fades in, `step` staggers after the first; only the fade where it does not travel. */
 function arrive(root: HTMLElement, mover: Element, step: number, timing: MoveTiming): void {
   if (timing.arrive === undefined) return;
   const delay = timing.wait + Math.min(step, STAGGER_STEPS) * timing.stagger;
-  const from = awayOf(root, timing.way);
-  moving.set(mover, [
-    mover.animate([{ opacity: 0 }, { opacity: 1 }], { ...timing.arrive, delay, fill: "backwards" }),
-    mover.animate([{ transform: from }, { transform: "none" }], {
-      ...timing.travel,
-      delay,
-      fill: "backwards",
-    }),
-  ]);
+  mover.animate([{ opacity: 0 }, { opacity: 1 }], { ...timing.arrive, delay, fill: "backwards" });
+  if (!timing.travels) return;
+  // Note that a clip is no offset to add onto one under way, so an unroll replaces any clip of its own.
+  const unrolls = timing.way === LIST_MOTION_WAY.UNROLL;
+  mover.animate([awayOf(root, timing.way), homeOf(timing.way)], {
+    ...timing.travel,
+    delay,
+    fill: "backwards",
+    composite: unrolls ? "replace" : "add",
+  });
 }
 
 /**
  * Replays from `before` what the commit moved under `root`: each mover
- * glides from where it was drawn, or where the row of its key was drawn in
- * another list, less what the group around it moved, which carries it; a
- * mover new to a list that stood fades in. Both wait out the exit when
- * something left, as what leaves goes first.
+ * glides from where it stood, or where the row of its key stood in another
+ * list, less what the group around it moved, which carries it, added onto
+ * any glide of its own still under way; a mover new to a list that stood
+ * fades in. Both wait out the exit when something left, as what leaves goes
+ * first.
  */
 function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): void {
   const movers = moversOf(root).filter((mover) => !exits.has(mover));
@@ -414,24 +504,27 @@ function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): voi
       ? { x: 0, y: 0 }
       : { x: was.x - is.x, y: was.y - is.y };
   };
-  let arrivals = 0;
+  const arriving = movers.filter((mover) => {
+    const list = mover.parentElement;
+    return wasOf(mover) === undefined && list !== null && before.lists.has(list);
+  });
+  for (const [step, mover] of arriving.entries()) arrive(root, mover, step, timing);
+  // Note that rows arriving in a leaving row's place, a choice's next rows, set the beat what they move glides on.
+  const glide = arriving.length === 0 ? (timing.close ?? timing.travel) : timing.travel;
   for (const mover of movers) {
-    if (wasOf(mover) === undefined) {
-      const list = mover.parentElement;
-      if (list !== null && before.lists.has(list)) arrive(root, mover, arrivals++, timing);
-      continue;
-    }
+    if (wasOf(mover) === undefined) continue;
     const carrier = carrierOf(root, mover);
     const own = movedBy(mover);
     const carried = carrier === root ? { x: 0, y: 0 } : movedBy(carrier);
     const x = own.x - carried.x;
     const y = own.y - carried.y;
     if (Math.abs(x) < STILL && Math.abs(y) < STILL) continue;
-    const glide = mover.animate(
-      [{ transform: `translate(${x}px, ${y}px)` }, { transform: "none" }],
-      { ...timing.travel, delay: timing.wait, fill: "backwards" },
-    );
-    moving.set(mover, [glide]);
+    mover.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: "none" }], {
+      ...glide,
+      delay: timing.wait,
+      fill: "backwards",
+      composite: "add",
+    });
   }
 }
 
@@ -460,6 +553,7 @@ interface ListMotionPlayerProps {
   leaves: Leaves;
   change: unknown;
   way: ListMotionWay;
+  reading: boolean;
 }
 
 /** It holds no state of its own. */
@@ -477,56 +571,49 @@ type ListMotionPlayerState = Record<never, never>;
 class ListMotionPlayer extends Component<
   ListMotionPlayerProps,
   ListMotionPlayerState,
-  Snapshot | null
+  Batch | null
 > {
   /** Gives back the root's held height and stops following the scroller; none while nothing is held. */
   private release: (() => void) | undefined = undefined;
 
-  override getSnapshotBeforeUpdate(previous: ListMotionPlayerProps): Snapshot | null {
+  override getSnapshotBeforeUpdate(previous: ListMotionPlayerProps): Batch | null {
     const root = this.props.root.current;
     if (root === null) return null;
     if (this.props.change !== undefined && previous.change === this.props.change) return null;
-    return snapshotOf(root);
+    let batch = batches.get(root);
+    if (batch === undefined) {
+      const opened: Batch = { before: snapshotOf(root), waiting: 0, leavers: [] };
+      batch = opened;
+      batches.set(root, opened);
+      // Note that a commit no motion heard the end of is not one the next commit starts from.
+      queueMicrotask(() => {
+        if (batches.get(root) === opened) batches.delete(root);
+      });
+    }
+    batch.waiting += 1;
+    return batch;
   }
 
   override componentDidUpdate(
-    _previous: ListMotionPlayerProps,
+    previous: ListMotionPlayerProps,
     _state: ListMotionPlayerState,
-    before: Snapshot | null,
+    batch: Batch | null,
   ): void {
     const { pending, returned } = this.props.leaves;
     const leavers = pending.splice(0);
     const root = this.props.root.current;
     root?.setAttribute(ROOT_ATTRIBUTE, "");
     if (root !== null) this.standReturned(root, returned.splice(0));
-    if (root === null || before === null) {
+    if (root === null || batch === null) {
       for (const leaver of leavers) leaver.onLeft();
       return;
     }
-    const leaving = this.leavingOf(root, leavers, before);
-    if (leaving.length > 0) this.holdHeight(root);
-    // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
-    const engine = animates(root);
-    const exit = engine
-      ? tokenTiming(root, "--luke-duration-exit", "--luke-motion-exit")
-      : undefined;
-    // Note that a motion under way is stopped before anything is read, so each
-    // element is read where the new layout stands it, and all are read at once.
-    for (const mover of engine ? moversOf(root) : []) {
-      for (const motion of moving.get(mover) ?? []) motion.cancel();
-      moving.delete(mover);
-    }
-    playExits(root, leaving, before, exit, this.props.way);
-    const travel = engine ? tokenTiming(root, "--luke-duration-shape", "--luke-spring") : undefined;
-    if (travel === undefined) return;
-    const style = getComputedStyle(root);
-    playMoves(root, before, {
-      wait: leaving.length > 0 && exit !== undefined ? Number(exit.duration) : 0,
-      travel,
-      arrive: tokenTiming(root, "--luke-duration-quick", "--luke-motion-exit"),
-      stagger: milliseconds(style.getPropertyValue("--luke-row-stagger")),
-      way: this.props.way,
-    });
+    batch.leavers.push(...leavers);
+    batch.waiting -= 1;
+    // Note that the last motion over the root to hear the commit plays it, with every exit the others were handed.
+    if (batch.waiting > 0) return;
+    if (batches.get(root) === batch) batches.delete(root);
+    this.play(root, batch, this.props.reading || previous.reading);
   }
 
   override componentDidMount(): void {
@@ -539,6 +626,41 @@ class ListMotionPlayer extends Component<
 
   override render(): null {
     return null;
+  }
+
+  /**
+   * Plays a commit over the root: the exits of what leaves, the glides of
+   * what that moved, and the root's height held at the scroller's end.
+   * Note that the rows a leaving row unrolled away from close over it as it
+   * rolls up, on its exit's tokens, where the rest glide after it.
+   */
+  private play(root: HTMLElement, batch: Batch, reading: boolean): void {
+    const { before } = batch;
+    const leaving = this.leavingOf(root, batch.leavers, before);
+    if (leaving.length > 0) this.holdHeight(root);
+    // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
+    const engine = animates(root);
+    const exit = engine
+      ? tokenTiming(root, "--luke-duration-exit", "--luke-motion-exit")
+      : undefined;
+    const { way } = this.props;
+    playExits(root, leaving, before, exit, way);
+    const shape = engine ? tokenTiming(root, "--luke-duration-shape", "--luke-spring") : undefined;
+    if (shape === undefined) return;
+    const left = leaving.length > 0 && exit !== undefined;
+    const closes = left && way === LIST_MOTION_WAY.UNROLL;
+    // Note that the change that ends the read lands the last of it, which arrives as the rest of it did.
+    playMoves(root, before, {
+      wait: left && !closes ? Number(exit.duration) : 0,
+      travel: shape,
+      close: closes ? exit : undefined,
+      arrive: tokenTiming(root, "--luke-duration-quick", "--luke-motion-exit"),
+      stagger: reading
+        ? 0
+        : milliseconds(getComputedStyle(root).getPropertyValue("--luke-row-stagger")),
+      way,
+      travels: !reading,
+    });
   }
 
   /** Stands again each element whose entry was listed again before its exit finished. */
@@ -617,24 +739,28 @@ class ListMotionPlayer extends Component<
  * `root` names stands among them, and each list under it that opts in
  * (`motionRows`) moves as this file's header says. `change`, where given,
  * is what the lists draw, and a commit that keeps it plays nothing; without
- * it every commit is read. `way` is how a row arrives and leaves.
+ * it every commit is read. `way` is how a row arrives and leaves, and
+ * `reading` whether what the lists draw is still being read, which fades a
+ * row arriving in where it stands.
  */
 export function ListMotion({
   root,
   change,
   way = LIST_MOTION_WAY.SLIDE,
+  reading = false,
   children,
 }: {
   root: RefObject<HTMLElement | null>;
   change?: unknown;
   way?: ListMotionWay;
+  reading?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   const [leaves] = useState<Leaves>(() => ({ pending: [], returned: [] }));
   return (
     <LeavesContext.Provider value={leaves}>
       {children}
-      <ListMotionPlayer root={root} leaves={leaves} change={change} way={way} />
+      <ListMotionPlayer root={root} leaves={leaves} change={change} way={way} reading={reading} />
     </LeavesContext.Provider>
   );
 }

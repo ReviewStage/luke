@@ -1636,7 +1636,7 @@ export interface ChatAgentMember {
  * Each agent member of the workspace as its coding agent names it, by the
  * agent's id, every agent's rather than the few a task's summary names, so
  * a window names an agent and draws its line under its task wherever it
- * stands: its task, and the name its tab shows, Luke for an operator, its human name, else its title, or else its
+ * stands: its task, and the name its tab shows, Luke for an operator, else its title, or else its
  * model's id. None for an agent whose coding agent is gone, and none where
  * the account is not in the workspace.
  */
@@ -3163,7 +3163,7 @@ export function workspaceChatLiveStatements(
         {
           id: chatMember.id,
           kind: chatMember.kind,
-          // A person by their account's name; an agent by its human name, else its title, else its model's id, as `agentMembersOf` names one.
+          // A person by their account's name; an agent by its title, else its model's id, as `agentMembersOf` names one.
           name: sql<
             string | null
           >`case when ${chatMember.userId} is null then coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title}, ${codingAgent.model}) else ${user.name} end`,

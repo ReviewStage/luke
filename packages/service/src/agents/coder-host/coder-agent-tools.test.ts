@@ -28,6 +28,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { linkIntegrationInstallation } from "@luke/database/models/integration-installation-store";
+import { listMemories } from "@luke/database/models/memory-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import {
@@ -126,6 +127,8 @@ import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integ
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
+import { AGENT_ROLE } from "../agent-runtime/role.js";
+import { toolsOf } from "../agent-runtime/tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
@@ -271,8 +274,8 @@ function seat(target: ConversationTarget): SessionAuth {
 
 interface StartedAgent extends ConversationTarget {
   readonly id: string;
-  /** The human name the store gave the agent, which names it in every answer and mention. */
-  readonly personaName: string;
+  /** The name the agent goes by in every answer and mention: its title, or its model before it has one. */
+  readonly name: string;
   readonly sessionId: string;
 }
 
@@ -312,7 +315,7 @@ async function claimed(
   return {
     ...target,
     id: started.value.agent.id,
-    personaName: started.value.agent.personaName ?? "",
+    name: started.value.agent.title ?? started.value.agent.model,
     sessionId: session,
   };
 }
@@ -637,7 +640,7 @@ async function openWorkspaces() {
   const billing = await database.run(
     createTask(bob, { organizationId: workspaceId, name: "Billing", repository: RELAY_FULL_NAME }),
   );
-  const caller = await agentOn(alice, invitations.id);
+  const caller = { ...(await agentOn(alice, invitations.id)), name: CALLER_TITLE };
   assert.equal(await database.run(fillCodingAgentTitle(alice, caller.id, CALLER_TITLE)), true);
   const teammates = await agentOn(bob, billing.id);
   const archived = await agentOn(alice, invitations.id);
@@ -682,26 +685,24 @@ test("list_agents names every other agent of the caller's workspace, on any task
   const archived = {
     ...reading,
     id: agents.archived.id,
-    name: agents.archived.personaName,
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
     task: { id: tasks.invitations, name: "Teammate invitations" },
     onYourTask: true,
     archived: true,
-    mention: `[@${agents.archived.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
+    mention: `[@${agents.archived.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
   };
   const teammates = {
     ...reading,
     id: agents.teammates.id,
-    name: agents.teammates.personaName,
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
     task: { id: tasks.billing, name: "Billing" },
     onYourTask: false,
     archived: false,
-    mention: `[@${agents.teammates.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
+    mention: `[@${agents.teammates.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
   };
 
   const listed = await call(CODER_TOOL.LIST_AGENTS, {});
@@ -804,11 +805,10 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, tasks.invitations);
-  // The agent is answered with the mention its starter names it by, the human name it was given.
-  assert.equal(started.agent.name, stored.personaName);
+  // The agent is answered with the mention its starter names it by, its model while it has no title.
   assert.equal(
     started.agent.mention,
-    `[@${stored.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${stored.title ?? stored.model}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
@@ -819,7 +819,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const message = sentWords(opening?.body);
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
-  assert.ok(message.includes(`"${caller.personaName}"`) && message.includes(caller.id), message);
+  assert.ok(message.includes(`"${caller.name}"`) && message.includes(caller.id), message);
   // The developer's inbox is the starter's: what the agent would post there goes to it instead.
   assert.ok(message.includes("The developer's inbox is that agent's to keep"), message);
   // An agent's own pick of a model is no member's new default.
@@ -1099,12 +1099,12 @@ test("start_agent with a title names the agent by it from the start, and a title
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   const startedId = started.agent.id;
-  // The agent goes by the human name it was given, its title standing beside it as what it works on.
+  // The agent goes by its title from the start.
   const named = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(named.title, title);
   assert.equal(
     started.agent.mention,
-    `[@${named.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${named.title}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
 
   // The title generated as the agent's words arrive is filled only where none stands.
@@ -2090,7 +2090,7 @@ test("update_agent archives a teammate's idle agent on another task for the call
     by: CODING_AGENT_ARCHIVER.AGENT,
     userId: agents.caller.userId,
     agentId: agents.caller.id,
-    agentName: agents.caller.personaName,
+    agentName: agents.caller.name,
     reason,
   };
   assert.ok((await row()).archivedAt !== null);
@@ -2154,7 +2154,7 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
   assert.equal(teammates.title, null, "a refused archive renames nothing");
 });
 
-test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, stamps no archive and leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
+test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
@@ -2179,21 +2179,11 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     },
     already,
   });
-  // The archive stamp is read off the row itself, since the store reads it no longer.
   const standing = async () => {
     const read = Option.getOrThrow(
       await database.run(readTask(agents.teammates.userId, tasks.billing)),
     ).task;
-    const [row] = await database.run(
-      Database.use((db) =>
-        db.select({ archivedAt: task.archivedAt }).from(task).where(eq(task.id, tasks.billing)),
-      ),
-    );
-    return {
-      status: read.status,
-      archivedAt: row?.archivedAt ?? undefined,
-      finished: read.completedAt !== undefined,
-    };
+    return { status: read.status, finished: read.completedAt !== undefined };
   };
   const archive = (archived: boolean, key: string) =>
     call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, archived }, key);
@@ -2207,11 +2197,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       : [];
 
   assert.deepEqual(await archive(true, "call-1"), answered(TASK_STATUS.CANCELED, false));
-  assert.deepEqual(await standing(), {
-    status: TASK_STATUS.CANCELED,
-    archivedAt: undefined,
-    finished: true,
-  });
+  assert.deepEqual(await standing(), { status: TASK_STATUS.CANCELED, finished: true });
   assert.equal(
     await agentArchive(),
     null,
@@ -2230,11 +2216,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     await archive(false, "call-3"),
     answered(TASK_STATUS.IN_PROGRESS, false, assignee),
   );
-  assert.deepEqual(await standing(), {
-    status: TASK_STATUS.IN_PROGRESS,
-    archivedAt: undefined,
-    finished: false,
-  });
+  assert.deepEqual(await standing(), { status: TASK_STATUS.IN_PROGRESS, finished: false });
 
   await database.run(
     recordCodingAgentPublished(agents.teammates.userId, agents.teammates.id, {
@@ -2695,7 +2677,7 @@ test("a direct message and stop_agent reach a teammate's Claude Code agent throu
     userId: agents.teammates.userId,
     conversationId: started.value.agent.conversationId,
     id: started.value.agent.id,
-    personaName: started.value.agent.personaName ?? "",
+    name: started.value.agent.title ?? started.value.agent.model,
     sessionId: `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`,
   };
   assert.equal(
@@ -2738,7 +2720,6 @@ test("stop_agent stops a teammate's running agent on another task by eve's cance
     status: ACTION_RESULT_STATUS.ACCEPTED,
     agent: {
       id: agents.teammates.id,
-      name: agents.teammates.personaName,
       title: OPUS,
       task: { id: tasks.billing, name: "Billing" },
       onYourTask: false,
@@ -2778,7 +2759,6 @@ test("stop_agent answers an idle agent as idle and changes nothing, refuses one 
     status: ACTION_RESULT_STATUS.ACCEPTED,
     agent: {
       id: agents.teammates.id,
-      name: agents.teammates.personaName,
       title: OPUS,
       task: { id: tasks.billing, name: "Billing" },
       onYourTask: false,
@@ -2977,7 +2957,7 @@ test("read_page reads a page an agent on no task of the caller's workspace showe
 
   assert.deepEqual(
     [read.title, read.html, read.agent, read.isYours, "task" in read],
-    ["Flaky tests", "<h1>Flaky</h1>", { id: sweeper.id, name: sweeper.personaName }, false, false],
+    ["Flaky tests", "<h1>Flaky</h1>", { id: sweeper.id, name: sweeper.name }, false, false],
   );
   assert.ok(
     isWireString(read.mention) &&
@@ -4259,5 +4239,164 @@ test("create_automation and update_automation take a Sentry trigger once the wor
       "cooldown-too-long",
     ),
     rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE),
+  );
+});
+
+/** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */
+async function turnMemoryOn(...userIds: readonly string[]): Promise<void> {
+  for (const userId of userIds) {
+    await database.run(
+      writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } }),
+    );
+  }
+}
+
+/** The words of the memories a recall answered. */
+function recalledWords(answer: WireRecord): readonly unknown[] {
+  assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.ok(Array.isArray(answer.memories));
+  return answer.memories.map((memory) => (isRecord(memory) ? memory.text : memory));
+}
+
+test("a coding agent remembers for its workspace, as its starter's words: a teammate's agent there recalls it, an agent of another workspace recalls nothing, and a workspace or account the call names is ignored", async () => {
+  const { workspaceId, elsewhere, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const fact = "Every hosted route is an oRPC procedure declared in the features contract.";
+  await turnMemoryOn(agents.caller.userId, agents.teammates.userId, agents.otherWorkspaces.userId);
+  const asCaller = await peerCaller(host, agents.caller, eve.services);
+
+  const kept = await asCaller(CODER_TOOL.REMEMBER, {
+    text: fact,
+    workspaceId: elsewhere,
+    userId: agents.strangers.userId,
+  });
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+  const asOtherWorkspace = await peerCaller(host, agents.otherWorkspaces, eve.services);
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(recalledWords(await asTeammate(CODER_TOOL.RECALL, { query: "hosted routes" })), [
+    fact,
+  ]);
+  assert.deepEqual(recalledWords(await asOtherWorkspace(CODER_TOOL.RECALL, {})), []);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map((memory) => [
+      memory.text,
+      memory.userId,
+    ]),
+    [[fact, agents.caller.userId]],
+  );
+  assert.deepEqual(await database.run(listMemories(elsewhere, agents.caller.userId)), []);
+});
+
+test("a teammate's agent corrects a memory in place as its own starter's words, and a credential is never kept", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  await turnMemoryOn(agents.caller.userId, agents.teammates.userId);
+  const asCaller = await peerCaller(host, agents.caller, eve.services);
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+  const kept = await asCaller(CODER_TOOL.REMEMBER, { text: "Deploys go out from main." });
+  assert.ok(isRecord(kept.memory) && isWireString(kept.memory.id));
+
+  const corrected = await asTeammate(CODER_TOOL.REMEMBER, {
+    text: "Deploys go out from the release branch.",
+    replaces: kept.memory.id,
+  });
+  const refused = await asTeammate(CODER_TOOL.REMEMBER, {
+    text: `The deploy key is ${["ghp", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"].join("_")}.`,
+  });
+
+  assert.equal(corrected.outcome, "corrected");
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map((memory) => [
+      memory.text,
+      memory.userId,
+    ]),
+    [["Deploys go out from the release branch.", agents.teammates.userId]],
+  );
+});
+
+test("while its starter has Memory off, a coding agent's remember and recall are refused and nothing is kept", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  await turnMemoryOn(agents.teammates.userId);
+  const asCaller = await peerCaller(host, agents.caller, eve.services);
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+  await asTeammate(CODER_TOOL.REMEMBER, { text: "Deploys go out from main." });
+
+  const kept = await asCaller(CODER_TOOL.REMEMBER, { text: "Every route is an oRPC procedure." });
+  const recalled = await asCaller(CODER_TOOL.RECALL, {});
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(recalled.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(recalled.memories, undefined);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map(
+      (memory) => memory.text,
+    ),
+    ["Deploys go out from main."],
+  );
+});
+
+test("a private memory is kept and recalled by its member's operator alone: their own coding agent, whose transcript teammates read, is never answered it and may not keep one", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const luke = await operatorOn(agents.caller.userId, workspaceId);
+  const preference = "Wants a one-line summary before any merge.";
+  await turnMemoryOn(agents.caller.userId);
+  const asLuke = await peerCaller(host, luke, eve.services);
+  const asCoder = await peerCaller(host, agents.caller, eve.services);
+
+  const kept = await asLuke(CODER_TOOL.REMEMBER, { text: preference, private: true });
+  const refused = await asCoder(CODER_TOOL.REMEMBER, { text: "Prefers tabs.", private: true });
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.deepEqual(recalledWords(await asLuke(CODER_TOOL.RECALL, { query: "summary" })), [
+    preference,
+  ]);
+  assert.deepEqual(recalledWords(await asCoder(CODER_TOOL.RECALL, { query: "summary" })), []);
+  assert.deepEqual(recalledWords(await asCoder(CODER_TOOL.RECALL, {})), []);
+});
+
+test("remember and recall are a coding agent's alone, never a worker's", () => {
+  assert.deepEqual(
+    [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL].map((tool) => [
+      toolsOf(AGENT_ROLE.CODER).has(tool),
+      toolsOf(AGENT_ROLE.CODER_WORKER).has(tool),
+    ]),
+    [
+      [true, false],
+      [true, false],
+    ],
+  );
+});
+
+test("the member's operator keeps memories in its workspace as its member's words, which a teammate's coding agent recalls", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const luke = await operatorOn(agents.caller.userId, workspaceId);
+  const fact = "Releases are cut from the release branch every Thursday.";
+  await turnMemoryOn(agents.caller.userId, agents.teammates.userId);
+  const asLuke = await peerCaller(host, luke, eve.services);
+
+  const kept = await asLuke(CODER_TOOL.REMEMBER, { text: fact });
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(recalledWords(await asTeammate(CODER_TOOL.RECALL, { query: "releases" })), [
+    fact,
+  ]);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map((memory) => [
+      memory.text,
+      memory.userId,
+    ]),
+    [[fact, agents.caller.userId]],
   );
 });

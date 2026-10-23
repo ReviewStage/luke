@@ -94,14 +94,17 @@ function MacRepositoryRow({
   const [command, setCommand] = useState(savedCommand);
   useEffect(() => setCommand(savedCommand), [savedCommand]);
   const [busy, setBusy] = useState(false);
+  const [landed, setLanded] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const write = useCallback(
     (entry: MacRepository) => {
       setBusy(true);
+      setLanded(false);
       setRejection(undefined);
       act(ACT_KIND.MAC_REPOSITORY_SET, entry).then(
         () => {
           setBusy(false);
+          setLanded(true);
           onSaved();
         },
         (refused: Error) => {
@@ -142,6 +145,7 @@ function MacRepositoryRow({
               variant={BUTTON_VARIANT.PRIMARY}
               busy={busy}
               busyLabel="Saving"
+              succeeded={landed}
               disabled={!changed}
             >
               Save

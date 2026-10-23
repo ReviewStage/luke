@@ -1,6 +1,10 @@
 import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
 import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   cssCustomProperties,
   IconButton,
   TEXT_ELEMENT,
@@ -334,7 +338,12 @@ function TranscriptCodeBlock({
         .join("\n")
     : code;
   return (
-    <div className="transcript-code ph-no-capture">
+    <Card
+      look={CARD_LOOK.CODE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
+      className="transcript-code ph-no-capture"
+    >
       <div className="transcript-code-header">
         {suggesting ? (
           <span className="transcript-code-suggestion">{SUGGESTION.LABEL}</span>
@@ -359,7 +368,7 @@ function TranscriptCodeBlock({
           )}
         </code>
       </pre>
-    </div>
+    </Card>
   );
 }
 

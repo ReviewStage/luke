@@ -430,6 +430,7 @@ export function PagePane({
               <IconButton
                 icon={<RotateCwIcon aria-hidden="true" />}
                 label="Reload page"
+                turns
                 onClick={() => {
                   setReloads((was) => was + 1);
                   sources.forget();
