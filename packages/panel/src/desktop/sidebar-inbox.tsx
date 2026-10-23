@@ -75,6 +75,7 @@ export function SidebarInbox({
         }}
         models={named.models}
         readerId={tasks.me}
+        reading={reading}
         note={
           <InboxListNote
             failed={read.failed || taskless.failed}
