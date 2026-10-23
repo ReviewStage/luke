@@ -49,10 +49,21 @@
 
   /* A bar on the menu's surface, as a find bar floats over what it finds
      in: its field and its buttons side by side, a hair apart. */
-  .luke-menu-surface[data-flow="row"] {
+  .luke-menu-surface:is([data-flow="row"], [data-flow="toolbar"]) {
     flex-direction: row;
     align-items: center;
     gap: var(--luke-space-2);
+  }
+
+  /* A toolbar floated over what it acts on: its buttons a hair from its
+     edge, its corner a menu row's round that hair out, and no entrance of
+     its own, since its owner shows it as the pointer or a selection comes. */
+  .luke-menu-surface[data-flow="toolbar"] {
+    width: max-content;
+    padding: var(--luke-space-2);
+    border-radius: calc(var(--luke-menu-row-radius) + var(--luke-space-2));
+    white-space: nowrap;
+    animation: none;
   }
 
   .luke-menu {

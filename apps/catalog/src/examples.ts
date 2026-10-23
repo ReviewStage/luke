@@ -6,6 +6,7 @@ import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
 import { BAR_ITEMS_EXAMPLE } from "./examples/bar-items";
+import { BLOCK_LISTS_EXAMPLE } from "./examples/block-lists";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
@@ -17,6 +18,7 @@ import { CHOICE_BAR_EXAMPLE } from "./examples/choice-bar";
 import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
+import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
@@ -25,6 +27,7 @@ import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
+import { FACTS_EXAMPLE } from "./examples/facts";
 import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
@@ -105,6 +108,8 @@ export const EXAMPLES: readonly Example[] = [
   CALENDAR_EXAMPLE,
   CARDS_EXAMPLE,
   CARD_PRESSES_EXAMPLE,
+  BLOCK_LISTS_EXAMPLE,
+  COMPOSER_FRAMES_EXAMPLE,
   CHIPS_EXAMPLE,
   BAR_ITEMS_EXAMPLE,
   CHOICE_BAR_EXAMPLE,
@@ -118,6 +123,7 @@ export const EXAMPLES: readonly Example[] = [
   DISCLOSURES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
+  FACTS_EXAMPLE,
   FILE_PICKERS_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
   FORM_FIELD_EXAMPLE,

@@ -1,3 +1,5 @@
+import { createElement } from "react";
+
 /**
  * menu-surface.tsx -- the menu's surface for a list an app hangs itself: its ground, edge, corner, shadow, inset, entrance, and exit, with the owner's place and keys.
  *
@@ -5,7 +7,8 @@
  * `PopoverPanel` for a dialog hung from its button. A list whose keys stay
  * somewhere else stands on it too: a searchable menu keyed from its field,
  * the `@` and `/` lists keyed from the editor they were typed in, a crumb's
- * tree, and the one press offered over selected words. The owner places it
+ * tree, and a toolbar floated over a message, a picture, or selected code.
+ * The owner places it
  * and keys it; the surface draws it the way every menu is drawn. It stays
  * hidden for the one layout pass that measures where it fits, where its
  * owner says it is not placed yet, and while its owner holds it drawn
@@ -20,16 +23,31 @@ export const MENU_SURFACE_INSET = {
 
 export type MenuSurfaceInset = (typeof MENU_SURFACE_INSET)[keyof typeof MENU_SURFACE_INSET];
 
-/** Which way the surface lays what it holds: a menu's rows one under another, or a bar's field and buttons one beside another. */
+/**
+ * Which way the surface lays what it holds: a menu's rows one under another;
+ * a bar's field and buttons one beside another; or a toolbar floated over
+ * what it acts on, its buttons a hair from its edge at a control's corner,
+ * shown and hidden by its owner rather than arriving as a menu opens.
+ */
 export const MENU_SURFACE_FLOW = {
   COLUMN: "column",
   ROW: "row",
+  TOOLBAR: "toolbar",
 } as const;
 
 export type MenuSurfaceFlow = (typeof MENU_SURFACE_FLOW)[keyof typeof MENU_SURFACE_FLOW];
 
+/** The elements a surface may be: a box, or a span where it hangs in running words, as a picture's tools hang in a paragraph. */
+export const MENU_SURFACE_ELEMENT = {
+  DIV: "div",
+  SPAN: "span",
+} as const;
+
+export type MenuSurfaceElement = (typeof MENU_SURFACE_ELEMENT)[keyof typeof MENU_SURFACE_ELEMENT];
+
 /** The surface itself, a box its owner places by its own class and keys by its own handlers. */
 export function MenuSurface({
+  as: Element = MENU_SURFACE_ELEMENT.DIV,
   className,
   inset = MENU_SURFACE_INSET.MENU,
   flow = MENU_SURFACE_FLOW.COLUMN,
@@ -38,6 +56,7 @@ export function MenuSurface({
   children,
   ...rest
 }: Omit<React.ComponentPropsWithRef<"div">, "className" | "inert"> & {
+  as?: MenuSurfaceElement | undefined;
   /** The owner's own class, which places it and sets its width and nothing of its look. */
   className?: string | undefined;
   inset?: MenuSurfaceInset | undefined;
@@ -47,18 +66,20 @@ export function MenuSurface({
   /** It is on its way out: fading, inert, and taking nothing. */
   leaving?: boolean | undefined;
 }): React.JSX.Element {
-  return (
-    <div
-      {...rest}
-      className={className === undefined ? "luke-menu-surface" : `luke-menu-surface ${className}`}
-      data-inset={inset}
-      data-flow={flow === MENU_SURFACE_FLOW.ROW ? flow : undefined}
-      data-placed={placed === undefined ? undefined : String(placed)}
-      data-leaving={leaving ? "true" : undefined}
-      inert={leaving}
-    >
-      {children}
-    </div>
+  // Note that the element is made rather than written, because a ref typed
+  // for a div is no ref for a span.
+  return createElement(
+    Element,
+    {
+      ...rest,
+      className: className === undefined ? "luke-menu-surface" : `luke-menu-surface ${className}`,
+      "data-inset": inset,
+      "data-flow": flow === MENU_SURFACE_FLOW.COLUMN ? undefined : flow,
+      "data-placed": placed === undefined ? undefined : String(placed),
+      "data-leaving": leaving ? "true" : undefined,
+      inert: leaving,
+    },
+    children,
   );
 }
 

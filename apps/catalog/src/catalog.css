@@ -414,6 +414,11 @@ body {
   max-width: 360px;
 }
 
+/* A sample composer's words and foot, inside its frame. */
+.catalog-composer {
+  padding: var(--luke-space-12);
+}
+
 /* A palette's short card: its search row over a list engine's box that
    fills the rest of the card's height. */
 .catalog-palette {

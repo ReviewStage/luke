@@ -33,8 +33,11 @@
 @import "./components/button/button.css";
 @import "./components/swatch/swatch.css";
 @import "./components/calendar/calendar.css";
+@import "./components/block-list/block-list.css";
 @import "./components/card/card.css";
 @import "./components/card-press/card-press.css";
+@import "./components/composer-frame/composer-frame.css";
+@import "./components/facts/facts.css";
 @import "./chart/chart.css";
 @import "./components/virtual-rows/virtual-rows.css";
 @import "./components/folding-button/folding-button.css";

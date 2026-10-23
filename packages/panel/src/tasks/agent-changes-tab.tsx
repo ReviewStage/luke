@@ -22,8 +22,12 @@ import {
   FILL_ELEMENT,
   FILL_FLOW,
   Fill,
+  GAP,
   IconButton,
+  INSET,
+  LAYOUT_ELEMENT,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -407,11 +411,17 @@ function AboveThreads({
   draw: ChangesThreads["draw"] | undefined;
 }): React.JSX.Element {
   return (
-    <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.UNPLACED_THREADS}>
+    <Stack
+      as={LAYOUT_ELEMENT.OL}
+      gap={GAP.ITEM}
+      inset={INSET.BLOCK}
+      className="diff-outdated-threads"
+      aria-label={CHANGES_WORDS.UNPLACED_THREADS}
+    >
       {above.map((each) => (
         <li key={each.key}>{draw?.(each.thread, THREAD_PLACE.ABOVE)}</li>
       ))}
-    </ol>
+    </Stack>
   );
 }
 

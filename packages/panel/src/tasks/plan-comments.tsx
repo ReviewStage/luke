@@ -30,7 +30,9 @@ import {
   type CardLook,
   CardPress,
   type CardShadow,
+  COMPOSER_LOOK,
   CommentsIcon,
+  ComposerFrame,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
@@ -511,7 +513,7 @@ function CommentEntry({
           </WordsDatesContext.Provider>
         </>
       ) : (
-        <div className="comment-field comment-editing">
+        <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
           <CommentText
             value={editing}
             label={COMMENT_WORDS.EDIT}
@@ -526,7 +528,7 @@ function CommentEntry({
               {COMMENT_WORDS.SAVE}
             </Button>
           </div>
-        </div>
+        </ComposerFrame>
       )}
     </div>
   );
@@ -755,11 +757,11 @@ function ReplyField({
     });
   };
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the field is a drop target alone; the keys it hears come from its own field and buttons.
-    <div
+    <ComposerFrame
+      look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
       className="comment-field"
       data-variant={variant}
-      data-dropping={dropping ? "" : undefined}
+      dropping={dropping}
       // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
       data-held={
         (words === "" ? inFlight : words).trim() !== "" ||
@@ -828,7 +830,7 @@ function ReplyField({
           </>
         )}
       </div>
-    </div>
+    </ComposerFrame>
   );
 }
 

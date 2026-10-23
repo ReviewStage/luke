@@ -118,6 +118,18 @@
     justify-content: space-between;
   }
 
+  [data-inset="ring"]:is(.luke-stack, .luke-inline) {
+    padding: var(--luke-focus-ring-reach);
+  }
+
+  [data-inset="column"]:is(.luke-stack, .luke-inline) {
+    padding: var(--luke-space-12);
+  }
+
+  [data-inset="block"]:is(.luke-stack, .luke-inline) {
+    padding: var(--luke-space-8) var(--luke-space-12);
+  }
+
   /* A Fill takes the room its column leaves and may give way to nothing in
      either direction, so what it holds scrolls or clips inside it rather than
      stretching the column past the window. */

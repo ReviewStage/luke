@@ -925,11 +925,6 @@
     top: calc(-1 * var(--luke-space-8));
     right: 0;
     z-index: 10;
-    padding: var(--luke-space-2);
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-radius-6);
-    background: var(--luke-color-overlay);
-    box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
   }
 
   /* An action whose hover card stands keeps the bar up while the pointer
@@ -1966,18 +1961,14 @@
   background: var(--luke-color-ground);
 }
 
-/* The Comment press floating over code selected as text (diff-list.tsx):
-   above the words' middle, or under them where the list's top leaves no
-   room, on the overlay's face so it stands apart from the code. */
+/* The Comment press floating over code selected as text (diff-list.tsx),
+   on `@luke/ui`'s toolbar: above the words' middle, or under them where the
+   list's top leaves no room. */
 .diff-list-offer {
   position: absolute;
   z-index: 3;
   top: var(--diff-offer-y);
   left: var(--diff-offer-x);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
   transform: translate(-50%, calc(-100% - var(--luke-space-4)));
 }
 
@@ -2478,14 +2469,6 @@
   .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
     display: none;
   }
-}
-
-.chapter-rail-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: var(--column-inset);
-  list-style: none;
 }
 
 /* A row's number, quiet before its title, and its risk as a dot in the
@@ -3191,17 +3174,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Its labels under the title, each `@luke/ui`'s Badge filled with its
-   GitHub colour (`pull-request-labels.tsx`), never wider than the row. */
-.pull-request-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  margin: var(--luke-space-6) 0 var(--luke-space-2);
-  padding: 0 var(--row-inset);
-  list-style: none;
-}
-
+/* Its labels, each `@luke/ui`'s Badge filled with its GitHub colour
+   (`pull-request-labels.tsx`), never wider than the row. */
 .pull-request-label {
   display: flex;
   min-width: 0;
@@ -3213,8 +3187,6 @@
    as one compact group where they do not. */
 .changes-people.pull-request-people > .pull-request-labels {
   min-width: 0;
-  margin: 0;
-  padding: 0;
 }
 
 /* The reviewers' faces and, beside them, the two pickers, whose own side
@@ -3638,13 +3610,7 @@
 }
 
 .diff-outdated-threads {
-  display: flex;
   flex: none;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  list-style: none;
 }
 
 /* One card for what is written on lines of code (`annotation-card.tsx`): a
@@ -3848,16 +3814,6 @@
   background: var(--luke-color-code-ground);
 }
 
-/* A pending comment the Review panel lists, under its file and lines. */
-.pull-request-pending-list > .pull-request-thread-comment {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  padding: var(--luke-space-8) var(--boxed-inset);
-  border-top: 1px solid var(--luke-color-border);
-}
-
 /* Under a thread's comments, what a member does on it
    (`pull-request-thread-actions.tsx`): a quiet field-shaped Reply… that
    opens the reply's own field, and Resolve or Unresolve at the row's end;
@@ -3888,20 +3844,6 @@
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-6);
-}
-
-/* The Review panel's list of the pending comments, each under its file and lines. */
-.pull-request-pending-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  --boxed-inset: var(--luke-space-8);
-}
-
-.pull-request-pending-list > .pull-request-thread-comment:first-child {
-  border-top: 0;
 }
 
 .pull-request-thread-actions-row {
@@ -4921,16 +4863,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   }
 }
 
-/* The shared composer card (../ai-elements/prompt-input.tsx): one card on
-   the sidebar's ground inside a hairline; under its field, the foot with
-   the owner's controls at its left and the round submit at its right. */
+/* The shared composer card (../ai-elements/prompt-input.tsx), `@luke/ui`'s
+   `ComposerFrame`: its field over the foot, with the owner's controls at
+   its left and the round submit at its right. */
 .prompt-input {
   display: flex;
   width: 100%;
   flex-direction: column;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-sidebar);
 }
 
 .prompt-input-footer {
@@ -5210,12 +5149,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   min-width: 0;
   align-items: center;
   gap: var(--luke-icon-gap);
-}
-
-/* Files dragged over the box: the card's edge brightens as it does under
-   focus, so the drop target is the card itself. */
-.agent-composer[data-dropping] form {
-  border-color: var(--luke-color-border-selected);
 }
 
 /* A quote block in the message box (`reply-to-selection.tsx`): the agent's
@@ -5561,13 +5494,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    why on one quiet row (`archived-note.tsx`, `@luke/ui`'s Banner), with
    Unarchive as the press that opens it again. The note a continued agent's
    box gives way to (`continue-agent.tsx`) is framed as the box was, on its
-   card, edge and corner, so it stands where the box stood rather than across
-   the column. */
+   `ComposerFrame`, so it stands where the box stood rather than across the
+   column. */
 .continued-composer {
   padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-sidebar);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -6011,21 +5941,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .agent-context-segment {
   flex: none;
   background: var(--context-part);
-}
-
-.agent-context-legend,
-.agent-context-stats {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.agent-context-stats {
-  padding-top: var(--luke-space-12);
-  border-top: 1px solid var(--luke-color-border);
 }
 
 .agent-context-row {
@@ -6493,26 +6408,16 @@ svg.lucide {
   outline-offset: 2px;
 }
 
-/* Note that the tools are as wide as their own names, past a skinny
-   picture's edge where they need to be, and never wrap, because the
-   picture's box is no measure for them. Above it, they cover none of the
-   picture, only the line before it while it is selected. */
+/* The tools on `@luke/ui`'s toolbar, which is as wide as their own names,
+   past a skinny picture's edge where they need to be, and never wraps,
+   because the picture's box is no measure for them. Above it, they cover
+   none of the picture, only the line before it while it is selected. */
 .picture-tools {
   position: absolute;
   z-index: 1;
   top: 0;
   left: 0;
-  display: flex;
-  width: max-content;
-  align-items: center;
-  gap: var(--luke-space-2);
-  padding: var(--luke-space-2);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 6px 18px var(--luke-color-shadow-deep);
   translate: 0 calc(-100% - var(--luke-space-8));
-  white-space: nowrap;
 }
 
 /* With no room above the picture inside the plan's scroller, as at its top,
@@ -7018,7 +6923,10 @@ svg.lucide {
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
 }
 
-/* The field that answers a thread, or starts one, in the composer's well. */
+/* The field that answers a thread, or starts one, on `@luke/ui`'s
+   `ComposerFrame`: a reply as every box in the window is, an edit in the
+   card's well, a first comment bare on the card. What stands here lays out
+   what it holds. */
 .comment-field {
   --comment-field-inline: var(--luke-space-8);
   /* The plain field's insets and height (`PlainCommentText`), the editor's below. */
@@ -7027,9 +6935,6 @@ svg.lucide {
   --luke-text-area-inset-end: var(--luke-space-2);
   --luke-text-area-least: 36px; /* off-scale: one line and its padding, as the editor stands */
   margin-top: var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-ground);
 }
 
 /* The agent box's editor as a comment's field, its placeholder and its
@@ -7075,13 +6980,12 @@ svg.lucide {
   flex: 1;
 }
 
-/* A thread's first comment is the card itself: its words on the card's own
-   surface, no well inside it, its tools along the card's foot. */
+/* A thread's first comment is the card itself (`COMPOSER_LOOK.BARE`): its
+   words on the card's own surface, no well inside it, its tools along the
+   card's foot. */
 .comment-field[data-variant="first"] {
   --comment-field-inline: 0;
   margin-top: 0;
-  border: 0;
-  background: none;
 }
 
 .comment-field[data-variant="first"] .comment-field-foot {
@@ -7089,23 +6993,8 @@ svg.lucide {
   padding-left: 0;
 }
 
-/* A reply is a composer as every box in the window is (`PromptInput`): the
-   card's ground, its hairline, and its larger round, ringed while it holds
-   the caret. */
-.comment-field[data-variant="reply"] {
-  border-color: var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-sidebar);
-}
-
 .comment-editing {
   margin-left: var(--comment-indent);
-}
-
-/* Files dragged over a comment's field: its edge brightens as it does under
-   focus, so the drop target is the field itself. */
-.comment-field[data-dropping] {
-  border-color: var(--luke-color-border-selected);
 }
 
 /* The files a comment's field holds, over its words, at its padding. */

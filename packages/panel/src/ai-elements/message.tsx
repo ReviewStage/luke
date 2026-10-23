@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { BUTTON_SIZE, cn, IconButton, Tooltip } from "@luke/ui";
+import { BUTTON_SIZE, cn, IconButton, MENU_SURFACE_FLOW, MenuSurface, Tooltip } from "@luke/ui";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
@@ -106,14 +106,27 @@ export type MessageActionsProps = Omit<ComponentProps<"div">, "className"> & {
  * one rhythm whether a turn offers actions or not. Hidden, the bar takes no
  * pointer either, so the words under it stay selectable. A sent message
  * sets them inline, in a line under its bubble beside who sent it
- * (`agent-tab.tsx`'s `AgentMessage`). Each placement is drawn by
- * `.message-actions` (tasks.css).
+ * (`agent-tab.tsx`'s `AgentMessage`). The floating card is `@luke/ui`'s
+ * toolbar (`MenuSurface`'s `TOOLBAR` flow); `.message-actions` (tasks.css)
+ * places it and shows and hides either placement.
  */
 export function MessageActions({
   placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
   children,
   ...props
 }: MessageActionsProps): ReactNode {
+  if (placement === MESSAGE_ACTIONS_PLACEMENT.FLOATING) {
+    return (
+      <MenuSurface
+        flow={MENU_SURFACE_FLOW.TOOLBAR}
+        className="message-actions"
+        data-placement={placement}
+        {...props}
+      >
+        {children}
+      </MenuSurface>
+    );
+  }
   return (
     <div className="message-actions" data-placement={placement} {...props}>
       {children}

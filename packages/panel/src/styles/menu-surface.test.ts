@@ -19,7 +19,9 @@ import { layContainersAt } from "../testing/container-width.js";
  * corner, and shadow are the menu's whatever the owner's class places it.
  * A searchable menu, the `@` and `/` lists, and a submenu run their content
  * edge to edge; the one press over selected words and the comment bubble
- * keep the menu's inset; and a crumb's tree stays hidden until it is placed.
+ * keep the menu's inset; a crumb's tree stays hidden until it is placed; and
+ * a message's actions, a picture's tools, and the Comment press over selected
+ * code float on the surface as a toolbar.
  * jsdom lays nothing out, so the sheets are laid as every app lays them
  * (`testing/container-width.ts`) and the surface is drawn as its owners draw
  * it. jsdom resolves no `var()` in a shorthand, so what the rules matching
@@ -115,4 +117,16 @@ test("a find bar lays its field and buttons side by side on the surface, a hair 
   assert.equal(says("align-items"), "center");
   assert.equal(says("gap"), "var(--luke-space-2)");
   assert.equal(says("padding"), "var(--luke-menu-inset)");
+});
+
+test("a toolbar floats on the menu's ground, edge, and shadow, a hair round its buttons, shown by its owner rather than arriving", () => {
+  for (const owner of ["message-actions", "picture-tools", "diff-list-offer"]) {
+    const says = surface(owner, undefined, undefined, MENU_SURFACE_FLOW.TOOLBAR);
+    assert.equal(says("background"), "var(--luke-color-overlay)", owner);
+    assert.equal(says("border"), "1px solid var(--luke-color-border-strong)", owner);
+    assert.equal(says("box-shadow"), "var(--luke-menu-shadow)", owner);
+    assert.equal(says("flex-direction"), "row", owner);
+    assert.equal(says("padding"), "var(--luke-space-2)", owner);
+    assert.equal(says("animation"), "none", owner);
+  }
 });

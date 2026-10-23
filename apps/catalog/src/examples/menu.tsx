@@ -2,6 +2,7 @@ import {
   ArchiveIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
   ComboboxList,
@@ -44,7 +45,8 @@ import { CatalogSection } from "../section";
  * the menu's surface under lists an app hangs and keys itself: an `@` list
  * narrowed under its kind's crumb, edge to edge, one press inset, as
  * one offered over selected words is, and a find bar's field and buttons
- * laid side by side on it.
+ * laid side by side on it; and toolbars floated on it, a hair round their
+ * buttons: a message's actions, a picture's worded tools, and one press.
  */
 
 const ignore = () => undefined;
@@ -262,6 +264,37 @@ function MenuExample(): React.JSX.Element {
             </Button>
           </MenuSurface>
           <FindBar />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="menu-toolbar" title="A toolbar floated over what it acts on">
+        <Inline gap={GAP.CONTROL}>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR}>
+            <IconButton
+              label="Copy"
+              icon={<CopyIcon />}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={ignore}
+            />
+            <IconButton
+              label="Edit"
+              icon={<PencilIcon />}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={ignore}
+            />
+          </MenuSurface>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR} role="toolbar" aria-label="Picture">
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<PencilIcon />} onClick={ignore}>
+              Describe
+            </Button>
+            <Button variant={BUTTON_VARIANT.DANGER} icon={<TrashIcon />} onClick={ignore}>
+              Remove
+            </Button>
+          </MenuSurface>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR}>
+            <Button icon={<DocumentIcon />} onClick={ignore}>
+              Comment
+            </Button>
+          </MenuSurface>
         </Inline>
       </CatalogSection>
     </>

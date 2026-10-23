@@ -20,7 +20,9 @@ import { motionRows } from "../list-motion/list-motion.js";
  *
  * An arrangement that is a list (`as` a `ul` or `ol`) may move its rows as
  * they arrive, leave, and change places (`moves`, under a `ListMotion`), and
- * take the press that starts a drag of one of them (`onPointerDown`).
+ * take the press that starts a drag of one of them (`onPointerDown`). The
+ * room inside its edge is a named place too (`INSET`), for a list whose
+ * rows stand in a scroller or a column rather than against its edge.
  *
  * A Fill is a region rather than an arrangement of items: it takes the room
  * its own column leaves and lays what it holds one under another, or beside
@@ -70,6 +72,21 @@ export const JUSTIFY = {
 
 export type Justify = (typeof JUSTIFY)[keyof typeof JUSTIFY];
 
+/**
+ * The room an arrangement keeps inside its own edge, by where it stands:
+ * none; the keyboard ring's reach, so a row's ring is not cut by the
+ * scroller the list stands in; a column's edge to the rows it holds; or a
+ * block of items set in a card, a step less over and under than either side.
+ */
+export const INSET = {
+  NONE: "none",
+  RING: "ring",
+  COLUMN: "column",
+  BLOCK: "block",
+} as const;
+
+export type Inset = (typeof INSET)[keyof typeof INSET];
+
 /** The elements an arrangement may be, by what it groups. */
 export const LAYOUT_ELEMENT = {
   DIV: "div",
@@ -94,6 +111,7 @@ interface LayoutProps {
   gap?: Gap;
   align?: Align;
   justify?: Justify;
+  inset?: Inset;
   as?: LayoutElement;
   /** The id a region is named by, or names another with. */
   id?: string | undefined;
@@ -125,6 +143,7 @@ export function Stack({
   gap = GAP.FIELD,
   align = ALIGN.STRETCH,
   justify = JUSTIFY.START,
+  inset = INSET.NONE,
   as: Element = LAYOUT_ELEMENT.DIV,
   className,
   moves = false,
@@ -143,6 +162,7 @@ export function Stack({
       "data-gap": gap,
       "data-align": align,
       "data-justify": justify,
+      "data-inset": inset === INSET.NONE ? undefined : inset,
     },
     children,
   );
@@ -156,6 +176,7 @@ export function Inline({
   wrap = true,
   grow = false,
   growFirst = false,
+  inset = INSET.NONE,
   as: Element = LAYOUT_ELEMENT.DIV,
   className,
   moves = false,
@@ -182,6 +203,7 @@ export function Inline({
       "data-wrap": wrap,
       "data-grow": grow ? "" : undefined,
       "data-grow-first": growFirst ? "" : undefined,
+      "data-inset": inset === INSET.NONE ? undefined : inset,
     },
     children,
   );

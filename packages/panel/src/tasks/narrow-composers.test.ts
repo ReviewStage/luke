@@ -328,7 +328,7 @@ function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "se
     return element;
   };
   const card = part(document.body, "div", "agent-composer");
-  const form = part(card, "form", "prompt-input inbox-answer");
+  const form = part(card, "form", "luke-composer-frame prompt-input inbox-answer");
   const line = part(form, "div", "agent-composer-field");
   part(line, "div", "agent-composer-input");
   const foot = part(form, "div", "prompt-input-footer inbox-answer-foot");

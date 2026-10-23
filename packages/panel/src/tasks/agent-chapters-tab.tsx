@@ -35,6 +35,7 @@ import {
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  INSET,
   LAYOUT_ELEMENT,
   MarkStrip,
   NAV_CURRENT,
@@ -385,7 +386,12 @@ function ChapterRail({
       inert={leaving}
     >
       <ScrollArea>
-        <ol className="chapter-rail-list">
+        <Stack
+          as={LAYOUT_ELEMENT.OL}
+          gap={GAP.NONE}
+          inset={INSET.COLUMN}
+          className="chapter-rail-list"
+        >
           {rows.map((row, index) => {
             const risk = row.chapter.risk === null ? undefined : RISK_WORDS[row.chapter.risk];
             const done = viewed(row.paths);
@@ -415,7 +421,7 @@ function ChapterRail({
               </li>
             );
           })}
-        </ol>
+        </Stack>
       </ScrollArea>
     </nav>
   );
