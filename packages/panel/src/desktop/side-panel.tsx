@@ -1651,8 +1651,8 @@ function TabContent({
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
-  /** Runs an agent's branch in a terminal of this Mac in this panel, which its Pull request tab's Run offers; none where no repository is known or the platform has no Mac terminal. */
-  onRunOnMac: ((agentId: string) => void) | undefined;
+  /** Runs a branch in an agent's terminal of this Mac in this panel, which every Pull request tab's Run offers: the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
+  onRunOnMac: ((agentId: string, number?: number) => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const directory = useMemberDirectory();
@@ -1733,12 +1733,8 @@ function TabContent({
             view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
             onView={(view) => onPullRequestView(tab, view)}
             onActions={(actions) => onTabActions(tab, actions)}
-            // Note that Run reads the agent's own branch, so a tab naming another pull request by its number offers none.
-            onRun={
-              onRunOnMac === undefined || tab.number !== undefined
-                ? undefined
-                : () => onRunOnMac(tab.changes)
-            }
+            // Note that Run reads the branch of the pull request the tab shows: the agent's own, or the one its number names.
+            onRun={onRunOnMac === undefined ? undefined : () => onRunOnMac(tab.changes, tab.number)}
           />
         </Suspense>
       </PullRequestsOnGitHub>

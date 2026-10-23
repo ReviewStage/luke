@@ -24,6 +24,7 @@ import {
   type CodingAgentPage,
   type CodingAgentPullRequestAnswer,
   type CodingAgentSummary,
+  MERGE_STATE,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
@@ -202,6 +203,8 @@ let told: AnyAct[] = [];
 let published: CodingAgentPullRequestAnswer | undefined;
 /** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
 let earlier = 0;
+/** The owner of the fork the published pull request's head is pushed to; none for the base repository's own. */
+let forkOwner: string | undefined;
 /** What the window copied, in order. */
 let copied: string[] = [];
 /** What the workspace's list of agents answers, whatever it was asked. */
@@ -236,6 +239,7 @@ beforeEach(() => {
   told = [];
   published = undefined;
   earlier = 0;
+  forkOwner = undefined;
   openedOnGitHub = [];
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS, pageFrameUrl });
@@ -314,6 +318,30 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
         const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (
+        request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST &&
+        published?.pullRequest != null
+      ) {
+        // Note that the overview is read from what the agent published, as the service reads both from one pull request.
+        const { number, title, url, state } = published.pullRequest;
+        const value = {
+          pullRequest: {
+            number,
+            title,
+            url,
+            state,
+            html: "",
+            base: "main",
+            head: published.branch ?? "main",
+            ...(forkOwner === undefined ? undefined : { headOwner: forkOwner }),
+            createdAt: 1,
+            mergedAt: null,
+            merge: MERGE_STATE.CLEAN,
+            requested: [],
+          },
+        };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
@@ -1655,6 +1683,73 @@ test("Run in the header of the agent's Pull request tab runs its branch on this 
   assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
   assert.equal(tab.macTerminal, AGENT_ID);
   assert.equal(tab.repository, PAGE.repository);
+});
+
+test("Run in the header of a Pull request tab opened by its number runs that pull request's branch, not the agent's own", async () => {
+  takeDownTerminal = standTerminalDocument();
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "luke/view-commands",
+    pullRequest: {
+      number: 2905,
+      title: "View commands",
+      url: "https://github.com/acme/relay/pull/2905",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 5,
+      deletions: 2,
+      changedFiles: 2,
+    },
+  };
+  await mountPanelPage();
+  // Note that a link to another pull request opens its tab by number, as the Inbox's and a mention's do.
+  act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2905 }));
+  await settle();
+
+  const run =
+    document.querySelector<HTMLButtonElement>(
+      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
+    ) ?? assert.fail("the numbered Pull request tab's header offers Run");
+  act(() => run.click());
+  await settle();
+
+  const tab = drawnPanel?.tab;
+  assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
+  assert.equal(tab.macTerminal, AGENT_ID);
+  assert.equal(tab.number, 2905);
+});
+
+test("a fork's Pull request tab offers no Run, since its head's branch name would be read from the base repository", async () => {
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "main",
+    pullRequest: {
+      number: 2907,
+      title: "Contributed fix",
+      url: "https://github.com/acme/relay/pull/2907",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 1,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  forkOwner = "contributor";
+  await mountPanelPage();
+  act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2907 }));
+  await settle();
+
+  assert.ok(
+    document.querySelector("aside.side-panel .pull-request-title-actions"),
+    "the fork's Pull request tab draws its header",
+  );
+  assert.equal(
+    document.querySelector('aside.side-panel button[aria-label="Run on this Mac"]'),
+    null,
+    "no Run on a fork's pull request",
+  );
 });
 
 test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
