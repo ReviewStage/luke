@@ -8,8 +8,8 @@
  * place, every one of them or the ones an editor names (`actions`), as a
  * message box names its marks' alone. A block's chord, and a Markdown rule
  * that makes a block (`blockRulesOutOfCells`), does nothing in a table's
- * cell (`inTableCell`, `selectionTouchesCell`), which holds one line of words. A chord the editor answers goes no further than the editor, as the
- * pull request box's own do (`markdown-field.tsx`), so it is the editor's
+ * cell (`inTableCell`, `selectionTouchesCell`), which holds one line of words. A chord the editor answers goes no further than the editor,
+ * so it is the editor's
  * alone while it has the caret and the window's keymap never hears it; every
  * other key, one the editor handled or not, reaches the window as before.
  */

@@ -18,6 +18,7 @@ import {
   type EditorAnchor,
   type EditorAnchors,
   type EditorDiagram,
+  type Finish,
   type HeadingsChange,
   type MentionNode,
   type MentionNodeDoors,
@@ -98,8 +99,8 @@ export interface MarkdownEditorProps {
   readonly focus?: boolean | undefined;
   /** The text as it would be saved now, after each change, and where the comment threads' words stand in it, where the document carries any. */
   readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
-  /** Esc or ⌘↩, with the section the caret stood in, which a document with no sections need not read. */
-  readonly onFinish: (section: number) => void;
+  /** Esc or ⌘↩, with the section the caret stood in, which a document with no sections need not read, and which of the two it was. */
+  readonly onFinish: (section: number, how: Finish) => void;
   /** Focus leaving the room for anywhere but its own toolbar and menus; none where the document stays open. */
   readonly onLeave?: (() => void) | undefined;
   /** Where the mounted editor's handle is kept, for a document that asks it more than its drafts. */
@@ -149,7 +150,7 @@ function MountedEditor({
     const mounted = module.mount(host.current, {
       ...latest.current,
       onDraft: (markdown, anchors) => latest.current.onDraft(markdown, anchors),
-      onFinish: (section) => latest.current.onFinish(section),
+      onFinish: (section, how) => latest.current.onFinish(section, how),
       onLeaveUp:
         latest.current.onLeaveUp === undefined ? undefined : () => latest.current.onLeaveUp?.(),
       // Note that the mentions' doors are read as they are used, as the rest are.
@@ -297,7 +298,7 @@ export function MarkdownEditor({
     placeholder,
     className,
     onDraft,
-    onFinish: (section) => once(() => onFinish(section)),
+    onFinish: (section, how) => once(() => onFinish(section, how)),
     onLeaveUp,
     mentions:
       mentions === undefined

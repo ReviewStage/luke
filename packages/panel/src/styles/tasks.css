@@ -2916,68 +2916,60 @@
   color: var(--luke-color-text-muted);
 }
 
-/* Words sent to GitHub as Markdown (`markdown-field.tsx`): Write and
-   Preview over the field, the preview drawn in the field's own box. */
-.markdown-field {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-space-8);
-}
-
-/* Write and Preview at the start of the field's head, and the formatting
-   presses at its end while the words are written, as GitHub's own box
-   draws them; a narrow field wraps the presses under the choice. */
-.markdown-field-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  align-self: stretch;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-}
-
-.markdown-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* The hairline between groups of presses. */
-.markdown-toolbar-rule {
-  width: 1px;
-  height: var(--luke-control-icon);
-  margin: 0 var(--luke-space-4);
-  background: var(--luke-color-border);
-}
-
-/* The box is the preview's frame, its words scrolling inside it in
-   `@luke/ui`'s `ScrollArea`; the frame clips the scroll bar to its corners,
-   as the box that scrolled itself did. */
-/* The panel Write and Preview show, as wide as the field so the words
-   and their preview fill it as they did before the tabs held them. */
-.markdown-field-panel {
+/* Words sent to GitHub as Markdown (`comment-editor.tsx`): the plan's
+   editor in a text field's frame, a suggestion's press over it where the
+   comment offers one, and a note under it where the words run past
+   GitHub's bound. */
+.comment-editor {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  align-self: stretch;
+  gap: var(--luke-space-6);
 }
 
-.markdown-field-preview {
+/* The words grow with what is written from a few lines' height, as a text
+   area that grows does; the frame clips nothing, since the `/` menu and the
+   format toolbar open past its edge. A suggestion's press stands in its
+   corner, the words kept clear of it. */
+.comment-editor-frame {
+  position: relative;
   box-sizing: border-box;
-  display: flex;
-  width: 100%;
-  min-height: 96px;
-  max-height: 240px;
-  flex-direction: column;
+  min-height: calc(3lh + 2 * var(--luke-space-6));
+  padding: var(--luke-space-6) var(--luke-control-inset);
 }
 
-.markdown-field-preview-words {
-  padding: var(--luke-space-8) var(--luke-space-12);
+.comment-editor-frame:has(> .comment-editor-head) {
+  padding-inline-end: calc(var(--luke-control-height) + var(--luke-space-4));
 }
 
-.markdown-field-preview-words > p:only-child {
+.comment-editor-head {
+  position: absolute;
+  top: var(--luke-space-2);
+  right: var(--luke-space-2);
+}
+
+.comment-editor-text {
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-reading-leading);
+}
+
+/* A suggested change is GitHub's ```suggestion block, drawn under its name
+   rather than as code in a language, as the transcript heads one. */
+.comment-editor-text pre:has(> code.language-suggestion)::before {
+  display: block;
+  margin-bottom: var(--luke-space-4);
+  color: var(--luke-color-text);
+  content: "Suggested change";
+  font-family: var(--luke-font-sans);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.comment-editor-note {
   margin: 0;
+  color: var(--luke-color-danger);
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-review-foot {
@@ -3480,7 +3472,7 @@
 
 /* A comment being written on lines of a file (`line-comment.tsx`), under
    the last of them as a review thread stands: a card of the thread's own
-   face, its head naming the lines, the words with their preview, GitHub's
+   face, its head naming the lines, the words as they are drawn, GitHub's
    refusal, and what GitHub's own line comment offers at its foot. Its frame
    is `@luke/ui`'s Card, which leaves its room to it. */
 .line-comment {

@@ -105,6 +105,14 @@ export type PlanEditorPlacement =
 /** The caret at the end of the text, as a press on the room under its last line puts it. */
 export const PLACEMENT_END = { end: true } as const;
 
+/** How the text was finished: ⌘↩, which a box sends or saves on, or Esc, which it lets go on; a plan finishes either way. */
+export const FINISH = {
+  SUBMIT: "submit",
+  ESCAPE: "escape",
+} as const;
+
+export type Finish = (typeof FINISH)[keyof typeof FINISH];
+
 /** What an empty plan says until a word is typed, the editor's own where a document names none. */
 export const PLAN_PLACEHOLDER = "Write the plan";
 
@@ -160,8 +168,8 @@ export interface PlanEditorProps {
   readonly className: string;
   /** The text as it would be saved now, after each change, and where the comment threads' words stand in it, where the editor carries any. */
   readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
-  /** Esc or ⌘↩, with the section the caret stood in, counted as `planSections` counts them. */
-  readonly onFinish: (section: number) => void;
+  /** Esc or ⌘↩, with the section the caret stood in, counted as `planSections` counts them, and which of the two it was. */
+  readonly onFinish: (section: number, how: Finish) => void;
   /** ↑ from the first line of the text, which goes to the title above it; none where nothing stands above the text, where ↑ is the editor's own. */
   readonly onLeaveUp?: (() => void) | undefined;
   /** What the text's mentions are drawn and picked with; none where the text takes no mentions, as a template does not. */
@@ -343,7 +351,7 @@ export interface PlanEditorHandle extends EditorFormatting {
   readonly take: (sent: string, merged: string) => { readonly base: string; readonly text: string };
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
-  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in, or a document's own Markdown laid in there. */
+  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in, or a document's own Markdown laid in there; with no `/` word, a document's own Markdown laid in after the caret's block. */
   readonly insertBlock: (block: SlashChoice) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;

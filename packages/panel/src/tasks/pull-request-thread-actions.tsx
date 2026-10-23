@@ -1,11 +1,9 @@
 import type { ReviewThread } from "@luke/features/coding-agent-wire";
-import {
-  PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_BOUNDS,
-} from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button, TextArea } from "@luke/ui";
+import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
+import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useState } from "react";
+import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -81,29 +79,24 @@ function ReplyForm({
   onCancel: () => void;
 }): React.JSX.Element {
   const [body, setBody] = useState("");
-  const field = useRef<HTMLTextAreaElement>(null);
-  const blank = body.trim() === "";
+  const blank = body.trim() === "" || overCommentBound(body);
   const send = () => {
     if (!blank && !busy) onSend(body);
   };
 
-  useEffect(() => {
-    field.current?.focus();
-  }, []);
-
   return (
     <div className="pull-request-thread-reply">
-      <TextArea
-        ref={field}
+      <CommentEditor
         label={THREAD_WORDS.REPLY_FIELD}
         placeholder={THREAD_WORDS.REPLY_PLACEHOLDER}
         value={body}
-        maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-        rows={3}
-        busy={busy}
         onChange={setBody}
-        onEscape={onCancel}
+        busy={busy}
+        focus
         onSubmit={send}
+        onCancel={() => {
+          if (!busy) onCancel();
+        }}
       />
       <div className="pull-request-thread-reply-foot">
         <Button disabled={busy} onClick={onCancel}>

@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
+  FINISH,
   PLACEMENT_END,
   type PlacedWords,
   type PlanEditorModule,
@@ -799,7 +800,7 @@ test("the words the caret stood on stay where they stood as the editor closes, t
     DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
   );
 
-  act(() => open().onFinish(1));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
@@ -812,7 +813,7 @@ test("an editor closing with its caret on no words scrolls nothing", async () =>
   const scroller = scrollerOf(container);
   scroller.scrollTop = 500;
 
-  act(() => open().onFinish(1));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
 
   assert.equal(scroller.scrollTop, 500);

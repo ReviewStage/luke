@@ -15,6 +15,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import {
   type EditorSpan,
+  FINISH,
   type MentionDrawer,
   PLAN_PLACEHOLDER,
   type PlacedWords,
@@ -447,8 +448,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         // The keys a mention's list or the block menu takes are its own first, Escape among them, which closes it.
         if (mentions?.onKey(event) === true) return true;
         if (blocks?.onKey(event) === true) return true;
-        if (event.key === "Escape" || (event.key === "Enter" && event.metaKey)) {
-          onFinish(caretSection(editor));
+        if (event.key === "Escape") {
+          onFinish(caretSection(editor), FINISH.ESCAPE);
+          return true;
+        }
+        if (event.key === "Enter" && event.metaKey) {
+          onFinish(caretSection(editor), FINISH.SUBMIT);
           return true;
         }
         const { selection } = view.state;
