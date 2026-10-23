@@ -712,6 +712,15 @@ function dialog(): HTMLElement {
   return document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 }
 
+/** Types `words` into the standing question's gate, as a reader typing the subject's name does. */
+function typeGate(words: string): void {
+  const field = dialog().querySelector<HTMLInputElement>("input") ?? assert.fail("no gate");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 /** Answers the standing question with its dangerous answer. */
 async function confirm(verb: string): Promise<void> {
   act(() => button(dialog(), verb).click());
@@ -1243,7 +1252,7 @@ const leaveGroup = (page: HTMLElement) =>
 const leaveLine = (group: HTMLElement) =>
   rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
 
-test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is", async () => {
+test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is, once the workspace's name is typed", async () => {
   const other: WorkspaceMember = {
     ...ADMIN_OLA,
     userId: "user-kim",
@@ -1264,6 +1273,12 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   const names = offered.map((item) => item.textContent);
   act(() => offered.find((item) => item.textContent?.includes("kim@example.com"))?.click());
   await confirm("Transfer ownership");
+  const refusedUntilNamed = roleSent();
+  typeGate(ACME.name.toUpperCase());
+  await confirm("Transfer ownership");
+  const refusedMisnamed = roleSent();
+  typeGate(ACME.name);
+  await confirm("Transfer ownership");
 
   assert.equal(line, "You're its owner. Make an admin the owner first, then you can leave.");
   assert.deepEqual(buttons(group, "Leave"), []);
@@ -1272,6 +1287,8 @@ test("the owner cannot leave until the workspace is handed over: its row says so
     names.map((name) => name?.replace(/^[A-Z]/u, "")),
     ["Olaola@example.com", "Kimkim@example.com"],
   );
+  assert.deepEqual(refusedUntilNamed, [], "the act waits on the workspace's name");
+  assert.deepEqual(refusedMisnamed, [], "a name typed otherwise is not the name");
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: "user-kim" }],
   ]);

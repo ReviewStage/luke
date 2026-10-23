@@ -241,6 +241,12 @@ function useDefaultChoice(
   return [choice, setChoice];
 }
 
+/** Whether New task's draft in `workspaceId` holds words or files, which its card keeps from a stray dismissal. */
+export function useNewTaskHolding(workspaceId: string | undefined): boolean {
+  const { text, attachments } = useDraft(newTaskPlace(workspaceId)).draft;
+  return hasWordsOrFiles(text, attachments);
+}
+
 export function NewTaskComposer({
   newTask,
   workspaceId,

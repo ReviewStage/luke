@@ -15,8 +15,9 @@ import { CatalogSection } from "../section";
 /**
  * confirm-dialogs.tsx -- an irreversible act's question, opened from its
  * button: one refused the first time it is answered and accepted when tried
- * again, one in the accent for an act that can be undone, a long one, and
- * one that asks for a field to be filled.
+ * again, its card shaking at the refusal and its act wearing a check as it
+ * lands, one in the accent for an act that can be undone, a long one, one
+ * that asks for a field to be filled, and one gated on the subject's name.
  */
 
 /** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@luke/ui`. */
@@ -33,10 +34,13 @@ function refused(reason: string): ActionResult {
 function Asking({
   label,
   question,
+  gate,
   answer = () => ACCEPTED,
 }: {
   label: string;
   question: DialogQuestion;
+  /** The subject's name the act waits on, for the gravest acts. */
+  gate?: string;
   answer?: () => ActionResult;
 }): React.JSX.Element {
   const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
@@ -47,7 +51,7 @@ function Asking({
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={confirm.ask}>
         {label}
       </Button>
-      <ConfirmDialog confirm={confirm} question={question} />
+      <ConfirmDialog confirm={confirm} question={question} gate={gate} />
     </>
   );
 }
@@ -143,6 +147,16 @@ function ConfirmDialogs(): React.JSX.Element {
           }}
         />
         <Named />
+        <Asking
+          label="Delete account…"
+          gate="ada@example.com"
+          question={{
+            title: "Delete the account ada@example.com?",
+            body: "This cannot be undone.",
+            verb: "Delete account",
+            running: "Deleting account",
+          }}
+        />
       </Inline>
     </CatalogSection>
   );

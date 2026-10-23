@@ -1,7 +1,7 @@
-import { DIALOG_SIZE, Dialog } from "@luke/ui";
+import { DIALOG_SIZE, Dialog, type DialogHandle } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
-import { NewTaskComposer } from "./new-task-composer.js";
+import { NewTaskComposer, useNewTaskHolding } from "./new-task-composer.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -21,8 +21,10 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
  * card away with nothing started, its words and files kept as New task's
- * draft for the next opening (`../composer-drafts.ts`); a start under way
- * holds the card. A refusal keeps the card with the reason under the
+ * draft for the next opening (`../composer-drafts.ts`); while the draft
+ * holds words or files, the first of them only nudges the card, since a
+ * stray press would otherwise drop the picks made in it, and the next puts
+ * it away. A start under way holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
  */
@@ -40,6 +42,8 @@ const CARD_SELECTOR = '[aria-modal="true"]';
  */
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
   const [starting, setStarting] = useState(false);
+  const holding = useNewTaskHolding(newTask.workspaceId);
+  const dialog = useRef<DialogHandle>(null);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
   // Note that the field is the editor the composer mounts once its bundle
@@ -63,7 +67,9 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
     <Dialog
       size={DIALOG_SIZE.COMPOSER}
       labelledBy={titleId}
+      ref={dialog}
       busy={starting}
+      holding={holding}
       initialFocus={field}
       onDismiss={close}
     >
@@ -72,7 +78,8 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           newTask={newTask}
           workspaceId={newTask.workspaceId}
           onStarting={setStarting}
-          onLeave={close}
+          // Note that the field's Escape goes through the dialog, so a draft holds it back as it holds the card's own.
+          onLeave={() => dialog.current?.dismiss()}
           focusedByOwner
           titleId={titleId}
           // Note that the dialog's card is not at a page's top, so a list rises over the line as an agent's box's does.

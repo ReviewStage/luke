@@ -727,6 +727,7 @@ function OwnerLeave({
       {heir === undefined ? null : (
         <ConfirmDialog
           confirm={transfer}
+          gate={workspace.name}
           question={{
             title: `Transfer ownership of ${workspace.name}`,
             body: TRANSFER_WORDS.BODY,
