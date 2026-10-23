@@ -26,6 +26,7 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
+import type { MarkdownTaskToggler } from "@luke/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { agoText, momentText, sinceText } from "@luke/ui/time-format";
 import { LinkIcon } from "lucide-react";
@@ -40,7 +41,6 @@ import {
   MARKDOWN_MARK,
   type MarkdownEdit,
   MarkdownMessage,
-  type TaskToggler,
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
@@ -821,7 +821,7 @@ interface DocumentUnitProps {
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
   /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
-  onTask?: TaskToggler | undefined;
+  onTask?: MarkdownTaskToggler | undefined;
   /** The plan's text as saved, which a thread being started is laid over; none while no thread is being started. */
   planText: string | undefined;
 }
@@ -1218,15 +1218,15 @@ export const PlanBody = memo(function PlanBody({
     [editable],
   );
   // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
-  const togglers = useRef(new Map<number, TaskToggler>());
-  const taskToggler = (section: number): TaskToggler | undefined => {
+  const togglers = useRef(new Map<number, MarkdownTaskToggler>());
+  const taskToggler = (section: number): MarkdownTaskToggler | undefined => {
     // Note that a unit with no box has none, so the chase starting and stopping leaves it as drawn.
     if (!tickable(section) || !TASK_ITEM_ANYWHERE.test(views[section]?.words ?? "")) {
       return undefined;
     }
     const held = togglers.current.get(section);
     if (held !== undefined) return held;
-    const toggler: TaskToggler = (at) => latestTick.current(section, at);
+    const toggler: MarkdownTaskToggler = (at) => latestTick.current(section, at);
     togglers.current.set(section, toggler);
     return toggler;
   };

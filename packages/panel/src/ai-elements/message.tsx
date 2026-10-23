@@ -1,10 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
 import { BUTTON_SIZE, cn, IconButton, MessageFrame, Tooltip } from "@luke/ui";
+import {
+  MARKDOWN_LOOK,
+  Markdown,
+  type MarkdownComponents,
+  type MarkdownProps,
+} from "@luke/ui/markdown";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
-import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
-import { type Components, Streamdown } from "streamdown";
+import { type HTMLAttributes, memo, type ReactNode } from "react";
 import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
 
 /**
@@ -97,7 +102,7 @@ export function MessageAction({
 }
 
 /**
- * Markdown drawn at the panel's own scale. Streamdown's headings and lists
+ * Markdown drawn at the panel's own scale (`@luke/ui/markdown`'s transcript look). Streamdown's headings and lists
  * are a page's, sized for a document a reader sits down to; a transcript's
  * are a note's, a step above the words around them and no more, a
  * list keeps to the column's own indent, and a quote is the one every
@@ -105,7 +110,7 @@ export function MessageAction({
  * Streamdown's, which stood the browser's 40px in from the column. Each is
  * drawn by its class in tasks.css, a heading by its level.
  */
-export const PANEL_MARKDOWN_COMPONENTS: Components = {
+export const PANEL_MARKDOWN_COMPONENTS: MarkdownComponents = {
   h1: ({ children }) => (
     <h1 className="transcript-heading" data-level={1}>
       {children}
@@ -142,7 +147,7 @@ export const PANEL_MARKDOWN_COMPONENTS: Components = {
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
-export type MessageResponseProps = Omit<ComponentProps<typeof Streamdown>, "className">;
+export type MessageResponseProps = Omit<MarkdownProps, "look" | "className">;
 
 /**
  * A reply's markdown, drawn as it streams, in `.transcript-markdown`
@@ -155,7 +160,7 @@ export type MessageResponseProps = Omit<ComponentProps<typeof Streamdown>, "clas
 export const MessageResponse = memo((props: MessageResponseProps): ReactNode => {
   const parser = useAtomValue(markdownHtmlParserAtom);
   if (AsyncResult.isInitial(parser)) return null;
-  return <Streamdown className="transcript-markdown" {...props} />;
+  return <Markdown look={MARKDOWN_LOOK.TRANSCRIPT} className="transcript-markdown" {...props} />;
 });
 
 MessageResponse.displayName = "MessageResponse";

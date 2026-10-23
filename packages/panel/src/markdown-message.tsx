@@ -1,25 +1,26 @@
-import { Checkbox, PROSE_CLASS } from "@luke/ui";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
-import { QUOTE_CLASS } from "@luke/ui/quote-face";
+import {
+  MARKDOWN_LOOK,
+  Markdown,
+  type MarkdownComponents,
+  type MarkdownSteps,
+  type MarkdownTaskToggler,
+  markdownStep,
+} from "@luke/ui/markdown";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import { createContext, memo, type ReactNode, useContext, useMemo, useRef, useState } from "react";
-import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import type { Element, ElementContent, Root, RootContent, Text } from "hast";
+import { createContext, memo, type ReactNode, useContext, useMemo } from "react";
 import { PlanDiagram } from "./plan-diagram.js";
 import { TextLink } from "./text-link.js";
 
 const SAFE_LINK = /^https?:\/\//i;
 
-/**
- * The library's own tree types, read off the hook it hands them to rather
- * than declared again or pulled in as a dependency of their own: the tree
- * root or an element, an element, an element's child, and a run of text.
- */
-type HastParent = NonNullable<Parameters<AllowElement>[2]>;
-type HastNode = HastParent["children"][number];
-type HastChild = Parameters<AllowElement>[0]["children"][number];
-type HastText = Extract<HastNode, { type: "text" }>;
+/** The drawn tree's types: the tree root or an element, a node under it, an element's child, and a run of text. */
+type HastParent = Root | Element;
+type HastNode = RootContent;
+type HastChild = ElementContent;
+type HastText = Text;
 
 /** A stretch of the words, from one offset up to another. */
 export interface MarkdownSpan {
@@ -294,8 +295,8 @@ const drawEdit =
   };
 
 /** An element of the tree, and what it may hold. */
-type HastElement = Extract<HastNode, { type: "element" }>;
-type HastElementChild = HastElement["children"][number];
+type HastElement = Element;
+type HastElementChild = ElementContent;
 
 /** The class a search's words are marked with, as `search-field.tsx`'s `Highlighted` marks them. */
 const SEARCH_MATCH_CLASS = "search-match";
@@ -374,97 +375,6 @@ const glueDrawnLinks =
     }
   };
 
-/** A task item's checkbox as drawn: the offset its item starts at in the words, and the item's own words, which name it. */
-interface TaskItem {
-  readonly at: number;
-  readonly label: string;
-}
-
-/** Each task item's checkbox, by the tree's own node. */
-const TASK_ITEMS = new WeakMap<HastElement, TaskItem>();
-
-/** A list item's own words, a picture's alt text among them, without the words of a list nested in it. */
-function itemWords(node: HastElementChild): string {
-  if (node.type === "text") return node.value;
-  if (node.type !== "element" || node.tagName === "ul" || node.tagName === "ol") return "";
-  if (node.tagName === "img") return isWireString(node.properties.alt) ? node.properties.alt : "";
-  return node.children.map(itemWords).join("");
-}
-
-/**
- * Gives each task item's checkbox the offset its list item starts at in the
- * words, its marker's, which the tree keeps on the item and not on the box,
- * and the item's words as its name. Note that the nearest item is the box's
- * own, so a nested list's box names its own item rather than the one around it.
- */
-function placeTasks(parent: HastParent, item: HastElement | undefined): void {
-  for (const child of parent.children) {
-    if (child.type !== "element") continue;
-    const own = child.tagName === "li" ? child : item;
-    const at = own?.position?.start.offset;
-    if (
-      child.tagName === "input" &&
-      child.properties.type === "checkbox" &&
-      own &&
-      at !== undefined
-    ) {
-      TASK_ITEMS.set(child, { at, label: own.children.map(itemWords).join("").trim() });
-    }
-    placeTasks(child, own);
-  }
-}
-
-/** The rehype step that names each task item's checkbox by its item's offset. */
-const placeTaskItems = () => (tree: HastParent) => placeTasks(tree, undefined);
-
-/**
- * Ticks or clears the task item whose marker starts at an offset in the
- * words, answering whether the change was saved.
- */
-export type TaskToggler = (at: number) => Promise<boolean>;
-
-/**
- * A task item's checkbox that ticks or clears its item. It flips at the
- * press, since the words come back changed only once the change is saved,
- * and flips back where it was not. Note that its caller keys it by the
- * words' own state, so a change arriving from anyone redraws it from them.
- */
-function TaskBox({
-  item,
-  checked,
-  toggle,
-}: {
-  item: TaskItem;
-  checked: boolean;
-  toggle: TaskToggler;
-}): React.JSX.Element {
-  const [shown, setShown] = useState(checked);
-  // Note that the box stands in the bullet's gutter (`markdown.css`), and
-  // takes a finger's press around it there, as the editor's does.
-  return (
-    <span className="task-list-box">
-      <Checkbox
-        label={item.label}
-        checked={shown}
-        onChange={(next) => {
-          setShown(next);
-          toggle(item.at).then((saved) => {
-            if (!saved) setShown(checked);
-          });
-        }}
-      />
-    </span>
-  );
-}
-
-/**
- * GitHub's dialect, which is the one coding agents write: tables,
- * strikethrough, and task lists, with a single tilde left as the character it
- * is, so two home-directory paths in one sentence do not strike the words
- * between them.
- */
-const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: false }]];
-
 /**
  * How each element is drawn where the library's default would say the wrong
  * thing on this surface.
@@ -480,22 +390,12 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  * naming a mention as the chip that opens what it names before it is ever
  * drawn as a plain one.
  *
- * A heading is styled, never announced: a reader walking the document's
- * headings should meet the panel's, not a reply's. An image has no picture
- * to draw in a caption, so its alternative words stand in for it. A fence
- * is its code, and a Mermaid one draws as its diagram only where the place
- * showing the words asks for it (`diagrams`), as a plan's page does.
+ * A heading, a picture, and a quote are the note's own (`@luke/ui/markdown`).
+ * A fence is its code, and a Mermaid one draws as its diagram only where the
+ * place showing the words asks for it (`diagrams`), as a plan's page does.
  */
-const COMPONENTS: Components = {
+const COMPONENTS: MarkdownComponents = {
   a: ({ href, children, node }) => plainLink(href, children, node, undefined),
-  h1: ({ children }) => heading(1, children),
-  h2: ({ children }) => heading(2, children),
-  h3: ({ children }) => heading(3, children),
-  h4: ({ children }) => heading(4, children),
-  h5: ({ children }) => heading(5, children),
-  h6: ({ children }) => heading(6, children),
-  img: ({ alt }) => <>{alt ?? ""}</>,
-  blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
 /** A web link as a plain link, pressed where an opener is handed; anything else as its words alone. */
@@ -683,14 +583,6 @@ function DiagramFence({
   return code === undefined ? source : <PlanDiagram code={code} source={source} />;
 }
 
-function heading(level: number, children: ReactNode): React.JSX.Element {
-  return (
-    <p className="markdown-heading" data-level={level}>
-      {children}
-    </p>
-  );
-}
-
 function safeUrl(url: string): string {
   return SAFE_LINK.test(url) ? url : "";
 }
@@ -700,25 +592,15 @@ function keptUrl(url: string): string {
 }
 
 /**
- * The classes drawn Markdown wears, with a place's own after them. An editor
- * that stands in the drawn words' place wears the same, so its lists keep
- * the prose's gutter and markers and opening or closing it moves no word.
- */
-export function markdownClass(className?: string): string {
-  return className === undefined
-    ? `markdown ${PROSE_CLASS}`
-    : `markdown ${PROSE_CLASS} ${className}`;
-}
-
-/**
- * A message's words drawn as the Markdown they were written in: inline emphasis, code, strikethrough, and web
- * links inside the paragraph, and the blocks a paragraph cannot hold —
- * headings, lists, quotes, fenced code, tables, rules — composed around it.
- * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
- * the same component reads at the caption's ten pixels and the plan's own
- * size. Note that it is drawn again only when what it is handed changes,
- * because the engine parses the words afresh on every draw, and a plan
- * drawing every section on each frame of its typing would parse them all.
+ * A message's words drawn as the Markdown they were written in, as a note
+ * (`@luke/ui/markdown`): inline emphasis, code, strikethrough, and web links
+ * inside the paragraph, and the blocks a paragraph cannot hold — headings,
+ * lists, quotes, fenced code, tables, rules — composed around it. Raw HTML
+ * in the words is text. Every size in the stylesheet is in `em`, so the same
+ * component reads at the caption's ten pixels and the plan's own size. Note
+ * that it is drawn again only when what it is handed changes, because the
+ * engine parses the words afresh on every draw, and a plan drawing every
+ * section on each frame of its typing would parse them all.
  */
 export const MarkdownMessage = memo(function MarkdownMessage({
   words,
@@ -746,34 +628,28 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
   diagrams?: boolean | undefined;
   /** Ticks or clears a task item pressed, as a plan the developer can edit does; every checkbox is read-only without it. */
-  onTask?: TaskToggler | undefined;
+  onTask?: MarkdownTaskToggler | undefined;
 }): React.JSX.Element {
-  // Note that the toggler is read as a box is pressed, so a new one each render redraws nothing.
-  const toggler = useRef(onTask);
-  toggler.current = onTask;
-  const toggles = onTask !== undefined;
   const rehypePlugins = useMemo(() => {
-    const plugins: NonNullable<Options["rehypePlugins"]> = [];
-    if (toggles) plugins.push(placeTaskItems);
-    if (edit !== undefined) plugins.push([drawEdit, edit, words]);
-    if (found !== undefined && found.length > 0) plugins.push([markFound, found]);
-    if (link !== undefined) plugins.push([glueDrawnLinks, link]);
+    const plugins: MarkdownSteps = [];
+    if (edit !== undefined) plugins.push(markdownStep(drawEdit, edit, words));
+    if (found !== undefined && found.length > 0) plugins.push(markdownStep(markFound, found));
+    if (link !== undefined) plugins.push(markdownStep(glueDrawnLinks, link));
     return plugins;
-  }, [toggles, edit, words, found, link]);
+  }, [edit, words, found, link]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
-  const components = useMemo<Components>(() => {
+  const components = useMemo<MarkdownComponents>(() => {
     if (
       link === undefined &&
       openLink === undefined &&
       diagrams !== true &&
-      picture === undefined &&
-      !toggles
+      picture === undefined
     ) {
       return COMPONENTS;
     }
-    const drawing: Components = {
+    const drawing: MarkdownComponents = {
       ...COMPONENTS,
       a: ({ href, children, node }) => {
         const drawn =
@@ -790,41 +666,19 @@ export const MarkdownMessage = memo(function MarkdownMessage({
       drawing.img = ({ src, alt, title }) =>
         (isWireString(src) ? picture(src, alt ?? "", title) : undefined) ?? <>{alt ?? ""}</>;
     }
-    if (toggles) {
-      const toggle: TaskToggler = (at) => toggler.current?.(at) ?? Promise.resolve(false);
-      drawing.input = ({ node, ...props }) => {
-        const item = node === undefined ? undefined : TASK_ITEMS.get(node);
-        return item === undefined ? (
-          <Checkbox
-            label="Task"
-            checked={props.checked === true}
-            disabled
-            onChange={() => undefined}
-          />
-        ) : (
-          <TaskBox
-            key={String(props.checked === true)}
-            item={item}
-            checked={props.checked === true}
-            toggle={toggle}
-          />
-        );
-      };
-    }
     return drawing;
-  }, [link, openLink, diagrams, picture, toggles]);
+  }, [link, openLink, diagrams, picture]);
   return (
-    <div className={markdownClass(className)}>
-      <FenceEdit.Provider value={edit}>
-        <Markdown
-          remarkPlugins={REMARK_PLUGINS}
-          rehypePlugins={rehypePlugins}
-          components={components}
-          urlTransform={link === undefined ? safeUrl : keptUrl}
-        >
-          {words}
-        </Markdown>
-      </FenceEdit.Provider>
-    </div>
+    <FenceEdit.Provider value={edit}>
+      <Markdown
+        look={MARKDOWN_LOOK.NOTE}
+        words={words}
+        className={className}
+        rehypePlugins={rehypePlugins}
+        components={components}
+        urlTransform={link === undefined ? safeUrl : keptUrl}
+        onTask={onTask}
+      />
+    </FenceEdit.Provider>
   );
 });

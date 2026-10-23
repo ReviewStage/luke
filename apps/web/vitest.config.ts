@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import { panelResolve } from "./scripts/panel-build";
+import { siteMarkdown } from "./scripts/site-markdown";
 
 /**
  * The shared tokens' sheet, which vitest answers as its text where a test
@@ -11,8 +12,9 @@ const TOKEN_STYLESHEET = /\/ui\/src\/tokens\/tokens\.css\?inline$/;
 export default defineConfig({
   // The panel's imports answered as the build answers them, so the web app's
   // root draws in a test what it ships. Streamdown is inlined so that its
-  // imports are resolved here at all.
-  plugins: [panelResolve()],
+  // imports are resolved here at all. The site's Markdown documents are drawn
+  // as the build draws them.
+  plugins: [panelResolve(), siteMarkdown()],
   test: {
     name: "web",
     include: ["tests/**/*.test.ts"],

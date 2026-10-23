@@ -708,7 +708,7 @@ test("a block a thread covers whole offers no button to start another, and one a
       return container.querySelector(".comment-block-button button");
     };
     const heading = (name: string) =>
-      [...container.querySelectorAll(".markdown-heading")].find((h) => h.textContent === name);
+      [...container.querySelectorAll(".luke-markdown-heading")].find((h) => h.textContent === name);
     const paragraph = [...container.querySelectorAll("p")].find((p) =>
       p.textContent?.startsWith("Admins can withdraw"),
     );
