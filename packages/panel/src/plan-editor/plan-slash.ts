@@ -1,5 +1,6 @@
 import { WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
 import type { Editor } from "@tiptap/core";
+import type { ResolvedPos } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
@@ -13,8 +14,8 @@ import { turnInto } from "./writing-format.js";
 /**
  * plan-slash.ts -- the plan editor's `/`: the word the caret ends reported to the panel, which draws the block menu over it, and the block it chooses laid in in the word's place.
  *
- * A `/` at the start of a line or after a space, outside code, opens the
- * panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
+ * A `/` at the start of a line or after a space, outside code and outside
+ * a table's cell, opens the panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
  * no space in it, so a space typed after it ends it and closes the menu.
  * A choice deletes the word, through its end where the caret stands inside
  * it, and runs the block's command on the block the caret stands in
@@ -82,12 +83,28 @@ const INSERTS = {
   },
 } as const satisfies Record<SlashBlock, (editor: Editor) => void>;
 
-/** The `/` word the caret ends in plain text, outside code; nothing while the editor has no caret or the caret ends none. */
+/** The roles a table's cells take in ProseMirror's table schema, which TipTap's table cells declare. */
+const CELL_ROLES: ReadonlySet<unknown> = new Set(["cell", "header_cell"]);
+
+/**
+ * Whether the caret stands in a table's cell. Note that no block the menu
+ * lays in may stand there, because a cell of GFM's table is one line of
+ * words, so a table, a heading, or a list laid in a cell is lost as the
+ * text is saved.
+ */
+function inCell($from: ResolvedPos): boolean {
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if (CELL_ROLES.has($from.node(depth).type.spec.tableRole)) return true;
+  }
+  return false;
+}
+
+/** The `/` word the caret ends in plain text, outside code and outside a table's cell; nothing while the editor has no caret or the caret ends none. */
 function slashAt(view: EditorView): SlashWord | undefined {
   const { selection, doc } = view.state;
   if (!selection.empty || !view.hasFocus()) return undefined;
   const { $from } = selection;
-  if ($from.parent.type.spec.code === true) return undefined;
+  if ($from.parent.type.spec.code === true || inCell($from)) return undefined;
   const before = $from.parent.textBetween(0, $from.parentOffset, undefined, LEAF_CHARACTER);
   const match = SLASH_WORD.exec(before);
   if (match === null) return undefined;
