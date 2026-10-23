@@ -21,6 +21,8 @@
  * Beside it stands one server per integration the agent is handed, at
  * `LUKE_INTEGRATION_MCP_PATH/<connection>` (`notion-2` for a member's second
  * Notion account), on the same bearer and the same JSON-RPC: its
+ * `initialize` tells the client what eve tells the model of the connection,
+ * which account it is among them, as its `instructions`; its
  * `tools/list` is the provider's own tools, and its `tools/call` forwards to
  * the provider on the member's own grant and answers the provider's result
  * as it sent it (`../../integrations/connection-door.ts`). A harness names
@@ -57,6 +59,7 @@ import {
 import {
   type ConnectionRefusal,
   callConnectionTool,
+  connectionInstructions,
   listConnectionTools,
 } from "../../integrations/connection-door.js";
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
@@ -259,6 +262,10 @@ export interface LukeMcpDoors {
  */
 interface McpServer {
   readonly name: string;
+  /** What `initialize` tells the client of the server, which the harness shows the model; none for Luke's own, whose tools say it. */
+  readonly instructions: (
+    admitted: AdmittedConversation,
+  ) => Effect.Effect<Option.Option<string>, never, LukeMcpServices>;
   readonly listTools: (
     admitted: AdmittedConversation,
   ) => Effect.Effect<RpcAnswer, never, LukeMcpServices>;
@@ -341,6 +348,7 @@ function listLukeTools(
 function lukeServer(doors: LukeMcpDoors): McpServer {
   return {
     name: "luke",
+    instructions: () => Effect.succeedNone,
     listTools: listLukeTools,
     callTool: (admitted, params) => callLukeTool(doors, admitted, params),
   };
@@ -370,6 +378,7 @@ function refusedCall(refusal: ConnectionRefusal): WireRecord {
 function integrationServer(connection: string): McpServer {
   return {
     name: connection,
+    instructions: (admitted) => connectionInstructions(admitted, connection),
     listTools: (admitted) =>
       Effect.map(listConnectionTools(admitted, connection), (tools) =>
         Result.succeed({ tools: tools.map(listedIntegrationTool) }),
@@ -408,11 +417,12 @@ function answerRequest(
           rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, "Invalid initialize params"),
         );
       }
-      return Effect.succeed(
+      return Effect.map(server.instructions(admitted), (instructions) =>
         Result.succeed({
           protocolVersion: negotiatedVersion(asked.success.protocolVersion),
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: server.name, version: SERVER_VERSION },
+          ...(Option.isSome(instructions) ? { instructions: instructions.value } : undefined),
         }),
       );
     }

@@ -98,11 +98,12 @@ export interface ConnectionRefusal {
   readonly requiresSignIn?: true;
 }
 
-/** One connection handed to the agent: which account at which provider. */
+/** One connection handed to the agent: which account at which provider, and, where the member holds more than one there, the note naming which account it is. */
 interface HandedConnection {
   readonly provider: IntegrationProvider;
   readonly connectionName: string;
   readonly instanceKey: string;
+  readonly accountNote?: string;
 }
 
 /** What a call of a connection's tool answered: the provider's own MCP result, as it sent it, or why there is none. */
@@ -214,6 +215,29 @@ function sessionFailed(connectionName: string, doing: string, failure: McpToolsF
   }
   const said = failure.serverMessage === undefined ? "" : `: ${failure.serverMessage}`;
   return `Failed to ${doing} "${connectionName}": the service was ${failure.reason}${said}.`;
+}
+
+/**
+ * What the model is told of one connection the agent is handed, as eve
+ * tells it: the integration's description and, where the member holds more
+ * than one account there, the note naming which account this one is, so the
+ * agent can pick the account the developer named; nothing for a connection
+ * it is not handed. Its server answers it as its `initialize`'s
+ * `instructions`, which the harness shows the model beside the server's
+ * tools.
+ */
+export function connectionInstructions(
+  admitted: AdmittedConversation,
+  name: string,
+): Effect.Effect<Option.Option<string>, never, ConnectionDoorServices> {
+  return Effect.map(
+    handedConnection(admitted, name),
+    Option.map(({ provider, accountNote }) =>
+      accountNote === undefined
+        ? INTEGRATION[provider].DESCRIPTION
+        : `${INTEGRATION[provider].DESCRIPTION} ${accountNote}`,
+    ),
+  );
 }
 
 /**

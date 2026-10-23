@@ -41,6 +41,7 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
 } from "../../integrations/integration-store.js";
+import { INTEGRATION } from "../../integrations/integrations.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import {
@@ -836,6 +837,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         yield* Effect.promise(() => Promise.all([linear.close(), notion.close()]));
 
         assert.equal(linear.getServerVersion()?.name, "linear");
+        assert.equal(linear.getInstructions(), INTEGRATION.linear.DESCRIPTION);
         assert.deepEqual(
           linearTools.tools.map((tool) => tool.name),
           ["list_issues", "create_issue", "fail", "draw", "attach"],

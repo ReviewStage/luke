@@ -32,11 +32,17 @@ import {
 } from "../testing/integration-mcp-fake.js";
 import {
   callConnectionTool,
+  connectionInstructions,
   listConnectionTools,
   nativeAgentConnections,
 } from "./connection-door.js";
-import { beginIntegrationSignIn, completeIntegrationSignIn } from "./integration-store.js";
+import {
+  beginIntegrationSignIn,
+  completeIntegrationSignIn,
+  renameIntegrationConnection,
+} from "./integration-store.js";
 import { integrationUnavailable } from "./integration-token.js";
+import { INTEGRATION } from "./integrations.js";
 
 /**
  * A native agent's integration servers, listed and called through their
@@ -151,6 +157,41 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           after,
           before.filter((name) => name !== LINEAR),
         );
+      }),
+  );
+
+  it.effect(
+    "each connection's server tells the model what the integration is and, past one account, which account it is by label",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const services = doorServices(linearTokenOf(member.userId), hearing(), []);
+        const account = (connectionName: string, connectSubject: string) =>
+          Effect.andThen(
+            beginIntegrationSignIn(
+              member.userId,
+              { provider: NOTION, connectionName, connectSubject },
+              `state-${connectionName}-${member.userId}`,
+              Redacted.make("connect-verifier"),
+            ),
+            completeIntegrationSignIn(
+              member.userId,
+              connectionName,
+              `state-${connectionName}-${member.userId}`,
+            ),
+          );
+        yield* account(NOTION, member.userId);
+        yield* account("notion-2", `second-${member.userId}`);
+        yield* renameIntegrationConnection(member.userId, NOTION, "Work");
+        yield* renameIntegrationConnection(member.userId, "notion-2", "Personal");
+        const told = (name: string) =>
+          connectionInstructions(member.admitted, name).pipe(Effect.provide(services));
+
+        assert.deepEqual(yield* told(LINEAR), Option.some(INTEGRATION[LINEAR].DESCRIPTION));
+        const second = Option.getOrThrow(yield* told("notion-2"));
+        assert.ok(second.startsWith(INTEGRATION[NOTION].DESCRIPTION));
+        assert.ok(second.includes('the developer\'s "Personal" Notion account'));
+        assert.deepEqual(yield* told("slack"), Option.none());
       }),
   );
 
