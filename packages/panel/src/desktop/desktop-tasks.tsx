@@ -792,6 +792,7 @@ function PlanDocument({
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
             shownCode: shownCode ?? [],
+            pages: { taskId: listedCard.id },
             task: {
               name: listedCard.name,
               status: listedCard.status,
