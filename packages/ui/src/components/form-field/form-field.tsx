@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from "react";
+import { Field, FieldDescription, FieldError, FieldLabel } from "../../shadcn/field.js";
 import { LengthCounter } from "../length-counter/length-counter.js";
 
 /**
@@ -12,7 +13,9 @@ import { LengthCounter } from "../length-counter/length-counter.js";
  * region filling more surely than one arriving. A field whose control takes
  * so many characters at most (`count`) says how many it holds of them at the
  * end of its label's line once they near the limit (`LengthCounter`). The field owns the room
- * between its parts; the room around it is its container's.
+ * between its parts; the room around it is its container's. It is drawn by
+ * shadcn/ui's field (`../../shadcn/field.tsx`); its label keeps the
+ * `luke-field-label` name a test finds it by.
  */
 
 /** What a field hands the control it holds, spread onto an input or read by a control of its own. */
@@ -56,17 +59,18 @@ export function FormField({
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
     .filter((part) => part !== undefined)
     .join(" ");
+  const labelled = (
+    <FieldLabel className="luke-field-label" id={labelId} htmlFor={controlId}>
+      {label}
+    </FieldLabel>
+  );
   return (
-    <div className="luke-field" data-invalid={failed}>
+    <Field data-invalid={failed}>
       {count === undefined ? (
-        <label className="luke-field-label" id={labelId} htmlFor={controlId}>
-          {label}
-        </label>
+        labelled
       ) : (
-        <div className="luke-field-head">
-          <label className="luke-field-label" id={labelId} htmlFor={controlId}>
-            {label}
-          </label>
+        <div className="flex min-w-0 items-baseline justify-between gap-control-gap">
+          {labelled}
           <LengthCounter length={count.length} limit={count.limit} />
         </div>
       )}
@@ -76,14 +80,8 @@ export function FormField({
         "aria-describedby": describedBy === "" ? undefined : describedBy,
         "aria-invalid": failed ? true : undefined,
       })}
-      {described ? (
-        <p className="luke-field-description" id={descriptionId}>
-          {description}
-        </p>
-      ) : null}
-      <p className="luke-field-error" id={errorId} aria-live="polite">
-        {failed ? error : null}
-      </p>
-    </div>
+      {described ? <FieldDescription id={descriptionId}>{description}</FieldDescription> : null}
+      <FieldError id={errorId}>{failed ? error : null}</FieldError>
+    </Field>
   );
 }

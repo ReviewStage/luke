@@ -8,7 +8,7 @@ import {
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   claimCodingAgentRunnerLease,
   releaseCodingAgentRunnerLease,
@@ -1286,13 +1286,16 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(first !== undefined);
         first.exitCode = 0;
         sequence.next = 42;
-        const lateEnds: string[] = [];
-        // The first launch's END lands just as the relaunch's command has started, before its answer.
+        const lateEnds: Promise<string>[] = [];
+        // The test's own database, which the END's lease is taken in beside the relaunch's.
+        const context = yield* Effect.context<DatabaseServices>();
+        // The first launch's END lands just as the relaunch's command has started, before its answer,
+        // and waits out the relaunch's lease.
         api.hooks.onStart = async () => {
           lateEnds.push(
-            await Effect.runPromise(
+            Effect.runPromiseWith(context)(
               runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
-                Effect.provide(Layer.mergeAll(api.layer, getTestDB())),
+                Effect.provide(api.layer),
               ),
             ),
           );
@@ -1301,7 +1304,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.deepEqual(lateEnds, [RUNNER_ENDED.STALE]);
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
+        assert.deepEqual(yield* Effect.promise(() => Promise.all(lateEnds)), [RUNNER_ENDED.STALE]);
         assert.equal(api.sandboxes[0]?.status, "running");
       }),
   );
@@ -1662,6 +1671,50 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(ended, RUNNER_ENDED.HELD);
       assert.equal(api.sandboxes[0]?.status, "running");
     }),
+  );
+
+  it.effect(
+    "a launch's END waits out a call holding the agent's runner lease, and stops nothing once that call relaunched the runner",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [sandbox] = api.sandboxes;
+        assert.ok(sandbox !== undefined);
+        // A send elsewhere holds the lease, as it does while it relaunches the runner.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+
+        const ending = yield* Effect.forkChild(
+          runnerEnded({
+            target: { userId, conversationId: agent.conversationId },
+            sessionId: opened.sessionId,
+            sequence: 5,
+          }).pipe(Effect.provide(api.layer)),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        yield* TestClock.adjust("5 seconds");
+        assert.equal(sandbox.status, "running");
+        // The send's relaunch writes its launch's tag, past the END's sequence, and lets go.
+        sandbox.tags[RUNNER_TAG.LAUNCH] = "42";
+        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
+
+        assert.equal(yield* Fiber.join(ending), RUNNER_ENDED.STALE);
+        assert.equal(sandbox.status, "running");
+      }),
   );
 
   it.effect(
