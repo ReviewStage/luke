@@ -62,19 +62,22 @@ it.layer(getTestDB())("the operator persona-name migration", (it) => {
           repository: "acme/api",
         }),
       ).agent;
-      // The operator as one made before stood: given a first name, as every agent was.
+      // The operator and the coder as ones made before stood: given a first name, as every agent was.
       yield* db
         .update(codingAgent)
         .set({ personaName: "Ava" })
         .where(eq(codingAgent.id, operator.id));
+      yield* db
+        .update(codingAgent)
+        .set({ personaName: "Maya" })
+        .where(eq(codingAgent.id, coder.id));
 
       for (const statement of yield* migrationStatements(MIGRATION)) yield* sql.unsafe(statement);
 
       const nameOf = (agentId: string) =>
         Effect.map(readCodingAgent(owner, agentId), (read) => Option.getOrThrow(read).personaName);
       assert.equal(yield* nameOf(operator.id), null);
-      assert.equal(yield* nameOf(coder.id), coder.personaName);
-      assert.match(coder.personaName ?? "", /^\S+$/u);
+      assert.equal(yield* nameOf(coder.id), "Maya");
     }),
   );
 });

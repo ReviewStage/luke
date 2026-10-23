@@ -2288,7 +2288,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
 
         const first = yield* typed({});
         assert.ok(desked(first.text), first.text ?? "");
-        assert.ok(first.text?.includes(agent.personaName ?? ""), first.text ?? "");
+        assert.ok(first.text?.includes(`/agent/${agent.id})`), first.text ?? "");
         const unchanged = yield* typed(first.handed);
         assert.ok(!desked(unchanged.text), unchanged.text ?? "");
 
@@ -2359,7 +2359,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const told = yield* typed(first.handed);
         const text = told.text ?? "";
         assert.ok(noticed(text), text);
-        assert.ok(text.includes(`[@${agent.personaName ?? ""}]`), text);
+        assert.ok(text.includes(`/agent/${agent.id})`), text);
         assert.equal(text.split("a turn ended").length - 1, 1, text);
 
         // Handed once: the notices are read, and a desk with nothing new hands nothing.
@@ -2381,12 +2381,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           repository: "acme/relay",
         });
         yield* joinWorkspace(task.workspaceId, teammate);
-        const started = (starter: string) =>
+        const started = (starter: string, title: string) =>
           Effect.gen(function* () {
             // Each a second after the last, so newest first is one order, and none yet reads as never started.
             yield* TestClock.adjust("1 second");
             const made = yield* createCodingAgent(starter, {
               taskId: task.id,
+              title,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
               effort: "high",
@@ -2397,8 +2398,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             return Option.getOrThrow(made).agent;
           });
         const own = [];
-        for (let index = 0; index < 9; index += 1) own.push(yield* started(userId));
-        const teammates = yield* started(teammate);
+        for (let index = 0; index < 9; index += 1)
+          own.push(yield* started(userId, `Invite ${index}`));
+        const teammates = yield* started(teammate, "Teammate's invite");
         const operator = yield* openOperator(host, userId, task.workspaceId);
         // Each of the member's agents opened an ask, the oldest first, so nine rows stand for the notices' eight.
         for (const [index, each] of own.entries()) {
@@ -2415,8 +2417,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
             {},
           )).text ?? "";
-        const named = (agent: { readonly personaName: string | null }) =>
-          desk.includes(`[@${agent.personaName ?? ""}]`);
+        const named = (agent: { readonly title: string | null }) =>
+          desk.includes(`[@${agent.title ?? ""}]`);
         assert.ok(desk.includes("and 1 more"), desk);
         assert.ok(own.slice(1).every(named), desk);
         assert.ok(!named(own[0] ?? teammates), "the oldest is the one counted");

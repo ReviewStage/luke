@@ -2143,77 +2143,38 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
   );
 });
 
-it.layer(getTestDB())("the coding-agent store's human names", (it) => {
-  it.effect(
-    "every agent started on a task is given a first name alone that no other agent of the task wears, and a Start that names one keeps it",
-    () =>
-      Effect.gen(function* () {
-        const starter = yield* openAccount;
-        const workspace = yield* openWorkspace(starter);
-        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
-        const start = (personaName?: string) =>
-          createCodingAgent(starter, {
-            taskId: task.id,
-            planSnapshot: "# Billing",
-            prompt: null,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: "acme/api",
-            ...(personaName === undefined ? undefined : { personaName }),
-          }).pipe(Effect.map((started) => Option.getOrThrow(started).agent));
-        const names: string[] = [];
-        for (let started = 0; started < 12; started += 1) {
-          const agent = yield* start();
-          assert.match(agent.personaName ?? "", /^\S+$/u);
-          names.push(agent.personaName ?? "");
-        }
-        assert.equal(new Set(names).size, names.length);
-        assert.equal((yield* start("Maya Chen")).personaName, "Maya Chen");
-      }),
-  );
+it.layer(getTestDB())("the coding-agent store's agent names", (it) => {
+  it.effect("no agent is given a human name, so every one goes by its title", () =>
+    Effect.gen(function* () {
+      const starter = yield* openAccount;
+      const workspace = yield* openWorkspace(starter);
+      const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+      const run = { title: "Flaky tests", model: "anthropic/claude-opus-5.5", effort: "high" };
+      const onTask = yield* createCodingAgent(starter, {
+        ...run,
+        taskId: task.id,
+        planSnapshot: "# Billing",
+        prompt: null,
+        idempotencyKey: randomUUID(),
+        repository: "acme/api",
+      });
+      const onNoTask = yield* createCodingAgent(starter, {
+        ...run,
+        taskId: null,
+        organizationId: workspace,
+        planSnapshot: null,
+        prompt: "Sweep the flaky tests.",
+        idempotencyKey: randomUUID(),
+        repository: "acme/api",
+      });
 
-  it.effect(
-    "a member's operator is given no name, not even one its Start carries, while an agent on no task still is",
-    () =>
-      Effect.gen(function* () {
-        const starter = yield* openAccount;
-        const workspace = yield* openWorkspace(starter);
-        const operator = Option.getOrThrow(
-          yield* createCodingAgent(starter, {
-            taskId: null,
-            organizationId: workspace,
-            planSnapshot: null,
-            prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
-            // A continue of an operator from before carries the first name it was given.
-            personaName: "Ava",
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: null,
-          }),
-        ).agent;
-        const coder = Option.getOrThrow(
-          yield* createCodingAgent(starter, {
-            taskId: null,
-            organizationId: workspace,
-            planSnapshot: null,
-            prompt: "Sweep the flaky tests.",
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: "acme/api",
-          }),
-        ).agent;
-
-        assert.equal(operator.personaName, null);
-        assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(starter, operator.id)).personaName,
-          null,
-        );
-        assert.match(coder.personaName ?? "", /^\S+$/u);
-      }),
+      for (const started of [onTask, onNoTask]) {
+        const agent = Option.getOrThrow(started).agent;
+        const read = Option.getOrThrow(yield* readCodingAgent(starter, agent.id));
+        assert.equal(read.personaName, null);
+        assert.equal(read.title, "Flaky tests");
+      }
+    }),
   );
 });
 

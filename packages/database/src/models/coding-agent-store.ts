@@ -1,4 +1,3 @@
-import { pickPersonaName } from "@luke/features/agent-persona";
 import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_ARCHIVER,
@@ -43,7 +42,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { DateTime, Effect, Option, Random, Schema, SchemaTransformation } from "effect";
+import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { agentPin } from "../schemas/agent-pin.js";
@@ -194,7 +193,7 @@ export interface CodingAgent {
   readonly startBranch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
-  /** The human name the agent was given as it was created; null for an agent from before names were given, and for an operator, which is Luke. */
+  /** A human name the agent once went by; null for every agent now, which goes by its title, the column kept until it is dropped. */
   readonly personaName: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
@@ -307,8 +306,6 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly startedFrom?: StoredStartedFrom | undefined;
   /** The agent's title from the start, a run's fixed name; none where it is named later. */
   readonly title?: string | undefined;
-  /** The human name the agent keeps, a continued agent's own; none where it is given a new one. */
-  readonly personaName?: string | undefined;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
@@ -722,7 +719,6 @@ const insertAgent = SqlSchema.findOneOption({
     automationOrigin: AutomationOriginColumnSchema,
     startedFrom: StartedFromColumnSchema,
     title: Schema.NullOr(Schema.String),
-    personaName: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -751,7 +747,6 @@ const insertAgent = SqlSchema.findOneOption({
           automationOrigin: write.automationOrigin,
           startedFrom: write.startedFrom,
           title: write.title,
-          personaName: write.personaName,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
@@ -777,31 +772,6 @@ const insertAgent = SqlSchema.findOneOption({
         .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
     ),
 });
-
-/** The human names the agents of a task were given, read under the task's lock as a Start takes it, so a new one is given a first name none of them wears. */
-const findTaskPersonaNames = SqlSchema.findAll({
-  Request: Schema.Struct({ taskId: Schema.String }),
-  Result: Schema.Struct({ personaName: Schema.NullOr(Schema.String) }),
-  execute: ({ taskId }) =>
-    Database.use((db) =>
-      db
-        .select({ personaName: codingAgent.personaName })
-        .from(codingAgent)
-        .where(eq(codingAgent.taskId, taskId)),
-    ),
-});
-
-/** A human name for a new agent of the task, or of no task, whose first name none of the task's agents wears while one is left. */
-function newPersonaName(taskId: string | null) {
-  return Effect.gen(function* () {
-    const taken =
-      taskId === null
-        ? []
-        : (yield* findTaskPersonaNames({ taskId })).flatMap((row) => row.personaName ?? []);
-    const draw = yield* Random.next;
-    return pickPersonaName(taken, () => draw);
-  });
-}
 
 const updateAgentChoice = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -1807,11 +1777,6 @@ export function createCodingAgent(
           automationOrigin: started.automationOrigin ?? null,
           startedFrom: started.startedFrom ?? null,
           title: started.title ?? null,
-          // The operator is Luke, never a teammate with a first name, so it is given none (`agentTabLabel`).
-          personaName:
-            started.kind === CODING_AGENT_KIND.OPERATOR
-              ? null
-              : (started.personaName ?? (yield* newPersonaName(started.taskId))),
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
