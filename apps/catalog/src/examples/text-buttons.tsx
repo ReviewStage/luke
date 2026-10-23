@@ -57,6 +57,18 @@ function TextButtons(): React.JSX.Element {
       <CatalogSection id="text-buttons-accent" title="Accent, the one act a line offers">
         <RepliesToggle />
       </CatalogSection>
+      <CatalogSection id="text-buttons-whole" title="Whole, short words a finger presses">
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          Last edited by Ada Lovelace ·{" "}
+          <TextButton
+            lines={TEXT_BUTTON_LINES.WHOLE}
+            onClick={pressed}
+            aria-label="Edited 2 hours ago. Show version history"
+          >
+            2h ago
+          </TextButton>
+        </Text>
+      </CatalogSection>
       <CatalogSection id="text-buttons-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">
           <Text>

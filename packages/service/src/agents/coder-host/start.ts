@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
+import type { HandedFile } from "@luke/database/models/attached-file-parts";
 import { ensureMember } from "@luke/database/models/chat-store";
 import {
   type CodingAgent,
@@ -23,7 +25,7 @@ import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
 } from "@luke/database/schemas/coding-agent";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
   type NoteFiles,
@@ -45,6 +47,7 @@ import {
   type CodingAgentStartRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -56,7 +59,8 @@ import {
 } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { Clock, Effect, Option } from "effect";
+import { sentLineId } from "@luke/wire/host-ids";
+import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
@@ -68,6 +72,7 @@ import { githubReachOrRefusal } from "../../github/github-refusal.js";
 import { readBranchHead } from "../../github/repository-file.js";
 import { workspaceRepository } from "../../github/workspace-repository.js";
 import {
+  credentialMissing,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
@@ -81,7 +86,7 @@ import {
   validateModelChoice,
 } from "../../providers/model-catalog.js";
 import { admitsPlanWriter } from "../agent-reach.js";
-import { eveContent } from "../attached-files.js";
+import { eveContent, keptHandedImages } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -93,12 +98,14 @@ import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
-  type AgentRuntimeChoice,
+  AgentCredentialMissing,
   accountFastOffer,
   agentRuntimeChoice,
+  markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
+import { isNativeRuntime } from "./native-runtime.js";
 import {
   type FittedReplay,
   replayOf,
@@ -401,9 +408,17 @@ export type StartAsk = StartPlace & {
   readonly serverWords?: string | undefined;
   /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
   readonly branch?: string | undefined;
-  /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
+  /** Whether a call is opened into the agent as it lands; it runs where any Start would (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
+  /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
+  readonly reached?: StartReach | undefined;
 };
+
+/** A repository as a task's start reached it: the full name its row keeps, and how it was reached. */
+export interface StartReach {
+  readonly repository: string;
+  readonly access: GitHubAccess;
+}
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
 export interface CodingAgentStart {
@@ -444,10 +459,10 @@ export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
       ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
-  return {
-    offered: offeredToAccount(read, fastOffer),
-    defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE,
-  };
+  const offered = yield* hostedStoreOrUnavailable(
+    markedUnconnected(userId, offeredToAccount(read, fastOffer)),
+  );
+  return { offered, defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE };
 });
 
 /**
@@ -716,10 +731,14 @@ const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const lowest = offered.find((model) => model.id === choice.model)?.efforts[0] ?? choice.effort;
   const measured = yield* measuredStepOf(userId, from.lineage);
-  const instructions =
+  // Note that a native harness's step estimates no instructions (`runner-events-app.ts`), since
+  // the CLI composes its own, so it is told the fallback as a source that measured none is.
+  const estimated =
     measured === undefined
-      ? REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS
-      : fromEveEstimate(measured.step.systemPromptTokens + measured.step.toolDefinitionTokens);
+      ? 0
+      : measured.step.systemPromptTokens + measured.step.toolDefinitionTokens;
+  const instructions =
+    estimated === 0 ? REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS : fromEveEstimate(estimated);
   const bound = measuredBoundBytes(
     measured === undefined
       ? undefined
@@ -879,23 +898,78 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The runtime a new agent's conversation is recorded on. A blank Start, and
- * one a Call opens a call into as it lands (`call`), is always eve's,
- * whatever the account's routing would choose: a call reaches eve alone
- * (`voice/opening.ts` refuses an agent on any other runtime). Every
- * other Start is decided by the account's routing (`agentRuntimeChoice`),
- * with its payer, after the blank case: the credential Settings chose, a
- * continue and a fork alike.
+ * Whether a Start of the account's on the model would find a credential to
+ * pay for it, refused by name where none does, as the Start itself would be
+ * (`agentRuntimeChoice`): what a caller checks before it undoes anything a
+ * refused Start could not put back, as an operator's Reset archives its
+ * standing operator.
  */
-function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
-  if (ask.blank === true || ask.call === true) {
-    return Effect.succeed<AgentRuntimeChoice>({
-      runtime: CONVERSATION_RUNTIME.EVE,
-      payer: undefined,
-    });
-  }
-  return agentRuntimeChoice(userId, model);
+export const startCredentialStands = (userId: string, model: string) =>
+  Effect.asVoid(
+    Effect.catch(agentRuntimeChoice(userId, model), (failure) =>
+      failure instanceof AgentCredentialMissing
+        ? Effect.fail(credentialMissing(failure.provider))
+        : hostedStoreOrUnavailable(Effect.fail(failure)),
+    ),
+  );
+
+/**
+ * The runtime a new agent's conversation is recorded on, with its payer,
+ * by the account's routing (`agentRuntimeChoice`): the credential Settings
+ * chose, a blank Start, one a Call opens a call into (`call`), a continue
+ * and a fork alike, since a call reaches a native harness's agent as it
+ * reaches eve's (`voice/deployment-exchange.ts`). Where no credential of
+ * the account's pays, the Start is refused by name, the provider beside
+ * it, and nothing is written.
+ */
+function startRuntimeOf(userId: string, model: string) {
+  return Effect.catch(agentRuntimeChoice(userId, model), (failure) =>
+    failure instanceof AgentCredentialMissing
+      ? Effect.fail(credentialMissing(failure.provider))
+      : hostedStoreOrUnavailable(Effect.fail(failure)),
+  );
 }
+
+/**
+ * The first message of a native agent's Start, written as the line awaiting
+ * its turn under a fresh key, as a steer's is (`steer.ts`), and its line id,
+ * which the runner is handed and names back as it takes the line. Its
+ * dispatch has already happened by the time it matters: the line is written
+ * standing, and the Start's own open is what hands it over.
+ */
+const openingLine = (
+  agent: CodingAgent,
+  text: string,
+  files: readonly HandedFile[],
+  mentioned: string | undefined,
+  automation: StoredAutomationOrigin | undefined,
+) =>
+  Effect.gen(function* () {
+    const clientKey = randomUUID();
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const written = yield* hostedStoreOrUnavailable(
+      writer.writeAwaitingLine(
+        { userId: agent.userId, conversationId: agent.conversationId },
+        {
+          text,
+          clientKey,
+          attachments: files,
+          mentioned,
+          // An automation's run says its prompt as the automation, as its later lines do (`automation-runs.ts`).
+          sender:
+            automation === undefined
+              ? { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId }
+              : { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+        },
+        Effect.succeed(true),
+      ),
+    );
+    // A line refused, or one the store never landed, is no line the runner could name back.
+    if (Result.isFailure(written) || Option.isNone(written.success)) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    return sentLineId(clientKey);
+  });
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
@@ -946,11 +1020,20 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
   // A blank agent on a task with no repository reaches none.
+  // Note that a task started with its agent reached the repository a moment ago, in the same
+  // request and as the same member, so that reach stands rather than a second round of GitHub reads.
   const member = ask.automationOrigin === undefined ? userId : undefined;
   const reached =
     landing.repository === null
       ? undefined
-      : yield* workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
+      : ask.reached !== undefined && ask.reached.repository === landing.repository
+        ? ask.reached
+        : yield* workspaceRepository(
+            landing.workspaceId,
+            landing.repository,
+            member,
+            landing.mover,
+          );
   // An agent started from another goes on from the branch that one was started on.
   const branch = yield* startBranchOf(
     userId,
@@ -968,7 +1051,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const serverWords =
     ask.serverWords ??
     (from === undefined ? words : wordsOf(from.serverWords ?? from.prompt, ask.note));
-  // The files of the source's brief that fit, then those the note carries, which a fresh plan start has none of.
+  // The files of the source's brief that fit, then those the note carries; a fresh start's are its own,
+  // a prompt's or, on the plan, the note's, such as the pictures `start_agent` hands on.
   const attachments =
     from === undefined
       ? (ask.attachments ?? [])
@@ -988,7 +1072,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
-  const runtime = yield* hostedStoreOrUnavailable(startRuntimeOf(userId, ask, choice.model));
+  const runtime = yield* startRuntimeOf(userId, choice.model);
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
@@ -996,8 +1080,6 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
       title,
-      // A continue keeps its source's human name, as the same teammate going on.
-      personaName: continued ? (from.source.personaName ?? undefined) : undefined,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
@@ -1022,15 +1104,32 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
     const sessions = yield* eve;
+    // Each image is kept beside the new agent's conversation first, so the agent is told its id; one the
+    // store could not keep goes unnamed, as before, rather than failing a Start whose agent already stands.
+    const files = yield* keptHandedImages(
+      { userId: agent.userId, conversationId: agent.conversationId },
+      attachments,
+    ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
+    const mentioned =
+      words === undefined ? undefined : mentionedContext(words, landing.task, reads);
+    // eve writes the first message into the transcript as its session takes it; a native harness's
+    // runner only names its line back as it takes it (`native-events/`), so the line is written here,
+    // awaiting its turn, before the runner can name it. A launch refused discards the agent, line and all.
+    // A line that could not be written discards the agent, as a refused launch does, so a retry
+    // under the same key starts it afresh rather than finding an agent that was never launched.
+    const line = isNativeRuntime(runtime.runtime)
+      ? yield* openingLine(agent, handed, files, mentioned, ask.automationOrigin).pipe(
+          Effect.tapError(() =>
+            Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
+          ),
+        )
+      : undefined;
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
         turn: BRAIN_HOST_TURN.TYPED,
-        message: eveContent(
-          handed,
-          brief.prompt === null && from === undefined ? [] : attachments,
-          words === undefined ? undefined : mentionedContext(words, landing.task, reads),
-        ),
+        message: eveContent(handed, files, mentioned),
+        ...(line === undefined ? undefined : { lineId: line }),
       })
       .pipe(
         Effect.catchTag("EveUnreachable", (failure) =>
@@ -1145,6 +1244,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   where: StartWhere,
   request: CodingAgentStartRequest,
   summaryModel?: SummaryModelOf,
+  reached?: StartReach,
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
@@ -1160,6 +1260,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     blank: request.blank,
     call: request.call,
     summaryModel,
+    reached,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));

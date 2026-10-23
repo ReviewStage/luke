@@ -125,7 +125,7 @@ test("a press on a picture opens the plan's pictures over the window, named by t
   const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
 
   act(() => {
-    view.querySelectorAll<HTMLButtonElement>(".picture-frame")[1]?.click();
+    view.querySelectorAll<HTMLButtonElement>(".picture-block button")[1]?.click();
   });
 
   const viewer = document.querySelector(".attachment-viewer");
@@ -160,7 +160,7 @@ test("who last changed a picture's section is said in the viewer over the window
   );
 
   act(() => {
-    view.querySelector<HTMLButtonElement>(".picture-frame")?.click();
+    view.querySelector<HTMLButtonElement>(".picture-block button")?.click();
   });
   const note = () => lineWords(document.querySelector(".attachment-viewer-note .actor-line"));
   assert.equal(note(), "Edited by Lee Park · now");

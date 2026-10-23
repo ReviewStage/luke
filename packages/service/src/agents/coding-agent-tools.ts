@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import type { ChatMemberSubject } from "@luke/database/models/chat-store";
 import {
   archiveIdleCodingAgent,
   awaitingLinesOfReached,
@@ -41,11 +42,12 @@ import type { StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
+  harnessNameOf,
   runtimeChoiceRefusal,
   runtimeChoiceRefusalWords,
   runtimeModels,
 } from "@luke/features/agent-runtime-models";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -116,6 +118,11 @@ import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { AgentSessions } from "./brain-host/eve-sessions.js";
+import {
+  forwardedImageRefusalWords,
+  forwardedImages,
+  type ImageForwarder,
+} from "./coder-host/forwarded-images.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
@@ -358,7 +365,8 @@ export const START_CODING_AGENT_REFUSAL = {
     `${CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
     `bounded the same or none, a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
     "characters or none, a branch as one git branch name or none, a model with its effort, " +
-    "both or neither, and a taskId or none.",
+    `both or neither, a taskId or none, and images as at most ${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} ` +
+    "attachment ids or none.",
   NO_TASK:
     `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} ` +
     `answered it, or make one with ${AGENT_TOOL.CREATE_TASK} first.`,
@@ -391,6 +399,8 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or its starter chooses the API key in Settings.",
   PLAN_INELIGIBLE:
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
+  CREDENTIAL_MISSING:
+    "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no coding agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -437,6 +447,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_CODING_AGENT_REFUSAL.PLAN_UNREACHABLE],
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_CODING_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
@@ -459,6 +470,8 @@ export interface CodingAgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
   readonly eve: AgentSessions | undefined;
+  /** eve as the deployment acting for any account, such as the creator an automation's run starts as, whoever fired it; nothing where the deployment names no secret or no origin for eve. */
+  readonly eveAs?: ((account: string) => AgentSessions) | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
@@ -508,6 +521,11 @@ const CODER_READ_AGENT_INPUT = Schema.Struct({
     ),
   ),
 });
+
+/** A bound in bytes as a tool's words say it, in megabytes. */
+function megabytesOf(bytes: number): string {
+  return `${bytes / 1_000_000} MB`;
+}
 
 /** A prompt or a note a start may name: bounded apart from a message, since a brief to a worker on a long plan is quoted whole. */
 const START_PROMPT = Schema.Trim.check(
@@ -562,11 +580,22 @@ const START_AGENT_INPUT = Schema.Struct({
         "message; leave it out where there is nothing beyond the plan.",
     ),
   ),
+  images: Schema.optionalKey(
+    describeWire(
+      Schema.Array(wireUuidSchema).check(Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS)),
+      "Pictures handed to the agent with its first message, which it sees as images: at most " +
+        `${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids, each a picture of your own ` +
+        `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept, or of a chat message you can ` +
+        `read; each at most ${megabytesOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES)} and all of them ` +
+        `${megabytesOf(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES)} together, since a larger one is ` +
+        "refused, never made smaller. Leave it out to hand none.",
+    ),
+  ),
   title: Schema.optionalKey(
     describeWire(
       START_TITLE,
-      "The agent's title from the start, what it works on, shown beside the human name it is " +
-        "given, such as the pull request it will open; leave it out to have it named from what it is told.",
+      "The agent's title from the start, how the developer sees it named, such as the pull " +
+        "request it will open; leave it out to have it named from what it is told.",
     ),
   ),
   branch: Schema.optionalKey(
@@ -696,7 +725,7 @@ export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
     "List the coding agents of your workspace, on any task or none and started by any member, " +
-    "yourself left out: each with its id, its name (the human name the developer sees it by, where it has one), its title (what it works on), the model " +
+    "yourself left out: each with its id, its title (how the developer sees it named; a member's operator is named Luke instead), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
     "sandbox is on if a turn " +
@@ -735,7 +764,8 @@ export const START_AGENT_TOOL = {
     "Start a new coding agent on the task you work on, or on another task of your workspace by " +
     `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer's Start ` +
     "button would: on the task's plan itself with no prompt, or on the prompt given in the " +
-    "plan's place, with the note after either. Start it on the task you work on, taskId left " +
+    "plan's place, with the note after either and any pictures images names, which it sees as " +
+    "images. Start it on the task you work on, taskId left " +
     "out, for any part of that task's work, even one that runs apart from yours, so its " +
     "branch, pull request, and transcript stand under that task; name another task only for " +
     "work unrelated to it, or where the developer asked for that, and for work that should " +
@@ -1051,7 +1081,7 @@ interface AgentReading {
   /** Whether the agent works on the call's own task. */
   readonly onYourTask: boolean;
   readonly archived: boolean;
-  /** The human name the agent was given, as its tab shows it and its mention names it; none for an agent from before names were given, which goes by its title. */
+  /** The name the agent goes by apart from its title, as its tab shows it and its mention names it: Luke for an operator, none for any other agent. */
   readonly name?: string;
   /** The agent's title, what it works on, which update_agent renames; the model's id where it has none yet. */
   readonly title: string;
@@ -1220,8 +1250,11 @@ function stewardRefused(
   return stewardRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, agent, act);
 }
 
-/** A refusal's words, with when a plan's reached limit resets where the provider said. */
+/** A refusal's words, with when a plan's reached limit resets where the provider said, and which harness to connect where a credential is missing. */
 function withReset(words: string, refusal: HostedRefusal): string {
+  if (refusal.provider !== undefined) {
+    return `${words} The model's provider is connected as ${harnessNameOf(refusal.provider)}.`;
+  }
   return refusal.resetsAt === undefined
     ? words
     : `${words} It resets at ${new Date(refusal.resetsAt).toISOString()}.`;
@@ -1236,7 +1269,7 @@ function startRefusalWords(refusal: HostedRefusal): string {
 }
 
 /** A choice the catalog refused, the one named or the member's stored default, said with every model offered and the efforts each lists, so the model can try again or ask. */
-function choiceRefusal(
+export function choiceRefusal(
   choice: ModelChoice | undefined,
   offered: readonly OfferedModel[],
   lead = "Not started",
@@ -1249,12 +1282,12 @@ function choiceRefusal(
   return `${lead}: ${refused}. The choices are: ${choices}.`;
 }
 
-/** An agent by the name its tab shows: Luke for an operator, its human name, else its title, or its model's id where it has none yet. */
+/** An agent by the name its tab shows: Luke for an operator, else its title, or its model's id where it has none yet. */
 function agentName(agent: CodingAgent): string {
   return agentGivenName(agent) ?? agent.title ?? agent.model;
 }
 
-/** The name an answer names an agent by, Luke for an operator and its human name for any other, where it goes by one. */
+/** The name an answer names an agent by apart from its title: Luke for an operator, none for any other agent. */
 function givenNameOf(agent: CodingAgent): { name?: string } {
   const name = agentGivenName(agent);
   return name === undefined ? {} : { name };
@@ -1599,6 +1632,29 @@ function startFromRefusalWords(
   return startRefusalWords(refusal);
 }
 
+/**
+ * Who hands pictures on in the caller's name: a coding agent its own
+ * conversation's and its workspace's chat's as its chat member reads them;
+ * Luke on a call, which keeps no conversation of its own here, the chat's as
+ * the member on the call reads them.
+ */
+const forwarderOf = (caller: AgentCaller) =>
+  Effect.map(callerWorkspace(caller), (workspace): ImageForwarder => {
+    const userId = callerUserId(caller);
+    const reader: ChatMemberSubject =
+      caller.kind === AGENT_CALLER.AGENT
+        ? { kind: MEMBER_KIND.AGENT, agentId: caller.agent.id }
+        : { kind: MEMBER_KIND.HUMAN, userId };
+    return {
+      userId,
+      conversationId: caller.kind === AGENT_CALLER.AGENT ? caller.agent.conversationId : undefined,
+      chat: Option.match(workspace, {
+        onNone: () => undefined,
+        onSome: (organizationId) => ({ organizationId, reader }),
+      }),
+    };
+  });
+
 /** Why a start's input asks for nothing that can start, read before anything is: a source with a prompt or a branch, or a coding agent continuing itself. */
 function startInputRefusal(
   caller: AgentCaller,
@@ -1657,9 +1713,10 @@ export function runStartAgent(
     Effect.gen(function* () {
       // Another task, or another agent's, is started on only where it is of the caller's
       // own workspace; a call run again after its start landed answers what it made
-      // (`startedBefore`), before a source is read, which its own continue has since stopped.
+      // (`startedBefore`), before a source is read, which its own continue has since stopped,
+      // or the pictures it named, which may be gone since.
       const elsewhere = from !== undefined || (named !== undefined && named !== ownTask);
-      if (elsewhere) {
+      if (elsewhere || asked.success.images !== undefined) {
         const before = yield* startedBefore(call);
         if (Option.isSome(before)) return before.value;
       }
@@ -1676,6 +1733,14 @@ export function runStartAgent(
       const place: StartWhere | undefined =
         landing?.success.place ?? (taskId === null ? undefined : { taskId });
       if (place === undefined) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
+      // The pictures it is handed are read as the caller may read them, and refused whole where one is not.
+      const images =
+        asked.success.images === undefined
+          ? Result.succeed([])
+          : yield* forwardedImages(yield* forwarderOf(caller), asked.success.images);
+      if (Result.isFailure(images)) {
+        return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
+      }
       // An agent a coding agent starts hears who started it, and where to report back: in the
       // chat of the task they share, or in a direct message to it otherwise.
       const note =
@@ -1692,6 +1757,7 @@ export function runStartAgent(
         choice,
         prompt,
         note,
+        attachments: images.success,
         title: asked.success.title,
         branch: asked.success.branch,
         from,
@@ -1872,11 +1938,18 @@ const sectionAsked = (
     });
   });
 
-/** Whether every change named already stands on the task as its member reads it. */
-function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
+/**
+ * Whether every change named already stands on the task as its member reads
+ * it. Note that a repository confirmed again stands only where it is reached
+ * as the task records it, because the write records the access it was reached
+ * through.
+ */
+function changesStand(stored: StoredTask, changes: TaskChanges): boolean {
+  const { task } = stored;
   return (
     (changes.name === undefined || changes.name === task.name) &&
     (changes.repository === undefined || changes.repository === task.repository) &&
+    (changes.githubAccess === undefined || changes.githubAccess === stored.githubAccess) &&
     (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined)) &&
     (changes.status === undefined || changes.status === task.status) &&
     (changes.priority === undefined || changes.priority === task.priority) &&
@@ -2040,7 +2113,7 @@ export function runUpdateTask(
         return agentToolRejected(relinked.failure);
       }
       const already =
-        changesStand(read.value.task, asWritten) &&
+        changesStand(read.value, asWritten) &&
         (placing?.success.stands ?? true) &&
         (relinked === undefined || issueChangesStand(relinked.success));
       // The task's change and its place in the sidebar are one transaction, so a place refused, its

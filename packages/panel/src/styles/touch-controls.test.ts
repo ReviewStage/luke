@@ -8,18 +8,14 @@ import {
   LIST_ROW_META,
   List,
   ListRow,
+  MESSAGE_ACTIONS_PLACEMENT,
+  MessageActions,
+  type MessageActionsPlacement,
 } from "@luke/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import {
-  MESSAGE_ACTIONS_PLACEMENT,
-  Message,
-  MessageAction,
-  MessageActions,
-  type MessageActionsPlacement,
-  MessageContent,
-} from "../ai-elements/message.js";
+import { Message, MessageAction, MessageContent } from "../ai-elements/message.js";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
@@ -113,16 +109,19 @@ const HOVER_ONLY: readonly {
   {
     name: "a tab's × other than the chosen tab's",
     piece: {
-      className: "tab-strip",
+      className: "luke-tabs",
       children: [
         {
-          className: "tab",
+          className: "luke-tab",
           data: { selected: "false", closable: "true", marked: "false" },
-          children: [{ tag: "span", className: "tab-button" }, { className: "tab-close" }],
+          children: [
+            { tag: "span", className: "luke-tab-button" },
+            { className: "luke-tab-close" },
+          ],
         },
       ],
     },
-    control: ".tab-close",
+    control: ".luke-tab-close",
   },
   {
     name: "a plan section's byline",
@@ -183,11 +182,11 @@ const HOVER_ONLY: readonly {
     name: "a toast's ×",
     piece: {
       tag: "li",
-      className: "toast",
+      className: "luke-toast",
       data: { action: "true" },
-      children: [{ tag: "span", className: "toast-dismiss" }],
+      children: [{ tag: "span", className: "luke-toast-dismiss" }],
     },
-    control: ".toast-dismiss",
+    control: ".luke-toast-dismiss",
   },
 ];
 
@@ -252,16 +251,19 @@ test("on a touch screen a failed agent's tab keeps its mark rather than its ×",
   layFor(true);
   const close = drawn(
     {
-      className: "tab-strip",
+      className: "luke-tabs",
       children: [
         {
-          className: "tab",
+          className: "luke-tab",
           data: { selected: "false", closable: "true", marked: "true" },
-          children: [{ tag: "span", className: "tab-end-mark" }, { className: "tab-close" }],
+          children: [
+            { tag: "span", className: "luke-tab-end-mark" },
+            { className: "luke-tab-close" },
+          ],
         },
       ],
     },
-    ".tab-close",
+    ".luke-tab-close",
   );
 
   assert.ok(faded(close));
@@ -291,7 +293,7 @@ function tappableMessage(placement: MessageActionsPlacement) {
   const part = (selector: string) =>
     container.querySelector<HTMLElement>(selector) ?? assert.fail(selector);
   return {
-    actions: () => part(".message-actions"),
+    actions: () => part(".luke-message-actions"),
     tap: (selector: string) => act(() => part(selector).click()),
   };
 }

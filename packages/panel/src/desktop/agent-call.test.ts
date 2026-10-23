@@ -179,7 +179,7 @@ function videoHeight(page: HTMLElement): string | undefined {
 /** One of the video's top-corner handles, which it must have. */
 function corner(page: HTMLElement, side: "left" | "right"): HTMLElement {
   const handle = videoRoom(page)?.querySelector<HTMLElement>(
-    `.agent-call-video-corner[data-corner="${side}"]`,
+    `.luke-resize-corner[data-corner="${side}"]`,
   );
   assert.ok(handle, `the video has a ${side} corner handle`);
   return handle;
@@ -235,7 +235,7 @@ test("on a call no line says what Luke is doing: no Listening, no Thinking, and 
   const tab = page.querySelector(".agent-tab");
   assert.ok(tab);
   assert.doesNotMatch(tab.textContent ?? "", /Thinking|Listening|Writing notes/u);
-  assert.equal(tab.querySelector(".thinking-dots"), null);
+  assert.equal(tab.querySelector(".luke-thinking-dots"), null);
   assert.equal(tab.querySelector(".call-status"), null);
 });
 
@@ -352,7 +352,7 @@ test("hovering the video brings out its resize controls, each named and reached 
   const laid = layContainersAt({});
   try {
     const controls = () =>
-      [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner")]
+      [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")]
         .map((each) => getComputedStyle(each).opacity)
         .join(" ");
     assert.equal(room.dataset.reveal, "false");
@@ -373,7 +373,7 @@ test("hovering the video brings out its resize controls, each named and reached 
   }
   const touch = layContainersAt({}, { touch: true });
   try {
-    const controls = [...room.querySelectorAll<HTMLElement>(".agent-call-video-corner")].map(
+    const controls = [...room.querySelectorAll<HTMLElement>(".luke-resize-corner")].map(
       (each) => getComputedStyle(each).opacity,
     );
     assert.deepEqual(controls, ["1", "1"], "a touch screen, which has no hover, always shows them");
@@ -419,17 +419,17 @@ test("on a call the voice's notice line floats just over the video's room, never
   assert.equal(tab.querySelector(".voice-caption, .voice-caption-speaker"), null, "no captions");
 });
 
-test("an agent on Claude Code or Codex draws no Call button and no call foot, even where the platform has a voice", async () => {
+test("an agent on Claude Code or Codex offers the same Call button, which calls that agent, where the platform has a voice", async () => {
   for (const runtime of NATIVE_CODING_AGENT_RUNTIMES) {
     const pressed: string[] = [];
     const page = await mountOn({ onPress: (agentId) => pressed.push(agentId) }, IDLE_VOICE_VIEW, {
       ...AGENT,
       runtime,
     });
-    assert.ok(page.querySelector(".dictate-button"), `${runtime}: the composer stands`);
-    assert.equal(callButton(page), null, `${runtime}: no Call button`);
-    assert.equal(page.querySelector(".agent-call-foot"), null, `${runtime}: no call foot`);
-    assert.deepEqual(pressed, []);
+    const call = callButton(page);
+    assert.ok(call !== null, `${runtime}: the Call button stands`);
+    act(() => call.click());
+    assert.deepEqual(pressed, [AGENT.id], `${runtime}: it calls the agent`);
     act(() => roots.pop()?.unmount());
     document.body.innerHTML = "";
   }

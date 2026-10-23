@@ -1,0 +1,47 @@
+/* card-press.css -- a whole card's press: a bare button holding the words
+   that name the card, and its reach, laid over the card it stands in, which
+   carries its ring and its pressed fill. The card's own look is its app's. */
+
+@layer components {
+  .luke-card-press {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+  }
+
+  .luke-card-press:disabled {
+    cursor: default;
+  }
+
+  /* The reach covers every edge of the card: the nearest positioned box.
+     Its ring, the keyboard's (`data-focus-ring`), is drawn inside the
+     card's edge, so a scroller the card stands at the edge of never cuts
+     it off. */
+  .luke-card-press-reach {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--luke-control-radius);
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+    transition: background-color var(--luke-duration-hover) ease;
+  }
+
+  .luke-card-press[data-corner="menu"] > .luke-card-press-reach {
+    border-radius: var(--luke-menu-radius);
+  }
+
+  /* Note that a press through its card lets the pointer reach what the card holds, its hover cards among it, and hears the card's clicks instead. */
+  .luke-card-press[data-reach="card"] > .luke-card-press-reach {
+    pointer-events: none;
+  }
+
+  .luke-card-press:active:not(:disabled) > .luke-card-press-reach {
+    background: var(--luke-color-fill-pressed);
+  }
+}

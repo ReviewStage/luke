@@ -19,6 +19,16 @@
     overflow-wrap: anywhere;
   }
 
+  /* A label with its count at the line's far end, on the label's
+     baseline. */
+  .luke-field-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--luke-control-gap);
+    min-width: 0;
+  }
+
   :is(.luke-field-description, .luke-field-error) {
     margin: 0;
     font-family: var(--luke-font-sans);
@@ -34,6 +44,26 @@
 
   .luke-field-error {
     color: var(--luke-color-danger-text);
+  }
+
+  /* An error arriving fades in and drops into its line from just above, the
+     pair every arriving element rides. */
+  .luke-field-error:not(:empty) {
+    animation:
+      luke-field-error-fade var(--luke-duration-quick) ease-out,
+      luke-field-error-drop var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @keyframes luke-field-error-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-field-error-drop {
+    from {
+      transform: translateY(-4px);
+    }
   }
 
   /* Empty, it keeps its place in the tree, so its live region is standing

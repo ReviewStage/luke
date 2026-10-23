@@ -26,7 +26,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { formatDate, formatNumber } from "@luke/ui/admin-format";
+import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useEffect, useState } from "react";
 import { AccountCell } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
@@ -156,7 +156,7 @@ function workspaceColumns(
     key,
     label,
     kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    cell: (row: AdminWorkspaceRow) => formatNumber(value(row)),
+    cell: (row: AdminWorkspaceRow) => formatCount(value(row)),
   });
   return [
     {
@@ -210,14 +210,14 @@ function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
         <div className={STAT_CELL}>
           <StatCard
             label="Shared workspaces"
-            value={formatNumber(summary.shared)}
+            value={formatCount(summary.shared)}
             hint="2+ members · excludes personal"
           />
         </div>
         <div className={STAT_CELL}>
           <StatCard
             label="Active this week"
-            value={formatNumber(summary.sharedActiveWeek)}
+            value={formatCount(summary.sharedActiveWeek)}
             hint={`${formatShare(activeShare)} of shared`}
             title="A task or coding agent started, or a plan revised, in the last 7 UTC days"
           />
@@ -228,16 +228,16 @@ function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
           <StatCard
             label="Invites accepted"
             value={formatShare(summary.invitations.acceptanceRate)}
-            hint={`${formatNumber(summary.invitations.pending)} pending · ${formatNumber(summary.invitations.expired)} expired`}
-            title={`${formatNumber(summary.invitations.accepted)} accepted of ${formatNumber(summary.invitations.settled)} no longer open, across every workspace`}
+            hint={`${formatCount(summary.invitations.pending)} pending · ${formatCount(summary.invitations.expired)} expired`}
+            title={`${formatCount(summary.invitations.accepted)} accepted of ${formatCount(summary.invitations.settled)} no longer open, across every workspace`}
           />
         </div>
         <div className={STAT_CELL}>
           <StatCard
             label="With GitHub installed"
             value={formatShare(summary.github.activeShare)}
-            hint={`${formatNumber(summary.github.sharedWithSuspended)} suspended`}
-            title={`${formatNumber(summary.github.sharedWithActive)} shared workspaces with an active installation`}
+            hint={`${formatCount(summary.github.sharedWithSuspended)} suspended`}
+            title={`${formatCount(summary.github.sharedWithActive)} shared workspaces with an active installation`}
           />
         </div>
       </div>
@@ -253,7 +253,7 @@ function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
       Tasks and Agents count those started in the last {list.activityDays} UTC days, and Merged the
       distinct pull requests from the workspace's agents that merged in them.
       {truncated
-        ? ` Only the ${formatNumber(list.rows.length)} busiest of ${formatNumber(list.total)} are listed. Search reads every workspace.`
+        ? ` Only the ${formatCount(list.rows.length)} busiest of ${formatCount(list.total)} are listed. Search reads every workspace.`
         : ""}
     </Text>
   );
@@ -375,7 +375,7 @@ export function WorkspacesScreen({
           <>
             {search}
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {formatNumber(rows.length)} of {formatNumber(list.total)} workspaces
+              {formatCount(rows.length)} of {formatCount(list.total)} workspaces
               {list.search === undefined ? "" : " matching"}
             </Text>
           </>

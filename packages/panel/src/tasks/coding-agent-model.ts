@@ -1,4 +1,12 @@
-import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import { recordedVideosOf } from "@luke/features/agent-pictures-model";
+import { harnessNameOf } from "@luke/features/agent-runtime-models";
+import {
+  AGENT_TOOL,
+  CLAUDE_CODE_TOOL,
+  CONNECTION_TOOL,
+  EVE_TOOL,
+  RETIRED_TOOL,
+} from "@luke/features/agent-tools";
 import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -66,6 +74,7 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
@@ -79,11 +88,11 @@ import {
   USER_MESSAGE_METADATA,
   type WireValue,
 } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
 import { drawnCall } from "./native-tool-calls.js";
-import { dayAndTimeText } from "./task-time.js";
 import {
   changesSidebar,
   remoteCallOf,
@@ -520,6 +529,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
+    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
@@ -533,6 +543,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -578,11 +589,41 @@ export function archiveWords(archived: boolean): {
   return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
 }
 
-/** A refused start or message as the view hears it: why, why the repository is out of reach where it is and the service said, and when a plan's reached limit resets where it is that and the provider said. */
+/** A refused start or message as the view hears it: why, why the repository is out of reach where it is and the service said, when a plan's reached limit resets where it is that and the provider said, and the provider whose credential is missing where it is that. */
 export interface RefusedCall {
   readonly failure: CodingAgentCallFailure;
   readonly unreached?: RepositoryUnreached | undefined;
   readonly resetsAt?: number | undefined;
+  readonly provider?: ModelProvider | undefined;
+}
+
+/** What a missing credential keeps the developer from: starting an agent, or messaging one. */
+const ACTION = { START: "start an agent", MESSAGE: "message this agent" } as const;
+
+/** What a model menu says beside a model whose provider no subscription or API key of the account's pays for, which it draws disabled. */
+export const MODEL_NOT_CONNECTED = "Not connected";
+
+/** What an agent Luke's key paid for says to a message, since it never moves to another payer. */
+export const LUKE_PAID_REFUSAL = "Luke's key no longer runs agents. Continue in a new one.";
+
+/** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
+function credentialMissingWords(
+  provider: ModelProvider | undefined,
+  action: (typeof ACTION)[keyof typeof ACTION],
+): string {
+  const harness = provider === undefined ? "Claude Code or Codex" : harnessNameOf(provider);
+  return `Connect ${harness} in Settings to ${action}.`;
+}
+
+/** A missing credential's note, whose press opens Settings › Agents. */
+function credentialMissingFailure(
+  refused: RefusedCall,
+  action: (typeof ACTION)[keyof typeof ACTION],
+): Failure {
+  return {
+    reason: FAILURE_REASON.CONNECT_AGENTS,
+    text: credentialMissingWords(refused.provider, action),
+  };
 }
 
 /**
@@ -640,6 +681,9 @@ function planRefusalWords(
 export function startFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
+  }
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    return credentialMissingFailure(refused, ACTION.START);
   }
   return callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure));
 }
@@ -742,7 +786,9 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This task no longer exists.";
+    // Note that only a dictated clip is refused for want of an OpenAI key, so a Start never hears it.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
+    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return "The agent could not be started. Try again.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return START_RETIRED;
@@ -758,6 +804,8 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+      return credentialMissingWords(undefined, ACTION.START);
   }
 }
 
@@ -772,6 +820,12 @@ export function messageFailureNote(
   }
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
+  // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    return payer === CODING_AGENT_PAYER.LUKE
+      ? callFailure(LUKE_PAID_REFUSAL)
+      : credentialMissingFailure(refused, ACTION.MESSAGE);
+  }
   return callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure));
 }
 
@@ -780,9 +834,10 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    // A message names no repository and no model, so neither refusal is its own.
+    // A message names no repository, no model, and no clip, so none of these refusals is its own.
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
+    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return "The message could not be sent. Try again.";
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
@@ -801,6 +856,8 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+      return credentialMissingWords(undefined, ACTION.MESSAGE);
   }
 }
 
@@ -1417,9 +1474,28 @@ export function sidebarCallIds(messages: readonly CodingAgentMessage[]): readonl
     );
 }
 
-/** Whether a call is a delegation to a worker, a coding agent's or the brain's, which the tab draws as a subagent's row rather than a call's. */
+/**
+ * Whether a call is a delegation to a worker, a coding agent's, the brain's,
+ * or a native harness's subagent (`native-tool-calls.ts` draws Codex's spawn
+ * as Claude Code's `Agent`), which the tab draws as a subagent's row rather
+ * than a call's.
+ */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
+  return (
+    part.tool === CODING_AGENT_DELEGATE_TOOL ||
+    part.tool === EVE_TOOL.WORKER ||
+    nativeSubagent(part)
+  );
+}
+
+/**
+ * Whether a delegation is a native harness's subagent, whose own work Luke
+ * keeps no transcript of yet, so its row opens no worker's tab.
+ */
+export function nativeSubagent(
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>,
+): boolean {
+  return part.tool === CLAUDE_CODE_TOOL.AGENT;
 }
 
 /** Whether a part is a delegation to a worker (`delegates`). */
@@ -1533,6 +1609,11 @@ function isShownSet(part: AgentPart): part is ToolPart {
     isRecord(part.output) &&
     part.output.status === ACTION_RESULT_STATUS.ACCEPTED
   );
+}
+
+/** Whether a part is a browser call that kept a recording, which a reader watches as a shown set and never folds away. */
+function keptRecording(part: AgentPart): boolean {
+  return part.kind === AGENT_PART.TOOL && recordedVideosOf(part.tool, part.output).length > 0;
 }
 
 /**
@@ -1664,7 +1745,9 @@ export function agentRows(
       part.kind === AGENT_PART.TOOL &&
       (workers.get(part.callId) ?? part.state) === TOOL_STATE.OUTPUT_ERROR,
     kept: (part) =>
-      (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) || isShownSet(part),
+      (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) ||
+      isShownSet(part) ||
+      keptRecording(part),
   };
   return turnRows(parts, reading, {
     key: message.id,
@@ -2089,6 +2172,40 @@ function sentLineMessage(line: SentLine): CodingAgentMessage {
   };
 }
 
+/**
+ * The line an agent New task started is drawn on before its transcript is
+ * read: the developer's words as they went, under the id their start's key
+ * names, on their way.
+ */
+export function openingLineOf(words: {
+  readonly key: string;
+  readonly prompt: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+}): SentLine {
+  return {
+    id: sentLineId(words.key),
+    clientKey: words.key,
+    text: words.prompt.trim(),
+    attachments: words.attachments,
+    steers: false,
+    state: SENT_LINE_STATE.PENDING,
+  };
+}
+
+/**
+ * The line an agent was started on, while its transcript reads back no line
+ * of the developer's. Note that the service writes that first row under a
+ * key of its own, or eve under none, so the line is let go by any row of
+ * theirs rather than by its id, and the first is always that one.
+ */
+export function unreadOpeningLine(
+  opening: SentLine | undefined,
+  messages: readonly CodingAgentMessage[],
+): SentLine | undefined {
+  if (opening === undefined) return undefined;
+  return messages.some((message) => message.role === MESSAGE_ROLE.USER) ? undefined : opening;
+}
+
 /** The transcript's rows, with the lines sent and not yet read back at its end, in the order they went. */
 export function agentLines(
   messages: readonly CodingAgentMessage[],
@@ -2138,10 +2255,17 @@ export function pullRequestNumberLabel(
   return `#${pullRequest.number}`;
 }
 
-/** The word the row says where the pull request stands, only where that changes what the developer would do: a draft, merged, or closed; nothing for one open. */
-export function pullRequestStateWord(state: PullRequestState): string | undefined {
-  return state === PULL_REQUEST_STATE.OPEN ? undefined : PULL_REQUEST_STATE_LABEL[state];
+/** The word the row says where the pull request stands, only where that changes what the developer would do: a draft, merged, closed, or open in GitHub's merge queue, queued; nothing for one open otherwise. */
+export function pullRequestStateWord(
+  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+): string | undefined {
+  const { state } = pullRequest;
+  if (state !== PULL_REQUEST_STATE.OPEN) return PULL_REQUEST_STATE_LABEL[state];
+  return pullRequest.queued === true ? QUEUED_LABEL : undefined;
 }
+
+/** What the row says of an open pull request GitHub's merge queue holds, as its tab's pill says it. */
+const QUEUED_LABEL = "Queued";
 
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(

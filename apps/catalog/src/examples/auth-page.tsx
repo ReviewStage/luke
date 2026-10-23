@@ -1,11 +1,13 @@
+import { LANDING_TONE } from "@luke/features/landing-outcome";
 import {
-  AUTH_STATUS_TONE,
+  AuthMark,
   AuthPage,
   BUTTON_VARIANT,
   Button,
   FormField,
   MARK_PROVIDER,
   ProviderButton,
+  SocialSignInCard,
   TEXT_FIELD_TYPE,
   TextField,
   WingFace,
@@ -15,11 +17,15 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * auth-page.tsx -- the sign-in card with its provider choices, the consent
- * card in both its states, and a form with an error on a phone's width, each
- * in a frame the size of the screen it stands for. Every name and address is
+ * auth-page.tsx -- the sign-in page with its provider choices, a landing's
+ * ringed mark on its way, settled, and failed, with and
+ * without Open Luke, and a form with an error on a phone's width, each in a
+ * frame the size of the screen it stands for. Every name and address is
  * made up.
  */
+
+/** Open Luke as a page offers it; the catalog goes nowhere. */
+const OPEN_LUKE = { label: "Open Luke", href: "#" } as const;
 
 function Face(): React.JSX.Element {
   return (
@@ -81,22 +87,71 @@ function AuthPages(): React.JSX.Element {
           </AuthPage>
         </div>
       </CatalogSection>
-      <CatalogSection id="auth-status" title="Status, settled and failed">
+      <CatalogSection id="auth-social-card" title="Social sign-in card, opening and failed">
+        <div className="catalog-screens">
+          <div className="catalog-screen catalog-screen-phone">
+            <SocialSignInCard
+              mark={<Face />}
+              title="Luke admin"
+              pending={undefined}
+              onPress={() => undefined}
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <SocialSignInCard
+              mark={<Face />}
+              title="Sign in to accept your invitation"
+              description="Sign in with the account that uses someone@acme-corporation.example."
+              pending="github"
+              failed
+              onPress={() => undefined}
+            />
+          </div>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="auth-landing" title="Landing, on its way, settled, and failed">
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<Face />}
-              status={{ tone: AUTH_STATUS_TONE.SETTLED, label: "Confirming" }}
+              mark={<AuthMark provider={MARK_PROVIDER.GITHUB} />}
+              title="Connecting GitHub…"
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<AuthMark provider={MARK_PROVIDER.GITHUB} tone={LANDING_TONE.SETTLED} />}
+              title="GitHub is connected to your workspace"
+              description="Everyone in the workspace can use it. You can close this tab."
+              action={OPEN_LUKE}
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.FAILED} />}
+              title="Luke could not reach Notion"
+              description="Try again in a moment."
+              action={OPEN_LUKE}
+            />
+          </div>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="auth-luke"
+        title="Luke's own mark, on its way and failed, with no Open Luke"
+      >
+        <div className="catalog-screens">
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<AuthMark />}
               title="Continuing to Luke…"
               description="This window will close soon."
             />
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<Face />}
-              status={{ tone: AUTH_STATUS_TONE.ATTENTION, label: "Not completed" }}
+              mark={<AuthMark tone={LANDING_TONE.FAILED} />}
               title="Luke could not continue"
-              description="Return to Luke and start sign-in again."
+              description="Start sign-in again."
             />
           </div>
         </div>

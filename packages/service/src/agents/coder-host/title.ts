@@ -57,6 +57,13 @@ import { CURSOR_START } from "./transcript.js";
  * is filled on its child conversation (`child-titles.ts`). Nothing of the
  * conversation leaves here but to the model.
  *
+ * The model runs on the account's own API key (`account-keys.ts`'s
+ * `ownKeyOf`), never Luke's. An account that saved none, as one paying
+ * only through a subscription, is named with no model call at all: the
+ * first words of the first line of its opening, or of the automation's
+ * prompt, or of the task a subagent was handed, tidied as a model's answer
+ * is (`firstWordsTitle`).
+ *
  * A task still standing untitled, as one started from a prompt alone does,
  * takes the title its first agent to be titled is given, and keeps it: a
  * name a member or Luke gave the task, before or meanwhile, is never
@@ -68,8 +75,12 @@ const AGENT_TITLE = {
   MAX_OUTPUT_TOKENS: 64,
   /** How long the call may take before the agent goes untitled. */
   TIMEOUT: CODER.TITLE_TIMEOUT,
-  /** The least the model is asked to think, since a title is no reasoning task. */
+  /** The least an Anthropic model is asked to think, since a title is no reasoning task. */
   EFFORT: "low",
+  /** OpenAI's word for no reasoning at all, so the few output tokens a title has go to its words. */
+  OPENAI_EFFORT: "none",
+  /** The most words of its first line a title falls back to where no model names it. */
+  FALLBACK_WORDS: 6,
   /** The most of each message the call reads, which is enough to tell the task from. */
   EXCERPT_CHARS: 2_000,
   /** The newest messages read for the agent's latest answer, past the lines sent since it ended. */
@@ -82,6 +93,15 @@ const INSTRUCTIONS =
 /** The quotes a model wraps a title in, and the punctuation it ends one with. */
 const SURROUNDING_QUOTES = /^["'“”‘’`]+|["'“”‘’`]+$/gu;
 const TRAILING_PUNCTUATION = /[.!?:;,]+$/u;
+
+/** A Markdown link, whose label alone a fallback title keeps; its address may hold one level of parentheses, as a page's name often does. */
+const MARKDOWN_LINK = /\[([^[\]]*)\]\((?:[^()]|\([^()]*\))*\)/gu;
+
+/** The Markdown marks a fallback title drops: a heading's, emphasis, code, and a quote's. */
+const MARKDOWN_MARKS = /[#*`>]+/gu;
+
+/** A list item's marker at the start of a line. */
+const LIST_MARKER = /^\s*(?:[-+]|\d+\.)\s+/u;
 
 /** Who each message of an agent's exchange is said by, as the call reads it. */
 const SPEAKER = {
@@ -103,6 +123,31 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
     return Option.none();
   }
   return Option.some(title);
+}
+
+/**
+ * A title with no model call: the first words of the first line with any
+ * words on it, its Markdown marks and links' addresses left out, tidied as
+ * a model's answer is; nothing where no words stand. Note that the text is
+ * cut to the excerpt first, and that a link's label holds no bracket and its
+ * address parentheses one level deep at most, because the words are the developer's and a
+ * pattern that may rescan them from every bracket would be slow on long ones.
+ */
+function firstWordsTitle(text: string): Option.Option<string> {
+  const line =
+    text
+      .slice(0, AGENT_TITLE.EXCERPT_CHARS)
+      .split("\n")
+      .map((each) =>
+        each
+          .replace(LIST_MARKER, "")
+          .replaceAll(MARKDOWN_LINK, "$1")
+          .replaceAll(MARKDOWN_MARKS, " ")
+          .trim(),
+      )
+      .find((each) => each.length > 0) ?? "";
+  const words = line.split(/\s+/u).slice(0, AGENT_TITLE.FALLBACK_WORDS).join(" ");
+  return tidyAgentTitle(words);
 }
 
 /** A part's words without the replay of another agent or the note's marker: the brief and the note where either stands, the part whole otherwise. */
@@ -208,18 +253,28 @@ function turnsNoticed(
   );
 }
 
+/** What an agent is named from: the exchange a model reads, and the opening a title with no model is cut from. */
+interface ConversationNaming {
+  readonly exchange: string;
+  readonly opening: string;
+}
+
+/** Nothing to name an agent from yet. */
+const NOTHING_TO_NAME: ConversationNaming = { exchange: "", opening: "" };
+
 /**
  * What an agent is named from: the developer's first message, or an
  * automation's prompt alone where its run started the agent, their latest
  * where it is another, so a retry past a greeting reads the task that
  * followed it, and the agent's latest answer, each by its speaker, a
- * message with no words left out.
+ * message with no words left out; and, for a title with no model, the
+ * first of the developer's words alone, or the automation's prompt.
  */
 function conversationExchange(
   target: ConversationTarget,
   tools: ToolSet,
   origin: StoredAutomationOrigin | null,
-): Effect.Effect<string, QueryError | Schema.SchemaError, DatabaseServices> {
+): Effect.Effect<ConversationNaming, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
     const { userId, conversationId } = target;
     const opening = yield* listMessagesPast(userId, conversationId, tools, CURSOR_START, 1);
@@ -235,8 +290,8 @@ function conversationExchange(
     const answered = answerToDeveloper(newest, yield* turnsNoticed(target, tools, newest));
     const opened = saidByDeveloper(first?.message) ? first : undefined;
     // An answer to no word of the developer's, as to a wake the brain took before anyone spoke, names nothing.
-    if (origin === null && opened === undefined && said === undefined) return "";
-    return [
+    if (origin === null && opened === undefined && said === undefined) return NOTHING_TO_NAME;
+    const exchange = [
       {
         speaker: SPEAKER.DEVELOPER,
         words: origin === null ? excerptOf(opened?.message) : originWords(origin),
@@ -250,6 +305,8 @@ function conversationExchange(
       .filter((line) => line.words.length > 0)
       .map((line) => `${line.speaker}: ${line.words}`)
       .join("\n\n");
+    const firstWords = origin === null ? excerptOf((opened ?? said)?.message) : origin.prompt;
+    return { exchange, opening: firstWords };
   });
 }
 
@@ -264,7 +321,10 @@ function generateAgentTitle(
       system: INSTRUCTIONS,
       prompt: named,
       maxOutputTokens: AGENT_TITLE.MAX_OUTPUT_TOKENS,
-      providerOptions: { anthropic: { effort: AGENT_TITLE.EFFORT } },
+      providerOptions: {
+        anthropic: { effort: AGENT_TITLE.EFFORT },
+        openai: { reasoningEffort: AGENT_TITLE.OPENAI_EFFORT },
+      },
     }),
   ).pipe(
     Effect.map((answer) => tidyAgentTitle(answer.text)),
@@ -282,12 +342,13 @@ function generateAgentTitle(
 /**
  * The title generated from a conversation's first exchange, as one of its
  * first `CODER.TITLE_TURNS` turns asks for it, under the tools given, its
- * automation's origin in its opening's place where one started it. Nothing
+ * automation's origin in its opening's place where one started it, or cut
+ * from its opening where no model is given. Nothing
  * for a conversation past those turns, one with no words in it yet, and a
  * call that answered nothing, so the next turn asks again.
  */
 function titleOfConversation(
-  model: LanguageModel,
+  model: LanguageModel | undefined,
   target: ConversationTarget,
   tools: ToolSet,
   origin: StoredAutomationOrigin | null = null,
@@ -300,9 +361,10 @@ function titleOfConversation(
       undefined,
     );
     if (ran.earlier) return Option.none();
-    const exchange = yield* conversationExchange(target, tools, origin);
-    if (exchange.length === 0) return Option.none();
-    return yield* generateAgentTitle(model, exchange);
+    const naming = yield* conversationExchange(target, tools, origin);
+    if (naming.exchange.length === 0) return Option.none();
+    if (model === undefined) return firstWordsTitle(naming.opening);
+    return yield* generateAgentTitle(model, naming.exchange);
   });
 }
 
@@ -330,10 +392,11 @@ function titledWithTask(
  * A subagent's title generated from the task it was handed and filled on
  * its child conversation, for a child that has none yet: a title already
  * standing is never asked for again, and a call that fails leaves the child
- * untitled. A child not yet opened is filled nowhere.
+ * untitled. With no model the title is cut from the task's first words.
+ * A child not yet opened is filled nowhere.
  */
 export function titleSubagent(
-  model: LanguageModel,
+  model: LanguageModel | undefined,
   parent: ConversationTarget,
   childConversationId: string,
   task: string,
@@ -341,7 +404,8 @@ export function titleSubagent(
   return Effect.gen(function* () {
     const standing = yield* childTitlesOf(parent, [childConversationId]);
     if (standing.has(childConversationId)) return;
-    const title = yield* generateAgentTitle(model, task);
+    const title =
+      model === undefined ? firstWordsTitle(task) : yield* generateAgentTitle(model, task);
     if (Option.isNone(title)) return;
     yield* fillChildTitle(parent, childConversationId, title.value);
   });
@@ -356,9 +420,10 @@ export function titleSubagent(
  * exchange with no words in it asks nothing. A call that answers nothing
  * writes nothing, so the next words or turn's end ask again. The title
  * written also names the agent's task where it still stands untitled.
+ * With no model the title is cut from the opening's first words.
  */
 export function titleCodingAgent(
-  model: LanguageModel,
+  model: LanguageModel | undefined,
   target: ConversationTarget,
   agent: CodingAgent,
 ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {

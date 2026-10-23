@@ -179,6 +179,8 @@ export const githubPullRequestSummarySchema = EffectSchema.Struct({
   /** How many comments it holds, on its conversation and its diff together, and how many commits. */
   comments: EffectSchema.optionalKey(countedNumber),
   commits: EffectSchema.optionalKey(countedNumber),
+  /** True where it is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service older than it. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type GitHubPullRequestSummary = typeof githubPullRequestSummarySchema.Type;

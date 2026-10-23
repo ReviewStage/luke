@@ -6,13 +6,18 @@ import {
   GAP,
   Inline,
   SUBMIT_STATE,
+  TEXT_AREA_GROW_LIMIT,
+  TEXT_AREA_LOOK,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextArea,
+  Tooltip,
 } from "@luke/ui";
+import { cutReply, QUOTE_GAP, quoteOf } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputFooter,
@@ -23,7 +28,7 @@ import {
 import { useSideBundles } from "../bundle-loader.js";
 import { type ChatDraftPlace, DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
-import { enterKeyHint, enterSends } from "../enter-sends.js";
+import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
 import { imageFiles } from "../feedback-images.js";
 import {
   COMPOSER_INPUT,
@@ -31,7 +36,6 @@ import {
   type MentionNode,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -45,6 +49,7 @@ import {
   type MentionSource,
   useMentionPicker,
 } from "./mention-picker.js";
+import { ComposerQuoteView } from "./reply-to-selection.js";
 import { useMentionDoors, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -88,7 +93,12 @@ import { useKnownNames } from "./use-known-names.js";
  * pictures alone. While pictures are read the post waits for them. Where
  * the editor's bundle could not be loaded, a plain textarea stands in with
  * no list and no pictures, as a plan comment's does, so a message can
- * always be written. What
+ * always be written. Words selected in the chat and replied to are laid
+ * in as a quote block where the caret stands, as the agent box lays them
+ * (`reply-to-selection.tsx`), through the door the box hands its place
+ * (`replyDoor`), or handed with the box as it opens (`pendingQuote`) and
+ * laid in once its editor stands; the plain box takes them as a
+ * blockquote at its end, cut to the room the post has left. What
  * is typed is a person's words, so the box is out of a session recording
  * (`ph-no-capture`) as well as masked.
  */
@@ -125,6 +135,12 @@ export interface ChatComposerMentions {
   readonly crowded: (text: string) => boolean;
 }
 
+/** A quote handed to a box before it could take it, and what is told once it is in. */
+export interface PendingQuote {
+  readonly words: string;
+  readonly onQuoted: () => void;
+}
+
 /** What a chat box is handed by the place it stands in. */
 interface ChatComposerProps {
   /** The channel the box posts in, which its draft is kept under. */
@@ -139,6 +155,10 @@ interface ChatComposerProps {
   readonly keywords: readonly string[];
   /** Whether it stands under a thread, a line high, rather than at a place's foot. */
   readonly compact?: boolean;
+  /** Where the box hands the chat's Reply the door that lays a quote in, answering whether it did; none where nothing replies. */
+  readonly replyDoor?: RefObject<((words: string) => boolean) | undefined> | undefined;
+  /** A quote to lay in once the box can take it, as a Reply that opened the box hands it, `onQuoted` told once it is in. */
+  readonly pendingQuote?: PendingQuote | undefined;
   /**
    * Sends the words and the pictures, either of which may be empty, the box
    * already empty for the next post; where they are refused, hands `takeBack`
@@ -354,6 +374,47 @@ function usePastedMention(doors: MentionDoors): (words: string) => MentionNode |
         );
 }
 
+/**
+ * Hands `door` the box's way of laying a quote in, the latest drawn, for as
+ * long as the box stands, and lays `pending` in once the box is `ready`.
+ */
+function useReplyDoor(
+  door: ChatComposerProps["replyDoor"],
+  quote: (words: string) => boolean,
+  pending: PendingQuote | undefined,
+  ready: boolean,
+): void {
+  const latest = useRef(quote);
+  useLayoutEffect(() => {
+    latest.current = quote;
+  });
+  useEffect(() => {
+    if (door === undefined) return undefined;
+    door.current = (words) => latest.current(words);
+    return () => {
+      door.current = undefined;
+    };
+  }, [door]);
+  // Note that a quote handed while the editor's bundle still loads waits for it, rather than going nowhere.
+  useEffect(() => {
+    if (ready && pending !== undefined && latest.current(pending.words)) pending.onQuoted();
+  }, [pending, ready]);
+}
+
+/** A quote as the plain box writes it at the end of `draft`, cut to the room the post has left; nothing where no word of it fits. */
+function plainQuoted(draft: string, words: string): string | undefined {
+  const before = draft.trimEnd();
+  const lead = before === "" ? "" : `${before}${QUOTE_GAP}`;
+  const room = CHAT_BOUNDS.MAX_TEXT_CHARS - lead.length - QUOTE_GAP.length;
+  let kept = words;
+  while (kept !== "") {
+    const quoted = quoteOf(kept);
+    if (quoted.length <= room) return `${lead}${quoted}${QUOTE_GAP}`;
+    kept = cutReply(kept, kept.length - (quoted.length - room));
+  }
+  return undefined;
+}
+
 /** The box on the agent box's editor: `@` and `#` open the app's mention list at the word, and the microphone lays a dictation in at the caret. */
 function EditorChatComposer({
   channelId,
@@ -362,6 +423,8 @@ function EditorChatComposer({
   mentions,
   keywords,
   compact,
+  replyDoor,
+  pendingQuote,
   onSend,
   module,
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
@@ -390,6 +453,13 @@ function EditorChatComposer({
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
   const doors = useMentionDoors();
   const pasted = usePastedMention(doors);
+  // The chat's Reply lays its quote in where the caret stands, for as long as the box stands; the editor refuses it while a dictation holds the box.
+  useReplyDoor(
+    replyDoor,
+    (words) => editor.current?.insertQuote(words) === true,
+    pendingQuote,
+    module !== undefined,
+  );
 
   // Note that a send made from the box hands the caret back to it at once,
   // as a press of Send takes it, unless the caret went somewhere else
@@ -426,7 +496,6 @@ function EditorChatComposer({
       ref={card}
       className="agent-composer chat-composer"
       data-compact={String(compact === true)}
-      data-dropping={dropping ? "" : undefined}
       onDragOver={(event) => {
         if (!carriesFiles(event)) return;
         event.preventDefault();
@@ -445,6 +514,7 @@ function EditorChatComposer({
       }}
     >
       <PromptInput
+        dropping={dropping}
         onSubmit={() => {
           refocus.current = card.current?.contains(document.activeElement) === true;
           send();
@@ -483,6 +553,7 @@ function EditorChatComposer({
           }}
           onTrigger={() => undefined}
           chip={() => null}
+          quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}
           mentions={{
             onTrigger: picker.onTrigger,
             onChannelTrigger: picker.onChannelTrigger,
@@ -529,39 +600,49 @@ function PlainChatComposer({
   label,
   mentions,
   compact,
+  replyDoor,
+  pendingQuote,
   onSend,
 }: ChatComposerProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const { draft, setDraft, empty, note, send } = useChatSend(chatPlace(channelId, replyTo), onSend);
-  // The field grows with its words, a line at a time, as a plan comment's plain field does.
-  useLayoutEffect(() => {
-    const element = field.current;
-    if (element === null) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  }, [draft]);
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Note that every key an input method composes with is the method's.
-    if (event.nativeEvent.isComposing || !enterSends(event)) return;
-    event.preventDefault();
-    submitPromptInput(event.currentTarget);
-  };
-
+  // Note that the plain box has no quote block, so a reply's quote is written at its end as the Markdown it sends as.
+  useReplyDoor(
+    replyDoor,
+    (words) => {
+      const quoted = plainQuoted(draft, words);
+      if (quoted === undefined) return false;
+      setDraft(quoted);
+      field.current?.focus();
+      return true;
+    },
+    pendingQuote,
+    true,
+  );
   return (
     <div className="agent-composer chat-composer" data-compact={String(compact === true)}>
       <PromptInput onSubmit={send}>
-        <textarea
-          ref={field}
-          className="chat-composer-field ph-no-capture"
-          aria-label={label}
-          placeholder={label}
-          rows={compact === true ? 1 : 2}
-          maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
-          enterKeyHint={enterKeyHint()}
-          value={draft}
-          onChange={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={onKeyDown}
-        />
+        {/* Note that the field is left out of the screen recording whole, past its words' masking. */}
+        <div className="ph-no-capture">
+          <TextArea
+            ref={field}
+            look={TEXT_AREA_LOOK.BARE}
+            growLimit={TEXT_AREA_GROW_LIMIT.NONE}
+            grow
+            label={label}
+            placeholder={label}
+            rows={compact === true ? 1 : 2}
+            maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
+            enterKeyHint={enterKeyHint()}
+            submitKey={enterSubmitKey()}
+            value={draft}
+            onChange={setDraft}
+            // Note that a send goes through the form, whose held submit holds it too.
+            onSubmit={() => {
+              if (field.current !== null) submitPromptInput(field.current);
+            }}
+          />
+        </div>
         <ComposerFoot empty={empty} />
       </PromptInput>
       <CrowdedNote shown={mentions.crowded(draft)} />

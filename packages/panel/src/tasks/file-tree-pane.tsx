@@ -1,14 +1,21 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { cssCustomProperties, IconButton, SearchField } from "@luke/ui";
+import {
+  cssCustomProperties,
+  Fill,
+  IconButton,
+  PanePin,
+  ResizeEdge,
+  type ResizeEdgeHandle,
+  SearchField,
+  Tooltip,
+} from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
-import type { ResizableEdgeProps } from "../desktop/use-resizable-edge.js";
 import type { FileMark, FileTreeHandle, FolderEntry, ReadFolder } from "../file-tree/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { entriesOf } from "./folder-listings.js";
 
 /**
@@ -129,7 +136,7 @@ export function FileTreePane({
   /** How wide it stands, as the panel keeps it for every tree; none stands at its default width. */
   width?: number | undefined;
   /** The edge on its left it is dragged wider or narrower by; none draws none. */
-  edge?: ResizableEdgeProps | undefined;
+  edge?: ResizeEdgeHandle | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().fileTree);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -213,7 +220,7 @@ export function FileTreePane({
 
   const filterLabel = onlyShown ? "Show all files" : "Show only files Luke showed";
   return (
-    <aside
+    <PanePin
       ref={pane}
       className="file-tree-pane ph-no-capture"
       aria-label={label}
@@ -222,7 +229,7 @@ export function FileTreePane({
       style={
         width === undefined ? undefined : cssCustomProperties({ "--file-tree-width": `${width}px` })
       }
-      onPointerDown={float?.onPointerDown}
+      onPin={float?.onPressWithin}
       onPointerLeave={float?.onPointerLeave}
       onKeyDown={(event) => {
         float?.onKeyDown(event);
@@ -235,15 +242,17 @@ export function FileTreePane({
         field.current?.select();
       }}
     >
-      {edge === undefined ? null : <div className="side-panel-resize" {...edge} />}
+      {edge === undefined ? null : <ResizeEdge edge={edge} />}
       <search className="file-tree-search">
-        <TreeSearch
-          field={field}
-          query={query}
-          scope={scope}
-          floating={float?.floating ?? false}
-          onQuery={setQuery}
-        />
+        <Fill>
+          <TreeSearch
+            field={field}
+            query={query}
+            scope={scope}
+            floating={float?.floating ?? false}
+            onQuery={setQuery}
+          />
+        </Fill>
         {shown === undefined ? null : (
           <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
             <IconButton
@@ -261,8 +270,8 @@ export function FileTreePane({
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
         </p>
       ) : (
-        <div className="file-tree-host" ref={host} />
+        <Fill className="file-tree-host" ref={host} />
       )}
-    </aside>
+    </PanePin>
   );
 }

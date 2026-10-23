@@ -15,6 +15,8 @@
 
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
+import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
+import { modelProviderSchema } from "../models-wire.js";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
 
@@ -57,6 +59,24 @@ const planLimitReachedData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(planLimitReachedDataSchema),
 );
 
+/**
+ * What a missing credential carries beside its slug: the provider whose
+ * subscription or API key would pay, which the refusal's words name. The
+ * client reads it with this as it stands (`hosted-link.ts`).
+ */
+export const credentialMissingDataSchema = EffectSchema.Struct({
+  provider: EffectSchema.optionalKey(modelProviderSchema),
+});
+
+const credentialMissingData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(credentialMissingDataSchema),
+);
+
+/** What a refused install or update carries beside its slug: which skill, and why its files were refused. */
+const installedSkillRefusedData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(installedSkillRefusedDataSchema),
+);
+
 /** Every hosted refusal, the slug its code, and the extra fields of each that carries some. */
 export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: {},
@@ -79,13 +99,17 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: {},
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: {},
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: {},
+  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: {},
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: {},
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: {},
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: { data: planLimitReachedData },
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: {},
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: { data: credentialMissingData },
   [HOSTED_API_ERROR.TASK_ARCHIVED]: {},
   [HOSTED_API_ERROR.NOT_PERMITTED]: {},
   [HOSTED_API_ERROR.ALREADY_INVITED]: {},
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: {},
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: {},
+  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: { data: installedSkillRefusedData },
+  [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: { data: installedSkillRefusedData },
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

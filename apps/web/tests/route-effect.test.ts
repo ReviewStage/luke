@@ -36,7 +36,7 @@ const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke"
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
-  vi.stubEnv(OPENAI_API_KEY, API_KEY);
+  vi.stubEnv(CRON_SECRET, SECRET);
 });
 
 afterEach(async () => {
@@ -44,10 +44,10 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
-const OPENAI_API_KEY = "OPENAI_API_KEY";
+const CRON_SECRET = "CRON_SECRET";
 const GATE_PATH = "/api/gate";
 const GATE = `https://luke.test${GATE_PATH}`;
-const API_KEY = "sk-test";
+const SECRET = "cron-secret-test";
 const USER_ID = "user-1";
 const AUTHORIZATION = "Bearer token";
 
@@ -80,9 +80,9 @@ function writeRoute() {
 
 /**
  * The gate every hosted group runs its requests through, as one route: the
- * method, the tier switched on, and the caller signed in. The key is the
- * environment's, which is what `HostedEnvironment` reads as the runtime's
- * services are built, so a case naming another key ends the runtime before
+ * method, a deployment secret configured, and the caller signed in. The
+ * secret is the environment's, which is what `HostedEnvironment` reads as the runtime's
+ * services are built, so a case naming another secret ends the runtime before
  * it asks for the next.
  */
 function gateRoute(resolveUserId: UserIdResolver<string | undefined>) {
@@ -97,7 +97,7 @@ function gateRoute(resolveUserId: UserIdResolver<string | undefined>) {
             return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
           }
           const environment = yield* HostedEnvironment;
-          if (environment.openAiKey === undefined) {
+          if (environment.cronSecret === undefined) {
             return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
           }
           const account = yield* resolveUserId(request.headers.authorization);
@@ -114,20 +114,20 @@ function gateRequest(method: string): Request {
 }
 
 const CASES = [
-  { method: "GET", apiKey: API_KEY, userId: USER_ID, status: HOSTED_HTTP_STATUS.OK },
+  { method: "GET", secret: SECRET, userId: USER_ID, status: HOSTED_HTTP_STATUS.OK },
   {
     method: "POST",
-    apiKey: API_KEY,
+    secret: SECRET,
     userId: USER_ID,
     status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
   },
   {
     method: "GET",
-    apiKey: undefined,
+    secret: undefined,
     userId: USER_ID,
     status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   },
-  { method: "GET", apiKey: API_KEY, userId: undefined, status: HOSTED_HTTP_STATUS.UNAUTHORIZED },
+  { method: "GET", secret: SECRET, userId: undefined, status: HOSTED_HTTP_STATUS.UNAUTHORIZED },
 ] as const;
 
 test("the route reads a bearer the request carries", async () => {
@@ -144,7 +144,7 @@ test("the route reads a bearer the request carries", async () => {
 test("the route built from a route layer answers the gate's own refusals", async () => {
   const gate: number[] = [];
   for (const entry of CASES) {
-    vi.stubEnv(OPENAI_API_KEY, entry.apiKey ?? "");
+    vi.stubEnv(CRON_SECRET, entry.secret ?? "");
     gate.push(
       (
         await gateRoute(() => Effect.succeed(Option.fromUndefinedOr(entry.userId))).fetch(

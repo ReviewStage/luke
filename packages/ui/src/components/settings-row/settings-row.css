@@ -207,4 +207,128 @@
       z-index: 1;
     }
   }
+
+  .luke-settings-row-mark {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: var(--luke-settings-row-mark-size, 20px);
+    height: var(--luke-settings-row-mark-size, 20px);
+  }
+
+  .luke-settings-row-mark > :is(svg, img) {
+    width: 100%;
+    height: 100%;
+  }
+
+  .luke-settings-row-state {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-space-6);
+  }
+
+  .luke-settings-row-state[data-block] {
+    display: flex;
+    width: fit-content;
+  }
+
+  .luke-settings-row-state[data-wrap] {
+    flex-wrap: wrap;
+    white-space: nowrap;
+  }
+
+  .luke-settings-row-state[data-state="connected"]::before {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--luke-color-complete);
+    content: "";
+  }
+
+  .luke-settings-row-state[data-state="attention"] {
+    color: var(--luke-color-attention);
+  }
+
+  .luke-settings-row-value {
+    min-width: 64px;
+    flex: none;
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-align: right;
+  }
+
+  .luke-settings-row-act-slot {
+    width: var(--luke-control-height);
+    flex: none;
+  }
+
+  .luke-settings-saved-mark {
+    display: inline-flex;
+    color: var(--luke-color-complete);
+  }
+
+  .luke-settings-saved-mark > svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* Note that the check follows a button's words, which sit in an inline
+     span with no gap of their own. */
+  .luke-button .luke-settings-saved-mark {
+    margin-left: var(--luke-space-4);
+  }
+
+  .luke-settings-changed-mark {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-settings-attention-mark {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--luke-color-attention);
+  }
+
+  .luke-settings-attention-mark > svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* A row that just arrived lights once: a wash laid over it, inset a step so
+     it keeps clear of the card's corner and under its words, its opacity
+     alone fading out. Held
+     long enough to find, as a search's landing is, on the shared tokens, so
+     reduced motion and a capture run settle it unlit at once. */
+  .luke-settings-row[data-landed] {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .luke-settings-row[data-landed]::after {
+    content: "";
+    position: absolute;
+    inset: var(--luke-space-2);
+    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+    background: var(--luke-color-fill-hover);
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+    opacity: 0;
+    z-index: -1;
+    pointer-events: none;
+    animation: luke-settings-row-landed calc(var(--luke-duration-shape) * 4) var(--luke-motion-exit);
+  }
+
+  @keyframes luke-settings-row-landed {
+    from,
+    50% {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+    }
+  }
 }

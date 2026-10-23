@@ -1,0 +1,55 @@
+{
+  "action": "created",
+  "installation": { "uuid": "a8e5d37a-696c-4c54-adb5-b3f28d64c7de" },
+  "data": {
+    "issue": {
+      "url": "https://sentry.io/api/0/organizations/acme/issues/1234567890/",
+      "web_url": "https://acme.sentry.io/issues/1234567890/",
+      "project_url": "https://acme.sentry.io/issues/?project=4508000000000002",
+      "id": "1234567890",
+      "shareId": null,
+      "shortId": "API-1Y",
+      "title": "DatabaseError: connection pool exhausted",
+      "culprit": "db.pool in acquire",
+      "permalink": "https://acme.sentry.io/issues/1234567890/",
+      "logger": null,
+      "level": "fatal",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4508000000000002",
+        "name": "API",
+        "slug": "api",
+        "platform": "python"
+      },
+      "type": "error",
+      "metadata": {
+        "type": "DatabaseError",
+        "value": "connection pool exhausted",
+        "filename": "db/pool.py",
+        "function": "acquire",
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "isUnhandled": true,
+      "count": "3",
+      "userCount": 2,
+      "firstSeen": "2026-10-18T20:56:00.679000+00:00",
+      "lastSeen": "2026-10-18T20:56:00.738000+00:00"
+    }
+  },
+  "actor": { "type": "application", "id": "sentry", "name": "Sentry" }
+}

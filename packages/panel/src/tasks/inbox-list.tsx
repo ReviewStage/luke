@@ -15,6 +15,7 @@ import {
   EmptyState,
   type EmptyStateAction,
   ErrorState,
+  GAP,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -24,12 +25,25 @@ import {
   HoverCardRule,
   IconButton,
   INLINE_REF_LOOK,
+  InlineRef,
+  LAYOUT_ELEMENT,
+  LIST_LEAVING_SELECTOR,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   LIST_ROW_META,
   List,
+  ListMotion,
   ListRow,
+  motionKey,
+  motionRows,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
+  RowHint,
+  RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
   SearchField,
@@ -37,8 +51,15 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  Stack,
   TaskStatusMark,
+  Time,
+  Tooltip,
+  useLeaving,
   useMenu,
+  useMinute,
+  useResizeEdge,
+  VisuallyHidden,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -82,7 +103,6 @@ import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { SidebarResizeEdge } from "../desktop/desktop-sidebar.js";
 import {
   INBOX_LIST_WIDTH,
   type InboxShowChoice,
@@ -100,13 +120,9 @@ import {
 } from "../desktop/phone-head.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
-import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
-import { FadingWords } from "../fading-words.js";
-import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { TaskChipCard } from "./chip-cards.js";
@@ -137,10 +153,10 @@ import {
   type InboxLineKind,
   type InboxListed,
   type InboxListView,
+  type InboxPerson,
   type InboxPersonGroup,
   type InboxShow,
   type InboxSort,
-  type InboxStarter,
   type InboxStatusGroup,
   type InboxStatusGroupKind,
   type InboxWhose,
@@ -151,6 +167,7 @@ import {
   inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
+  inboxWaitsOn,
   isDone,
   isUnread,
   listedItems,
@@ -164,19 +181,10 @@ import {
   useRowMediaAsks,
   useRowMediaReads,
 } from "./inbox-row-media.js";
-import {
-  type InboxLeaves,
-  InboxLeavesProvider,
-  InboxRowMotion,
-  LEAVING,
-  useLeaving,
-} from "./inbox-row-motion.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
-import { RelativeTime } from "./relative-time.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
-import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
@@ -504,7 +512,7 @@ function InboxItemCard({
             <span>{standingWords(item, needsYou, starter)}</span>
           </>
         }
-        corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
+        corner={<Time at={item.updatedAt} now={now} hint={false} />}
       />
       {thread.ask === undefined ? (
         settled === undefined ? null : (
@@ -782,7 +790,7 @@ export function InboxItemRow({
   const drafted = useInboxItemDrafted(item) && !open;
   const starter = readersItem(item, reader)
     ? undefined
-    : personActor(item.startedBy, directory.members, reader, directory.former);
+    : personActor(inboxWaitsOn(item), directory.members, reader, directory.former);
   const ticked = inboxShownTicks(item, useInboxItemDraft(item));
   const lineKind = inboxLineKind(item);
   const nameOf = (member: Parameters<typeof personActor>[0]) =>
@@ -839,6 +847,7 @@ export function InboxItemRow({
       >
         <ListRow
           ref={hold}
+          motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <>
@@ -879,25 +888,27 @@ export function InboxItemRow({
           }
           meta={
             <span className="home-row-meta">
-              {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
+              {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
               {context === undefined ? null : (
-                <FadingWords className="home-row-context" words={context} />
+                <OneLine className="home-row-context" words={context}>
+                  {context}
+                </OneLine>
               )}
               {starter === undefined || !face ? null : (
                 <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
               )}
               {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
-                <span className="visually-hidden">{waitingOn(starter)}</span>
+                <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
               )}
               {drafted ? <DraftMark /> : null}
               {needsYou ? (
                 <span className="inbox-row-attention">
                   <AttentionMark />
-                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
                 </span>
               ) : null}
               <TaskStatusChip holder={holder} />
-              <RelativeTime at={item.updatedAt} now={now} hint={false} />
+              <Time at={item.updatedAt} now={now} hint={false} />
             </span>
           }
           metaAt={LIST_ROW_META.TITLE}
@@ -968,7 +979,7 @@ function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element 
   return (
     <span className="inbox-row-task-status" data-task-status={status}>
       <TaskStatusMark status={status} />
-      <span className="visually-hidden">{TASK_STATUS_WORDS[status]}</span>
+      <VisuallyHidden>{TASK_STATUS_WORDS[status]}</VisuallyHidden>
     </span>
   );
 }
@@ -1092,13 +1103,13 @@ function StatusHeader({
  * heads its groups. A press folds the group, as every group header's does.
  */
 function PersonHeader({
-  starter,
+  person,
   readerId,
   folded,
   count,
   onToggle,
 }: {
-  starter: InboxStarter | undefined;
+  person: InboxPerson | undefined;
   readerId: string | undefined;
   folded: boolean;
   count: number;
@@ -1108,8 +1119,8 @@ function PersonHeader({
   const reader = known ?? readerId;
   const you = members?.find((each) => each.userId === reader);
   const actor: Actor =
-    starter !== undefined
-      ? personActor(starter, members, reader, former)
+    person !== undefined
+      ? personActor(person, members, reader, former)
       : you !== undefined
         ? memberActor(you, reader)
         : { kind: ACTOR_KIND.PERSON, userId: reader ?? "", name: "", you: true };
@@ -1612,7 +1623,15 @@ function ListHead({
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">
-            {search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
+            {search.field ?? (
+              <OneLine
+                as={ONE_LINE_ELEMENT.H1}
+                end={ONE_LINE_END.ELLIPSIS}
+                className="desktop-toolbar-title"
+              >
+                {title}
+              </OneLine>
+            )}
           </div>
           <div className="desktop-toolbar-actions">{options}</div>
         </header>
@@ -1622,9 +1641,9 @@ function ListHead({
   );
 }
 
-/** What a list its search left empty says. */
-function noMatch(searched: string): string {
-  return `No items match “${searched.trim()}”.`;
+/** What a list its search left empty says, under its rows, on the window's Inbox and a task's own alike. */
+export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
+  return <p className="sidebar-note">{`No items match “${searched.trim()}”.`}</p>;
 }
 
 /** What the list says where a task's read did not answer. */
@@ -1689,7 +1708,7 @@ export function InboxListNote({
   }
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
-  if (searched !== undefined) return <p className="sidebar-note">{noMatch(searched)}</p>;
+  if (searched !== undefined) return <SearchEmpty searched={searched} />;
   if (filteredOut !== undefined)
     return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
@@ -1721,7 +1740,7 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
-  /** The list's search, which its head's magnifier opens; none where the list offers none, as a task's own Inbox does. */
+  /** The list's search, which its head's magnifier opens, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
@@ -1766,10 +1785,15 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
     const row = focusedRow.current;
     if (list === null || row === undefined || list.hidden) return;
     // Note that a row leaving, or one in a group leaving, is drawn on, out of reach, while it fades, so the keyboard still in it is in no row.
-    if (rows.find(row)?.closest(LEAVING) === null) return;
+    if (rows.find(row)?.closest(LIST_LEAVING_SELECTOR) === null) return;
     focusedRow.current = undefined;
     const active = document.activeElement;
-    if (active !== null && active !== document.body && active.closest(LEAVING) === null) return;
+    if (
+      active !== null &&
+      active !== document.body &&
+      active.closest(LIST_LEAVING_SELECTOR) === null
+    )
+      return;
     listHeadControl(list)?.focus();
   });
   return {
@@ -1783,24 +1807,24 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   };
 }
 
-/** A group's key, by which it leaves the list (`inbox-row-motion.tsx`). */
+/** A group's key, by which it leaves the list (`ListMotion`). */
 function groupKey({ key }: { readonly key: string }): string {
   return key;
 }
 
-/** A run of rows, each drawn on after it is no longer listed until its exit has played (`inbox-row-motion.tsx`). */
+/** A run of rows, each drawn on after it is no longer listed until its exit has played (`ListMotion`). */
 function InboxRows({
   items,
   row,
 }: {
   items: readonly InboxListed[];
-  row: (listed: InboxListed, leave?: React.RefCallback<HTMLElement>) => React.ReactNode;
+  row: (listed: InboxListed, leaving: boolean) => React.ReactNode;
 }): React.JSX.Element {
-  const { drawn, leave } = useLeaving(items, (listed) => listed.item.id);
+  const drawn = useLeaving(items, (listed) => listed.item.id);
   return (
-    <ul className="sidebar-tasks">
-      {drawn.map(({ key, value, leaving }) => row(value, leaving ? leave(key) : undefined))}
-    </ul>
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks" moves>
+      {drawn.map(({ value, leaving }) => row(value, leaving))}
+    </Stack>
   );
 }
 
@@ -1812,12 +1836,10 @@ function InboxGroups<G>({
 }: {
   groups: readonly G[];
   keyOf: (group: G) => string;
-  group: (group: G, leave: React.RefCallback<HTMLElement> | undefined) => React.ReactNode;
+  group: (group: G) => React.ReactNode;
 }): React.JSX.Element {
-  const { drawn, leave } = useLeaving(groups, keyOf);
-  return (
-    <>{drawn.map(({ key, value, leaving }) => group(value, leaving ? leave(key) : undefined))}</>
-  );
+  const drawn = useLeaving(groups, keyOf);
+  return <>{drawn.map(({ value }) => group(value))}</>;
 }
 
 /** The list: its head where it has one, then each task's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
@@ -1830,6 +1852,7 @@ export function InboxList({
   readerId,
   columns,
   rows,
+  reading = false,
   placement = INBOX_LIST_PLACEMENT.PAGE,
   onChoose,
   onMark,
@@ -1845,6 +1868,8 @@ export function InboxList({
   head: InboxListHead;
   /** What stands under the rows: the list's empty line, placeholder rows while it is read, or a read that did not answer. */
   note: React.ReactNode;
+  /** Whether the list is still being read, as its reads land one after another while the window opens, so a row arriving fades in where it stands rather than sliding in as a new one does. */
+  reading?: boolean;
   /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;
   /** Where each row's press is kept, by the item it opens. */
@@ -1861,7 +1886,6 @@ export function InboxList({
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const [leaves] = useState<InboxLeaves>(() => ({ pending: [] }));
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
   // The reads hold the pictures of the items listed alone, and none while the rows show no media.
   const previews = head.view?.choices.mediaPreviews === true;
@@ -1869,8 +1893,8 @@ export function InboxList({
     previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
   );
   const media = previews ? mediaReads : undefined;
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
     width,
     bounds: INBOX_LIST_WIDTH,
     reserve: () => PANE_RESERVE,
@@ -1880,8 +1904,8 @@ export function InboxList({
   const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
   // A row whose item is done with is drawn gray, the chosen row kept on To do and every such row on All alike.
-  // A row leaving the list hands itself to the list's motion rather than to the keyboard's rows (`inbox-row-motion.tsx`).
-  const row = (listed: InboxListed, leave?: React.RefCallback<HTMLElement>) => (
+  // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
+  const row = (listed: InboxListed, leaving: boolean) => (
     <InboxItemRow
       key={listed.item.id}
       listed={listed}
@@ -1895,7 +1919,7 @@ export function InboxList({
       line={head.view?.choices.secondLine !== false}
       muted={isDone(listed.item)}
       media={media}
-      ref={leave ?? rows.hold(listed.item.id)}
+      ref={leaving ? undefined : rows.hold(listed.item.id)}
       onChoose={onChoose}
       onMark={onMark}
       onClose={onClose}
@@ -1903,13 +1927,10 @@ export function InboxList({
   );
   const needingYou = (items: readonly InboxListed[]) =>
     items.filter((listed) => needsYouOf(listed, view.readerId)).length;
-  const statusSection = (
-    { key, status, items }: InboxStatusGroup,
-    leave: React.RefCallback<HTMLElement> | undefined,
-  ) => {
+  const statusSection = ({ key, status, items }: InboxStatusGroup) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
-      <div key={key} ref={leave} className="sidebar-repository">
+      <div key={key} className="sidebar-repository" {...motionKey(key)}>
         <StatusHeader
           status={status}
           folded={folded}
@@ -1920,15 +1941,12 @@ export function InboxList({
       </div>
     );
   };
-  const personSection = (
-    { key, starter, items }: InboxPersonGroup,
-    leave: React.RefCallback<HTMLElement> | undefined,
-  ) => {
+  const personSection = ({ key, person, items }: InboxPersonGroup) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
-      <div key={key} ref={leave} className="sidebar-repository">
+      <div key={key} className="sidebar-repository" {...motionKey(key)}>
         <PersonHeader
-          starter={starter}
+          person={person}
           readerId={readerId}
           folded={folded}
           count={needingYou(items)}
@@ -1940,7 +1958,12 @@ export function InboxList({
   };
   // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's.
   const body = (
-    <div ref={bodyRef} className="inbox-tasks-body">
+    <div
+      ref={bodyRef}
+      className="inbox-tasks-body"
+      data-empty={String(listedItems(view).length === 0)}
+      {...motionRows()}
+    >
       {view.grouping === INBOX_GROUPING.NONE ? (
         <InboxRows items={view.items} row={row} />
       ) : view.grouping === INBOX_GROUPING.PERSON ? (
@@ -1962,11 +1985,11 @@ export function InboxList({
           key={view.grouping}
           groups={view.groups}
           keyOf={({ holder }) => holderKey(holder)}
-          group={({ holder, items }, leave) => {
+          group={({ holder, items }) => {
             const key = holderKey(holder);
             const folded = head.view?.folds.folded(key) ?? false;
             return (
-              <div key={key} ref={leave} className="sidebar-repository">
+              <div key={key} className="sidebar-repository" {...motionKey(key)}>
                 <HolderHeader
                   holder={holder}
                   folded={folded}
@@ -1982,8 +2005,6 @@ export function InboxList({
         />
       )}
       {note}
-      {/* Note that the motion is drawn after the rows, so a row leaving has handed itself over by the time it plays. */}
-      <InboxRowMotion root={bodyRef} leaves={leaves} change={view} />
     </div>
   );
   // Note that in the sidebar the list scrolls with the sidebar's own scroller, under its pins, and takes the sidebar's width.
@@ -1999,10 +2020,10 @@ export function InboxList({
       style={sidebar ? undefined : { width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} placement={placement} />
-      <InboxLeavesProvider value={leaves}>
+      <ListMotion root={bodyRef} change={view} reading={reading}>
         {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
-      </InboxLeavesProvider>
-      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
+      </ListMotion>
+      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );
 }

@@ -12,15 +12,22 @@ import {
   DIALOG_TONE,
   type DialogConfirm,
   EllipsisIcon,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   MarkDoneIcon,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PencilIcon,
+  Stack,
   TextField,
+  Tooltip,
   TrashIcon,
   useConfirmDialog,
+  useLeaving,
   useMenu,
 } from "@luke/ui";
-import { TASK_ROW, type TaskRow } from "@luke/ui/task-list-model";
+import { TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
   memberOf,
   memberSection,
@@ -39,7 +46,6 @@ import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
@@ -413,6 +419,15 @@ function SidebarSection({
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const reads = useReadMarks();
+  // Note that a row on its way out has no place among the rows a drag or a menu moves.
+  const shown = useLeaving(rows, taskRowKey);
+  const listedAt = new Map(rows.map((row, at) => [taskRowKey(row), at]));
+  const placeOf = (key: string) => {
+    const at = listedAt.get(key);
+    return move === undefined || at === undefined
+      ? undefined
+      : { at, count: rows.length, onMove: move };
+  };
   const held = drawnSectionTasks(drawn);
   const groups = sectionActionGroups(drawn, context, {
     onMarkRead: () => {
@@ -461,24 +476,26 @@ function SidebarSection({
       )}
       {rows.length === 0 ? (
         folded ? null : (
-          <p className="sidebar-section-empty">Drag tasks here</p>
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
+          </div>
         )
       ) : (
         // A folded section's rows are only the open one, so a drop over it lands on top rather than among them.
-        <ul
+        <Stack
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.ROW}
           className="sidebar-tasks"
           data-row-drop-rows={folded ? undefined : ""}
+          moves
           onPointerDown={drag}
         >
-          {rows.map((row, at) => (
-            <RowPlaced
-              key={row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id}
-              place={move === undefined ? undefined : { at, count: rows.length, onMove: move }}
-            >
+          {shown.map(({ key, value: row }) => (
+            <RowPlaced key={key} place={placeOf(key)}>
               {context.row(row)}
             </RowPlaced>
           ))}
-        </ul>
+        </Stack>
       )}
     </div>
   );
@@ -509,7 +526,13 @@ export function SidebarSections({
   const drag = useRowDrag(move, { handle: SECTION_HANDLE });
   return (
     <nav className="sidebar-group" aria-label="Sections">
-      <ul className="sidebar-sections" onPointerDown={drag}>
+      <Stack
+        as={LAYOUT_ELEMENT.UL}
+        gap={GAP.CONTROL}
+        className="sidebar-sections"
+        moves
+        onPointerDown={drag}
+      >
         {sections.map((drawn, at) => (
           <li key={drawn.section.id} className="sidebar-sections-item">
             <SidebarSection
@@ -519,7 +542,7 @@ export function SidebarSections({
             />
           </li>
         ))}
-      </ul>
+      </Stack>
     </nav>
   );
 }

@@ -126,6 +126,7 @@ export {
   automationPath,
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
+  installedSkillPath,
   VOICE_SERVICE_PATH,
 } from "./service-paths.js";
 export {

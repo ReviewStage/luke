@@ -2,13 +2,15 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { LIVE_CLIENT_EVENT } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
-import { Context, Effect, Exit, FiberSet, Layer, Scope } from "effect";
+import { Context, Effect, Exit, FiberSet, Layer, Redacted, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type WebSocket, WebSocketServer } from "ws";
+import type { OwnApiKey } from "../accounts/own-api-key.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -30,7 +32,7 @@ import {
   type HostedLiveExchange,
 } from "./live-exchange.js";
 import { FINALIZATION, LOG_EVENT, type Log, standardOutputLog } from "./log.js";
-import { createLiveUpstream, type LiveUpstream } from "./openai.js";
+import { createLiveUpstream } from "./openai.js";
 import {
   type Admission,
   type SessionEffect,
@@ -197,7 +199,12 @@ export interface VoiceServiceOptions {
   /** The server the service stands on, built where the function module is evaluated. */
   server: VoiceServer;
   /** The GPT Live project key; absent, every upgrade is refused with 503. */
-  apiKey: string | undefined;
+  /**
+   * The caller's own OpenAI API key, read afresh for each session, or
+   * nothing where the account saved none: every call runs on its caller's
+   * key, never Luke's (`../accounts/own-api-key.ts`).
+   */
+  openAiKeyOf: (accountId: string) => Effect.Effect<OwnApiKey, SessionFailure, DatabaseServices>;
   model?: string | undefined;
   accounts: VoiceAccounts;
   /** The `voice_sessions` row of each session. */
@@ -253,7 +260,6 @@ export class VoiceService {
   readonly #log: Log;
   readonly #accounts: VoiceAccounts;
   readonly #record: VoiceSessionRecord;
-  readonly #upstream: LiveUpstream | undefined;
   readonly #avatar: AvatarProvider | undefined;
   /** What a socket's first frame opens: the account admitted and spent, the session at OpenAI, the row registered. */
   readonly #opener: SessionOpener;
@@ -264,7 +270,6 @@ export class VoiceService {
 
   private constructor(
     options: VoiceServiceOptions,
-    upstream: LiveUpstream | undefined,
     avatar: AvatarProvider | undefined,
     sockets: WebSocketServer,
     fibers: FiberSet.FiberSet<void>,
@@ -274,10 +279,21 @@ export class VoiceService {
     this.#log = options.log ?? standardOutputLog;
     this.#accounts = options.accounts;
     this.#record = options.record;
-    this.#upstream = upstream;
     this.#avatar = avatar;
     this.#opener = sessionOpener({
       accounts: options.accounts,
+      upstreamOf: (accountId) =>
+        Effect.map(options.openAiKeyOf(accountId), (key) =>
+          key === undefined || key === PROVIDER_KEY_UNREADABLE
+            ? key
+            : createLiveUpstream({
+                apiKey: Redacted.value(key),
+                baseUrl: options.openAiBaseUrl,
+                httpClient: options.httpClient,
+                createTimeoutMs: options.createTimeoutMs,
+                attachTimeoutMs: options.attachTimeoutMs,
+              }),
+        ),
       record: options.record,
       model: options.model,
       firstFrameTimeoutMs: options.firstFrameTimeoutMs ?? SERVICE_DEFAULTS.FIRST_FRAME_TIMEOUT_MS,
@@ -325,7 +341,6 @@ export class VoiceService {
             server.close(() => resume(Effect.void));
           }),
       );
-      const apiKey = options.apiKey?.trim();
       const avatar =
         options.avatar === undefined
           ? undefined
@@ -333,35 +348,20 @@ export class VoiceService {
               keyframe: Context.get(yield* Layer.build(options.avatar.keyframe), Keyframe),
               personaId: options.avatar.personaId,
             };
-      const service = new VoiceService(
-        options,
-        apiKey
-          ? createLiveUpstream({
-              apiKey,
-              baseUrl: options.openAiBaseUrl,
-              httpClient: options.httpClient,
-              createTimeoutMs: options.createTimeoutMs,
-              attachTimeoutMs: options.attachTimeoutMs,
-            })
-          : undefined,
-        avatar,
-        sockets,
-        fibers,
-        (session) => {
-          // Begun on a fiber of the set, and begun by the scheduler rather
-          // than on the stack of whoever asked. v4's `runForkWith`, which
-          // `FiberSet.runtime` forks through, evaluates the effect where it
-          // is called, so a session's word to the device reported from
-          // inside the exchange's own reading fiber would be written to the
-          // socket in the middle of that read, ahead of the very frame the
-          // relay's reader is queued to forward and that the report is about.
-          // The yield is what puts this fiber's first step behind the wakes
-          // already queued, which is the order the device is owed: every
-          // server frame as it arrived, and then the service's own word about
-          // the last of them.
-          fork(Effect.andThen(Effect.yieldNow, session));
-        },
-      );
+      const service = new VoiceService(options, avatar, sockets, fibers, (session) => {
+        // Begun on a fiber of the set, and begun by the scheduler rather
+        // than on the stack of whoever asked. v4's `runForkWith`, which
+        // `FiberSet.runtime` forks through, evaluates the effect where it
+        // is called, so a session's word to the device reported from
+        // inside the exchange's own reading fiber would be written to the
+        // socket in the middle of that read, ahead of the very frame the
+        // relay's reader is queued to forward and that the report is about.
+        // The yield is what puts this fiber's first step behind the wakes
+        // already queued, which is the order the device is owed: every
+        // server frame as it arrived, and then the service's own word about
+        // the last of them.
+        fork(Effect.andThen(Effect.yieldNow, session));
+      });
       yield* Effect.acquireRelease(
         Effect.sync(() =>
           options.server.serve((request, socket, head) => {
@@ -446,7 +446,7 @@ export class VoiceService {
    * Hands a session this connection can no longer end to the sweep: the row
    * stamped detached where this connection still holds it, so a device that
    * comes back within the grace re-attaches, and a session no one comes back
-   * for is ended on Luke's key with its seconds recorded.
+   * for is ended on its owner's key with its seconds recorded.
    */
   #leaveToSweep(session: {
     sessionId: string;
@@ -457,9 +457,6 @@ export class VoiceService {
 
   /** Who an upgrade admits before any socket stands, or the status it is refused with. */
   #admit(request: IncomingMessage, known: boolean): UpgradeDecision {
-    if (this.#upstream === undefined) {
-      return { status: UPGRADE_STATUS.SERVICE_UNAVAILABLE };
-    }
     if (!known) return { status: UPGRADE_STATUS.NOT_FOUND };
     if (request.headers.origin !== undefined) return { status: UPGRADE_STATUS.FORBIDDEN };
     const bearer = presentedBearer(request);
@@ -476,8 +473,6 @@ export class VoiceService {
    */
   #serve(socket: WebSocket, admission: Admission): SessionEffect<void> {
     return Effect.gen({ self: this }, function* () {
-      const upstream = this.#upstream;
-      if (upstream === undefined) return;
       const device = yield* voiceSocket(socket, { byteBudget: SOCKET_BYTE_BUDGET });
       yield* Effect.sync(() => socket.resume());
       const refuse = (reason: HostedApiError): Effect.Effect<void> =>
@@ -488,7 +483,7 @@ export class VoiceService {
           yield* device.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, reason);
         });
 
-      const opened = yield* this.#opener.open(upstream, admission, device);
+      const opened = yield* this.#opener.open(admission, device);
       // A socket opened for a device that has gone is the scope's to
       // release, which it does on the way out of this effect; a session it
       // opened is left to the device's re-attach or to the sweep.
@@ -653,7 +648,7 @@ export class VoiceService {
       // Any ending but a confirmed one leaves the row stamped, so the sweep
       // ends the session and records its seconds if no device comes back: a
       // close OpenAI never confirmed, or a sideband that went first, may
-      // still be a session running on Luke's key.
+      // still be a session running on its owner's key.
       const detached = summary.finalization === FINALIZATION.DETACHED;
       yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
       if (summary.finalization !== FINALIZATION.CONFIRMED) yield* leaveToSweep;

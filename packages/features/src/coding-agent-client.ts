@@ -57,6 +57,9 @@ import {
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
   githubImageTypeSchema,
+  type MemoriesAnswerView,
+  type MemoriesReadParams,
+  type MemoryForgetParams,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -89,7 +92,8 @@ import {
   TRANSCRIPT_PARTS_QUERY,
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
-import { planLimitReachedDataSchema } from "./contract/errors.js";
+import { credentialMissingDataSchema, planLimitReachedDataSchema } from "./contract/errors.js";
+import { conversationMediaTypeSchema } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
@@ -121,9 +125,11 @@ import {
   type TranscriptNowAnswer,
   type WorkspaceChatLiveAnswer,
 } from "./live-wire.js";
+import { MEMORY_QUERY } from "./memory-wire.js";
 import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
+  type ModelProvider,
   modelChoiceSchema,
 } from "./models-wire.js";
 import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
@@ -191,6 +197,7 @@ type Failed = {
   readonly failure: CodingAgentCallFailure;
   readonly unreached?: RepositoryUnreached;
   readonly resetsAt?: number;
+  readonly provider?: ModelProvider;
 };
 
 /** The refusals a call may answer with, by the service's own word for each. */
@@ -210,6 +217,13 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+} satisfies NamedRefusals;
+
+/** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
+const MEMORY_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -238,10 +252,16 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
 } satisfies NamedRefusals;
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
 const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
+
+/** The refusals a dictated clip can answer with: the account saved no OpenAI key to hear it on. */
+const DICTATION_REFUSALS = {
+  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING,
+} satisfies NamedRefusals;
 
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
@@ -305,6 +325,10 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
     const limit = Result.getOrUndefined(readServiceAnswer(planLimitReachedDataSchema)(payload));
     return limit?.resetsAt === undefined ? { failure } : { failure, resetsAt: limit.resetsAt };
   }
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    const missing = Result.getOrUndefined(readServiceAnswer(credentialMissingDataSchema)(payload));
+    return missing?.provider === undefined ? { failure } : { failure, provider: missing.provider };
+  }
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
@@ -318,6 +342,16 @@ export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
 /** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
 function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
+}
+
+/** A transcript's picture's bytes in base64 under its type: a picture, or a WebM an agent recorded; unanswered under any other type. */
+function readConversationPicture(
+  response: Response,
+): Effect.Effect<CodingAgentInboxAttachmentView> {
+  return Effect.map(
+    imageBodyOf(response, conversationMediaTypeSchema),
+    (picture) => picture ?? UNANSWERED,
+  );
 }
 
 /** The types an inbox item's attachment is served under: a block's picture's, or any a file an answer carried travelled as. */
@@ -374,10 +408,12 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   if (failure === undefined) return UNANSWERED;
   const unreached = failed.data?.unreached;
   const resetsAt = failed.data?.resetsAt;
+  const provider = failed.data?.provider;
   return {
     failure,
     ...(unreached === undefined ? undefined : { unreached }),
     ...(resetsAt === undefined ? undefined : { resetsAt }),
+    ...(provider === undefined ? undefined : { provider }),
   };
 }
 
@@ -479,6 +515,29 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
     return chaptersModelAnswerOf(
       askHosted(this.#hosted.account.writePreferences, { chaptersModel: model }),
+    );
+  }
+
+  /** The memories Luke's agents kept in a workspace the account is a member of, most recently kept first. */
+  readMemories(
+    params: MemoriesReadParams,
+  ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.account.memories, { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId }),
+      MEMORY_REFUSALS,
+    );
+  }
+
+  /** One memory forgotten for good, answering the workspace's memories as they then stand. */
+  forgetMemory(
+    params: MemoryForgetParams,
+  ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
+    // The workspace and the memory ride in the query, since a DELETE carries no body.
+    return hostedAnswer(
+      askHosted(this.#hosted.account.forgetMemory, {
+        query: { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId, [MEMORY_QUERY.ID]: params.id },
+      }),
+      MEMORY_REFUSALS,
     );
   }
 
@@ -608,7 +667,7 @@ export class HostedCodingAgentClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
       askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
-      {},
+      DICTATION_REFUSALS,
     );
   }
 
@@ -1202,7 +1261,7 @@ export class HostedCodingAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readImage(answer.response);
+        return readConversationPicture(answer.response);
       },
     );
   }

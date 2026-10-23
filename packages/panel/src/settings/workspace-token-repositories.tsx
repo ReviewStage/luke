@@ -3,13 +3,20 @@ import {
   type WorkspaceTokenRepository,
 } from "@luke/features/github-repositories-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { Badge, BUTTON_VARIANT, Button, SETTINGS_ROW_INDENT, SettingsRow } from "@luke/ui";
+import {
+  Badge,
+  BUTTON_VARIANT,
+  Button,
+  SETTINGS_ROW_INDENT,
+  SettingsRow,
+  SettingsRowMark,
+} from "@luke/ui";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { WorkspaceTile } from "../desktop/workspace-tile.js";
+import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
 
@@ -108,7 +115,7 @@ export function AddTokenRepository({
   const menuId = useId();
   const holder = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, button, PICKER_ALIGN.END);
+  const placement = usePickerPlacement(open, button, PICKER_ALIGN.END, menuId);
   const close = () => {
     setOpen(false);
     button.current?.focus();
@@ -143,7 +150,7 @@ export function AddTokenRepository({
           ? WORDS.NONE
           : undefined;
   return (
-    <span className="settings-picker" ref={holder} {...placement} data-align={PICKER_ALIGN.END}>
+    <span className="settings-picker" ref={holder} {...placement}>
       <Button
         ref={button}
         variant={BUTTON_VARIANT.OUTLINE}
@@ -200,15 +207,16 @@ function TokenRepositoryRow({
     <SettingsRow
       indent={SETTINGS_ROW_INDENT.MARK}
       leading={
-        <span className="settings-row-mark workspace-github-account-mark">
+        <SettingsRowMark>
           <WorkspaceTile
             workspace={{
               id: `github:${owner}`,
               name: owner,
               pictureUrl: githubAccountPictureUrl(owner),
             }}
+            size={TILE_SIZE.NESTED}
           />
-        </span>
+        </SettingsRowMark>
       }
       label={repository.fullName}
       adornment={<Badge>{WORDS.TOKEN}</Badge>}

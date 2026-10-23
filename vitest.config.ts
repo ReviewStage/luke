@@ -27,6 +27,7 @@ export default defineConfig({
       "tools/claude-code-probe",
       "tools/codex-probe",
       "packages/agent-runner",
+      "tools/anti-slop",
     ],
   },
 });

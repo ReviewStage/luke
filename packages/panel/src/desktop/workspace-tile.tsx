@@ -1,8 +1,8 @@
 import type { TasksWorkspacePhotoAnswer } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { identityHue, identityLetter } from "@luke/ui/actor-model";
-import { useEffect, useReducer, useState } from "react";
+import { AVATAR_SHAPE, AVATAR_SIZE, Avatar } from "@luke/ui";
+import { useEffect, useReducer } from "react";
 import { useAct } from "../act.js";
 
 /**
@@ -22,7 +22,7 @@ import { useAct } from "../act.js";
  * know it by, and two workspaces of one name still read apart more often than
  * not. The letter is the tile's own text, the name's first character as a
  * reader sees it, an emoji's whole, because text is what session replay masks
- * (`session-replay.ts`), as it masks an image's address. The tile is hidden
+ * (`session-replay.ts`), as it masks an image's address. It is an `@luke/ui` Avatar tile. The tile is hidden
  * from a screen reader, since the row beside it already says the name.
  */
 
@@ -40,14 +40,23 @@ interface KeptPhoto {
  */
 const keptPhotos = new Map<string, Map<string, KeptPhoto>>();
 
-/** The tile's sizes: a line of words', a row's glyph, or the sidebar's head and Settings › Workspace's first row. */
+/** The tile's sizes: a line of words', a row's glyph, a mark a step smaller under a row, or the sidebar's head and Settings › Workspace's first row. */
 export const TILE_SIZE = {
   INLINE: "inline",
   ROW: "row",
   HEAD: "head",
+  NESTED: "nested",
 } as const;
 
 type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];
+
+/** The avatar size each tile size is drawn at. */
+const AVATAR_OF = {
+  [TILE_SIZE.INLINE]: AVATAR_SIZE.MARK,
+  [TILE_SIZE.ROW]: AVATAR_SIZE.INLINE,
+  [TILE_SIZE.HEAD]: AVATAR_SIZE.CARD,
+  [TILE_SIZE.NESTED]: AVATAR_SIZE.STACK,
+} as const satisfies Record<TileSize, (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE]>;
 
 /** The workspace's photo at this version, read through `read` the first time any tile asks and shared after. */
 function keptPhoto(
@@ -108,32 +117,16 @@ export function WorkspaceTile({
   size?: TileSize;
 }): React.JSX.Element {
   const photo = useWorkspacePhoto(workspace.id, workspace.photoVersion);
-  const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
-  const [loadedUrl, setLoadedUrl] = useState<string | undefined>(undefined);
   const url = workspace.photoVersion === undefined ? workspace.pictureUrl : photo;
-  const drawn = url !== undefined && url !== failedUrl ? url : undefined;
-  const shown = drawn !== undefined && drawn === loadedUrl;
   // Note that the letter and its hue stand until the picture has loaded, because an avatar on the network may take a while, and go once it has, because a transparent photo would show them through.
   return (
-    <span
-      className="workspace-tile"
-      data-size={size}
-      data-hue={shown ? undefined : identityHue(workspace.id)}
-      aria-hidden="true"
-    >
-      {shown ? null : identityLetter(workspace.name)}
-      {drawn === undefined ? null : (
-        <img
-          className="workspace-tile-picture"
-          data-loaded={String(shown)}
-          src={drawn}
-          alt=""
-          referrerPolicy="no-referrer"
-          draggable={false}
-          onLoad={() => setLoadedUrl(drawn)}
-          onError={() => setFailedUrl(drawn)}
-        />
-      )}
-    </span>
+    <Avatar
+      name={workspace.name}
+      id={workspace.id}
+      src={url}
+      size={AVATAR_OF[size]}
+      shape={AVATAR_SHAPE.TILE}
+      decorative
+    />
   );
 }

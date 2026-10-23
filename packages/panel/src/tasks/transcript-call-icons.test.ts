@@ -12,7 +12,8 @@ import { TranscriptOpeningCall, TranscriptTool } from "./transcript-blocks.js";
  * transcript-call-icons.test.ts -- a read of a coding agent wears the
  * transcript's scroll, as Copy full transcript does, in a call's row and in
  * a row that opens a tab alike, rather than the two linked steps (lucide's
- * workflow) the window once drew for the coding agents. Synthetic calls.
+ * workflow) the window once drew for the coding agents; and each chat call
+ * wears a chat glyph of its own. Synthetic calls.
  */
 
 /** A finished read of an agent's row and its opening row, drawn into one box. */
@@ -49,4 +50,42 @@ test("a read of a coding agent wears the transcript's scroll in either row", () 
 
   assert.equal(rows.querySelectorAll(".lucide-scroll-text").length, 2);
   assert.equal(rows.querySelector(".lucide-workflow"), null);
+});
+
+test("each chat call wears a chat glyph of its own rather than the wrench a tool this build does not know wears", () => {
+  const box = document.createElement("div");
+  box.innerHTML = renderToStaticMarkup(
+    createElement(
+      "div",
+      null,
+      ...[
+        CALL_KIND.CHAT_POST,
+        CALL_KIND.CHAT_READ,
+        CALL_KIND.CHAT_RESOLVE,
+        CALL_KIND.CHAT_EDIT_CHANNEL,
+      ].map((kind) =>
+        createElement(TranscriptTool, {
+          key: kind,
+          kind,
+          state: TOOL_STATE.OUTPUT_AVAILABLE,
+          subject: "#launch",
+          description: undefined,
+          input: { kind: TOOL_BLOCK.JSON, text: "{}" },
+          output: { kind: TOOL_BLOCK.JSON, text: "{}" },
+          errorText: undefined,
+        }),
+      ),
+    ),
+  );
+
+  assert.deepEqual(
+    [
+      ".lucide-message-square-text",
+      ".lucide-messages-square",
+      ".lucide-message-square-check",
+      ".lucide-hash",
+    ].map((icon) => box.querySelectorAll(icon).length),
+    [1, 1, 1, 1],
+  );
+  assert.equal(box.querySelector(".lucide-wrench"), null);
 });

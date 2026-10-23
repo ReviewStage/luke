@@ -11,6 +11,7 @@ import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { Effect, Layer, Option, Result, Stream } from "effect";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -92,6 +93,7 @@ const services = Layer.mergeAll(
 /** A workspace connected to an installation reaching the repository, and its owner. */
 const openConnectedWorkspace = Effect.gen(function* () {
   const owner = yield* openGithubUser();
+  yield* connectAgentApiKeys(owner);
   const workspaceId = yield* openWorkspace(owner);
   const installation = INSTALLATIONS[installationsConnected++];
   assert.ok(installation);
@@ -143,8 +145,10 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
       Effect.gen(function* () {
         const { workspaceId } = yield* openConnectedWorkspace;
         const teammate = yield* openGithubUser();
+        yield* connectAgentApiKeys(teammate);
         yield* joinWorkspace(workspaceId, teammate);
         const outsider = yield* openGithubUser();
+        yield* connectAgentApiKeys(outsider);
         yield* openWorkspace(outsider);
         const { opened, eve } = fakeEve();
 

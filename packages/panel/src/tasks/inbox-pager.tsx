@@ -5,13 +5,19 @@ import {
   type ShortcutChord,
   shortcutAria,
 } from "@luke/settings/shortcuts";
-import { IconButton, LIST_VARIANT, List, ListRow, type ListRowHint } from "@luke/ui";
+import {
+  IconButton,
+  LIST_VARIANT,
+  List,
+  ListRow,
+  type ListRowHint,
+  OneLine,
+  Shortcut,
+  Tooltip,
+} from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cloneElement, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
-import { FadingWords } from "../fading-words.js";
-import { Shortcut } from "../shortcut.js";
-import { Tooltip } from "../tooltip.js";
 import {
   INBOX_DIRECTION,
   type InboxDirection,
@@ -122,7 +128,9 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
           title={
             <span className="inbox-next-words">
               <span className="inbox-next-lead">{way.lead}</span>
-              <FadingWords className="inbox-next-title" words={next.title} />
+              <OneLine className="inbox-next-title" words={next.title}>
+                {next.title}
+              </OneLine>
             </span>
           }
           meta={next.byKey ? <Shortcut chord={way.chord} /> : null}

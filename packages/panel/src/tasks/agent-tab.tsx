@@ -3,7 +3,6 @@ import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_KIND,
-  CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
@@ -28,14 +27,22 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   INLINE_REF_LOOK,
+  InlineRef,
+  LineSummary,
+  MESSAGE_ACTIONS_PLACEMENT,
+  OneLine,
   TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
   TextLink,
+  useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
+import { skillWord } from "@luke/ui/skill-mention";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import {
   callEndedLine,
@@ -68,16 +75,14 @@ import {
   ConversationRows,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
-import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message.js";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
+import { Message, MessageContent } from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { FadingWords } from "../fading-words.js";
 import { useFindOpen } from "../find-in-tab.js";
-import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
@@ -85,13 +90,13 @@ import {
   AgentCallControls,
   type AgentCallDoors,
   AgentCallFoot,
-  takesCalls,
   useAgentOnCall,
 } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
   CallPictures,
+  MessageFileChips,
   ShownPictures,
   useAgentPictureDoor,
 } from "./agent-pictures.js";
@@ -99,9 +104,8 @@ import { type PublishedDoors, PublishedRow } from "./agent-published.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
-import { AgentTabSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-note.js";
-import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice.js";
@@ -132,11 +136,13 @@ import {
   lineSender,
   macOwnerOf,
   messageWords,
+  nativeSubagent,
   newestTodos,
   placedMessages,
   planPayerOf,
   providerOf,
   SENT_LINE_STATE,
+  type SentLine,
   type SpokenMessage,
   settledPlanEdits,
   sidebarCallIds,
@@ -145,6 +151,7 @@ import {
   teammateStarter,
   transcriptRowKey,
   turnStretches,
+  unreadOpeningLine,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -161,7 +168,6 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links.js";
-import { ChatGptPlanLabel, ClaudePlanLabel } from "./plan-label.js";
 import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
@@ -173,7 +179,6 @@ import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
 import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import {
   calledAgent,
   cardTitle,
@@ -203,7 +208,12 @@ import {
   TranscriptWords,
 } from "./transcript-blocks.js";
 import { type FindRow, useTranscriptFind } from "./transcript-find.js";
-import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark.js";
+import {
+  UndeliveredLines,
+  UndeliveredMark,
+  useLineSending,
+  useUndeliveredLines,
+} from "./undelivered-mark.js";
 import { useAgentCalls } from "./use-agent-calls.js";
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
@@ -420,7 +430,7 @@ function useLiveDoors(
   return useContext(LiveDoors) ?? doors;
 }
 
-/** A chat notice's card, at the moment the window's clock says. */
+/** A chat notice's bubble, from its sender, at the column's left. */
 function NoticeRow({
   message,
   doors,
@@ -428,7 +438,6 @@ function NoticeRow({
   message: CodingAgentMessage;
   doors: ChatNoticeDoors | undefined;
 }): ReactNode {
-  const now = useMinute();
   const live = useLiveDoors({ chat: doors });
   const notice = chatNoticeOf(message);
   if (notice === undefined) return null;
@@ -444,8 +453,8 @@ function NoticeRow({
       notice={notice}
       words={messageWords(message)}
       from={from}
+      sentAt={message.sentAt}
       doors={live?.chat}
-      now={now}
     />
   );
 }
@@ -565,16 +574,24 @@ function DelegationRow({
   const choice =
     standing === undefined ? view.choice : { model: standing.model, effort: standing.effort };
   const status = standing?.status ?? workerStatusOf(part.state);
+  // A native harness's subagent has no worker's tab to open yet.
+  const native = nativeSubagent(part);
+  const opens = onOpen !== undefined && !native;
+  // Note that a native subagent's task and answer fold open under its row instead, as its call's own body reads them.
+  const call = toolCallView(part);
   return (
     <TranscriptSubagent
       callId={part.callId}
-      job={cardTitle(view.task) || CALL_WORDS[CALL_KIND.WORKER].verb}
+      job={view.title ?? (cardTitle(view.task) || CALL_WORDS[CALL_KIND.WORKER].verb)}
       pair={choice === undefined ? undefined : { choice, models: doors?.models ?? [] }}
       state={standing === undefined ? part.state : workerToolState(standing.status)}
       startedAt={doors?.starts?.get(part.callId)}
       errorText={part.errorText}
-      onOpen={onOpen === undefined ? undefined : () => onOpen(part.callId, view.task, status)}
-      card={live?.cards?.worker({ callId: part.callId, task: view.task, status })}
+      onOpen={opens ? () => onOpen(part.callId, view.task, status) : undefined}
+      card={
+        opens ? live?.cards?.worker({ callId: part.callId, task: view.task, status }) : undefined
+      }
+      body={native ? { input: call.input, output: call.output } : undefined}
     />
   );
 }
@@ -643,12 +660,7 @@ function TodosDock({
   if (docked === undefined) return null;
   return (
     <div className="agent-todos-dock">
-      <TranscriptTodosDock
-        key={docked.callId}
-        todos={docked.todos}
-        summary={todosSummary(docked.todos)}
-        focus={todoFocus(docked.todos)}
-      />
+      <TranscriptTodosDock todos={docked.todos} focus={todoFocus(docked.todos)} />
     </div>
   );
 }
@@ -688,7 +700,7 @@ function LoadedSkillView({
   return (
     <OpeningCallView
       part={part}
-      hint={subject.skill.path}
+      hint={subject.skill.path ?? skillWord(subject.skill.name)}
       card={<SkillCard subject={subject} />}
       onOpen={subject.onOpen}
     />
@@ -876,11 +888,11 @@ function AgentPartView({
 function OriginBody({ body }: { body: string }): React.JSX.Element {
   return (
     <Fold className="agent-origin-body">
-      <FoldSummary className="agent-origin-body-line">
+      <LineSummary brightens>
         <DisclosureChevron />
-        <WebhookIcon aria-hidden="true" />
+        <WebhookIcon className="agent-origin-body-icon" aria-hidden="true" />
         {WEBHOOK_BODY_LABEL}
-      </FoldSummary>
+      </LineSummary>
       <FoldBody>
         <pre className="agent-origin-body-text">{body}</pre>
       </FoldBody>
@@ -1021,11 +1033,16 @@ function OriginSubject({
   const words =
     subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
   const { url } = subject;
-  if (url === undefined) return <FadingWords className="agent-origin-subject" words={words} />;
+  if (url === undefined)
+    return (
+      <OneLine className="agent-origin-subject" words={words}>
+        {words}
+      </OneLine>
+    );
   const chip = linkChip(url, words, doors);
   if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
-    <FadingWords className="agent-origin-subject" words={words}>
+    <OneLine className="agent-origin-subject" words={words}>
       <TextLink
         href={url}
         look={TEXT_LINK_LOOK.UNDERLINED}
@@ -1036,7 +1053,7 @@ function OriginSubject({
       >
         {words}
       </TextLink>
-    </FadingWords>
+    </OneLine>
   );
 }
 
@@ -1265,6 +1282,7 @@ export function AgentMessage({
 }): ReactNode {
   const words = messageWords(message);
   const forkOffered = useForkOffered();
+  const sending = useLineSending(message.id);
   if (plan) {
     return (
       <PlanCard
@@ -1290,7 +1308,7 @@ export function AgentMessage({
     const shown = inboxLineWords(words);
     return (
       <Message from={message.role} data-message-id={message.id}>
-        <AttachedFileChips files={messageFileChips(message)} />
+        <MessageFileChips message={message} sending={sending} />
         {words === "" ? null : (
           <MessageContent>
             <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
@@ -2140,8 +2158,7 @@ function AgentTabView({
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
-  // Note that an agent on a provider's own harness takes no call, so its tab draws neither the button nor the foot.
-  const call = takesCalls(agent) ? offeredCall : undefined;
+  const call = offeredCall;
   const onCall = useAgentOnCall(agent.id) && call !== undefined;
   const lines = useMemo(
     () => agentLines(transcript.messages, composer.sent),
@@ -2167,10 +2184,16 @@ function AgentTabView({
     ),
     sameSet,
   );
+  const sending = useKept(
+    new Set(
+      composer.sent.filter((line) => line.state === SENT_LINE_STATE.PENDING).map((line) => line.id),
+    ),
+    sameSet,
+  );
   const retryLine = useSteady(composer.retryLine);
   const marks = useMemo(
-    () => ({ undelivered, unsent, retry: (id: string) => retryLine?.(id) }),
-    [undelivered, unsent, retryLine],
+    () => ({ undelivered, unsent, sending, retry: (id: string) => retryLine?.(id) }),
+    [undelivered, unsent, sending, retryLine],
   );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
@@ -2211,7 +2234,8 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <section
+    <Fill
+      as={FILL_ELEMENT.SECTION}
       ref={tab}
       className="agent-tab ph-no-capture"
       aria-label={agentTabLabel(agent, models)}
@@ -2295,6 +2319,7 @@ function AgentTabView({
             models={models}
             readModels={readModels}
             usage={transcript.usage}
+            payer={transcript.payer}
             servers={servers}
             context={transcript.context}
             brief={agent.brief}
@@ -2308,19 +2333,6 @@ function AgentTabView({
             skills={skills}
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
-            payer={
-              agent.runtime === CODING_AGENT_RUNTIME.CODEX ? (
-                <ChatGptPlanLabel
-                  starter={readerId !== undefined && agent.startedBy?.userId === readerId}
-                  status={agent.status}
-                />
-              ) : agent.runtime === CODING_AGENT_RUNTIME.CLAUDE_CODE ? (
-                <ClaudePlanLabel
-                  starter={readerId !== undefined && agent.startedBy?.userId === readerId}
-                  status={agent.status}
-                />
-              ) : undefined
-            }
             call={
               call === undefined ? undefined : <AgentCallControls agentId={agent.id} doors={call} />
             }
@@ -2336,7 +2348,7 @@ function AgentTabView({
       composer.sending ? null : (
         <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
       )}
-    </section>
+    </Fill>
   );
 }
 
@@ -2372,6 +2384,37 @@ type AgentTabProps = AgentTabDoors &
     | { agent: CodingAgentSummary; agentId?: undefined }
     | { agent: CodingAgentSummary | undefined; agentId: string }
   );
+
+/** Nothing to retry on a tab whose agent is not made yet. */
+const NO_RETRY = () => undefined;
+
+/**
+ * The tab of an agent New task is still starting, before the service has
+ * made it: the developer's words as its first line, as the agent's own
+ * transcript will draw them, and its working line saying it is starting,
+ * over the composer's card, which the agent's own tab takes the place of
+ * once the start answers, its first line drawn in the same place.
+ */
+export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
+  const messages = useMemo(() => agentLines([], [line]), [line]);
+  return (
+    <Fill as={FILL_ELEMENT.SECTION} className="agent-tab ph-no-capture">
+      <AgentTranscriptView
+        messages={messages}
+        brief={CODING_AGENT_BRIEF.PROMPT}
+        reading={false}
+        failed={false}
+        working
+        sessionStarting
+        onRetry={NO_RETRY}
+        overComposer
+      />
+      <footer className="agent-tab-foot">
+        <ComposerSkeleton />
+      </footer>
+    </Fill>
+  );
+}
 
 /**
  * An agent's tab, by the agent's id alone: its transcript is followed and
@@ -2504,8 +2547,20 @@ function AgentTabBody({
   const surroundsLanded =
     publishedSettled &&
     (callsSettled || !messages.some((message) => callOfLine(message) !== undefined));
+  // An agent New task just started draws the words it was started on as its
+  // first line until its transcript reads one back (`unreadOpeningLine`).
+  const opening = unreadOpeningLine(
+    control.opening?.agentId === agent.id ? control.opening.line : undefined,
+    messages,
+  );
+  const sent = useMemo(
+    () => (opening === undefined ? composer.sent : [opening, ...composer.sent]),
+    [opening, composer.sent],
+  );
   const opened = useRef(false);
-  if (surroundsLanded) opened.current = true;
+  // Note that a log already drawn on its opening line is never held back again, because
+  // an agent just started has published nothing and been called by no one, so nothing would move it.
+  if (surroundsLanded || opening !== undefined) opened.current = true;
   const holding = messages.length > 0 && !opened.current;
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => appPlatform().openGitHub(url);
@@ -2576,7 +2631,7 @@ function AgentTabBody({
         models={control.models}
         readModels={control.readModels}
         transcript={transcript}
-        composer={composer}
+        composer={sent === composer.sent ? composer : { ...composer, sent }}
         model={model}
         servers={servers}
         published={published}
@@ -2710,7 +2765,11 @@ export function AgentSubagentTab({
     onHeld(callId, { ...held, subagentTitles: new Map() });
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
-    <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="agent-tab ph-no-capture"
+      aria-label={cardTitle(task)}
+    >
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2732,6 +2791,6 @@ export function AgentSubagentTab({
           </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
-    </section>
+    </Fill>
   );
 }

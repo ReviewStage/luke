@@ -100,6 +100,13 @@
     padding-top: var(--luke-section-gap);
   }
 
+  /* A filter line whose filters all stand hidden, a line of chips waiting
+     for its first, takes no room, so the line can stand ready for a chip
+     to arrive into without a gap where none is. */
+  .luke-collection-page-filters:not(:has(> :not([hidden]))) {
+    display: none;
+  }
+
   /* The header and filters stand still above the scroll, and reserve a
      scrollbar's gutter as the scroll does, so a scrollbar that takes room
      narrows the column under them no more than them. Their end gap is the
@@ -138,11 +145,16 @@
 
   /* Under a toolbar with no filters, the content opens the filters' gap
      below the toolbar's hairline, inside the scroll so the wheel works
-     right up to it. */
-  .luke-collection-page[data-frame="toolbar"] > .luke-collection-page-scroll:first-child,
+     right up to it. Note that the gap is the content's padding rather than
+     the scroll's, because a sticky head sticks inside its scroller's
+     padding, and would leave what scrolls under it showing above it. */
+  .luke-collection-page[data-frame="toolbar"]
+    > .luke-collection-page-scroll:first-child
+    > .luke-collection-page-content,
   .luke-collection-page[data-frame="toolbar"]
     > :not(.luke-collection-page-top)
-    + .luke-collection-page-scroll {
+    + .luke-collection-page-scroll
+    > .luke-collection-page-content {
     padding-top: var(--luke-section-gap);
   }
 

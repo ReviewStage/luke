@@ -28,12 +28,43 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * The environment the runner reads. The bearer authenticates it to Luke, its
  * events and its MCP server alike. The plan token is never read by the runner
  * itself: the CLI it launches inherits it, and the command sandbox denies it,
- * with the bearer, to every command the agent runs. Codex's token is never
+ * with the bearer, to every command the agent runs. An Anthropic API key
+ * stands in its place for an agent the account's key pays for. Codex's token is never
  * in it: app-server asks Luke for it through the runner's token command.
  */
 export const RUNNER_ENV = {
   BEARER: "LUKE_RUNNER_TOKEN",
   CLAUDE_TOKEN: "CLAUDE_CODE_OAUTH_TOKEN",
+  /**
+   * The account's Anthropic API key, in the plan token's place for an agent
+   * its key pays for: the CLI's documented variable
+   * (https://code.claude.com/docs/en/agent-sdk/quickstart), on the same terms.
+   */
+  API_KEY: "ANTHROPIC_API_KEY",
+  /**
+   * The account's OpenAI API key, for a Codex launch its key pays for: the
+   * variable app-server's provider names as its `env_key`
+   * (https://developers.openai.com/codex/config-advanced/), which no command
+   * Codex runs inherits.
+   */
+  OPENAI_API_KEY: "OPENAI_API_KEY",
+} as const;
+
+/**
+ * How the folder of the skills a member installed into Luke is laid out,
+ * which Luke writes into the sandbox as it opens and a config line names
+ * (`installedSkills`): a Claude Code local plugin, its manifest naming it,
+ * whose `skills/` holds one folder per skill, `SKILL.md` and its files, and
+ * which is Codex's extra skills root as it stands. Claude Code lists a
+ * plugin's skill as `<plugin>:<name>`.
+ */
+export const INSTALLED_SKILLS = {
+  /** The folder of skill folders, under the installed folder. */
+  SKILLS: "skills",
+  /** The plugin's manifest, under the installed folder. */
+  MANIFEST: ".claude-plugin/plugin.json",
+  /** The plugin's name, which leads each of its skills' names in Claude Code. */
+  PLUGIN: "luke",
 } as const;
 
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
@@ -101,6 +132,20 @@ export const IMAGE_MEDIA_TYPE = {
  */
 const SEQUENCE_MAX = 2 ** 52;
 
+/**
+ * One integration the agent is handed, as an MCP server of its own at Luke,
+ * reached under the runner's bearer as Luke's own server is: the
+ * connection's name (`linear`, `notion-2`), which the server is registered
+ * under and its tools are named by, and its endpoint. The name is a bare
+ * word, so it stands as a TOML key in Codex's config and in Claude Code's
+ * `mcp__<server>__<tool>` as written.
+ */
+const IntegrationServerSchema = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/)),
+  url: Schema.String,
+});
+export type IntegrationServer = typeof IntegrationServerSchema.Type;
+
 const SequenceSchema = Schema.Number.check(
   Schema.isInt(),
   Schema.isGreaterThanOrEqualTo(0),
@@ -132,8 +177,12 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   eventsUrl: Schema.String,
   /** The Luke MCP server's streamable-HTTP endpoint. */
   mcpUrl: Schema.String,
+  /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
+  integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /** The hosts a command the agent runs may reach, besides nothing else. */
   allowedDomains: Schema.Array(Schema.String),
+  /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
+  installedSkills: Schema.optionalKey(Schema.String),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
 
@@ -152,20 +201,31 @@ export const CodexConfigSchema = Schema.Struct({
   executable: Schema.String,
   model: Schema.String,
   effort: Schema.optionalKey(CodexEffortSchema),
+  /**
+   * Whether the agent runs its model's fast version: Codex's documented
+   * `fast` service tier (the API's `priority`), which a launch on an OpenAI
+   * API key alone asks for; the plan's launch runs none.
+   */
+  fast: Schema.optionalKey(Schema.Boolean),
   /** Luke's coder instructions, as the thread's `developer_instructions`. */
   developerInstructions: Schema.String,
   threadId: Schema.optionalKey(Schema.String),
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
   mcpUrl: Schema.String,
+  /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
+  integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /**
    * Where the runner asks Luke for the plan's access token, under its bearer
    * (`/api/agents/runner-token`). App-server takes its token from the
    * runner's `codex-token` command (Codex's provider `auth`), which Codex runs
    * again as its cached token ages and after a 401, so a turn outlives any
-   * one token.
+   * one token. Not asked where the launch's environment holds
+   * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it.
    */
   tokenUrl: Schema.String,
+  /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
+  installedSkills: Schema.optionalKey(Schema.String),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 
@@ -215,8 +275,9 @@ const StopLineSchema = Schema.Struct({
 /**
  * A model or effort change, applied from the next model call on Claude Code
  * and from the next turn on Codex. An effort the launch's harness does not
- * take is skipped. `fast` turns Claude Code's own fast mode on or off; Codex
- * has none and skips it.
+ * take is skipped. `fast` turns Claude Code's own fast mode on or off, and
+ * Codex's `fast` service tier on an API key from its next turn; Codex on the
+ * plan skips it.
  */
 const ModelLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MODEL),

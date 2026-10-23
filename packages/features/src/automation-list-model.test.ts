@@ -25,6 +25,7 @@ import {
   PULL_REQUEST_MOMENT,
 } from "./automation-wire.js";
 import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
 /**
  * The Automations list as a window draws it: the workspace's automations
@@ -157,6 +158,18 @@ test("a GitHub event is said as what happens, by whom, where, and the labels, br
   );
 });
 
+test("a Sentry trigger is said as its event in Sentry", () => {
+  const sentry = (event: (typeof SENTRY_TRIGGER_EVENT)[keyof typeof SENTRY_TRIGGER_EVENT]) =>
+    automationTriggerText({
+      kind: AUTOMATION_TRIGGER.INTEGRATION,
+      provider: TRIGGER_PROVIDER.SENTRY,
+      event,
+    });
+
+  assert.equal(sentry(SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED), "When an alert fires in Sentry");
+  assert.equal(sentry(SENTRY_TRIGGER_EVENT.ISSUE_CREATED), "When a new issue is created in Sentry");
+});
+
 test("a newest run is working while its agent works, failed where it could not start or its agent failed, and at rest otherwise", () => {
   const agent = (status: (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS]) => ({
     id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
@@ -214,6 +227,21 @@ test("a run is titled by its agent where the agent has a title, else by what fir
     automationRunTitle(run({ firing: { kind: "schedule", dueAt: 1 } })),
     "Scheduled run",
   );
+  const sentry = {
+    kind: AUTOMATION_TRIGGER.INTEGRATION,
+    provider: TRIGGER_PROVIDER.SENTRY,
+    event: SENTRY_TRIGGER_EVENT.ISSUE_CREATED,
+  } as const;
+  assert.equal(
+    automationRunTitle(
+      run({ agent: null, firing: { ...sentry, subject: { id: "4001", title: "TypeError" } } }),
+    ),
+    "TypeError",
+  );
+  assert.equal(
+    automationRunTitle(run({ agent: null, firing: { ...sentry, subject: { id: "4001" } } })),
+    "Sentry event",
+  );
 });
 
 test("a run's line says why it did not start, else where its agent stands, or that it waits", () => {
@@ -268,7 +296,7 @@ test("a run's line says why it did not start, else where its agent stands, or th
     "Its agent failed: its creator's API key was refused or can't be read",
     "another's automation names whose key, and no Settings the reader cannot mend",
   );
-  assert.match(automationRunLine(keyRefused), /check Settings › Coding agents › API keys$/u);
+  assert.match(automationRunLine(keyRefused), /check Settings › Agents$/u);
   const onTeammatesAgent = run({
     agent: {
       ...agent(CODING_AGENT_STATUS.FAILED),
@@ -292,7 +320,67 @@ test("a run's line says why it did not start, else where its agent stands, or th
       }),
       "its creator",
     ),
-    /check Settings › Coding agents › API keys$/u,
+    /check Settings › Agents$/u,
     "the reader's own agent is the reader's key, even on another's automation",
+  );
+});
+
+/** A Sentry trigger on the event given, keeping to the filters given. */
+function sentry(
+  event: (typeof SENTRY_TRIGGER_EVENT)[keyof typeof SENTRY_TRIGGER_EVENT],
+  filters?: Extract<AutomationTrigger, { kind: "integration" }>["filters"],
+): AutomationTrigger {
+  return {
+    kind: AUTOMATION_TRIGGER.INTEGRATION,
+    provider: TRIGGER_PROVIDER.SENTRY,
+    event,
+    ...(filters === undefined ? undefined : { filters }),
+  };
+}
+
+test("a Sentry trigger is said as its event in Sentry, then the projects, environments, and levels it keeps to, levels least severe first", () => {
+  assert.equal(
+    automationTriggerText(sentry(SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED)),
+    "When an alert fires in Sentry",
+  );
+  assert.equal(
+    automationTriggerText(
+      sentry(SENTRY_TRIGGER_EVENT.ISSUE_CREATED, {
+        project: ["web", "api"],
+        environment: ["production"],
+        level: [SENTRY_LEVEL.FATAL, SENTRY_LEVEL.ERROR],
+      }),
+    ),
+    "When a new issue is created in Sentry · web, api · production · error, fatal",
+  );
+  assert.equal(
+    automationTriggerText(
+      sentry(SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED, { level: [SENTRY_LEVEL.WARNING] }),
+    ),
+    "When an alert fires in Sentry · warning",
+  );
+});
+
+test("an integration's skipped run is titled by its subject, and a same-subject skip says it ran for this issue already", () => {
+  const firing = {
+    kind: "integration",
+    provider: TRIGGER_PROVIDER.SENTRY,
+    event: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+    subject: {
+      id: "4711",
+      title: "TypeError: cart is undefined",
+      url: "https://acme.sentry.io/issues/4711/",
+    },
+  } as const;
+  const skipped = run({
+    firing,
+    status: AUTOMATION_RUN_STATUS.SKIPPED,
+    reason: AUTOMATION_RUN_REASON.SAME_SUBJECT,
+  });
+
+  assert.equal(automationRunTitle(skipped), "TypeError: cart is undefined");
+  assert.equal(
+    automationRunLine(skipped),
+    "Skipped: already ran for this issue within its cooldown.",
   );
 });

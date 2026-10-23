@@ -7,10 +7,10 @@ import {
   Menu,
   type MenuEntry,
   Stack,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { CalendarRangeIcon, SlidersHorizontalIcon } from "lucide-react";
-import { Tooltip } from "../../tooltip.js";
 
 /** Every range a view may read, shortest first. */
 const ALL_WINDOWS: readonly AdminMetricsWindow[] = Object.values(ADMIN_METRICS_WINDOW);

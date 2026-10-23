@@ -1,0 +1,81 @@
+{
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The task to start the agent on, by the id list_tasks answered; leave it out for the task you work on."
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64000,
+      "description": "What the agent should do, typed to it as its first message; the developer's words where they named the job. Leave it out to start the agent on the task's plan itself."
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64000,
+      "description": "Everything else the agent should hear as it starts (what to start with, what to watch out for, what to leave alone), handed to it after the plan or the prompt in the same first message; leave it out where there is nothing beyond the plan."
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 36
+      },
+      "maxItems": 10,
+      "description": "Pictures handed to the agent with its first message, which it sees as images: at most 10 attachment ids, each a picture of your own conversation, such as one show_image kept, or of a chat message you can read; each at most 1.5 MB and all of them 3 MB together, since a larger one is refused, never made smaller. Leave it out to hand none."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "The agent's title from the start, how the developer sees it named, such as the pull request it will open; leave it out to have it named from what it is told."
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "The branch of the task's repository to clone the agent's checkout at and cut its own branch from, such as the head branch of a pull request it builds on; it must already be on GitHub. Leave it out for the repository's default branch."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The model to run on, by its catalog id (such as anthropic/claude-opus-5.5); leave it out with the effort for the member's default."
+    },
+    "effort": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The reasoning effort, as the model lists it (such as high); given with the model or not at all."
+    },
+    "from": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36,
+          "description": "The agent to start from, by the id list_agents answered."
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36,
+          "description": "One of that agent's messages, by the messageId read_agent names on an entry of its tail, to fork it there; leave it out to continue the agent from where it stands."
+        }
+      },
+      "required": [
+        "agentId"
+      ],
+      "additionalProperties": false,
+      "description": "Another coding agent of your workspace to take over from, on its own task, or on no task where it has none: the new agent is handed its brief and its transcript (with Luke's summary of the steps that do not fit) and a copy of its work, runs on its model unless you name one, and hears the note after them; it takes no prompt and no branch. Without messageId it continues the agent, which is stopped; with one it forks the agent at that message, which goes on."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

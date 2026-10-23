@@ -8,11 +8,24 @@ import {
   knownResponse,
 } from "@luke/features/chat-wire";
 import type { InboxAsk } from "@luke/features/inbox-wire";
-import { ErrorState, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  CardHead,
+  ErrorState,
+  GAP,
+  LAYOUT_ELEMENT,
+  Stack,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  Time,
+} from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
 import { ActorLine, ActorRef } from "../actor-ref.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import {
@@ -25,6 +38,7 @@ import {
   chatAskWaitsOn,
   chatNumberedPick,
 } from "./chat-ask-model.js";
+import { useChatReplyDoor } from "./chat-reply-doors.js";
 import {
   AnswerForm,
   answerPlaceholder,
@@ -57,7 +71,7 @@ import {
   type InboxMissing,
   sentenceCased,
 } from "./inbox-model.js";
-import { RelativeTime } from "./relative-time.js";
+import { ComposerQuoteView, REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 
 /**
@@ -86,8 +100,11 @@ import { SentWords } from "./skill-chip.js";
  * there, and Enter on an option or in a field sends as Send does. An
  * acknowledgement's Send reads Got it until a word is written. The note line
  * takes mentions where the page hands them, and a dictation, but no files,
- * which a chat answer does not carry. Why an answer was not taken is said
- * under the box.
+ * which a chat answer does not carry. Words selected in the card, its
+ * title, its blocks, and its options, steps, and fields' names, and
+ * replied to are quoted into its note line while it may be answered
+ * (`chat-reply-doors.ts`). Why an answer was not taken is said under the
+ * box.
  *
  * Once answered, the card holds the answerer's comment as the Inbox draws an
  * answer: their face and name, when, and whether it reached the poster, then
@@ -146,6 +163,7 @@ function focusLacking(box: HTMLElement | null, missing: InboxMissing): void {
  * them; why an answer was not taken under it.
  */
 function Answer({
+  card,
   message,
   ask,
   response,
@@ -154,6 +172,8 @@ function Answer({
   keywords,
   onAnswer,
 }: {
+  /** The card the box answers, whose words a Reply quotes into its note line. */
+  card: RefObject<HTMLDivElement | null>;
   message: ChatMessage;
   ask: CarriedAsk;
   response: ChatResponse;
@@ -183,6 +203,8 @@ function Answer({
     statuses,
     onNote: setRefusal,
   });
+  // A Reply over the card's words lays its quote into the note line, never while an answer is out.
+  useChatReplyDoor(card, (words) => !sending && field.editor.current?.insertQuote(words) === true);
   const nod = response.type === CHAT_ASK.NONE && draft.note.trim() === "";
   // A send of an answer that lacks something goes nowhere, and takes the keyboard to what it lacks.
   const send = () => {
@@ -255,6 +277,7 @@ function Answer({
         placeholder={placeholder}
         maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
         onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
+        quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
         nod={nod}
         sending={sending}
         held={sending}
@@ -310,7 +333,7 @@ function AnsweredComment({
   const at = chatAnsweredAt(chat, message);
   const answerer = actorOf(answeredBy ?? "");
   return (
-    <ol className="inbox-thread" aria-label="Answer">
+    <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.NONE} className="inbox-thread" aria-label="Answer">
       <Comment
         kind={COMMENT.ANSWERED}
         head={
@@ -321,7 +344,7 @@ function AnsweredComment({
             <span className="inbox-comment-when">
               {at === undefined ? null : (
                 <>
-                  <RelativeTime className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
+                  <Time className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
                 </>
               )}
               <Delivered heard={ask.needsReply} poster={actorOf(message.authorId)} />
@@ -343,7 +366,7 @@ function AnsweredComment({
           </div>
         )}
       </Comment>
-    </ol>
+    </Stack>
   );
 }
 
@@ -373,19 +396,26 @@ export function AskCard({
 }: AskCardProps): React.JSX.Element {
   const { response } = ask;
   const open = ask.status === ASK_STATUS.OPEN;
+  const card = useRef<HTMLDivElement>(null);
   const title =
-    ask.title === undefined ? null : <Text variant={TEXT_VARIANT.DIALOG}>{ask.title}</Text>;
+    ask.title === undefined ? null : (
+      <div {...{ [REPLY_SCOPE]: "" }}>
+        <Text variant={TEXT_VARIANT.DIALOG}>{ask.title}</Text>
+      </div>
+    );
   if (!knownResponse(response)) {
     return (
       <div className="chat-ask" data-status={ask.status}>
         <div className="inbox-ask">
-          <div className="inbox-ask-head">
-            <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
-          </div>
-          <div className="chat-ask-body">
-            {title}
-            {blocks}
-          </div>
+          <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+            <CardHead>
+              <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
+            </CardHead>
+            <div className="chat-ask-body">
+              {title}
+              {blocks}
+            </div>
+          </Card>
         </div>
       </div>
     );
@@ -416,40 +446,43 @@ export function AskCard({
     }
   })();
   return (
-    <div className="chat-ask" data-status={ask.status}>
+    <div ref={card} className="chat-ask" data-status={ask.status}>
       <div className="inbox-ask">
-        {asked === undefined ? null : (
-          <div className="inbox-ask-head">
-            <span className="inbox-ask-kind">{askHeadWords(asked, undefined)}</span>
-            {standing}
+        <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+          {asked === undefined ? null : (
+            <CardHead>
+              <span className="inbox-ask-kind">{askHeadWords(asked, undefined)}</span>
+              {standing}
+            </CardHead>
+          )}
+          <div className="chat-ask-body">
+            {title}
+            {blocks}
+            {waiting ? <Waiting waitsOn={waitsOn} actorOf={actorOf} /> : null}
+            {answerable ? (
+              <Answer
+                card={card}
+                message={message}
+                ask={ask}
+                response={response}
+                asked={asked}
+                self={self}
+                keywords={keywords}
+                onAnswer={onAnswer}
+              />
+            ) : null}
+            {ask.status === ASK_STATUS.ANSWERED ? (
+              <AnsweredComment
+                message={message}
+                ask={ask}
+                asked={asked}
+                chat={chat}
+                actorOf={actorOf}
+                now={now}
+              />
+            ) : null}
           </div>
-        )}
-        <div className="chat-ask-body">
-          {title}
-          {blocks}
-          {waiting ? <Waiting waitsOn={waitsOn} actorOf={actorOf} /> : null}
-          {answerable ? (
-            <Answer
-              message={message}
-              ask={ask}
-              response={response}
-              asked={asked}
-              self={self}
-              keywords={keywords}
-              onAnswer={onAnswer}
-            />
-          ) : null}
-          {ask.status === ASK_STATUS.ANSWERED ? (
-            <AnsweredComment
-              message={message}
-              ask={ask}
-              asked={asked}
-              chat={chat}
-              actorOf={actorOf}
-              now={now}
-            />
-          ) : null}
-        </div>
+        </Card>
       </div>
     </div>
   );

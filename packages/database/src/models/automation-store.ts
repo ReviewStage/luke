@@ -23,6 +23,7 @@ import {
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import type { SentryTriggerEvent, TriggerProvider } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import {
   and,
@@ -138,6 +139,8 @@ export const AUTOMATION_COLUMNS = {
 
 /** What making an automation takes: the task, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
 export interface NewAutomation {
+  /** The id to make it under, such as one drawn from an agent's call key so a call run again finds the one it made; a fresh one where left out. A make under an id already standing writes nothing and answers none. */
+  readonly id?: string;
   /** The task it stands on, whose workspace and repository it takes; null for one made on a workspace with repositories of its own. */
   readonly taskId: string | null;
   /** The workspace an automation with no task stands on, which the account must be a member of; read off the task otherwise. */
@@ -366,6 +369,7 @@ const WrittenSchema = Schema.Struct({ id: Schema.String, txid: Schema.String });
 
 const insertAutomation = SqlSchema.findAll({
   Request: Schema.Struct({
+    id: Schema.optionalKey(Schema.String),
     userId: Schema.String,
     taskId: Schema.NullOr(Schema.String),
     name: Schema.String,
@@ -388,6 +392,7 @@ const insertAutomation = SqlSchema.findAll({
       db
         .insert(automation)
         .values({
+          ...(row.id === undefined ? undefined : { id: row.id }),
           userId: row.userId,
           taskId: row.taskId,
           organizationId: row.organizationId,
@@ -404,6 +409,8 @@ const insertAutomation = SqlSchema.findAll({
           createdAt: row.now,
           updatedAt: row.now,
         })
+        // A caller that names the id may run its make again, which then finds the row standing and writes nothing.
+        .onConflictDoNothing({ target: automation.id })
         .returning({ id: automation.id, txid: TXID }),
     ),
 });
@@ -603,7 +610,7 @@ function historyOf(userId: string, automationId: string): SQL {
 const HISTORY_COLUMNS = {
   ...RUN_COLUMNS,
   agentConversationId: codingAgent.conversationId,
-  // The name the agent goes by: Luke for an operator, its human name, else its title.
+  // The name the agent goes by: Luke for an operator, else its title.
   agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
   agentCreatedAt: codingAgent.createdAt,
   agentUserId: codingAgent.userId,
@@ -1013,6 +1020,61 @@ const findGithubAutomations = SqlSchema.findAll({
         )
         .orderBy(asc(automation.createdAt), asc(automation.id))
         .limit(limit),
+    ),
+});
+
+const findIntegrationAutomations = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    provider: Schema.String,
+    event: Schema.String,
+    limit: Schema.Int,
+  }),
+  Result: ListeningRowSchema,
+  execute: ({ organizationId, provider, event, limit }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
+        .from(automation)
+        .where(
+          and(
+            eq(automation.enabled, true),
+            // Note that an integration automation was made after workspaces came to every row, so its own column names its workspace.
+            eq(automation.organizationId, organizationId),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.INTEGRATION),
+            sql`${automation.trigger}->>'provider' = ${provider}`,
+            sql`${automation.trigger}->>'event' = ${event}`,
+            memberOfAutomationWorkspace(automation.userId),
+          ),
+        )
+        .orderBy(asc(automation.createdAt), asc(automation.id))
+        .limit(limit),
+    ),
+});
+
+const findSubjectRun = SqlSchema.findAll({
+  Request: Schema.Struct({
+    automationId: Schema.String,
+    subjectId: Schema.String,
+    since: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ automationId, subjectId, since }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automationRun.id })
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            // Note that a run is dated by when it started, because one queued may start up to an hour after it fired.
+            gte(automationRun.settledAt, since),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            sql`${automationRun.firing}->>'kind' = ${AUTOMATION_FIRING.INTEGRATION}`,
+            sql`${automationRun.firing}->'subject'->>'id' = ${subjectId}`,
+          ),
+        )
+        .limit(1),
     ),
 });
 
@@ -1618,4 +1680,33 @@ export function githubAutomationsOn(
   limit: number,
 ): TaskStoreEffect<readonly ListeningAutomation[]> {
   return findGithubAutomations({ repository, event, limit });
+}
+
+/**
+ * The enabled automations of the workspace listening for the provider's
+ * event, of owners still members of it, oldest first, at most `limit`:
+ * what a delivery from the workspace's installation may fire, its filters
+ * still to read. No other workspace's automation is ever among them.
+ */
+export function integrationAutomationsOn(
+  organizationId: string,
+  provider: TriggerProvider,
+  event: SentryTriggerEvent,
+  limit: number,
+): TaskStoreEffect<readonly ListeningAutomation[]> {
+  return findIntegrationAutomations({ organizationId, provider, event, limit });
+}
+
+/**
+ * Whether the automation started a run on the integration subject named
+ * (one Sentry issue, by the provider's id) at or after `since`:
+ * what its per-subject cooldown holds a new delivery back by. A run that was
+ * skipped or failed started nothing, so it holds nothing back.
+ */
+export function subjectRunStartedSince(
+  automationId: string,
+  subjectId: string,
+  since: Date,
+): TaskStoreEffect<boolean> {
+  return Effect.map(findSubjectRun({ automationId, subjectId, since }), (rows) => rows.length > 0);
 }

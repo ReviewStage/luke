@@ -135,6 +135,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     EXPERIMENT.BROWSER,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
+    EXPERIMENT.MEMORY,
   ]);
 });
 
@@ -170,11 +171,12 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
 
   // Each experiment is a card of its own, and the avatar stands in Video calls' card, under its switch.
   const cards = [...page.querySelectorAll("section")].map((card) =>
-    [...card.querySelectorAll('[role="switch"], [aria-haspopup], fieldset')].map((control) =>
-      control instanceof HTMLFieldSetElement
-        ? wordsOf(control, "aria-labelledby")
-        : // A chip's name ends with the value it names, which is not the row's.
-          control.getAttribute("aria-label")?.split(": ")[0],
+    [...card.querySelectorAll('[role="switch"], [aria-haspopup], [role="radiogroup"]')].map(
+      (control) =>
+        control.getAttribute("role") === "radiogroup"
+          ? control.getAttribute("aria-label")
+          : // A chip's name ends with the value it names, which is not the row's.
+            control.getAttribute("aria-label")?.split(": ")[0],
     ),
   );
   assert.deepEqual(cards, [
@@ -184,24 +186,24 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ["Browser tab"],
     ["Chat"],
     ["Video calls", "Avatar"],
+    ["Memory"],
   ]);
 
   // Every face stands open, with no menu to open first: one radio group, Atlas chosen at first.
-  const group = page.querySelector("fieldset");
-  assert.ok(group instanceof HTMLFieldSetElement);
+  const group = page.querySelector('[role="radiogroup"]');
+  assert.ok(group instanceof HTMLElement);
+  assert.equal(group.getAttribute("aria-label"), "Avatar");
   assert.equal(
     wordsOf(group, "aria-describedby"),
     "Who Luke appears as on video. A new choice shows the next time video starts.",
   );
-  const faces = [...group.querySelectorAll("label")];
-  const radios = faces.map((face) => face.querySelector<HTMLInputElement>('input[type="radio"]'));
+  const faces = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(
     faces.map((face) => face.textContent),
     ["Atlas", "Caspian", "Cassidy", "Celia", "Cosmo", "Lyra", "Orion", "Selene"],
   );
-  assert.equal(new Set(radios.map((radio) => radio?.name)).size, 1);
   assert.deepEqual(
-    radios.map((radio) => radio?.checked),
+    faces.map((face) => face.getAttribute("aria-checked") === "true"),
     [true, false, false, false, false, false, false, false],
   );
   // Each shows its face from Keyframe's storage, and the chosen one stands large beside them all.
@@ -236,6 +238,6 @@ test("with Video calls off, no avatar is offered", () => {
     view: rowsInput(NO_EXPERIMENTS),
   });
 
-  assert.equal(page.querySelector('input[type="radio"]'), null);
+  assert.equal(page.querySelector('[role="radio"]'), null);
   assert.equal(page.querySelectorAll("section").length, EXPERIMENTS.length);
 });

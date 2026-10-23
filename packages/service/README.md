@@ -269,6 +269,34 @@ while production's `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`
 hold the App's client id and secret, a Vercel project setting rather than anything in
 this repository. Nothing on the branch is Preview-specific.
 
+## The Luke Sentry integration
+
+Automations fire on Sentry's events (an issue alert whose action is Luke, a
+new issue) through Luke's own Sentry public integration, which a Sentry
+organization's owner installs on one Luke workspace; a delivery fires only
+the automations of the workspace its installation stands for
+(`integration_installation`, `@luke/database/models/integration-installation-store`).
+`src/triggers/sentry/sentry-app-config.ts`'s `SentryApp` is the integration
+as the web runtime builds it from `SENTRY_APP_SLUG` (the integration's slug,
+which its install address names), `SENTRY_APP_CLIENT_ID`, and
+`SENTRY_APP_CLIENT_SECRET` (the client secret, which both exchanges an
+install's code and signs every webhook delivery). A deployment missing any
+of them still builds the service, and every read of it answers
+`SentryAppNotConfigured` naming what was missing.
+
+To register the integration, in Sentry's Settings › Developer Settings ›
+Custom Integrations › Create New Integration, choose a public integration and set:
+
+- **Webhook URL**: `https://<deployment>/api/triggers/sentry`.
+- **Redirect URL**: `https://<deployment>/api/triggers/sentry/installed`.
+- **Verify Installation**: on, so an install completes only once Luke has exchanged its code.
+- **Permissions**: Issue & Event › Read, and Project › Read; nothing else.
+- **Webhooks**: Issue on.
+- **Alert Rule Action**: on, so an alert rule can name Luke as its action.
+
+Then copy the integration's slug, client id, and client secret into the three
+variables above for every environment that receives its deliveries.
+
 ## The admin resource
 
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted
@@ -394,15 +422,18 @@ with Opus in base64, held to two minutes and a megabyte and refused past
 either as `request_too_large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the task's
 title, the paths it names), each on one line. `src/dictation/transcription.ts`
-sends the clip and the words to OpenAI's `gpt-transcribe` on Luke's key as one
+sends the clip and the words to OpenAI's `gpt-transcribe` on the caller's own
+OpenAI API key (`src/accounts/own-api-key.ts`, the key saved in Settings ›
+Agents, never Luke's) as one
 multipart `POST /v1/audio/transcriptions`, the words as its `keywords[]`
 ([OpenAI's speech-to-text guide](https://developers.openai.com/api/docs/guides/speech-to-text)).
 Nothing of the clip or the text is stored, logged, traced, or counted as an
-event; a failure logs OpenAI's status alone and answers `unavailable`, as a
-deployment without `OPENAI_API_KEY` does. The day is metered one call and the
+event; a failure logs OpenAI's status alone and answers `unavailable`, and a
+caller who saved no OpenAI API key is refused `openai-key-missing` (409)
+before the clip is read. The day is metered one call and the
 seconds OpenAI billed, or the clip's own length where the answer reports none,
 and a meter the database refused is logged while the text is still answered.
-There is no path on an account's own key. `src/dictation/dictation-procedures.test.ts`
+`src/dictation/dictation-procedures.test.ts`
 answers the route over a scripted OpenAI at its HTTP door.
 
 ## The models group
@@ -439,7 +470,7 @@ through `validateModelChoice`, accepts a `(model, effort)` only for an
 offered model at an effort it lists, keeping the standard window only for a
 model that offers two, and `providerModelOf`, which turns a
 catalog id into the id the provider's own API takes — model calls go to
-Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
+Anthropic and OpenAI directly on the account's own keys, never through the gateway — so
 `anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
 catalog's after its prefix. `src/providers/model-catalog.test.ts` reads the catalog
 through a scripted gateway and the test clock; `src/accounts/models-procedures.test.ts`
@@ -771,7 +802,12 @@ wrapper's own result. Both the names and that envelope are the wire's
 (`@luke/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
 `integrationRemoteCallSchema`), because the desktop draws the nested call as
 the provider's tool, under the provider's mark, and leaves its wrapper's row
-out. Every name
+out. A Claude Code or Codex agent has no wrapper: each connection it is
+handed is an MCP server of its own at Luke
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/luke-mcp/app.ts`
+over `src/integrations/connection-door.ts`), and its call of one
+(`mcp__linear__list_issues`, or Codex's `mcpToolCall` on server `linear`) is
+stored under the same name and envelope, the call its own parent. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
@@ -1098,10 +1134,10 @@ deployment for the cookie's account, a Stop and a delete's retire with it. The a
 tools and authors its own under `apps/dev/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, its own `apply_patch` and `grep`
-(`apps/dev/tools/`), Luke's own `search_web` and
-`read_web_page` (`public-research.ts`: the search screened, cited, and
-budgeted per turn on Luke's key and counted on the account's meter, the page
-read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
+(`apps/dev/tools/`), eve's provider-run `web_search` (Anthropic's server
+search on a Claude model, OpenAI's on a GPT one, inside the agent's own model
+call and so on its own key), Luke's own `read_web_page`
+(`public-research.ts`: refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), which takes notes
 (`@luke/features/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
@@ -1157,7 +1193,21 @@ archives it or brings it back, by the task
 menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
-task's archive keeps only when it stands from; and `list_models`, the models and efforts the agent's starter may
+task's archive keeps only when it stands from; `list_automations`,
+`create_automation`, `update_automation`, `delete_automation`, and
+`run_automation`
+(`src/agents/automation-tools.ts`), which list the workspace's automations
+the starter may read, or read one whole with its newest runs, and make,
+change, pause, resume, delete, and run one now for the starter through the
+automations routes' own writes (`src/automations/automation-writes.ts`),
+under the same checks and access, an automation made under an id drawn from
+eve's key for the call, so a call run again makes one, and never with a
+webhook trigger, whose secret is shown only in the window that minted it;
+a write answers the start of the prompt, as the list does, and a
+switched-off connection named by no connection's name is refused; a run now
+records a manual firing under a key drawn from the call's and acts on it
+through the same guards and start a Run now takes, reaching eve as the
+deployment acting for the starter; an operator is offered no delete; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1176,7 +1226,7 @@ The worker (`apps/dev/subagents/worker/`) is the agent's own declared
 subagent: read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
-(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
+(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `web_search`,
 `read_web_page`), told to change nothing, and uncapped in tokens, as the
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
@@ -1218,8 +1268,8 @@ the first turn in which the agent runs a sandbox tool of its own.
 The model is chosen at every step (`src/agents/coder-host/model.ts`): the agent's row
 names the catalog id and effort, `providerModelOf` turns the id into the
 provider's own, and the step is told `@ai-sdk/anthropic` on
-`ANTHROPIC_API_KEY` with `providerOptions.anthropic.effort`, or
-`@ai-sdk/openai`'s Responses model on `OPENAI_API_KEY` with
+the account's own Anthropic key with `providerOptions.anthropic.effort`, or
+`@ai-sdk/openai`'s Responses model on its own OpenAI key with
 `providerOptions.openai.reasoningEffort`, with the context window the
 catalog lists for the model (`CatalogModel.contextWindow`) or a fallback
 where it lists none. Each step also asks for its reasoning in words, so the
@@ -1230,13 +1280,12 @@ thinks whether asked or not. An older Claude is not asked, since the ask
 would start it thinking. Nothing goes through AI Gateway.
 
 The key a step runs on is read at every step too
-(`src/agents/coder-host/account-keys.ts`): the account's own key for the provider where
-it saved one (above, "Accounts' own provider keys"), opened from its row,
-and Luke's own `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` only where it saved
-none. A row the deployment's ring cannot open, or a deployment holding no
-ring, refuses the step with `ACCOUNT_KEY_UNREADABLE` rather than run it on
-Luke's key, so nothing the account meant to pay for is quietly billed to
-Luke. A step on the account's key goes through a middleware that keeps the
+(`src/agents/coder-host/account-keys.ts`): the account's own key for the provider
+(above, "Accounts' own provider keys"), opened from its row; the deployment
+holds no model key of its own. A provider it saved no
+key for refuses the step with `NO_PROVIDER_KEY`, and a row the deployment's
+ring cannot open, or a deployment holding no ring, with
+`ACCOUNT_KEY_UNREADABLE`, so nothing is quietly billed to Luke. A step on the account's key goes through a middleware that keeps the
 row's status as the provider answers: a 401 marks it `invalid`, OpenAI's
 429 `insufficient_quota` or Anthropic's "credit balance" refusal marks it
 `quota_exceeded`, and a call that goes through marks it `verified` again,
@@ -1244,8 +1293,15 @@ each written only where the row still holds the key the step ran on. The
 first two fail the step with `ACCOUNT_KEY_REFUSED` or
 `ACCOUNT_KEY_NO_QUOTA` in place of the provider's own error, and the three
 refusals read as the agent's failure `provider_key`, which the desktop
-words as a key to replace in Settings. An agent's title stays on Luke's
-Anthropic key. Reading the row every
+words as a key to replace in Settings. The calls beside an account's agents
+run on its own key too, through `ownKeyOf`, the provider they prefer first
+and the other where it saved only that, and never on Luke's: an agent's or
+a worker's title on the provider's small model (Haiku, or OpenAI's
+`gpt-6-luna`), and a Continue's or Fork's replay summary on the new agent's
+own model, or the other provider's balanced model. An account that saved
+no API key, as one on a subscription alone, has its agents titled from the
+first words of their opening's first line, with no model call, and its
+replays carried without a summary. Reading the row every
 step means a later change to it is the next step's model.
 
 The sandbox (`apps/dev/sandbox.ts`) is one Vercel Sandbox per session at the
@@ -1293,8 +1349,8 @@ work on a `luke/<slug>` branch and never push the default branch, and decide
 on a pull request and its draft state itself; the plan is the session's
 first message, or for an agent started on a developer's prompt, the prompt is,
 the agent is never handed the plan, and the instructions are worded for a
-prompt in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
-`DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
+prompt in the plan's place. The service needs `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each
+account's own keys are sealed, `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
 selects the scripted model for `apps/dev/evals/coder.eval.ts`, which
 `pnpm --filter @luke/web test:agent` runs and which
@@ -1383,6 +1439,62 @@ belong in that loop. It lives in `account_preference.plan_template`
 the preferences part's own, so a row a template opened answers no snapshot.
 `src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
 
+### Workspace memory
+
+Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), read for
+the agent's starter by `memoryOnFor` (`src/agents/memory-tools.ts`): while it
+is off the agent is offered neither tool, its instructions say nothing of the
+memory, and the tools' door refuses a call a harness offering every tool
+still makes; Settings › Memory stands nowhere in the panel.
+
+The `memory` table (`packages/database/src/schemas/memory.ts`) holds the facts
+and conventions a workspace's coding agents kept, one short statement a row,
+keyed by `organization_id` and leaving with the workspace. It is the
+workspace's, shared by every member, rather than a task's, a repository's, or
+one member's, so every agent in the workspace may recall it and no agent of
+another workspace does. Its `user_id` names the member whose words it holds:
+the starter of the agent that kept it, or of the one that last corrected it.
+Like the workspace's git history it outlives that member: leaving keeps it,
+and deleting the account sets `user_id` null, read as a former member.
+
+A memory kept with `remember`'s `private` is the one exception: `private_to`
+names the one member whose operator recalls it and who reads and forgets it
+in Settings, and to every other member, an owner or admin included, its id
+names nothing. Only the member's operator keeps or recalls one
+(`MemoryCall.readsPrivate`), because an operator's transcript is its member's
+alone (`agentNoTeammatesOperator`) while a coder's is read by every member, so
+a coder's recall reads the shared memories alone and its `private` is
+refused. It is that member's, not the workspace's, so its foreign key cascades
+and it leaves with their account. Recall and Settings read through
+`listMemories(workspaceId, readerId)`, which answers the shared memories and
+the reader's own private ones; the same words stand once only within one
+visibility, and a correction keeps the visibility of the memory it corrects.
+The operator is told to keep the member's own preferences and what they are
+juggling private (`coder-host/instructions.ts`'s `PRIVATE_MEMORY_WORDS`).
+
+The coding agent keeps and searches it through `remember` and `recall`
+(`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a
+worker, on both the eve tool files and Luke's MCP server through the shared
+agent door (`coder-host/agent-doors.ts`). The workspace and the starter are
+read from the service's record of the agent (`callerWorkspace`,
+`callerUserId`), never from the model. `packages/database/src/models/memory-store.ts`
+keeps a memory or corrects one in place under a lock on the workspace's row,
+so the same words kept twice stand once, a correction leaves no older version
+beside the new one, and the bound of 200 memories of 400 characters a
+workspace is counted once. Recall ranks the workspace's memories by how many
+of the query's words each holds; no index or embedding stands behind it.
+Credential-shaped words are refused before the store is reached, and a store
+that cannot be reached answers the agent that memory is unavailable rather
+than failing the turn.
+
+Settings › Memory reads them through the account resource's `memories` and
+`forgetMemory` procedures (`src/accounts/memories-procedures.ts`, on
+`/api/account/memories?workspaceId=`), each to a member of the workspace the
+query names: an account that is no member is answered `NOT_FOUND`. A forget is
+the member's whose words the memory holds, or an owner's or admin's
+(`src/accounts/workspace-memories.ts`); any other is `NOT_PERMITTED`.
+`src/accounts/memories-procedures.test.ts` answers both over a real dialect.
+
 ## The chapters group
 
 `src/chapters/chapters-generator.ts` tells a pull request's diff as chapters
@@ -1392,9 +1504,11 @@ groups, orders, and narrates the hunks in one structured call
 the answer), holds the answer to the diff, asks once more for any hunk it left
 out, and closes the story with "Other changes": the files a reader reads past,
 those with no hunk, and whatever is still outside. The model is a seam: the
-route hands in `chaptersModelOf(anthropicKey)`, one fixed fast Claude model on
-Luke's own key, never the account's meter, and a test hands in a scripted
-one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
+route hands in `chaptersModelOf(own, modelId)` on the API key the member who
+pressed Generate saved (`ownKeyOf`), the Claude model they chose on an
+Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Luke's
+key; a member who saved none reads `generatable: false`. A test hands in a
+scripted one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
 call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is
 one of the store's `PULL_REQUEST_CHAPTERS_FAILURE` kinds, logged by its kind alone. The prompt,
 ReviewStage's rules in one pass, and the diff laid out as stage-cli's `prep`
@@ -1961,31 +2075,17 @@ and loaded with `load_skill`; each body says where the skill stands in the
 agent's checkout. A task with no repository, one the App does not reach, or
 a read that fails offers none.
 
-The research reads (`src/agents/public-research.ts`) are `search_web`,
-one query sent to OpenAI's Responses API with its own `web_search` tool on
-Luke's key and its default OpenAI model (`BRAIN_OPENAI_DEFAULTS`) at low reasoning effort and low search
-context, since the turn waits on it, asked to store nothing, and
-`read_web_page`, one public HTTPS page fetched and reduced to its text.
-Neither knows the account or the task: what leaves is the query and fixed
-instructions, or a GET for one URL with no credential of the account's, and
-the result goes back only to the call that asked. A query is one line of at
-most 200 characters with nothing shaped like a credential; keeping private
-repository text out of it is the agents' instructions' rule, since plain
-words cannot be told apart by code. A search is `found` only with a cited
-public URL, each with the answer's words that cited it; a finished uncited
-answer is `no-results` and its words go no further, one the token bound cut
-short before it cited anything is `not-searched`, and every failure is `not-searched`
-or `not-read` in words that say nothing was found. A page read refuses any
-host whose address, resolved before each request and again on every redirect
-hop it follows by hand, is private, loopback, link-local, CGNAT, unique-local,
-or reserved; the check is a lookup ahead of the request, so a DNS answer that
-changes between the two is the case it does not cover. A turn gets at most
-4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
-page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
-inference on Luke's key, so each one is counted as one of the calling account's
-hosted uses before it is sent; a count that cannot be written is logged and stops
-nothing.
-`src/agents/public-research.test.ts` holds both against scripted HTTP and DNS.
+The page read (`src/agents/public-research.ts`) is `read_web_page`, one
+public HTTPS page fetched and reduced to its text, with no credential of the
+account's, the result going back only to the call that asked. A search is no
+tool of Luke's: it is eve's provider-run `web_search`, paid for by the agent's
+own model call. A page read refuses any host whose address, resolved before
+each request and again on every redirect hop it follows by hand, is private,
+loopback, link-local, CGNAT, unique-local, or reserved; the check is a lookup
+ahead of the request, so a DNS answer that changes between the two is the case
+it does not cover. A turn gets at most 6 page reads, and 20,000 characters of
+a page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`).
+`src/agents/public-research.test.ts` holds it against scripted HTTP and DNS.
 The developer talks to an agent through the ordinary voice
 session. Every call is a `/api/voice/sessions` session whose
 `session.create` names the task (`planId`) and the agent of it the call
@@ -2681,8 +2781,7 @@ already closed, as of that call's own close.
 Before any socket stands, an HTTP status on the upgrade: `401` for
 `/api/voice/sessions` without a bearer, `403` for a handshake carrying a
 browser `Origin` header (the caller is no page: the desktop connects from
-its main process), `503` while
-`OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
+its main process). Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
 or `session.attach`, a create naming no task or no agent, or an attach to a
@@ -2690,7 +2789,9 @@ session bound to no task or no agent; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
 did not create; `not-found` for a call naming a task the account
 does not hold, or an agent that is not that task's, the account's to reach,
-or standing unarchived, refused before the session is counted; `upstream-error` when OpenAI refused the
+or standing unarchived, refused before the session is counted; `openai-key-missing`
+for a caller who saved no OpenAI API key, which every call runs on, refused
+before the session is counted or created; `upstream-error` when OpenAI refused the
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.
 
@@ -2717,9 +2818,10 @@ the relay never heard and which are settled as failed for `abandoned`
 through the same write the relay's own end takes, at most fifty a sweep and
 counted as `abandoned`; and the bound on a detached voice session described
 under "How a session ends", which ends every open session whose device went
-without a hang-up more than a minute ago on Luke's key, at most 20 a sweep and
-each inside ten seconds, counted as `voice`. A deployment without the OpenAI
-key opened no voice session and sweeps none.
+without a hang-up more than a minute ago on its owner's own OpenAI key, at
+most 20 a sweep and each inside ten seconds, counted as `voice`; one whose
+owner holds no OpenAI key now is stamped for a later sweep, until OpenAI's
+own hour limit closes it as expired.
 
 It then fires the automations whose schedule is due ("Automations" below),
 at most twenty-five a sweep, counted as `automations.fired`, and acts on

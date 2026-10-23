@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import {
   CONVERSATION_PICTURE_BOUNDS,
+  type ConversationMediaType,
+  conversationMediaTypeSchema,
   type KeptPicture,
 } from "@luke/features/conversation-picture-wire";
-import { type InboxImageType, inboxImageTypeSchema } from "@luke/features/inbox-wire";
 import { and, eq, sum } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -28,23 +29,23 @@ import type { ConversationTarget } from "./writer.js";
  * that conversation, as every transcript read does.
  */
 
-/** A picture to keep: its bytes, the type they were sniffed to be, and the size their header states. */
+/** A picture to keep, or a video shown as one: its bytes, the type they were sniffed to be, and the size their header states. */
 export interface PictureToKeep {
   readonly bytes: Uint8Array;
-  readonly contentType: InboxImageType;
+  readonly contentType: ConversationMediaType;
   readonly width: number;
   readonly height: number;
 }
 
 /** A kept picture as a read answers it: the type it is served under, and its bytes. */
 export interface StoredPicture {
-  readonly contentType: InboxImageType;
+  readonly contentType: ConversationMediaType;
   readonly bytes: Uint8Array;
 }
 
 const KeptRowSchema = Schema.Struct({
   id: Schema.String,
-  contentType: inboxImageTypeSchema,
+  contentType: conversationMediaTypeSchema,
   width: Schema.Int,
   height: Schema.Int,
   byteCount: Schema.Int,
@@ -87,7 +88,7 @@ const insertPicture = SqlSchema.findAll({
     userId: Schema.String,
     conversationId: Schema.String,
     sha256: Schema.String,
-    contentType: inboxImageTypeSchema,
+    contentType: conversationMediaTypeSchema,
     width: Schema.Int,
     height: Schema.Int,
     bytes: Schema.Uint8Array,
@@ -108,7 +109,7 @@ const insertPicture = SqlSchema.findAll({
 
 const findPicture = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
-  Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
+  Result: Schema.Struct({ contentType: conversationMediaTypeSchema, bytes: Schema.Uint8Array }),
   execute: ({ conversationId, id }) =>
     Database.use((db) =>
       db

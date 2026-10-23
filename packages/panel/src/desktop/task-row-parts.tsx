@@ -19,28 +19,39 @@ import {
   dropBelowStart,
   TaskPriorityMark,
   TaskStatusMark,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import {
+  assigneeRows,
+  NO_ASSIGNEE,
+  NO_ASSIGNEE_WORDS,
+  TASK_PRIORITY_WORDS,
+  TASK_STATUS_WORDS,
+} from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 
 /**
- * task-row-parts.tsx -- what the Tasks page's List row and Board card share: the chips that change a task's priority and status where it stands, the marks of its agents at work and its pull requests, how many Inbox threads of it wait on the reader, and the door that sends a change.
+ * task-row-parts.tsx -- what the Tasks page's List row and Board card share: the chips that change a task's priority, status, and assignee where it stands, the marks of its agents at work and its pull requests, how many Inbox threads of it wait on the reader, and the door that sends a change.
  *
  * A row and a card draw the same task the same way, so a status picked on
  * either is picked from one menu, a pull request reads alike in both, and a
  * change the service did not keep says so in one toast. A chip names its
  * value by its mark alone where its place has no room for words, its words
  * still its name, and drops a menu of every value, each with its mark, the
- * one standing checked. A task from a service before statuses stands as
- * Todo, and one before priorities as No priority, as everywhere else.
+ * one standing checked. The assignee's chip is its face, or the dashed
+ * unassigned mark, dropping the task page's assignee rows
+ * (`task-standing.tsx`'s `assigneeRows`). A task from a service before
+ * statuses stands as Todo, and one before priorities as No priority, as
+ * everywhere else.
  */
 
 /** What a change the service did not keep says. */
@@ -65,6 +76,9 @@ function priorityOf(task: TaskSummary): TaskPriority {
 /** Whether a task already stands where a standing would send it. */
 export function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
   if (standing.status !== undefined) return statusOf(task) === standing.status;
+  if (standing.assigneeId !== undefined) {
+    return (task.assignee?.userId ?? null) === standing.assigneeId;
+  }
   return priorityOf(task) === standing.priority;
 }
 
@@ -101,7 +115,7 @@ function StandingChip<T extends string>({
   named,
   onPick,
 }: {
-  /** What it changes, Status or Priority, which its tooltip and its menu say before the value. */
+  /** What it changes, Status, Priority, or Assignee, which its tooltip and its menu say before the value. */
   label: string;
   value: T;
   order: readonly T[];
@@ -173,6 +187,51 @@ export function PriorityChip({
   );
 }
 
+/**
+ * The chip that says who a task is assigned to by their face, or the dashed
+ * unassigned mark, and changes it: No assignee, then the workspace's members,
+ * the reader first. An assignee the members do not name, as while they are
+ * unread, still stands checked by the name the task carries.
+ */
+export function AssigneeChip({
+  task,
+  look,
+  onStanding,
+}: {
+  task: TaskSummary;
+  look: ChipLook;
+  onStanding: (standing: TaskStanding) => void;
+}): React.JSX.Element {
+  const { members, readerId } = useMemberDirectory();
+  const person = usePerson(task.assignee);
+  const value = task.assignee?.userId ?? NO_ASSIGNEE;
+  const listed = assigneeRows(members, readerId);
+  const rows = listed.some((row) => row.id === value)
+    ? listed
+    : [
+        ...listed,
+        {
+          id: value,
+          label: task.assignee?.name ?? NO_ASSIGNEE_WORDS,
+          icon: <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />,
+        },
+      ];
+  const words = Object.fromEntries(rows.map((row) => [row.id, row.label]));
+  const icons = new Map(rows.map((row) => [row.id, row.icon]));
+  return (
+    <StandingChip
+      label="Assignee"
+      value={value}
+      order={rows.map((row) => row.id)}
+      words={words}
+      mark={(id) => <>{icons.get(id)}</>}
+      look={look}
+      named={false}
+      onPick={(id) => onStanding({ assigneeId: id === NO_ASSIGNEE ? null : id })}
+    />
+  );
+}
+
 /** The chip that says a task's status and changes it, its words beside its mark where `named`. */
 export function StatusChip({
   task,
@@ -224,14 +283,18 @@ function markedPullRequests(task: TaskSummary) {
  * GitHub's colour for where it stands and its number, those still standing
  * first, at most `most` of them and a count of the rest; nothing where it has
  * neither. The marks are facts, its card's rows being where a pull request
- * opens.
+ * opens. Where `steady`, as in the List's column, a task whose agents rest
+ * keeps the working mark's room before its pull requests, so they line up
+ * with those of a task whose agent works.
  */
 export function TaskWorkMarks({
   task,
   most = MARKED_PULL_REQUESTS,
+  steady = false,
 }: {
   task: TaskSummary;
   most?: number;
+  steady?: boolean;
 }): React.JSX.Element | null {
   const working = (task.agents?.working ?? 0) > 0;
   const pullRequests = markedPullRequests(task);
@@ -240,7 +303,9 @@ export function TaskWorkMarks({
   if (!working && shown.length === 0) return null;
   return (
     <span className="task-work-marks">
-      {working ? <StateGlyph state={GLYPH_STATE.WORKING} /> : null}
+      {working || steady ? (
+        <StateGlyph state={working ? GLYPH_STATE.WORKING : GLYPH_STATE.REST} />
+      ) : null}
       {shown.map((pullRequest) => (
         <span
           key={pullRequest.url ?? pullRequest.number}

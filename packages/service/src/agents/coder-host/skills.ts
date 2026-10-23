@@ -1,16 +1,31 @@
 /**
- * skills.ts -- the agent skills a coding agent's session is offered: the ones its repository keeps, read where its checkout stands.
+ * skills.ts -- the agent skills a coding agent's session is offered: its repository's, read where its checkout stands, then the ones its member installed.
  *
- * The skills are the repository's (`../agent-runtime/skills.ts`). A coding
- * agent's checkout already holds each skill's sibling files, so its body is
- * led by the folder it stands in within the checkout.
+ * The skills are merged in `../agent-runtime/skills.ts`'s precedence: the
+ * repository's, then the workspace's installed skills, then the member's
+ * personal ones. A coding agent's checkout already holds each repository
+ * skill's sibling files, so its body is led by the folder it stands in
+ * within the checkout; an installed skill's files are written by eve into
+ * the sandbox, or, for an agent on a native harness, by the launch
+ * (`nativeSkills`, `runner-sessions.ts`), which hands the harness the
+ * installed skills alone, since it finds the repository's in the checkout
+ * itself. An agent with no repository is offered its installed skills
+ * alone. The member is the agent's starter, whose conversation it is, and
+ * for an automation's agent the automation's owner, who starts it; the
+ * workspace is its task's, read as that member, as its repository's reads
+ * are.
  */
 
-import type { CodingAgent, WithRepository } from "@luke/database/models/coding-agent-store";
+import { type CodingAgent, hasRepository } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import type { Effect } from "effect";
+import { Effect } from "effect";
 import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
-import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
+import {
+  type AgentSkill,
+  installedSkills,
+  mergedSkills,
+  repositorySkills,
+} from "../agent-runtime/skills.js";
 import type { RepositorySkill } from "../repository-skills.js";
 import { CODER } from "./bounds.js";
 import type { CheckoutServices } from "./checkout.js";
@@ -21,16 +36,58 @@ function loadedMarkdown(skill: RepositorySkill): string {
   return `This skill is \`${folder}/SKILL.md\` in the checkout; resolve the files it names relative to \`${folder}/\`.\n\n${skill.markdown}`;
 }
 
-/** The skills the agent's repository keeps on its default branch, as eve is handed them (`repositorySkills`). */
+/** Each source's skills for the agent, in precedence order: its repository's on its default branch, where it has one, then its member's installed ones. */
+function sourcedSkills(
+  target: ConversationTarget,
+  agent: CodingAgent,
+  loaded: (skill: RepositorySkill) => string = loadedMarkdown,
+): Effect.Effect<readonly [readonly AgentSkill[], readonly AgentSkill[]], never, CheckoutServices> {
+  return Effect.gen(function* () {
+    // The workspace is read once for both sources.
+    const workspaceOf = yield* Effect.cached(agentWorkspace(target.userId, agent));
+    return yield* Effect.all(
+      [
+        hasRepository(agent)
+          ? repositorySkills(target, workspaceOf, agent.repository, agentMember(agent), loaded)
+          : Effect.succeed([]),
+        installedSkills(target, workspaceOf),
+      ],
+      { concurrency: "unbounded" },
+    );
+  });
+}
+
+/** The skills the agent's session is offered: its repository's on its default branch, where it has one, then its member's installed ones (`mergedSkills`). */
 export function agentSkills(
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: CodingAgent,
 ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
-  return repositorySkills(
-    target,
-    agentWorkspace(target.userId, agent),
-    agent.repository,
-    agentMember(agent),
-    loadedMarkdown,
-  );
+  return Effect.flatMap(sourcedSkills(target, agent), (sources) => mergedSkills(target, sources));
+}
+
+/**
+ * The installed skills a native harness is handed (`runner-sessions.ts`):
+ * the merge eve's session is offered, of the repository's skills the
+ * harness finds itself and the installed ones, less those repository
+ * skills, which the harness reads from the checkout. Merged whole first, so
+ * an installed skill a repository skill of its name shadows stays out too;
+ * a repository skill in a root the harness never reads (`roots`, such as
+ * `.claude/skills` for Codex) shadows nothing, since the harness would
+ * offer neither. Read from the default branch, as eve's are.
+ */
+export function nativeSkills(
+  target: ConversationTarget,
+  agent: CodingAgent,
+  roots: readonly string[],
+): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
+  return Effect.gen(function* () {
+    const seen = new Set<string>();
+    const [repository, installed] = yield* sourcedSkills(target, agent, (skill) => {
+      if (roots.some((root) => skill.folder.startsWith(`${root}/`))) seen.add(skill.name);
+      return loadedMarkdown(skill);
+    });
+    const theirs = repository.filter((skill) => seen.has(skill.name));
+    const merged = yield* mergedSkills(target, [theirs, installed]);
+    return merged.filter((skill) => !seen.has(skill.name));
+  });
 }

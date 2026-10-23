@@ -51,7 +51,7 @@ export interface RoleProfile {
   /** Whether the role's sessions are a worker's, admitted on ownership alone, rather than a root's own standing. */
   readonly delegated: boolean;
   readonly connections: ConnectionPolicy;
-  /** Whether the role's sessions are offered the skills the repository they work on keeps (`skills.ts`). */
+  /** Whether the role's sessions are offered skills: the repository's they work on and their member's installed ones (`skills.ts`). */
   readonly skills: boolean;
   readonly sandbox: SandboxPolicy;
 }

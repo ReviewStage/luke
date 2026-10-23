@@ -7,8 +7,8 @@ import {
   type ChangelogView,
   changelogRoutes,
   changelogViewForPath,
-  parseReleases,
 } from "../src/changelog-releases";
+import { parseReleases } from "../src/site-markdown";
 
 /** A release section, newest first as CHANGELOG.md lists them, numbered from the oldest at 1.0.0. */
 function releaseSection(minor: number, body: string): string {

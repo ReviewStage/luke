@@ -8,7 +8,8 @@ import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
 import { webFunctions } from "../server/function-layout";
 import { apiRewrites, rewritesDrifted, vercelConfigSource } from "../server/function-rewrites";
-import { changelogRoutes, parseReleases } from "../src/changelog-releases";
+import { changelogRoutes } from "../src/changelog-releases";
+import { parseReleases } from "../src/site-markdown";
 
 interface Route {
   readonly src: string;
@@ -406,7 +407,8 @@ test("every path the web app is served at sends its own Content Security Policy 
     assert.deepEqual([...policiesSent(answer)], [headers.get("content-security-policy")], path);
     const directives = directivesOf(headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], path);
-    assert.deepEqual(directives.get("script-src"), ["'self'"], path);
+    // Files changed colours its diffs with Pierre's Highlights, one WebAssembly module, which this alone lets the app compile.
+    assert.deepEqual(directives.get("script-src"), ["'self'", "'wasm-unsafe-eval'"], path);
     assert.deepEqual(directives.get("object-src"), ["'none'"], path);
     assert.deepEqual(directives.get("base-uri"), ["'self'"], path);
     assert.deepEqual(directives.get("form-action"), ["'self'"], path);

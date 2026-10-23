@@ -148,7 +148,7 @@ function editedLines(view: HTMLElement): (string | undefined)[] {
 function shownWords(line: Element | null): string | undefined {
   const copy = line?.cloneNode(true);
   if (!(copy instanceof Element)) return undefined;
-  for (const hidden of copy.querySelectorAll(".visually-hidden, .luke-visually-hidden"))
+  for (const hidden of copy.querySelectorAll(".luke-visually-hidden, .luke-visually-hidden"))
     hidden.remove();
   return lineWords(copy);
 }
@@ -167,7 +167,7 @@ function cardOf(
 test("the saved body is drawn as Markdown", () => {
   const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK, live: false }));
 
-  assert.match(markup, /<p class="markdown-heading" data-level="2">Goal<\/p>/u);
+  assert.match(markup, /<p class="luke-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
@@ -403,7 +403,7 @@ test("the sections changed since the last look are counted beside a face for eac
     ),
     ["person", "luke"],
   );
-  assert.equal(line.querySelector(".visually-hidden")?.textContent, "Charles Pan, Luke");
+  assert.equal(line.querySelector(".luke-visually-hidden")?.textContent, "Charles Pan, Luke");
   act(() => line.querySelector("button")?.click());
   assert.equal(dismissed, 1);
 });
@@ -421,7 +421,7 @@ test("a title long enough to fill its line wraps short of its ⋯, as a section'
       },
     },
   );
-  const title = view.querySelector(".plan-unit-attributed .task-title > .markdown-heading");
+  const title = view.querySelector(".plan-unit-attributed .task-title > .luke-markdown-heading");
   const titleRow = title?.closest(".plan-unit-attributed")?.querySelector(".plan-unit-more");
   // Note that jsdom resolves no custom property, so the room reads as the length it is declared by.
   const room = title === null || title === undefined ? "" : getComputedStyle(title).paddingRight;

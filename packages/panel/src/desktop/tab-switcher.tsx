@@ -19,8 +19,8 @@
  * as any move.
  *
  * The keys are heard before anything under them, a terminal's or a text
- * field's, since a Control chord is otherwise theirs: a Browser tab's page
- * and a Terminal tab hand ⌃Tab on to the window for it (`browser-views.ts`,
+ * field's, since a Control chord is otherwise theirs: a cloud Browser tab
+ * and a Terminal tab hand ⌃Tab on to the window for it (`chordIsWindows`,
  * `terminal-keys.ts`). It is a desktop app's alone, since a browser keeps
  * ⌃Tab for its own tabs, and it holds off the menu bar's Back and Forward
  * while it stands, as ⌘K's palette does, and leaves ⌃Tab to a dialog over
@@ -32,31 +32,21 @@
  * its tab drew it (`switcher-looks.ts`), at work or failed as everywhere.
  * Its preview is a still of the whole work area, taken once the window
  * settles on the screen and again as ⌃Tab leaves it: main takes a downscaled
- * picture of that part of the window (`window.capture`), and a Browser
- * tab's page, which its view draws over the window rather than in it, is
- * drawn into it from its own still (`browser.capture`). A still is a picture
+ * picture of that part of the window (`window.capture`). A still is a picture
  * of the window's words, so it is kept in this window's memory alone, a few
  * at a time, never written, traced, or counted, and the session recording
- * leaves it out (`ph-no-capture`), as it does a Browser tab's still. Until a
- * stop has one, its card shows its glyph.
+ * leaves it out (`ph-no-capture`). Until a stop has one, its card shows its
+ * glyph.
  */
 
 import { useAtomSet } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
-import {
-  APP_COMMAND,
-  APP_SHORTCUTS,
-  commandForKey,
-  type KeyedCommand,
-  SHORTCUT_KEY,
-  type ShortcutChord,
-} from "@luke/settings/shortcuts";
-import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
+import { TabCard, TabCards } from "@luke/ui";
 import {
   isAgentTab,
-  isBrowserTab,
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
@@ -85,9 +75,8 @@ import { stepTitle } from "../history-titles.js";
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { Shortcut } from "../shortcut.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
-import { type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -122,9 +111,6 @@ const STILL_SETTLES = "800 millis";
 /** How many stills the window keeps, the most recent stops': as many as the cards, and a few the cards may reach once a tab closes. */
 const STILLS_KEPT = 8;
 
-/** The JPEG quality a still with a Browser tab's page drawn in is kept at, as main keeps the window's own (`register-desktop-ipc.ts`). */
-const STILL_QUALITY = 0.7;
-
 /** The two chords, each the step it takes. */
 const SWITCH_COMMANDS = [APP_COMMAND.NEXT_RECENT_TAB, APP_COMMAND.PREVIOUS_RECENT_TAB] as const;
 
@@ -135,9 +121,6 @@ const STEP_OF = {
 
 /** The part of the window a stop's still is of: the work area beside the sidebar, both of a task's panes as they stand. */
 const WORK_AREA = ".desktop-main";
-
-/** A Browser tab's page body as its pane lays it out under its address bar, which its view is drawn over (`browser-pane.tsx`). */
-const BROWSER_PAGE = ".side-panel .browser-view-body";
 
 /** What a place's card wears, as the sidebar's row for it does. */
 const PLACE_LOOK = {
@@ -152,13 +135,6 @@ const TASK_WORDS = "Task";
 
 /** What a person's page is called where the name is not known. */
 const PERSON_WORDS = "Profile";
-
-/** The keys the cards' foot names, as ⌘K's foot does. */
-const FOOT_HINTS: readonly { readonly chord: ShortcutChord; readonly label: string }[] = [
-  { chord: APP_SHORTCUTS[APP_COMMAND.NEXT_RECENT_TAB].chord, label: "Next" },
-  { chord: APP_SHORTCUTS[APP_COMMAND.PREVIOUS_RECENT_TAB].chord, label: "Back" },
-  { chord: { key: SHORTCUT_KEY.ESCAPE, bare: true }, label: "Cancel" },
-];
 
 /** The hold before the cards show, as an atom whose work is the wait; handed its door inside a record, as a function handed to an atom's setter is called at once. */
 const holdAtom = () =>
@@ -196,7 +172,7 @@ function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined)
   if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
   if (isTerminalTab(tab)) return tabLook({ kind: TAB_KIND.TERMINAL, agent: undefined });
   if (isMacTerminalTab(tab)) return tabLook({ kind: TAB_KIND.MAC_TERMINAL });
-  if (isBrowserTab(tab) || isCloudBrowserTab(tab)) {
+  if (isCloudBrowserTab(tab)) {
     return tabLook({ kind: TAB_KIND.BROWSER, title: undefined });
   }
   if (isPageTab(tab)) return tabLook({ kind: TAB_KIND.PAGE, title: "Page" });
@@ -252,6 +228,7 @@ function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined)
       return {
         ...tabLook({ kind: TAB_KIND.AGENT, name: subject.name, agent: subject.agent }),
         detail: undefined,
+        endMark: agentEndMark(agent, false),
       };
     }
     case STOP_KIND.PERSON:
@@ -299,103 +276,10 @@ function areaOf(selector: string): Area | undefined {
   return { x, y, width: Math.round(box.right) - x, height: Math.round(box.bottom) - y };
 }
 
-/** A picture, read whole. */
-async function pictureOf(src: string): Promise<HTMLImageElement> {
-  const picture = new Image();
-  picture.src = src;
-  await picture.decode();
-  return picture;
-}
-
-/**
- * The work area's still with a Browser tab's page drawn into it where the
- * page's view stood, since a still of the window has a hole there: the view
- * is drawn over the window rather than in it.
- */
-async function withPage(work: string, area: Area, page: string, view: Area): Promise<string> {
-  const [ground, laid] = await Promise.all([pictureOf(work), pictureOf(page)]);
-  const scale = ground.naturalWidth / area.width;
-  const canvas = document.createElement("canvas");
-  canvas.width = ground.naturalWidth;
-  canvas.height = ground.naturalHeight;
-  const context = canvas.getContext("2d");
-  if (context === null) return work;
-  context.drawImage(ground, 0, 0);
-  context.drawImage(
-    laid,
-    (view.x - area.x) * scale,
-    (view.y - area.y) * scale,
-    view.width * scale,
-    view.height * scale,
-  );
-  return canvas.toDataURL("image/jpeg", STILL_QUALITY);
-}
-
 /** Whether the press is the switcher's to hold while it stands: every key but ⌃ itself. */
 function claim(event: Event): void {
   event.preventDefault();
   event.stopPropagation();
-}
-
-/** One card: its still or its glyph, its name, and the task and strip it stands in. */
-function SwitcherCard({
-  look,
-  still,
-  here,
-  chosen,
-  onPoint,
-  onPick,
-}: {
-  look: CardLook;
-  still: string | undefined;
-  here: boolean;
-  chosen: boolean;
-  onPoint: () => void;
-  onPick: () => void;
-}): React.JSX.Element {
-  return (
-    <div
-      role="option"
-      aria-selected={chosen}
-      // Note that a card takes no stop of its own, because the keys stay where they were while ⌃ is held, as ⌘Tab's do.
-      tabIndex={-1}
-      className="tab-switcher-card"
-      data-here={here}
-      onPointerEnter={onPoint}
-      // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
-      onPointerDown={(event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        onPick();
-      }}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <div className="tab-switcher-preview ph-no-capture">
-        {still === undefined ? (
-          <span className="tab-switcher-glyph">{look.icon}</span>
-        ) : (
-          <img className="tab-switcher-still" src={still} alt="" draggable={false} />
-        )}
-      </div>
-      <div className="tab-switcher-name">
-        {look.icon}
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-          {look.label}
-        </Text>
-      </div>
-      <div className="tab-switcher-detail">
-        {look.detail === undefined ? null : (
-          <>
-            {look.detailIcon}
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {look.detail}
-            </Text>
-            {look.endMark}
-          </>
-        )}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -462,24 +346,11 @@ export function TabSwitcher({
     if (latest.current.held) setStillsKept((count) => count + 1);
   };
 
-  // A still of the work area as it is drawn now, a Browser tab's page drawn into it, kept once main answers; a stop no longer on screen by then keeps what it had.
+  // A still of the work area as it is drawn now, kept once main answers; a stop no longer on screen by then keeps what it had.
   const takeStill = (stop: Stop) => {
     const area = areaOf(WORK_AREA);
     if (area === undefined) return;
-    const browser =
-      stop.kind === STOP_KIND.TASK && stop.panel !== undefined && isBrowserTab(stop.panel)
-        ? stop.panel.browser
-        : undefined;
-    const view = browser === undefined ? undefined : areaOf(BROWSER_PAGE);
-    const work = act(ACT_KIND.WINDOW_CAPTURE, area);
-    const taking =
-      browser === undefined || view === undefined
-        ? work
-        : Promise.all([work, act(ACT_KIND.BROWSER_CAPTURE, { browserId: browser })]).then(
-            ([ground, page]) =>
-              ground === null || page === null ? ground : withPage(ground, area, page, view),
-          );
-    taking.then(
+    act(ACT_KIND.WINDOW_CAPTURE, area).then(
       (src) => {
         if (src !== null) keep(stop, src);
       },
@@ -670,34 +541,35 @@ export function TabSwitcher({
     <>
       <div className="tab-switcher-backdrop" aria-hidden="true" />
       <div className="tab-switcher" role="dialog" aria-label="Recent tabs">
-        <div className="tab-switcher-cards" role="listbox" aria-label="Recent tabs">
-          {cards.map((stop, at) => (
-            <SwitcherCard
-              key={at}
-              look={cardLook(
-                stop,
-                tasks,
-                titles.current.find((held) => sameStop(held.stop, stop))?.title,
-              )}
-              still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
-              here={state.here && at === 0}
-              chosen={at === chosen}
-              onPoint={() => move(switcherChose(latest.current, at))}
-              onPick={() => {
-                move(switcherChose(latest.current, at));
-                letGo(true);
-              }}
-            />
-          ))}
-        </div>
-        <div className="tab-switcher-footer" aria-hidden="true">
-          {FOOT_HINTS.map((hint) => (
-            <span key={hint.label} className="tab-switcher-footer-hint">
-              <Shortcut chord={hint.chord} />
-              {hint.label}
-            </span>
-          ))}
-        </div>
+        <TabCards label="Recent tabs">
+          {cards.map((stop, at) => {
+            const look = cardLook(
+              stop,
+              tasks,
+              titles.current.find((held) => sameStop(held.stop, stop))?.title,
+            );
+            return (
+              <TabCard
+                key={at}
+                icon={look.icon}
+                label={look.label}
+                detail={look.detail}
+                detailIcon={look.detailIcon}
+                endMark={look.endMark}
+                still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
+                here={state.here && at === 0}
+                chosen={at === chosen}
+                // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
+                pickOnPress
+                onPoint={() => move(switcherChose(latest.current, at))}
+                onPick={() => {
+                  move(switcherChose(latest.current, at));
+                  letGo(true);
+                }}
+              />
+            );
+          })}
+        </TabCards>
       </div>
     </>,
     document.body,

@@ -48,6 +48,7 @@ const UNREACHED = "https://github.com/acme/secret/pull/7";
 const OLDER_SERVICE = "https://github.com/acme/relay/pull/44";
 const AVATAR = "https://avatars.githubusercontent.com/u/583231?v=4";
 const MANY_LABELS = "https://github.com/acme/relay/pull/45";
+const QUEUED = "https://github.com/acme/relay/pull/46";
 const OPEN_ISSUE = "https://github.com/acme/relay/issues/7";
 const SHELVED_ISSUE = "https://github.com/acme/relay/issues/9";
 const UNREACHED_ISSUE = "https://github.com/acme/secret/issues/3";
@@ -116,6 +117,16 @@ const RELAY_PULLS = new Map([
       url: MANY_LABELS,
       state: PULL_REQUEST_STATE.OPEN,
       labels: ["a", "b", "c", "d", "e", "f", "g", "h"].map((name) => ({ name, color: "4fd18b" })),
+    },
+  ],
+  [
+    46,
+    {
+      number: 46,
+      title: "Rotate the signing keys",
+      url: QUEUED,
+      state: PULL_REQUEST_STATE.OPEN,
+      queued: true as const,
     },
   ],
   [
@@ -284,6 +295,23 @@ test("a pull request's link says its number and state, wearing its mark, as the 
       { workspaceId: "workspace-acme", repository: "acme/secret", number: 7 },
     ],
   );
+});
+
+test("an open pull request GitHub's merge queue holds says Queued and wears the queued mark, as a chip and as a row standing alone", async () => {
+  const { container } = await drawn(`Queued behind ${QUEUED}.`, ACME_WITH_GITHUB);
+
+  assert.deepEqual(chips(container), [["#46", "Queued", "queued"]]);
+
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+  const alone = await drawn(QUEUED, ACME_WITH_GITHUB, true);
+  const row = alone.container.querySelector('[data-lone-link="pull-request"]');
+  const mark = row?.querySelector<SVGElement>("[data-pull-request-mark]");
+
+  assert.equal(mark?.dataset.pullRequestState, "queued");
+  assert.equal(mark?.getAttribute("aria-label"), "Pull request #46, queued");
+  assert.ok(row?.textContent?.includes("Queued"));
 });
 
 test("where the workspace has no GitHub App installed, nothing is asked and the chip says what the address says", async () => {

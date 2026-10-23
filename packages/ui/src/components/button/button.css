@@ -53,6 +53,14 @@
     text-overflow: ellipsis;
   }
 
+  .luke-button-trailing {
+    flex: none;
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+  }
+
   .luke-button svg {
     flex: none;
     width: var(--luke-control-icon);
@@ -145,6 +153,30 @@
   .luke-button[data-variant="danger-tint"] {
     --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
     --luke-button-ink: var(--luke-color-danger-text);
+  }
+
+  /* A row, a card's act drawn as a menu's row: the row's width, height,
+     corner, and inset, its words at its start in the body's type, lit by
+     the menu row's fill under the pointer and the keyboard alike, never
+     ringed. */
+  .luke-button[data-variant="row"] {
+    display: flex;
+    width: 100%;
+    justify-content: flex-start;
+    height: var(--luke-menu-row-height);
+    padding: 0 var(--luke-space-8);
+    border-radius: var(--luke-menu-row-radius);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-button[data-variant="row"]:is(:hover, :focus-visible, [aria-expanded="true"]):not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    outline: none; /* no ring: the row's fill marks it, as a menu's does */
+    --luke-button-fill: var(--luke-color-fill-strong);
   }
 
   /* Round, a glyph alone is a disc and words a pill, held off its round
@@ -286,6 +318,69 @@
     opacity: 0.7;
   }
 
+  /* A press sinks the button's face a little under the finger and lets it
+     spring back as the press leaves, by transform alone, so nothing beside
+     it moves. Note that the face moves, never the button, because a button
+     that shrank would pull its edge out from under a press made near it,
+     and the release would land on its container and be no click. A row is
+     a menu's row, lit rather than pressed, so it holds still; an
+     unavailable or busy one takes no press, so it gives none. */
+  .luke-button-face {
+    transition:
+      transform var(--luke-duration-fast) var(--luke-spring-fast),
+      opacity var(--luke-duration-quick) ease-out;
+  }
+
+  /* Note that the face goes down on the quick exit beat and comes back on
+     the spring, because a click holds the press for a tenth of a second,
+     which the spring's beat would spend before the face had moved. */
+  .luke-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"])
+  .luke-button-face {
+    transform: scale(0.9);
+    transition: transform var(--luke-duration-exit) ease-out;
+  }
+
+  /* Every press a button takes is answered once it lands, so even a click
+     too quick to hold the press down is seen: its face springs back from
+     pressed, and a row, a menu's row, gives a little whole (`press-pulse.css`).
+     A submit's arrow lifts away as the message goes and drops back in. */
+  .luke-button[data-submit="ready"][data-pulse="face"] svg {
+    animation: luke-button-send var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @keyframes luke-button-send {
+    30% {
+      transform: translateY(-6px);
+      opacity: 0;
+    }
+    31% {
+      transform: translateY(6px);
+      opacity: 0;
+    }
+  }
+
+  /* A press an unavailable button refuses shakes it, once per press, so the
+     refusal reads as an answer rather than a press that went nowhere
+     (`button.tsx` restarts `data-denied` on each). */
+  .luke-button[data-denied="true"] {
+    animation: luke-button-deny var(--luke-duration-fast) var(--luke-motion-exit);
+  }
+
+  @keyframes luke-button-deny {
+    20% {
+      transform: translateX(-3px);
+    }
+    40% {
+      transform: translateX(3px);
+    }
+    60% {
+      transform: translateX(-2px);
+    }
+    80% {
+      transform: translateX(2px);
+    }
+  }
+
   /* Unavailable, a button fades to 45%: a disabled one whole, one that
      keeps the keyboard its fill and its words alone, so the app's ring
      around it is drawn at full strength. */
@@ -300,7 +395,7 @@
     opacity: 1;
   }
 
-  .luke-button[aria-disabled="true"]:not([aria-busy="true"]) {
+  .luke-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"]) {
     --luke-button-fill-faded: color-mix(in srgb, var(--luke-button-fill) 45%, transparent);
     background: var(--luke-button-fill-faded);
     color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
@@ -353,6 +448,85 @@
   @keyframes luke-button-turn {
     to {
       transform: rotate(1turn);
+    }
+  }
+
+  /* Done, its act landed: its words keep their room and its name, unseen, and a check
+     springs in where they stood, at full strength, since nothing is
+     unavailable about an act that has landed. The check's one beat is what
+     its owner waits on (`button.tsx`), so a dialog closes as it settles. */
+  .luke-button[data-done="true"] {
+    cursor: default;
+  }
+
+  /* Note that the words fade rather than hide, because a hidden face would
+     take the button's name with it while its check, which says nothing,
+     stands. */
+  .luke-button[data-done="true"] .luke-button-face {
+    opacity: 0;
+    /* Note that the words leave at once, because a busy button's words stood
+       hidden under its ring and would show through a fade as the check
+       lands; they come back on the face's own fade as the check goes. */
+    transition: none;
+  }
+
+  .luke-button-done {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    animation:
+      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  /* Note that the check wears the button's ink, over the green a connected
+     line draws it in, because it stands on the act's own fill. */
+  .luke-button-done svg {
+    color: inherit;
+  }
+
+  /* A busy button's press landing: the check springs in where the ring
+     stood and holds, then goes, and its words fade back (`button.tsx`
+     waits on the hold). The hold is `--luke-confirm-delay`, how long a
+     Saved stands, which reduced motion keeps, so the check is still seen
+     there, only without its spring. */
+  .luke-button-done[data-hold="true"] {
+    animation:
+      luke-button-done-hold var(--luke-confirm-delay) linear,
+      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  /* Note that the hold moves nothing; it is a beat the check is waited on for. */
+  @keyframes luke-button-done-hold {
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* A button that turns, a refresh's or a retry's, turns its glyph once as
+     a press lands, on the spring, beside its face's pulse (`button.tsx`
+     restarts `data-turn` on each press). */
+  .luke-button[data-turn="true"] .luke-button-face > svg:first-child {
+    animation: luke-button-turn-once var(--luke-duration-shape) var(--luke-spring);
+  }
+
+  @keyframes luke-button-turn-once {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+
+  @keyframes luke-button-done-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-button-done-spring {
+    from {
+      transform: scale(0.5);
     }
   }
 }

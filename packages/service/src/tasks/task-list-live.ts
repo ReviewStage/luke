@@ -57,9 +57,10 @@ export interface TaskListLiveStatements {
 /**
  * The plans the account reaches, each with the reader's own pin and its
  * owner's name. Note that `archivedAt` is still answered, as null, because
- * a desktop build still running decodes a row without it as no row: no
- * plan is archived any more, and the column is read by nothing. It goes
- * once no running build requires it.
+ * a desktop from before #4541 decodes a row without it as no row: no
+ * plan is archived any more, and the column is dropped. The key goes with
+ * the minimum supported desktop version, not with a service deploy, since a
+ * desktop stays old far longer than a service build runs.
  */
 function tasksStatement(userId: string) {
   return queryBuilder
@@ -142,7 +143,6 @@ function agentsStatement(userId: string) {
           effort: codingAgent.effort,
           contextWindow: codingAgent.contextWindow,
           title: codingAgent.title,
-          personaName: codingAgent.personaName,
           kind: codingAgent.kind,
           brief: sql<string>`case when ${codingAgent.prompt} is not null then ${CODING_AGENT_BRIEF.PROMPT} when ${codingAgent.planSnapshot} is not null then ${CODING_AGENT_BRIEF.PLAN} else ${CODING_AGENT_BRIEF.BLANK} end`,
           repository: codingAgent.repository,

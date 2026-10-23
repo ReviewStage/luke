@@ -1,7 +1,7 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState } from "@luke/ui";
+import { EmptyState, useMinute } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
@@ -37,7 +37,6 @@ import {
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
-import { useMinute } from "../tasks/task-time.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
@@ -298,16 +297,18 @@ function InboxShown({
     url: opened.url,
   }));
   const { pages } = view;
-  // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws.
+  // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws, an archived one's among them.
   const { onTaskAgents } = view;
   const taskAgents = agents.agents;
+  const { heldIds } = agents;
   useEffect(() => {
     if (taskId === undefined || taskAgents === undefined) return;
     onTaskAgents(
       taskId,
       taskAgents.map((agent) => agent.id),
+      heldIds,
     );
-  }, [taskId, taskAgents, onTaskAgents]);
+  }, [taskId, taskAgents, heldIds, onTaskAgents]);
   const openHere: OpenHere = (href) => {
     const target = inboxPanelTarget(href, {
       taskId,
@@ -409,6 +410,7 @@ function InboxShown({
                     }}
                     models={named.models}
                     readerId={tasks.me}
+                    reading={reading}
                     note={
                       <InboxListNote
                         failed={read.failed || taskless.failed}

@@ -74,6 +74,7 @@ import {
   type BrowserConsoleMessage,
   type BrowserCursorKind,
   type BrowserCursorMove,
+  type BrowserRecordingStopped,
   backendNodeIdOf,
   cutBrowserText,
 } from "./browser-agent-actions.js";
@@ -111,10 +112,61 @@ export interface BrowserCursor<R = never> {
   readonly watched: boolean;
 }
 
-/** What a run is asked beside its actions: where it reports the agent's pointer, and whether it keeps a copy of each screenshot for the transcript. */
+/**
+ * Where a run records the browser, where its caller can: `start` starts a
+ * recording, answering the most seconds it runs, and `stop` stops it and
+ * keeps the video, answering what was kept; either fails in words a model
+ * can act on, such as that a recording already runs.
+ */
+export interface BrowserRecorder<R = never> {
+  readonly start: Effect.Effect<number, string, R>;
+  readonly stop: (
+    caption: string | undefined,
+  ) => Effect.Effect<Omit<BrowserRecordingStopped, "action" | "status">, string, R>;
+}
+
+/** What a run is asked beside its actions: where it reports the agent's pointer, whether it keeps a copy of each screenshot for the transcript, and where it records. */
 export interface BrowserRunOptions<R = never> {
   readonly cursor?: BrowserCursor<R>;
   readonly keepScreenshots?: boolean;
+  readonly recorder?: BrowserRecorder<R>;
+}
+
+/** What a recording action says where the run has no recorder. */
+const NO_RECORDER = "this browser cannot record a video";
+
+/** A recording action's step: started, or stopped and kept, through the run's recorder. */
+function recordingStep<R>(
+  action: Extract<
+    BrowserAgentAction,
+    {
+      readonly action:
+        | typeof BROWSER_AGENT_ACTION.RECORD
+        | typeof BROWSER_AGENT_ACTION.STOP_RECORDING;
+    }
+  >,
+  recorder: BrowserRecorder<R> | undefined,
+): Effect.Effect<BrowserAgentStep, ActionFailed, R> {
+  if (recorder === undefined) return failed(NO_RECORDER);
+  const refused = (reason: string) => new ActionFailed({ reason });
+  if (action.action === BROWSER_AGENT_ACTION.RECORD) {
+    return recorder.start.pipe(
+      Effect.map((maxSeconds) => ({
+        action: action.action,
+        status: BROWSER_STEP_STATUS.DONE,
+        maxSeconds,
+      })),
+      Effect.mapError(refused),
+    );
+  }
+  return recorder.stop(action.caption).pipe(
+    Effect.map((stopped) => ({
+      action: action.action,
+      status: BROWSER_STEP_STATUS.DONE,
+      ...stopped,
+    })),
+    Effect.mapError(refused),
+  );
 }
 
 /**
@@ -1243,6 +1295,21 @@ function closeTab(cdp: CdpSession, pages: Pages, tab: string) {
   });
 }
 
+/** Whether an action records the browser, which names no tab. */
+export function isRecordingAction(action: BrowserAgentAction): action is Extract<
+  BrowserAgentAction,
+  {
+    readonly action:
+      | typeof BROWSER_AGENT_ACTION.RECORD
+      | typeof BROWSER_AGENT_ACTION.STOP_RECORDING;
+  }
+> {
+  return (
+    action.action === BROWSER_AGENT_ACTION.RECORD ||
+    action.action === BROWSER_AGENT_ACTION.STOP_RECORDING
+  );
+}
+
 /**
  * The step an action answers, the tab it names or the one before it acted on
  * standing in for a tab it leaves out; where a `wait` follows it on that
@@ -1256,6 +1323,7 @@ function stepOf<R>(
   watched: boolean,
   run: BrowserRunOptions<R>,
 ): Effect.Effect<BrowserAgentStep, ActionFailed | CdpFailure, R> {
+  if (isRecordingAction(action)) return recordingStep(action, run.recorder);
   if (action.action === BROWSER_AGENT_ACTION.LIST) {
     return Effect.map(cdp.pages, (listed) => ({
       action: action.action,
@@ -1288,6 +1356,10 @@ function stepOf<R>(
 
 /** How long an action may take, and what is said when it takes longer. */
 function boundOf(action: BrowserAgentAction): { readonly millis: number; readonly reason: string } {
+  if (action.action === BROWSER_AGENT_ACTION.STOP_RECORDING) {
+    const millis = BROWSER_AGENT_LIMITS.RECORDING_STOP_TIMEOUT_MS;
+    return { millis, reason: `the recording was not kept within ${millis / 1000} seconds` };
+  }
   if (action.action !== BROWSER_AGENT_ACTION.WAIT) {
     const millis = BROWSER_AGENT_LIMITS.ACTION_TIMEOUT_MS;
     return { millis, reason: `${action.action} did not finish within ${millis / 1000} seconds` };
@@ -1359,7 +1431,9 @@ export function runBrowserActions<R = never>(
       let tab: string | undefined;
       for (const [at, action] of actions.entries()) {
         const named =
-          action.action === BROWSER_AGENT_ACTION.LIST || action.action === BROWSER_AGENT_ACTION.OPEN
+          action.action === BROWSER_AGENT_ACTION.LIST ||
+          action.action === BROWSER_AGENT_ACTION.OPEN ||
+          isRecordingAction(action)
             ? undefined
             : (action.tab ?? tab);
         const watched = watchedFor(action, named, actions[at + 1]);

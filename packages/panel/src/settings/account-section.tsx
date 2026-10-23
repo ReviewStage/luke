@@ -15,13 +15,13 @@ import {
   SettingsRow,
   SettingsSection,
   useConfirmDialog,
+  wholeWordsHint,
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { wholeWordsHint } from "../tooltip.js";
 import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
@@ -172,6 +172,7 @@ export function AccountSection({
       />
       <ConfirmDialog
         confirm={deletion}
+        gate={account.email}
         question={{
           title: `Delete the account ${account.email}?`,
           body: "This cannot be undone.",

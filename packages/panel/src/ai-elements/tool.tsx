@@ -1,9 +1,21 @@
-import { TextButton, useDisclosureBodyDrawn } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import {
+  Badge,
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  DISCLOSURE_BODY,
+  DisclosureBody,
+  GlyphSlot,
+  LineSummary,
+  OneLine,
+  TextButton,
+  useDisclosureBodyDrawn,
+} from "@luke/ui";
 import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { CodeBlock } from "./code-block.js";
-import { Fold, FoldBody, type FoldProps, FoldSummary } from "./fold.js";
+import { Fold, type FoldProps } from "./fold.js";
 
 /**
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.
@@ -151,23 +163,15 @@ export function ToolLine({
   "state" | "icon" | "label" | "subject" | "chip" | "subjectIsCode" | "place"
 >): ReactNode {
   const trailing = subject !== undefined || chip !== undefined;
-  const [labelBox, labelClipped] = useClipped(label ?? "");
   return (
     <>
-      <span className="tool-icon" aria-hidden="true">
-        {icon}
-      </span>
+      <GlyphSlot>{icon}</GlyphSlot>
       {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
       <span className="tool-words">
         {label === undefined ? null : (
-          <span
-            ref={labelBox}
-            className="tool-label"
-            data-chipped={chip === undefined ? undefined : ""}
-            data-overflow={String(labelClipped)}
-          >
+          <OneLine className={chip === undefined ? "tool-label" : "tool-label tool-label-chipped"}>
             {trailing ? `${label} ` : label}
-          </span>
+          </OneLine>
         )}
         {chip === undefined ? null : (
           <span className="tool-chip">
@@ -181,7 +185,12 @@ export function ToolLine({
           </span>
         )}
       </span>
-      {place === undefined ? null : <span className="tool-place"> {place}</span>}
+      {place === undefined ? null : (
+        <span className="tool-place">
+          {" "}
+          <Badge>{place}</Badge>
+        </span>
+      )}
       <ToolStateMark state={state} />
     </>
   );
@@ -200,7 +209,7 @@ export function ToolHeader({
 }: ToolHeaderProps): ReactNode {
   const drawn = useDisclosureBodyDrawn();
   return (
-    <FoldSummary className="tool-line">
+    <LineSummary>
       <ToolLine
         state={state}
         icon={icon}
@@ -210,13 +219,31 @@ export function ToolHeader({
         subjectIsCode={subjectIsCode}
         place={place}
       />
-    </FoldSummary>
+    </LineSummary>
   );
 }
 
 /** The body under an open row: a card holding the blocks, a hairline between them, clipped to its corners, so what is in it rings inside itself. */
-export function ToolContent({ children }: { children: ReactNode }): ReactNode {
-  return <FoldBody className="tool-body">{children}</FoldBody>;
+export function ToolContent({
+  name,
+  children,
+}: {
+  /** The class its place names what it holds by, beside the body's own. */
+  name?: string | undefined;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
+      <Card
+        look={CARD_LOOK.TINT}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.FLUSH}
+        className={name === undefined ? "tool-body" : `tool-body ${name}`}
+      >
+        {children}
+      </Card>
+    </DisclosureBody>
+  );
 }
 
 /** A block's words drawn by its kind. */

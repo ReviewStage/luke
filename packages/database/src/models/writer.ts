@@ -13,7 +13,6 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "@luke/features/brain";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import {
   type AssistantMessageMetadata,
@@ -77,7 +76,7 @@ import {
   OPERATOR_NOTICE_KIND,
   type OperatorNoticeKind,
 } from "../storage-vocabulary.js";
-import { lineParts, receivedPartsOf } from "./attached-file-parts.js";
+import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
   InstantColumnSchema,
@@ -379,15 +378,15 @@ function senderNameOf(sender: LineSender | undefined): string | null {
 
 /**
  * The line to a coding agent as the message route and the queue's drain
- * write it: its words, the files attached to it, the client's key for the
- * send, what sent it, and who the row says wrote it, the developer's typed
- * ask where it names no one else, or a chat notice steered on a member's
- * behalf.
+ * write it: its words, the files attached to it, each image with what was
+ * kept of it, the client's key for the send, what sent it, and who the row
+ * says wrote it, the developer's typed ask where it names no one else, or a
+ * chat notice steered on a member's behalf.
  */
 interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
-  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly attachments?: readonly HandedFile[] | undefined;
   /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
   readonly mentioned?: string | undefined;
   readonly sender: LineSender;

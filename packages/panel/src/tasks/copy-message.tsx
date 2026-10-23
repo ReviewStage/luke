@@ -1,11 +1,7 @@
+import { MESSAGE_ACTIONS_PLACEMENT, MessageActions, type MessageActionsPlacement } from "@luke/ui";
 import { LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import {
-  MESSAGE_ACTIONS_PLACEMENT,
-  MessageAction,
-  MessageActions,
-  type MessageActionsPlacement,
-} from "../ai-elements/message.js";
+import { MessageAction } from "../ai-elements/message.js";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback.js";
 import { useCopyLink } from "../copy-link-item.js";
 import { ForkMessageAction } from "./fork-action.js";
@@ -31,6 +27,7 @@ export function CopyMessageAction({
   forkable = false,
   forkCut,
   placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
+  lead,
 }: {
   words: string;
   /** Whether its words are whole and there are any, which its Copy needs; a turn still running, or one with no words, is offered no Copy. */
@@ -43,12 +40,15 @@ export function CopyMessageAction({
   forkCut?: ForkCut | undefined;
   /** Where the actions stand: floated over the message's corner, or set in the line under it. */
   placement?: MessageActionsPlacement;
+  /** An action of the message's own set before Copy, as a chat notice's Open in Chat is. */
+  lead?: ReactNode;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
   const place = useMessagePlace(messageId ?? "");
   const copyLink = useCopyLink();
   return (
     <MessageActions placement={placement}>
+      {lead}
       {copyable ? (
         <MessageAction
           label={COPY_LABEL}

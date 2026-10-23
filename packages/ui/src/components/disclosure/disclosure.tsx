@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { FoldChevronIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../use-disclosure.js";
 
 /**
@@ -43,15 +44,21 @@ import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../us
  * element's own toggle, so its state is the element's again at once.
  *
  * `Disclosure` draws the quiet summary row: a chevron, then the caller's
- * glyph and words, muted until the pointer is over it. A surface that skins
- * its fold its own way builds on `useDisclosureFold` and `DisclosureScope`
- * instead, so the state and the motion live here once.
+ * glyph and words, muted until the pointer is over it. Drawn as a card
+ * (`DISCLOSURE_LOOK.CARD`), as what a transcript opens on is, it stands on
+ * the hover's wash inside a hairline, its head the one line a closed card
+ * shows (`DISCLOSURE_SUMMARY.HEAD`) and its body under a hairline
+ * (`DISCLOSURE_BODY.CARD`). A control standing in
+ * a summary sits in a `DisclosureAction`, so pressing it leaves the fold be.
+ * A surface that skins its fold its own way builds on `useDisclosureFold`
+ * and `DisclosureScope` instead, so the state and the motion live here once.
  */
 
-/** Where an open body stands: under the summary's words, past its chevron, flush with the row, or wherever the caller's own skin inside it sets it. */
+/** Where an open body stands: under the summary's words, past its chevron, flush with the row, inset under a card's head and the hairline below it, or wherever the caller's own skin inside it sets it. */
 export const DISCLOSURE_BODY = {
   INDENTED: "indented",
   FLUSH: "flush",
+  CARD: "card",
   NONE: "none",
 } as const;
 export type DisclosureBodyInset = (typeof DISCLOSURE_BODY)[keyof typeof DISCLOSURE_BODY];
@@ -220,6 +227,7 @@ export function useDisclosureSummaryClick(): (event: MouseEvent<HTMLElement>) =>
   const { toggle } = useDisclosureState();
   return (event) => {
     event.preventDefault();
+    pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
     toggle();
   };
 }
@@ -229,7 +237,15 @@ export function useDisclosureSummaryClick(): (event: MouseEvent<HTMLElement>) =>
  * holder keeps its state says `open` and hears `onOpenChange`, because the
  * element's own `open` is drawn from the fold's state rather than set.
  */
+/** How a fold stands: bare among its lines, or as a card, on the hover's wash inside a hairline, clipped at its corner. */
+export const DISCLOSURE_LOOK = {
+  PLAIN: "plain",
+  CARD: "card",
+} as const;
+export type DisclosureLook = (typeof DISCLOSURE_LOOK)[keyof typeof DISCLOSURE_LOOK];
+
 type DisclosureProps = {
+  look?: DisclosureLook;
   defaultOpen?: boolean;
   /** Whether it is open, where its holder keeps that; `onOpenChange` hears each press and toggle. */
   open?: boolean | undefined;
@@ -239,6 +255,7 @@ type DisclosureProps = {
 
 /** A fold drawn as the quiet summary row and its body. */
 export function Disclosure({
+  look = DISCLOSURE_LOOK.PLAIN,
   defaultOpen = false,
   open,
   onOpenChange,
@@ -256,6 +273,7 @@ export function Disclosure({
         {...props}
         {...details}
         className="luke-disclosure"
+        data-look={look === DISCLOSURE_LOOK.PLAIN ? undefined : look}
         onToggle={(event) => {
           details.onToggle(event);
           onToggle?.(event);
@@ -267,27 +285,97 @@ export function Disclosure({
   );
 }
 
-type DisclosureSummaryProps = {
-  children: ReactNode;
-} & Omit<
-  ComponentPropsWithoutRef<"summary">,
-  "className" | "style" | "children" | "onClick" | "aria-expanded"
->;
+/**
+ * How a summary is drawn: the quiet row with its chevron; the file row, whose
+ * own controls stand in it and which a rule closes under while the fold is
+ * open; a chip at the end of its row, on the surface inside a hairline,
+ * saying in its glyphs and a count what it folds (a line's review threads);
+ * a card's head, the one line a closed card shows, in its holder's ink,
+ * finger-tall on a coarse pointer; or a transcript's line, bare of all of
+ * these, which the skin the fold holding it wears lays out and draws (a
+ * review note's head, a pull request's section heading).
+ */
+export const DISCLOSURE_SUMMARY = {
+  QUIET: "quiet",
+  ROW: "row",
+  CHIP: "chip",
+  HEAD: "head",
+  TRANSCRIPT: "transcript",
+} as const;
+export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DISCLOSURE_SUMMARY];
 
-/** The one line a closed fold shows, which opens and closes it: the chevron, then the caller's glyph and words. */
+type DisclosureSummaryProps = {
+  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. `CHIP` draws none either, its glyphs saying what it folds, and `HEAD` and `TRANSCRIPT` leave their `DisclosureChevron` to the caller, wherever its line holds it. */
+  look?: DisclosureSummaryLook;
+  children: ReactNode;
+} & Omit<ComponentPropsWithoutRef<"summary">, "className" | "style" | "children" | "aria-expanded">;
+
+/** The one line a closed fold shows, which opens and closes it: the chevron, then the caller's glyph and words; a press is heard by the caller, a hint's, before it folds. */
 export function DisclosureSummary({
+  look = DISCLOSURE_SUMMARY.QUIET,
+  onClick,
   children,
   ...props
 }: DisclosureSummaryProps): React.JSX.Element {
   const { open } = useDisclosureState();
-  const click = useDisclosureSummaryClick();
+  const toggle = useDisclosureSummaryClick();
+  const click = (event: MouseEvent<HTMLElement>) => {
+    onClick?.(event);
+    toggle(event);
+  };
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a summary is the platform's own disclosure control, focusable and opened by Enter and Space; the click it already takes is routed to React's state.
     // biome-ignore lint/a11y/useAriaPropsSupportedByRole: a summary is exposed as its details' disclosure button, which takes aria-expanded; the rule's table gives the element no role.
-    <summary {...props} className="luke-disclosure-summary" aria-expanded={open} onClick={click}>
-      <DisclosureChevron />
+    <summary
+      {...props}
+      className="luke-disclosure-summary"
+      data-look={look === DISCLOSURE_SUMMARY.QUIET ? undefined : look}
+      tabIndex={look === DISCLOSURE_SUMMARY.ROW ? -1 : props.tabIndex}
+      aria-expanded={open}
+      onClick={click}
+    >
+      {look === DISCLOSURE_SUMMARY.QUIET ? <DisclosureChevron /> : null}
       {children}
     </summary>
+  );
+}
+
+/**
+ * What a press on `target` already does for itself: a link, a button, a
+ * field, or a label. Note that the summary is left out, because every slot
+ * stands inside one.
+ */
+const OWN_PRESS = "a[href], area[href], button, input, label, select, textarea";
+
+/**
+ * A press inside an action's slot, kept for what it landed on rather than
+ * folding the summary around it. Note that a press on the slot's bare ground
+ * is also stopped from reaching the element's own toggle, while one on a
+ * control is left to do what it does, a link's navigation and a box's check
+ * among it.
+ */
+function keepPress(event: MouseEvent<HTMLElement>): void {
+  event.stopPropagation();
+  if (event.target instanceof Element && event.target.closest(OWN_PRESS) !== null) return;
+  event.preventDefault();
+}
+
+/**
+ * The seat of a control in a fold's summary, such as a row's ⋯ or a name
+ * that opens a page: a press on what it holds, or a key that presses it,
+ * acts on that alone and leaves the fold as it stood. Note that it draws no
+ * box of its own (`display: contents`), so what it holds is laid out as the
+ * summary's own child, and that a press inside a menu it opens, portaled
+ * elsewhere, still reaches it, as React bubbles a portal's events through
+ * the tree that drew it.
+ */
+export function DisclosureAction({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the slot only keeps its controls' presses from folding the summary they stand in; the controls inside are the presses.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the slot keeps the same way.
+    <span className="luke-disclosure-action" onClick={keepPress}>
+      {children}
+    </span>
   );
 }
 

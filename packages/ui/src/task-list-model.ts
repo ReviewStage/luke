@@ -11,7 +11,8 @@ import {
  * task-list-model.ts -- how the sidebar's task list is grouped, ordered, and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
  *
  * The list is one section of the sidebar, its tasks drawn under the groups
- * the view chooses: by repository, by who created them, or in one run.
+ * the view chooses: by repository, by who they are assigned to, by who
+ * created them, or in one run.
  * Home's Recent and ⌘K order tasks by the same last activity (`taskTime`). The
  * order chosen orders the rows within a group and the groups themselves,
  * and is the time each row shows, so the order and the label never
@@ -19,7 +20,8 @@ import {
  *
  * A row of the sidebar's list is a task, or an agent an automation started
  * with no task, which stands among the tasks by the same rules rather than
- * in a group of its own: under its repository, under whoever started it, and
+ * in a group of its own: under its repository, under whoever started it, as
+ * its creator and as its assignee alike, and
  * in the order chosen, a task's row timed as the task is (`taskTime`).
  *
  * The list holds the tasks of the statuses the view shows, to do and in
@@ -33,11 +35,22 @@ import {
 /** How the list groups its tasks. */
 export const TASK_GROUPING = {
   REPOSITORY: "repository",
+  ASSIGNEE: "assignee",
   CREATOR: "creator",
   NONE: "none",
 } as const;
 
 export type TaskGrouping = (typeof TASK_GROUPING)[keyof typeof TASK_GROUPING];
+
+/**
+ * The grouping a list is drawn by: the one its view keeps, but a grouping
+ * by person, assignee or creator, kept for a workspace nobody shares now,
+ * which has no people to group by, is drawn by repository.
+ */
+export function drawnGrouping(grouping: TaskGrouping, shared: boolean): TaskGrouping {
+  const byPerson = grouping === TASK_GROUPING.ASSIGNEE || grouping === TASK_GROUPING.CREATOR;
+  return byPerson && !shared ? TASK_GROUPING.REPOSITORY : grouping;
+}
 
 /** How the list orders its tasks, and its groups by them. */
 export const TASK_ORDER = {
@@ -89,6 +102,17 @@ export interface RepositoryGroup {
 export interface CreatorGroup {
   readonly creatorId: string | undefined;
   readonly rows: readonly TaskRow[];
+}
+
+/** One assignee's rows, by their account id; undefined is the rows no one is assigned to. */
+export interface AssigneeGroup {
+  readonly assigneeId: string | undefined;
+  readonly rows: readonly TaskRow[];
+}
+
+/** The key a row is followed by, out of one list and into another: its task's id, or its agent's. */
+export function taskRowKey(row: TaskRow): string {
+  return row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id;
 }
 
 /** A task as a row of the list. */
@@ -341,5 +365,34 @@ export function creatorGroups(
       (order === TASK_ORDER.NAME
         ? nameIn(a).localeCompare(nameIn(b))
         : latest(b.rows, order) - latest(a.rows, order)),
+  );
+}
+
+/**
+ * The rows grouped by who they are assigned to (`taskRowAssigneeId`): the
+ * reader's own first, then each teammate's by their name as `nameOf` says
+ * it, the name the group's header says, and the rows no one is assigned to
+ * last. The rows within each group stand in the order chosen.
+ */
+export function assigneeGroups(
+  rows: readonly TaskRow[],
+  order: TaskOrder,
+  readerId: string | undefined,
+  nameOf: (row: TaskRow) => string,
+): readonly AssigneeGroup[] {
+  const groups = [...grouped(orderTaskRows(rows, order), taskRowAssigneeId)].map(
+    ([assigneeId, members]) => ({ assigneeId, rows: members }),
+  );
+  const rank = (group: AssigneeGroup) =>
+    group.assigneeId === undefined ? 2 : group.assigneeId === readerId ? 0 : 1;
+  const nameIn = (group: AssigneeGroup) => {
+    const first = group.rows[0];
+    return first === undefined ? "" : nameOf(first);
+  };
+  return groups.sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      nameIn(a).localeCompare(nameIn(b)) ||
+      latest(b.rows, order) - latest(a.rows, order),
   );
 }

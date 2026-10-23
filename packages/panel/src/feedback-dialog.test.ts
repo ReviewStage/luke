@@ -211,6 +211,46 @@ test("a note kept from one experiment's row is not sent under another place's ti
   assert.equal(field().value, "");
 });
 
+/** Writes `words` into the field, as typing does. */
+function write(words: string): void {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field(), words);
+    field().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Escape pressed on whatever holds focus. */
+function pressEscape(): void {
+  act(() => {
+    (document.activeElement ?? document.body).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+}
+
+test("a note being written is nudged rather than closed by the first Escape, closed by the next, and kept for the next opening", () => {
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  write("The board missed a plan.");
+  pressEscape();
+  const nudged = dialog()?.getAttribute("data-nudge");
+  pressEscape();
+  const closed = dialog() === null;
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+
+  assert.equal(nudged, "true", "the first Escape nudges the card and keeps it");
+  assert.equal(closed, true, "the second closes it");
+  assert.equal(field().value, "The board missed a plan.");
+});
+
+test("an empty note is closed by the first Escape", () => {
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  pressEscape();
+  assert.equal(dialog(), null);
+});
+
 test("a refused send says why and keeps the note, and sending again delivers it", async () => {
   mount();
   openFromHelp(APP_COMMAND.SEND_FEEDBACK);
@@ -226,6 +266,7 @@ test("a refused send says why and keeps the note, and sending again delivers it"
     dialog()?.querySelector('[role="alert"]')?.textContent,
     "Could not send that. Try again.",
   );
+  assert.equal(dialog()?.getAttribute("data-refused"), "true", "the card shakes as it refuses");
   assert.equal(field().value, "The board missed a plan.");
 
   answer = { delivered: true };

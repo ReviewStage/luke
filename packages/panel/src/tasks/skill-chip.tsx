@@ -1,3 +1,4 @@
+import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
 import {
   holdsSlashWord,
   type SkillOption,
@@ -15,9 +16,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Components, ExtraProps } from "streamdown";
 import type { SkillSource } from "./skill-picker.js";
-import { SkillRef, type SkillSubject } from "./skill-ref.js";
+import { opensFile, SkillRef, type SkillSubject, type SkillWithFile } from "./skill-ref.js";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -84,7 +84,7 @@ function withChips(text: string, tokens: readonly TextRange[]): string {
  * message's skills hold, and its `/name` as words otherwise, as an element
  * typed into the message by hand is.
  */
-function SkillElement({ node }: ExtraProps): ReactNode {
+function SkillElement({ node }: MarkdownNodeProps): ReactNode {
   const doors = useContext(SkillFileContext);
   const name = String(node?.properties[SKILL_ELEMENT.NAME] ?? "");
   const skill = doors?.skills?.get(name);
@@ -92,7 +92,7 @@ function SkillElement({ node }: ExtraProps): ReactNode {
   return <SkillRef subject={{ skill, onOpen: () => doors.onOpen(skill) }} />;
 }
 
-const SKILL_COMPONENTS: Components = { [SKILL_ELEMENT.TAG]: SkillElement };
+const SKILL_COMPONENTS: MarkdownComponents = { [SKILL_ELEMENT.TAG]: SkillElement };
 
 /** Hands every transcript under it the task's skills and what opening one's file does. */
 export function SkillFiles({
@@ -102,7 +102,7 @@ export function SkillFiles({
 }: {
   /** Where the task's skills are read from; nothing while the task names no repository. */
   source: SkillSource | undefined;
-  onOpen: (skill: SkillOption) => void;
+  onOpen: (skill: SkillWithFile) => void;
   children: ReactNode;
 }): React.JSX.Element {
   // Note that the press is read through a ref, so a new one each render
@@ -130,7 +130,12 @@ export function SkillFiles({
     });
   }, [source]);
   const doors = useMemo(
-    () => ({ skills, ask, onOpen: (skill: SkillOption) => latest.current(skill) }),
+    () => ({
+      skills,
+      ask,
+      // Note that an installed skill names no file of the repository's, so naming one opens nothing.
+      onOpen: (skill: SkillOption) => (opensFile(skill) ? latest.current(skill) : undefined),
+    }),
     [skills, ask],
   );
   return <SkillFileContext.Provider value={doors}>{children}</SkillFileContext.Provider>;

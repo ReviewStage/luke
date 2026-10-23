@@ -1,0 +1,35 @@
+/* resize-edge.css -- the edge a pane is resized by (`ResizeEdge`): a strip
+   wider than it looks, straddling its pane's border on its side, the side
+   panel's left or the sidebar's right, filled in the accent under the
+   pointer, mid-drag, or on the keyboard. The window's cursor while a drag
+   lasts, which must win over every cursor the app draws, is the app's to
+   draw under `data-edge-drag`. */
+
+@layer components {
+  .luke-resize-edge {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    outline: none; /* no ring: the edge fills in the focus colour */
+    transition: background-color var(--luke-duration-hover) ease;
+  }
+
+  [data-luke-profile="desktop"] .luke-resize-edge {
+    -webkit-app-region: no-drag;
+  }
+
+  .luke-resize-edge[data-side="left"] {
+    left: -3px;
+  }
+
+  .luke-resize-edge[data-side="right"] {
+    right: -3px;
+  }
+
+  .luke-resize-edge:is(:hover, :active, :focus-visible) {
+    background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
+  }
+}

@@ -1,6 +1,6 @@
 import { useAtomSet } from "@effect/atom-react";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
+import { BUTTON_SIZE, Button, IconButton, MENU_SURFACE_FLOW, MenuSurface, Tooltip } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Duration, Effect } from "effect";
@@ -11,7 +11,6 @@ import { useAppCommand } from "../app-commands.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
 import type { ComposerQuote } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * reply-to-selection.tsx -- words selected in an agent's message answered from its message box: Reply over the selection, and the quote block it lays into the box.
@@ -38,15 +37,25 @@ import { Tooltip } from "../tooltip.js";
  * While it stands, R does what the press does (`APP_COMMAND.REPLY_TO_SELECTION`),
  * as GitHub's R quotes words selected into a reply, its hover saying so.
  * An Inbox item's thread offers the same Reply over the agent's part of it,
- * its question's Markdown, its messages, and why it took the item back, and
+ * its question's Markdown, its messages, why it took the item back, and
+ * what its ask offers, an option's words, a step, a field's name, and
  * lays the quote into the item's box (`inbox-pane.tsx`,
- * `inbox-answer-box.tsx`).
+ * `inbox-answer-box.tsx`). Chat offers it over every message's words and
+ * an ask's, laying the quote into the box nearest them (`chat-pane.tsx`),
+ * so the press hands on the words it was over beside the reply. Note that
+ * a selection reaching into a field, an input or an editor, is never
+ * offered, because what it holds is the reader's own typing, not words to
+ * answer.
  */
 
 /** The attribute that marks an agent's own words in a transcript, which a selection inside may be replied to. */
 export const REPLY_SCOPE = "data-reply-scope";
 
 const SCOPE_SELECTOR = `[${REPLY_SCOPE}]`;
+
+/** What the reader types into, whose words a selection reaching into is not offered. */
+const EDITABLE_SELECTOR =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 
 /** What the presses are called, which are their names and their hints. */
 const REPLY_WORDS = {
@@ -79,12 +88,26 @@ const selectionSettleAtom = () =>
     Effect.andThen(Effect.sleep(SELECTION_SETTLE), Effect.sync(offer)),
   );
 
-/** A selection Reply answers: its words as the reply, and where the press stands. */
+/** A selection Reply answers: its words as the reply, the words it lies in, and where the press stands. */
 interface Picked {
   readonly reply: string;
+  readonly words: Element;
   readonly left: number;
   readonly top: number;
   readonly below: boolean;
+}
+
+/**
+ * Whether a selection reaches into a field under `words`: one it lies in,
+ * or one it runs across, as a selection inside an input is told around it.
+ */
+function reachesField(words: Element, range: Range): boolean {
+  const common = range.commonAncestorContainer;
+  const at = common instanceof Element ? common : common.parentElement;
+  if (at !== null && at.closest(EDITABLE_SELECTOR) !== null) return true;
+  return [...words.querySelectorAll(EDITABLE_SELECTOR)].some((field) =>
+    range.intersectsNode(field),
+  );
 }
 
 /** The selection inside one agent's words under `scope`, as Reply answers it; nothing for any other. */
@@ -99,6 +122,7 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
   if (words === null || words === undefined || !scope.contains(words)) return undefined;
   // Note that words a hidden pane holds keep their selection, as the narrow Inbox's item does behind its list, but are no longer on screen to reply to.
   if (words.closest("[hidden]") !== null) return undefined;
+  if (reachesField(words, range)) return undefined;
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
   const box = range.getBoundingClientRect();
@@ -110,6 +134,7 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
   const centre = box.left + box.width / 2;
   return {
     reply,
+    words,
     left: Math.min(Math.max(centre, seen.left + PRESS_MARGIN), seen.right - PRESS_MARGIN),
     top: below ? box.bottom + (finger ? FINGER_SELECTION_GAP : PRESS_GAP) : box.top - PRESS_GAP,
     below,
@@ -118,14 +143,15 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
 
 /**
  * Reply over words selected in an agent's message under `scope`, handing
- * them to `onReply` as pressed; nothing while no such selection stands.
+ * them to `onReply` as pressed, with the words they were picked from;
+ * nothing while no such selection stands.
  */
 export function ReplyToSelection({
   scope,
   onReply,
 }: {
   scope: RefObject<HTMLElement | null>;
-  onReply: (reply: string) => void;
+  onReply: (reply: string, words: Element) => void;
 }): ReactNode {
   const [picked, setPicked] = useState<Picked | undefined>(undefined);
   const shown = picked !== undefined;
@@ -177,14 +203,15 @@ export function ReplyToSelection({
       : () => {
           setPicked(undefined);
           window.getSelection()?.removeAllRanges();
-          onReply(picked.reply);
+          onReply(picked.reply, picked.words);
         };
   useAppCommand(APP_COMMAND.REPLY_TO_SELECTION, reply);
 
   if (picked === undefined || reply === undefined) return null;
   return createPortal(
-    <div
-      className="menu-surface reply-to-selection"
+    <MenuSurface
+      flow={MENU_SURFACE_FLOW.TOOLBAR}
+      className="reply-to-selection"
       data-below={picked.below ? "" : undefined}
       style={{ left: picked.left, top: picked.top }}
     >
@@ -199,7 +226,7 @@ export function ReplyToSelection({
           {REPLY_WORDS.REPLY}
         </Button>
       </Tooltip>
-    </div>,
+    </MenuSurface>,
     document.body,
   );
 }

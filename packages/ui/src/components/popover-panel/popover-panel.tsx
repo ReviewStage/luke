@@ -10,6 +10,7 @@ import {
 } from "react";
 import { CloseIcon } from "../../face/glyphs.js";
 import { IconButton } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * popover-panel.tsx -- the panel a button opens inside its `AnchoredPopover`: a small dialog named by its title, holding the keyboard while it stands and closing once focus leaves it.
@@ -52,18 +53,18 @@ export type PopoverPanelHint = ComponentType<{
   children: ReactElement<PopoverPanelHintProps>;
 }>;
 
-/** The ×, under the app's hint where it hangs one. */
+/** The ×, under its hint. */
 function CloseButton({
   label,
   hint: Hint,
   onPress,
 }: {
   label: string;
-  hint: PopoverPanelHint | undefined;
+  hint: PopoverPanelHint;
   onPress: () => void;
 }): React.JSX.Element {
   const button = <IconButton icon={<CloseIcon />} label={label} onClick={onPress} />;
-  return Hint === undefined ? button : <Hint label={label}>{button}</Hint>;
+  return <Hint label={label}>{button}</Hint>;
 }
 
 /** Whether `target` is a node inside `box`. */
@@ -82,7 +83,7 @@ export function PopoverPanel({
   title,
   look = POPOVER_PANEL_LOOK.CARD,
   closeLabel,
-  hint,
+  hint = Tooltip,
   initialFocus,
   onDismiss,
   onLeave,
@@ -96,7 +97,7 @@ export function PopoverPanel({
   look?: PopoverPanelLook | undefined;
   /** What the × is named, which draws it at a card's head; none where it is left out. */
   closeLabel?: string | undefined;
-  /** The app's hint over the ×. */
+  /** The hint over the ×: the window's tooltip, unless the caller hangs one of its own. */
   hint?: PopoverPanelHint | undefined;
   /** The control that takes focus as it opens; the panel itself where it names none. */
   initialFocus?: RefObject<HTMLElement | null> | undefined;

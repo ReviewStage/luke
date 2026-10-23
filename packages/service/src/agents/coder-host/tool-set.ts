@@ -20,8 +20,8 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  * The coding agent runs eve's own tools, authored one file each under
  * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
- * search, the hosted public search and page read the brain has
- * too (`../public-research.ts`), the delegation of a slice of its
+ * search, eve's provider-run web search on the agent's own model call and
+ * key, the hosted page read (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), the pull request the service
@@ -54,7 +54,7 @@ export const CODER_TOOL = {
   GLOB: AGENT_TOOL.GLOB,
   GREP: AGENT_TOOL.GREP,
   APPLY_PATCH: AGENT_TOOL.APPLY_PATCH,
-  SEARCH_WEB: AGENT_TOOL.SEARCH_WEB,
+  WEB_SEARCH: AGENT_TOOL.WEB_SEARCH,
   READ_WEB_PAGE: AGENT_TOOL.READ_WEB_PAGE,
   DELEGATE: AGENT_TOOL.DELEGATE,
   EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
@@ -76,11 +76,18 @@ export const CODER_TOOL = {
   CREATE_SECTION: AGENT_TOOL.CREATE_SECTION,
   DELETE_SECTION: AGENT_TOOL.DELETE_SECTION,
   UPDATE_TASK: AGENT_TOOL.UPDATE_TASK,
+  LIST_AUTOMATIONS: AGENT_TOOL.LIST_AUTOMATIONS,
+  CREATE_AUTOMATION: AGENT_TOOL.CREATE_AUTOMATION,
+  UPDATE_AUTOMATION: AGENT_TOOL.UPDATE_AUTOMATION,
+  DELETE_AUTOMATION: AGENT_TOOL.DELETE_AUTOMATION,
+  RUN_AUTOMATION: AGENT_TOOL.RUN_AUTOMATION,
   POST_CHAT: AGENT_TOOL.POST_CHAT,
   READ_CHAT: AGENT_TOOL.READ_CHAT,
   RESOLVE_ASK: AGENT_TOOL.RESOLVE_ASK,
   EDIT_CHANNEL: AGENT_TOOL.EDIT_CHANNEL,
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
+  REMEMBER: AGENT_TOOL.REMEMBER,
+  RECALL: AGENT_TOOL.RECALL,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   READ_COMMENTS: AGENT_TOOL.READ_COMMENTS,
@@ -199,14 +206,18 @@ export function repositoryToolsOf(
   ]);
 }
 
-/** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` to every agent but an operator. */
-export type KindTool = typeof CODER_TOOL.LIST_OPEN_ASKS | typeof CODER_TOOL.DELETE_SECTION;
+/** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` and `delete_automation` to every agent but an operator. */
+export type KindTool =
+  | typeof CODER_TOOL.LIST_OPEN_ASKS
+  | typeof CODER_TOOL.DELETE_SECTION
+  | typeof CODER_TOOL.DELETE_AUTOMATION;
 
 /**
  * The tools an agent is offered by its kind, on every turn: an operator
  * reads every open ask to its member across their agents, and deletes
  * nothing, under Dean's Steward policy (`../steward.ts`), so it is offered
- * `list_open_asks` and never `delete_section`; every other agent the reverse.
+ * `list_open_asks` and never `delete_section` or `delete_automation`; every
+ * other agent the reverse.
  * Note that each tool withheld is one its call would only be refused by,
  * since a native harness is offered every tool: an operator's delete by its
  * door (`agent-doors.ts`'s `runAgentTools`), and another agent's read of the
@@ -216,13 +227,14 @@ export type KindTool = typeof CODER_TOOL.LIST_OPEN_ASKS | typeof CODER_TOOL.DELE
 export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindTool> {
   return agent.kind === CODING_AGENT_KIND.OPERATOR
     ? new Set([CODER_TOOL.LIST_OPEN_ASKS])
-    : new Set([CODER_TOOL.DELETE_SECTION]);
+    : new Set([CODER_TOOL.DELETE_SECTION, CODER_TOOL.DELETE_AUTOMATION]);
 }
 
 /**
  * The tools a coding agent's transcript may name that no agent is offered
- * now: eve's provider-run web reads, which coding agents ran before they had
- * the hosted pair, the archive, unarchive, and move of a task into a
+ * now: eve's provider-run page fetch, which coding agents ran before they had
+ * the hosted page read, Luke's own hosted search on Luke's key, since
+ * replaced by eve's provider-run `web_search` on the agent's own key, the archive, unarchive, and move of a task into a
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
  * `post_to_inbox`, and `message_agent`, since folded into `post_chat`'s
@@ -231,7 +243,7 @@ export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindT
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
-  WEB_SEARCH: "web_search",
+  SEARCH_WEB: RETIRED_TOOL.SEARCH_WEB,
   ARCHIVE_AGENT: RETIRED_TOOL.ARCHIVE_AGENT,
   UNARCHIVE_AGENT: RETIRED_TOOL.UNARCHIVE_AGENT,
   MOVE_TASK: RETIRED_TOOL.MOVE_TASK,
@@ -262,9 +274,13 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.BROWSER,
 ]);
 
-/** What a chat post's input is read for here: the types of its blocks, an image's among them. */
+/** What a chat post's input is read for here: the types of its blocks, and an image's path, which names a file in the sandbox where an attachment's id names none. */
 const readPostedBlocks = Schema.decodeUnknownOption(
-  Schema.Struct({ blocks: Schema.Array(Schema.Struct({ type: Schema.String })) }),
+  Schema.Struct({
+    blocks: Schema.Array(
+      Schema.Struct({ type: Schema.String, path: Schema.optionalKey(Schema.Unknown) }),
+    ),
+  }),
 );
 
 /** What an inbox post's input is read for here: its body, whose pictures name files in the sandbox. */
@@ -274,7 +290,7 @@ const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.S
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
  * edit of the plan adding a picture read from one, for a chat post with a
- * picture, or for an inbox post whose body draws one by a path naming no
+ * picture by its path, or for an inbox post whose body draws one by a path naming no
  * scheme, each read from a file in the sandbox, or a message
  * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
@@ -292,7 +308,7 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
               action.input.pictures.length > 0) ||
             (action.toolName === CODER_TOOL.POST_CHAT &&
               Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
-                blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),
+                blocks.some((block) => block.type === CHAT_BLOCK.IMAGE && block.path !== undefined),
               )) ||
             (action.toolName === CODER_TOOL.POST_TO_INBOX &&
               Option.exists(

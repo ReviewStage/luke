@@ -57,8 +57,8 @@ const openTask = Effect.gen(function* () {
   return { userId, taskId: task.id, workspaceId: task.workspaceId };
 });
 
-/** The human name the agent goes by, which its revisions are labelled with. */
-const AGENT_NAME = "Maya Chen";
+/** The title the agent goes by, which its revisions are labelled with. */
+const AGENT_TITLE = "Invite emails";
 
 const startAgent = (userId: string, taskId: string) =>
   Effect.map(
@@ -66,7 +66,7 @@ const startAgent = (userId: string, taskId: string) =>
       taskId,
       idempotencyKey: randomUUID(),
       model: AGENT_MODEL,
-      personaName: AGENT_NAME,
+      title: AGENT_TITLE,
       effort: "high",
       planSnapshot: "# Teammate invitations",
       prompt: null,
@@ -103,7 +103,7 @@ it.layer(getTestDB())("a plan's history", (it) => {
       );
 
       assert.deepEqual(shapeOf(yield* revisionsOf(userId, taskId)), [
-        { seq: 2, actor: PLAN_ACTOR.AGENT, label: AGENT_NAME, duringCall: false, changes: 1 },
+        { seq: 2, actor: PLAN_ACTOR.AGENT, label: AGENT_TITLE, duringCall: false, changes: 1 },
         {
           seq: 1,
           actor: PLAN_ACTOR.NOTETAKER,

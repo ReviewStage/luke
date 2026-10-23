@@ -53,7 +53,7 @@ import {
   planCommentStartRequestSchema,
 } from "./plan-comment-wire.js";
 import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
-import { planAttachmentPath, type RepositoryPlace } from "./service-paths.js";
+import { planAttachmentPath, type RepositoryPlace, type SkillsPlace } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -74,6 +74,7 @@ import {
   type RepositoryPinsWritten,
   repositoryPinRequestSchema,
   TASK_LIST_ARCHIVED,
+  TASK_SKILLS_INSTALLED,
   type Task,
   type TaskCreateRequest,
   type TaskFileAnswer,
@@ -93,6 +94,8 @@ import {
   taskUpdateRequestSchema,
 } from "./task-wire.js";
 import {
+  BROWSER_TAB_OPEN_FAILURE,
+  type BrowserTabOpenFailure,
   PICTURE_KEEP_FAILURE,
   PLAN_COMMENT_CALL_FAILURE,
   type RepositoryCallFailure,
@@ -102,6 +105,8 @@ import {
   type TaskCallFailure,
   type TaskCodeAnswer,
   type TaskIssueCallFailure,
+  type TasksBrowserTabOpenAnswer,
+  type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
@@ -219,6 +224,16 @@ function hostedResult<Answer, Failure extends string>(
 const TASK_ISSUE_REFUSALS = new Map<HostedApiError, TaskIssueCallFailure>([
   [HOSTED_API_ERROR.NOT_FOUND, TASK_CALL_FAILURE.NOT_FOUND],
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, TASK_CALL_FAILURE.LINEAR_UNAVAILABLE],
+]);
+
+/** The refusals a Browser tab's open can answer with, by the service's own word for each. */
+const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>([
+  [HOSTED_API_ERROR.NOT_FOUND, BROWSER_TAB_OPEN_FAILURE.NOT_FOUND],
+  [HOSTED_API_ERROR.NOT_PERMITTED, BROWSER_TAB_OPEN_FAILURE.NOT_PERMITTED],
+  [HOSTED_API_ERROR.INVALID_REQUEST, BROWSER_TAB_OPEN_FAILURE.INVALID_ADDRESS],
+  [HOSTED_API_ERROR.AGENT_NOT_READY, BROWSER_TAB_OPEN_FAILURE.NOT_READY],
+  [HOSTED_API_ERROR.AGENT_RETIRED, BROWSER_TAB_OPEN_FAILURE.RETIRED],
+  [HOSTED_API_ERROR.UPSTREAM_ERROR, BROWSER_TAB_OPEN_FAILURE.UNREACHABLE],
 ]);
 
 /** A call on a task's linked issues as the window hears it: the answer, or why there is none, a refusal it does not name as unanswered. */
@@ -621,7 +636,9 @@ export class HostedTaskClient {
   readSkills(
     taskId: string,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.taskFiles.skills, { id: taskId }));
+    return orNothing(
+      askHosted(this.#hosted.taskFiles.skills, { id: taskId, installed: TASK_SKILLS_INSTALLED }),
+    );
   }
 
   /**
@@ -649,9 +666,14 @@ export class HostedTaskClient {
 
   /** The skills a developer may choose of a repository the workspace's installation reaches, as `readSkills` reads a plan's; nothing where the service did not answer. */
   readRepositorySkills(
-    place: RepositoryPlace,
+    place: SkillsPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.github.repositorySkills, { ...place }));
+    return orNothing(
+      askHosted(this.#hosted.github.repositorySkills, {
+        ...place,
+        installed: TASK_SKILLS_INSTALLED,
+      }),
+    );
   }
 
   /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
@@ -679,6 +701,34 @@ export class HostedTaskClient {
     taskId: string,
   ): Effect.Effect<TasksIssueLinksAnswer, never, HttpClient.HttpClient> {
     return issueView(askHosted(this.#hosted.plans.issues, { id: taskId }));
+  }
+
+  /**
+   * Opens a Browser tab at the address in the browser of the coding agent
+   * named on the task, taken over by the account at once, under a deadline
+   * that outlasts the agent's sandbox resuming; or why none opened, a
+   * refusal it does not name as unanswered.
+   */
+  openBrowserTab(
+    params: TasksBrowserTabOpenParams,
+  ): Effect.Effect<TasksBrowserTabOpenAnswer, never, HttpClient.HttpClient> {
+    const { taskId, agentId, address } = params;
+    return Effect.match(
+      askHosted(
+        this.#hosted.agentBrowserTabs.open,
+        { params: { id: taskId }, body: { agentId, address } },
+        HOSTED_DEADLINE.BROWSER_OPEN,
+      ),
+      {
+        onSuccess: (answer): TasksBrowserTabOpenAnswer => answer,
+        onFailure: (failed): TasksBrowserTabOpenAnswer => ({
+          failure:
+            (failed._tag === "HostedRefused"
+              ? BROWSER_TAB_OPEN_REFUSALS.get(failed.refusal)
+              : undefined) ?? BROWSER_TAB_OPEN_FAILURE.UNANSWERED,
+        }),
+      },
+    );
   }
 
   /** The Browser tabs open in one task's agents' browsers, the oldest first; or that the service did not answer. */

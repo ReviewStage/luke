@@ -201,7 +201,7 @@ const findLastEdit = SqlSchema.findOneOption({
           at: planRevision.at,
           agentId: planRevision.agentId,
           agentModel: codingAgent.model,
-          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
@@ -252,7 +252,7 @@ const findRevisionLines = SqlSchema.findAll({
           liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           agentModel: codingAgent.model,
-          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,

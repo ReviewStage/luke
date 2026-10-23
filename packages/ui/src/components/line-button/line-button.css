@@ -1,0 +1,117 @@
+/* line-button.css -- LineButton and LineSummary: a press as wide as its
+   column, one line tall, drawn as the words in it, as a call's row or a
+   quoted passage. The keyboard's ring is the app's reset's, as it is for
+   every control. */
+
+@layer components {
+  .luke-line-button {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    list-style: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: pointer;
+    transition:
+      color var(--luke-duration-hover) ease,
+      background-color var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-hover) ease;
+  }
+
+  /* A summary draws no marker of its own: a row's chevron, where it has
+     one, is the caller's. */
+  .luke-line-button::-webkit-details-marker {
+    display: none;
+  }
+
+  /* A desktop control answers a press the way a Mac's does, without the
+     web's pointing hand. */
+  [data-luke-profile="desktop"] .luke-line-button {
+    cursor: default;
+  }
+
+  /* A glyph keeps its seat however long the words beside it run. */
+  .luke-line-button > svg {
+    flex: none;
+  }
+
+  /* A call's row: 28px tall, its words in the caption's type and the muted
+     ink, held in by a hairline at its ends, lit under the pointer and
+     deeper under the press. Note that it is at least, not exactly, a row's
+     height, so a narrow column whose caller lets its words wrap to two
+     lines grows the row around them, a hairline above and below. */
+  .luke-line-button[data-look="row"] {
+    min-height: 28px; /* off-scale: a call's line */
+    padding: var(--luke-space-2) var(--luke-space-4);
+    border-radius: var(--luke-radius-6);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-line-button[data-look="row"]:hover {
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-line-button[data-look="row"][data-brightens="true"]:hover {
+    color: var(--luke-color-text);
+  }
+
+  .luke-line-button[data-look="row"]:active {
+    background: var(--luke-color-fill-pressed);
+  }
+
+  /* A finger's press is 44px tall, so on a coarse pointer a row stands that
+     tall, its words still centred; a mouse keeps its compact height. */
+  @media (pointer: coarse) {
+    .luke-line-button[data-look="row"] {
+      min-height: var(--luke-touch-target);
+    }
+  }
+
+  /* A quote: its container's type and ink, two lines and then cut short,
+     its ink coming up under the pointer and fading back under the press. */
+  .luke-line-button[data-look="quote"] {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  .luke-line-button[data-look="quote"]:hover {
+    color: var(--luke-color-text);
+  }
+
+  .luke-line-button[data-look="quote"]:active {
+    opacity: 0.7;
+  }
+
+  /* A band across a card: its container's type and ink, square at its
+     ends, filled faintly under the pointer, its words coming up to the full
+     ink and underlined under the pointer or the keyboard, as a link's are,
+     so it reads as the way to the lines it names. */
+  .luke-line-button[data-look="band"] {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.24em;
+  }
+
+  .luke-line-button[data-look="band"]:hover {
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-line-button[data-look="band"]:is(:hover, :focus-visible) {
+    color: var(--luke-color-text);
+    text-decoration-line: underline;
+  }
+}

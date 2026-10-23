@@ -832,7 +832,9 @@ the issue's owners on a high-priority issue.
 ### Deploying
 
 Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
-on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
+on for the project, and set `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each
+caller's own OpenAI API key is sealed: every call runs on its caller's key,
+and a caller who saved none is refused `openai-key-missing`. `LUKE_LIVE_MODEL` optionally pins
 the model. The exchange also needs `EVE_DEPLOYMENT_SECRET`, the deployment's
 own secret at eve's door and never the cron's `CRON_SECRET`, and without it
 every session is refused as unavailable; eve's

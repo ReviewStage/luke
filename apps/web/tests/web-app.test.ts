@@ -59,7 +59,7 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() =>
-    assert.ok(root.querySelector("section.sign-in-gate") !== null, "the panel draws its sign-in"),
+    assert.ok(root.querySelector("section.luke-auth-card") !== null, "the panel draws its sign-in"),
   );
   const toMac = [...root.querySelectorAll("a")].find(
     (link) => link.textContent === "Open in the Mac app",
@@ -80,7 +80,7 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   service.setSession(true);
   await vi.waitFor(() => {
     window.dispatchEvent(new Event("focus"));
-    assert.ok(root.querySelector("section.sign-in-gate") === null, "the sign-in is gone");
+    assert.ok(root.querySelector("section.luke-auth-card") === null, "the sign-in is gone");
     assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
   }, 5_000);
   await vi.waitFor(() =>

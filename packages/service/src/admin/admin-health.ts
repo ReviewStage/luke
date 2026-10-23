@@ -20,8 +20,6 @@ import {
 
 /** The providers the deployment reads from its own environment, in the order the list draws them. */
 const ADMIN_INTEGRATION = {
-  HOSTED_TIER: { key: "hosted-tier", label: "Hosted voice & attention (OpenAI)" },
-  CODING_AGENTS: { key: "coding-agents", label: "Coding agents on Luke's key (Anthropic)" },
   GITHUB_APP: { key: "github-app", label: "GitHub App (installations and webhooks)" },
   GITHUB_SIGN_IN: { key: "github-sign-in", label: "GitHub sign-in" },
   GOOGLE_SIGN_IN: { key: "google-sign-in", label: "Google sign-in" },
@@ -40,8 +38,6 @@ const ADMIN_INTEGRATION = {
 
 /** Whether each provider's configuration is present — never its value. */
 export interface AdminIntegrationPresence {
-  hostedTier: boolean;
-  codingAgents: boolean;
   githubApp: boolean;
   githubSignIn: boolean;
   googleSignIn: boolean;
@@ -66,8 +62,6 @@ export function adminIntegrations(present: AdminIntegrationPresence): AdminInteg
     return [{ key: provider, label: `${INTEGRATION_NAME[provider]} (Vercel Connect)`, configured }];
   });
   return [
-    { ...ADMIN_INTEGRATION.HOSTED_TIER, configured: present.hostedTier },
-    { ...ADMIN_INTEGRATION.CODING_AGENTS, configured: present.codingAgents },
     { ...ADMIN_INTEGRATION.GITHUB_APP, configured: present.githubApp },
     { ...ADMIN_INTEGRATION.GITHUB_SIGN_IN, configured: present.githubSignIn },
     { ...ADMIN_INTEGRATION.GOOGLE_SIGN_IN, configured: present.googleSignIn },

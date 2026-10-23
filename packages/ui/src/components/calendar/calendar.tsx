@@ -1,6 +1,7 @@
 import { type FocusEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { DAYS_PER_WEEK } from "../../activity-calendar.js";
 import { BackIcon, ForwardIcon } from "../../face/glyphs.js";
+import { pulseOnPress } from "../../press-pulse.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
 
 /**
@@ -343,7 +344,7 @@ export function Calendar({
                       aria-current={day === today ? "date" : undefined}
                       data-day={day}
                       data-outside={monthOf(day) !== month ? "true" : undefined}
-                      onClick={() => pick(day)}
+                      onClick={pulseOnPress(() => pick(day))}
                     >
                       {dateOf(day).getUTCDate()}
                     </button>

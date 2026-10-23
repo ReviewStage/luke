@@ -23,15 +23,17 @@
  * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
  * `linesCount`'s, always green and red. An option may say more in the
- * app's hint over it (`hint`), such as the whole a count leaves out.
+ * hint over it (`hint`), such as the whole a count leaves out.
  *
  * `look` is how the chosen option stands out. `fill` is the window's own
  * selected state, a sidebar row's and an open tab's: plain words at the
  * control's height, a fill under the one chosen. It draws no underline: a
  * bar heading a page or a column stands in its header's band, whose
  * hairline is the header's. `segmented` is a trough, the chosen option on a
- * thumb raised in it, its options wrapping inside it when too wide. In
- * either the fill or the thumb slides from option to option. `size`
+ * thumb raised in it, its options wrapping inside it when too wide, or,
+ * stretched (`stretch`), filling its row on one line, its options sharing
+ * it alike, as a pane switcher's. In either the fill or the thumb slides
+ * from option to option. `size`
  * compact is a step smaller, in the caption's type. A fill bar heading a
  * page read at its measure, or a narrow column, stands its options in line
  * with the words under it (`inset`). What finds the bar for an app (the
@@ -54,9 +56,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { pulseOnPress } from "../../press-pulse.js";
 import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
 import { type ChoiceKeys, useChoiceKeys } from "../choice/use-choice-keys.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /** How the bar draws its chosen option: a fill under it, or a thumb raised in a trough. */
 export const CHOICE_BAR_LOOK = {
@@ -98,11 +102,14 @@ export type ChoiceBarInset = (typeof CHOICE_BAR_INSET)[keyof typeof CHOICE_BAR_I
  * then drawn by its glyph alone at once, the chosen one too, so none is
  * named while the others are not. A bar folding together also takes its
  * options' room in where its toolbar sets `--luke-fold: tight`, which it
- * does before their names stop fitting.
+ * does before their names stop fitting. A bar a finger works (`words`) never
+ * folds: every option is named in words alone, with no glyph a finger could
+ * not hover for its name, and a row too long scrolls sideways.
  */
 export const CHOICE_BAR_FOLD = {
   OWN: "own",
   TOGETHER: "together",
+  WORDS: "words",
 } as const;
 
 export type ChoiceBarFold = (typeof CHOICE_BAR_FOLD)[keyof typeof CHOICE_BAR_FOLD];
@@ -354,7 +361,7 @@ export interface ChoiceItem<Value extends string> {
   readonly icon?: ReactNode;
   /** Words drawn quiet after the name, or parts each in its own tone. */
   readonly count?: string | readonly CountPart[] | undefined;
-  /** What the app's hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing. */
+  /** What the hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing. */
   readonly hint?: string | undefined;
   readonly disabled?: boolean | undefined;
 }
@@ -388,7 +395,9 @@ interface ChoiceBarBase<Value extends string> {
   focus?: ChoiceBarFocus | undefined;
   inset?: ChoiceBarInset | undefined;
   fold?: ChoiceBarFold | undefined;
-  /** The app's hint, hung from each option that says one (`ChoiceItem.hint`). */
+  /** Whether a segmented bar fills its row on one line, its options sharing it alike, rather than hugging them. */
+  stretch?: boolean | undefined;
+  /** The hint hung from each option that says one (`ChoiceItem.hint`): the window's tooltip, unless the caller hangs one of its own. */
   hint?: ChoiceBarHint | undefined;
   disabled?: boolean | undefined;
 }
@@ -471,7 +480,8 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     focus = CHOICE_BAR_FOCUS.ROVING,
     inset = CHOICE_BAR_INSET.NONE,
     fold = CHOICE_BAR_FOLD.OWN,
-    hint: Hint,
+    stretch = false,
+    hint: Hint = Tooltip,
     disabled = false,
     clearable: _,
     onChange: __,
@@ -527,6 +537,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       data-inset={inset}
       data-fold={fold}
       data-folded={folded ? "true" : undefined}
+      data-stretch={stretch ? "true" : undefined}
     >
       <span className="luke-choice-bar-thumb" aria-hidden="true" />
       {items.map((item) => {
@@ -542,9 +553,9 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             className="luke-choice-bar-option"
             disabled={disabled || item.disabled === true}
             onMouseDown={roving ? undefined : keepFocus}
-            onClick={() => press(item.value)}
+            onClick={pulseOnPress(() => press(item.value))}
           >
-            {item.icon === undefined ? null : (
+            {item.icon === undefined || fold === CHOICE_BAR_FOLD.WORDS ? null : (
               <span className="luke-choice-bar-icon" aria-hidden="true">
                 {item.icon}
               </span>
@@ -553,7 +564,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             {count === undefined ? null : <span className="luke-choice-bar-count">{count}</span>}
           </button>
         );
-        return Hint === undefined || item.hint === undefined ? (
+        return item.hint === undefined ? (
           option
         ) : (
           <Hint key={item.value} label={item.hint}>

@@ -1,9 +1,11 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { type ViewportBox, visibleViewport } from "../../visible-viewport.js";
 import { SwitchMark } from "../switch/switch.js";
+import { MenuGlyph } from "./menu-surface.js";
 import { useTouchHold } from "./touch-hold.js";
 
 /**
@@ -458,7 +460,7 @@ export function MenuItem({
   const label = <span className="luke-menu-item-label">{action.label}</span>;
   const body = (
     <>
-      <span className="luke-menu-item-glyph">{action.icon}</span>
+      <MenuGlyph>{action.icon}</MenuGlyph>
       {action.detail === undefined ? (
         label
       ) : (
@@ -495,7 +497,7 @@ export function MenuItem({
         className="luke-menu-item"
         data-detail={action.detail === undefined ? undefined : "true"}
         disabled={action.disabled}
-        onClick={onChoose}
+        onClick={pulseOnPress(onChoose, PRESS_PULSE.QUIET)}
       >
         {body}
       </button>
@@ -511,7 +513,7 @@ export function MenuItem({
       data-danger={action.danger ? "true" : undefined}
       data-detail={action.detail === undefined ? undefined : "true"}
       disabled={action.disabled}
-      onClick={onChoose}
+      onClick={pulseOnPress(onChoose, PRESS_PULSE.QUIET)}
     >
       {body}
     </button>
@@ -552,7 +554,7 @@ function SteeredItem({
     "data-detail": action.detail === undefined ? undefined : "true",
     onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
     onMouseMove: off ? undefined : steered.onHover,
-    onClick: off ? undefined : onChoose,
+    onClick: off ? undefined : pulseOnPress(onChoose, PRESS_PULSE.QUIET),
   } as const;
   // A setting is a switch for the keyboard and the reader, whatever its end draws.
   if (action.checked !== undefined) {
@@ -601,14 +603,14 @@ function SubmenuItem({
         // it; the tap itself opens the submenu, the keyboard taken into it.
         if (event.pointerType !== "touch") onOpen(event.currentTarget, false);
       }}
-      onClick={(event) => onOpen(event.currentTarget, true)}
+      onClick={pulseOnPress((event) => onOpen(event.currentTarget, true), PRESS_PULSE.QUIET)}
       onKeyDown={(event) => {
         if (event.key !== "ArrowRight") return;
         event.preventDefault();
         onOpen(event.currentTarget, true);
       }}
     >
-      <span className="luke-menu-item-glyph">{entry.icon}</span>
+      <MenuGlyph>{entry.icon}</MenuGlyph>
       <span className="luke-menu-item-label">{entry.label}</span>
       <span className="luke-menu-item-end">
         <ChevronRightIcon />

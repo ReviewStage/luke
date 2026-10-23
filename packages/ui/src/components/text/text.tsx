@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 /**
  * text.tsx -- words set in one of the type roles every app shares, on whichever element their meaning asks for.
@@ -15,12 +15,13 @@ import type { ReactNode } from "react";
  * A face and a truncation are the two things a caller may ask of the words
  * beyond their role: the monospace face for a technical token (a version, a
  * requirement, an identifier) rather than prose, and one line cut with an
- * ellipsis where a row has no room for a second. A truncated element still
+ * ellipsis where a row has no room for a second, or, for a path, cut from its
+ * start so its last part stays. A truncated element still
  * holds every word, so what is read aloud is never cut; it truncates at its
  * own box's edge, so it stands as a block or a flex item.
  */
 
-/** How words are set: body, a label, a caption, a section's or a dialog's heading, a page's title. */
+/** How words are set: body, a label, a caption, a section's or a dialog's heading, a page's title, or as their surroundings set them (`inherit`, for words cut to a line inside a row that has already set its type and ink). */
 export const TEXT_VARIANT = {
   BODY: "body",
   LABEL: "label",
@@ -28,6 +29,7 @@ export const TEXT_VARIANT = {
   SECTION: "section",
   DIALOG: "dialog",
   TITLE: "title",
+  INHERIT: "inherit",
 } as const;
 
 export type TextVariant = (typeof TEXT_VARIANT)[keyof typeof TEXT_VARIANT];
@@ -48,6 +50,14 @@ export const TEXT_FONT = {
 } as const;
 
 export type TextFont = (typeof TEXT_FONT)[keyof typeof TEXT_FONT];
+
+/** Where a truncated line is cut: at its end, or, for a path whose last part is its name, at its start. */
+export const TEXT_TRUNCATE = {
+  END: "end",
+  START: "start",
+} as const;
+
+export type TextTruncate = (typeof TEXT_TRUNCATE)[keyof typeof TEXT_TRUNCATE];
 
 /** The elements words may stand in, by what they are rather than how they look. */
 export const TEXT_ELEMENT = {
@@ -72,25 +82,32 @@ export function Text({
   font = TEXT_FONT.SANS,
   truncate = false,
   id,
+  className,
   children,
+  ...attributes
 }: {
   variant?: TextVariant;
   as?: TextElement;
   tone?: TextTone;
   font?: TextFont;
-  /** Hold the words to one line, cut with an ellipsis where the box ends. */
-  truncate?: boolean;
+  /** Hold the words to one line, cut with an ellipsis where the box ends, or at the start of the words (`start`) to keep their end. */
+  truncate?: boolean | TextTruncate;
   /** The id a control or a region names itself by (`aria-labelledby`, `aria-describedby`). */
   id?: string | undefined;
+  /** A hook for the caller's own layout (a flex share, a margin), beside the shared class. */
+  className?: string | undefined;
   children: ReactNode;
-}): React.JSX.Element {
+} & Omit<HTMLAttributes<HTMLElement>, "children" | "className" | "id">): React.JSX.Element {
   return (
     <Element
-      className="luke-text"
+      {...attributes}
+      className={className === undefined ? "luke-text" : `luke-text ${className}`}
       data-variant={variant}
       data-tone={tone}
       data-font={font}
-      data-truncate={truncate ? "" : undefined}
+      data-truncate={
+        truncate === TEXT_TRUNCATE.START ? TEXT_TRUNCATE.START : truncate ? "" : undefined
+      }
       id={id}
     >
       {children}

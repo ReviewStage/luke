@@ -13,11 +13,19 @@ import {
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackIcon,
+  commandKeyshortcuts,
+  Fill,
+  FoldingButton,
+  GAP,
+  LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
+  ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
   SettingsPage,
+  Shortcut,
+  Stack,
   useMenu,
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
@@ -27,7 +35,6 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { AttentionMark } from "../settings/marks.js";
 import {
@@ -54,10 +61,9 @@ import {
   settingsSearchEntries,
 } from "../settings-search.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Shortcut } from "../shortcut.js";
-import { commandKeyshortcuts } from "../tooltip.js";
+import { useExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
-import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
@@ -206,6 +212,7 @@ export function DesktopSettings({
   const [integrationsQuery, setIntegrationsQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
   const [templateHistory, setTemplateHistory] = useState(false);
+  const experiments = useExperimentChoices();
   // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
   if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // The Integrations page's search is the page's, so turning to another page leaves it.
@@ -308,40 +315,42 @@ export function DesktopSettings({
           }}
         />
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
-          <div className="sidebar-section">
+          <Fill className="sidebar-section">
             <ScrollArea fade={SCROLL_FADE.BOTH}>
               <div className="sidebar-section-body">
                 {search ? (
                   <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
                 ) : (
-                  shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
-                    <section key={group} className="settings-nav-group">
-                      <GroupHeading
-                        group={group}
-                        listed={listed}
-                        capabilities={settings.capabilities}
-                      />
-                      <ul>
-                        {pages.map((view) => (
-                          <SettingsPageRow
-                            key={view}
-                            view={view}
-                            current={view === settings.view}
-                            note={view === SETTINGS_VIEW.VOICE ? voiceNote : undefined}
-                            onOpen={() => open(view)}
-                          />
-                        ))}
-                      </ul>
-                    </section>
-                  ))
+                  shownSettingsPageGroups(settings.capabilities, experiments).map(
+                    ({ group, pages }) => (
+                      <section key={group} className="settings-nav-group">
+                        <GroupHeading
+                          group={group}
+                          listed={listed}
+                          capabilities={settings.capabilities}
+                        />
+                        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
+                          {pages.map((view) => (
+                            <SettingsPageRow
+                              key={view}
+                              view={view}
+                              current={view === settings.view}
+                              note={view === SETTINGS_VIEW.VOICE ? voiceNote : undefined}
+                              onOpen={() => open(view)}
+                            />
+                          ))}
+                        </Stack>
+                      </section>
+                    ),
+                  )
                 )}
               </div>
             </ScrollArea>
-          </div>
+          </Fill>
         </LinkWorkspaceProvider>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
+        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
         <PlanTemplatePage

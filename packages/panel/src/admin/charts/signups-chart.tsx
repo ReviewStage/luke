@@ -3,12 +3,7 @@ import type {
   AdminSignInMethods,
   AdminTrend,
 } from "@luke/features/admin-answer-wire";
-import {
-  formatDayTick,
-  formatNumber,
-  formatTooltipDay,
-  PARTIAL_DAY_OPACITY,
-} from "@luke/ui/admin-format";
+import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
@@ -16,6 +11,7 @@ import {
   ChartTooltipContent,
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
+import { formatCount, formatDayTick } from "@luke/ui/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { barRadius, barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame.js";
@@ -111,7 +107,7 @@ export function SignInMethodsChart({
     .filter((row) => row.accounts > 0)
     .map((row) => ({
       ...row,
-      label: `${formatNumber(row.accounts)} · ${Math.round(
+      label: `${formatCount(row.accounts)} · ${Math.round(
         (row.accounts / totalAccounts) * 100,
       )}% of accounts`,
     }));

@@ -10,6 +10,7 @@ import {
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../agents/brain-host/eve-sessions.js";
+import { sessionsRouter } from "../agents/coder-host/runtime-sessions.js";
 import { CALL_BACKEND } from "./call-backend.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
@@ -27,7 +28,10 @@ import type { ExchangeAttachment } from "./live-exchange.js";
  * cannot be reached has. Nothing is read from the environment here; the
  * function hands the reads in, and a test hands in its own database and a
  * fake eve behind the same door. Its eve sends a spoken ask and nothing else
- * by its type, under the coding agents' mount, into the agent the call names.
+ * by its type, under the coding agents' mount, into the agent the call names,
+ * routed as every other message is (`routedSessions`): to eve, or to the
+ * native harness the agent's conversation runs on, where the function
+ * provides the harnesses (`apps/web/server/native-agents.ts`).
  */
 
 /** The one kind of turn the voice function asks an agent for. */
@@ -118,9 +122,12 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
         origin,
         deploymentSecret,
       );
+    // Every ask goes through the door a typed message goes through (`coder-host/steer.ts`), so
+    // a conversation a native harness answers reaches its runner where this function has one.
+    const route = yield* sessionsRouter;
     return exchangeAttachment({
       writer,
-      eve,
+      eve: (accountId, mount) => route(eve(accountId, mount), accountId),
       createId: () => randomUUID(),
       report: seams.report,
     });

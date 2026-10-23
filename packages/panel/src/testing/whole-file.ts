@@ -9,10 +9,12 @@ import { vi } from "vitest";
 
 /** Waits for the whole file under `container` to be drawn: the diff bundle loaded, and Pierre's rows drawn on its next frame. */
 export async function wholeFileDrawn(container: HTMLElement): Promise<void> {
-  await act(() =>
-    vi.waitFor(() => {
+  await vi.waitFor(
+    async () => {
+      await act(async () => undefined);
       if (!wholeFileRoot(container)?.querySelector("[data-line]")) throw new Error("not drawn");
-    }),
+    },
+    { timeout: 4000, interval: 10 },
   );
 }
 

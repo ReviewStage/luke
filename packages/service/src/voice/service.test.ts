@@ -42,6 +42,7 @@ import {
   fakeAccounts,
   fakeSessionRecord,
   readSocket,
+  savedOpenAiKeys,
   send,
   startFakeOpenAi,
 } from "../testing/voice-fakes.js";
@@ -164,7 +165,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
         const port = yield* listening(voice, 0, "127.0.0.1");
         const service = yield* VoiceService.make({
           server: voice,
-          apiKey: API_KEY,
+          openAiKeyOf: savedOpenAiKeys({ [FAKE_USER_ID]: API_KEY }),
           accounts,
           record,
           openAiBaseUrl: openAi.baseUrl,
@@ -259,6 +260,23 @@ test("a bearer no account stands behind is refused as an invalid token and count
   assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.INVALID_TOKEN);
   assert.equal(context.openAi.creates.length, 0);
   assert.equal(context.accounts.spent.length, 0);
+});
+
+test("a caller who saved no OpenAI key is refused as missing one, and nothing is counted or created on any other key", async () => {
+  const context = await stand({ openAiKeyOf: savedOpenAiKeys({}) });
+  onTestFinished(() => context.stop());
+
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, createFrame());
+  assert.equal(
+    hostedError(record(await opened.reader.next())),
+    HOSTED_API_ERROR.OPENAI_KEY_MISSING,
+  );
+  assert.equal((await opened.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(context.openAi.creates.length, 0);
+  assert.equal(context.accounts.spent.length, 0);
+  assert.deepEqual(context.record.registered, []);
 });
 
 test("a session is authorized, counted, created, registered to its account, attached, and answered in that order", async () => {

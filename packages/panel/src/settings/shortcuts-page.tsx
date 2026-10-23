@@ -10,8 +10,7 @@ import {
   FILES_CHANGED_SHORTCUTS,
   shownShortcutGroups,
 } from "@luke/settings/shortcuts";
-import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
-import { Shortcut } from "../shortcut.js";
+import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection, Shortcut } from "@luke/ui";
 
 /**
  * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts, grouped as the menu bar groups them, listed to be found rather than changed.
@@ -52,13 +51,7 @@ export function WindowShortcutSections({
           {group.commands.map((command) => (
             <div key={command} {...searchAnchorProps(command)}>
               <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={APP_SHORTCUTS[command].label}>
-                {() => (
-                  <Shortcut
-                    className="shortcut-value"
-                    chord={APP_SHORTCUTS[command].chord}
-                    spoken
-                  />
-                )}
+                {() => <Shortcut value chord={APP_SHORTCUTS[command].chord} spoken />}
               </SettingsRow>
             </div>
           ))}
@@ -71,13 +64,7 @@ export function WindowShortcutSections({
               density={SETTINGS_ROW_DENSITY.LIST}
               label={FILES_CHANGED_SHORTCUTS[key].label}
             >
-              {() => (
-                <Shortcut
-                  className="shortcut-value"
-                  chord={FILES_CHANGED_SHORTCUTS[key].chord}
-                  spoken
-                />
-              )}
+              {() => <Shortcut value chord={FILES_CHANGED_SHORTCUTS[key].chord} spoken />}
             </SettingsRow>
           </div>
         ))}
@@ -86,9 +73,7 @@ export function WindowShortcutSections({
         {CHAPTERS_KEYS.map((key) => (
           <div key={key} {...searchAnchorProps(key)}>
             <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={CHAPTERS_SHORTCUTS[key].label}>
-              {() => (
-                <Shortcut className="shortcut-value" chord={CHAPTERS_SHORTCUTS[key].chord} spoken />
-              )}
+              {() => <Shortcut value chord={CHAPTERS_SHORTCUTS[key].chord} spoken />}
             </SettingsRow>
           </div>
         ))}

@@ -14,6 +14,9 @@
 /** The unprivileged user the harness runs as, which the image creates. */
 export const AGENT_USER = "agent";
 
+/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
+export const RUNNER_DIRECTORY = "/opt/luke/agent-runner";
+
 /**
  * The Claude Agent SDK, pinned exactly, and the `claude` binary its
  * platform package carries (the SDK's own `claudeCodeVersion`), so

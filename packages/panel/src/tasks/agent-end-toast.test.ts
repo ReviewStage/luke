@@ -71,12 +71,12 @@ test("an automation's agent with no plan is toasted under the automation's name,
       failed: true,
     }),
   );
-  const toast = document.querySelector<HTMLElement>(".toast");
+  const toast = document.querySelector<HTMLElement>(".luke-toast");
   assert.ok(toast);
   assert.deepEqual(
     [
-      toast.querySelector(".toast-words")?.textContent,
-      toast.querySelector(".toast-detail")?.textContent,
+      toast.querySelector(".luke-toast-words")?.textContent,
+      toast.querySelector(".luke-toast-detail")?.textContent,
       toast.dataset.tone,
     ],
     ["Triage overnight issues failed", "Morning Sentry triage", "failed"],
@@ -92,7 +92,7 @@ test("an automation's agent with no plan is toasted under the automation's name,
 
 /** What each toast standing says, leaving out those on their way out. */
 function standing(): string[] {
-  return [...document.querySelectorAll(".toast:not([data-leaving]) .toast-words")].map(
+  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
@@ -118,7 +118,7 @@ test("an agent's end leaves by itself once the news's hold runs out, but not whi
       failed: false,
     }),
   );
-  const toast = document.querySelector<HTMLElement>(".toast") ?? assert.fail("the toast");
+  const toast = document.querySelector<HTMLElement>(".luke-toast") ?? assert.fail("the toast");
   act(() => toast.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
   pass(hold * 2);
   const pointedAt = standing();

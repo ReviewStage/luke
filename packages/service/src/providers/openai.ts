@@ -1,13 +1,8 @@
 /**
- * How the hosted endpoints reach OpenAI on Luke's own key. The key comes from
- * the deployment's environment and never appears in a response, a log line, or
- * an error; without one the endpoints answer 503 and the hosted tier is simply
- * off, the same kill switch the feedback endpoint uses.
+ * openai.ts -- where the hosted endpoints reach OpenAI. Every call runs on the
+ * calling account's own OpenAI API key (`../accounts/own-api-key.ts`); the
+ * deployment holds no OpenAI key of its own.
  */
-
-export const HOSTED_OPENAI_ENVIRONMENT = {
-  API_KEY: "OPENAI_API_KEY",
-} as const;
 
 export const HOSTED_OPENAI_DEFAULTS = {
   BASE_URL: "https://api.openai.com/v1",

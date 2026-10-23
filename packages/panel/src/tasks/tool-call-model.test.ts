@@ -735,6 +735,56 @@ test("the section calls read as theirs, a made section by the title asked and a 
   assert.equal(toolCallView({ ...moved, output: undefined }).subject, "");
 });
 
+test("the automation calls read as theirs, a made one by the name asked and a changed or deleted one by the name its answer names, and open nothing", () => {
+  const automation = { id: "automation-1", name: "Agent audit" };
+  const calls = [
+    {
+      tool: "list_automations",
+      callId: "call-1",
+      input: {},
+      output: { status: "accepted", automations: [] },
+    },
+    {
+      tool: "create_automation",
+      callId: "call-2",
+      input: { name: "Agent audit" },
+      output: { status: "accepted", automation },
+    },
+    {
+      tool: "update_automation",
+      callId: "call-3",
+      input: { automationId: "automation-1", enabled: false },
+      output: { status: "accepted", automation },
+    },
+    {
+      tool: "run_automation",
+      callId: "call-5",
+      input: { automationId: "automation-1" },
+      output: { status: "accepted", automation, run: { id: "run-1", status: "started" } },
+    },
+    {
+      tool: "delete_automation",
+      callId: "call-4",
+      input: { automationId: "automation-1" },
+      output: { status: "accepted", automation },
+    },
+  ];
+
+  assert.deepEqual(
+    calls.map((call) => {
+      const view = toolCallView(call);
+      return [view.kind, view.subject, toolTarget(call)];
+    }),
+    [
+      [CALL_KIND.LIST_AUTOMATIONS, "", undefined],
+      [CALL_KIND.CREATE_AUTOMATION, "Agent audit", undefined],
+      [CALL_KIND.UPDATE_AUTOMATION, "Agent audit", undefined],
+      [CALL_KIND.RUN_AUTOMATION, "Agent audit", undefined],
+      [CALL_KIND.DELETE_AUTOMATION, "Agent audit", undefined],
+    ],
+  );
+});
+
 test("the issue calls read as theirs, an issue by the identifier and title its answer names and by the name or title asked before then, and open nothing", () => {
   const issue = { id: "issue-1", identifier: "ACME-4", title: "Flaky invite test" };
   const calls = [
@@ -869,6 +919,31 @@ test("a pause names how long it waits, and its answer how long it waited or that
     kind: TOOL_BLOCK.TEXT,
     text: "Stopped early: a message arrived.",
   });
+});
+
+test("the chat calls read as theirs, a post by its words and a read by its channel, each member's mention link by the member's name, a resolve by the ask's key and a channel's edit by the channel, never as a tool this build does not know", () => {
+  const sam = "[@Sam](https://tryluke.dev/acme/person/sam)";
+  const calls = [
+    { tool: "post_chat", input: { text: `${sam} migration's in` } },
+    { tool: "read_chat", input: { channel: sam } },
+    { tool: "read_chat", input: {} },
+    { tool: "resolve_ask", input: { key: "branch-protection", reason: "Settled." } },
+    { tool: "edit_channel", input: { channel: "#launch", archived: true } },
+  ];
+
+  assert.deepEqual(
+    calls.map((call) => {
+      const view = toolCallView({ ...call, output: { status: "accepted" } });
+      return [view.kind, view.subject];
+    }),
+    [
+      [CALL_KIND.CHAT_POST, "Sam migration's in"],
+      [CALL_KIND.CHAT_READ, "Sam"],
+      [CALL_KIND.CHAT_READ, ""],
+      [CALL_KIND.CHAT_RESOLVE, "branch-protection"],
+      [CALL_KIND.CHAT_EDIT_CHANNEL, "#launch"],
+    ],
+  );
 });
 
 test("a post into the plan's own channel opens the plan's Chat tab, and a post elsewhere, a read, or a resolve opens nothing", () => {

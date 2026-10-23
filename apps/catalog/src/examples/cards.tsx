@@ -2,8 +2,14 @@ import {
   ALIGN,
   BUTTON_VARIANT,
   Button,
+  CARD_CORNER,
+  CARD_DROP_TARGET,
+  CARD_ELEMENT,
+  CARD_LOOK,
   CARD_PADDING,
+  CARD_SHADOW,
   Card,
+  CardHead,
   GAP,
   Inline,
   JUSTIFY,
@@ -19,7 +25,11 @@ import { CatalogSection } from "../section";
 /**
  * cards.tsx -- a card at each padding: a chart's regular inset, a figure's
  * compact one, a band's snug one, and a flush card a list fills to its
- * edge; then long words in a narrow column.
+ * edge; then long words in a narrow column; then cards set among lines,
+ * at a control's corner: tinted, on the code's ground, and outlined; one
+ * leaving its room to what it holds; a dashed one for what is missing; one
+ * standing in running words; a well, and one marked as the drop target a
+ * dragged row is carried over; and one standing over the page as a menu does.
  */
 
 /** A press the catalog has nowhere to take. */
@@ -39,6 +49,20 @@ function Cards(): React.JSX.Element {
               </Text>
               <Text tone={TEXT_TONE.MUTED}>No calls in this window.</Text>
             </Stack>
+          </Card>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-raised" title="Raised, with a head">
+        <div className="catalog-column">
+          <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+            <CardHead>
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
+                Decide
+              </Text>
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
+                Answered
+              </Text>
+            </CardHead>
           </Card>
         </div>
       </CatalogSection>
@@ -74,6 +98,96 @@ function Cards(): React.JSX.Element {
                 </div>
               ))}
             </Stack>
+          </Card>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-among-lines" title="Among lines: tinted, code, and outlined">
+        <div className="catalog-column">
+          <Stack gap={GAP.CONTROL}>
+            <Card look={CARD_LOOK.TINT} corner={CARD_CORNER.CONTROL} padding={CARD_PADDING.FLUSH}>
+              <div className="catalog-card-row">
+                <Text>Ran pnpm test</Text>
+              </div>
+              <div className="catalog-card-row">
+                <Text tone={TEXT_TONE.MUTED}>412 passed</Text>
+              </div>
+            </Card>
+            <Card look={CARD_LOOK.CODE} corner={CARD_CORNER.CONTROL} padding={CARD_PADDING.FLUSH}>
+              <div className="catalog-card-row">
+                <Text>const seats = await readSeats(workspace);</Text>
+              </div>
+            </Card>
+            <Card
+              as={CARD_ELEMENT.ARTICLE}
+              look={CARD_LOOK.OUTLINE}
+              corner={CARD_CORNER.CONTROL}
+              padding={CARD_PADDING.SNUG}
+            >
+              <Text>The retry loop starts before the first request is sent.</Text>
+            </Card>
+          </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-none" title="Room left to what it holds, nothing clipped">
+        <div className="catalog-column">
+          <Card corner={CARD_CORNER.CONTROL} padding={CARD_PADDING.NONE}>
+            <div className="catalog-card-row">
+              <Text>Comment on lines 12–18</Text>
+            </div>
+          </Card>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-dashed" title="Dashed, for what is missing">
+        <div className="catalog-column">
+          <Card corner={CARD_CORNER.CONTROL} padding={CARD_PADDING.SNUG} dashed>
+            <Text tone={TEXT_TONE.MUTED}>Login screen · no longer available</Text>
+          </Card>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-in-words" title="In running words">
+        <div className="catalog-column">
+          <Text>
+            The screen as it stood:
+            <Card as={CARD_ELEMENT.SPAN} corner={CARD_CORNER.CONTROL} padding={CARD_PADDING.SNUG}>
+              A picture&apos;s frame stands here, in the paragraph.
+            </Card>
+          </Text>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-well" title="A well, and one a row is carried over">
+        <div className="catalog-column">
+          <Stack gap={GAP.CONTROL}>
+            <Card
+              as={CARD_ELEMENT.SECTION}
+              look={CARD_LOOK.WELL}
+              corner={CARD_CORNER.CONTROL}
+              padding={CARD_PADDING.SNUG}
+              aria-label="Todo"
+            >
+              <Text tone={TEXT_TONE.MUTED}>No tasks</Text>
+            </Card>
+            <Card
+              as={CARD_ELEMENT.SECTION}
+              look={CARD_LOOK.WELL}
+              corner={CARD_CORNER.CONTROL}
+              padding={CARD_PADDING.SNUG}
+              aria-label="Done"
+              {...{ [CARD_DROP_TARGET]: "true" }}
+            >
+              <Text tone={TEXT_TONE.MUTED}>A card carried over lands here</Text>
+            </Card>
+          </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-over-page" title="Over the page, as a menu stands">
+        <div className="catalog-column">
+          <Card
+            look={CARD_LOOK.RAISED}
+            corner={CARD_CORNER.MENU}
+            padding={CARD_PADDING.SNUG}
+            shadow={CARD_SHADOW.MENU}
+          >
+            <Text>Summary: 3 agents, 2 pull requests, 1 page.</Text>
           </Card>
         </div>
       </CatalogSection>

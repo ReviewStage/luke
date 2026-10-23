@@ -373,8 +373,6 @@ interface HeldAgent {
   title: string | null;
   /** What kind of agent it is: an operator is said as Luke (`agentTabLabel`); none for a coder. */
   kind?: CodingAgentKind | undefined;
-  /** The human name the agent was given, said ahead of its title (`agentTabLabel`); none for one from before names were given. */
-  personaName?: string | undefined;
   /** The automation whose run started it, which an untitled agent goes by (`agentTabLabel`). */
   automationName?: string | undefined;
   status: CodingAgentStatus;
@@ -428,7 +426,6 @@ function noticeText(input: {
   model: string;
   title: string | null;
   kind?: CodingAgentKind | undefined;
-  personaName?: string | undefined;
   automationName?: string | undefined;
   status: CodingAgentStatus;
   models: readonly CatalogModel[] | undefined;
@@ -462,18 +459,26 @@ function inboxNoticeText(
 }
 
 /**
- * The answer as it waits on the account: the items of the agents it
- * started, a task's and one with no task alike, since an agent runs on its starter's keys and asks its starter,
- * and the tasks holding any item whole, since every member's Inbox lists
- * them. An item whose starter the service does not say, or an account whose
- * id is not known, is the account's own, as every item was before. Note that
- * what counts and is announced is this, while the window lists every
- * member's items of agents with no task (`sliceOf`), as it does a task's.
+ * The answer as it waits on the account: a task's items that wait on it
+ * (`waitsOn`), its assignee's, or its agent's starter's where nobody is
+ * assigned, and the items of the agents with no task it started, since such
+ * an agent runs on its starter's keys and asks its starter, and the tasks
+ * holding any item whole, since every member's Inbox lists them. An item a
+ * service before `waitsOn` names goes by its starter; one naming neither, or
+ * an account whose id is not known, is the account's own, as every item was
+ * before. Note that what counts and is announced is this, while the window
+ * lists every member's items of agents with no task (`sliceOf`), as it does
+ * a task's.
  */
-function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): AccountInboxAnswer {
+function waitingOnAccount(
+  answer: AccountInboxAnswer,
+  accountId: string | undefined,
+): AccountInboxAnswer {
   if (accountId === undefined) return answer;
-  const ownOf = (item: { readonly startedBy?: string }) =>
-    item.startedBy === undefined || item.startedBy === accountId;
+  const ownOf = (item: { readonly startedBy?: string; readonly waitsOn?: string }) => {
+    const waitsOn = item.waitsOn ?? item.startedBy;
+    return waitsOn === undefined || waitsOn === accountId;
+  };
   return {
     ...answer,
     items: answer.items.filter(ownOf),
@@ -640,7 +645,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
     let holder: string | undefined;
-    /** The inbox read's last answer for the account signed in, as it waits on the account (`startedBy`), every member's items of agents with no task the window lists, and its items and chat messages by id; none before its first. */
+    /** The inbox read's last answer for the account signed in, as it waits on the account (`waitingOnAccount`), every member's items of agents with no task the window lists, and its items and chat messages by id; none before its first. */
     let waiting:
       | {
           readonly answer: AccountInboxAnswer;
@@ -725,7 +730,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         model: end.agent.model,
         title: end.agent.title,
         kind: end.agent.kind,
-        personaName: end.agent.personaName,
         automationName: end.agent.automationName,
         status: end.agent.status,
         models,
@@ -884,11 +888,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      * answer was read, because a task brought back from the archive brings
      * its items back unchanged, and they are not news; an item posted again
      * after it was answered or closed moves its revision on, and is. Only
-     * what waits on the account (`startedBy`) is counted and announced, while
+     * what waits on the account (`waitingOnAccount`) is counted and announced, while
      * every member's items of agents with no task are written for the window.
      */
     function observeWaiting(read: AccountInboxAnswer): void {
-      const answer = startedBy(read, dependencies.accountId());
+      const answer = waitingOnAccount(read, dependencies.accountId());
       const listed = read.planless ?? [];
       const was = waiting;
       // Note that an answer at the same cursor holding fewer of the account's own items is news, because the account's id, which picks them, may have arrived since.
@@ -1051,15 +1055,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function heldOf(
       agent: Pick<
         CodingAgentSummary,
-        | "planId"
-        | "model"
-        | "title"
-        | "kind"
-        | "personaName"
-        | "automationName"
-        | "status"
-        | "turnId"
-        | "quietTurn"
+        "planId" | "model" | "title" | "kind" | "automationName" | "status" | "turnId" | "quietTurn"
       >,
     ): HeldAgent {
       return {
@@ -1067,7 +1063,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         model: agent.model,
         title: agent.title,
         kind: agent.kind,
-        personaName: agent.personaName,
         automationName: agent.automationName,
         status: agent.status,
         turnId: agent.turnId,

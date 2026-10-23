@@ -291,7 +291,7 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
       if (bar === side) assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
       assert.ok(rightClickChosen(bar).length > 0, `the ${label} tab answers a right-click`);
     }
-    assert.equal(container.querySelector(".tab [aria-haspopup]"), null, "no tab wears a ⋯");
+    assert.equal(container.querySelector(".luke-tab [aria-haspopup]"), null, "no tab wears a ⋯");
     act(() => roots.pop()?.unmount());
     container.remove();
   }

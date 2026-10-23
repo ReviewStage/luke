@@ -3,11 +3,14 @@ import { keepConversationPicture } from "@luke/database/models/conversation-pict
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import {
+  CONVERSATION_MEDIA_TYPE,
   CONVERSATION_PICTURE_BOUNDS,
+  type ConversationMediaType,
   type KeptPicture,
 } from "@luke/features/conversation-picture-wire";
-import { imageDimensions } from "@luke/features/image-signature";
+import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
 import { INBOX_BOUNDS } from "@luke/features/inbox-wire";
+import { startsLikeWebm, webmDimensions } from "@luke/features/video-signature";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -22,7 +25,8 @@ import { type InboxSandboxDoor, readSandboxImage } from "./inbox-image.js";
  * The agent names each file by its path and says in a line what it shows;
  * the service reads each through the same door the agent's file tools reach
  * the sandbox by (`inbox-image.ts`), held to a picture's bound and the three
- * types, measures it, and keeps it beside the transcript the call is written
+ * types, or a WebM video the agent recorded of what it did, which the
+ * transcript plays in a picture's place, measures it, and keeps it beside the transcript the call is written
  * to (`conversation-pictures.ts`), the agent's own or its worker's. The
  * answer names each kept picture by id, never by its bytes, so the record
  * carries an id, and the developer's window draws the set from it. The
@@ -37,8 +41,9 @@ import { type InboxSandboxDoor, readSandboxImage } from "./inbox-image.js";
 export const SHOW_IMAGE_REFUSAL = {
   UNREADABLE: `Not shown: give images as a list of 1 to ${CONVERSATION_PICTURE_BOUNDS.MAX_PER_CALL} items, each a path in your sandbox and a caption of one line of at most ${INBOX_BOUNDS.MAX_ALT_CHARS} characters.`,
   NO_FILE: "Not shown: no such file in your sandbox:",
-  NOT_IMAGE: "Not shown: that file is not a PNG, JPEG, or WebP image whose header states its size:",
-  TOO_LARGE: `Not shown: a picture is kept up to ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB. Save it smaller, as a JPEG or a WebP, or as the part of the page that matters, and show it again:`,
+  NOT_IMAGE:
+    "Not shown: that file is not a PNG, JPEG, or WebP image whose header states its size, or a WebM video whose video track states its size:",
+  TOO_LARGE: `Not shown: a picture or a video is kept up to ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB. Save a picture smaller, as a JPEG or a WebP, or as the part of the page that matters; record a video shorter or smaller; and show it again:`,
   UNREADABLE_FILE: "Not shown: that file could not be read from your sandbox:",
   FULL: `Not shown: this transcript already keeps ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES_PER_CONVERSATION / 1_000_000} MB of pictures, as many as it may.`,
   UNAVAILABLE: "Not shown: the pictures could not be kept just now. The call may be made again.",
@@ -50,7 +55,7 @@ const SHOW_IMAGE_INPUT = Schema.Struct({
       Schema.Struct({
         path: describeWire(
           Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(INBOX_BOUNDS.MAX_PATH_CHARS)),
-          "The picture's file in your sandbox, relative to the checkout or absolute: a PNG, JPEG, or WebP.",
+          "The picture's file in your sandbox, relative to the checkout or absolute: a PNG, JPEG, or WebP, or a WebM video.",
         ),
         caption: describeWire(
           Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(INBOX_BOUNDS.MAX_ALT_CHARS)),
@@ -70,7 +75,10 @@ export const SHOW_IMAGE_TOOL = {
     "with Playwright (`npx playwright screenshot <url> <file>`, installing it where it is missing), " +
     "then name each file by its path with a one-line caption saying what it shows. Show the pictures " +
     "that belong together in one call, as one set: before and after, or each screen a change touches. " +
-    `Each is a PNG, JPEG, or WebP of at most ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB. ` +
+    "To show a flow rather than a screen, such as clicking through a form you built, record it as a " +
+    "WebM video, for instance with Playwright's `recordVideo`, and show that file the same way; the " +
+    "transcript plays it. " +
+    `Each is a PNG, JPEG, or WebP, or a WebM video, of at most ${CONVERSATION_PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB. ` +
     "Never show a picture of a secret. A Markdown image in your reply shows nothing; this is the one " +
     "way to show a picture. Answers `accepted` with each picture's id, or `rejected` and why nothing " +
     "was shown.",
@@ -97,6 +105,18 @@ interface ReadPicture {
   readonly height: number;
 }
 
+/** The type a shown file's first bytes say it is: a picture's, or a WebM's, whose doctype `webmDimensions` then holds it to. */
+function sniffShown(head: Uint8Array): ConversationMediaType | undefined {
+  return sniffImageType(head) ?? (startsLikeWebm(head) ? CONVERSATION_MEDIA_TYPE.WEBM : undefined);
+}
+
+/** The size a shown file states: a WebM's video track's, or a picture's header's. */
+function shownDimensions(bytes: Uint8Array, type: ConversationMediaType) {
+  return type === CONVERSATION_MEDIA_TYPE.WEBM
+    ? webmDimensions(bytes)
+    : imageDimensions(bytes, type);
+}
+
 /** The picture at the path, read, held to the bound, and measured; or the sentence refusing it. */
 function readPicture(
   binding: ShowImageBinding,
@@ -105,6 +125,7 @@ function readPicture(
   return Effect.map(
     readSandboxImage(binding.sandbox, binding.checkout, path, {
       maxBytes: CONVERSATION_PICTURE_BOUNDS.MAX_BYTES,
+      sniff: sniffShown,
       refusals: {
         NO_FILE: SHOW_IMAGE_REFUSAL.NO_FILE,
         NOT_IMAGE: SHOW_IMAGE_REFUSAL.NOT_IMAGE,
@@ -113,7 +134,7 @@ function readPicture(
       },
     }),
     Result.flatMap((image) => {
-      const dimensions = imageDimensions(image.bytes, image.contentType);
+      const dimensions = shownDimensions(image.bytes, image.contentType);
       if (dimensions === undefined) return Result.fail(`${SHOW_IMAGE_REFUSAL.NOT_IMAGE} ${path}`);
       return Result.succeed({ ...image, ...dimensions });
     }),

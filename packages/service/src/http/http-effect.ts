@@ -1,3 +1,5 @@
+import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
+import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -44,25 +46,32 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), for an upstream that refused, its status (`upstreamRefused`), and for a plan's reached limit, when it resets (`planLimitReached`). */
+/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), for an upstream that refused, its status (`upstreamRefused`), for a plan's reached limit, when it resets (`planLimitReached`), and for a skill refused, which and why (`installedSkillRefused`). */
 export type HostedRefusal = {
   readonly error: HostedRefusalSlug;
   readonly unreached?: RepositoryUnreached;
   readonly upstreamStatus?: number;
   readonly resetsAt?: number;
+  readonly provider?: ModelProvider;
+  readonly skillName?: string;
+  readonly skillRefusal?: InstalledSkillFilesRefusal;
 };
 
 /**
@@ -115,6 +124,8 @@ export const HOSTED_REFUSAL = {
   AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
   /** The agent runs on a native harness this function cannot reach (neither launched nor relayed from it); nothing was written, and nothing fell through to eve. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
+  /** The account saved no OpenAI API key, which a voice call or a dictated clip runs on. */
+  OPENAI_KEY_MISSING: { error: HOSTED_API_ERROR.OPENAI_KEY_MISSING },
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_SIGNED_OUT: { error: HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT },
   /** The agent runs on its starter's plan, whose provider did not answer; nothing was written, and the same request later may be taken. */
@@ -123,6 +134,8 @@ export const HOSTED_REFUSAL = {
   AGENT_PLAN_LIMIT_REACHED: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED },
   /** The agent runs on its starter's plan, which its provider said is not eligible to run it; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
+  /** The account keeps neither the model provider's subscription nor its API key, and Luke's key pays for no coding agent; nothing was written. */
+  AGENT_CREDENTIAL_MISSING: { error: HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING },
   /** The chat channel is archived, so it takes no post; nothing was written. Named for the task archive it once answered too, which no task has any more. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
@@ -133,6 +146,10 @@ export const HOSTED_REFUSAL = {
   SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
   /** The workspace's Linear could not be read: none connected, its grant refused, or no such issue; nothing was written. */
   LINEAR_UNAVAILABLE: { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE },
+  /** A skill of that name is already installed in the scope asked; nothing was installed. */
+  SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
+  /** A skill's files were refused; nothing was installed. */
+  SKILL_FILES_REFUSED: { error: HOSTED_API_ERROR.SKILL_FILES_REFUSED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
@@ -140,6 +157,24 @@ export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
   return resetsAt === undefined
     ? HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED
     : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
+}
+
+/** No credential of the account's pays for a coding agent on the provider's models, named so the words can say which to connect. */
+export function credentialMissing(provider: ModelProvider): HostedRefusal {
+  return { ...HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING, provider };
+}
+
+/** A skill refused, by name where one was read, and why its files were where they were. */
+export function installedSkillRefused(
+  refusal: typeof HOSTED_REFUSAL.SKILL_NAME_TAKEN | typeof HOSTED_REFUSAL.SKILL_FILES_REFUSED,
+  skillName: string | undefined,
+  skillRefusal?: InstalledSkillFilesRefusal,
+): HostedRefusal {
+  return {
+    ...refusal,
+    ...(skillName === undefined ? undefined : { skillName }),
+    ...(skillRefusal === undefined ? undefined : { skillRefusal }),
+  };
 }
 
 /** The repository out of reach, with why, so the desktop can offer what mends it. */

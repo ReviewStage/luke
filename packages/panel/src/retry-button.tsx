@@ -8,13 +8,14 @@
  * `@luke/ui`'s `RetryRowLabel` instead, and its own press is the retry.
  */
 
+import { FoldingButton } from "@luke/ui";
 import { RotateCwIcon } from "lucide-react";
-import { FoldingButton } from "./folding-button.js";
 
 const RETRY_WORD = "Retry";
 
 /**
- * The retry beside a failure's words; `label` names what it reads again where
+ * The retry beside a failure's words, its arrow turning once as it is
+ * pressed; `label` names what it reads again where
  * "Retry" alone would not say. Its words fold away where a bar short of room
  * folds them (`FoldingButton`), leaving the glyph, named still, whose hint
  * then says the words.
@@ -27,6 +28,11 @@ export function RetryButton({
   label?: string;
 }): React.JSX.Element {
   return (
-    <FoldingButton label={label} icon={<RotateCwIcon aria-hidden="true" />} onClick={onRetry} />
+    <FoldingButton
+      label={label}
+      icon={<RotateCwIcon aria-hidden="true" />}
+      turns
+      onClick={onRetry}
+    />
   );
 }

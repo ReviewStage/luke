@@ -7,11 +7,16 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  OneLine,
   PencilIcon,
   PinIcon,
+  RowHint,
+  RowHintOptions,
+  Time,
   UnarchiveIcon,
   UnpinIcon,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
@@ -20,14 +25,11 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
-import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
-import { RowHint, RowHintOptions } from "../tooltip.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
@@ -238,6 +240,7 @@ export function SidebarAgent({
       <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
+          motionKey={agent.id}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
@@ -261,7 +264,7 @@ export function SidebarAgent({
             ) : (
               <>
                 {name}
-                {isUnread ? <span className="luke-visually-hidden">(unread)</span> : null}
+                {isUnread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
               </>
             )
           }
@@ -269,14 +272,16 @@ export function SidebarAgent({
             editing ? null : (
               <span className="sidebar-task-time">
                 {repository === undefined ? null : (
-                  <FadingWords className="sidebar-task-repository" words={repository} />
+                  <OneLine className="sidebar-task-repository" words={repository}>
+                    {repository}
+                  </OneLine>
                 )}
                 {starter === undefined ? null : (
                   <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
                 )}
                 {drafted ? <DraftMark /> : null}
                 {agentEndMark(agent, false)}
-                <RelativeTime at={at} now={now} hint={false} />
+                <Time at={at} now={now} hint={false} />
               </span>
             )
           }

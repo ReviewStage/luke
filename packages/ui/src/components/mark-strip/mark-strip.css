@@ -1,0 +1,74 @@
+/* mark-strip.css -- a hidden rail's strip: a column of marks, one for each
+   row, filling the box its place stands it in; dots, or bars sharing its
+   height. */
+
+@layer components {
+  .luke-mark-strip {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--luke-space-4);
+    padding-block: var(--luke-space-12);
+  }
+
+  .luke-mark-strip[data-pressable="true"] {
+    cursor: pointer;
+  }
+
+  .luke-mark-strip-mark {
+    --luke-mark-strip-ink: var(--luke-color-border-strong);
+    width: var(--luke-space-6);
+    height: var(--luke-space-6);
+    flex: none;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-mark-strip-ink);
+  }
+
+  .luke-mark-strip-mark[data-tone="danger"] {
+    --luke-mark-strip-ink: var(--luke-color-danger-text);
+  }
+
+  .luke-mark-strip-mark[data-tone="attention"] {
+    --luke-mark-strip-ink: var(--luke-color-attention);
+  }
+
+  .luke-mark-strip-mark[data-tone="complete"] {
+    --luke-mark-strip-ink: var(--luke-color-complete);
+  }
+
+  .luke-mark-strip-mark[data-tone="working"] {
+    --luke-mark-strip-ink: var(--luke-color-working);
+  }
+
+  .luke-mark-strip-mark[data-viewed] {
+    opacity: 0.35;
+  }
+
+  .luke-mark-strip-mark[data-current] {
+    opacity: 1;
+    box-shadow: 0 0 0 1px var(--luke-color-text);
+  }
+
+  /* Bars: each a share of the strip's height, at most a dot's, its ink
+     filling the top of its share so the gap between bars shrinks with them;
+     the row shown stands wider, and never thinner than a line. */
+  .luke-mark-strip[data-look="bars"] {
+    gap: 0;
+  }
+
+  .luke-mark-strip[data-look="bars"] > .luke-mark-strip-mark {
+    height: auto;
+    min-height: 0;
+    max-height: var(--luke-space-6);
+    flex: 1 1 0;
+    border-radius: 0;
+    background: linear-gradient(var(--luke-mark-strip-ink) 0 66%, transparent 66%);
+  }
+
+  .luke-mark-strip[data-look="bars"] > .luke-mark-strip-mark[data-current] {
+    width: var(--luke-space-12);
+    min-height: var(--luke-space-2);
+  }
+}

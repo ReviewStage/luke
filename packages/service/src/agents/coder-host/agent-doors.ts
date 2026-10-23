@@ -45,6 +45,14 @@ import {
   runLookAtPicture,
 } from "../../tasks/picture-look.js";
 import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
+import {
+  runCreateAutomation,
+  runDeleteAutomation,
+  runListAutomations,
+  runRunAutomation,
+  runUpdateAutomation,
+} from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import {
   type AgentSessions,
@@ -68,6 +76,7 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
+import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runListOpenAsks } from "../operator-desk.js";
 import {
   REPOSITORY_REFUSAL,
@@ -129,7 +138,14 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.CREATE_SECTION
     | typeof CODER_TOOL.DELETE_SECTION
     | typeof CODER_TOOL.UPDATE_TASK
-    | typeof CODER_TOOL.LIST_MODELS;
+    | typeof CODER_TOOL.LIST_AUTOMATIONS
+    | typeof CODER_TOOL.CREATE_AUTOMATION
+    | typeof CODER_TOOL.UPDATE_AUTOMATION
+    | typeof CODER_TOOL.DELETE_AUTOMATION
+    | typeof CODER_TOOL.RUN_AUTOMATION
+    | typeof CODER_TOOL.LIST_MODELS
+    | typeof CODER_TOOL.REMEMBER
+    | typeof CODER_TOOL.RECALL;
   readonly input: UnparsedWireValue;
   readonly callId: string;
 }
@@ -148,8 +164,15 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
   [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
+  [CODER_TOOL.LIST_AUTOMATIONS]: runListAutomations,
+  [CODER_TOOL.CREATE_AUTOMATION]: runCreateAutomation,
+  [CODER_TOOL.UPDATE_AUTOMATION]: runUpdateAutomation,
+  [CODER_TOOL.DELETE_AUTOMATION]: runDeleteAutomation,
+  [CODER_TOOL.RUN_AUTOMATION]: runRunAutomation,
   [CODER_TOOL.LIST_MODELS]: runListModels,
   [CODER_TOOL.LIST_OPEN_ASKS]: runListOpenAsks,
+  [CODER_TOOL.REMEMBER]: runAgentRemember,
+  [CODER_TOOL.RECALL]: runAgentRecall,
 } as const;
 
 /** One call of the agent's chat tools, by the tool's name and the input its runtime held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
@@ -396,7 +419,8 @@ export function runAgentChat(
           );
     const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
     const { clientKey, postsInTurn, sandbox } = call;
-    return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
+    const { conversationId } = admitted.target;
+    return yield* postAsAgent({ ...reader, conversationId, repository, telling }, call.input, {
       clientKey,
       postsInTurn,
       sandbox,
@@ -422,15 +446,23 @@ export function runAgentTools(
 ): Effect.Effect<
   WireRecord,
   never,
-  DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
+  | DatabaseServices
+  | HttpClient.HttpClient
+  | GitHubApp
+  | ModelCatalog
+  | WorkspaceLinearConnect
+  | SentryApp
 > {
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return agentToolRejected(found.failure);
     // The agent asking is the one the conversation is, and eve is reached as its starter.
     const sender = found.success;
-    // An operator deletes nothing: it is not offered the delete, and a native harness's call of it is refused.
-    if (call.tool === CODER_TOOL.DELETE_SECTION && isOperator(sender)) {
+    // An operator deletes nothing: it is not offered a delete, and a native harness's call of one is refused.
+    if (
+      (call.tool === CODER_TOOL.DELETE_SECTION || call.tool === CODER_TOOL.DELETE_AUTOMATION) &&
+      isOperator(sender)
+    ) {
       return agentToolRejected(STEWARD_DELETE_REFUSAL);
     }
     const secret = seams.deploymentSecret();
@@ -438,21 +470,20 @@ export function runAgentTools(
     const compose = yield* eveSessionsComposer;
     // Each agent the tools reach is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
     const route = yield* sessionsRouter;
-    const eve =
+    const eveAs =
       secret === undefined || origin === undefined
         ? undefined
-        : route(
-            compose({
-              origin,
-              caller: { secret, account: sender.userId },
-              mount: EVE_MOUNT.CODER,
-            }),
-            sender.userId,
-          );
+        : (account: string) =>
+            route(
+              compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER }),
+              account,
+            );
+    const eve = eveAs?.(sender.userId);
     const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
     const toolCall = {
       caller,
       eve,
+      eveAs,
       writer: seams.writer(),
       clientKey: call.callId,
       summaryModel: seams.summaryModel,

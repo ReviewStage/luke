@@ -1,0 +1,34 @@
+/* note-line.css -- a muted line said where a list's rows would stand. */
+
+@layer components {
+  .luke-note-line {
+    margin: 0;
+    font-family: var(--luke-font-sans);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-note-line[data-look="centred"] {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+  }
+
+  .luke-note-line[data-look="list"],
+  .luke-note-line[data-look="inset"] {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-note-line[data-look="list"] {
+    padding: var(--luke-space-8) var(--luke-space-12);
+  }
+
+  .luke-note-line[data-fill] {
+    flex: 1;
+  }
+}

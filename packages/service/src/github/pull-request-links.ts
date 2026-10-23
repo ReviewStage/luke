@@ -31,6 +31,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { GitHubPullRequestSummary } from "@luke/features";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { Cache, Context, Data, Duration, Effect, Exit, Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import {
@@ -41,6 +42,7 @@ import {
   markRefusedToken,
 } from "./github-app.js";
 import { logWorkspaceReadFailure } from "./github-refusal.js";
+import { pullRequestQueued } from "./pull-request-merging.js";
 import { pullRequestByNumber } from "./pull-requests.js";
 
 /** How many links an instance keeps, and for how long an answer and a refusal are kept. */
@@ -95,6 +97,12 @@ const pullRequestOfLink = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Option.isNone(found)) return null;
   const pull = found.value;
+  // Note that a queue read GitHub could not answer draws the link as open rather than failing it.
+  const queued =
+    pull.state === PULL_REQUEST_STATE.OPEN &&
+    (yield* pullRequestQueued(reached.value.token, key.repository, key.number).pipe(
+      Effect.catch(() => Effect.succeed(false)),
+    ));
   return {
     number: pull.number,
     title: pull.title,
@@ -114,6 +122,7 @@ const pullRequestOfLink = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...(pull.labels === undefined ? undefined : { labels: pull.labels }),
     ...(pull.comments === undefined ? undefined : { comments: pull.comments }),
     ...(pull.commits === undefined ? undefined : { commits: pull.commits }),
+    ...(queued ? { queued: true } : undefined),
   };
 });
 

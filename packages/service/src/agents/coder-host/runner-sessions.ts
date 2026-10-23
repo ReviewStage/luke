@@ -14,9 +14,17 @@
  * `native_session`, which the events route records from what the runner
  * reports, and a relaunch resumes.
  *
- * `open` opens a sandbox from the coding agent's image (`agent-sandbox-image.ts`),
- * checks the agent's repository out into it exactly as eve's sandbox does
- * (`checkout.ts`, the same token at the firewall), and launches the runner.
+ * `open` reads the harness's credential and answers, as eve's open answers
+ * once eve took the message; past the answer (`after-response.ts`) it opens
+ * a sandbox from the coding agent's image (`agent-sandbox-image.ts`),
+ * waiting while the image is prepared, checks the agent's repository out
+ * into it on eve's terms (`checkout.ts`, the same token at the firewall,
+ * but cloned whole, since the history is deepened before the runner starts
+ * anyway), or opens it from its workspace's repository snapshot of the
+ * same image and fetches only what landed since (`repository-snapshot.ts`),
+ * building that snapshot past the answer where none was ready, writes the
+ * skills its member installed into Luke beside it (`native-skills.ts`), and
+ * launches the runner. A launch that fails there is the agent's failed turn.
  * A launch mints the runner's bearer and records its digest on the
  * agent's row, uploads the runner's bundle (`runner-bundle.ts`), and starts
  * it as a detached command of the sandbox's API as root, which installs the
@@ -28,6 +36,10 @@
  * written to its stdin. The command, the sandbox session it runs in, and the
  * first event number of the launch are kept as the sandbox's tags, which is
  * how a later call finds the runner it writes to.
+ *
+ * A message's words go as text and its images as image blocks; any other
+ * file it carries, such as a PDF, is written into the sandbox first, outside
+ * the checkout, and the line names its path (`runnerContent`).
  *
  * `send` writes the harness's lines and then a message line to that runner
  * while it runs. Where the sandbox stopped or the runner ended, it resumes
@@ -61,14 +73,16 @@
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { AGENT_USER } from "@luke/agent-runner/pins";
+import { AGENT_USER, RUNNER_DIRECTORY } from "@luke/agent-runner/pins";
 import {
   type ContentBlock,
   INPUT_LINE,
   type InputLine,
+  type IntegrationServer,
   RUNNER_ENV,
   type RunnerConfig,
 } from "@luke/agent-runner/protocol";
+import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import {
   claimCodingAgentRunnerLease,
   releaseCodingAgentRunnerLease,
@@ -82,15 +96,32 @@ import {
   readCodingAgentOfConversation,
   readCodingAgentRouting,
   recordCodingAgentRunnerToken,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import type { ConversationTarget } from "@luke/database/models/writer";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { causeKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
-import { Clock, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  DateTime,
+  Duration,
+  Effect,
+  Option,
+  Result,
+  Schedule,
+  Stream,
+} from "effect";
+import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
+import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
   AgentSandboxImage,
+  type AgentSandboxImageService,
   IMAGE_PREPARING_STATUS,
   ImagePreparing,
 } from "../agent-sandbox-image.js";
@@ -104,7 +135,15 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
-import type { RepositorySandbox } from "../repository-shell.js";
+import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
+import { REPOSITORY_REFUSAL, type RepositorySandbox } from "../repository-shell.js";
+import {
+  buildRepositorySnapshot,
+  forgetRepositorySnapshot,
+  REPOSITORY_SNAPSHOT_STATE,
+  type RepositorySnapshotOf,
+  readRepositorySnapshot,
+} from "../repository-snapshot.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
@@ -116,6 +155,8 @@ import {
   deploymentOidcToken,
   type ListedSandbox,
   type NetworkPolicy,
+  NOT_FOUND_STATUS,
+  type SandboxFile,
   SandboxUnavailable,
   SESSION_TAG,
   SNAPSHOT_GONE_STATUS,
@@ -124,14 +165,22 @@ import {
 } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import {
+  type AgentRepositoryRead,
+  agentRepositoryRead,
   agentRepositoryToken,
+  CHECKOUT_DEPTH,
+  CheckoutRefused,
   type CheckoutServices,
-  checkOutAgentRepository,
+  cloneAgentRepository,
   deepenAgentCheckout,
   openWorkingFolder,
+  refreshAgentCheckout,
 } from "./checkout.js";
+import { NATIVE_SKILLS_PATH, nativeSkillFiles } from "./native-skills.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
+import { nativeSkills } from "./skills.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -151,6 +200,8 @@ export interface RunnerSessionsOptions {
   readonly eventsUrl: string;
   /** The Luke MCP server's endpoint (P06), which the composing edge names. */
   readonly mcpUrl: string;
+  /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside Luke's. */
+  readonly integrations: (agent: CodingAgent) => Effect.Effect<readonly IntegrationServer[]>;
   /** Luke's coder instructions for the agent, which the harness's config carries. */
   readonly instructions: (agent: CodingAgent) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
@@ -200,6 +251,8 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
     resume: string | undefined,
     firstSequence: number,
   ) => Effect.Effect<RunnerConfig, LaunchRefused>;
+  /** The checkout's folders the harness finds a repository's skills in, whose names it keeps over an installed skill's. */
+  readonly skillRoots: readonly string[];
   /** What goes ahead of a message to a runner already running. */
   readonly ahead: (
     agent: CodingAgent,
@@ -220,12 +273,13 @@ export const SANDBOX_NAME = "luke-agent-";
 
 /**
  * Where the launch stands in the sandbox: the bundle as the file API uploads
- * it, as the default user, and where root installs it, in a directory only
- * root writes, so no Terminal's shell changes what runs as `agent`.
+ * it, as the default user, and where it is installed root's, in the directory
+ * the image made root's (`RUNNER_DIRECTORY`), so no Terminal's shell changes
+ * what runs as `agent`.
  */
 const RUNNER_PATH = {
   UPLOAD: "/tmp/luke-agent-runner.mjs",
-  INSTALLED: "/opt/luke/agent-runner/agent-runner.mjs",
+  INSTALLED: `${RUNNER_DIRECTORY}/agent-runner.mjs`,
 } as const;
 
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
@@ -233,7 +287,9 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
 
 /**
  * The launch, run by bash as root: the uploaded bundle installed where only
- * root writes and checked against the digest Luke computed, the checkout
+ * root writes and checked against the digest Luke computed, the member's
+ * installed skills, where the sandbox's opening uploaded them, moved where
+ * only root writes and every user reads (`native-skills.ts`), the checkout
  * marked safe for git and shared with `agent`'s group, then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
@@ -244,12 +300,37 @@ const LAUNCH_SCRIPT = [
   `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
   `rm -f ${RUNNER_PATH.UPLOAD}`,
   `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
+  `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
   `git config --system --get-all safe.directory 2>/dev/null | grep -Fxq ${CODER.CHECKOUT_PATH} || git config --system --add safe.directory ${CODER.CHECKOUT_PATH}`,
   `if [ -d ${CODER.CHECKOUT_PATH}/.git ]; then git -C ${CODER.CHECKOUT_PATH} config core.sharedRepository group; fi`,
   `chmod -R g+rwX ${CODER.CHECKOUT_PATH}`,
   `find ${CODER.CHECKOUT_PATH} -type d -exec chmod g+s {} +`,
   `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
 ].join("\n");
+
+/**
+ * A launch whose stdin was refused, said in the log by how its command
+ * ended: its exit code where Vercel has one, and the tail of its stderr,
+ * every token-shaped run redacted (`commandStderrTail`), since a runner that
+ * dies before it reads its config says why there alone. Every value the
+ * launch handed it in its environment is redacted too, whatever its shape,
+ * so neither its credential nor its bearer can reach the log.
+ */
+const diedAtStart = (
+  api: VercelSandboxApi,
+  sandboxSessionId: string,
+  commandId: string,
+  secrets: readonly string[],
+) =>
+  Effect.gen(function* () {
+    const exit = yield* api
+      .commandExit(sandboxSessionId, commandId)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    const stderr = yield* api.commandStderrTail(sandboxSessionId, commandId, secrets);
+    yield* Effect.logWarning(
+      `A runner's launch took no stdin: exit ${exit === null || exit === undefined ? "unknown" : String(exit)}, stderr: ${stderr ?? "none"}`,
+    );
+  });
 
 /** What `$0` reads as in the launch's shell. */
 const LAUNCH_NAME = "luke-agent-runner";
@@ -261,6 +342,19 @@ const LAUNCH_NAME = "luke-agent-runner";
  * bundle).
  */
 const FAILED_STATUS = { UNAVAILABLE: 503, REFUSED: 422 } as const;
+
+/**
+ * How an open past its Start's answer waits on an image still being
+ * prepared, a template whose snapshot a create found gone among them, on
+ * the template's own wait (`NATIVE_TEMPLATE`): an open answers preparing
+ * before any sandbox stands, so making it again leaves nothing behind.
+ */
+const IMAGE_READY = {
+  schedule: Schedule.spaced(NATIVE_TEMPLATE.POLL).pipe(
+    Schedule.upTo({ duration: NATIVE_TEMPLATE.WAIT }),
+  ),
+  while: (failure: { readonly _tag: string }) => failure instanceof ImagePreparing,
+};
 
 /** The image types a message's file may carry to the harness as an image block. */
 const IMAGE_TYPES: ReadonlySet<string> = new Set([
@@ -287,29 +381,73 @@ function sessionIdOf(prefix: string, mintedAt: number): string {
 /** The bearer's bytes before it is spelled, as many as a session key. */
 const BEARER_BYTES = 32;
 
-/** A message's content as the runner's lines carry it: words as text, an image as an image block, any other file named. */
-function runnerContent(message: string | UserContent, harness: string): readonly ContentBlock[] {
-  if (typeof message === "string") return [{ type: "text", text: message }];
-  return message.flatMap((part): ContentBlock[] => {
+/**
+ * Where a message's files that the harness takes no block of are written
+ * in its sandbox, one folder per message line: outside the checkout, so no
+ * commit picks them up, and readable by `agent`, since the API writes them
+ * as its default user with the mode below.
+ */
+const ATTACHMENT_DIRECTORY = "/tmp/luke-attachments";
+
+/** How a file written for the agent is kept: readable by every user, written by none but the API's. */
+const ATTACHMENT_MODE = 0o644;
+
+/** How long a written file's name may be, which a tar header holds whole (`vercel-sandbox-api.ts`'s `tarOf`). */
+const ATTACHMENT_NAME_CHARS = 80;
+
+/** A message line and the files it names, which are written into the running session before the line. */
+export interface RunnerMessage {
+  readonly line: InputLine & { readonly uuid: string };
+  readonly files: readonly SandboxFile[];
+}
+
+/** A file's name as the sandbox's path holds it: a single segment of safe characters, cut short, its extension kept. */
+function attachmentFileName(name: string, at: number): string {
+  const safe = name.replace(/[^A-Za-z0-9._-]+/gu, "-").replace(/^[.-]+/u, "");
+  const dot = safe.lastIndexOf(".");
+  const extension = dot > 0 ? safe.slice(dot).slice(0, 16) : "";
+  const stem = (dot > 0 ? safe.slice(0, dot) : safe).slice(
+    0,
+    ATTACHMENT_NAME_CHARS - extension.length,
+  );
+  return `${at + 1}-${stem === "" ? "attachment" : stem}${extension}`;
+}
+
+/**
+ * A message's content as the runner's lines carry it, and the files it
+ * names: words as text, an image as an image block, and any other file,
+ * such as a PDF, written into the sandbox under the line's own folder and
+ * named by its path, as eve stages a file part in its sandbox. A file whose
+ * bytes are not in the message, a URL elsewhere, is named as not passed.
+ */
+function runnerContent(
+  message: string | UserContent,
+  harness: string,
+  lineId: string,
+): { readonly content: readonly ContentBlock[]; readonly files: readonly SandboxFile[] } {
+  if (typeof message === "string") return { content: [{ type: "text", text: message }], files: [] };
+  const files: SandboxFile[] = [];
+  const content = message.flatMap((part, at): ContentBlock[] => {
     if (part.type === "text") return [{ type: "text" as const, text: part.text }];
-    if (part.type === "file" || part.type === "image") {
-      const mediaType = part.type === "file" ? part.mediaType : (part.mediaType ?? "");
-      const data = part.type === "file" ? part.data : part.image;
-      const base64 = base64Of(data);
-      if (IMAGE_TYPES.has(mediaType) && base64 !== undefined) {
-        return [
-          {
-            type: "image" as const,
-            source: {
-              type: "base64" as const,
-              // SAFETY: the type is one of the four the set holds, which are the protocol's image types.
-              media_type: mediaType as "image/png",
-              data: base64,
-            },
+    if (part.type !== "file" && part.type !== "image") return [];
+    const mediaType = part.type === "file" ? part.mediaType : (part.mediaType ?? "");
+    const data = part.type === "file" ? part.data : part.image;
+    const base64 = base64Of(data);
+    if (IMAGE_TYPES.has(mediaType) && base64 !== undefined) {
+      return [
+        {
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            // SAFETY: the type is one of the four the set holds, which are the protocol's image types.
+            media_type: mediaType as "image/png",
+            data: base64,
           },
-        ];
-      }
-      const name = part.type === "file" ? (part.filename ?? "a file") : "an image";
+        },
+      ];
+    }
+    const name = part.type === "file" ? (part.filename ?? "a file") : "an image";
+    if (base64 === undefined) {
       return [
         {
           type: "text" as const,
@@ -317,8 +455,20 @@ function runnerContent(message: string | UserContent, harness: string): readonly
         },
       ];
     }
-    return [];
+    const path = `${ATTACHMENT_DIRECTORY}/${lineId}/${attachmentFileName(name, at)}`;
+    files.push({
+      path,
+      contents: new Uint8Array(Buffer.from(base64, "base64")),
+      mode: ATTACHMENT_MODE,
+    });
+    return [
+      {
+        type: "text" as const,
+        text: `[${name} (${mediaType}) was attached: it is at ${path} in your sandbox, read it from there]`,
+      },
+    ];
   });
+  return { content, files };
 }
 
 /** A file part's data as base64: a `data:` URL's payload, a string as it stands, or bytes encoded; nothing for a URL elsewhere. */
@@ -570,6 +720,29 @@ export const runnerSessions = <
       });
 
     /**
+     * The member's installed skills, less the repository's, uploaded for the
+     * launch to install (`native-skills.ts`), as a new sandbox opens; nothing
+     * where there are none. A write that fails is logged, and the agent opens
+     * without them rather than not at all.
+     */
+    const writeInstalledSkills = (
+      target: ConversationTarget,
+      agent: CodingAgent,
+      running: string,
+    ) =>
+      Effect.gen(function* () {
+        const files = nativeSkillFiles(yield* nativeSkills(target, agent, harness.skillRoots));
+        if (files.length === 0) return;
+        yield* api.writeFiles(running, files);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning(
+            `The installed skills of a ${harness.name} agent were not written: ${describeFailure(failure)}`,
+          ),
+        ),
+      );
+
+    /**
      * One launch of the runner in the running session: a fresh bearer
      * recorded, the bundle uploaded, the command started, the runner's
      * place kept in the sandbox's tags, and its config line and first
@@ -579,11 +752,12 @@ export const runnerSessions = <
       sessionId: string,
       agent: CodingAgent,
       sandbox: { readonly name: string; readonly running: string },
-      first: InputLine,
+      first: RunnerMessage,
       resume: string | undefined,
+      credential: HarnessLaunch,
     ) =>
       Effect.gen(function* () {
-        const credential = yield* harness.launch(agent);
+        yield* filesWritten(sandbox.running, first);
         const bundle = yield* (yield* RunnerBundle).contents;
         const digest = createHash("sha256").update(bundle).digest("hex");
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
@@ -604,6 +778,8 @@ export const runnerSessions = <
           command: "bash",
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
           cwd: CODER.CHECKOUT_PATH,
+          // Note that the credential and the bearer ride in the environment alone, which the API's
+          // sudo keeps, as Vercel documents it does, on an image that honours that (`sandbox-image.ts`).
           env: { ...SANDBOX_ENV, ...credential.env, [RUNNER_ENV.BEARER]: bearer },
           sudo: true,
         });
@@ -619,7 +795,16 @@ export const runnerSessions = <
             }),
           );
           const config = yield* harness.config(agent, resume, firstSequence);
-          yield* api.writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`);
+          yield* api
+            .writeStdin(sandbox.running, commandId, `${line(config)}${line(first.line)}`)
+            .pipe(
+              Effect.tapError(() =>
+                diedAtStart(api, sandbox.running, commandId, [
+                  ...Object.values(credential.env),
+                  bearer,
+                ]),
+              ),
+            );
         }).pipe(
           Effect.tapError(() =>
             Effect.ignore(
@@ -642,12 +827,16 @@ export const runnerSessions = <
         );
       });
 
-    /** The message as a line, under Luke's id for it where the caller named one. */
-    const messageLine = (message: EveMessage<Turn>): InputLine & { readonly uuid: string } => ({
-      type: INPUT_LINE.MESSAGE,
-      uuid: message.lineId ?? randomUUID(),
-      content: runnerContent(message.message, harness.name),
-    });
+    /** The message as a line, under Luke's id for it where the caller named one, and the files it names. */
+    const messageLine = (message: EveMessage<Turn>): RunnerMessage => {
+      const uuid = message.lineId ?? randomUUID();
+      const { content, files } = runnerContent(message.message, harness.name, uuid);
+      return { line: { type: INPUT_LINE.MESSAGE, uuid, content }, files };
+    };
+
+    /** The files a message names written into the running session, before its line names them. */
+    const filesWritten = (running: string, message: RunnerMessage) =>
+      message.files.length === 0 ? Effect.void : api.writeFiles(running, message.files);
 
     /** A failure as the log says it and the caller reads it: a refusal's reason, a sandbox's own words, the kind alone for any other. */
     const failed = (call: string) => (failure: { readonly _tag: string }) =>
@@ -677,60 +866,207 @@ export const runnerSessions = <
         },
       );
 
+    /** A new sandbox of the agent's, under the session given, opened from the snapshot named. */
+    const createdFrom = (agent: CodingAgent, sessionId: string, snapshotId: string) =>
+      api.create({
+        name: `${SANDBOX_NAME}${randomUUID()}`,
+        snapshotId,
+        tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
+        timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
+        vcpus: CODER.SANDBOX_VCPUS,
+        keepLastSnapshots: {
+          count: CODER.SANDBOX_SNAPSHOTS.count,
+          expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
+          deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
+        },
+        env: SANDBOX_ENV,
+      });
+
+    /** The sandbox as it runs: its name, and the session it runs in; one Vercel names no session of is deleted again. */
+    const runningOf = (opened: ListedSandbox) =>
+      opened.currentSessionId === undefined
+        ? Effect.andThen(
+            Effect.ignore(api.deleteSandbox(opened.name)),
+            Effect.fail(new SandboxUnavailable({})),
+          )
+        : Effect.succeed({ name: opened.name, running: opened.currentSessionId });
+
+    /**
+     * The repository snapshot the agent's sandbox may open from: one of its
+     * workspace's, made on the image this launch opens, of the repository's
+     * default branch; none for an agent started on another branch, or on its
+     * starter's own token, whose access is not the workspace's.
+     */
+    const repositorySnapshotOf = (
+      agent: WithRepository<CodingAgent>,
+      read: AgentRepositoryRead,
+      imageSnapshotId: string,
+    ): Option.Option<RepositorySnapshotOf> =>
+      agent.startBranch === null && read.access.kind === GITHUB_ACCESS.APP
+        ? Option.some({
+            imageSnapshotId,
+            workspaceId: read.workspaceId,
+            fullName: read.fullName,
+            defaultBranch: read.defaultBranch,
+          })
+        : Option.none();
+
+    /**
+     * The repository snapshot built past the request's answer, apart from
+     * the launch and its runner lease, so neither waits on it; nothing where
+     * no request's answer is being kept, as for a relaunch a message makes,
+     * which leaves the build to the next Start.
+     */
+    const buildInBackground = (of: RepositorySnapshotOf, read: AgentRepositoryRead) =>
+      Effect.gen(function* () {
+        if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
+        yield* afterResponse(
+          "A repository snapshot's build",
+          buildRepositorySnapshot(api, of, read, (running) =>
+            repositorySandboxOver(api, running, options.run),
+          ),
+        );
+      });
+
+    /**
+     * The agent's sandbox opened from its repository snapshot and its
+     * checkout brought up to the default branch; none where the snapshot was
+     * gone or its checkout would not refresh, the snapshot then forgotten so
+     * the next launch builds it again, and the sandbox this opened deleted.
+     * A Vercel that did not answer the create opens nothing here either, and
+     * forgets nothing, so the launch goes on as without a snapshot.
+     */
+    const openedFromRepositorySnapshot = (
+      agent: WithRepository<CodingAgent>,
+      sessionId: string,
+      of: RepositorySnapshotOf,
+      snapshotId: string,
+      read: AgentRepositoryRead,
+    ) =>
+      Effect.gen(function* () {
+        const opened = yield* Effect.flatMap(createdFrom(agent, sessionId, snapshotId), runningOf);
+        yield* refreshAgentCheckout(
+          agent,
+          repositorySandboxOver(api, opened.running, options.run),
+          read,
+        ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+        return Option.some(opened);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.gen(function* () {
+            yield* Effect.logWarning(
+              `A ${harness.name} sandbox did not open from its repository snapshot: ${describeFailure(failure)}`,
+            );
+            const unusable =
+              failure instanceof CheckoutRefused ||
+              failure.status === SNAPSHOT_GONE_STATUS ||
+              failure.status === NOT_FOUND_STATUS;
+            if (unusable) yield* Effect.ignore(forgetRepositorySnapshot(api, of, snapshotId));
+            return Option.none<{ readonly name: string; readonly running: string }>();
+          }),
+        ),
+      );
+
+    /**
+     * The agent's sandbox opened from the image, the image prepared again
+     * where its snapshot is gone, because otherwise every launch would fail
+     * on it until someone deleted the template by hand; this launch answers
+     * as preparing meanwhile.
+     */
+    const openedFromImage = (
+      image: AgentSandboxImageService,
+      agent: CodingAgent,
+      sessionId: string,
+      snapshotId: string,
+    ) =>
+      createdFrom(agent, sessionId, snapshotId).pipe(
+        Effect.catchIf(
+          (failure) => failure.status === SNAPSHOT_GONE_STATUS,
+          () =>
+            Effect.flatMap(image.snapshotGone(snapshotId), () => Effect.fail(new ImagePreparing())),
+        ),
+        Effect.flatMap(runningOf),
+      );
+
+    /**
+     * The agent's sandbox with its repository checked out. The repository is
+     * read first, which confirms its workspace still reaches it before any
+     * sandbox opens on its code. Where its workspace's repository snapshot
+     * is ready, the sandbox opens from it and fetches only what landed
+     * since; otherwise it opens from the image and clones the repository
+     * whole, and the snapshot is built past the answer for the next launch
+     * (`repository-snapshot.ts`). A snapshot Vercel could not be asked about
+     * is passed by, and no build is started on it.
+     */
+    const checkedOutSandbox = (
+      image: AgentSandboxImageService,
+      target: ConversationTarget,
+      agent: WithRepository<CodingAgent>,
+      sessionId: string,
+      imageSnapshotId: string,
+    ) =>
+      Effect.gen(function* () {
+        const read = yield* agentRepositoryRead(target, agent);
+        const of = repositorySnapshotOf(agent, read, imageSnapshotId);
+        if (Option.isSome(of)) {
+          const found = yield* readRepositorySnapshot(api, of.value).pipe(Effect.option);
+          if (Option.isSome(found) && found.value.state === REPOSITORY_SNAPSHOT_STATE.READY) {
+            const fromSnapshot = yield* openedFromRepositorySnapshot(
+              agent,
+              sessionId,
+              of.value,
+              found.value.snapshotId,
+              read,
+            );
+            if (Option.isSome(fromSnapshot)) return fromSnapshot.value;
+          }
+          // The build reads the snapshot again and leaves one ready or being built be.
+          if (Option.isSome(found)) yield* buildInBackground(of.value, read);
+        }
+        const opened = yield* openedFromImage(image, agent, sessionId, imageSnapshotId);
+        yield* cloneAgentRepository(
+          agent,
+          repositorySandboxOver(api, opened.running, options.run),
+          read,
+          CHECKOUT_DEPTH.WHOLE,
+        ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+        return opened;
+      });
+
     /**
      * A new sandbox opened under the session given, the agent's repository
-     * checked out in it, and the runner launched on the first line. A sandbox
-     * whose launch failed is deleted again, since no conversation records the
-     * session that would find it.
+     * checked out in it (`checkedOutSandbox`), then at once what eve's first
+     * write does (`deepenAgentCheckout`): the write token at the firewall and
+     * the commit identity, since the harness's own shell has no hook for a
+     * first write; and the runner launched on the first line. A sandbox
+     * whose launch failed is deleted again, since no conversation records
+     * the session that would find it.
      */
-    const openedSandbox = (agent: CodingAgent, sessionId: string, first: InputLine) =>
+    const openedSandbox = (
+      agent: CodingAgent,
+      sessionId: string,
+      first: RunnerMessage,
+      credential: HarnessLaunch,
+    ) =>
       Effect.gen(function* () {
         const image = yield* AgentSandboxImage;
         const snapshot = yield* image.snapshotId;
         if (Option.isNone(snapshot))
           return yield* Effect.fail(new LaunchRefused({ reason: "no snapshot" }));
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-        const opened = yield* api
-          .create({
-            name: `${SANDBOX_NAME}${randomUUID()}`,
-            snapshotId: snapshot.value,
-            tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
-            timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-            vcpus: CODER.SANDBOX_VCPUS,
-            keepLastSnapshots: {
-              count: CODER.SANDBOX_SNAPSHOTS.count,
-              expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
-              deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-            },
-            env: SANDBOX_ENV,
-          })
-          .pipe(
-            // Note that a template's snapshot gone under it is handed back, so the image is
-            // prepared again, because otherwise every launch would fail on it until someone
-            // deleted the template by hand; this launch answers as preparing meanwhile.
-            Effect.catchIf(
-              (failure) => failure.status === SNAPSHOT_GONE_STATUS,
-              () =>
-                Effect.flatMap(image.snapshotGone(snapshot.value), () =>
-                  Effect.fail(new ImagePreparing()),
-                ),
-            ),
-          );
+        const { name, running } = hasRepository(agent)
+          ? yield* checkedOutSandbox(image, target, agent, sessionId, snapshot.value)
+          : yield* openedFromImage(image, agent, sessionId, snapshot.value);
         yield* Effect.gen(function* () {
-          const running = opened.currentSessionId;
-          if (running === undefined) return yield* new SandboxUnavailable({});
           const repositorySandbox = repositorySandboxOver(api, running, options.run);
-          // The checkout eve's sandbox makes, then at once what eve's first write does
-          // (`deepenAgentCheckout`): the write token at the firewall, the whole history, and the
-          // commit identity, since the harness's own shell has no hook for a first write.
           if (hasRepository(agent)) {
-            yield* checkOutAgentRepository(target, agent, repositorySandbox);
             yield* deepenAgentCheckout(target, agent, repositorySandbox);
           } else {
             yield* openWorkingFolder(repositorySandbox);
           }
-          yield* launch(sessionId, agent, { name: opened.name, running }, first, undefined);
-        }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+          yield* writeInstalledSkills(target, agent, running);
+          yield* launch(sessionId, agent, { name, running }, first, undefined, credential);
+        }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
       });
 
     /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
@@ -748,7 +1084,7 @@ export const runnerSessions = <
         const accepted = {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
           sessionId,
-          deliveryId: sent.uuid,
+          deliveryId: sent.line.uuid,
         } as const;
         const live = yield* liveRunner(api, found.value);
         if (live !== undefined) {
@@ -759,10 +1095,11 @@ export const runnerSessions = <
           // by `retune`, which holds the same lease, so it is written after this line, never
           // undone by it.
           const ahead = yield* harness.ahead(agent);
+          yield* filesWritten(live.sandboxSessionId, sent);
           yield* api.writeStdin(
             live.sandboxSessionId,
             live.commandId,
-            [...ahead.lines, sent].map(line).join(""),
+            [...ahead.lines, sent.line].map(line).join(""),
           );
           return accepted;
         }
@@ -780,7 +1117,7 @@ export const runnerSessions = <
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedSandbox(agent, sessionId, sent);
+          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent));
           yield* api
             .deleteSandbox(found.value.name)
             .pipe(
@@ -799,7 +1136,15 @@ export const runnerSessions = <
         const resume = Option.getOrUndefined(
           Option.flatMapNullishOr(routing, (read) => read.nativeSession),
         );
-        yield* launch(sessionId, agent, { name: found.value.name, running }, sent, resume);
+        const credential = yield* harness.launch(agent);
+        yield* launch(
+          sessionId,
+          agent,
+          { name: found.value.name, running },
+          sent,
+          resume,
+          credential,
+        );
         return accepted;
       });
 
@@ -841,14 +1186,74 @@ export const runnerSessions = <
         return RUNNER_CHOICE.WRITTEN;
       });
 
+    /**
+     * A launch that failed past its Start's answer: said in the log, and
+     * written as the agent's first turn, queued and settled failed as a turn
+     * whose runner was lost is (`settleRunnerLostTurns`), with why, so the
+     * agent reads failed at once rather than starting until its grace runs
+     * out. The line the Start wrote stands. A write that fails is logged.
+     */
+    const launchFailed = (agent: CodingAgent) => (failure: { readonly _tag: string }) =>
+      Effect.gen(function* () {
+        yield* Effect.logWarning(
+          `A ${harness.name} launch failed after its Start: ${failure instanceof LaunchRefused ? failure.reason : describeFailure(failure)}`,
+        );
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(
+          { userId, conversationId: agent.conversationId },
+          { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+        );
+        // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
+        // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason.
+        const detail =
+          failure instanceof CheckoutRefused
+            ? failure.reason
+            : failure instanceof LaunchRefused
+              ? `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE}: ${failure.reason}`
+              : REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE;
+        yield* settleRunnerLostTurns(
+          writer,
+          agent.conversationId,
+          yield* Clock.currentTimeMillis,
+          detail,
+        );
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(`A failed launch's turn was not written: ${causeKind(cause)}`),
+        ),
+      );
+
     const sessions: NativeSessions<Turn> = {
+      // An open answers once the plan's credential is read, so a plan refused or at its limit is
+      // refused at once, as before; the sandbox, the checkout, and the launch run past the answer of
+      // the request that asked (`after-response.ts`), under the runner lease, as eve's open hands its
+      // message over and returns. The caller's after-response door is kept beside the sessions' own
+      // services for that. A message sent meanwhile waits on the lease, then finds the runner.
       open: (message) =>
         Effect.gen(function* () {
-          const agent = yield* agentOf(message.conversationId);
-          const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
-          yield* holdingRunner(agent.id, openedSandbox(agent, sessionId, messageLine(message)));
-          return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
-        }).pipe(Effect.catch(failed("open")), Effect.provideContext(context)),
+          const after = yield* Effect.serviceOption(AfterResponse);
+          return yield* Effect.gen(function* () {
+            const agent = yield* agentOf(message.conversationId);
+            const credential = yield* harness.launch(agent);
+            const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
+            yield* afterResponse(
+              `A ${harness.name} launch`,
+              holdingRunner(
+                agent.id,
+                openedSandbox(agent, sessionId, messageLine(message), credential).pipe(
+                  Effect.retry(IMAGE_READY),
+                ),
+              ).pipe(Effect.catch(launchFailed(agent))),
+            );
+            return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
+          }).pipe(
+            Effect.catch(failed("open")),
+            Effect.provideContext(
+              Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
+            ),
+          );
+        }),
 
       send: (sessionId, message) =>
         Effect.gen(function* () {

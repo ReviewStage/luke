@@ -13,9 +13,15 @@
  * `yarn dlx`, with `-y` where `npx` takes it), then `skills add` and a
  * source. The flags that place a skill in a local agent's folders (`-g`,
  * `-a`, `-y`, `--copy`, `-l`) mean nothing here and are passed over; scope
- * is the dialog's to choose. A source on any host but GitHub, over ssh, on
- * disk, or as a download is named unsupported, with a reason the window
- * words.
+ * is the dialog's to choose. A GitHub source is read in every form the
+ * tool reads one (vercel-labs/skills at a80e4c9, `src/source-parser.ts`'s
+ * `parseSource`: https://github.com/vercel-labs/skills/blob/a80e4c9d12d607631249d4d7d059f835d4b2f13a/src/source-parser.ts):
+ * `owner/repo` with a folder, `@skill`, or a `#ref` or `#ref@skill`
+ * fragment, a `github:` prefix, the tool's aliases, a github.com address,
+ * or an ssh one; a path that steps out of its folder is refused. A source
+ * on any host but GitHub, on disk, or as a download is named unsupported,
+ * with a reason the window words. A github.com or skills.sh link pasted
+ * alone is read as that command's source would be.
  *
  * Anything else is a skill's text, held to the convention's rules: its
  * frontmatter's name and description where it opens with one, and
@@ -99,6 +105,8 @@ const skillPasteSourceSchema = Schema.Struct({
   skills: Schema.optionalKey(
     Schema.Union([Schema.Literal(ALL_SKILLS), Schema.Array(Schema.String)]),
   ),
+  /** Whether `--full-depth` asks for every skill folder, past a skill at the folder searched too. */
+  fullDepth: Schema.optionalKey(Schema.Literal(true)),
 });
 
 const skillPasteUnsupportedSchema = Schema.Struct({
@@ -156,8 +164,14 @@ const SKILL_FLAGS = new Set(["--skill", "-s"]);
 /** The flag that asks for every skill. */
 const ALL_FLAG = "--all";
 
+/** The flag that asks for every skill folder, as deep as the tool looks. */
+const FULL_DEPTH_FLAG = "--full-depth";
+
 /** The flags that take values of their own, which are passed over with them. */
-const VALUED_FLAGS = new Set(["--agent", "-a"]);
+const VALUED_FLAGS = new Set(["--agent", "-a", "--subagent"]);
+
+/** The flags that take exactly one value, which is passed over with them. */
+const ONE_VALUE_FLAGS = new Set(["--metadata"]);
 
 /** A name the skill flags take that asks for every skill. */
 const EVERY_SKILL = "*";
@@ -235,9 +249,11 @@ function isSourceShaped(word: string): boolean {
 function readAddArguments(words: readonly string[]): {
   readonly source: string | undefined;
   readonly skills: typeof ALL_SKILLS | readonly string[] | undefined;
+  readonly fullDepth: boolean;
 } {
   let source: string | undefined;
   let all = false;
+  let fullDepth = false;
   const named: string[] = [];
   const name = (value: string): void => {
     const trimmed = value.trim();
@@ -260,8 +276,12 @@ function readAddArguments(words: readonly string[]): {
         for (const part of next.split(",")) take(part);
         at += 1;
       }
+    } else if (ONE_VALUE_FLAGS.has(flag)) {
+      if (inline === undefined) at += 1;
     } else if (flag === ALL_FLAG) {
       all = true;
+    } else if (flag === FULL_DEPTH_FLAG) {
+      fullDepth = true;
     } else if (isFlag(word)) {
       // A flag about local agent folders (-g, -y, --copy, -l) or one this reader does not know.
     } else if (source === undefined) {
@@ -269,7 +289,7 @@ function readAddArguments(words: readonly string[]): {
     }
   }
   const skills = all ? ALL_SKILLS : named.length > 0 ? [...new Set(named)] : undefined;
-  return { source, skills };
+  return { source, skills, fullDepth };
 }
 
 /* ----- The source ----- */
@@ -290,12 +310,36 @@ const GITHUB_NAME = /^[A-Za-z0-9_.-]+$/u;
 /** `owner/repo`, with `.git` or without, and `@skill` or without. */
 const SHORTHAND = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:@([^/@\s]+))?$/u;
 
+/** `owner/repo/` and a folder in it, or a trailing slash alone; an owner holds no dot, so `github.com/owner/repo` is an address. */
+const SHORTHAND_FOLDER = /^([A-Za-z0-9_-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/(.*)$/u;
+
+/** The sources the `skills` tool reads as another repository (`SOURCE_ALIASES`). */
+const SOURCE_ALIASES: ReadonlyMap<string, string> = new Map([
+  ["coinbase/agentWallet", "coinbase/agentic-wallet-skills"],
+  ["vercel-labs/vercel-skills", "vercel-labs/agent-skills"],
+]);
+
+/** An ssh address of a GitHub repository: `git@github.com:owner/repo` or `ssh://git@github.com/owner/repo`. */
+const GITHUB_SSH = /^(?:ssh:\/\/)?git@github\.com[:/]([^/]+)\/([^/]+?)\/?$/iu;
+
+/** The hosts of GitHub's that only serve files to download (`isHostedArtifactUrl`). */
+const DOWNLOAD_HOSTS = new Set([
+  "raw.githubusercontent.com",
+  "codeload.github.com",
+  "objects.githubusercontent.com",
+]);
+
 /** An address that downloads a file rather than naming a repository. */
 const DOWNLOAD = /\.(?:zip|tar|tgz|tar\.gz|tar\.bz2|tar\.xz|md)$/iu;
 
 /** A repository's name, its `.git` taken off. */
 function repoName(segment: string): string {
   return segment.replace(/\.git$/u, "");
+}
+
+/** Whether a path's segment, its escapes read, steps out of its folder or would: `.` or `..`, or either behind an escaped slash or a backslash. */
+function leavesFolder(segment: string): boolean {
+  return segment.split(/[/\\]/u).some((part) => part === "." || part === "..");
 }
 
 /** A path's segments, empty ones and a trailing `SKILL.md` taken off. */
@@ -317,16 +361,13 @@ function readGitHubAddress(segments: readonly string[]): SourceRead {
     const path = folderOf(rest.map(decodeSegment));
     return { owner, repo, ref: decodeSegment(ref), ...(path === undefined ? {} : { path }) };
   }
-  // An archive, a release asset, or a raw file is a download; any other page names no skill.
-  return {
-    reason:
-      DOWNLOAD.test(segments.join("/")) ||
-      kind === "archive" ||
-      kind === "releases" ||
-      kind === "raw"
-        ? SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL
-        : SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE,
-  };
+  // An archive, a release asset, or a raw file is a download; any other page of the repository names the repository, as the tool reads it.
+  const download =
+    DOWNLOAD.test(segments.join("/")) ||
+    kind === "archive" ||
+    kind === "raw" ||
+    (kind === "releases" && (ref === "download" || (ref === "latest" && rest[0] === "download")));
+  return download ? { reason: SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL } : { owner, repo };
 }
 
 /** A path segment as written, its escapes read. */
@@ -357,8 +398,46 @@ function otherHostReason(host: string, path: string): SkillPasteUnsupportedReaso
   return SKILL_PASTE_UNSUPPORTED.OTHER_HOST;
 }
 
-/** A command's source read as a repository, or the reason it is not one Luke reads. */
-function readSource(source: string): SourceRead {
+/** A `#ref` or `#ref@skill` fragment read off a source, each part's escapes read (`parseFragmentRef`). */
+function splitFragment(source: string): {
+  readonly source: string;
+  readonly ref?: string;
+  readonly skill?: string;
+} {
+  const hash = source.indexOf("#");
+  if (hash === -1 || hash === source.length - 1)
+    return { source: hash === -1 ? source : source.slice(0, hash) };
+  const fragment = source.slice(hash + 1);
+  const at = fragment.indexOf("@");
+  const ref = decodeSegment(at === -1 ? fragment : fragment.slice(0, at));
+  const skill = at === -1 ? "" : decodeSegment(fragment.slice(at + 1));
+  return {
+    source: source.slice(0, hash),
+    ...(ref === "" ? {} : { ref }),
+    ...(skill === "" ? {} : { skill }),
+  };
+}
+
+/** A command's source read as a repository, its fragment's ref and skill where the source names none, or the reason it is not one Luke reads. */
+function readSource(pasted: string): SourceRead {
+  const fragment = splitFragment(pasted);
+  const read = readBareSource(fragment.source);
+  if ("reason" in read) return read;
+  const ref = read.ref ?? fragment.ref;
+  const skill = fragment.skill ?? read.skill;
+  return {
+    ...read,
+    ...(ref === undefined ? {} : { ref }),
+    ...(skill === undefined ? {} : { skill }),
+  };
+}
+
+/** A source with no fragment read as a repository, or the reason it is not one Luke reads. */
+function readBareSource(written: string): SourceRead {
+  const unprefixed = written.replace(/^github:/u, "").replace(/^git\+(?=https?:\/\/)/u, "");
+  const source = SOURCE_ALIASES.get(unprefixed) ?? unprefixed;
+  const ssh = GITHUB_SSH.exec(source);
+  if (ssh !== null) return readGitHubAddress([ssh[1] ?? "", ssh[2] ?? ""]);
   if (/^[\w.-]+@[\w.-]+:/u.test(source) || source.startsWith("ssh://")) {
     return { reason: SKILL_PASTE_UNSUPPORTED.SSH };
   }
@@ -370,10 +449,27 @@ function readSource(source: string): SourceRead {
   ) {
     return { reason: SKILL_PASTE_UNSUPPORTED.LOCAL_PATH };
   }
+  // Note that a path is read before a URL folds `..` away, so one that steps out is refused rather than read elsewhere.
+  if (
+    source
+      .split(/[/\\]/u)
+      .map(decodeSegment)
+      .some((segment) => segment.split(/[/\\]/u).includes(".."))
+  ) {
+    return { reason: SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE };
+  }
   const shorthand = SHORTHAND.exec(source);
   if (shorthand !== null) {
     const [, owner = "", repo = "", skill] = shorthand;
     return { owner, repo, ...(skill === undefined ? {} : { skill }) };
+  }
+  const inFolder = SHORTHAND_FOLDER.exec(source);
+  if (inFolder !== null) {
+    const [, owner = "", repo = "", rest = ""] = inFolder;
+    const segments = rest.split("/").map(decodeSegment);
+    if (segments.some(leavesFolder)) return { reason: SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE };
+    const path = folderOf(segments);
+    return { owner, repo, ...(path === undefined ? {} : { path }) };
   }
   const address = /^[a-z][a-z0-9+.-]*:\/\//iu.test(source) ? source : `https://${source}`;
   let url: URL;
@@ -387,7 +483,13 @@ function readSource(source: string): SourceRead {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     return { reason: SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE };
   }
-  if (host === "github.com") return readGitHubAddress(segments);
+  if (host === "github.com") {
+    if (segments.slice(2).map(decodeSegment).some(leavesFolder)) {
+      return { reason: SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE };
+    }
+    return readGitHubAddress(segments);
+  }
+  if (DOWNLOAD_HOSTS.has(host)) return { reason: SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL };
   if (host === "skills.sh") return readSkillsShAddress(segments);
   // Note that a bare word with no dot in its host, as `foo` reads, names nothing at all.
   if (!host.includes(".")) return { reason: SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE };
@@ -409,11 +511,19 @@ function readCommand(text: string): SkillPaste | undefined {
   if (!ADD_COMMANDS.has(command[0] ?? "")) {
     return { kind: SKILL_PASTE_KIND.UNSUPPORTED, reason: SKILL_PASTE_UNSUPPORTED.OTHER_COMMAND };
   }
-  const { source, skills } = readAddArguments(command.slice(1));
+  const { source, skills, fullDepth } = readAddArguments(command.slice(1));
   if (source === undefined) {
     return { kind: SKILL_PASTE_KIND.UNSUPPORTED, reason: SKILL_PASTE_UNSUPPORTED.NO_SOURCE };
   }
-  const read = readSource(source);
+  return sourcePaste(readSource(source), skills, fullDepth);
+}
+
+/** A source read as what it installs, the skill it names among those asked for; or why it is not one Luke reads. */
+function sourcePaste(
+  read: SourceRead,
+  skills: SkillPasteSource["skills"],
+  fullDepth: boolean,
+): SkillPaste {
   if ("reason" in read) return { kind: SKILL_PASTE_KIND.UNSUPPORTED, reason: read.reason };
   const asked =
     read.skill === undefined || skills === ALL_SKILLS
@@ -427,7 +537,21 @@ function readCommand(text: string): SkillPaste | undefined {
     ...(read.ref === undefined ? {} : { ref: read.ref }),
     ...(read.path === undefined ? {} : { path: read.path }),
     ...(asked === undefined ? {} : { skills: asked }),
+    ...(fullDepth ? { fullDepth: true } : {}),
   };
+}
+
+/** A GitHub or skills.sh address alone on its line, with or without its scheme. */
+const BARE_ADDRESS = /^(?:https?:\/\/)?(?:www\.)?(?:github\.com|skills\.sh)\/\S+$/iu;
+
+/**
+ * A link to a repository, a skill's folder, or a skills.sh skill pasted
+ * alone, read as the source `skills add` would take it as. Note that only
+ * an address whose host says it is one is read this way: `owner/repo`
+ * alone could as well be the first words of a skill's text.
+ */
+function readAddress(text: string): SkillPaste | undefined {
+  return BARE_ADDRESS.test(text) ? sourcePaste(readSource(text), undefined, false) : undefined;
 }
 
 /* ----- The text ----- */
@@ -525,11 +649,11 @@ function readText(markdown: string): SkillPasteText {
 
 /**
  * What a member pasted into the Add skill box: a `skills add` command's
- * GitHub source, an unsupported source and why, a skill's text with what
+ * GitHub source or a GitHub link alone, an unsupported source and why, a skill's text with what
  * it breaks of the convention, or nothing.
  */
 export function parseSkillPaste(text: string): SkillPaste {
   const trimmed = text.trim();
   if (trimmed === "") return { kind: SKILL_PASTE_KIND.EMPTY };
-  return readCommand(trimmed) ?? readText(trimmed);
+  return readCommand(trimmed) ?? readAddress(trimmed) ?? readText(trimmed);
 }

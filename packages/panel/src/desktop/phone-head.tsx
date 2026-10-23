@@ -1,6 +1,5 @@
-import { dropBelow, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
+import { dropBelow, EllipsisIcon, IconButton, Tooltip, useMenu } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 
 /**

@@ -1,6 +1,6 @@
 import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
+import { CHOICE_BAR_LOOK, ChoiceBar, Slider } from "@luke/ui";
 import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
@@ -166,14 +166,10 @@ function Stacked({
         <img className="image-diff-picture" src={before} alt={IMAGE_WORDS.BEFORE} />
         <img className="image-diff-picture" src={after} alt={IMAGE_WORDS.AFTER} style={style} />
       </div>
-      <input
-        type="range"
-        className="image-diff-slider"
-        min={0}
-        max={100}
+      <Slider
         value={amount}
-        aria-label={swipe ? IMAGE_WORDS.SWIPE : IMAGE_WORDS.FADE}
-        onChange={(event) => onAmount(Number(event.target.value))}
+        onChange={onAmount}
+        label={swipe ? IMAGE_WORDS.SWIPE : IMAGE_WORDS.FADE}
       />
     </div>
   );

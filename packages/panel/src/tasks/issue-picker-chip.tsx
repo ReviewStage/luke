@@ -4,8 +4,22 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import { BADGE_TONE, Badge, CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
+import {
+  BADGE_TONE,
+  Badge,
+  CHIP_LOOK,
+  CHIP_WIDTH,
+  Chip,
+  ChipName,
+  ProviderMark,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Tooltip,
+  useMinute,
+} from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
+import { sinceText } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -15,13 +29,11 @@ import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
-import { Tooltip } from "../tooltip.js";
 import {
   GITHUB_ISSUES_STANDING,
   type GitHubIssuesStanding,
   useGitHubIssues,
 } from "./github-issues-read.js";
-import { sinceText, useMinute } from "./task-time.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -258,7 +270,14 @@ function githubRow(
             <Badge tone={BADGE_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
           </span>
         </Tooltip>
-        <span className="issue-picker-github-said">{said}</span>
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="issue-picker-github-said"
+        >
+          {said}
+        </Text>
       </span>
     ) : (
       said
@@ -355,7 +374,7 @@ export function IssuePickerChip({
   const menuId = useId();
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, button, align);
+  const placement = usePickerPlacement(open, button, align, menuId);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // A switch of workspace closes the menu, in the render that brings it,

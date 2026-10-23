@@ -6,14 +6,21 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
-import { Button } from "@luke/ui";
+import {
+  Button,
+  EDITABLE_BLOCK_KIND,
+  EDITABLE_HEADING_LEAVE,
+  EDITABLE_TEXT_BLOCK_SELECTOR,
+  EditableBlock,
+  EditableHeading,
+} from "@luke/ui";
+import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
-import { markdownClass } from "../markdown-message.js";
 import { DiagramPreview } from "../plan-diagram.js";
 import {
   type EditorAnchors,
@@ -70,9 +77,6 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * `ph-no-capture`, and its words are document text, which the recording masks.
  */
 
-/** What every block of a document the keyboard moves between wears: the title, and each section. */
-export const DOCUMENT_BLOCK_CLASS = "plan-document-block";
-
 /** What the open editor's room wears: the text and what it opened inside it, where the focus is the editor's. */
 export const EDITOR_ROOM_CLASS = "plan-document-editor";
 
@@ -95,28 +99,16 @@ const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
 );
 
-/** The keyboard moved to the block before or after this one in the document. */
-function stepBlock(from: HTMLElement, by: 1 | -1): void {
-  const blocks = [...document.querySelectorAll<HTMLElement>(`.${DOCUMENT_BLOCK_CLASS}`)];
-  blocks[blocks.indexOf(from) + by]?.focus();
-}
-
-/** The arrows move to the next or previous block. */
-function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
-  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return false;
-  event.preventDefault();
-  stepBlock(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
-  return true;
-}
-
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox or the label around it, or the section's byline. */
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button bar a picture's, a task's checkbox or the label around it, or the section's byline. */
 function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike.
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike. A picture's press is a button that hands on only the press it does not take, a diagram's under a mouse in a wide room, which is the words' as the bare picture's was.
   return !(
     target instanceof Element &&
-    target.closest("a, button, input, label, [data-mention-ref], .plan-unit-row") !== null
+    target.closest(
+      "a, button:not(.luke-picture-tile), input, label, [data-mention-ref], .plan-unit-row",
+    ) !== null
   );
 }
 
@@ -170,7 +162,7 @@ function wordsUnder(
 
 /** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */
 function drawnWordsTop(body: HTMLElement, words: PlacedWords): number | undefined {
-  const block = body.querySelectorAll(`[${TEXT_BLOCK_ATTRIBUTE}]`)[words.section];
+  const block = body.querySelectorAll(EDITABLE_TEXT_BLOCK_SELECTOR)[words.section];
   if (block === undefined) return undefined;
   let seen = 0;
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
@@ -226,12 +218,9 @@ export interface TextBox {
   readonly right: number;
 }
 
-/** What every block of a document's text wears, the title's apart, so its room knows where the words stand. */
-const TEXT_BLOCK_ATTRIBUTE = "data-text-block";
-
 /** Where the text's blocks under `element` stand together, from the first's top to the last's bottom; none while none is drawn. */
 export function textBoxOf(element: HTMLElement | null): TextBox | undefined {
-  const blocks = element?.querySelectorAll(`[${TEXT_BLOCK_ATTRIBUTE}]`) ?? [];
+  const blocks = element?.querySelectorAll(EDITABLE_TEXT_BLOCK_SELECTOR) ?? [];
   const first = blocks[0]?.getBoundingClientRect();
   const last = blocks[blocks.length - 1]?.getBoundingClientRect();
   if (first === undefined || last === undefined) return undefined;
@@ -351,10 +340,9 @@ function useSelectedOnClose(editing: PlanEditing, key: EditorHost, take: () => v
 }
 
 /**
- * One section of the text as a block: its drawn words, which a click opens
- * the text at, and the keyboard selects, moves past, or opens at the
- * section's end. A block is a labelled group rather than a button, so a
- * screen reader still reads the words inside it.
+ * One section of the text as a block (`EditableBlock`): its drawn words,
+ * which a click opens the text at, and the keyboard selects, moves past, or
+ * opens at the section's end.
  */
 export function DocumentBlock({
   host,
@@ -375,46 +363,26 @@ export function DocumentBlock({
   const block = useRef<HTMLDivElement>(null);
   const prefetchEditorBundle = usePrefetchEditorBundle();
   useSelectedOnClose(editing, host, () => block.current?.focus());
-  // Note that a code block is taken out of the Tab order, because Chrome makes
-  // a scrolling `<pre>` a Tab stop of its own inside the document's one.
-  useEffect(() => {
-    for (const code of block.current?.querySelectorAll("pre") ?? []) code.tabIndex = -1;
-  });
   return (
-    // biome-ignore lint/a11y/useSemanticElements: a block holds a section's words, not a form's controls, so it is no `<fieldset>`.
-    <div
+    <EditableBlock
       ref={block}
-      className={DOCUMENT_BLOCK_CLASS}
-      // Note that the attribute is `TEXT_BLOCK_ATTRIBUTE`, which marks the block as the text's for its room.
-      data-text-block=""
-      role="group"
-      tabIndex={entry ? 0 : -1}
-      aria-label={label}
-      aria-keyshortcuts="Enter"
+      label={label}
+      kind={EDITABLE_BLOCK_KIND.TEXT}
+      entry={entry}
       onPointerEnter={prefetchEditorBundle}
       onFocus={() => {
         prefetchEditorBundle();
         editing.select(host);
       }}
-      onClick={(event) => {
-        // Note that a click on a menu or a card portaled out of the block still
-        // bubbles here through React's tree, and opens no editor.
-        if (!(event.target instanceof Node && event.currentTarget.contains(event.target))) return;
-        if (!editsOnClick(event.target)) return;
-        const { clientX: x, clientY: y } = event;
-        const words = wordsUnder(event.currentTarget, section, x, y);
+      onPress={({ target, x, y, block: pressed }) => {
+        if (!editsOnClick(target)) return;
+        const words = wordsUnder(pressed, section, x, y);
         editing.open(words === undefined ? { x, y } : { x, y, words });
       }}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (steppedByArrow(event)) return;
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        editing.open({ section });
-      }}
+      onOpen={() => editing.open({ section })}
     >
       {children}
-    </div>
+    </EditableBlock>
   );
 }
 
@@ -551,39 +519,25 @@ export function EditableTitle({
     };
   }, []);
   return (
-    // biome-ignore lint/a11y/useSemanticElements: the title's block holds its words, not a form's controls, so it is no `<fieldset>`.
-    <div
+    <EditableBlock
       ref={block}
-      className={DOCUMENT_BLOCK_CLASS}
-      role="group"
-      tabIndex={entry ? 0 : -1}
-      aria-label="Title"
-      aria-keyshortcuts="Enter"
+      label="Title"
+      kind={EDITABLE_BLOCK_KIND.TITLE}
+      entry={entry}
       onPointerEnter={prefetchEditorBundle}
       onFocus={(event) => {
         prefetchEditorBundle();
         if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
       }}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (steppedByArrow(event)) return;
-        if (event.key !== "Enter" || text.current === null) return;
-        event.preventDefault();
-        caretAtEnd(text.current);
+      onOpen={() => {
+        if (text.current !== null) caretAtEnd(text.current);
       }}
     >
-      <div className="markdown task-title ph-no-capture">
-        {/* biome-ignore lint/a11y/useSemanticElements: the title is edited in the heading's own look, which wraps as a heading does; an input cannot. */}
-        <div
+      <div className={`${MARKDOWN_CLASS.ROOT} task-title ph-no-capture`}>
+        <EditableHeading
           ref={text}
-          className="markdown-heading task-title-text"
-          data-level="1"
-          contentEditable="plaintext-only"
-          suppressContentEditableWarning
-          role="textbox"
-          aria-label="Task name"
-          tabIndex={-1}
-          spellCheck
+          label="Task name"
+          level={1}
           onFocus={() => {
             saved.current = false;
           }}
@@ -598,21 +552,14 @@ export function EditableTitle({
             restartPause(stamp.current);
           }}
           onBlur={(event) => save(event.currentTarget)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              save(event.currentTarget);
-              block.current?.focus();
-              return;
-            }
-            if (event.key !== "Enter" && event.key !== "ArrowDown") return;
-            event.preventDefault();
-            save(event.currentTarget);
-            editing.open();
+          onLeave={(way, heading) => {
+            save(heading);
+            if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
+            else editing.open();
           }}
         />
       </div>
-    </div>
+    </EditableBlock>
   );
 }
 

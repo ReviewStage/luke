@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_PAYER,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
@@ -14,6 +15,7 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { test } from "vitest";
@@ -30,11 +32,13 @@ import {
   choiceOn,
   delegates,
   effortFor,
+  LUKE_PAID_REFUSAL,
   messageFailureNote,
   messageFailureWords,
   messageWords,
   modelLabel,
   offeredModels,
+  openingLineOf,
   placedMessages,
   planPayerOf,
   publishedUrl,
@@ -46,11 +50,12 @@ import {
   settledPlanEdits,
   sidebarCallIds,
   startedAgentOf,
+  startFailureNote,
   transcriptRowKey,
+  unreadOpeningLine,
   unreadSentLines,
   withAgentRun,
 } from "./coding-agent-model.js";
-import { dayAndTimeText } from "./task-time.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [
@@ -204,6 +209,23 @@ test("a sent line is read back by the row written under its key alone, so two li
   assert.equal(messageWords(both[2] ?? plan), "Go on.");
 });
 
+test("the line an agent was started on stands until the transcript reads back the developer's first row, whatever key that row was written under", () => {
+  const opening = openingLineOf({
+    key: "key-start",
+    prompt: " Fix the sidebar.\n",
+    attachments: [],
+  });
+  assert.equal(
+    messageWords(agentLines([], [opening])[0] ?? developer("none", "")),
+    "Fix the sidebar.",
+  );
+  const reply: CodingAgentMessage = { id: "m-0", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
+  assert.equal(unreadOpeningLine(opening, [reply]), opening, "no row of the developer's yet");
+  // eve writes the first row under no key of the start's.
+  assert.equal(unreadOpeningLine(opening, [developer("m-1", "Fix the sidebar.")]), undefined);
+  assert.equal(unreadOpeningLine(undefined, []), undefined);
+});
+
 test("a line refused for now is let go once its row lands, and one refused for good stands", () => {
   const unsent = { ...sentUnder("key-1", "Stop."), state: SENT_LINE_STATE.FAILED };
   const undelivered = { ...sentUnder("key-2", "Wait."), state: SENT_LINE_STATE.UNDELIVERED };
@@ -276,13 +298,13 @@ test("the checkout command fetches and switches to the branch, and the chip open
   );
 });
 
-test("the row says where the pull request stands only once it is a draft, merged, or closed, and the mark says it to a reader without its colour", () => {
-  assert.deepEqual(Object.values(PULL_REQUEST_STATE).map(pullRequestStateWord), [
-    undefined,
-    "Draft",
-    "Merged",
-    "Closed",
-  ]);
+test("the row says where the pull request stands only once it is a draft, merged, closed, or queued, and the mark says it to a reader without its colour", () => {
+  assert.deepEqual(
+    Object.values(PULL_REQUEST_STATE).map((state) => pullRequestStateWord({ state })),
+    [undefined, "Draft", "Merged", "Closed"],
+  );
+  assert.equal(pullRequestStateWord({ state: PULL_REQUEST_STATE.OPEN, queued: true }), "Queued");
+  assert.equal(pullRequestStateWord({ state: PULL_REQUEST_STATE.MERGED, queued: true }), "Merged");
   assert.equal(
     pullRequestPillLabel({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
     "Pull request #123, merged",
@@ -642,6 +664,37 @@ test("a message a Claude plan refused says to reconnect it, a limit says when it
       "Your Claude plan has reached its usage limit. It waits until the limit resets.",
       `The plan paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
       messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
+    ],
+  );
+});
+
+test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Luke's key paid for says to continue in a new one, Settings mending nothing", () => {
+  const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) => ({
+    failure: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+    ...(provider === undefined ? undefined : { provider }),
+  });
+
+  assert.deepEqual(
+    [
+      startFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null),
+      startFailureNote(missing(MODEL_PROVIDER.OPENAI), "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10"),
+      messageFailureNote(missing(MODEL_PROVIDER.OPENAI), null, CODING_AGENT_PAYER.API_KEY),
+      messageFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null, CODING_AGENT_PAYER.LUKE),
+    ],
+    [
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Connect Claude Code in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Connect Codex in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Connect Codex in Settings to message this agent.",
+      },
+      { reason: FAILURE_REASON.OTHER, text: LUKE_PAID_REFUSAL },
     ],
   );
 });

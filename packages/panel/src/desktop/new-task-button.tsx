@@ -1,7 +1,6 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ComposeIcon, IconButton } from "@luke/ui";
+import { ComposeIcon, IconButton, Tooltip } from "@luke/ui";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * new-task-button.tsx -- New task as a glyph: the title bar's while the sidebar is folded, and the start corner of a phone's Inbox and Tasks page (`phone-head.tsx`), opening New task's dialog.

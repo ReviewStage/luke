@@ -1,5 +1,4 @@
 import {
-  isBrowserTab,
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
@@ -46,7 +45,7 @@ function sideTabLabel(tab: SidePanelTab, tasks: StepTitleTasks): string {
   }
   if (isTerminalTab(tab)) return TAB_WORDS.TERMINAL;
   if (isMacTerminalTab(tab)) return TAB_WORDS.MAC_TERMINAL;
-  if (isBrowserTab(tab) || isCloudBrowserTab(tab)) return TAB_WORDS.BROWSER;
+  if (isCloudBrowserTab(tab)) return TAB_WORDS.BROWSER;
   if (isSubagentTab(tab)) return "Worker";
   if (isTranscriptTab(tab)) {
     const agent = tasks.agents.agents?.find((each) => each.id === tab.transcript);

@@ -199,6 +199,34 @@ export function AlertIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * A ring round a check: something was done. Its paths are Lucide's
+ * `circle-check` (https://lucide.dev, ISC licence, copyright (c) Lucide
+ * Contributors 2022), drawn in our stroke.
+ */
+export function CircleCheckIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-glyph">
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </Glyph>
+  );
+}
+
+/**
+ * An in-tray: something was posted to the Inbox. Its paths are Lucide's
+ * `inbox` (https://lucide.dev, ISC licence, copyright (c) Lucide
+ * Contributors 2022), drawn in our stroke.
+ */
+export function InboxIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-glyph">
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </Glyph>
+  );
+}
+
 /** Stands down without choosing: the cancel a control becomes mid-action. */
 export function CloseIcon(): React.JSX.Element {
   return (
@@ -590,6 +618,16 @@ export function TerminalIcon(): React.JSX.Element {
  */
 export function AgentPlaceholderIcon(): React.JSX.Element {
   return <Glyph>{null}</Glyph>;
+}
+
+/** A lit bulb: what Luke's agents remember for the workspace. */
+export function MemoryIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 3.6a5.4 5.4 0 0 0-3.2 9.8c.7.5 1.1 1.3 1.1 2.1v1.5h4.2v-1.5c0-.8.4-1.6 1.1-2.1A5.4 5.4 0 0 0 12 3.6Z" />
+      <path d="M9.9 19.6h4.2" />
+    </Glyph>
+  );
 }
 
 /** A page with its corner turned down and lines of text on it: the task's own document. */

@@ -1,4 +1,5 @@
 import type { ComponentPropsWithRef, MouseEvent } from "react";
+import { pulsePress } from "../../press-pulse.js";
 
 /**
  * switch.tsx -- the app's one on/off switch: a pill whose thumb slides right and takes the accent while on.
@@ -56,7 +57,12 @@ export function Switch({
       aria-describedby={describedBy ?? button["aria-describedby"]}
       className="luke-switch"
       data-checked={checked}
-      onClick={(event) => onChange(!checked, event)}
+      onClick={(event) => {
+        // Note that the thumb is what a press moves, so it is what gives as the press lands.
+        const thumb = event.currentTarget.firstElementChild;
+        if (thumb instanceof HTMLElement) pulsePress(thumb);
+        onChange(!checked, event);
+      }}
     >
       <span className="luke-switch-thumb" />
     </button>

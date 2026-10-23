@@ -1,6 +1,18 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { IconButton, SCROLL_FADE_INSET } from "@luke/ui";
+import {
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  FILL_ELEMENT,
+  Fill,
+  IconButton,
+  SCROLL_FADE_INSET,
+  Tooltip,
+} from "@luke/ui";
+import { callHeading, WORKED_SEPARATOR } from "@luke/ui/time-format";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -17,12 +29,9 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { CodeSnippet, useSnippetNote } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
-import { callHeading } from "./task-time.js";
-import { WORKED_SEPARATOR } from "./working-time.js";
 
 /**
  * code-pane.tsx -- the code a task's agents put on screen: the side panel's Code tab, every snippet they showed, one card each, in the order they showed them.
@@ -166,7 +175,15 @@ function CodeCardContent({
     agentLabel,
   );
   return (
-    <article className="code-card" data-call-id={showing.callId} aria-label={fileRefText(code.ref)}>
+    <Card
+      as={CARD_ELEMENT.ARTICLE}
+      look={CARD_LOOK.CODE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
+      className="code-card"
+      data-call-id={showing.callId}
+      aria-label={fileRefText(code.ref)}
+    >
       <CodeCardHeader
         codeRef={code.ref}
         note={code.note}
@@ -174,7 +191,7 @@ function CodeCardContent({
         onOpen={onOpenFile === undefined ? undefined : () => onOpenFile(code.ref, code.commit)}
       />
       <CodeSnippet code={code} notes={notes} />
-    </article>
+    </Card>
   );
 }
 
@@ -277,7 +294,7 @@ export function CodePane({
 }): React.JSX.Element {
   const now = Date.now();
   return (
-    <section className="code-pane ph-no-capture" aria-label="Code shown">
+    <Fill as={FILL_ELEMENT.SECTION} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
         <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
           {codeFeedCalls(shown, calls).map((call) => (
@@ -293,6 +310,6 @@ export function CodePane({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-    </section>
+    </Fill>
   );
 }

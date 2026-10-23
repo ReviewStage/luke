@@ -38,32 +38,13 @@ html.call-window #root {
   font-size: var(--luke-type-label-size);
   line-height: var(--luke-type-label-leading);
   animation:
-    call-card-fade var(--duration-quick) var(--motion-exit),
-    call-card-rise var(--duration-fast) var(--spring-fast);
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit),
+    luke-card-rise var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
 .call-card[data-leaving="true"] {
   pointer-events: none;
-  animation: call-card-leave var(--duration-exit) var(--motion-exit) forwards;
-}
-
-@keyframes call-card-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes call-card-rise {
-  from {
-    transform: translateY(var(--luke-space-8));
-  }
-}
-
-@keyframes call-card-leave {
-  to {
-    opacity: 0;
-    transform: translateY(var(--luke-space-8));
-  }
+  animation: luke-card-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 /* Above the account row, edge to edge with the rows' own fills. */
@@ -91,14 +72,14 @@ html.call-window #root {
     calc(
       -1 *
       min(
-        max(0px, var(--column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
+        max(0px, var(--luke-column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
         var(--luke-stage-height) -
         var(--floating-card, 0px) -
         2 *
         var(--luke-space-16)
       )
     );
-  transition: translate var(--duration-fast) var(--spring-fast);
+  transition: translate var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
 /* On a phone the card is fixed to the page rather than the stage, so it
@@ -215,16 +196,6 @@ html.call-window[data-pointer-stale="true"]
   bottom: var(--luke-space-4);
 }
 
-.call-card-task {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.call-card-task[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
-}
-
 /* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
    the top of the call's Call tab, on the card's ground, border, and
    corner, so the tile reads as the call card grown into a picture. It
@@ -272,6 +243,7 @@ html.call-window[data-pointer-stale="true"]
   color: var(--luke-color-text);
   font-size: var(--luke-type-label-size);
   line-height: var(--luke-type-label-leading);
+  container-type: inline-size;
 }
 
 /* The avatar's picture whole, never cut, at the tile's height where the
@@ -300,15 +272,17 @@ html.call-window[data-pointer-stale="true"]
 }
 
 /* Luke's face where there is no video to draw: the still frame a fixture
-   run captures, and the ground under what the tile says while it connects
-   or once it has ended. */
+   run captures, and what stands in front of the wait while the tile
+   connects or once it has ended. */
 .call-video-still {
   display: flex;
   height: 100%;
+  box-sizing: border-box;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--luke-space-8);
+  padding: var(--luke-space-8);
 }
 
 .call-video-face {
@@ -317,18 +291,77 @@ html.call-window[data-pointer-stale="true"]
   height: 56px;
 }
 
-.call-video-face .luke-face {
-  width: 100%;
-  height: 100%;
-  color: var(--luke-color-text-muted);
+/* The wait for the picture (`AvatarWaiting`), over the tile's whole ground
+   while it connects and over the video until its first frame, on the
+   tile's own ground so no empty or black frame shows through: the
+   skeleton block breathes where the picture will stand, at the tile's own
+   corner, and the face and what it waits on stand in front of it. Once the
+   first frame is drawn the wait fades out over the pane's motion, the
+   picture under it showing through as it goes, and then leaves the
+   reader; its loops hold still under the picture rather than run unseen. */
+.call-video-waiting {
+  position: absolute;
+  inset: 0;
+  background: var(--luke-color-overlay);
+  transition:
+    opacity var(--luke-duration-pane) var(--luke-motion-pane),
+    visibility 0s linear var(--luke-duration-pane);
 }
 
+.call-video-waiting[data-gone="true"] {
+  --luke-loop-motion: paused;
+  --luke-face-motion: paused;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.call-video-waiting-ground {
+  position: absolute;
+  inset: 0;
+}
+
+/* What the tile says: the wait's dots before Connecting video, or Video
+   ended, in the caption's muted voice and on one line. */
 .call-video-note {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-space-6);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  white-space: nowrap;
+}
+
+/* Restart video, labelled where the tile has room and round where it has
+   not, one of the two drawn at a time; each no taller than its button. */
+.call-video-restart {
+  display: flex;
+}
+
+.call-video-restart[data-room="narrow"] {
+  display: none;
+}
+
+/* A tile too narrow for words beside the face, as an agent's video at its
+   first 120px or smaller, keeps the face, the wait's dots, and a round
+   Restart video, and its words for a reader, so nothing it draws is cut. */
+@container (width < 168px) {
+  .call-video-note-words {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .call-video-restart[data-room="wide"] {
+    display: none;
+  }
+
+  .call-video-restart[data-room="narrow"] {
+    display: flex;
+  }
 }
 
 /* Video off, in the tile's bottom-right corner over whatever it draws, on

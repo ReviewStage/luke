@@ -1,5 +1,8 @@
 import { Schema as EffectSchema } from "effect";
-import { agentBrowserTabsAnswerSchema } from "./agent-browser-tab-wire.js";
+import {
+  agentBrowserTabAnswerSchema,
+  agentBrowserTabsAnswerSchema,
+} from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
@@ -36,6 +39,10 @@ import {
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
+import {
+  workspaceSentryAnswerSchema,
+  workspaceSentryDisconnectRequestSchema,
+} from "./sentry-install-wire.js";
 import {
   taskIssueChoiceSchema,
   taskIssueLinkAnswerSchema,
@@ -558,10 +565,13 @@ export const tasksTreeAnswerSchema = EffectSchema.Union([
 
 export type TasksTreeAnswer = typeof tasksTreeAnswerSchema.Type;
 
-/** The skills a developer may choose of a repository, as the window asks the host for them: the plan whose repository it is, or the workspace and the repository where no plan names it. */
+/** The skills a developer may choose, as the window asks the host for them: the plan they are chosen on, or the workspace and the repository where no plan names it, or the workspace alone for an agent with no repository, which is offered its installed skills alone. */
 export const tasksSkillsParamsSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.NonEmptyString }),
-  EffectSchema.Struct(repositoryPlaceFields),
+  EffectSchema.Struct({
+    workspaceId: repositoryPlaceFields.workspaceId,
+    repository: EffectSchema.optionalKey(repositoryPlaceFields.repository),
+  }),
 ]);
 
 export type TasksSkillsParams = typeof tasksSkillsParamsSchema.Type;
@@ -679,6 +689,45 @@ export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksBrowserTabsAnswer = typeof tasksBrowserTabsAnswerSchema.Type;
+
+/**
+ * Why a Browser tab a member asked for did not open in a coding agent's
+ * browser, as the side panel says it: the service did not answer, the task
+ * or the agent is none the member reaches, the agent is not theirs to
+ * drive, the address is not one a Browser tab opens, the agent has run no
+ * sandbox yet, it is archived, or its browser could not be reached.
+ */
+export const BROWSER_TAB_OPEN_FAILURE = {
+  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
+  NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
+  NOT_PERMITTED: "not-permitted",
+  INVALID_ADDRESS: "invalid-address",
+  NOT_READY: "not-ready",
+  RETIRED: "retired",
+  UNREACHABLE: "unreachable",
+} as const;
+
+export type BrowserTabOpenFailure =
+  (typeof BROWSER_TAB_OPEN_FAILURE)[keyof typeof BROWSER_TAB_OPEN_FAILURE];
+
+/** A Browser tab a member opens from the side panel: the task, the coding agent whose browser it opens in, and the address. */
+export const tasksBrowserTabOpenParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  agentId: EffectSchema.NonEmptyString,
+  address: EffectSchema.NonEmptyString,
+});
+
+export type TasksBrowserTabOpenParams = typeof tasksBrowserTabOpenParamsSchema.Type;
+
+/** The tab opened, already taken over by the member, or why none opened. */
+export const tasksBrowserTabOpenAnswerSchema = EffectSchema.Union([
+  agentBrowserTabAnswerSchema,
+  EffectSchema.Struct({
+    failure: EffectSchema.Literals(Object.values(BROWSER_TAB_OPEN_FAILURE)),
+  }),
+]);
+
+export type TasksBrowserTabOpenAnswer = typeof tasksBrowserTabOpenAnswerSchema.Type;
 
 /** A task's agents' Browser tabs, followed by a window while its side panel lists them. */
 export const taskBrowserTabsFollowSchema = EffectSchema.Struct({
@@ -947,6 +996,20 @@ export const tasksWorkspaceGitHubConnectAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceGitHubConnectAnswer = typeof tasksWorkspaceGitHubConnectAnswerSchema.Type;
+
+/** One of a workspace's Sentry installations disconnected, as the window asks it: the workspace and Sentry's id for the installation. */
+export const tasksWorkspaceSentryDisconnectParamsSchema = workspaceSentryDisconnectRequestSchema;
+
+export type TasksWorkspaceSentryDisconnectParams =
+  typeof tasksWorkspaceSentryDisconnectParamsSchema.Type;
+
+/** A workspace's Sentry as the window hears it after a read or a disconnect: whether the deployment holds the integration and the workspace's installations, or why there is no answer. */
+export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ sentry: workspaceSentryAnswerSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
 
 /** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
 export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;

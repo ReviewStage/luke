@@ -130,8 +130,8 @@ const NOTICE_WORDS = {
   [OPERATOR_NOTICE_KIND.INBOX_ASK]: "it asked them in their inbox",
 } as const satisfies Record<OperatorNoticeKind, string>;
 
-/** The agent as a row names it: its human name, its title, or its model. */
-function agentName(agent: Pick<CodingAgent, "kind" | "personaName" | "title" | "model">): string {
+/** The agent as a row names it: Luke for an operator, else its title, or its model. */
+function agentName(agent: Pick<CodingAgent, "kind" | "title" | "model">): string {
   return agentGivenName(agent) ?? agent.title ?? agent.model;
 }
 
@@ -287,7 +287,7 @@ function noticesSection(notices: readonly UnreadOperatorNotice[], step: string):
     else held.kinds.push(notice.kind);
   }
   const rows = [...byAgent.values()].map(({ newest, kinds }) => {
-    const name = newest.agentPersonaName ?? newest.agentTitle ?? newest.agentModel;
+    const name = newest.agentTitle ?? newest.agentModel;
     const mention = agentMention({ id: newest.agentId, taskId: newest.taskId }, name, step);
     return `- ${mention}: ${kinds.map((kind) => NOTICE_WORDS[kind]).join(", ")}`;
   });

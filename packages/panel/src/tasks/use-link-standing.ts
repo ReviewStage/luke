@@ -103,6 +103,8 @@ export interface StandingPullRequest {
   readonly labels: readonly { readonly name: string; readonly color: string }[];
   readonly comments: number | undefined;
   readonly commits: number | undefined;
+  /** True where it is open and GitHub's merge queue holds it, which its mark and its words say as its Pull request tab does. */
+  readonly queued?: true;
 }
 
 /** The moment a pull request's card names when it says how long ago: when it was opened, merged, or closed. */
@@ -146,8 +148,17 @@ function standingPullRequestOf(pullRequest: GitHubPullRequestSummary): StandingP
     labels: pullRequest.labels ?? [],
     comments: pullRequest.comments,
     commits: pullRequest.commits,
+    ...(queuedOf(pullRequest) ? { queued: true } : undefined),
   };
 }
+
+/** Whether a pull request is drawn queued: open, and held in GitHub's merge queue. */
+function queuedOf(pullRequest: GitHubPullRequestSummary): boolean {
+  return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN;
+}
+
+/** An open pull request in the merge queue in words, as its chip and its tab's pill say it. */
+const QUEUED_WORDS = "Queued";
 
 /** A pull request's state in words, as its chip says it. */
 const PULL_REQUEST_WORDS = {
@@ -197,7 +208,8 @@ function githubAskedOf(url: string): Asked | undefined {
 
 /** What a mention asks its provider for, where it is a link to a Linear issue, a pull request, or a GitHub issue. */
 function askedOf(mention: Mention): Asked | undefined {
-  if (mention.kind !== MENTION_KIND.LINK) return undefined;
+  // Note that a well-known site's page names no provider to ask.
+  if (mention.kind !== MENTION_KIND.LINK || !("provider" in mention)) return undefined;
   if (mention.provider === INTEGRATION_PROVIDER.LINEAR) {
     const identifier = linearIssueIdentifierOf(mention.url);
     return identifier === undefined ? undefined : { provider: mention.provider, identifier };
@@ -279,7 +291,7 @@ function readStanding(
       : {
           key,
           title: pullRequest.title,
-          state: PULL_REQUEST_WORDS[pullRequest.state],
+          state: queuedOf(pullRequest) ? QUEUED_WORDS : PULL_REQUEST_WORDS[pullRequest.state],
           pullRequest: standingPullRequestOf(pullRequest),
           issue: undefined,
           byline: undefined,

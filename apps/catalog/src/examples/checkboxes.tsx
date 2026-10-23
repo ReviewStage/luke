@@ -4,8 +4,9 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * checkboxes.tsx -- a box unchecked, checked, mixed, and unavailable, and
- * one with long words in a narrow column.
+ * checkboxes.tsx -- a box unchecked, checked, mixed, and unavailable, one
+ * with long words in a narrow column, and boxes named by a label of their
+ * own, drawn without words, as a task list's markers.
  */
 
 function Held({ start, children }: { start: boolean; children: string }): React.JSX.Element {
@@ -15,6 +16,11 @@ function Held({ start, children }: { start: boolean; children: string }): React.
       {children}
     </Checkbox>
   );
+}
+
+function Wordless({ label }: { label: string }): React.JSX.Element {
+  const [checked, setChecked] = useState(false);
+  return <Checkbox label={label} checked={checked} onChange={setChecked} />;
 }
 
 function Checkboxes(): React.JSX.Element {
@@ -30,6 +36,12 @@ function Checkboxes(): React.JSX.Element {
           <Checkbox checked disabled onChange={() => undefined}>
             Unavailable while sending
           </Checkbox>
+        </Stack>
+      </CatalogSection>
+      <CatalogSection id="checkbox-wordless" title="Without words, a task list's markers">
+        <Stack gap={GAP.CONTROL} align="start">
+          <Wordless label="Send the invite" />
+          <Checkbox label="Pick a date" checked disabled onChange={() => undefined} />
         </Stack>
       </CatalogSection>
       <CatalogSection id="checkbox-narrow" title="Narrow column, long words">

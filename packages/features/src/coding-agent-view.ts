@@ -29,6 +29,7 @@ import {
   operatorEnsureAnswerSchema,
   operatorEnsureRequestSchema,
 } from "./coding-agent-wire.js";
+import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
@@ -44,7 +45,8 @@ import {
   inboxReadAllSchema,
   inboxReadStateSchema,
 } from "./inbox-wire.js";
-import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
+import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
+import { catalogModelSchema, modelChoiceSchema, modelProviderSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
   planTemplateRevisionAnswerSchema,
@@ -88,7 +90,8 @@ import { taskTranscriptAnswerSchema } from "./transcript-wire.js";
  *
  * A clip dictated into an agent's message box travels here too, since the
  * box is an agent's: the clip and its words to listen for, and the text
- * back, or why there is none.
+ * back, or why there is none, the account having saved no OpenAI key among
+ * the reasons.
  *
  * The account's plan template travels here too, since it is the account's
  * own on the service as the default and the keys are, and Settings asks for
@@ -129,6 +132,10 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
   /** The agent runs on its starter's plan, which its provider said is not eligible to run it. */
   AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
+  /** The account keeps neither the model provider's subscription nor its API key, so no coding agent on that provider starts or takes a message until one is connected in Settings › Agents. */
+  AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
+  /** A dictated clip is heard on the account's own OpenAI API key, and the account saved none. */
+  OPENAI_KEY_MISSING: "openai-key-missing",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -139,11 +146,12 @@ const failureSchema = EffectSchema.Literals(Object.values(CODING_AGENT_CALL_FAIL
 /** A failed call, as every answer below spells one. */
 const failed = EffectSchema.Struct({ failure: failureSchema });
 
-/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), and when a plan's reached limit resets where it is that. */
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, and the provider whose credential is missing where it is that. */
 const failedReaching = EffectSchema.Struct({
   failure: failureSchema,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+  provider: EffectSchema.optionalKey(modelProviderSchema),
 });
 
 /** The models the service offers, as the window hears them: the list, or why there is none. */
@@ -213,6 +221,26 @@ export type GitHubTokenSaveParams = typeof githubTokenSaveParamsSchema.Type;
 
 /** The account's plan template, as the window hears it read or written: the template as kept and whether the account wrote it, or why there is none. */
 export const planTemplateAnswerViewSchema = EffectSchema.Union([planTemplateAnswerSchema, failed]);
+
+/** A workspace's memories, as the window hears them read or one forgotten: the memories as they stand, or why there are none. */
+export const memoriesAnswerViewSchema = EffectSchema.Union([memoriesAnswerSchema, failed]);
+
+export type MemoriesAnswerView = typeof memoriesAnswerViewSchema.Type;
+
+/** Reading a workspace's memories, as the window asks it: the workspace Settings shows. */
+export const memoriesReadParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+});
+
+export type MemoriesReadParams = typeof memoriesReadParamsSchema.Type;
+
+/** Forgetting a memory, as the window asks it: its workspace and the memory's id. */
+export const memoryForgetParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  id: memoryIdSchema,
+});
+
+export type MemoryForgetParams = typeof memoryForgetParamsSchema.Type;
 
 export type PlanTemplateAnswerView = typeof planTemplateAnswerViewSchema.Type;
 
@@ -753,7 +781,11 @@ export type CodingAgentChatAttachmentParams = typeof codingAgentChatAttachmentPa
  */
 export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    // A transcript's picture may be a WebM an agent recorded, read through this same view.
+    contentType: EffectSchema.Literals([
+      ...Object.values(CODING_AGENT_ATTACHMENT_TYPE),
+      CONVERSATION_MEDIA_TYPE.WEBM,
+    ]),
     base64: EffectSchema.String,
   }),
   failed,

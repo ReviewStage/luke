@@ -7,6 +7,7 @@ import {
   type CodingAgent,
   codingAgentBriefOf,
   hasRepository,
+  readCodingAgentContext,
   readCodingAgentOfConversation,
   readDelegation,
   recordCodingAgentCompaction,
@@ -48,6 +49,7 @@ import {
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import type { PictureLookResult } from "../../tasks/picture-look.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
@@ -80,14 +82,10 @@ import {
 } from "../brain-host/relay.js";
 import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
+import { newestLineIsAutomation } from "../memory-provenance.js";
+import { memoryOnFor, seedMemoryText } from "../memory-tools.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
-import {
-  type ReadWebPageResult,
-  ResearchBudget,
-  runReadWebPage,
-  runSearchWeb,
-  type SearchWebResult,
-} from "../public-research.js";
+import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
 import { isOperator } from "../steward.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
@@ -138,6 +136,8 @@ import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import {
   contentKey,
+  FLUSH_LINE,
+  flushDue,
   savedByAnotherSince,
   type TurnHanded,
   taskKey,
@@ -173,8 +173,9 @@ import {
  * starter's, the conversation's owner, whoever is speaking to it.
  * An agent with no repository runs too: its sandbox opens with an empty
  * working folder and no credential, it is told of no checkout, branch,
- * commit, or pull request, and it is offered no repository skills and none
- * of the repository's tools (`tool-set.ts`'s `repositoryToolsOf`). A session
+ * commit, or pull request, and it is offered no repository skills, only
+ * the ones its member installed, and none of the repository's tools
+ * (`tool-set.ts`'s `repositoryToolsOf`). A session
  * opened afresh over a conversation whose last session retired is seeded
  * with what was said in it, as the brain's rotation is (`seed`).
  */
@@ -196,6 +197,8 @@ interface CoderSessionPrompt {
   readonly workspace: string;
   /** Whether the prompt told of the task's chat as the team's channel, which only an agent whose starter turned Chat on is, though every agent has the chat's tools. */
   readonly chatOn: boolean;
+  /** Whether the prompt told of the workspace's memory, which only an agent whose starter turned Memory on is offered. */
+  readonly memoryOn: boolean;
 }
 
 /**
@@ -216,6 +219,7 @@ export interface CoderSessionPromptRecord {
   readonly coAuthor?: string;
   readonly workspace?: string;
   readonly chatOn?: boolean;
+  readonly memoryOn?: boolean;
 }
 
 /** The turn opening: its kind, as its request named it, and its store id. */
@@ -285,7 +289,7 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
-  /** The skills the agent's repository keeps, offered to the session as it starts; none for an agent with no repository, or where they could not be read (`skills.ts`). */
+  /** The skills offered to the session as it starts: its repository's, none for an agent with no repository, then those its member installed, each source none where it could not be read (`skills.ts`). */
   skills(
     admitted: AdmittedConversation,
     agent: CodingAgent,
@@ -296,6 +300,10 @@ export interface CoderHost extends HostAdmission {
    * a session opened afresh after its last one retired remembers what was
    * said. A line awaiting its turn is left out, since it is the message the
    * session opens with; nothing for a conversation with nothing else said.
+   * An operator's is followed by the workspace's memory as a recall with no
+   * query answers it (`../memory-tools.ts`'s `seedMemoryText`), where its
+   * member has Memory on. No compaction summary leads it, since Luke keeps
+   * none of a coding agent's history.
    */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /**
@@ -415,7 +423,10 @@ export interface CoderHost extends HostAdmission {
    * the digest is not the one last handed; and an operator's desk, its
    * member's open work (`../operator-desk.ts`), where its standing work is
    * not what was last handed or it carries notices of what its member's
-   * agents did since, which are marked read once handed. Answers what the session has
+   * agents did since, which are marked read once handed; and, once an
+   * operator's newest step passed the flush mark and it was not told since
+   * eve last compacted it, the line telling it to keep what is durable before
+   * its history is summarised, where its member has Memory on. Answers what the session has
    * handed once this message is, for the session to keep; nothing to hand
    * where the conversation is no agent's. A read that fails is logged and
    * leaves its part out, so the turn still opens.
@@ -424,20 +435,20 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     turn: CoderTurn,
     handed: TurnHanded,
-  ): Effect.Effect<CoderTurnMessage, never, DatabaseServices>;
+  ): Effect.Effect<CoderTurnMessage, never, DatabaseServices | ModelCatalog>;
   /**
-   * Runs one of the agent's public reads, the brain's own
-   * (`../public-research.ts`): a search or a page read, under the turn's
-   * budget, the search on Luke's key and counted on the account's meter.
+   * Runs one of the agent's public page reads (`../public-research.ts`),
+   * under the turn's budget; its search is eve's provider-run `web_search`,
+   * inside its own model call.
    * The budget is the turn's own, named with its session, since eve numbers
    * every session's turns afresh.
    */
   research(
     admitted: AdmittedConversation,
-    tool: typeof CODER_TOOL.SEARCH_WEB | typeof CODER_TOOL.READ_WEB_PAGE,
+    tool: typeof CODER_TOOL.READ_WEB_PAGE,
     turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
-  ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
+  ): Effect.Effect<ReadWebPageResult, never, HttpClient.HttpClient>;
   /**
    * Runs one `look_at_picture` call (`../../plans/picture-look.ts`): one of
    * the pictures of the agent's plan, read as the member whose turn this is.
@@ -501,7 +512,12 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     never,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
+    | DatabaseServices
+    | HttpClient.HttpClient
+    | GitHubApp
+    | ModelCatalog
+    | WorkspaceLinearConnect
+    | SentryApp
   >;
   /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
   relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
@@ -607,6 +623,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     coAuthor: string | undefined,
     workspace: string,
     chatOn: boolean,
+    memoryOn: boolean,
   ): CoderSessionPrompt => {
     const brief = codingAgentBriefOf(agent);
     const taskLink =
@@ -627,8 +644,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       agent.githubAccess === GITHUB_ACCESS.TOKEN,
       CODER_HARNESS.EVE,
       agent.kind,
+      memoryOn,
     );
-    return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
+    return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn, memoryOn };
   };
 
   /**
@@ -656,6 +674,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
                 prompt.coAuthor,
                 prompt.workspace ?? agent.organizationId,
                 prompt.chatOn ?? false,
+                prompt.memoryOn ?? false,
               ).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
             },
@@ -704,6 +723,35 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           Effect.orElseSucceed(() => undefined),
         )
       : Effect.succeed(undefined);
+
+  /**
+   * Whether an operator's turn opens with the line telling it its history
+   * will soon be summarised (`turn-context.ts`'s `flushDue`), read against
+   * the window the catalog lists for what it runs on now; never for any
+   * other agent, nor where its member has Memory off, nor on a turn an
+   * automation's line opens, its heartbeat's among them, which may keep
+   * nothing and so leaves the line to the member's next turn; and not where
+   * a read failed, which is logged, so the turn still opens.
+   */
+  const flushOf = (
+    agent: CodingAgent,
+    handed: TurnHanded,
+  ): Effect.Effect<boolean, never, DatabaseServices | ModelCatalog> =>
+    !isOperator(agent) || handed.opened !== true || handed.flushTold === true
+      ? Effect.succeed(false)
+      : Effect.gen(function* () {
+          if (!(yield* memoryOnFor(agent.userId))) return false;
+          // A turn an automation opens may keep nothing, so it is not told, and a member's later turn is.
+          if (yield* newestLineIsAutomation(agent)) return false;
+          const context = yield* readCodingAgentContext(agent.userId, agent.id);
+          if (Option.isNone(context)) return false;
+          const { model, contextWindow } = context.value;
+          const windowTokens = contextWindowOf(yield* catalogNow, model, contextWindow);
+          return flushDue(context.value, windowTokens, handed);
+        }).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.orElseSucceed(() => false),
+        );
 
   /**
    * When the agent's turn before the one opening started, or nothing for its
@@ -917,28 +965,35 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             Effect.tapError(logStoreFailure),
             Effect.orElseSucceed(() => false),
           ),
+          // Memory likewise, off where it cannot be read, as its tools then are (`../memory-tools.ts`).
+          memoryOnFor(admitted.target.userId),
         ]),
-        ([ciReadable, coAuthor, workspace, chatOn]) =>
-          promptOf(agent, ciReadable, coAuthor, workspace, chatOn),
+        ([ciReadable, coAuthor, workspace, chatOn, memoryOn]) =>
+          promptOf(agent, ciReadable, coAuthor, workspace, chatOn, memoryOn),
       ),
 
-    skills: (admitted, agent) =>
-      hasRepository(agent) ? agentSkills(admitted.target, agent) : Effect.succeed([]),
+    skills: (admitted, agent) => agentSkills(admitted.target, agent),
 
     seed: (admitted) =>
-      Effect.map(
-        listRecentMessages(
+      Effect.gen(function* () {
+        const read = yield* listRecentMessages(
           admitted.target.userId,
           admitted.target.conversationId,
           CODER_TOOL_SET,
           BRAIN_HOST.SEED_MESSAGES,
-        ),
-        (read) =>
-          rotationSeedText(
-            read.ok ? read.value.filter((record) => !awaitsTurn(record)).map(messageOf) : [],
-            seams.now(),
-          ),
-      ),
+        );
+        const said = rotationSeedText(
+          read.ok ? read.value.filter((record) => !awaitsTurn(record)).map(messageOf) : [],
+          seams.now(),
+        );
+        // An operator's rotated session is seeded with the workspace's memory after what was said.
+        // Note that Luke keeps no compaction summary of a coding agent's history, so none leads it.
+        if (said === undefined) return undefined;
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found) || !isOperator(found.success)) return said;
+        const memory = yield* seedMemoryText(found.success);
+        return memory === undefined ? said : `${said}\n\n${memory}`;
+      }),
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
@@ -1053,8 +1108,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         );
         if (Result.isFailure(found)) return { text: undefined, handed };
         const agent = found.success;
-        const [task, digest, desk] = yield* Effect.all(
-          [taskOf(admitted, agent, turn, handed), digestOf(admitted, agent), deskOf(agent)],
+        const [task, digest, desk, flush] = yield* Effect.all(
+          [
+            taskOf(admitted, agent, turn, handed),
+            digestOf(admitted, agent),
+            deskOf(agent),
+            flushOf(agent, handed),
+          ],
           { concurrency: "unbounded" },
         );
         const clock = { now: seams.now(), timeZone: admitted.timeZone };
@@ -1082,8 +1142,17 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           ...(chatKey === undefined ? undefined : { chat: chatKey }),
           ...(deskKey === undefined ? undefined : { desk: deskKey }),
           ...(spoken ? { spoken: true, callWords: true } : undefined),
+          opened: true,
+          ...(flush || handed.flushTold === true ? { flushTold: true } : undefined),
         };
-        const parts = [...(kind === undefined ? [] : [kind]), standing, ...desked, ...chat];
+        const flushed = flush ? [FLUSH_LINE] : [];
+        const parts = [
+          ...(kind === undefined ? [] : [kind]),
+          ...flushed,
+          standing,
+          ...desked,
+          ...chat,
+        ];
         return { text: parts.join("\n\n"), handed: next };
       }),
 
@@ -1110,21 +1179,20 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
-        const model = seams.titleModel(admitted.target.userId);
-        if (model === undefined) return;
+        const found = yield* agentOf(admitted);
+        const chosen = Result.isSuccess(found) ? found.success.model : undefined;
+        // No model, as for an account that saved no API key, titles the worker from its task's first words.
+        const model = yield* seams.titleModel(admitted.target.userId, chosen);
         // A call no delegation was recorded for opened no child, so the fill finds no row to write.
         const childId = childConversationId(admitted.target.conversationId, callId);
         yield* titleSubagent(model, admitted.target, childId, task);
       }),
 
-    research: (admitted, tool, turn, input) => {
-      const access = seams.research(admitted.target.userId);
-      const turnId = hostTurnId(turn.sessionId, turn.eveTurnId);
-      const call = { turnId, budget: research, openAi: access.openAi, spend: access.spend };
-      return tool === CODER_TOOL.SEARCH_WEB
-        ? runSearchWeb(call, input)
-        : runReadWebPage(call, input);
-    },
+    research: (_admitted, _tool, turn, input) =>
+      runReadWebPage(
+        { turnId: hostTurnId(turn.sessionId, turn.eveTurnId), budget: research },
+        input,
+      ),
 
     relaysQuietly: (event, state) =>
       event.type !== "compaction.completed" && foldedQuietly(event, state, seams.now()),
@@ -1158,11 +1226,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (agent.taskId !== null && endsTurn(event)) {
           yield* settleTaskIfFinished(admitted.target.userId, agent.taskId);
         }
-        const titleModel = seams.titleModel(admitted.target.userId);
-        if (titleModel === undefined || !asksTitle(event)) return;
+        if (agent.title !== null || !asksTitle(event)) return;
         // Note that the title is awaited here rather than forked, because eve's step, and the
         // function instance under it, end when the hook returns and take a detached call with them.
-        yield* titleCodingAgent(titleModel, admitted.target, agent).pipe(
+        // No model, as for an account that saved no API key, titles the agent from its opening's first words.
+        yield* Effect.flatMap(seams.titleModel(admitted.target.userId, agent.model), (titleModel) =>
+          titleCodingAgent(titleModel, admitted.target, agent),
+        ).pipe(
           Effect.catch((failure) =>
             Effect.logWarning(`The agent's title was not written: ${failure._tag}`),
           ),

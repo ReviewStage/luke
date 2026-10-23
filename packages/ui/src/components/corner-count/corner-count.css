@@ -1,0 +1,28 @@
+/* corner-count.css -- a glyph with a count hung at its top end corner, on
+   the accent inside a ring of the window's ground, so it reads as standing
+   over the glyph rather than cut into it. */
+
+@layer components {
+  .luke-corner-count {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+  }
+
+  .luke-corner-count-mark {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-8));
+    inset-inline-start: calc(100% - var(--luke-space-6));
+    min-width: var(--luke-space-16);
+    padding: 0 var(--luke-space-4);
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-accent);
+    box-shadow: 0 0 0 2px var(--luke-color-ground);
+    color: var(--luke-color-on-accent);
+    font-size: var(--luke-type-caption-size);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--luke-weight-semibold);
+    line-height: var(--luke-space-16);
+    text-align: center;
+  }
+}

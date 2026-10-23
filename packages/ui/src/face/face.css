@@ -17,6 +17,19 @@
     transition: color var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
+  .luke-face[data-muted="true"] {
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-face[data-fill="true"] {
+    width: 100%;
+    height: 100%;
+  }
+
+  .luke-face[data-inherit="true"] {
+    color: inherit;
+  }
+
   /* The two motions the microphone owns, in the meters' own colours: the face
      is green while it attends to you and blue while it is the one talking, so
      the face alone says whose turn it is. */

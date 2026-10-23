@@ -41,6 +41,7 @@ import { afterEach, vi } from "vitest";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "../agents/brain-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -138,8 +139,6 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
 /** The environment a deployment holds, with the webhook's secret or without it. */
 function environment(secret: string | undefined): HostedEnvironmentValues {
   return {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,
@@ -219,6 +218,7 @@ function pullRequestDelivery(action: string, ref: string) {
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
+    yield* connectAgentApiKeys(owner);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: RELAY_FULL_NAME,
@@ -334,6 +334,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const installationId = 900_000 + Math.floor(Math.random() * 90_000);
         const login = `acme-${randomUUID()}`;
         const github = githubReaching([{ id: installationId, login, repositories: [] }]);
@@ -480,6 +481,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/triage-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Triage", repository: repositoryName });
         const trigger: AutomationTrigger = {
@@ -558,6 +560,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/review-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const onWorkspace = (event: GitHubTriggerEvent, name: string) =>
@@ -633,6 +636,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/settings-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const listening = (trigger: AutomationTrigger) =>
@@ -722,6 +726,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const repositoryName = `Acme/agents-${randomUUID()}`;
         const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const hearing = (senders: readonly GitHubSender[]) =>
@@ -798,6 +803,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   it.effect("a failed check suite queues a run, but not on a coding agent's own luke/ branch", () =>
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
+      yield* connectAgentApiKeys(owner);
       const repositoryName = `Acme/ci-${randomUUID()}`;
       const task = yield* startTask(owner, { name: "CI", repository: repositoryName });
       const made = Option.getOrThrow(

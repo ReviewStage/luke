@@ -10,7 +10,7 @@ import type { VoiceCloseReason } from "@luke/database/voice-vocabulary";
 import type { Task } from "@luke/features/task-wire";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "@luke/live";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, Redacted } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import type { VoiceAccounts } from "../voice/accounts.js";
 
@@ -73,6 +73,8 @@ export interface FakeOpenAi {
   baseUrl: string;
   creates: RecordedCreate[];
   attaches: RecordedAttach[];
+  /** Every attach asked for, a refused one included, by the session it named and the bearer it carried. */
+  attachAsks: Array<Omit<RecordedAttach, "socket">>;
   /** The status the next create answers with; 201 unless a test says otherwise. */
   createStatus: number;
   /** The status every attach is refused with, where one is, as OpenAI answers an attach to a session already gone; a socket otherwise. */
@@ -112,6 +114,7 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
     baseUrl: "",
     creates,
     attaches,
+    attachAsks: [],
     createStatus: HTTP_CREATED,
     attachStatus: undefined,
     nextAttach: attachLine.next,
@@ -149,6 +152,10 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
       socket.destroy();
       return;
     }
+    fake.attachAsks.push({
+      sessionId: decodeURIComponent(match[1]),
+      authorization: request.headers.authorization,
+    });
     if (fake.attachStatus !== undefined) {
       socket.end(`HTTP/1.1 ${fake.attachStatus} Refused\r\nConnection: close\r\n\r\n`);
       return;
@@ -171,6 +178,24 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
 
 export const FAKE_USER_ID = "user-1";
 export const FAKE_BEARER = "Bearer account-token-1";
+
+/** Every account holding the one OpenAI API key given, as a test whose accounts are made as it runs reads one. */
+export function everyAccountKeyed(
+  key: string,
+): (accountId: string) => Effect.Effect<Redacted.Redacted | undefined> {
+  return () => Effect.succeed(Redacted.make(key));
+}
+
+/** The OpenAI API keys accounts saved, by account, as the voice service reads one: nothing for an account that saved none. */
+export function savedOpenAiKeys(
+  keys: Readonly<Record<string, string>>,
+): (accountId: string) => Effect.Effect<Redacted.Redacted | undefined> {
+  return (accountId) =>
+    Effect.sync(() => {
+      const key = keys[accountId];
+      return key === undefined ? undefined : Redacted.make(key);
+    });
+}
 
 interface RecordedSeconds {
   userId: string;

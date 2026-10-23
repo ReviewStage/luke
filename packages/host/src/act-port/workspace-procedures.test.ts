@@ -75,6 +75,8 @@ const GRACE = {
 };
 const ALAN = { userId: "user-alan", name: "Alan Turing" };
 const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
+const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
+const SENTRY_INSTALLATION = { installationId: "installation-1", account: "acme" };
 const LINEAR_ISSUE = {
   id: "issue-1",
   identifier: "ENG-1",
@@ -113,6 +115,12 @@ const REFUSAL = {
     "Could not disconnect Linear from that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES]:
     "Could not read that workspace's Linear issues on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]:
+    "Could not read that workspace's Sentry on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]:
+    "Could not install Sentry for that workspace on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]:
+    "Could not disconnect Sentry from that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]:
     "Could not read that repository's issues on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]:
@@ -184,6 +192,8 @@ interface Script {
   connectUrl: string;
   /** The address a Linear connection answers to open. */
   linearConnectUrl: string;
+  /** The address a Sentry install answers to open. */
+  sentryInstallUrl: string;
   /** What a people unfollow waits on once the host has heard it, so a test can open a stream while it is on its way. */
   peopleUnfollowed: Promise<void>;
 }
@@ -210,6 +220,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     alreadyInvited: false,
     connectUrl: INSTALL_URL,
     linearConnectUrl: LINEAR_SIGN_IN_URL,
+    sentryInstallUrl: SENTRY_INSTALL_URL,
     peopleUnfollowed: Promise.resolve(),
   };
   const refusal = () =>
@@ -268,6 +279,22 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
         params.workspaceId === ACME.id
           ? { issues: [LINEAR_ISSUE] }
           : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const),
+      ),
+    workspaceSentry: (params) =>
+      ask(`sentry:${params.workspaceId}`, () =>
+        params.workspaceId === ACME.id
+          ? { sentry: { configured: true, installations: [SENTRY_INSTALLATION] } }
+          : refusal(),
+      ),
+    workspaceSentryInstall: (params) =>
+      ask(
+        `sentry-install:${params.workspaceId}`,
+        (): TasksWorkspaceGitHubConnectAnswer =>
+          script.notPermitted ? refusal() : { url: script.sentryInstallUrl },
+      ),
+    workspaceSentryDisconnect: (params) =>
+      ask(`sentry-disconnect:${params.workspaceId}:${params.installationId}`, () =>
+        script.notPermitted ? refusal() : { sentry: { configured: true, installations: [] } },
       ),
     // Acme's relay lists its one issue, its ledger's installation grants none, and anything else went unanswered.
     tasksGitHubIssues: (params) =>
@@ -548,6 +575,32 @@ it("a workspace's Linear sign-in opens only an https address, and its issues are
   assert.deepEqual(browsed, [LINEAR_SIGN_IN_URL]);
   assert.deepEqual(issues, { answer: [LINEAR_ISSUE] });
   assert.deepEqual(none, { refused: LINEAR_UNAVAILABLE_REFUSAL });
+});
+
+it("a workspace's Sentry install opens only Sentry's own address, its installations are read, and a disconnect answers what remains or is refused in words that say why", async () => {
+  const { client, browsed, script } = windowPort(PANEL);
+  const disconnect = { ...WORKSPACE, installationId: SENTRY_INSTALLATION.installationId };
+
+  const installed = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL, WORKSPACE);
+  script.sentryInstallUrl = "https://sentry.example/sentry-apps/luke/external-install/";
+  const elsewhere = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL, WORKSPACE);
+  const read = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ, WORKSPACE);
+  const disconnected = await settled(
+    client,
+    WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
+    disconnect,
+  );
+  script.notPermitted = true;
+  const refused = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT, disconnect);
+
+  assert.deepEqual(installed, { answer: undefined });
+  assert.deepEqual(elsewhere, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL] });
+  assert.deepEqual(browsed, [SENTRY_INSTALL_URL]);
+  assert.deepEqual(read, {
+    answer: { configured: true, installations: [SENTRY_INSTALLATION] },
+  });
+  assert.deepEqual(disconnected, { answer: { configured: true, installations: [] } });
+  assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
 });
 
 it("a repository's GitHub issues are answered from a panel, an installation that grants none answers so with its settings page rather than an empty list, and one unanswered is refused in the kind's own words", async () => {

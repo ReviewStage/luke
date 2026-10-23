@@ -12,22 +12,37 @@ import {
 import { encodeMention, MENTION_KIND, type MentionPlace } from "@luke/features/mention-link";
 import {
   AnchoredPopover,
+  BUTTON_VARIANT,
+  Button,
   Calendar,
+  CHIP_LOOK,
+  CHIP_WIDTH,
+  Chip,
+  ChipName,
   GAP,
   Inline,
   POPOVER_ALIGN,
+  PopoverPanel,
   SETTINGS_ROW_DENSITY,
+  SettingsRow,
   Stack,
-  TEXT_BUTTON_TONE,
   TEXT_FIELD_TYPE,
-  TextButton,
   TextField,
+  useMinute,
 } from "@luke/ui";
-import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
-import { PopoverPanel } from "../popover-panel.js";
+import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { SwitchRow } from "../settings/switch-row.js";
-import { useMinute } from "./task-time.js";
 
 /**
  * date-picker.tsx -- a date mention picked or changed in place, as Notion's date picker does: the date as written, a month to pick from, an end date, a time, and Clear, hung from the chip or the `@` word.
@@ -38,15 +53,27 @@ import { useMinute } from "./task-time.js";
  * one. It is drawn as the window's other popovers with settings in them
  * are (`view-settings.tsx`): a card under its title and ×, its switches the
  * Settings rows' own (`../settings/switch-row.tsx`) at their compact
- * density, and its one action, Clear, a quiet word at its ruled foot, lined
- * up with the fields and the rows' names above it. Top
+ * density, and its one action, Clear, a row at its ruled foot lit as a
+ * menu's row is, its word lined up with the fields and the rows' names
+ * above it. Top
  * to bottom it holds a field for each end's date, as Notion's does, each
  * read as an `@` word is read (`dateOfWords`, so `next fri 3pm` works) as
  * Enter or leaving the field takes it, and beside each, while Include
- * time is on, the end's time in the reader's zone, which the switch's row
- * names; the month the date's start falls in (`@luke/ui`'s `Calendar`); End
- * date, after which the next pick sets the range's end; Include time; and
- * Clear.
+ * time is on, the end's time; the month the date's start falls in
+ * (`@luke/ui`'s `Calendar`); End date, after which the next pick sets the
+ * range's end; Include time; while it is on, Time zone, the zone the times
+ * are read in; and Clear.
+ *
+ * Time zone opens on the reader's own zone, and its field turns the card to
+ * a page of every zone the runtime knows, searched as the window's other
+ * long lists are (`../searchable-menu.tsx`), in the room the card stood in
+ * rather than hung over it, so nothing of it is cut by the card's edge and
+ * focus never leaves the picker. A zone picked, or Escape, turns back to
+ * the card, focus on the field. A zone picked keeps the times as written,
+ * as Notion's does: 3:00 PM stays 3:00 PM, now in the zone picked, and the
+ * date is written with that zone's offset and named in its words. A date
+ * holds an offset rather than a zone's name, so a date opened again opens
+ * on the reader's zone, its times as that zone reads them.
  *
  * What the developer changes is held here until the picker closes, as
  * Notion applies a change: Escape, Enter in its words, a press outside, or
@@ -63,6 +90,17 @@ import { useMinute } from "./task-time.js";
  * field's value.
  */
 
+/** Every zone the runtime knows, as Time zone lists them. */
+const TIME_ZONES = Intl.supportedValuesOf("timeZone");
+
+/** Which page of the picker stands: the date's card, or the zones Time zone picks from. */
+const DATE_PICKER_PAGE = {
+  DATE: "date",
+  ZONE: "zone",
+} as const;
+
+type DatePickerPage = (typeof DATE_PICKER_PAGE)[keyof typeof DATE_PICKER_PAGE];
+
 /** How the picker closed: a key (Escape, or Enter in its words), focus leaving it, or Clear. */
 export const DATE_PICKER_CLOSE = {
   KEY: "key",
@@ -72,9 +110,12 @@ export const DATE_PICKER_CLOSE = {
 
 type DatePickerClose = (typeof DATE_PICKER_CLOSE)[keyof typeof DATE_PICKER_CLOSE];
 
-/** What the picker hands its owner as it closes: the date it holds, whether the developer changed it, and how it closed. */
+/** What the picker hands its owner as it closes: the date it holds, the zone its times were read in, whether the developer changed it, and how it closed. */
 export interface DatePicked {
   readonly date: DateSpan | undefined;
+  readonly zone: string;
+  /** Whether a zone other than the reader's was picked, which names the date anew even where its moment stands, as at a zone of the same offset. */
+  readonly zonePicked: boolean;
   readonly changed: boolean;
   readonly how: DatePickerClose;
 }
@@ -113,6 +154,9 @@ const WORDS = {
   END_DATE: "End",
   END: "End date",
   TIME: "Include time",
+  ZONE: "Time zone",
+  ZONE_SEARCH: "Search time zones",
+  ZONE_NO_MATCH: "No time zones match",
   START_TIME: "Start time",
   END_TIME: "End time",
   CLEAR: "Clear",
@@ -303,10 +347,44 @@ function timeSwitched(draft: Draft, on: boolean): Draft {
   );
 }
 
-/** A mention of `date` as the editor holds one: its words in full in the reader's zone, and its link. */
-export function dateMentionNode(date: DateSpan, place: MentionPlace): MentionNode {
+/** A zone as Time zone names it, its underscores read as spaces. */
+function zoneLabel(zone: string): string {
+  return zone.replaceAll("_", " ");
+}
+
+/** A zone as its field says it in the card's narrow room: its place, the last of its name, `Los Angeles`. */
+function zonePlace(zone: string): string {
+  return zoneLabel(zone.slice(zone.lastIndexOf("/") + 1));
+}
+
+/** The offset `zone` stands at `now`, as its short name says it: `GMT-7`; nothing where the runtime names none. */
+function zoneOffset(zone: string, now: number): string | undefined {
+  return new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" })
+    .formatToParts(now)
+    .find((part) => part.type === "timeZoneName")?.value;
+}
+
+/** Every zone as Time zone lists them, `zone` among them where the runtime lists it under no name of its own, each with its offset now, which a search matches too. */
+function zoneRows(zone: string, now: number): MenuRow[] {
+  const zones = TIME_ZONES.includes(zone) ? TIME_ZONES : [zone, ...TIME_ZONES];
+  return zones.map((each) => {
+    const offset = zoneOffset(each, now);
+    return {
+      id: each,
+      label: zoneLabel(each),
+      ...(offset === undefined ? undefined : { detail: offset, terms: [offset] }),
+    };
+  });
+}
+
+/** A mention of `date` as the editor holds one: its words in full in `zone`, the reader's where none is named, and its link. */
+export function dateMentionNode(
+  date: DateSpan,
+  place: MentionPlace,
+  zone: string = readerZone(),
+): MentionNode {
   return {
-    name: dateLabel(date, readerZone()),
+    name: dateLabel(date, zone),
     target: encodeMention({ kind: MENTION_KIND.DATE, ...date }, place),
   };
 }
@@ -316,7 +394,7 @@ function dayWords(moment: DateWallMoment): string {
   return dateLabel({ start: moment.day });
 }
 
-/** An end's time of day, written in the reader's zone. */
+/** An end's time of day, written in the zone the picker reads its times in. */
 function TimeField({
   label,
   time,
@@ -352,7 +430,17 @@ function DatePickerPanel({
   onClose: (picked: DatePicked) => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const zone = readerZone();
+  // Note that the zone is kept beside its state too, because the picker closes reading it in the same event that may change it.
+  const chosenZone = useRef(readerZone());
+  const [zone, setZone] = useState(chosenZone.current);
+  const [page, setPage] = useState<DatePickerPage>(DATE_PICKER_PAGE.DATE);
+  // Note that a page turned takes its focused control away, and the leave that may hear is no leave of the picker's.
+  const turning = useRef(false);
+  // The page last turned from, so the card turned back to hands the focus to the field that turned it.
+  const [from, setFrom] = useState<DatePickerPage | undefined>(undefined);
+  const zoneMenu = useRef<HTMLElement | null>(null);
+  const zoneField = useRef<HTMLButtonElement>(null);
+  const zoneMenuId = useId();
   const today = dateToday(now, zone) ?? new Date(now).toISOString().slice(0, 10);
   const field = useRef<HTMLInputElement>(null);
   const done = useRef(false);
@@ -375,14 +463,46 @@ function DatePickerPanel({
   const finish = (how: DatePickerClose) => {
     if (done.current) return;
     done.current = true;
-    const closing = wordsRead(latest.current, Date.now(), zone)?.draft ?? latest.current;
-    onClose({ date: dateOfWall(closing.wall, zone), changed: closing.changed, how });
+    const at = chosenZone.current;
+    const closing = wordsRead(latest.current, Date.now(), at)?.draft ?? latest.current;
+    onClose({
+      date: dateOfWall(closing.wall, at),
+      zone: at,
+      zonePicked: at !== readerZone(),
+      changed: closing.changed,
+      how,
+    });
   };
+  const leave = () => {
+    if (!turning.current) finish(DATE_PICKER_CLOSE.LEAVE);
+  };
+  const turnTo = (next: DatePickerPage) => {
+    turning.current = true;
+    setFrom(page);
+    setPage(next);
+  };
+  // A zone picked keeps the times as written, read now in the zone picked.
+  const zonePicked = (picked: string) => {
+    if (picked !== chosenZone.current) {
+      chosenZone.current = picked;
+      setZone(picked);
+      update(changedTo(latest.current.wall, latest.current.pickingEnd));
+    }
+    turnTo(DATE_PICKER_PAGE.DATE);
+  };
+  // The page turned has taken the focus by now, its own effects run before this one.
+  useEffect(() => {
+    turning.current = false;
+  }, [page]);
+  const zones = useMemo(
+    () => (page === DATE_PICKER_PAGE.ZONE ? zoneRows(zone, now) : []),
+    [page, zone, now],
+  );
   // Typed words are read as the field is left, the month shown moving to the end they set; words that name no date are marked and kept.
   const read = (): boolean => {
     const typing = latest.current.typing;
     if (typing === undefined) return true;
-    const next = wordsRead(latest.current, Date.now(), zone);
+    const next = wordsRead(latest.current, Date.now(), chosenZone.current);
     if (next === undefined) {
       update({ ...latest.current, typing: { ...typing, invalid: true } });
       return false;
@@ -426,13 +546,35 @@ function DatePickerPanel({
     />
   );
 
+  if (page === DATE_PICKER_PAGE.ZONE) {
+    return (
+      <SearchableMenu
+        id={zoneMenuId}
+        ref={(element) => {
+          zoneMenu.current = element;
+        }}
+        label={WORDS.ZONE}
+        className="date-zone-menu"
+        placeholder={WORDS.ZONE_SEARCH}
+        rows={zones}
+        value={zone}
+        noMatch={WORDS.ZONE_NO_MATCH}
+        onPick={zonePicked}
+        onClose={() => turnTo(DATE_PICKER_PAGE.DATE)}
+        onLeave={(left) => {
+          if (!(left instanceof Node && zoneMenu.current?.contains(left))) leave();
+        }}
+      />
+    );
+  }
+
   return (
     <PopoverPanel
       title={WORDS.TITLE}
       closeLabel={WORDS.CLOSE}
-      initialFocus={field}
+      initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
       onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
-      onLeave={() => finish(DATE_PICKER_CLOSE.LEAVE)}
+      onLeave={leave}
     >
       <Stack gap={GAP.TIGHT}>
         {timed ? (
@@ -476,15 +618,32 @@ function DatePickerPanel({
         <SwitchRow
           density={SETTINGS_ROW_DENSITY.COMPACT}
           label={WORDS.TIME}
-          detail={timed ? zone : undefined}
           checked={timed}
           onChange={(on) => update(timeSwitched(latest.current, on))}
         />
+        {timed ? (
+          <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
+            {(control) => (
+              <Chip
+                ref={zoneField}
+                look={CHIP_LOOK.FIELD}
+                width={CHIP_WIDTH.AUTO}
+                chevron
+                aria-label={`${WORDS.ZONE}: ${zoneLabel(zone)}`}
+                aria-describedby={control["aria-describedby"]}
+                aria-haspopup="dialog"
+                onClick={() => turnTo(DATE_PICKER_PAGE.ZONE)}
+              >
+                <ChipName>{zonePlace(zone)}</ChipName>
+              </Chip>
+            )}
+          </SettingsRow>
+        ) : null}
       </Stack>
       <div className="date-picker-foot">
-        <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
+        <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
           {WORDS.CLEAR}
-        </TextButton>
+        </Button>
       </div>
     </PopoverPanel>
   );

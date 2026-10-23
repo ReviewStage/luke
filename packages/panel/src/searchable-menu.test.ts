@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu.js";
 
 /**
@@ -13,7 +13,8 @@ import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu.js
  * Left open and close a pinned row's submenu, Escape closes the submenu
  * before the menu and never reaches what stands behind it, Enter picks with
  * or without Command, keys an input method is composing with pick and move
- * nothing, and a list too short to search reads the same keys itself.
+ * nothing, a list too short to search reads the same keys itself, and a
+ * submenu turns left where it would run past the room its menu keeps to.
  */
 
 declare global {
@@ -31,6 +32,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 const ROWS: readonly MenuRow[] = [
@@ -66,12 +68,15 @@ function footOf(said: string[]): FootRow[] {
 }
 
 /** The menu drawn over `rows`, with a field where `placeholder` is given, in a page that hears what Escape reaches. */
-function mount(options: { placeholder?: string; foot?: boolean } = {}) {
+function mount(
+  options: { placeholder?: string; foot?: boolean; room?: boolean; rows?: readonly MenuRow[] } = {},
+) {
   const asked: Asked = { said: [], escapedPast: [] };
   // Note that the page listens a box above React's root, because a press
   // kept from it still reaches the root's own listeners.
   const page = document.body.appendChild(document.createElement("div"));
   const container = page.appendChild(document.createElement("div"));
+  if (options.room === true) page.dataset.popoverRoom = "";
   page.addEventListener("keydown", (event) => {
     if (event.key === "Escape") asked.escapedPast.push("Escape");
   });
@@ -83,7 +88,7 @@ function mount(options: { placeholder?: string; foot?: boolean } = {}) {
         id: "menu",
         label: "Model",
         placeholder: options.placeholder,
-        rows: ROWS,
+        rows: options.rows ?? ROWS,
         value: undefined,
         noMatch: "No models match",
         onPick: (id) => asked.said.push(`pick ${id}`),
@@ -163,6 +168,56 @@ test("the arrows go on into the pinned rows, whose submenu Right opens, Left clo
   assert.deepEqual(asked.said, ["effort low"]);
 });
 
+/** A listed row that opens a submenu of where a new tab opens, beside a row of its own. */
+function browserRows(said: string[]): readonly MenuRow[] {
+  return [
+    { id: "board", label: "Board" },
+    {
+      id: "browser",
+      label: "New Browser tab",
+      submenu: {
+        label: "Open the tab in",
+        rows: [
+          { id: "agent", label: "Invite expiry" },
+          { id: "mac", label: "This Mac" },
+        ],
+        value: undefined,
+        onPick: (id) => said.push(`open ${id}`),
+      },
+    },
+  ];
+}
+
+test("a listed row with a submenu opens it on Enter or Right rather than being picked, Left closes it, and Enter picks in it", () => {
+  const said: string[] = [];
+  const asked = mount({ placeholder: "Search tabs", rows: browserRows(said) });
+  press({ key: "ArrowDown" });
+  press({ key: "Enter" });
+  const inside = announced();
+  press({ key: "ArrowLeft" });
+  const closed = document.querySelector('[aria-label="Open the tab in"][role="listbox"]');
+  press({ key: "ArrowRight" });
+  press({ key: "ArrowDown" });
+  press({ key: "Enter" });
+
+  assert.equal(inside, "Invite expiry");
+  assert.equal(closed, null);
+  assert.deepEqual(asked.said, []);
+  assert.deepEqual(said, ["open mac"]);
+});
+
+test("a search finds a listed row by the rows of its submenu", () => {
+  mount({ placeholder: "Search tabs", rows: browserRows([]) });
+  const field = keys() as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, "expiry");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.equal(announced(), "New Browser tab");
+});
+
 test("Enter on a pinned row presses it", () => {
   const asked = mount({ placeholder: "Search models", foot: true });
   press({ key: "ArrowUp" });
@@ -207,4 +262,47 @@ test("a list too short to search holds focus, names its highlight, and reads the
   assert.equal(document.activeElement, keys());
   assert.equal(moved, "Haiku");
   assert.deepEqual(asked.said, ["pick haiku"]);
+});
+
+/**
+ * Where the Effort submenu stands once opened in a room `room` wide at the
+ * window's left, its menu's row from `rowLeft` to `rowRight`: the side it
+ * took and how far it was pushed back over the menu. jsdom lays nothing
+ * out, so the window, the room, the row, and the submenu, 200px wide and
+ * drawn on the right, are answered as the panel would lay them.
+ */
+function submenuIn(room: number, rowLeft: number, rowRight: number) {
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1200);
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.dataset.popoverRoom !== undefined) return new DOMRect(0, 0, room, 800);
+    if (this.classList.contains("task-compose-menu-branch")) {
+      return new DOMRect(rowLeft, 100, rowRight - rowLeft, 32);
+    }
+    if (this.classList.contains("task-compose-submenu")) {
+      return new DOMRect(rowRight + 9, 100, 200, 100);
+    }
+    return new DOMRect(0, 0, 0, 0);
+  });
+  mount({ placeholder: "Search models", foot: true, room: true });
+  press({ key: "ArrowUp" });
+  press({ key: "ArrowUp" });
+  press({ key: "ArrowRight" });
+  const submenu =
+    document.querySelector<HTMLElement>(".task-compose-submenu") ?? assert.fail("it opens");
+  return {
+    side: submenu.dataset.side,
+    shift: Number.parseFloat(submenu.style.getPropertyValue("--submenu-shift")),
+  };
+}
+
+test("a submenu that would run past the room its menu keeps to turns to the left, though the window has room", () => {
+  assert.deepEqual(submenuIn(800, 300, 600), { side: "left", shift: 0 });
+});
+
+test("a submenu with room on neither side takes the side it runs past less, pushed back over the menu inside the room", () => {
+  // A 340px menu at x=30 in a 390px side panel: 209px past on the right, 179px on the left.
+  assert.deepEqual(submenuIn(390, 30, 370), { side: "left", shift: 179 });
 });

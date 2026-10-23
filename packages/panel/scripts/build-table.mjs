@@ -24,9 +24,11 @@ const panelRequire = createRequire(path.join(panelRoot, "package.json"));
 const MARKDOWN_HTML_PARSER = path.join(panelRoot, "src/markdown-html-parser.ts");
 
 // Pierre's diffs writes each diff as HTML with inline styles, which the
-// panel's policy refuses and reports one by one; its import of the writer is
-// answered with the diff bundle's own (`src/diff-view/inline-styles.ts`),
-// which carries each style where the bundle applies it through the CSSOM.
+// panel's policy refuses and reports one by one; its imports of the writer,
+// `hast-util-to-html` and, since 1.6, its own `utils/hastToHtml.js` in front
+// of it, are answered with the diff bundle's own
+// (`src/diff-view/inline-styles.ts`), which carries each style where the
+// bundle applies it through the CSSOM.
 const DIFF_MARKUP = path.join(panelRoot, "src/diff-view/inline-styles.ts");
 
 /**
@@ -39,11 +41,20 @@ const REDIRECTS = new Map([
   ["hast-util-to-html", DIFF_MARKUP],
 ]);
 
+/** Pierre's own writer, as its modules import it by a relative path. */
+const PIERRE_MARKUP = /^\.{1,2}\/(?:utils\/)?hastToHtml\.js$/;
+
+/** A module of Pierre's diffs, which alone imports `PIERRE_MARKUP`'s writer. */
+const PIERRE_MODULE = /[\\/]@pierre[\\/]diffs[\\/]dist[\\/]/;
+
 /** The specifiers `redirectOf` answers, for a bundler that filters before it asks. */
-export const REDIRECTED = /^(?:rehype-raw|hast-util-to-html)$/;
+export const REDIRECTED = /^(?:rehype-raw|hast-util-to-html|\.{1,2}\/(?:utils\/)?hastToHtml\.js)$/;
 
 /** The module of the panel's own an import is answered with, or undefined where it resolves as written. */
 export function redirectOf(specifier, importer) {
+  if (PIERRE_MARKUP.test(specifier)) {
+    return importer !== undefined && PIERRE_MODULE.test(importer) ? DIFF_MARKUP : undefined;
+  }
   const target = REDIRECTS.get(specifier);
   return target === undefined || importer === target ? undefined : target;
 }
@@ -144,9 +155,10 @@ export function lucideWholeModule(file) {
 // (`src/diff-view/index.ts`'s `highlightPool`), bundled whole as one classic
 // script and handed to the diff bundle as text (`DIFF_HIGHLIGHT_WORKER`),
 // which starts each worker from a `blob:`, the one place the panel's policy
-// admits a worker from. Its WebAssembly engine is answered with nothing,
-// since the policy admits no WebAssembly and the bundle asks for Shiki's
-// JavaScript engine; carried, it would be 600 KB of the worker's text.
+// admits a worker from. Shiki's WebAssembly engine is answered with nothing,
+// since the bundle colours with Pierre's Highlights, or with Shiki's
+// JavaScript engine where WebAssembly is refused, and never with Shiki's own
+// WebAssembly; carried, it would be 600 KB of the worker's text.
 const SHIKI_WASM = /^shiki\/wasm$/;
 const shikiWasmLeftOut = {
   name: "shiki-wasm-left-out",

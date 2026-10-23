@@ -1,19 +1,35 @@
 import {
   ArchiveIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  ComboboxList,
   CopyIcon,
+  DocumentIcon,
   dropBelowStart,
   EllipsisIcon,
+  FolderIcon,
   GAP,
   IconButton,
   Inline,
+  LIST_VARIANT,
+  List,
+  ListRow,
   MENU_ITEM_MARK,
+  MENU_SURFACE_FLOW,
+  MENU_SURFACE_INSET,
   Menu,
   type MenuEntry,
+  MenuGlyph,
   MenuItem,
+  MenuSurface,
   PencilIcon,
+  SearchField,
+  TEXT_ELEMENT,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
   TrashIcon,
   UserIcon,
@@ -27,8 +43,13 @@ import { CatalogSection } from "../section";
  * menu.tsx -- a menu dropped from a ⋯ with glyphs, shortcuts, a dimmed item
  * and a red one ruled apart; one of settings in submenus; one with a heading
  * and a footer, its long words cut short; one a right-click hangs at the
- * pointer; and a searchable menu's pinned rows, steered from its field: one
- * opening a list beside it, a switch, and one that does not apply now.
+ * pointer; a searchable menu's pinned rows, steered from its field: one
+ * opening a list beside it, a switch, and one that does not apply now; and
+ * the menu's surface under lists an app hangs and keys itself: an `@` list
+ * narrowed under its kind's crumb, edge to edge, one press inset, as
+ * one offered over selected words is, and a find bar's field and buttons
+ * laid side by side on it; and toolbars floated on it, a hair round their
+ * buttons: a message's actions, a picture's worded tools, and one press.
  */
 
 const ignore = () => undefined;
@@ -127,16 +148,22 @@ function AccountMenu(): React.JSX.Element {
   );
 }
 
-/** A row a right-click, or a touch held on it, opens the task's menu on, at the pointer. */
+/**
+ * A row a right-click, or a touch held on it, opens the task's menu on, at
+ * the pointer; its press drops the same menu under it.
+ */
 function RightClickRow(): React.JSX.Element {
   const menu = useMenu(true);
   return (
     <>
-      <button type="button" className="catalog-menu-row" {...menu.contextMenu()}>
-        <Text tone={TEXT_TONE.MUTED}>
-          Right-click anywhere in this row, or hold it on a touch screen.
-        </Text>
-      </button>
+      <List label="Tasks" variant={LIST_VARIANT.CARD}>
+        <ListRow
+          title="Right-click anywhere in this row, or hold it on a touch screen."
+          onPress={menu.trigger(dropBelowStart).onClick}
+          menuOpen={menu.drawn !== undefined}
+          contextMenu={menu.contextMenu()}
+        />
+      </List>
       {menu.drawn && (
         <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />
       )}
@@ -174,6 +201,53 @@ function PinnedRows(): React.JSX.Element {
   );
 }
 
+/** A narrowed `@` list on the menu's surface, under its kind's crumb, as an editor hangs one. */
+function NarrowedList(): React.JSX.Element {
+  const [active, setActive] = useState(0);
+  return (
+    <MenuSurface className="catalog-menu-surface" inset={MENU_SURFACE_INSET.NONE}>
+      <div className="catalog-menu-crumb">
+        <Inline gap={GAP.ICON}>
+          <MenuGlyph>
+            <FolderIcon aria-hidden="true" />
+          </MenuGlyph>
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+            Files and folders
+          </Text>
+        </Inline>
+      </div>
+      <ComboboxList
+        label="Mention"
+        groups={[
+          {
+            options: [
+              { id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" },
+              { id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" },
+            ],
+          },
+        ]}
+        active={active}
+        onActiveChange={setActive}
+        onChoose={setActive}
+        headed={false}
+        empty="Nothing matches"
+      />
+    </MenuSurface>
+  );
+}
+
+/** A find bar on the menu's surface: its field, then the buttons that step through what it found. */
+function FindBar(): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  return (
+    <MenuSurface flow={MENU_SURFACE_FLOW.ROW} role="search" aria-label="Find">
+      <SearchField label="Find" placeholder="Find" value={query} onChange={setQuery} />
+      <IconButton label="Previous match" icon={<ArrowUpIcon />} onClick={ignore} />
+      <IconButton label="Next match" icon={<ArrowDownIcon />} onClick={ignore} />
+    </MenuSurface>
+  );
+}
+
 function MenuExample(): React.JSX.Element {
   return (
     <>
@@ -189,6 +263,48 @@ function MenuExample(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="menu-pinned" title="Pinned rows steered from a field">
         <PinnedRows />
+      </CatalogSection>
+      <CatalogSection id="menu-surface" title="The surface under a list an app keys">
+        <Inline gap={GAP.CONTROL}>
+          <NarrowedList />
+          <MenuSurface>
+            <Button icon={<CopyIcon />} onClick={ignore}>
+              Copy
+            </Button>
+          </MenuSurface>
+          <FindBar />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="menu-toolbar" title="A toolbar floated over what it acts on">
+        <Inline gap={GAP.CONTROL}>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR}>
+            <IconButton
+              label="Copy"
+              icon={<CopyIcon />}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={ignore}
+            />
+            <IconButton
+              label="Edit"
+              icon={<PencilIcon />}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={ignore}
+            />
+          </MenuSurface>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR} role="toolbar" aria-label="Picture">
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<PencilIcon />} onClick={ignore}>
+              Describe
+            </Button>
+            <Button variant={BUTTON_VARIANT.DANGER} icon={<TrashIcon />} onClick={ignore}>
+              Remove
+            </Button>
+          </MenuSurface>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR}>
+            <Button icon={<DocumentIcon />} onClick={ignore}>
+              Comment
+            </Button>
+          </MenuSurface>
+        </Inline>
       </CatalogSection>
     </>
   );

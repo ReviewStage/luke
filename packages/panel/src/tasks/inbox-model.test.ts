@@ -559,7 +559,7 @@ function drawn(view: InboxListView): readonly (string | readonly [string, readon
   }
   if (view.grouping === INBOX_GROUPING.PERSON) {
     return view.groups.map(
-      ({ starter, items }) => [starter?.name ?? "You", items.map(({ item }) => item.id)] as const,
+      ({ person, items }) => [person?.name ?? "You", items.map(({ item }) => item.id)] as const,
     );
   }
   if (view.grouping === INBOX_GROUPING.STATUS) {
@@ -790,6 +790,50 @@ test("only an open item the reader's own agent asks needs them, or one whose sta
   assert.equal(needingYou(ME.userId), 0);
   assert.equal(needingYou(DANA.userId), 1);
   assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
+});
+
+/** Items on tasks the service says wait on someone other than the agent's starter, beside one from a service before it said. */
+const ASSIGNED = [
+  {
+    holder: taskHolder(BILLING),
+    items: [
+      // On a task assigned to the reader, though Dana started its agent.
+      item({ id: "assigned-to-me", startedBy: DANA, waitsOn: ME, updatedAt: 30 }),
+      // On a task assigned to Dana, though the reader started its agent.
+      item({ id: "assigned-to-dana", startedBy: ME, waitsOn: DANA, updatedAt: 20 }),
+    ],
+  },
+  {
+    holder: taskHolder(INVITES),
+    items: [
+      // From a service before it named who an item waits on: its starter.
+      item({ id: "older-service", startedBy: KAI, updatedAt: 10 }),
+    ],
+  },
+];
+
+test("an item waits on whoever the service says, its task's assignee, rather than its agent's starter, and on its starter from a service before it said: Needs you, the count, Whose, and Group by person all go by it", () => {
+  const view = { chosen: undefined, readerId: ME.userId } as const;
+  const none = { ...view, grouping: INBOX_GROUPING.NONE } as const;
+  assert.deepEqual(drawn(inboxList(ASSIGNED, { ...none, show: INBOX_SHOW.TO_DO })), [
+    "assigned-to-me",
+  ]);
+  assert.equal(inboxCounts(ASSIGNED, ME.userId)[INBOX_SHOW.TO_DO], 1);
+  assert.equal(inboxCounts(ASSIGNED, DANA.userId)[INBOX_SHOW.TO_DO], 1);
+  assert.equal(inboxCounts(ASSIGNED, KAI.userId)[INBOX_SHOW.TO_DO], 1);
+  const whose = (choice: InboxWhose) =>
+    drawn(inboxList(ASSIGNED, { ...none, show: INBOX_SHOW.ALL, whose: choice }));
+  assert.deepEqual(whose({ kind: INBOX_WHOSE.MINE }), ["assigned-to-me"]);
+  assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...DANA }), ["assigned-to-dana"]);
+  assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
+  assert.deepEqual(
+    drawn(inboxList(ASSIGNED, { ...view, grouping: INBOX_GROUPING.PERSON, show: INBOX_SHOW.ALL })),
+    [
+      ["You", ["assigned-to-me"]],
+      [DANA.name, ["assigned-to-dana"]],
+      [KAI.name, ["older-service"]],
+    ],
+  );
 });
 
 test("a task done or canceled hides none of its items: its open ones need you and its unread ones wait, To do listing and counting them as any task's, and one is the next", () => {

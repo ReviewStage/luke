@@ -1,0 +1,29 @@
+/* zoom-image.css -- a picture zoomed by a transform over its fitted size
+   (`ZoomImage`), so the frame it stands in keeps its size and clips what
+   stands past it. A press zooms in where it is fitted; zoomed, it is held
+   and dragged, and a press puts it back. A step from a press or a key
+   glides; a pinch or a drag follows the fingers at once. How tall it may
+   stand fitted is its frame's to say. */
+
+@layer components {
+  .luke-zoom-image {
+    display: block;
+    max-width: 100%;
+    object-fit: contain;
+    cursor: zoom-in;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .luke-zoom-image[data-zoom="zoomed"] {
+    cursor: grab;
+  }
+
+  .luke-zoom-image[data-zoom="zoomed"]:active {
+    cursor: grabbing;
+  }
+
+  .luke-zoom-image[data-glide="true"] {
+    transition: transform var(--luke-duration-quick) var(--luke-motion-pane);
+  }
+}

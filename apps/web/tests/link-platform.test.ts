@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { LINK_PLATFORM } from "@luke/features/link-open";
 import { afterEach, test, vi } from "vitest";
-import { browserLinkPlatform } from "../src/app/mac-app-handoff";
+import { browserLinkPlatform } from "../src/link-platform";
 
 /**
  * Which browsers the hand-off counts as on a Mac, by what each says of

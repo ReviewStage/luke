@@ -14,17 +14,29 @@ import {
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
+  GAP,
+  Inline,
+  JUSTIFY,
+  LAYOUT_ELEMENT,
+  SETTINGS_ROW_STATE,
+  SettingsFacts,
+  SettingsRowStateLine,
+  Stack,
+  TEXT_ELEMENT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
+  TEXT_FONT,
   TEXT_LINK_LOOK,
+  TEXT_VARIANT,
+  Text,
   TextField,
   TextLink,
   useConfirmDialog,
 } from "@luke/ui";
+import { dayText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";
-import { dayText } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 
 /**
@@ -84,9 +96,9 @@ function statusLabel(status: GitHubTokenStatus): string | undefined {
 /** A problem said in the attention tint, announced as it lands. */
 function Problem({ children }: { children: string }): React.JSX.Element {
   return (
-    <span className="settings-state" data-state="attention" role="alert">
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION} role="alert">
       {children}
-    </span>
+    </SettingsRowStateLine>
   );
 }
 
@@ -94,10 +106,14 @@ function Problem({ children }: { children: string }): React.JSX.Element {
 export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.Element {
   const status = statusLabel(token.status);
   return (
-    <span className="github-dialog-facts">
-      <code className="api-key-hint">{token.hint}</code>
+    <SettingsFacts gap={GAP.TIGHT}>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+        {token.hint}
+      </Text>
       {" · "}
-      <span className="github-dialog-login">{token.login}</span>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+        {token.login}
+      </Text>
       {token.expiresAt === null ? null : ` · Expires ${dayText(token.expiresAt)}`}
       {status === undefined ? null : (
         <>
@@ -105,7 +121,7 @@ export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.
           <Problem>{status}</Problem>
         </>
       )}
-    </span>
+    </SettingsFacts>
   );
 }
 
@@ -119,7 +135,7 @@ function SavedToken({
 }): React.JSX.Element {
   const removal = useConfirmDialog({ subject: true, surfaceOpen: true }, onRemove);
   return (
-    <div className="github-dialog-panel">
+    <Inline justify={JUSTIFY.BETWEEN}>
       <TokenFacts token={token} />
       <Button variant={BUTTON_VARIANT.DANGER_OUTLINE} disabled={removal.busy} onClick={removal.ask}>
         Remove
@@ -128,7 +144,7 @@ function SavedToken({
         confirm={removal}
         question={{ title: "Remove your GitHub token?", verb: "Remove", running: "Removing…" }}
       />
-    </div>
+    </Inline>
   );
 }
 
@@ -154,9 +170,11 @@ function TokenForm({
     });
   };
   return (
-    <div className="github-dialog-token">
-      <form
-        className="api-key-form"
+    <Stack gap={GAP.TIGHT}>
+      <Inline
+        as={LAYOUT_ELEMENT.FORM}
+        justify={JUSTIFY.END}
+        growFirst
         onSubmit={(event) => {
           event.preventDefault();
           save();
@@ -184,9 +202,9 @@ function TokenForm({
         >
           Save
         </Button>
-      </form>
+      </Inline>
       {problem === undefined ? null : <Problem>{problem}</Problem>}
-    </div>
+    </Stack>
   );
 }
 

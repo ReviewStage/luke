@@ -16,16 +16,23 @@ import {
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
-import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
+import {
+  type KeyRing,
+  parseKeyRing,
+  sealProviderKey,
+} from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
+  removeProviderKey,
   saveProviderKey,
   setPlanStatus,
   setProviderKeyStatus,
 } from "@luke/database/models/provider-key-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -70,6 +77,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 const SNAPSHOT = "snap_fixture_image";
 const EVENTS_URL = "https://luke.test/api/agents/runner-events";
 const MCP_URL = "https://luke.test/api/agents/mcp";
+
+/** The one integration the agent is handed, a server of its own. */
+const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
 const INSTRUCTIONS = "You are a Luke coding agent.";
 const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
 const KEK = `1:${Buffer.alloc(32, 3).toString("base64")}`;
@@ -106,8 +116,6 @@ function openAi() {
 }
 
 const NO_KEYS: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
@@ -195,6 +203,7 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
     userId,
     eventsUrl: EVENTS_URL,
     mcpUrl: MCP_URL,
+    integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
     tokenUrl: TOKEN_URL,
@@ -270,7 +279,9 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           firstSequence: 0,
           eventsUrl: EVENTS_URL,
           mcpUrl: MCP_URL,
+          integrations: [LINEAR_SERVER],
           tokenUrl: TOKEN_URL,
+          installedSkills: "/opt/luke/installed-skills",
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,
@@ -288,6 +299,75 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         for (const secret of ["access-0", "refresh-0", "id-token-0", bearer]) {
           assert.equal(visible.includes(secret), false, "a secret outside the environment");
         }
+      }),
+  );
+
+  it.effect(
+    "an agent its starter's OpenAI API key pays for launches with it as OPENAI_API_KEY, a fast version on the fast tier, never asks the plan, and is refused once the key is gone",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const apiKey = "sk-proj-fixture-account-key";
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-key",
+          model: "openai/gpt-6.1-sol-fast",
+          effort: "xhigh",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.API_KEY,
+        });
+        assert.ok(Option.isSome(started));
+        const agent = started.value.agent;
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(ring(), owner, Redacted.make(apiKey)),
+          "sk-proj…-key",
+          null,
+          new Date(0),
+        );
+
+        // No ChatGPT sign-in at all: an agent on its key never asks one, so OpenAI's token endpoint is never called.
+        const api = runnerSandboxApi();
+        const openai = openAi();
+        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [command] = api.commands;
+        assert.ok(command !== undefined);
+        assert.equal(command.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
+        assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
+        // A fast version runs its base model on Codex's fast tier.
+        const [config] = linesOf(command) as [CodexConfig];
+        assert.equal(config.model, "gpt-6.1-sol");
+        assert.equal(config.fast, true);
+        const visible = JSON.stringify([command.args, command.stdin, api.sandboxes]);
+        assert.equal(visible.includes(apiKey), false);
+        assert.equal(
+          (yield* sessions.send(opened.sessionId, message(agent, "Also the emails."))).outcome,
+          EVE_SEND_OUTCOME.ACCEPTED,
+        );
+        assert.equal(openai.state.renewals, 0);
+
+        yield* removeProviderKey(userId, owner.provider, owner.kind);
+        const gone = runnerSandboxApi();
+        const without = yield* sessionsFor(userId).pipe(Effect.provide(services(gone)));
+        assert.equal((yield* without.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(gone.commands, []);
       }),
   );
 
@@ -339,7 +419,12 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
         const lines = linesOf(api.commands[0]).slice(2) as InputLine[];
-        assert.deepEqual(lines[0], { type: INPUT_LINE.MODEL, model: "gpt-4.1", effort: "low" });
+        assert.deepEqual(lines[0], {
+          type: INPUT_LINE.MODEL,
+          model: "gpt-4.1",
+          fast: false,
+          effort: "low",
+        });
         assert.equal(lines[1]?.type, INPUT_LINE.MESSAGE);
         assert.deepEqual(lines[2], { type: INPUT_LINE.STOP, launch: 0 });
 

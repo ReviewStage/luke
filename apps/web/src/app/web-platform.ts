@@ -8,14 +8,14 @@
  */
 
 import { ADMIN_PAGE_PATH } from "@luke/features/admin-wire";
-import { inAppScheme, LINK_ORIGIN } from "@luke/features/link-home";
+import { APP_HOME_LINK } from "@luke/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
 import { openTargetOf } from "@luke/features/open-address";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
-import { browserLinkPlatform } from "./mac-app-handoff";
+import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
 import { openBrowserLiveOverWebSocket } from "./web-browser-live";
 import { askNotificationsPermission } from "./web-notices";
@@ -88,10 +88,7 @@ function openGitHubTab(url: string): void {
  * Luke's home where it names nothing, which still brings the app forward.
  */
 function macAppLink(): string {
-  return (
-    openTargetOf(location.pathname, location.hash, location.search)?.appLink ??
-    inAppScheme(`${LINK_ORIGIN}/`)
-  );
+  return openTargetOf(location.pathname, location.hash, location.search)?.appLink ?? APP_HOME_LINK;
 }
 
 /**

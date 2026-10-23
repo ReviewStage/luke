@@ -3,7 +3,22 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, ErrorState, FormField, TextField } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
+  ErrorState,
+  FoldingButton,
+  FormField,
+  MENU_SURFACE_ELEMENT,
+  MENU_SURFACE_FLOW,
+  MenuSurface,
+  Spinner,
+  TextField,
+  useFilePicker,
+} from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -11,7 +26,6 @@ import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { encodeImage } from "../feedback-images.js";
-import { FoldingButton } from "../folding-button.js";
 import { PictureBlock } from "../picture-block.js";
 import type {
   PictureNode,
@@ -20,7 +34,6 @@ import type {
   PlanEditorHandle,
   PlanEditorPictures,
 } from "../plan-editor/contract.js";
-import { Spinner } from "../spinner.js";
 import { documentScrollerOf } from "./document-frame.js";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
 
@@ -134,16 +147,21 @@ function UploadingPicture({
   const url = upload?.url;
   return (
     <span className="picture-block ph-no-capture" data-upload={upload?.kind ?? UPLOAD.FAILED}>
-      <span className="picture-frame">
+      <Card
+        as={CARD_ELEMENT.SPAN}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.FLUSH}
+        className="picture-frame"
+      >
         {url === undefined ? (
           <span className="picture-pending" />
         ) : (
           <img className="picture-image" src={url} alt={alt} draggable={false} />
         )}
-      </span>
+      </Card>
       {upload?.kind === UPLOAD.SENDING ? (
         <span className="picture-status">
-          <Spinner label={UPLOAD_WORDS.SENDING} />
+          <Spinner delay label={UPLOAD_WORDS.SENDING} />
           <span>{UPLOAD_WORDS.SENDING}</span>
         </span>
       ) : (
@@ -244,7 +262,9 @@ function PictureTools({
 }): React.JSX.Element {
   const { worded, above } = useToolsLayout(column);
   return (
-    <span
+    <MenuSurface
+      as={MENU_SURFACE_ELEMENT.SPAN}
+      flow={MENU_SURFACE_FLOW.TOOLBAR}
       className="picture-tools"
       role="toolbar"
       aria-label="Picture"
@@ -263,7 +283,7 @@ function PictureTools({
           }}
         />
       ))}
-    </span>
+    </MenuSurface>
   );
 }
 
@@ -352,7 +372,6 @@ export function useEditorPictures(
   const [drawn, setDrawn] = useState<readonly DrawnPicture[]>([]);
   const [uploads, setUploads] = useState<ReadonlyMap<string, Upload>>(new Map());
   const counted = useRef(0);
-  const chooser = useRef<HTMLInputElement>(null);
   const settled = useCallback(
     (upload: string, next: Upload | undefined) =>
       setUploads((was) => {
@@ -446,10 +465,12 @@ export function useEditorPictures(
       },
     };
   }
-  useAppCommand(
-    APP_COMMAND.INSERT_PICTURE,
-    workspace === undefined ? undefined : () => chooser.current?.click(),
-  );
+  const chooser = useFilePicker({
+    accept: CHOSEN_TYPES,
+    multiple: true,
+    onFiles: (files) => handle.current?.insertPictures([...files]),
+  });
+  useAppCommand(APP_COMMAND.INSERT_PICTURE, workspace === undefined ? undefined : chooser.open);
   const portals = drawn.map((each) =>
     createPortal(
       each.picture.upload === "" ? (
@@ -480,18 +501,7 @@ export function useEditorPictures(
     drawn: (
       <>
         {portals}
-        <input
-          ref={chooser}
-          type="file"
-          accept={CHOSEN_TYPES}
-          multiple
-          hidden
-          onChange={(event) => {
-            const files = [...(event.currentTarget.files ?? [])];
-            event.currentTarget.value = "";
-            handle.current?.insertPictures(files);
-          }}
-        />
+        {chooser.input}
       </>
     ),
   };

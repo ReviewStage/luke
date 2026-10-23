@@ -17,6 +17,7 @@ import {
   SUBMIT_STATE,
   TEXT_TONE,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -39,7 +40,6 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -306,6 +306,8 @@ interface AnswerFormProps {
   /** Whether the box holds something to send, which lights its Send. */
   readonly sendable: boolean;
   readonly onSubmit: () => void;
+  /** Whether files are dragged over the box, which brightens its edge. */
+  readonly dropping?: boolean | undefined;
 }
 
 /**
@@ -333,6 +335,7 @@ export function AnswerForm({
   held,
   sendable,
   onSubmit,
+  dropping,
 }: AnswerFormProps): React.JSX.Element {
   const { editor, room, module, pickers } = field;
   const { dictation, dictating } = pickers;
@@ -341,6 +344,7 @@ export function AnswerForm({
       className="inbox-answer"
       data-asks={asks ? "" : undefined}
       data-messages={messages ? "" : undefined}
+      dropping={dropping}
       onSubmit={onSubmit}
     >
       {controls}
@@ -536,7 +540,6 @@ function AnswerCard({
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
       className="agent-composer"
-      data-dropping={dropping ? "" : undefined}
       onDragOver={(event) => {
         if (!carriesFiles(event) || !takes) return;
         event.preventDefault();
@@ -556,6 +559,7 @@ function AnswerCard({
     >
       {takes ? (
         <AnswerForm
+          dropping={dropping}
           field={field}
           asks={asks}
           messages={!answering}

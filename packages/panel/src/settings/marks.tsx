@@ -1,4 +1,4 @@
-import { AlertIcon } from "@luke/ui";
+import { SavedTick, SettingsAttentionMark, SettingsChangedMark } from "@luke/ui";
 
 /**
  * The word beside a row's name while its value differs from the default,
@@ -8,7 +8,27 @@ import { AlertIcon } from "@luke/ui";
  * rather than a dot, so a reader and a glance read the same thing.
  */
 export function ChangedMark(): React.JSX.Element {
-  return <span className="settings-changed">Modified</span>;
+  return <SettingsChangedMark />;
+}
+
+/**
+ * What rides a settings row's name: the Modified word while its value
+ * differs from the default, and the Saved tick each time a write of the row's
+ * lands (`useSettingWrite`'s `saves`).
+ */
+export function SettingMarks({
+  changed,
+  saves,
+}: {
+  changed: boolean | undefined;
+  saves: number;
+}): React.JSX.Element {
+  return (
+    <>
+      {changed === true ? <ChangedMark /> : null}
+      <SavedTick saves={saves} />
+    </>
+  );
 }
 
 /**
@@ -21,12 +41,7 @@ export function ChangedMark(): React.JSX.Element {
  * is where the missing thing is explained.
  */
 export function AttentionMark({ note }: { note: string }): React.JSX.Element {
-  return (
-    <span className="settings-attention" title={note}>
-      <AlertIcon />
-      <span className="visually-hidden">({note})</span>
-    </span>
-  );
+  return <SettingsAttentionMark note={note} />;
 }
 
 /* Whether each group holds a value its reset would change, judged from the

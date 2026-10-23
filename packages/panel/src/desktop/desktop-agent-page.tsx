@@ -12,8 +12,15 @@ import {
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   IconButton,
   InlineEdit,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
+  SpinnerRegion,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
@@ -24,12 +31,10 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
-import { SpinnerRegion } from "../spinner.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -52,7 +57,6 @@ import {
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
@@ -175,7 +179,11 @@ function AgentPageHeading({
     <>
       <div className="desktop-toolbar-heading">
         {rename?.editing === true ? (
-          <h1 className="desktop-toolbar-title">
+          <OneLine
+            as={ONE_LINE_ELEMENT.H1}
+            end={ONE_LINE_END.ELLIPSIS}
+            className="desktop-toolbar-title"
+          >
             <InlineEdit
               value={label}
               label={NAME_LABEL}
@@ -185,9 +193,11 @@ function AgentPageHeading({
                 rename.end(edit.value);
               }}
             />
-          </h1>
+          </OneLine>
         ) : (
-          <FadingWords as={FADING_ELEMENT.H1} className="desktop-toolbar-title" words={label} />
+          <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title">
+            {label}
+          </OneLine>
         )}
       </div>
       <div className="desktop-toolbar-actions">
@@ -446,7 +456,7 @@ export function DesktopAgentPage({
   );
   if (agent === undefined) {
     return (
-      <section className="agent-page" aria-label="Agent">
+      <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
         {toolbar}
         {agents.listMissing ? (
           <NotFound thing={NOT_FOUND_THING.AGENT} />
@@ -455,9 +465,9 @@ export function DesktopAgentPage({
             {NOT_READ}
           </ErrorState>
         ) : (
-          <SpinnerRegion label="Loading agent" />
+          <SpinnerRegion delay label="Loading agent" />
         )}
-      </section>
+      </Fill>
     );
   }
   return (
@@ -489,7 +499,8 @@ export function DesktopAgentPage({
                       data-panel-open={String(sidePanel.open)}
                     >
                       {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-                      <section
+                      <Fill
+                        as={FILL_ELEMENT.SECTION}
                         className="agent-page"
                         aria-label="Agent"
                         hidden={sidePanel.fullScreen}
@@ -518,7 +529,7 @@ export function DesktopAgentPage({
                             />
                           </CallNotice.Provider>
                         </FindScope>
-                      </section>
+                      </Fill>
                       {drawing.panel ? (
                         <SidePanel
                           {...drawing}

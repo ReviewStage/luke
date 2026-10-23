@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ import {
   EFFORT,
   IMAGE_MEDIA_TYPE,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   type InputLine,
   RUNNER_END,
   RUNNER_ENV,
@@ -74,8 +75,12 @@ const CONFIG: RunnerConfig = {
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://luke.test/runner/mcp",
+  integrations: [{ name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" }],
   allowedDomains: ["github.com", "registry.npmjs.org"],
 };
+
+/** The integration server the config hands the agent. */
+const LINEAR_SERVER = { name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" };
 
 const FIRST_MESSAGE: InputLine = {
   type: INPUT_LINE.MESSAGE,
@@ -424,6 +429,37 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
   }),
 );
 
+it.effect(
+  "a launch on an Anthropic API key hands the key to the CLI alone: denied to commands and taken out of every event",
+  () =>
+    Effect.gen(function* () {
+      const apiKey = "account-api-key-for-tests";
+      const luke = fakeLuke();
+      const leak: Step = {
+        emit: {
+          type: "assistant",
+          message: { content: [{ type: "text", text: `key ${apiKey}` }] },
+          parent_tool_use_id: null,
+        },
+      };
+      const { cli, write, run } = yield* launch([leak, ...SHORT_TURN], luke, {
+        [RUNNER_ENV.BEARER]: BEARER,
+        [RUNNER_ENV.API_KEY]: apiKey,
+        PATH: "/usr/bin",
+      });
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* Fiber.join(run);
+
+      assert.equal(cli.options?.env?.[RUNNER_ENV.API_KEY], apiKey);
+      const denied = (cli.options?.sandbox?.credentials?.envVars ?? []).map(
+        (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
+      );
+      assert.ok(denied.includes(`${RUNNER_ENV.API_KEY}:deny`));
+      assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
+    }),
+);
+
 it.effect("leaves an escape that only looks like a secret's spelling as it was", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();
@@ -589,6 +625,38 @@ it.effect(
     }),
 );
 
+it.effect(
+  "loads the member's installed skills as a local plugin where Luke wrote them, and none where it wrote none",
+  () =>
+    Effect.gen(function* () {
+      const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
+      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
+      const missing = join(folder, "never-written");
+      const installed = join(folder, "installed");
+      mkdirSync(join(installed, ".claude-plugin"), { recursive: true });
+      writeFileSync(join(installed, INSTALLED_SKILLS.MANIFEST), '{"name":"luke"}\n');
+
+      const optionsWith = (installedSkills: string) =>
+        Effect.gen(function* () {
+          const { cli, write, run } = yield* launch(SHORT_TURN, fakeLuke());
+          yield* write({ ...CONFIG, installedSkills });
+          yield* write(FIRST_MESSAGE);
+          yield* Fiber.join(run);
+          return cli.options;
+        });
+
+      const withSkills = yield* optionsWith(installed);
+      const withNone = yield* optionsWith(missing);
+
+      assert.deepEqual(withSkills?.plugins, [
+        { type: "local", path: installed, skipMcpDiscovery: true },
+      ]);
+      // The checkout's own settings stay the only ones read.
+      assert.deepEqual(withSkills?.settingSources, ["project"]);
+      assert.equal(withNone?.plugins, undefined);
+    }),
+);
+
 /** The MCP route of a fake Luke: answers each request as its server does, notifications with 202, and keeps what each post carried. */
 function fakeMcpRoute(answer: "take" | "refuse" = "take") {
   const calls: { authorization: string | null; body: unknown }[] = [];
@@ -620,14 +688,17 @@ function fakeCliTransport() {
   return { transport, sent, answered };
 }
 
-/** A launch whose Luke answers its MCP route as `mcp` does, and the SDK server the CLI was handed, connected to a fake channel. */
-function launchWithMcp(mcp: ReturnType<typeof fakeMcpRoute>) {
+/** A launch whose Luke answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; Luke's own unless an integration's is named. */
+function launchWithMcp(
+  mcp: ReturnType<typeof fakeMcpRoute>,
+  named: { readonly name: string; readonly url: string } = { name: "luke", url: CONFIG.mcpUrl },
+) {
   return Effect.gen(function* () {
     const luke = fakeLuke();
     const routed: typeof luke = {
       ...luke,
       layer: fakeHttpClientLayer((url, init) =>
-        url === CONFIG.mcpUrl ? mcp.respond(url, init) : luke.respond(url, init),
+        url === named.url ? mcp.respond(url, init) : luke.respond(url, init),
       ),
     };
     const launched = yield* launch(SHORT_TURN, routed);
@@ -635,7 +706,7 @@ function launchWithMcp(mcp: ReturnType<typeof fakeMcpRoute>) {
     for (let step = 0; step < 500 && launched.cli.options === undefined; step += 1) {
       yield* Effect.yieldNow;
     }
-    const server = launched.cli.options?.mcpServers?.luke;
+    const server = launched.cli.options?.mcpServers?.[named.name];
     assert.ok(server?.type === "sdk" && "instance" in server);
     const cli = fakeCliTransport();
     // @ts-expect-error -- the fake stands in for the SDK's own control-channel transport.
@@ -668,6 +739,32 @@ it.effect("relays the CLI's MCP messages to Luke under the runner's bearer, over
       ],
     );
   }),
+);
+
+it.effect(
+  "hands the CLI each integration as a server of its own, relayed to its endpoint under the runner's bearer",
+  () =>
+    Effect.gen(function* () {
+      const mcp = fakeMcpRoute();
+      const { channel, write, run, cli } = yield* launchWithMcp(mcp, LINEAR_SERVER);
+
+      channel.transport.onmessage?.({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+      yield* Deferred.await(channel.answered);
+      yield* write(FIRST_MESSAGE);
+      yield* Fiber.join(run);
+
+      assert.deepEqual(Object.keys(cli.options?.mcpServers ?? {}), ["luke", "linear"]);
+      assert.deepEqual(channel.sent, [{ jsonrpc: "2.0", id: 1, result: { tools: [] } }]);
+      assert.deepEqual(
+        mcp.calls.map(({ authorization, body }) => ({ authorization, body })),
+        [
+          {
+            authorization: `Bearer ${BEARER}`,
+            body: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          },
+        ],
+      );
+    }),
 );
 
 it.effect("answers the CLI's MCP request with a JSON-RPC error where Luke refuses it", () =>
@@ -720,6 +817,7 @@ it.effect(
       assert.ok(argv.includes("--input-format"), "the stub CLI was started");
       assert.ok(argv.every((argument) => !argument.includes(BEARER)));
       assert.ok(argv.every((argument) => !argument.includes(CONFIG.mcpUrl)));
+      assert.ok(argv.every((argument) => !argument.includes(LINEAR_SERVER.url)));
       assert.ok(!argv.includes("--mcp-config"));
       assert.equal(listened, 0, "the launch opened no listening socket");
     }),

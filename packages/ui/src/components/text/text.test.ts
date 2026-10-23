@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "./text.js";
+import { TEXT_ELEMENT, TEXT_TRUNCATE, TEXT_VARIANT, Text } from "./text.js";
 
 /**
  * text.test.ts -- words cut to one line still hold every word, so a heading
@@ -47,4 +47,17 @@ test("a truncated heading is still named by its whole title", () => {
   const heading = container.querySelector("h2");
   assert.ok(heading);
   assert.equal(heading.textContent, LONG_TITLE);
+});
+
+test("a path cut from its start still holds every part of it", () => {
+  const path = "packages/panel/src/tasks/cloud-browser/address-bar-model.ts";
+  const container = render(
+    createElement(Text, {
+      as: TEXT_ELEMENT.SPAN,
+      truncate: TEXT_TRUNCATE.START,
+      children: createElement("bdi", null, path),
+    }),
+  );
+  assert.equal(container.textContent, path);
+  assert.ok(container.querySelector("[data-truncate='start']"));
 });

@@ -1,6 +1,7 @@
 import { automationOwner, automationTriggerText } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -9,10 +10,16 @@ import {
   Button,
   DetailPage,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   IconButton,
   List,
   ListRow,
+  ONE_LINE_ELEMENT,
+  OneLine,
   PAGE_FRAME,
+  RowHint,
+  RowHintOptions,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -20,7 +27,10 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Time,
+  Tooltip,
   useMenu,
+  useMinute,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -43,18 +53,15 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
-import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
-import { lineSubject } from "../tasks/agent-ref.js";
+import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
-import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model.js";
-import { RelativeTime } from "../tasks/relative-time.js";
-import { useMinute } from "../tasks/task-time.js";
+import { holderName, INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
+import { agentEndMark } from "../tasks/tab-look.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
@@ -68,7 +75,8 @@ import { useAutomations } from "./use-automations.js";
  * who left. Its head is their face at the page's size, their name, and
  * their role and email as the members read lists them, or that they left.
  * Under it stand their agents at work, the Inbox
- * items their agents wait on, the tasks they created, and their other
+ * items their agents wait on, the tasks assigned to them, the rest of the
+ * tasks they created, and their other
  * agents, each from the listed workspace's task list and Inbox
  * (`@luke/ui/person-page-model`), and the workspace's automations they
  * made, a section with nothing in it left out.
@@ -192,22 +200,29 @@ function AgentRow({
 }): React.JSX.Element {
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
+  const card = <AgentCard subject={subject} models={tasks.agents.models} />;
   return (
-    <ListRow
-      leading={
-        <span className="home-row-picture">
-          <ActorMark actor={subject.tile} />
-        </span>
-      }
-      title={subject.name}
-      meta={
-        <span className="home-row-meta">
-          <FadingWords className="home-row-context" words={task.name} />
-          {agent.at === undefined ? null : <RelativeTime at={agent.at} now={now} />}
-        </span>
-      }
-      onPress={() => tasks.onShowAgent(task.id, agent.id)}
-    />
+    <RowHintOptions card={card} cardBeside>
+      <ListRow
+        leading={
+          <span className="home-row-picture">
+            <ActorMark actor={subject.tile} />
+          </span>
+        }
+        title={subject.name}
+        hint={{ Hint: RowHint, label: subject.name }}
+        meta={
+          <span className="home-row-meta">
+            <OneLine className="home-row-context" words={task.name}>
+              {task.name}
+            </OneLine>
+            {agentEndMark(agent, false)}
+            {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
+          </span>
+        }
+        onPress={() => tasks.onShowAgent(task.id, agent.id)}
+      />
+    </RowHintOptions>
   );
 }
 
@@ -229,7 +244,7 @@ function PersonActions({
   tasks: TasksControl;
   userId: string;
   person: Actor;
-  /** Whether the workspace is shared, which alone filters the sidebar by creator. */
+  /** Whether the workspace is shared, which alone filters the sidebar by person. */
   shared: boolean;
   onShowTasks: () => void;
 }): React.JSX.Element {
@@ -356,10 +371,12 @@ function AutomationRow({
       title={automation.name}
       meta={
         <span className="home-row-meta">
-          <FadingWords
+          <OneLine
             className="home-row-context"
             words={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-          />
+          >
+            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
+          </OneLine>
         </span>
       }
       onPress={onOpen}
@@ -409,6 +426,49 @@ function PersonHeadSkeleton(): React.JSX.Element {
   );
 }
 
+/**
+ * One section of a person's tasks, the first `PERSON_TASKS_SHOWN` of them,
+ * newest first, wearing no face, since the page's head says whose they
+ * are; and under it, where it leaves some out and the sidebar filters by
+ * person, Show all, which lists every one there (`onShowAll`).
+ */
+function PersonTasks({
+  title,
+  listed,
+  tasks,
+  now,
+  onShowAll,
+}: {
+  title: string;
+  listed: readonly TaskSummary[];
+  tasks: TasksControl;
+  now: number;
+  onShowAll: (() => void) | undefined;
+}): React.JSX.Element | null {
+  if (listed.length === 0) return null;
+  return (
+    <>
+      <PersonSection title={title} count={listed.length}>
+        {listed.slice(0, PERSON_TASKS_SHOWN).map((task) => (
+          <RecentRow
+            key={task.id}
+            task={task}
+            pictures={tasks.repositories.pictures}
+            now={now}
+            face={false}
+            onOpen={() => tasks.onSelect(task.id)}
+          />
+        ))}
+      </PersonSection>
+      {listed.length > PERSON_TASKS_SHOWN && onShowAll !== undefined ? (
+        <p className="person-section-foot">
+          <Button onClick={onShowAll}>{`Show all ${listed.length} in sidebar`}</Button>
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 /** The page inside the workspace's member directory, which names the person. */
 function PersonColumn({
   tasks,
@@ -431,20 +491,22 @@ function PersonColumn({
   const left = former?.find((each) => each.userId === userId);
   const ref = personRef(userId, listed) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
-  // The sidebar's own view, so their tasks are listed there as its Created by lists them, whoever they are assigned to.
+  // The sidebar's own view, so their tasks are listed there as its Assigned to lists them, whoever created them, and those they created as its Created by does.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
   const memberCount = tasks.workspace?.memberCount;
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
-  const showTasks = () => taskView.onCreatedByAlone(userId);
+  const showTasks = () => taskView.onAssignedToAlone(userId);
+  const showCreated = () => taskView.onCreatedByAlone(userId);
   const page = personPage(userId, listed);
   const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
-  // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.
+  // An item on a task is theirs where it waits on them (`inboxWaitsOn`), its task's assignee or else its agent's starter, by the task's row from a service that names neither.
   const waiting = read.items.filter(
     ({ holder, item }) =>
-      holder.kind === INBOX_HOLDER.TASK && agentStarter(holder.task, item.agentId) === userId,
+      holder.kind === INBOX_HOLDER.TASK &&
+      (inboxWaitsOn(item)?.userId ?? agentStarter(holder.task, item.agentId)) === userId,
   );
   const { inboxView } = tasks;
   const openItem = ({ holder, item }: InboxListed) => {
@@ -459,9 +521,9 @@ function PersonColumn({
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
     return (
-      <section className="automations-view" aria-label={PROFILE}>
+      <Fill as={FILL_ELEMENT.SECTION} className="automations-view" aria-label={PROFILE}>
         <NotFound thing={NOT_FOUND_THING.PERSON} />
-      </section>
+      </Fill>
     );
   }
   // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
@@ -486,9 +548,9 @@ function PersonColumn({
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <FadingWords as={FADING_ELEMENT.H1} className="desktop-toolbar-title" words={name}>
+            <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={name}>
               {name ?? (refused ? PROFILE : <Skeleton width={SKELETON_HEAD.NAME} />)}
-            </FadingWords>
+            </OneLine>
           </div>
           <PersonActions
             tasks={tasks}
@@ -536,25 +598,20 @@ function PersonColumn({
           ))}
         </PersonSection>
       )}
-      {page.created.length === 0 ? null : (
-        <PersonSection title={you ? "Created by you" : "Created"} count={page.created.length}>
-          {page.created.slice(0, PERSON_TASKS_SHOWN).map((task) => (
-            <RecentRow
-              key={task.id}
-              task={task}
-              pictures={tasks.repositories.pictures}
-              now={now}
-              face={false}
-              onOpen={() => tasks.onSelect(task.id)}
-            />
-          ))}
-        </PersonSection>
-      )}
-      {page.created.length > PERSON_TASKS_SHOWN && shared ? (
-        <p className="person-section-foot">
-          <Button onClick={showTasks}>{`Show all ${page.created.length} in sidebar`}</Button>
-        </p>
-      ) : null}
+      <PersonTasks
+        title={you ? "Assigned to you" : "Assigned"}
+        listed={page.assigned}
+        tasks={tasks}
+        now={now}
+        onShowAll={shared ? showTasks : undefined}
+      />
+      <PersonTasks
+        title={you ? "Created by you" : "Created"}
+        listed={page.created}
+        tasks={tasks}
+        now={now}
+        onShowAll={shared ? showCreated : undefined}
+      />
       {page.agents.length === 0 ? null : (
         <PersonSection title="Agents" count={page.agents.length}>
           {page.agents.map((each) => (

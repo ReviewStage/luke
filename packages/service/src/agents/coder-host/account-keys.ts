@@ -19,36 +19,32 @@ import {
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
 import { DateTime, Effect, type Redacted, Result } from "effect";
-import { ModelCatalog } from "../../providers/model-catalog.js";
 import type { WebStoreRun } from "../../run.js";
-import type { MeterSeams } from "../agent-runtime/meter.js";
-import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
+import type { OwnKey, ProviderKey, ProviderKeys } from "./model.js";
 
 /**
- * account-keys.ts -- the keys one account's coding-agent step runs on: its own where it saved one, Luke's where it did not.
+ * account-keys.ts -- the keys one account's coding-agent step, and every call beside its agents, runs on: its own API keys, and never Luke's.
  *
  * Read afresh for every step, so a key saved, replaced, or removed in
  * Settings is the one the agent's next step runs on. A provider the account
- * holds a row for runs on that row's key and never on Luke's: where the
- * deployment's ring cannot open the row, or the deployment holds no ring at
- * all, the provider answers unreadable and its steps are refused, so a key
- * the account meant to pay for is never quietly replaced by Luke's. Only
+ * holds a row for runs on that row's key; one it holds none for is absent,
+ * so its steps are refused as having no key, and nothing falls back to
+ * Luke's own. Where the deployment's ring cannot open the row, or the
+ * deployment holds no ring at all, the provider answers unreadable and its
+ * steps are refused too. Only
  * API keys are read here; a subscription credential runs no eve step. Each
  * opened key carries where its status is reported, through the runner the
  * edge hands in, since the model's middleware that reports it is a promise
  * with no fiber to compose into.
  */
 
-/** What the read is handed: Luke's own keys, the deployment's ring as its environment holds it, and the edge's runner for a report. */
+/** What the read is handed: the deployment's ring as its environment holds it, and the edge's runner for a report. */
 export interface AccountKeysSeams {
-  readonly luke: LukeKeys;
-  /** The account's meter, which Luke's own keys carry (`../agent-runtime/meter.ts`). */
-  readonly meter: (userId: string) => MeterSeams;
   readonly ring: Redacted.Redacted | undefined;
   readonly run: WebStoreRun;
 }
 
-/** The provider's key: the account's own opened, unreadable, or Luke's where the account holds none. */
+/** The provider's key: the account's own opened, unreadable, or none where the account holds no row. */
 function keyOf(
   userId: string,
   provider: ProviderKeyProvider,
@@ -56,11 +52,7 @@ function keyOf(
   ring: KeyRing | undefined,
   seams: AccountKeysSeams,
 ): ProviderKey | typeof PROVIDER_KEY_UNREADABLE | undefined {
-  if (row === undefined) {
-    const luke =
-      provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? seams.luke.anthropic : seams.luke.openAi;
-    return luke === undefined ? undefined : { key: luke, meter: seams.meter(userId) };
-  }
+  if (row === undefined) return undefined;
   if (ring === undefined) return PROVIDER_KEY_UNREADABLE;
   const opened = openProviderKey(ring, { userId, provider, kind: PROVIDER_KEY_KIND.API_KEY }, row);
   if (Result.isFailure(opened)) return PROVIDER_KEY_UNREADABLE;
@@ -110,49 +102,54 @@ export function accountProviderKeys(
 }
 
 /**
- * Whether the Anthropic key the account's steps run on may run fast mode, as
- * a step would choose that key: its own key's answer where it holds a row,
- * readable or not, and the instance's answer for Luke's key where it holds
- * none; nothing where no fast request has answered.
+ * Whether the account's own Anthropic key may run fast mode, as its row
+ * says, readable or not; nothing where it holds no Anthropic key or no fast
+ * request has answered on it.
  */
 export function anthropicFastAccess(
   userId: string,
-): Effect.Effect<FastAccess | undefined, TaskStoreFailure, DatabaseServices | ModelCatalog> {
-  return Effect.gen(function* () {
-    const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
+): Effect.Effect<FastAccess | undefined, TaskStoreFailure, DatabaseServices> {
+  return Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) => {
     const own = rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-    if (own !== undefined) return own.fastAccess ?? undefined;
-    const catalog = yield* ModelCatalog;
-    return yield* catalog.lukeFastAccess;
+    return own?.fastAccess ?? undefined;
   });
 }
 
-/**
- * The key a call beside the account's steps spends on for one provider, as
- * a step would choose it: the account's own where it holds a row, and
- * Luke's where it holds none, with whether it is Luke's, which is counted on
- * the account's meter; nothing where neither stands or the account's row
- * cannot be opened, which leaves the call unmade rather than spend Luke's.
- */
-export function spendingKeyOf(
+/** The row's key opened under the ring, or nothing where the ring is missing or cannot open it. */
+function openedRow(
   userId: string,
-  provider: ProviderKeyProvider,
-  luke: LukeKeys,
+  row: ProviderKeyRow,
   ring: Redacted.Redacted | undefined,
-): TaskStoreEffect<{ readonly key: Redacted.Redacted; readonly lukes: boolean } | undefined> {
+): Redacted.Redacted | undefined {
+  const parsed = ring === undefined ? undefined : parseKeyRing(ring);
+  if (parsed === undefined || Result.isFailure(parsed)) return undefined;
+  const owner = { userId, provider: row.provider, kind: PROVIDER_KEY_KIND.API_KEY };
+  const opened = openProviderKey(parsed.success, owner, row);
+  return Result.isFailure(opened) ? undefined : opened.success;
+}
+
+/**
+ * The account's own API key a call beside its agents spends on, such as an
+ * agent's title, a pull request's chapters, or a replay's summary: the
+ * preferred provider's where the account saved one that opens, the other
+ * provider's otherwise, and nothing where it holds neither, which leaves
+ * the call unmade. Luke's own key is never one.
+ */
+export function ownKeyOf(
+  userId: string,
+  preferred: ProviderKeyProvider,
+  ring: Redacted.Redacted | undefined,
+): TaskStoreEffect<OwnKey | undefined> {
   return Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) => {
-    const row = rows.find((each) => each.provider === provider);
-    if (row === undefined) {
-      const lukes = provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? luke.anthropic : luke.openAi;
-      return lukes === undefined ? undefined : { key: lukes, lukes: true };
+    const order = [
+      preferred,
+      ...Object.values(PROVIDER_KEY_PROVIDER).filter((other) => other !== preferred),
+    ];
+    for (const provider of order) {
+      const row = rows.find((each) => each.provider === provider);
+      const key = row === undefined ? undefined : openedRow(userId, row, ring);
+      if (key !== undefined) return { provider, key };
     }
-    const parsed = ring === undefined ? undefined : parseKeyRing(ring);
-    if (parsed === undefined || Result.isFailure(parsed)) return undefined;
-    const opened = openProviderKey(
-      parsed.success,
-      { userId, provider, kind: PROVIDER_KEY_KIND.API_KEY },
-      row,
-    );
-    return Result.isFailure(opened) ? undefined : { key: opened.success, lukes: false };
+    return undefined;
   });
 }

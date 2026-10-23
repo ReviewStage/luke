@@ -1,0 +1,64 @@
+/* length-counter.css -- a field's count of its limit, in a caption's
+   tabular figures and the muted ink, the danger ink at the limit. It fades
+   in as the words near the limit and out over the exit as they draw back;
+   its count ticks in from the way it moved, opacity over the quick beat and
+   its travel on the fast spring. */
+
+@layer components {
+  .luke-length-counter {
+    display: inline-flex;
+    flex: none;
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-regular);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    animation: luke-length-counter-in var(--luke-duration-quick) ease-out backwards;
+  }
+
+  .luke-length-counter[data-full="true"] {
+    color: var(--luke-color-danger-text);
+  }
+
+  .luke-length-counter[data-leaving="true"] {
+    animation: luke-length-counter-out var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  }
+
+  .luke-length-counter-count {
+    display: inline-block;
+  }
+
+  .luke-length-counter-count[data-move="up"] {
+    --luke-length-counter-from: 40%;
+    animation:
+      luke-length-counter-in var(--luke-duration-quick) ease-out backwards,
+      luke-length-counter-tick var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  .luke-length-counter-count[data-move="down"] {
+    --luke-length-counter-from: -40%;
+    animation:
+      luke-length-counter-in var(--luke-duration-quick) ease-out backwards,
+      luke-length-counter-tick var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  @keyframes luke-length-counter-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-length-counter-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-length-counter-tick {
+    from {
+      transform: translateY(var(--luke-length-counter-from));
+    }
+  }
+}

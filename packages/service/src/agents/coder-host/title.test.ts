@@ -17,7 +17,9 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { Clock, Effect, Option } from "effect";
 import { BRAIN_TURN_TRIGGER, userMetadataOf } from "../../core.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
+import { titleNativeAgent } from "../native-events/native-title.js";
 import { titleCodingAgent } from "./title.js";
 
 /**
@@ -26,7 +28,8 @@ import { titleCodingAgent } from "./title.js";
  * GitHub event that fired it; an agent started from another is named from
  * its brief and note, never the replay between them; the model's answer is
  * the agent's title, and the name of its task where that still stands
- * untitled. The
+ * untitled; and an account with no API key is titled from its opening's
+ * first words, with no model. The
  * model is a script that keeps what it was asked; the store is PGlite.
  * Synthetic throughout.
  */
@@ -36,6 +39,19 @@ const PROMPT = `Find the flakiest test in CI this week and fix it. ${"Read every
 
 /** What the agent was handed: the prompt, then what Luke adds of the firing. */
 const HANDED = `${PROMPT}\n\n---\n\nLuke started this run for the automation "Flaky-test sweep" because commits were pushed on GitHub.`;
+
+/** The deployment's environment, which holds no model key of Luke's for a title to spend. */
+const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  eveDeploymentSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: undefined,
+};
 
 /** A model answering every call with `title`, keeping each prompt it was asked. */
 function scriptedTitleModel(title: string) {
@@ -163,6 +179,63 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
 });
 
 it.layer(getTestDB())("an agent's title", (it) => {
+  it.effect(
+    "an account that saved no API key is titled with no model, from the first words of its opening's first line, its Markdown marks and links' addresses left out, and its task named with it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const organizationId = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId, planning: false });
+        const prompted = yield* startOnTask(
+          owner,
+          task.id,
+          "Expire teammate invitations after one week, and email the inviter.",
+        );
+        const planned = yield* startOnTask(
+          owner,
+          task.id,
+          "\n# Teammate [invitations](https://example.test/plan) by **email**\n\n## Goal\n\nInvite a teammate.",
+        );
+
+        for (const agent of [prompted, planned]) {
+          yield* titleCodingAgent(
+            undefined,
+            { userId: owner, conversationId: agent.conversationId },
+            agent,
+          );
+        }
+
+        const titleOf = (agent: CodingAgent) =>
+          Effect.map(readCodingAgent(owner, agent.id), (read) => Option.getOrThrow(read).title);
+        assert.equal(yield* titleOf(prompted), "Expire teammate invitations after one week");
+        assert.equal(yield* titleOf(planned), "Teammate invitations by email");
+        assert.equal(yield* taskName(owner, task.id), "Expire teammate invitations after one week");
+      }),
+  );
+
+  it.effect(
+    "a native agent of an account that saved no API key is titled from its opening's first words, never on Luke's key",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const organizationId = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId, planning: false });
+        const agent = yield* startOnTask(
+          owner,
+          task.id,
+          "Retry [the invite email](https://example.test/mail_(draft)) when the provider times out.",
+        );
+
+        yield* titleNativeAgent(
+          { userId: owner, conversationId: agent.conversationId },
+          agent,
+        ).pipe(Effect.provideService(HostedEnvironment, DEPLOYMENT_ENVIRONMENT));
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        assert.equal(titled.title, "Retry the invite email when the");
+      }),
+  );
+
   it.effect(
     "an automation's run is named from the automation's prompt alone and the event's subject, never Luke's lines",
     () =>

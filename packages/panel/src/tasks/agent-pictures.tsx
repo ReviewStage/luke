@@ -1,13 +1,34 @@
 import {
   type CalledPicture,
   calledPicturesOf,
+  recordedVideosOf,
   type ShownPicture,
   shownPicturesOf,
 } from "@luke/features/agent-pictures-model";
 import type { FileChip } from "@luke/features/attachment-model";
-import type { KeptPicture } from "@luke/features/conversation-picture-wire";
+import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ATTACHMENT_CHIP_STATE, AttachmentChip, type AttachmentChipState } from "@luke/ui";
+import {
+  ALIGN,
+  ATTACHMENT_CHIP_STATE,
+  AttachmentChip,
+  type AttachmentChipState,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
+  GAP,
+  Inline,
+  LAYOUT_ELEMENT,
+  PictureTile,
+  SPINNER_SIZE,
+  Spinner,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Tooltip,
+} from "@luke/ui";
 import {
   PICTURE_STATE,
   type PictureAnswer,
@@ -28,13 +49,12 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import { PictureBlock } from "../picture-block.js";
-import { SPINNER_SIZE, Spinner } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import { useAddToPlan } from "./add-to-plan.js";
+import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 
 /**
- * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, and the pictures an integration's call answered, under the call's row.
+ * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, the pictures an integration's call answered, under the call's row, and an image a line handed it, over the line.
  *
  * Each picture is read once through the window's picture cache
  * (`@luke/ui/picture-cache`), under the agent, or under the worker whose
@@ -49,8 +69,14 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * its row, open or closed: a thumbnail, the spinner while read, or the
  * glyph where gone. A press on any opens the window's file viewer
  * walking the set, or the call's pictures, from it, with Add to plan
- * beside Download where the transcript is drawn on a plan's page. Everything here is
- * left out of the screen recording, as the tab around it is.
+ * beside Download where the transcript is drawn on a plan's page. A WebM
+ * the agent recorded and showed as a picture is played instead, its own
+ * block above the call's pictures, with the player's own controls, and
+ * walks no viewer. An image a line handed the agent, which its row names by
+ * the picture it was kept as rather than carrying its bytes, is read the
+ * same way and drawn among the line's files (`MessageFileChips`).
+ * Everything here is left out of the screen recording, as the tab around
+ * it is.
  */
 
 /** Where an agent's or a worker's pictures are read through: the scope the cache keeps them under, and the read. */
@@ -130,17 +156,17 @@ interface PictureViewer {
   readonly viewer: ReactNode;
 }
 
-/** One picture of an open viewer's set, watched so the viewer is drawn again as its read lands. */
+/** One picture read through the door, watched so what draws it is drawn again as its read lands. */
 function PictureWatch({
   door,
-  picture,
+  id,
   onSettled,
 }: {
   door: AgentPictureDoor;
-  picture: KeptPicture;
+  id: string;
   onSettled: () => void;
 }): null {
-  const state = usePicture(door.owner, picture.id, door.read);
+  const state = usePicture(door.owner, id, door.read);
   useEffect(() => onSettled(), [state.kind, onSettled]);
   return null;
 }
@@ -171,7 +197,7 @@ function OpenViewer({
   return (
     <>
       {items.map((each) => (
-        <PictureWatch key={each.picture.id} door={door} picture={each.picture} onSettled={redraw} />
+        <PictureWatch key={each.picture.id} door={door} id={each.picture.id} onSettled={redraw} />
       ))}
       {at < 0 ? null : (
         <AttachmentViewer
@@ -248,7 +274,7 @@ function TileFace({ state, words }: { state: PictureState | undefined; words: st
     );
   }
   if (state?.kind === PICTURE_STATE.MISSING) return <ImageOffIcon aria-hidden="true" />;
-  return <Spinner label="Reading the picture" size={SPINNER_SIZE.INLINE} />;
+  return <Spinner delay label="Reading the picture" size={SPINNER_SIZE.INLINE} />;
 }
 
 /** A tile's picture read through the cache; none for a picture the call has not answered yet. */
@@ -291,27 +317,42 @@ function SetTile({
     ? { flex: "0 0 auto", width: `${String(Math.round(ratio * SET_ROW_PX.MANY))}px` }
     : { flexGrow: ratio, flexBasis: `${String(Math.round(ratio * SET_ROW_PX.FEW))}px` };
   return (
-    <Tooltip label={many ? words : undefined}>
-      <button
-        type="button"
-        className="picture-set-tile"
-        style={shape}
-        aria-label={`Enlarge ${words}`}
-        onClick={onOpen}
-      >
-        <span className="picture-set-frame" data-focus-ring="" style={{ aspectRatio: aspect }}>
-          {shown.picture === undefined ? (
-            <TileFace state={undefined} words={words} />
-          ) : (
-            <TilePicture door={door} picture={shown.picture} words={words} />
-          )}
-          {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
-        </span>
-        {many || shown.caption === "" ? null : (
-          <span className="picture-set-caption">{shown.caption}</span>
-        )}
-      </button>
-    </Tooltip>
+    <span className="picture-set-tile" style={shape}>
+      <Tooltip label={many ? words : undefined}>
+        <PictureTile
+          name={words}
+          fill
+          onOpen={onOpen}
+          caption={
+            many || shown.caption === "" ? null : (
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="picture-set-caption"
+              >
+                {shown.caption}
+              </Text>
+            )
+          }
+        >
+          <Card
+            as={CARD_ELEMENT.SPAN}
+            corner={CARD_CORNER.CONTROL}
+            padding={CARD_PADDING.FLUSH}
+            className="picture-set-frame"
+            style={{ aspectRatio: aspect }}
+          >
+            {shown.picture === undefined ? (
+              <TileFace state={undefined} words={words} />
+            ) : (
+              <TilePicture door={door} picture={shown.picture} words={words} />
+            )}
+            {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
+          </Card>
+        </PictureTile>
+      </Tooltip>
+    </span>
   );
 }
 
@@ -326,9 +367,97 @@ function setCount(count: number): string {
   return `${String(count)} pictures`;
 }
 
+/** What the player is named for a reader, its caption after it. */
+const VIDEO_LABEL = "Video";
+
 /**
- * A `show_image` call drawn as what it showed: one picture as its own block,
- * several as one set, each in its place while the call reads it.
+ * The `blob:` address a video's `data:` URL plays from, made from its bytes
+ * here and let go of as the player goes: neither window's policy lets media
+ * load from a `data:` address, nor fetch one, where both allow `blob:`.
+ */
+function useBlobUrl(dataUrl: string): string | undefined {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    const comma = dataUrl.indexOf(",");
+    const type = dataUrl.slice(dataUrl.indexOf(":") + 1, dataUrl.indexOf(";"));
+    const binary = atob(dataUrl.slice(comma + 1));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const made = URL.createObjectURL(new Blob([bytes], { type }));
+    setUrl(made);
+    return () => URL.revokeObjectURL(made);
+  }, [dataUrl]);
+  return url;
+}
+
+/** A video's player once its bytes are in: at its own shape up to the column's, with the player's own controls. */
+function VideoPlayer({
+  dataUrl,
+  picture,
+  caption,
+}: {
+  dataUrl: string;
+  picture: KeptPicture;
+  caption: string;
+}): ReactNode {
+  const url = useBlobUrl(dataUrl);
+  return (
+    <Card
+      as={CARD_ELEMENT.SPAN}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
+      className="picture-frame"
+      style={{ aspectRatio: `${String(picture.width)} / ${String(picture.height)}` }}
+    >
+      {url === undefined ? null : (
+        // biome-ignore lint/a11y/useMediaCaption: an agent's recording of its screen has no sound to caption.
+        <video
+          className="picture-video"
+          src={url}
+          width={picture.width}
+          height={picture.height}
+          aria-label={caption === "" ? VIDEO_LABEL : `${VIDEO_LABEL}: ${caption}`}
+          controls
+          muted
+          playsInline
+          preload="metadata"
+        />
+      )}
+    </Card>
+  );
+}
+
+/** A video the agent showed: its own block, played where its bytes are in, the picture's quiet box while read, its words where gone. */
+function ShownVideo({
+  door,
+  shown,
+}: {
+  door: AgentPictureDoor;
+  shown: ShownPicture & { readonly picture: KeptPicture };
+}): ReactNode {
+  const state = usePicture(door.owner, shown.picture.id, door.read);
+  const caption = shown.caption === "" ? undefined : shown.caption;
+  if (state.kind !== PICTURE_STATE.READY) {
+    return <PictureBlock state={state} alt={shown.caption} caption={caption} />;
+  }
+  return (
+    <span className="picture-block ph-no-capture" data-state={state.kind} data-video="">
+      <VideoPlayer dataUrl={state.url} picture={shown.picture} caption={shown.caption} />
+      {caption === undefined ? null : <span className="picture-caption">{caption}</span>}
+    </span>
+  );
+}
+
+/** Whether a shown file was kept as a video, played rather than drawn. */
+function isShownVideo(
+  shown: ShownPicture,
+): shown is ShownPicture & { readonly picture: KeptPicture } {
+  return shown.picture !== undefined && isVideoType(shown.picture.mediaType);
+}
+
+/**
+ * A `show_image` call drawn as what it showed: each video it showed as its
+ * own player, then one picture as its own block, several as one set, each
+ * in its place while the call reads it.
  */
 export function ShownPictures({
   input,
@@ -338,9 +467,30 @@ export function ShownPictures({
   output: Parameters<typeof shownPicturesOf>[1];
 }): ReactNode {
   const door = useContext(AgentPicturesContext);
+  const all = shownPicturesOf(input, output);
+  if (door === undefined || all.length === 0) return null;
+  const videos = all.filter(isShownVideo);
+  const stills = all.filter((each) => !isShownVideo(each));
+  return (
+    <>
+      {videos.map((each, index) => (
+        // Note that a video's place among the call's is its identity: a call never reorders.
+        <ShownVideo key={index} door={door} shown={each} />
+      ))}
+      {stills.length === 0 ? null : <ShownStills door={door} shown={stills} />}
+    </>
+  );
+}
+
+/** The pictures of a `show_image` call that are no video: one as its own block, several as one set. */
+function ShownStills({
+  door,
+  shown,
+}: {
+  door: AgentPictureDoor;
+  shown: readonly ShownPicture[];
+}): ReactNode {
   const { open, viewer } = useViewer(door);
-  const shown = shownPicturesOf(input, output);
-  if (door === undefined || shown.length === 0) return null;
   const kept = shown.flatMap((each) =>
     each.picture === undefined
       ? []
@@ -452,12 +602,21 @@ export function CallPictures({
   const door = useContext(AgentPicturesContext);
   const { open, viewer } = useViewer(door);
   const called = calledPicturesOf(tool, input, output);
-  if (door === undefined || called.length === 0) return null;
+  const recorded = recordedVideosOf(tool, output);
+  if (door === undefined || (called.length === 0 && recorded.length === 0)) return null;
+  const videos = recorded.map((each, index) => (
+    // Note that a recording's place among its call's is its identity: an answer never reorders.
+    <ShownVideo key={index} door={door} shown={each} />
+  ));
+  if (called.length === 0) return <>{videos}</>;
   const kept = called.flatMap((each) =>
     each.kept ? [{ picture: each.picture, words: each.name }] : [],
   );
-  return (
-    <ul
+  const list = (
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
       className="attached-files call-pictures ph-no-capture"
       aria-label="Pictures the call answered"
     >
@@ -483,6 +642,50 @@ export function CallPictures({
         ),
       )}
       {viewer}
-    </ul>
+    </Inline>
+  );
+  return (
+    <>
+      {list}
+      {videos}
+    </>
+  );
+}
+
+/**
+ * The files on a line of the transcript, as chips: each from the bytes its
+ * row carries, and an image its row names by the picture it was kept as
+ * read through the agent's door, so it draws its thumbnail and opens once
+ * the read lands, and is its name alone while read or where it is gone.
+ * A line still on its way draws its files going up.
+ */
+export function MessageFileChips({
+  message,
+  sending = false,
+}: {
+  message: CodingAgentMessage;
+  /** Whether the line is still on its way, its row not yet read back. */
+  sending?: boolean;
+}): ReactNode {
+  const door = useContext(AgentPicturesContext);
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  const files = messageFileChips(message);
+  const chips = files.map(({ pictureId, ...chip }): FileChip => {
+    if (pictureId === undefined || door === undefined) return chip;
+    const state = pictureNow(door.owner, pictureId);
+    return state.kind === PICTURE_STATE.READY ? { ...chip, url: state.url } : chip;
+  });
+  return (
+    <>
+      {door === undefined
+        ? null
+        : files.map(({ pictureId }, index) =>
+            pictureId === undefined ? null : (
+              // Note that a file's place on its line is its identity: a line never reorders.
+              <PictureWatch key={index} door={door} id={pictureId} onSettled={redraw} />
+            ),
+          )}
+      <AttachedFileChips files={chips} uploading={sending} />
+    </>
   );
 }

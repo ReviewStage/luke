@@ -47,7 +47,10 @@ import {
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
-import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import {
+  keepConversationPicture,
+  readConversationPicture,
+} from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
@@ -60,6 +63,7 @@ import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentPin } from "@luke/database/schemas";
+import { attachment } from "@luke/database/schemas/attachment";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
@@ -121,6 +125,7 @@ import {
   chatAnswerSchema,
   chatNoticeAsksLine,
   chatNoticeReplyLine,
+  chatNoticeUnattachedLine,
   chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
@@ -151,6 +156,7 @@ import {
   PULL_REQUEST_STATE,
   TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
+import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   INBOX_ANSWER_LEAD,
@@ -220,6 +226,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import type { MessageReceivedPart } from "eve/client";
 import { afterEach, type TestContext, vi } from "vitest";
 import { requestUserId } from "../auth/bearer.js";
 import {
@@ -257,6 +264,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
 import { tasksProcedures } from "../tasks/tasks-procedures.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
@@ -280,6 +288,7 @@ import {
 } from "../testing/source-sandbox.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
+import { receivedMessage } from "./attached-files.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -553,8 +562,6 @@ function fakeEve(
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
 const NO_KEYS: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
@@ -615,7 +622,6 @@ const standing = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,
   eve: ReturnType<typeof fakeEve>,
-  titles: boolean,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
   sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
 ) =>
@@ -625,10 +631,7 @@ const standing = (
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      Layer.succeed(HostedEnvironment, {
-        ...NO_KEYS,
-        anthropicKey: titles ? Redacted.make("sk-ant-fixture") : undefined,
-      }),
+      Layer.succeed(HostedEnvironment, NO_KEYS),
       github.layer,
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
@@ -845,8 +848,6 @@ const openTask = (
     readonly eve?: ReturnType<typeof fakeEve>;
     /** What the repository answers on its own paths, for a test of what an agent published. */
     readonly github?: RepositoryScript;
-    /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
-    readonly titles?: boolean;
     /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
     readonly otherToken?: string | null;
     /** The model a replay's summary is written on; none unless a test names one. */
@@ -858,6 +859,9 @@ const openTask = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* otherAccount(options.otherToken);
+    // Luke's key pays for no coding agent, so both accounts start and message theirs on their own keys.
+    yield* connectAgentApiKeys(owner);
+    yield* connectAgentApiKeys(other);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
@@ -878,7 +882,6 @@ const openTask = (
       bearers,
       github,
       eve,
-      options.titles ?? false,
       options.summaryModel,
       options.sessionSandboxes,
     );
@@ -1164,11 +1167,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer, and answers the task in progress",
+    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer, reaching the repository on GitHub once for both, and answers the task in progress",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, ask } = yield* openTask();
+        const { owner, task, eve, installation, github, ask } = yield* openTask();
         const prompt = "Expire invitations after a week.";
+        const asked = github.sent.length;
 
         const started = yield* ask(
           request(TASKS, owner, {
@@ -1209,6 +1213,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           eve.opened.map((opened) => [opened.authorization, opened.message.message]),
           [[`Bearer ${owner}`, prompt]],
         );
+        assert.deepEqual(reachRequests(github.sent.slice(asked), installation.id), {
+          installationReads: 1,
+          listings: 1,
+          listingMints: 1,
+          repositoryMints: 0,
+        });
       }),
   );
 
@@ -1453,7 +1463,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           ]),
           githubReaching([installation]),
           eve,
-          false,
         );
 
         const byOwner = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -1504,7 +1513,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           new Map([[`Bearer ${owner}`, owner]]),
           githubReaching([installation]),
           fakeEve(),
-          false,
         );
 
         const started = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -1545,7 +1553,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           new Map([[`Bearer ${owner}`, owner]]),
           githubReaching([ledgerOnly]),
           eve,
-          false,
         );
 
         const started = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -4407,6 +4414,122 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "an image sent to an agent is kept once beside its conversation and handed to eve with a line naming its id, which reads back as the image and by which eve's receipt takes the line; a repeat under its key hands eve nothing, and the same image in a later message is named by the same row",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask, target, writer, turnId } = yield* startedAgent(eve, {
+          running: true,
+        });
+        const shot = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(SIZED_PNG).toString("base64"),
+        };
+        const body = { text: "Match this.", attachments: [shot], clientKey: randomUUID() };
+        const kept = Database.use((db) =>
+          db
+            .select({ id: attachment.id })
+            .from(attachment)
+            .where(eq(attachment.conversationId, target.conversationId)),
+        );
+
+        const sent = yield* ask(messageAs(owner, agent.id, body));
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
+        const [row, ...more] = yield* kept;
+        assert.ok(row !== undefined && more.length === 0, "one picture is kept");
+        const handed = receiptOf(eve.sent.at(-1)?.message.message);
+        assert.deepEqual(
+          handed.map((part) => (part.type === "text" ? part.text : part.filename)),
+          ["Match this.", "flow.png", `Image flow.png is attachment ${row.id}`],
+        );
+        const picture = Option.getOrThrow(
+          yield* readConversationPicture(target.conversationId, row.id),
+        );
+        assert.equal(picture.contentType, CODING_AGENT_ATTACHMENT_TYPE.PNG);
+        assert.deepEqual(new Uint8Array(picture.bytes), SIZED_PNG);
+        // eve's receipt of the message, its image staged by name with no bytes, takes the line it was sent as.
+        const taken = yield* writer.takeAwaitingLine(target, {
+          text: receivedMessage({ message: "", parts: handed }).text,
+          turnId,
+        });
+        assert.ok(Result.isSuccess(taken));
+        assert.equal(taken.success.length, 1, "the receipt takes the one line awaiting it");
+
+        const sends = eve.sent.length;
+        assert.equal(
+          (yield* ask(messageAs(owner, agent.id, body))).status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+        );
+        assert.equal(eve.sent.length, sends, "a repeat reaches eve no second time");
+        yield* ask(
+          messageAs(owner, agent.id, { ...body, text: "Again.", clientKey: randomUUID() }),
+        );
+        assert.deepEqual(receiptOf(eve.sent.at(-1)?.message.message).at(-1), {
+          type: "text",
+          text: `Image flow.png is attachment ${row.id}`,
+        });
+        assert.deepEqual(yield* kept, [row]);
+      }),
+  );
+
+  it.effect(
+    "an image sent to an agent is kept on its row by the picture's id with no bytes, which the transcript read answers and the agent's picture route serves, a PDF beside it keeps its bytes, and eve's receipt still takes the line",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask, fetch, target, writer, turnId } = yield* startedAgent(eve, {
+          running: true,
+        });
+        const data = Buffer.from(SIZED_PNG).toString("base64");
+        const pdf = Buffer.from("%PDF-1.4").toString("base64");
+        const sent = yield* ask(
+          messageAs(owner, agent.id, {
+            text: "Match this.",
+            attachments: [
+              { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
+              { name: "spec.pdf", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF, data: pdf },
+            ],
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
+
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        const files = page.messages.flatMap((message) =>
+          message.parts.filter((part) => isRecord(part) && part.type === "file"),
+        );
+        const [image, spec, ...more] = files;
+        assert.ok(isRecord(image) && isRecord(spec) && more.length === 0, JSON.stringify(files));
+        assert.equal(image.url, "", "the row carries no bytes of the image");
+        assert.doesNotMatch(JSON.stringify(page.messages), /data:image\//u);
+        assert.equal(spec.url, `data:${CODING_AGENT_ATTACHMENT_TYPE.PDF};base64,${pdf}`);
+        const pictureId = keptPictureIdOf(image.providerMetadata);
+        assert.ok(pictureId !== undefined, "the row names the kept picture");
+
+        const served = yield* fetch(
+          request(AGENT_PICTURE, owner, { id: agent.id, picture: pictureId }),
+        );
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
+          SIZED_PNG,
+        );
+        const taken = yield* writer.takeAwaitingLine(target, {
+          text: receivedMessage({ message: "", parts: receiptOf(eve.sent.at(-1)?.message.message) })
+            .text,
+          turnId,
+        });
+        assert.ok(Result.isSuccess(taken));
+        assert.equal(taken.success.length, 1, "the receipt takes the line its row names by id");
+      }),
+  );
+
+  it.effect(
     "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
     () =>
       Effect.gen(function* () {
@@ -5952,6 +6075,12 @@ const INBOX_READ = "/api/inbox/read";
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
+/** A PNG whose header states its size, 2 by 1, as a conversation keeps a picture. */
+const SIZED_PNG = Uint8Array.from([
+  ...PNG,
+  ...[0x49, 0x48, 0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0],
+]);
+
 it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
   const openInbox = (eve = fakeEve()) =>
@@ -6101,12 +6230,12 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             ["CSV or JSON?", second.id, secondAgent.id, secondAgent.model],
           ].sort(),
         );
-        // Each item names its agent as the agent goes by, the human name it was given.
+        // Each item names its agent as the agent goes by, its title.
         assert.deepEqual(
           all.items.map((item) => [item.title, item.agentTitle]).sort(),
           [
-            [QUESTION.title, agent.personaName ?? null],
-            ["CSV or JSON?", secondAgent.personaName ?? null],
+            [QUESTION.title, agent.title],
+            ["CSV or JSON?", secondAgent.title],
           ].sort(),
         );
 
@@ -7476,14 +7605,13 @@ const memberNaming = (member: ChatMemberRow) =>
     if (member.kind === MEMBER_KIND.AGENT) {
       const [agent] = yield* db
         .select({
-          personaName: codingAgent.personaName,
           title: codingAgent.title,
           model: codingAgent.model,
           taskId: codingAgent.taskId,
         })
         .from(codingAgent)
         .where(eq(codingAgent.id, member.agentId ?? ""));
-      const name = agent?.personaName ?? agent?.title ?? agent?.model ?? "";
+      const name = agent?.title ?? agent?.model ?? "";
       const task = agent?.taskId === null || agent === undefined ? {} : { taskId: agent.taskId };
       const mention = { kind: MENTION_KIND.AGENT, ...task, agentId: member.agentId ?? "" } as const;
       return { name, link: mentionMarkdown(mention, name, place) };
@@ -7724,6 +7852,103 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const second = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
         assert.deepEqual(second.receipt.told, [chat.links.second]);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  /** The files of the line eve was handed last, by name, and the words of the notice row an agent's conversation holds. */
+  const steeredFiles = (eve: ReturnType<typeof fakeEve>) => {
+    const content = eve.sent.at(-1)?.message.message;
+    assert.ok(Array.isArray(content), "the line was handed over as parts");
+    return content.flatMap((part) => (part.type === "file" ? [part.filename] : []));
+  };
+
+  it.effect(
+    "a DM's picture steers the agent it tells with the picture itself, a file named by its attachment id that the line keeps, and the words name it by that id",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.person.id, chat.second.member.id),
+        );
+        const attachmentId = randomUUID();
+        const sent = yield* postChat(
+          chat.telling,
+          {
+            authorMemberId: chat.person.id,
+            to: { channelId: dm.id },
+            blocks: [
+              { type: CHAT_BLOCK.MARKDOWN, text: "The new email." },
+              { type: CHAT_BLOCK.IMAGE, attachmentId, alt: "email.png" },
+            ],
+            clientKey: randomUUID(),
+          },
+          [{ id: attachmentId, contentType: CHAT_IMAGE_TYPE.PNG, bytes: PNG }],
+        ).pipe(Effect.provide(chat.github.layer));
+        assert.deepEqual(sent.receipt.told, [chat.links.second]);
+        assert.deepEqual(steeredFiles(eve), [`${attachmentId}.png`]);
+
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        assert.ok(notice !== undefined);
+        assert.deepEqual(
+          notice.message.parts.flatMap((part) =>
+            part.type === "file" ? [{ filename: part.filename, url: part.url }] : [],
+          ),
+          [
+            {
+              filename: `${attachmentId}.png`,
+              url: `data:${CHAT_IMAGE_TYPE.PNG};base64,${Buffer.from(PNG).toString("base64")}`,
+            },
+          ],
+        );
+        const [words] = notice.message.parts.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.equal(
+          chatNoticeWords(words ?? ""),
+          `The new email.\n\n[image: email.png (attachment ${attachmentId})]`,
+        );
+      }),
+  );
+
+  it.effect(
+    "a post whose pictures go past what one message carries steers the agent with the first that fit, each once however often it is shown, and names the rest as not attached where a person reading the notice never sees it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        // Three pictures each within a chat picture's bound, two of which fill one message's bytes.
+        const bytes = new Uint8Array(1_400_000);
+        bytes.set(PNG);
+        const ids = [randomUUID(), randomUUID(), randomUUID()];
+        const text = `${chat.links.second} the three screens.`;
+        yield* postChat(
+          chat.telling,
+          {
+            authorMemberId: chat.person.id,
+            to: { channelId: chat.channel.id },
+            blocks: [
+              { type: CHAT_BLOCK.MARKDOWN, text },
+              // The first picture shown twice, as two blocks of one sandbox path name one id, is still one file.
+              ...[ids[0] ?? "", ...ids].map((attachmentId, at) => ({
+                type: CHAT_BLOCK.IMAGE,
+                attachmentId,
+                alt: `screen ${at}`,
+              })),
+            ],
+            ...namedIn(text),
+            clientKey: randomUUID(),
+          },
+          ids.map((id) => ({ id, contentType: CHAT_IMAGE_TYPE.PNG, bytes })),
+        ).pipe(Effect.provide(chat.github.layer));
+        assert.deepEqual(steeredFiles(eve), [`${ids[0]}.png`, `${ids[1]}.png`]);
+
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        const [words = ""] = (notice?.message.parts ?? []).flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.ok(words.includes(chatNoticeUnattachedLine([ids[2] ?? ""])));
+        assert.ok(!chatNoticeWords(words).includes("Not attached"));
       }),
   );
 
@@ -8136,13 +8361,10 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
             chat.second.member.id,
           ),
         );
-        // The sender goes by the name it is shown by, its human name, which a title stands in for where it has none.
+        // The sender goes by the name it is shown by, its title.
         const titled = (title: string) =>
           Database.use((db) =>
-            db
-              .update(codingAgent)
-              .set({ title, personaName: null })
-              .where(eq(codingAgent.id, chat.first.agent.id)),
+            db.update(codingAgent).set({ title }).where(eq(codingAgent.id, chat.first.agent.id)),
           );
         const fromOf = Effect.gen(function* () {
           const rows = yield* chat.rowsOf(chat.second.target);
@@ -8320,6 +8542,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           userId: opened.owner,
           taskId: opened.task.id,
           self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
+          conversationId: started.target.conversationId,
           repository: RELAY_FULL_NAME,
           telling,
         });
@@ -9190,6 +9413,80 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
+    "an image block naming an attachment hands on a picture kept beside the poster's own conversation in a DM, copied into a picture of the new message, and the sandbox is never opened",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const target = { userId: chat.owner, conversationId: chat.conversations[0] ?? "" };
+        const shown = Option.getOrThrow(
+          yield* keepConversationPicture(target, {
+            bytes: PNG,
+            contentType: CHAT_IMAGE_TYPE.PNG,
+            width: 1,
+            height: 1,
+          }),
+        );
+        const posted = yield* chat.post(chat.first, {
+          text: "The developer's screenshot of the invite form.",
+          to: chat.links.second,
+          blocks: [{ type: CHAT_BLOCK.IMAGE, attachmentId: shown.id, alt: "The invite form." }],
+        });
+        assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+        const poster = yield* chat.memberOf(chat.first);
+        const [message] = Option.getOrThrow(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+        );
+        const image = message?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
+        assert.ok(message !== undefined && image !== undefined && "attachmentId" in image);
+        assert.equal(image.alt, "The invite form.");
+        assert.notEqual(image.attachmentId, shown.id, "the message keeps a picture of its own");
+        const kept = Option.getOrThrow(
+          yield* readAttachment(chat.owner, chat.task.workspaceId, message.id, image.attachmentId),
+        );
+        assert.deepEqual([kept.contentType, kept.bytes], [CHAT_IMAGE_TYPE.PNG, PNG]);
+      }),
+  );
+
+  it.effect(
+    "an image block naming another agent's picture is refused in words that say so, and one naming both a path and an attachment, or neither, is refused, posting nothing",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const theirs = Option.getOrThrow(
+          yield* keepConversationPicture(
+            { userId: chat.owner, conversationId: chat.conversations[1] ?? "" },
+            { bytes: PNG, contentType: CHAT_IMAGE_TYPE.PNG, width: 1, height: 1 },
+          ),
+        );
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        const post = (block: Record<string, string>) =>
+          chat.post(chat.first, {
+            text: "See.",
+            to: chat.links.second,
+            blocks: [{ type: CHAT_BLOCK.IMAGE, alt: "The form.", ...block }],
+          });
+        assert.deepEqual(
+          yield* post({ attachmentId: theirs.id }),
+          refused(
+            `Not posted: attachment ${theirs.id} is no picture you can hand on. Name a picture of your own ` +
+              "conversation, such as one show_image kept, or one of a chat message you can read.",
+          ),
+        );
+        assert.deepEqual(
+          yield* post({ path: "shot.png", attachmentId: theirs.id }),
+          refused(CHAT_TOOL_REFUSAL.IMAGE_SOURCE),
+        );
+        assert.deepEqual(yield* post({}), refused(CHAT_TOOL_REFUSAL.IMAGE_SOURCE));
+        const poster = yield* chat.memberOf(chat.first);
+        assert.deepEqual(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+          Option.some([]),
+          "nothing was posted",
+        );
+      }),
+  );
+
+  it.effect(
     "a turn opens with the chat the agent has not read, once, leaving out every message a notice already told it, and with nothing once it has read",
     () =>
       Effect.gen(function* () {
@@ -9293,6 +9590,17 @@ const transcriptRow = (
   );
 
 const text = (words: string) => ({ type: "text", text: words });
+
+/** A message as eve's receipt lists it: each text part as it was handed, and each file staged, by its name and type with no bytes. */
+function receiptOf(handed: EveMessage["message"] | undefined): MessageReceivedPart[] {
+  assert.ok(Array.isArray(handed), "the message carried parts");
+  return handed.flatMap((part): MessageReceivedPart[] => {
+    if (part.type === "text") return [{ type: "text", text: part.text }];
+    if (part.type !== "file") return [];
+    const name = part.filename === undefined ? undefined : { filename: part.filename };
+    return [{ type: "file", mediaType: part.mediaType, ...name }];
+  });
+}
 
 /** The first message the newest session opened on, read back into its brief, its replay, and its note. */
 function openedParts(eve: ReturnType<typeof fakeEve>) {
@@ -9864,6 +10172,21 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             },
             output: "ok",
           },
+          // A native harness's edits count as the agent's own file tools' do.
+          {
+            type: "tool-Edit",
+            toolCallId: "call-7",
+            state: "output-available",
+            input: { file_path: "src/claude.ts", old_string: "a", new_string: "b" },
+            output: "The file has been updated successfully.",
+          },
+          {
+            type: "tool-fileChange",
+            toolCallId: "call-8",
+            state: "output-available",
+            input: { changes: [{ path: "src/codex.ts", kind: { type: "update" }, diff: "" }] },
+            output: { status: "completed" },
+          },
         ]);
         const fork = (messageId: string) =>
           ask(
@@ -9893,7 +10216,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.match(parts.replay?.preamble ?? "", /You are a fork/u);
         assert.match(
           parts.replay?.preamble ?? "",
-          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`; undo/u,
+          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`, `src\/claude\.ts`, `src\/codex\.ts`; undo/u,
         );
         for (const named of [laterLine, randomUUID()]) {
           assert.deepEqual(
@@ -10347,6 +10670,111 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         assert.deepEqual(files, [...shots.slice(0, -1), "new.png"]);
         assert.match(parts.replay?.preamble ?? "", /could not be passed on: screen-9\.png\./u);
+      }),
+  );
+
+  it.effect(
+    "a continue attaches again the image its source's prompt carried, read from the picture kept beside the source's conversation, since the first message eve's receipt wrote names it by id with no bytes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const data = Buffer.from(SIZED_PNG).toString("base64");
+        const source = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              task: "Match this screen.",
+              attachments: [
+                { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
+              ],
+            }),
+          ),
+        ).agent;
+        // The source's first message as the relay writes it from eve's receipt: its words, then its files by name.
+        const received = receivedMessage({
+          message: "",
+          parts: receiptOf(eve.opened.at(-1)?.message.message),
+        });
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [
+          text(received.words),
+          ...received.files,
+        ]);
+        assert.deepEqual(
+          received.files.map((file) => file.url),
+          [""],
+          "eve's receipt carries no bytes of the image",
+        );
+
+        yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+        );
+        const opened = eve.opened.at(-1)?.message.message;
+        assert.ok(Array.isArray(opened));
+
+        assert.deepEqual(
+          opened.flatMap((part) => (part.type === "file" ? [[part.filename, part.data]] : [])),
+          [["flow.png", `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`]],
+        );
+        assert.doesNotMatch(
+          openedWithFiles(eve).parts.replay?.preamble ?? "",
+          /could not be passed on/u,
+        );
+      }),
+  );
+
+  it.effect(
+    "a source's first row keeps no bytes of a kept image where eve's receipt handed them back, naming the picture by id, and a continue attaches the image again from it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const data = Buffer.from(SIZED_PNG).toString("base64");
+        const url = `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`;
+        const source = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              task: "Match this screen.",
+              attachments: [
+                { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
+              ],
+            }),
+          ),
+        ).agent;
+        // eve's receipt of a file it did not stage carries its bytes back as a `data:` URL.
+        const received = receivedMessage({
+          message: "",
+          parts: receiptOf(eve.opened.at(-1)?.message.message).map((part) =>
+            part.type === "file" ? { ...part, url } : part,
+          ),
+        });
+        assert.deepEqual(
+          received.files.map((file) => [
+            file.url,
+            keptPictureIdOf(file.providerMetadata) !== undefined,
+          ]),
+          [["", true]],
+        );
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [
+          text(received.words),
+          ...received.files,
+        ]);
+
+        yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+        );
+        const opened = eve.opened.at(-1)?.message.message;
+        assert.ok(Array.isArray(opened));
+
+        assert.deepEqual(
+          opened.flatMap((part) => (part.type === "file" ? [[part.filename, part.data]] : [])),
+          [["flow.png", url]],
+        );
       }),
   );
 
@@ -10881,6 +11309,31 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a native source, whose steps estimate no instructions of their own, is fitted with the fallback's room for them, as a source that measured nothing is",
+    () =>
+      Effect.gen(function* () {
+        const { owner, first, continueFrom } = yield* longSource();
+        const unmeasured = yield* continueFrom(first.id, {
+          model: SMALL_WINDOW.model,
+          effort: "low",
+        });
+        // The runner's events record what Claude Code read, and nothing of instructions the CLI composed.
+        yield* recordCodingAgentStep(owner, first.id, {
+          inputTokens: LONG_TURNS * 2_600,
+          outputTokens: 500,
+          systemPromptTokens: 0,
+          toolDefinitionTokens: 0,
+          briefTokens: 100,
+          at: 1_000,
+        });
+        const native = yield* continueFrom(first.id, { model: SMALL_WINDOW.model, effort: "low" });
+
+        assert.ok((unmeasured.from?.steps ?? LONG_TURNS) < LONG_TURNS);
+        assert.equal(native.from?.steps, unmeasured.from?.steps);
+      }),
+  );
+
+  it.effect(
     "a continue of a continue carries the first source's kept steps ahead of its own within the new agent's window",
     () =>
       Effect.gen(function* () {
@@ -11002,10 +11455,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const answer = yield* chat.read;
         const named = (id: string) => answer.members.find((member) => member.id === id)?.name;
         assert.equal(named(answer.self), "Test User");
-        assert.equal(
-          named(chat.agent.id),
-          chat.codingAgent.personaName ?? chat.codingAgent.title ?? chat.codingAgent.model,
-        );
+        assert.equal(named(chat.agent.id), chat.codingAgent.title ?? chat.codingAgent.model);
 
         const sent = yield* chat.wrote({
           text: "Ship it once the migration lands.",

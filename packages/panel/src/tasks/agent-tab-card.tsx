@@ -5,7 +5,15 @@ import type {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRule,
+  Time,
+  useMinute,
+  VisuallyHidden,
+} from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import {
   ACTOR_SIZE,
@@ -27,8 +35,6 @@ import {
 } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { PullRequestMark } from "./pull-request-mark.js";
-import { RelativeTime } from "./relative-time.js";
-import { useMinute } from "./task-time.js";
 import { delegationView } from "./tool-call-model.js";
 import { type CopiedTranscript, LATEST_ACTIVITY, latestActivity } from "./transcript-copy.js";
 import { WorkingTime } from "./working-time.js";
@@ -36,7 +42,7 @@ import { WorkingTime } from "./working-time.js";
 /**
  * agent-tab-card.tsx -- the card an agent's or a subagent's tab hangs while the pointer rests on it: its whole name, when it last moved, and one line of what it last did.
  *
- * The card stands in the tab's hint's place (`tooltip.tsx`), so it waits,
+ * The card stands in the tab's hint's place (`@luke/ui`'s `Tooltip`), so it waits,
  * warms, and goes as a hint does, and an agent's and a subagent's are laid
  * out alike. Its head is the name, wrapped to two lines, or, for a subagent
  * not yet titled, its task on one line faded where it is cut short, as a
@@ -133,7 +139,7 @@ function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
         <>
           {corner.state}
           {corner.state === undefined || corner.at === undefined ? null : ENDED_SEPARATOR}
-          {corner.at === undefined ? null : <RelativeTime at={corner.at} now={now} hint={false} />}
+          {corner.at === undefined ? null : <Time at={corner.at} now={now} hint={false} />}
         </>
       );
     case CARD_CORNER.NONE:
@@ -335,7 +341,7 @@ export function AgentTabCard({
       )}
       {corner.kind === CARD_CORNER.WORKING ? (
         // Note that the word is a reader's alone, because the tile that shows the work hides its mark from a reader and nothing drawn says it.
-        <span className="visually-hidden">{glyphStateWords(GLYPH_STATE.WORKING, false)}</span>
+        <VisuallyHidden>{glyphStateWords(GLYPH_STATE.WORKING, false)}</VisuallyHidden>
       ) : null}
       <StartedBy by={startedBy} automationId={automationId} />
       {archivedBy === undefined ? null : <ArchivedByNote archivedBy={archivedBy} />}
