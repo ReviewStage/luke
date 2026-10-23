@@ -1139,8 +1139,19 @@ export const runnerSessions = <
         }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
       });
 
-    /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
-    const sendHolding = (sessionId: string, message: EveMessage<Turn>) =>
+    /**
+     * A message to the session, under the agent's runner lease: the sandbox
+     * and the agent read afresh, since a call the lease waited behind may
+     * have relaunched. `waitOnImage` is whether a relaunch on a fresh sandbox
+     * waits on an image still being prepared (`IMAGE_READY`), as it does
+     * once the message's answer has left (`send`).
+     */
+    const sendHolding = (
+      sessionId: string,
+      message: EveMessage<Turn>,
+      sent: RunnerMessage,
+      waitOnImage: boolean,
+    ) =>
       Effect.gen(function* () {
         // The agent is read beside the sandbox, and its read answers only for a sandbox found.
         const [found, agentRead] = yield* Effect.all(
@@ -1154,7 +1165,6 @@ export const runnerSessions = <
           return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
         }
         const target = { userId, conversationId: agent.conversationId };
-        const sent = messageLine(message);
         const accepted = {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
           sessionId,
@@ -1196,7 +1206,7 @@ export const runnerSessions = <
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent), false);
+          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent), waitOnImage);
           yield* api
             .deleteSandbox(found.value.name)
             .pipe(
@@ -1378,11 +1388,46 @@ export const runnerSessions = <
           );
         }),
 
+      // A relaunch on a fresh sandbox that finds the image still being prepared takes the message
+      // all the same, and waits on the image's build once the answer has left, under the lease
+      // again, as an open's launch does; the message is sent afresh then, so a sandbox a message
+      // sent meanwhile relaunched is written to rather than opened twice. A caller with no
+      // after-response door is answered that the image is being prepared, as before.
       send: (sessionId, message) =>
         Effect.gen(function* () {
-          const { id } = yield* agentOf(message.conversationId);
-          return yield* holdingRunner(id, sendHolding(sessionId, message));
-        }).pipe(Effect.catch(failed("send")), Effect.provideContext(context)),
+          const after = yield* Effect.serviceOption(AfterResponse);
+          return yield* Effect.gen(function* () {
+            const agent = yield* agentOf(message.conversationId);
+            const sent = messageLine(message);
+            return yield* holdingRunner(
+              agent.id,
+              sendHolding(sessionId, message, sent, false),
+            ).pipe(
+              Effect.catchIf(
+                (failure) => failure instanceof ImagePreparing && Option.isSome(after),
+                () =>
+                  Effect.as(
+                    afterResponse(
+                      `A ${harness.name} relaunch`,
+                      holdingRunner(agent.id, sendHolding(sessionId, message, sent, true)).pipe(
+                        Effect.catch(launchFailed(agent)),
+                      ),
+                    ),
+                    {
+                      outcome: EVE_SEND_OUTCOME.ACCEPTED,
+                      sessionId,
+                      deliveryId: sent.line.uuid,
+                    } as const,
+                  ),
+              ),
+            );
+          }).pipe(
+            Effect.catch(failed("send")),
+            Effect.provideContext(
+              Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
+            ),
+          );
+        }),
 
       // The Stop is scoped to the turn it names: written only while that turn is the
       // conversation's turn under way, to the command of the launch running it, and naming that

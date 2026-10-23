@@ -1186,6 +1186,61 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "a message to an expired sandbox whose image is still being prepared is taken at once, and its relaunch waits on the image's build past the answer, then runs on it",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        sequence.next = 42;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 41,
+        }).pipe(Effect.provide(api.layer));
+        const [expired] = api.sandboxes;
+        assert.ok(expired !== undefined);
+        expired.snapshotExpired = true;
+        const built = yield* Deferred.make<void>();
+        const kept = keptAfterResponse();
+        const preparing = yield* sessionsFor(userId, sequence).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(api),
+              Layer.succeed(AgentSandboxImage, {
+                snapshotId: Effect.flatMap(Deferred.isDone(built), (done) =>
+                  done ? Effect.succeed(Option.some(SNAPSHOT)) : Effect.fail(new ImagePreparing()),
+                ),
+                snapshotGone: () => Effect.void,
+                prepared: Effect.as(Deferred.await(built), true),
+              }),
+            ),
+          ),
+        );
+
+        const taken = yield* preparing
+          .send(opened.sessionId, message(agent, "Now the emails."))
+          .pipe(Effect.provide(kept.layer));
+        const relaunching = yield* Effect.forkChild(kept.run);
+        yield* turnsPass;
+
+        assert.equal(taken.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 1);
+        assert.equal(expired.deleted, false);
+        // Note that the clock never moves: the relaunch runs on the build's end, not on a tick.
+        yield* Deferred.succeed(built, undefined);
+        yield* Fiber.join(relaunching);
+        assert.equal(expired.deleted, true);
+        assert.equal(api.sandboxes.at(-1)?.status, "running");
+        assert.ok(JSON.stringify(linesOf(api.commands.at(-1))).includes("Now the emails."));
+      }),
+  );
+
+  it.effect(
     "a template snapshot Vercel answers gone (410 snapshot_not_found) is handed back to the image, and the open waits for the image made again and launches on its new snapshot",
     () =>
       Effect.gen(function* () {
