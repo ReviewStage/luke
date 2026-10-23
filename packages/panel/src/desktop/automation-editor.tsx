@@ -126,11 +126,10 @@ import {
   Tooltip,
   useConfirmDialog,
   useMenu,
-  useMinute,
   wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
-import { dayAndTimeText, localTimeZone, sinceText, timeZoneNames } from "@luke/ui/time-format";
+import { dayAndTimeText, localTimeZone, timeZoneNames } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
@@ -143,14 +142,19 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
+import { matchingRows } from "../searchable-menu.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { agentMenuRow, useAgentRowPlace } from "../tasks/agent-menu-row.js";
 import { AgentModelChip } from "../tasks/agent-model-chip.js";
 import { AgentServersButton } from "../tasks/agent-servers.js";
+import type { MentionableAgent } from "../tasks/mention-picker.js";
 import { ModelMenu } from "../tasks/model-menu.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip.js";
+import { mentionableAgent } from "../tasks/task-mentions.js";
+import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -160,7 +164,7 @@ import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
-import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices.js";
+import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
@@ -1528,11 +1532,6 @@ function ModelRow({
   );
 }
 
-/** An agent as the agent picker names it. */
-function agentLabel(agent: { title: string | null }): string {
-  return agent.title ?? "Untitled agent";
-}
-
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
@@ -1545,25 +1544,34 @@ const AGENT_DETAIL =
 
 /**
  * The agent each run goes to, chosen from the workspace's agents on the
- * repository. The agent it goes to as saved is kept first in the menu where
- * the list no longer holds it, so another pick can still be taken back.
+ * repository, each drawn as every agent menu draws it (`agentMenuRow`). The
+ * menu lists the newest while nothing is typed and, once a word is, those
+ * the service finds on the repository, so an agent past the newest is
+ * found; the agent chosen from a search stays named after the list moves
+ * on. The agent it goes to as saved is kept first in the menu where the
+ * list no longer holds it, so another pick can still be taken back.
  */
 function AgentRow({
   draft,
   savedAgentId,
-  agents,
+  choices,
   problem,
   onDraft,
 }: {
   draft: AutomationDraft;
   /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
-  agents: AgentsRead;
+  choices: RunChoices;
   /** What stops a save here, or nothing. */
   problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const now = useMinute();
+  const { agents, found, models, searched: words, searchAgents } = choices;
+  const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
+  const known = useKnownNames();
+  const place = useAgentRowPlace();
+  // Note that the catalog this row read names the models, since the window's own may not hold it yet.
+  const drawn = { ...place, models: models ?? place.models };
   if (agents !== undefined && "failed" in agents) {
     return (
       <SettingsRow
@@ -1575,19 +1583,38 @@ function AgentRow({
       </SettingsRow>
     );
   }
-  const listed = agents?.agents ?? [];
-  const chosen = listed.find((agent) => agent.id === draft.agentId);
+  const offered = (agents?.agents ?? []).map((agent) =>
+    mentionableAgent(agent, known.tasks, drawn.models),
+  );
+  const searched = found?.map((agent) => mentionableAgent(agent, known.tasks, drawn.models));
+  // Note that the newest are matched here too, because the service matches an agent by its
+  // title and its task, not by a name its row takes from its model.
+  const matched = new Set(
+    matchingRows(
+      offered.map((agent) => agentMenuRow(agent, drawn)),
+      words,
+    ).map((row) => row.id),
+  );
+  const listed =
+    words === ""
+      ? offered
+      : [
+          ...offered.filter((agent) => matched.has(agent.id)),
+          ...(searched ?? []).filter((agent) => !matched.has(agent.id)),
+        ];
+  const chosen =
+    offered.find((agent) => agent.id === draft.agentId) ??
+    searched?.find((agent) => agent.id === draft.agentId) ??
+    (picked?.id === draft.agentId ? picked : undefined);
+  const chosenRow = chosen === undefined ? undefined : agentMenuRow(chosen, drawn);
   const kept =
-    savedAgentId !== null && !listed.some((agent) => agent.id === savedAgentId)
+    savedAgentId !== null && !offered.some((agent) => agent.id === savedAgentId)
       ? savedAgentId
       : undefined;
+  // Note that a search lists only what it found, so the kept agent stands in the menu while none is typed.
   const rows = [
-    ...(kept === undefined ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
-    ...listed.map((agent) => ({
-      id: agent.id,
-      label: agentLabel(agent),
-      detail: sinceText(agent.createdAt, now),
-    })),
+    ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
+    ...listed.map((agent) => agentMenuRow(agent, drawn)),
   ];
   return (
     <PickerRow
@@ -1596,15 +1623,17 @@ function AgentRow({
       detail={AGENT_DETAIL}
       value={draft.agentId ?? ""}
       valueLabel={
-        chosen !== undefined
-          ? agentLabel(chosen)
+        chosenRow !== undefined
+          ? chosenRow.label
           : draft.agentId !== null && draft.agentId === kept
             ? KEPT_AGENT_LABEL
             : "Choose an agent"
       }
+      valueIcon={chosenRow?.icon}
       rows={rows}
+      placeholder="Search agents"
       note={
-        agents === undefined ? (
+        words !== "" ? undefined : agents === undefined ? (
           <Spinner delay label="Loading agents" />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."
@@ -1612,7 +1641,12 @@ function AgentRow({
       }
       noMatch={NO_MATCH.AGENTS}
       error={problem}
-      onPick={(agentId) => onDraft({ agentId })}
+      onOpen={() => searchAgents("")}
+      onSearch={searchAgents}
+      onPick={(agentId) => {
+        setPicked(listed.find((agent) => agent.id === agentId));
+        onDraft({ agentId });
+      }}
     />
   );
 }
@@ -1692,7 +1726,7 @@ function RunsGroup({
             <AgentRow
               draft={draft}
               savedAgentId={savedAgentId}
-              agents={choices.agents}
+              choices={choices}
               problem={problems[DRAFT_FIELD.AGENT]}
               onDraft={onDraft}
             />

@@ -292,7 +292,7 @@ function mentionFoot(): HTMLElement {
   const menu = document.body.appendChild(document.createElement("div"));
   menu.className = "luke-menu-surface searchable-menu mention-menu";
   const foot = menu.appendChild(document.createElement("div"));
-  foot.className = "task-compose-menu-foot mention-menu-foot";
+  foot.className = "luke-menu-keys";
   return foot;
 }
 

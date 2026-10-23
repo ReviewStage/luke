@@ -20,6 +20,7 @@ import {
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -237,6 +238,10 @@ let creates: AutomationCreateParams[] = [];
 let deletes: string[] = [];
 /** Every ask for a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
+/** The workspace's newest agents on the repository, as a read with no words answers them. */
+let workspaceAgents: readonly CodingAgentSummary[] = [];
+/** The agents a search for `words` finds, as the service answers it. */
+let agentsFound: (words: string) => readonly CodingAgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
@@ -299,6 +304,8 @@ beforeEach(() => {
   creates = [];
   deletes = [];
   agentsAsked = [];
+  workspaceAgents = [CI_DIGEST];
+  agentsFound = () => [];
   runs = [];
   runsAsked = [];
   runsHeld = false;
@@ -459,9 +466,10 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
+        const { words } = request.payload;
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { agents: [CI_DIGEST] },
+          value: { agents: words === undefined ? workspaceAgents : agentsFound(words) },
         });
       }
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
@@ -2033,6 +2041,162 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
       change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
     },
   ]);
+});
+
+/** Whether the picker named wears a glyph before its name, a chip's chevron not being one. */
+function chipWearsGlyph(page: HTMLElement, label: string): boolean {
+  return picker(page, label).querySelector(".luke-chip-name")?.previousElementSibling != null;
+}
+
+/** The Agent picker's rows, each as its glyph, its name, and its detail beside it, and the marks at its end. */
+function agentRows(): {
+  glyph: boolean;
+  name: string | null;
+  detail: string | null;
+  ends: string[];
+}[] {
+  return [...document.querySelectorAll("[role=option]")].map((option) => ({
+    glyph:
+      option.querySelector(".luke-combobox-option-glyph svg, .luke-combobox-option-glyph img") !==
+      null,
+    name: option.querySelector(".luke-combobox-option-label")?.textContent ?? null,
+    detail: option.querySelector(".luke-combobox-option-detail")?.textContent ?? null,
+    ends: [...(option.querySelector(".luke-combobox-option-hint")?.children ?? [])].map(
+      (mark) => mark.className,
+    ),
+  }));
+}
+
+test("the Agent picker draws each agent as every agent menu does: its glyph, its name, its task, and the failed mark where its turn failed, the chip wearing the chosen agent's glyph and name", async () => {
+  const BROKEN = {
+    ...CI_DIGEST,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
+    title: "Nightly sweep",
+    status: "failed",
+  } as const;
+  workspaceAgents = [BROKEN, CI_DIGEST];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  assert.equal(picked(page, "Agent"), "Choose an agent");
+  assert.equal(
+    chipWearsGlyph(page, "Agent"),
+    false,
+    "no agent is chosen, so the chip wears no glyph",
+  );
+
+  act(() => picker(page, "Agent").click());
+  assert.deepEqual(agentRows(), [
+    { glyph: true, name: "Nightly sweep", detail: "No task", ends: ["failed-mark"] },
+    { glyph: true, name: "CI digest", detail: "No task", ends: [] },
+  ]);
+
+  const row = [...document.querySelectorAll<HTMLElement>("[role=option]")][1];
+  assert.ok(row, "the menu lists the second agent");
+  act(() => row.click());
+  assert.equal(picked(page, "Agent"), "CI digest");
+  assert.equal(chipWearsGlyph(page, "Agent"), true, "the chip wears the chosen agent's glyph");
+});
+
+test("the Agent picker's rows each hang their agent's card while the pointer rests on them", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+
+  restOn(document.querySelector("[role=option]") ?? assert.fail("the menu lists the agent"));
+  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "CI digest");
+});
+
+test("a word typed in the Agent picker asks the service for the repository's agents it names, so one past the newest is found, chosen, kept named, and saved", async () => {
+  const OLDER = {
+    ...CI_DIGEST,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b23",
+    title: "Seat limits",
+  } as const;
+  agentsFound = (words) => (words === "seat" ? [OLDER] : []);
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+
+  type(
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
+    "seat",
+  );
+  await settle();
+  assert.deepEqual(agentsAsked.at(-1), {
+    workspaceId: WORKSPACE.id,
+    repository: "acme/ledger",
+    words: "seat",
+  });
+  assert.deepEqual(
+    agentRows().map((row) => row.name),
+    ["Seat limits"],
+  );
+
+  act(() => (document.querySelector<HTMLElement>("[role=option]") ?? assert.fail("found")).click());
+  await settle();
+  assert.equal(picked(page, "Agent"), "Seat limits");
+  act(() => button("Save").click());
+  await settle();
+  assert.deepEqual(changes, [
+    {
+      automationId: SWEEP.id,
+      change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: OLDER.id } },
+    },
+  ]);
+});
+
+test("a word typed in the Agent picker keeps the newest agents whose rows hold it, so one named by its model stays where the service matches no model", async () => {
+  const UNTITLED = { ...CI_DIGEST, title: null } as const;
+  workspaceAgents = [UNTITLED, { ...CI_DIGEST, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27" }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+  const [named] = agentRows();
+  assert.ok(named?.name, "the untitled agent is drawn under a name of its own");
+
+  type(
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
+    named.name.toLowerCase(),
+  );
+  await settle();
+
+  assert.deepEqual(
+    agentRows().map((row) => row.name),
+    [named.name],
+  );
+});
+
+test("the agent a same-agent automation was saved with, once the list no longer holds it, is left out of a search's results and offered again once the search is cleared", async () => {
+  const gone = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8f";
+  const following = automation(11, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: gone },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+  act(() => picker(page, "Agent").click());
+  const names = () => agentRows().map((row) => row.name);
+  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
+
+  const search = () =>
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input');
+  type(search(), "ci");
+  await settle();
+  assert.deepEqual(names(), ["CI digest"]);
+  type(search(), "");
+  await settle();
+
+  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
 });
 
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */

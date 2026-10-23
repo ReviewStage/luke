@@ -92,7 +92,13 @@ import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
-import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
+import {
+  AgentActorRef,
+  AgentCard,
+  agentCardReading,
+  agentSubject,
+  NOTHING_HELD,
+} from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
   AgentTabCard,
@@ -134,6 +140,7 @@ import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
 import {
   AgentGlyph,
+  agentEndMark,
   type KindLook,
   type PlanStanding,
   TAB_KIND,
@@ -179,6 +186,7 @@ import {
   AddTabButton,
   contentActionGroups,
   DoorsTab,
+  entryRow,
   type HeldTranscripts,
   type TabDoors,
   type TabLook,
@@ -390,6 +398,7 @@ export const ADD_SECTION = {
 /** A coding agent whose cloud browser the "+" offers a new tab in: the agent, and whose browser it is as the tab will say. */
 interface CloudBrowserOffer {
   readonly agentId: string;
+  readonly agent: CodingAgentSummary;
   readonly owner: CloudBrowserOwner;
 }
 
@@ -570,13 +579,49 @@ export function showPullRequest(
 }
 
 /**
+ * What a "+" menu hangs on its rows beyond their looks, the cards the
+ * tabs of the same things hang (`stripTabs`): where the panel's own "+" is
+ * drawn, it hands what those cards read; the summary and ⌘K, which hang
+ * theirs themselves, hand none.
+ */
+export interface PanelCards {
+  readonly agents: CodingAgentsControl;
+  readonly held: HeldTranscripts;
+  /** Every code Luke showed on the task, whose newest note on a file its row's card says. */
+  readonly shown: readonly TaskCodeShowing[];
+  readonly repository: string | null;
+  /** The open plan, or the agent on no task, whose pages a page row's card previews. */
+  readonly pagePlace: PagePlace;
+  /** The agent whose tab the plan's column shows, whose card follows its run. */
+  readonly shownAgent: string | undefined;
+  /** Opens an agent's tab in the plan's column, as a pull request's card offers. */
+  readonly onOpenAgent: (agentId: string) => void;
+}
+
+/** An agent's tab card as a row of its terminal or its browser hangs it, `foot` under it where the row says more. */
+function agentRowCard(
+  agent: CodingAgentSummary,
+  label: string,
+  cards: PanelCards | undefined,
+  foot?: React.ReactNode,
+): React.ReactNode {
+  if (cards === undefined) return undefined;
+  const { agents, held, shownAgent } = cards;
+  const read = agentCardReading(agent, label, held, shownAgent === agent.id, agents);
+  return <AgentTabCard name={label} models={agents.models ?? []} read={read} foot={foot} />;
+}
+
+/**
  * The "+" menu's New Browser tab, opened afresh each time, as a browser's
  * new tab is, so its row names no tab, and always in a coding agent's cloud
  * browser: on a task with one agent, a draft in its browser at once; on a
  * task with several, a submenu of whose browser, each wearing its glyph, the
  * one viewed first; and no row at all on a task with none.
  */
-function browserEntries(browsers: Parameters<typeof panelEntries>[0]["browsers"]): AddEntry[] {
+function browserEntries(
+  browsers: Parameters<typeof panelEntries>[0]["browsers"],
+  cards: PanelCards | undefined,
+): AddEntry[] {
   const [only, ...more] = browsers?.agents ?? [];
   if (browsers === undefined || only === undefined) return [];
   const look = tabLook({ kind: TAB_KIND.BROWSER, title: NEW_BROWSER_TAB });
@@ -586,12 +631,15 @@ function browserEntries(browsers: Parameters<typeof panelEntries>[0]["browsers"]
     const row = { ...base, terms: [only.owner.name] };
     return [{ row, onPick: () => browsers.onAgent(only.agentId) }];
   }
+  // Each choice wears its agent's failed mark and hangs its agent's card, as the agent's own row does.
   const submenu = {
     label: "Open the tab in",
-    rows: browsers.agents.map(({ agentId, owner }) => ({
+    rows: browsers.agents.map(({ agentId, agent, owner }) => ({
       id: agentId,
       label: owner.name,
       icon: owner.icon,
+      end: agentEndMark(agent, true),
+      card: agentRowCard(agent, owner.name, cards),
     })),
     value: undefined,
     onPick: browsers.onAgent,
@@ -645,8 +693,10 @@ export function panelEntries(input: {
   };
   /** The task the panel stands beside, whose name and status the Plan's row wears; none where the caller does not know it. */
   plan?: PlanStanding | undefined;
+  /** What the rows' cards read, where the caller hangs them; none where it hangs its own. */
+  cards?: PanelCards | undefined;
 }): AddEntry[] {
-  const { panel, files, changes = [], pages = [] } = input;
+  const { panel, files, changes = [], pages = [], cards } = input;
   const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind, input.plan),
     onPick: () => panel.onChoose(kind),
@@ -654,9 +704,23 @@ export function panelEntries(input: {
   // Note that a file's row is named by its place in the list, because a path
   // may spell a kind's word or another row's id, and the list only grows.
   const fileRows = files.map((ref, at) => {
-    const open = panel.files.some((file) => file.path === ref.path);
+    const tab = panel.files.find((file) => file.path === ref.path);
+    const open = tab !== undefined;
+    // Note that the card's note is of the revision the row opens: the open tab's, else the one shown.
+    const commit = open ? tab.commit : ref.commit;
+    const card =
+      cards === undefined ? undefined : (
+        <FileCard
+          path={ref.path}
+          note={newestFileNote(cards.shown, ref.path, {
+            repository: cards.repository,
+            commit,
+          })}
+        />
+      );
     return {
       row: { id: String(at), ...fileLook(ref.path), section: ADD_SECTION.FILES },
+      card,
       onPick: () =>
         open ? panel.onOpenFile({ path: ref.path }) : panel.onOpenFile(ref, ref.commit),
     };
@@ -665,6 +729,16 @@ export function panelEntries(input: {
   // id already names the agent's own row in the task's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
     const look = tabLook({ kind: TAB_KIND.CHANGES, pullRequest });
+    const card =
+      cards === undefined ? undefined : (
+        <ChangesCard
+          subject={agentSubject(cards.agents, agentId, cards.held, cards.shownAgent === agentId)}
+          models={cards.agents.models}
+          pullRequest={pullRequest}
+          people={peopleOf(cards.agents.changesPeople.get(agentId), pullRequest)}
+          onOpenAgent={() => cards.onOpenAgent(agentId)}
+        />
+      );
     return {
       row: {
         id: pullRequest.url,
@@ -673,6 +747,7 @@ export function panelEntries(input: {
         terms: [look.label, label],
         section: ADD_SECTION.PULL_REQUESTS,
       },
+      card,
       onPick: () => panel.onChoose({ changes: agentId }),
     };
   });
@@ -682,6 +757,7 @@ export function panelEntries(input: {
       ...tabLook({ kind: TAB_KIND.PAGE, title: page.title }),
       section: ADD_SECTION.PAGES,
     },
+    card: cards === undefined ? undefined : <PageCard place={cards.pagePlace} page={page} />,
     onPick: () => panel.onChoose({ page: page.id }),
   }));
   // A terminal's row adds a shell to its agent's sandbox, as New terminal
@@ -696,9 +772,12 @@ export function panelEntries(input: {
       command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
       section: ADD_SECTION.TERMINAL,
     },
+    // Note that the row hangs its Terminal tab's card: its agent's, saying under a rule whose sandbox its shells run in.
+    endMark: agentEndMark(agent, true),
+    card: agentRowCard(agent, label, cards, <TerminalCardFoot agentId={agent.id} />),
     onPick: () => input.terminals?.onNew(agent.id),
   }));
-  const browserRows = browserEntries(input.browsers);
+  const browserRows = browserEntries(input.browsers, cards);
   return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
@@ -1287,7 +1366,7 @@ export function ActivityList({
         {more.length === 0 ? null : (
           <MenuRowList
             label="Open a tab"
-            rows={more.map((entry) => entry.row)}
+            rows={more.map(entryRow)}
             onPick={(id) => {
               onListed(false);
               more.find((entry) => entry.row.id === id)?.onPick();
@@ -1317,7 +1396,7 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
         </div>
         <MenuRowList
           label="Open a tab"
-          rows={entries.map((entry) => entry.row)}
+          rows={entries.map(entryRow)}
           onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
         />
       </div>
@@ -2285,6 +2364,7 @@ export function SidePanel({
           const subject = agentSubject(agents, agent.id, drawnTranscripts, false);
           return {
             agentId: agent.id,
+            agent,
             owner: { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> },
           };
         });
@@ -2359,6 +2439,15 @@ export function SidePanel({
         panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
     },
     plan: task,
+    cards: {
+      agents,
+      held: drawnTranscripts,
+      shown: shownCode ?? [],
+      repository,
+      pagePlace: pagePlaceOf(holder, taskId),
+      shownAgent,
+      onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+    },
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);

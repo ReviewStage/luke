@@ -17,6 +17,7 @@ import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
+import { repositoryMenuRow } from "../repository-row.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
 
@@ -30,7 +31,8 @@ import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
  * app's searched menu over the repositories the reader's own token may
  * push to that neither the App nor the workspace's list already holds, read
  * as the menu opens from the addable the repository picker's listing
- * answers beside its own; a pick adds it, and the service answers the list
+ * answers beside its own, each drawn as the repository chip's menu draws one
+ * (`repository-row.tsx`); a pick adds it, and the service answers the list
  * as it then stands.
  */
 
@@ -134,7 +136,7 @@ export function AddTokenRepository({
         const offered = addable ?? listed.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
         const rows = offered
           .filter((one) => !added.has(one.fullName.toLowerCase()))
-          .map((one): MenuRow => ({ id: one.fullName, label: one.fullName }));
+          .map((one) => repositoryMenuRow(one.fullName, true));
         setCandidates({ kind: "read", rows });
       },
       () => setCandidates({ kind: "failed" }),

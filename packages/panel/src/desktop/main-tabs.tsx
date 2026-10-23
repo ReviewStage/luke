@@ -47,6 +47,7 @@ import {
   type AddEntry,
   AddTabButton,
   DoorsTab,
+  type HeldTranscripts,
   type TabDoors,
   type TabLook,
   type TabPin,
@@ -290,17 +291,34 @@ function agentTabs(input: {
  * whose tab is open chooses that tab rather than opening another, as a
  * browser's tab search does.
  */
-export function agentEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
-  return (agents.agents ?? []).map((agent) => ({
-    row: {
-      id: agent.id,
-      ...tabLook({ kind: TAB_KIND.AGENT, name: agentTabLabel(agent, agents.models), agent }),
-      section: AGENTS_SECTION,
-    },
-    endMark: agentEndMark(agent, true),
-    onPick: () => main.onChoose({ agent: agent.id }),
-    agent,
-  }));
+export function agentEntries(
+  main: MainTabsControl,
+  agents: CodingAgentsControl,
+  held?: HeldTranscripts,
+): AddEntry[] {
+  return (agents.agents ?? []).map((agent) => {
+    const label = agentTabLabel(agent, agents.models);
+    const chosen = main.tab !== undefined && sameTab({ agent: agent.id }, main.tab);
+    return {
+      row: {
+        id: agent.id,
+        ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+        section: AGENTS_SECTION,
+      },
+      endMark: agentEndMark(agent, true),
+      // Note that a caller handing what its tabs hold gets the card its tab hangs; ⌘K and the summary hang theirs themselves.
+      card:
+        held === undefined ? undefined : (
+          <AgentTabCard
+            name={label}
+            models={agents.models ?? []}
+            read={agentCardReading(agent, label, held, chosen, agents)}
+          />
+        ),
+      onPick: () => main.onChoose({ agent: agent.id }),
+      agent,
+    };
+  });
 }
 
 /**
@@ -351,7 +369,11 @@ export function chatEntries(available: boolean, onPick: () => void): AddEntry[] 
  * chat is started from a draft's composer, its Call. The task's Chat
  * stands in the side panel, whose own "+" offers it.
  */
-function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
+function addEntries(
+  main: MainTabsControl,
+  agents: CodingAgentsControl,
+  held: HeldTranscripts,
+): AddEntry[] {
   const { start } = agents;
   const newAgent: AddEntry = {
     row: {
@@ -362,7 +384,7 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
-  const agentRows = agentEntries(main, agents);
+  const agentRows = agentEntries(main, agents, held);
   const starts = agents.onUnarchive === undefined ? [newAgent] : [];
   return [...starts, ...agentRows];
 }
@@ -495,7 +517,7 @@ export function MainTabStrip({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(main, agents)}
+        entries={addEntries(main, agents, views.held)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}

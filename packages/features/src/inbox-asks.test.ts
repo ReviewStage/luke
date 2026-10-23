@@ -21,6 +21,8 @@ import {
   inboxReplyRefusal,
   inboxResponseAsk,
   inboxThreadPostInputSchema,
+  keptInboxAsk,
+  recommendedLabels,
 } from "./inbox-wire.js";
 import {
   countedNumber,
@@ -118,6 +120,24 @@ const v4ItemSchema = Schema.Struct({
   messages: Schema.optionalKey(Schema.Array(v4MessageSchema)),
 });
 
+/**
+ * A message as a desktop that reads a choice's one recommended label
+ * declares it, written out as it stood, so the test reads what a released
+ * build reads of a choice recommending several.
+ */
+const oneRecommendedMessageSchema = Schema.Struct({
+  ...v4MessageSchema.fields,
+  ask: Schema.Struct({
+    type: Schema.Literal(INBOX_ASK.DECIDE),
+    options: Schema.Array(
+      Schema.Struct({ label: Schema.String, detail: Schema.optionalKey(Schema.String) }),
+    ),
+    multiple: Schema.optionalKey(Schema.Boolean),
+    recommended: Schema.optionalKey(Schema.String),
+    status: Schema.Literals(Object.values(INBOX_ASK_STATUS)),
+  }),
+});
+
 /** What a desktop reads off the wire through the schema, or nothing where the read is refused. */
 function read<S extends Schema.Codec<unknown, unknown>>(
   schema: S,
@@ -181,6 +201,28 @@ test("a desktop before version 5 reads a version 5 item whole, its response the 
     ],
   );
   assert.deepEqual(read(inboxItemSchema, ITEM)?.messages, [ASKING, ANSWERING]);
+});
+
+test("a decide posted recommending several is kept as its first label and every label, which a desktop reading one label reads as its first", () => {
+  const options = [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }];
+  const posted = read(inboxThreadPostInputSchema, {
+    key: "invite-channels",
+    body: "Pick any.",
+    ask: { type: INBOX_ASK.DECIDE, options, multiple: true, recommended: ["Slack", "Email"] },
+  });
+  assert.ok(posted?.ask !== undefined);
+  const kept = keptInboxAsk(posted.ask);
+  assert.ok(kept.type === INBOX_ASK.DECIDE);
+  assert.deepEqual(recommendedLabels(kept), ["Slack", "Email"]);
+  const message = { ...ASKING, ask: { ...kept, status: INBOX_ASK_STATUS.OPEN } };
+  assert.deepEqual(read(inboxMessageSchema, message), message);
+  assert.deepEqual(read(oneRecommendedMessageSchema, message)?.ask, {
+    type: INBOX_ASK.DECIDE,
+    options,
+    multiple: true,
+    recommended: "Slack",
+    status: INBOX_ASK_STATUS.OPEN,
+  });
 });
 
 test("an ask maps to the version 4 response nearest it", () => {
