@@ -34,6 +34,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActorMark } from "../actor-ref.js";
 import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
+import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -41,6 +42,7 @@ import { readFiles, withFiles } from "./attached-files.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
 import type { MentionAgentsReader, MentionableAgent } from "./mention-picker.js";
+import { TAB_KIND, tabLook } from "./tab-look.js";
 import type { InboxThreadStarter } from "./use-task-inbox.js";
 
 /** The pane's name, as its bar and a reader say it. */
@@ -94,6 +96,45 @@ export interface InboxComposeProps {
   readonly start: InboxThreadStarter;
   readonly onStarted: (started: InboxStarted) => void;
   readonly onDiscard: () => void;
+}
+
+/** The heading To lists the agents on no task under. */
+const NO_TASK = "No task";
+
+/** An agent as its tab, ⌘K, and the column's "+" draw it: its harness's mark wearing where it stands, and its name; its tile where the list read nothing of it. */
+function agentLook(agent: MentionableAgent): {
+  readonly icon: React.ReactNode;
+  readonly label: string;
+} {
+  return agent.summary === undefined
+    ? { icon: <ActorMark actor={agent.actor} />, label: agent.name }
+    : tabLook({ kind: TAB_KIND.AGENT, name: agent.name, agent: agent.summary });
+}
+
+/**
+ * To's rows: each agent in its tab's look, its title beside its name where
+ * the two differ, as ⌘K tells agents apart, under its task's name, each
+ * task's agents standing together, so a search for a task's name finds its
+ * agents too, and those on no task last.
+ */
+function toRows(agents: readonly MentionableAgent[]): readonly MenuRow[] {
+  const sectionOf = (agent: MentionableAgent) => agent.task?.name ?? NO_TASK;
+  const ordered = [...agents].sort((first, second) => {
+    const one = first.task === undefined ? 1 : 0;
+    const other = second.task === undefined ? 1 : 0;
+    return one - other || sectionOf(first).localeCompare(sectionOf(second));
+  });
+  return ordered.map((each) => {
+    const title = each.summary?.title ?? undefined;
+    const titled = title !== undefined && title !== each.name;
+    return {
+      id: each.id,
+      ...agentLook(each),
+      ...(titled ? { detail: title } : undefined),
+      section: sectionOf(each),
+      terms: [each.name, ...(titled ? [title] : [])],
+    };
+  });
 }
 
 /** The words a send is known by, so the same thread sent again goes under the key it went under. */
@@ -217,60 +258,55 @@ export function InboxCompose({
         </div>
       </header>
       <div className="desktop-inbox inbox-compose">
-        <div className="inbox-compose-row">
-          <span className="inbox-compose-label">{TO}</span>
-          <Picker
-            label={TO}
-            align={PICKER_ALIGN.START}
-            width={CHIP_WIDTH.AUTO}
-            value={agent?.id ?? ""}
-            valueLabel={
-              agent === undefined
-                ? NO_AGENT
-                : agent.task?.name === undefined
-                  ? agent.name
-                  : `${agent.name} · ${agent.task.name}`
-            }
-            valueIcon={agent === undefined ? undefined : <ActorMark actor={agent.actor} />}
-            rows={rows.map((each) => ({
-              id: each.id,
-              label: each.name,
-              icon: <ActorMark actor={each.actor} />,
-              ...(each.task?.name === undefined
-                ? undefined
-                : { detail: each.task.name, terms: [each.task.name] }),
-            }))}
-            placeholder="Search agents"
-            noMatch={NO_MATCH}
-            note={
-              read === undefined ? (
-                <Spinner delay label="Loading agents" />
-              ) : "failed" in read ? (
-                AGENTS_FAILED
-              ) : read.agents.length === 0 ? (
-                NO_AGENTS
-              ) : undefined
-            }
-            disabled={sending}
-            onPick={(id) => {
-              setRefusal(undefined);
-              setPicked(id);
-            }}
-          />
-        </div>
-        <div className="inbox-compose-row">
-          <span className="inbox-compose-label">{SUBJECT}</span>
-          <TextField
-            label={SUBJECT}
-            size={TEXT_FIELD_SIZE.TITLE}
-            value={draft.subject}
-            placeholder={SUBJECT_PLACEHOLDER}
-            maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
-            disabled={sending}
-            autoFocus
-            onChange={(subject) => setDraft((was) => ({ ...was, subject }))}
-            onEnter={() => field.editor.current?.focus()}
-          />
+        <div className="inbox-compose-head">
+          <div className="inbox-compose-row">
+            <span className="inbox-compose-label">{TO}</span>
+            <Picker
+              label={TO}
+              align={PICKER_ALIGN.START}
+              width={CHIP_WIDTH.AUTO}
+              value={agent?.id ?? ""}
+              valueLabel={
+                agent === undefined
+                  ? NO_AGENT
+                  : agent.task?.name === undefined
+                    ? agent.name
+                    : `${agent.name} · ${agent.task.name}`
+              }
+              valueIcon={agent === undefined ? undefined : agentLook(agent).icon}
+              rows={toRows(rows)}
+              placeholder="Search agents"
+              noMatch={NO_MATCH}
+              note={
+                read === undefined ? (
+                  <Spinner delay label="Loading agents" />
+                ) : "failed" in read ? (
+                  AGENTS_FAILED
+                ) : read.agents.length === 0 ? (
+                  NO_AGENTS
+                ) : undefined
+              }
+              disabled={sending}
+              onPick={(id) => {
+                setRefusal(undefined);
+                setPicked(id);
+              }}
+            />
+          </div>
+          <div className="inbox-compose-row">
+            <span className="inbox-compose-label">{SUBJECT}</span>
+            <TextField
+              label={SUBJECT}
+              size={TEXT_FIELD_SIZE.INLINE}
+              value={draft.subject}
+              placeholder={SUBJECT_PLACEHOLDER}
+              maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
+              disabled={sending}
+              autoFocus
+              onChange={(subject) => setDraft((was) => ({ ...was, subject }))}
+              onEnter={() => field.editor.current?.focus()}
+            />
+          </div>
         </div>
         <div className="agent-composer inbox-compose-box">
           <AnswerForm

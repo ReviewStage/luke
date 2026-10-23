@@ -8401,3 +8401,60 @@ test("Discard takes a New thread away and shows the item it stood over again, as
   await settle();
   assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
 });
+
+/** The menu To opens, as a reader sees it: each task's heading, then each agent's name and what it says beside it. */
+function toMenuRows(): string[] {
+  const menu = document.querySelector('[role="dialog"][aria-label="To"]');
+  assert.ok(menu, "To's menu is open");
+  return [
+    ...menu.querySelectorAll('.luke-combobox-heading, .menu-row-list-heading, [role="option"]'),
+  ].map((node) => {
+    if (!node.matches('[role="option"]')) return `# ${node.textContent}`;
+    const name = node.querySelector(".luke-combobox-option-label")?.textContent ?? "";
+    const detail = node.querySelector(".luke-combobox-option-detail")?.textContent;
+    return detail === undefined ? name : `${name} · ${detail}`;
+  });
+}
+
+test("To lists the workspace's agents as ⌘K does, each in its tab's look under its task's name, its title beside a given name, and those on no task last", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const MAYA: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
+    planId: INVITES.id,
+    personaName: "Maya",
+    title: "Move the frontend into shared components",
+  };
+  const LONE: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b23",
+    planId: null,
+    personaName: "Ravi",
+    title: "Nightly dependency sweep",
+  };
+  heldStarts([LONE, MAYA, AGENT]);
+  const { page } = mount();
+  await settle();
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const to =
+    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
+    assert.fail("the draft has To");
+  act(() => to.click());
+  await settle();
+
+  assert.deepEqual(toMenuRows(), [
+    `# ${BILLING.name}`,
+    "Alerts",
+    `# ${INVITES.name}`,
+    "Maya · Move the frontend into shared components",
+    "# No task",
+    "Ravi · Nightly dependency sweep",
+  ]);
+});

@@ -1,4 +1,4 @@
-import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -1064,6 +1064,8 @@ export interface MentionableAgent {
   /** The task it works on, by its id and, where the place knows it, its name; absent for an agent on none. */
   readonly task?: { readonly id: string; readonly name?: string | undefined } | undefined;
   readonly archived?: boolean | undefined;
+  /** The agent as the workspace's list read it, where a place drew it from that list: what a picker draws its tab's look and title from. */
+  readonly summary?: CodingAgentSummary | undefined;
 }
 
 /** A person as the list offers them: their account's id, their name, their email where the members read names it, and their picture, which their row wears. */
