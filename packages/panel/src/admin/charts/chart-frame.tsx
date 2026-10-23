@@ -26,6 +26,7 @@ import {
 } from "@luke/ui";
 import { formatTrendMove, TREND_DIRECTION, trendDirection } from "@luke/ui/admin-format";
 import { formatCount } from "@luke/ui/time-format";
+import { CARD_GAP } from "./stat-card.js";
 
 /** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */
 const TREND_TONE = {
@@ -48,8 +49,11 @@ const SKELETON_TITLE_WIDTH = "144px";
 
 const SKELETON_ASIDE_WIDTH = "224px";
 
-/** The legend bone stops short of the line, as a sentence does. */
-const SKELETON_LEGEND_WIDTH = "60%";
+/** Two chart cards of equal width side by side, as the Reliability breakdowns stand. */
+export const CHART_PAIR_EVEN = `grid ${CARD_GAP} min-[720px]:grid-cols-2`;
+
+/** A wide chart card beside a narrow one, as the Overview's funnel and reach stand. */
+export const CHART_PAIR_WIDE = `grid ${CARD_GAP} min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]`;
 
 /** A trend's move alone, in the ink of its direction: a rise complete, a fall attention. */
 export function TrendMove({ trend }: { trend: AdminTrend }): React.JSX.Element {
@@ -129,7 +133,7 @@ export function ChartFrame({
   ref,
   children,
 }: {
-  title?: string;
+  title?: React.ReactNode;
   aside?: React.ReactNode;
   legend?: React.ReactNode;
   overlay?: React.ReactNode;
@@ -164,43 +168,68 @@ export function ChartFrame({
 }
 
 /**
- * A chart's card while its data is still being read: bones where the
- * heading, its caption, and the legend will be, each in the type it stands
- * for, and a block filling a box of `plot`, the chart's own plot height, so
- * the words and the plot land where the bones stood.
+ * The box a chart's plot stands in, `height` tall: the chart's own plot
+ * height, a CSS length the chart and its skeleton both read, so the bars land
+ * where the block stood.
+ */
+export function PlotBox({
+  height,
+  children,
+}: {
+  height: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return <div style={{ height }}>{children}</div>;
+}
+
+/**
+ * A caption's bone across from a heading. Note that it stands in a row of
+ * its own, whose baseline is the bone's foot, because the heading sets its
+ * caption on its words' baseline and a bone's block alone would sit its
+ * whole line's room above it, standing the heading taller than its words do.
+ */
+export function AsideSkeleton(): React.JSX.Element {
+  return (
+    <Inline>
+      <Skeleton width={SKELETON_ASIDE_WIDTH} />
+    </Inline>
+  );
+}
+
+/**
+ * A chart's card while its data is still being read, drawn through the
+ * chart's own frame: its heading, the words where the chart knows them and a
+ * bone where they are read, a bone for a caption read with the data, the
+ * legend as itself, since a chart's series are known before its data, and a
+ * block of `plot`, the chart's own plot height, so the words and the plot
+ * land where the bones stood. A chart the page's heading names (`untitled`)
+ * stands no heading.
  */
 export function ChartFrameSkeleton({
-  aside,
+  title,
+  untitled = false,
+  aside = false,
   legend,
   plot,
 }: {
-  aside: boolean;
-  legend: boolean;
-  /** The height class of the plot the block stands for. */
+  /** The heading's words where the chart knows them before its data; a bone where left out. */
+  title?: string | undefined;
+  untitled?: boolean;
+  /** Whether a caption read with the data stands across from the heading. */
+  aside?: boolean;
+  legend?: React.ReactNode;
+  /** The plot's height, the chart's own. */
   plot: string;
 }): React.JSX.Element {
   return (
-    <Card>
-      <Stack gap={GAP.FIELD}>
-        <Inline justify={JUSTIFY.BETWEEN}>
-          <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.LABEL}>
-            <Skeleton width={SKELETON_TITLE_WIDTH} />
-          </Text>
-          {aside ? (
-            <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
-              <Skeleton width={SKELETON_ASIDE_WIDTH} />
-            </Text>
-          ) : null}
-        </Inline>
-        <div className={plot}>
-          <Skeleton shape={SKELETON_SHAPE.BLOCK} />
-        </div>
-        {legend ? (
-          <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
-            <Skeleton width={SKELETON_LEGEND_WIDTH} />
-          </Text>
-        ) : null}
-      </Stack>
-    </Card>
+    <ChartFrame
+      title={untitled ? undefined : (title ?? <Skeleton width={SKELETON_TITLE_WIDTH} />)}
+      aside={aside ? <AsideSkeleton /> : undefined}
+      legend={legend}
+    >
+      <PlotBox height={plot}>
+        <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+      </PlotBox>
+    </ChartFrame>
   );
 }

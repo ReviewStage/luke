@@ -51,18 +51,31 @@ function said(words: ReactNode): boolean {
  */
 function CollectionPageRowsSkeleton(): React.JSX.Element {
   return (
-    <div className="luke-collection-page-loading">
+    <div className="luke-collection-page-skeleton">
       {Array.from({ length: LOADING_ROWS }, (_, row) => (
-        <div key={row} className="luke-collection-page-loading-row">
-          <span className="luke-collection-page-loading-title">
+        <div key={row} className="luke-collection-page-skeleton-row">
+          <span className="luke-collection-page-skeleton-title">
             <Skeleton shape={SKELETON_SHAPE.LINE} width="40%" />
           </span>
-          <span className="luke-collection-page-loading-description">
+          <span className="luke-collection-page-skeleton-description">
             <Skeleton shape={SKELETON_SHAPE.LINE} width="65%" />
           </span>
         </div>
       ))}
     </div>
+  );
+}
+
+/** The page's loading region, named `label` to a reader: `skeleton`, or rows of blocks where none is given. */
+function CollectionPageSkeleton({
+  label,
+  skeleton,
+}: {
+  label: string;
+  skeleton: ReactNode;
+}): React.JSX.Element {
+  return (
+    <SkeletonRegion label={label}>{skeleton ?? <CollectionPageRowsSkeleton />}</SkeletonRegion>
   );
 }
 
@@ -136,9 +149,7 @@ export function CollectionPage({
       <div className="luke-collection-page-scroll">
         <div className="luke-collection-page-content">
           {state === COLLECTION_STATE.LOADING ? (
-            <SkeletonRegion label={loadingLabel}>
-              {skeleton ?? <CollectionPageRowsSkeleton />}
-            </SkeletonRegion>
+            <CollectionPageSkeleton label={loadingLabel} skeleton={skeleton} />
           ) : null}
           {state === COLLECTION_STATE.EMPTY ? (
             <div className="luke-collection-page-notice">{empty}</div>

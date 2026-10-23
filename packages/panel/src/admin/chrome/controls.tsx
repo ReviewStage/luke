@@ -16,6 +16,14 @@ import { CalendarRangeIcon, SlidersHorizontalIcon } from "lucide-react";
 const ALL_WINDOWS: readonly AdminMetricsWindow[] = Object.values(ADMIN_METRICS_WINDOW);
 
 /**
+ * A page's sections stacked a section's gap apart, the one stack the loaded
+ * page and its skeleton both stand their sections in.
+ */
+export function PageSections({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <Stack gap={GAP.SECTION}>{children}</Stack>;
+}
+
+/**
  * What a refresh in flight dims, said busy to a reader until the answer
  * lands, under the failure a refresh landed on an answer that stays shown:
  * the numbers on screen are still the last ones actually read, and the
@@ -41,7 +49,7 @@ export function Refreshing({
       data-busy={refreshing}
       aria-busy={refreshing}
     >
-      <Stack gap={GAP.SECTION}>{children}</Stack>
+      <PageSections>{children}</PageSections>
     </div>
   );
   if (failure === undefined) return dimmed;

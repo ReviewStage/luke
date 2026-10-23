@@ -10,11 +10,14 @@ import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { formatDayTick } from "@luke/ui/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { barTopRadius } from "./bar-radius.js";
-import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame.js";
+import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
 
 export const USAGE_CHART = {
   calls: { label: "Hosted calls", color: "var(--luke-color-chart-1)" },
 } satisfies ChartConfig;
+
+/** The plot's height, which the chart and its skeleton both stand. */
+const USAGE_PLOT_HEIGHT = "12rem";
 
 /**
  * A trailing-window bar chart on shadcn/ui's chart primitives. One series, so
@@ -63,7 +66,8 @@ export function UsageChart({
     <ChartFrame title={label} aside={<ChartTrend trend={trend} />}>
       <ChartContainer
         config={USAGE_CHART}
-        className={`aspect-auto h-48 w-full ${onOpenDay ? "cursor-pointer" : ""}`}
+        className={`aspect-auto w-full ${onOpenDay ? "cursor-pointer" : ""}`}
+        style={{ height: USAGE_PLOT_HEIGHT }}
       >
         <BarChart data={[...daily]} {...barChartProps}>
           <CartesianGrid vertical={false} />
@@ -95,4 +99,9 @@ export function UsageChart({
       </ChartContainer>
     </ChartFrame>
   );
+}
+
+/** The chart while its days are read: `label`, its heading, over its plot's block, and a bone for the trend it reads. */
+export function UsageChartSkeleton({ label }: { label: string }): React.JSX.Element {
+  return <ChartFrameSkeleton title={label} aside plot={USAGE_PLOT_HEIGHT} />;
 }

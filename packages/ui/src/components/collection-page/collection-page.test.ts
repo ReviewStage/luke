@@ -131,7 +131,7 @@ test("a read in progress stands the caller's own skeleton in the named region, i
   const status = document.querySelector('[role="status"]');
   expect(status?.getAttribute("aria-busy")).toBe("true");
   expect(status?.parentElement?.querySelector('[data-testid="board-bones"]')).not.toBeNull();
-  expect(document.querySelector(".luke-collection-page-loading")).toBeNull();
+  expect(document.querySelector(".luke-collection-page-skeleton")).toBeNull();
 });
 
 test("an empty collection shows its empty state alone, and a failed one its error", () => {
