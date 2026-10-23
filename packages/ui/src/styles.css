@@ -105,5 +105,7 @@
 @import "./components/resize-edge/resize-edge.css";
 @import "./components/zoom-image/zoom-image.css";
 @import "./components/message/message.css";
+@import "./components/remote-surface/remote-surface.css";
+@import "./components/portal-fence/portal-fence.css";
 /* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

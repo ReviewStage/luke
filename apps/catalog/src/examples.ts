@@ -36,6 +36,7 @@ import { GLYPH_SLOTS_EXAMPLE } from "./examples/glyph-slots";
 import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
 import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
 import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
+import { KEEP_FOCUS_EXAMPLE } from "./examples/keep-focus";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
 import { LIST_MOTION_EXAMPLE } from "./examples/list-motion";
@@ -48,13 +49,16 @@ import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
+import { PANE_PINS_EXAMPLE } from "./examples/pane-pins";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
+import { PORTAL_FENCE_EXAMPLE } from "./examples/portal-fence";
 import { PRESS_SHORTCUTS_EXAMPLE } from "./examples/press-shortcuts";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
+import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
 import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
@@ -181,4 +185,8 @@ export const EXAMPLES: readonly Example[] = [
   RESIZE_EDGES_EXAMPLE,
   ZOOM_IMAGES_EXAMPLE,
   MESSAGES_EXAMPLE,
+  PANE_PINS_EXAMPLE,
+  KEEP_FOCUS_EXAMPLE,
+  PORTAL_FENCE_EXAMPLE,
+  REMOTE_SURFACE_EXAMPLE,
 ];

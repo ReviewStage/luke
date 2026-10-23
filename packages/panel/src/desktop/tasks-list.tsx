@@ -31,14 +31,17 @@ import {
   ErrorState,
   FoldChevronIcon,
   FoldingButton,
+  GAP,
   IconButton,
   InlineEdit,
+  LAYOUT_ELEMENT,
   ListMotion,
   motionKey,
   motionRows,
   OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
+  Stack,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -836,15 +839,17 @@ function TasksListGroup({
           </Text>
         ) : null
       ) : (
-        <ul
+        <Stack
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.NONE}
+          moves
           className="tasks-list-rows"
           aria-label={head.name}
           data-row-drop-rows={ordered(group.head) ? "" : undefined}
-          {...motionRows()}
           onPointerDown={draggable ? drag : undefined}
         >
           {drawn.map(({ value }) => row(value))}
-        </ul>
+        </Stack>
       )}
       {folded ? null : <OlderCompleted older={group.older} onShow={onShowOlder} />}
     </section>

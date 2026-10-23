@@ -20,6 +20,13 @@ import {
   Button,
   FILL_ELEMENT,
   Fill,
+  REMOTE_KEY_ACTION,
+  REMOTE_POINTER_ACTION,
+  type RemoteKey,
+  type RemoteModifiers,
+  type RemotePointer,
+  RemoteSurface,
+  type RemoteWheel,
   SPINNER_SIZE,
   Spinner,
   TEXT_TONE,
@@ -36,17 +43,7 @@ import {
   MousePointerClickIcon,
   RotateCwIcon,
 } from "lucide-react";
-import {
-  type KeyboardEvent,
-  type MouseEvent,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type WheelEvent,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -102,9 +99,6 @@ import {
 /** The most characters one text message carries; a longer paste goes in pieces. */
 const TEXT_PIECE_CHARS = 4_096;
 
-/** A wheel's line, in pixels, for a wheel that counts in lines. */
-const WHEEL_LINE_PIXELS = 16;
-
 /** The keys a Command chord edits text with on the page, sent there as Control. */
 const PAGE_EDIT_KEYS: ReadonlySet<string> = new Set(["a", "c", "x", "z"]);
 
@@ -118,18 +112,26 @@ const BUTTON_OF = [
   BROWSER_LIVE_MOUSE_BUTTON.RIGHT,
 ] as const;
 
-/** The modifier bits an event holds, as the live view counts them. */
-function modifiersOf(event: {
-  altKey: boolean;
-  ctrlKey: boolean;
-  metaKey: boolean;
-  shiftKey: boolean;
-}): number {
+/** The live view's mouse action, by the surface's. */
+const MOUSE_ACTION = {
+  [REMOTE_POINTER_ACTION.DOWN]: BROWSER_LIVE_MOUSE_ACTION.DOWN,
+  [REMOTE_POINTER_ACTION.UP]: BROWSER_LIVE_MOUSE_ACTION.UP,
+  [REMOTE_POINTER_ACTION.MOVE]: BROWSER_LIVE_MOUSE_ACTION.MOVE,
+} as const;
+
+/** The live view's key action, by the surface's. */
+const KEY_ACTION = {
+  [REMOTE_KEY_ACTION.DOWN]: BROWSER_LIVE_KEY_ACTION.DOWN,
+  [REMOTE_KEY_ACTION.UP]: BROWSER_LIVE_KEY_ACTION.UP,
+} as const;
+
+/** The modifier bits held, as the live view counts them. */
+function modifiersOf(held: RemoteModifiers): number {
   return (
-    (event.altKey ? BROWSER_LIVE_MODIFIER.ALT : 0) |
-    (event.ctrlKey ? BROWSER_LIVE_MODIFIER.CONTROL : 0) |
-    (event.metaKey ? BROWSER_LIVE_MODIFIER.META : 0) |
-    (event.shiftKey ? BROWSER_LIVE_MODIFIER.SHIFT : 0)
+    (held.alt ? BROWSER_LIVE_MODIFIER.ALT : 0) |
+    (held.control ? BROWSER_LIVE_MODIFIER.CONTROL : 0) |
+    (held.meta ? BROWSER_LIVE_MODIFIER.META : 0) |
+    (held.shift ? BROWSER_LIVE_MODIFIER.SHIFT : 0)
   );
 }
 
@@ -443,91 +445,54 @@ export function CloudBrowserPane({
   }, [live, size.width, size.height]);
 
   const yours = view.driver?.yours === true;
-  // A wheel over the page the member drives scrolls the page alone, never the panel around it;
-  // React's own wheel listener is passive, so the default is refused on one of the canvas's own.
-  const driving = useRef(yours);
-  driving.current = yours;
-  useEffect(() => {
-    const element = canvas.current;
-    if (element === null) return;
-    const refuse = (event: globalThis.WheelEvent) => {
-      if (driving.current) event.preventDefault();
-    };
-    element.addEventListener("wheel", refuse, { passive: false });
-    return () => element.removeEventListener("wheel", refuse);
-  }, []);
-  const at = (event: MouseEvent | WheelEvent) => {
-    const box = event.currentTarget.getBoundingClientRect();
-    return {
-      x: Math.max(0, Math.min(size.width, event.clientX - box.left)),
-      y: Math.max(0, Math.min(size.height, event.clientY - box.top)),
-    };
-  };
-  const mouse =
-    (action: (typeof BROWSER_LIVE_MOUSE_ACTION)[keyof typeof BROWSER_LIVE_MOUSE_ACTION]) =>
-    (event: MouseEvent<HTMLCanvasElement>) => {
-      if (!yours) return;
-      if (action === BROWSER_LIVE_MOUSE_ACTION.DOWN) event.currentTarget.focus();
-      const button =
-        action === BROWSER_LIVE_MOUSE_ACTION.MOVE
-          ? BROWSER_LIVE_MOUSE_BUTTON.NONE
-          : (BUTTON_OF[event.button] ?? BROWSER_LIVE_MOUSE_BUTTON.NONE);
-      live.input({
-        type: BROWSER_LIVE_CLIENT.MOUSE,
-        action,
-        ...at(event),
-        button,
-        buttons: event.buttons & 31,
-        clickCount: action === BROWSER_LIVE_MOUSE_ACTION.MOVE ? 0 : Math.min(3, event.detail || 1),
-        modifiers: modifiersOf(event),
-      });
-    };
-  const wheel = (event: WheelEvent<HTMLCanvasElement>) => {
-    if (!yours) return;
-    const scale = event.deltaMode === 0 ? 1 : WHEEL_LINE_PIXELS;
-    const clamp = (delta: number) => Math.max(-10_000, Math.min(10_000, delta * scale));
+  const pointerInput = (input: RemotePointer) => {
     live.input({
-      type: BROWSER_LIVE_CLIENT.WHEEL,
-      ...at(event),
-      deltaX: clamp(event.deltaX),
-      deltaY: clamp(event.deltaY),
-      modifiers: modifiersOf(event),
+      type: BROWSER_LIVE_CLIENT.MOUSE,
+      action: MOUSE_ACTION[input.action],
+      x: input.x,
+      y: input.y,
+      button:
+        input.button === undefined
+          ? BROWSER_LIVE_MOUSE_BUTTON.NONE
+          : (BUTTON_OF[input.button] ?? BROWSER_LIVE_MOUSE_BUTTON.NONE),
+      buttons: input.buttons & 31,
+      clickCount: input.clickCount,
+      modifiers: modifiersOf(input.modifiers),
     });
   };
-  const key =
-    (action: (typeof BROWSER_LIVE_KEY_ACTION)[keyof typeof BROWSER_LIVE_KEY_ACTION]) =>
-    (event: KeyboardEvent<HTMLCanvasElement>) => {
-      if (!yours) return;
-      const chord = {
-        key: event.key,
-        meta: event.metaKey,
-        shift: event.shiftKey,
-        alt: event.altKey,
-        control: event.ctrlKey,
-      };
-      // A chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
-      if (chordIsWindows(chord)) return;
-      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "v")
-        return;
-      event.preventDefault();
-      const edit = event.metaKey && PAGE_EDIT_KEYS.has(event.key.toLowerCase());
-      const modifiers = edit
-        ? (modifiersOf(event) & ~BROWSER_LIVE_MODIFIER.META) | BROWSER_LIVE_MODIFIER.CONTROL
-        : modifiersOf(event);
-      const message: InputMessage = {
-        type: BROWSER_LIVE_CLIENT.KEY,
-        action,
-        key: event.key.slice(0, 64),
-        code: event.code.slice(0, 64),
-        keyCode: Math.max(0, Math.min(255, event.keyCode)),
-        modifiers,
-      };
-      live.input(message);
+  const wheelInput = (input: RemoteWheel) => {
+    const clamp = (delta: number) => Math.max(-10_000, Math.min(10_000, delta));
+    live.input({
+      type: BROWSER_LIVE_CLIENT.WHEEL,
+      x: input.x,
+      y: input.y,
+      deltaX: clamp(input.deltaX),
+      deltaY: clamp(input.deltaY),
+      modifiers: modifiersOf(input.modifiers),
+    });
+  };
+  const keyInput = (input: RemoteKey): boolean => {
+    const { key, modifiers: held } = input;
+    const chord = { key, meta: held.meta, shift: held.shift, alt: held.alt, control: held.control };
+    // A chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
+    if (chordIsWindows(chord)) return false;
+    if ((held.meta || held.control) && !held.alt && key.toLowerCase() === "v") return false;
+    const edit = held.meta && PAGE_EDIT_KEYS.has(key.toLowerCase());
+    const modifiers = edit
+      ? (modifiersOf(held) & ~BROWSER_LIVE_MODIFIER.META) | BROWSER_LIVE_MODIFIER.CONTROL
+      : modifiersOf(held);
+    const message: InputMessage = {
+      type: BROWSER_LIVE_CLIENT.KEY,
+      action: KEY_ACTION[input.action],
+      key: key.slice(0, 64),
+      code: input.code.slice(0, 64),
+      keyCode: Math.max(0, Math.min(255, input.keyCode)),
+      modifiers,
     };
-  const paste = (event: React.ClipboardEvent<HTMLCanvasElement>) => {
-    if (!yours) return;
-    event.preventDefault();
-    const text = event.clipboardData.getData("text/plain");
+    live.input(message);
+    return true;
+  };
+  const pasteInput = (text: string) => {
     for (let from = 0; from < text.length; from += TEXT_PIECE_CHARS) {
       live.input({
         type: BROWSER_LIVE_CLIENT.TEXT,
@@ -590,25 +555,16 @@ export function CloudBrowserPane({
       </div>
       <Fill clip ref={body} className="browser-view-body cloud-browser-body">
         <div className="cloud-browser-stage" style={{ width: size.width, height: size.height }}>
-          <canvas
+          <RemoteSurface
             ref={canvas}
-            className="cloud-browser-canvas"
-            aria-label="The page"
-            data-driving={yours ? "" : undefined}
-            tabIndex={yours ? 0 : -1}
-            width={Math.round(size.width * (window.devicePixelRatio || 1))}
-            height={Math.round(size.height * (window.devicePixelRatio || 1))}
-            style={{ width: size.width, height: size.height }}
-            onMouseDown={mouse(BROWSER_LIVE_MOUSE_ACTION.DOWN)}
-            onMouseUp={mouse(BROWSER_LIVE_MOUSE_ACTION.UP)}
-            onMouseMove={mouse(BROWSER_LIVE_MOUSE_ACTION.MOVE)}
-            onContextMenu={(event) => {
-              if (yours) event.preventDefault();
-            }}
-            onWheel={wheel}
-            onKeyDown={key(BROWSER_LIVE_KEY_ACTION.DOWN)}
-            onKeyUp={key(BROWSER_LIVE_KEY_ACTION.UP)}
-            onPaste={paste}
+            label="The page"
+            width={size.width}
+            height={size.height}
+            driving={yours}
+            onPointer={pointerInput}
+            onWheel={wheelInput}
+            onKey={keyInput}
+            onPaste={pasteInput}
           />
           <CloudBrowserCursor
             cursor={tab.cursor}

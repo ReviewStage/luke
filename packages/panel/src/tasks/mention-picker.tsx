@@ -27,6 +27,7 @@ import {
   comboboxOptionId,
   DocumentIcon,
   IconButton,
+  KeepFocus,
   MENU_SURFACE_INSET,
   MenuGlyph,
   MenuSurface,
@@ -946,11 +947,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   const { kind, folder, back } = crumb;
   return (
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
-    // biome-ignore lint/a11y/noStaticElementInteractions: the press is the back button's; the crumb only keeps the focus where it was.
-    <div
-      className="agent-servers-page-head mention-menu-crumb"
-      onMouseDown={(event) => event.preventDefault()}
-    >
+    <KeepFocus className="agent-servers-page-head mention-menu-crumb">
       {back === undefined ? null : (
         <IconButton
           icon={<ArrowLeftIcon />}
@@ -970,7 +967,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
       >
         {folder ?? kind.name}
       </Text>
-    </div>
+    </KeepFocus>
   );
 }
 

@@ -37,6 +37,7 @@ import {
   NavItem,
   NOTE_LINE_LOOK,
   NoteLine,
+  PanePin,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -1917,12 +1918,12 @@ function SidebarColumn({
     </>
   );
   return (
-    <aside
+    <PanePin
       ref={overlay.ref}
       className="desktop-sidebar"
       data-row-drop-scope=""
       inert={!overlay.inSight}
-      onPointerDown={onPressWithin}
+      onPin={onPressWithin}
       onPointerLeave={overlay.onPointerLeave}
       onKeyDown={overlay.onKeyDown}
     >
@@ -2122,7 +2123,7 @@ function SidebarColumn({
       {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
-    </aside>
+    </PanePin>
   );
 }
 

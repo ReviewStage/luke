@@ -22,6 +22,7 @@ import {
   ListRow,
   NOTE_LINE_LOOK,
   NoteLine,
+  PanePin,
   PlusIcon,
   ScrollArea,
   SKELETON_SHAPE,
@@ -301,13 +302,13 @@ export function TerminalShells({
 }): React.JSX.Element {
   const { listed } = session;
   return (
-    <aside
+    <PanePin
       ref={pane}
       className="terminal-shells"
       aria-label="Shells"
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
-      onPointerDown={float.onPointerDown}
+      onPin={float.onPressWithin}
       onPointerLeave={float.onPointerLeave}
       onKeyDown={float.onKeyDown}
     >
@@ -336,7 +337,7 @@ export function TerminalShells({
           label={footWords(subject, listed?.sandbox)}
         />
       </div>
-    </aside>
+    </PanePin>
   );
 }
 

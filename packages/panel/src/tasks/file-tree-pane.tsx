@@ -4,6 +4,7 @@ import {
   cssCustomProperties,
   Fill,
   IconButton,
+  PanePin,
   ResizeEdge,
   type ResizeEdgeHandle,
   SearchField,
@@ -219,7 +220,7 @@ export function FileTreePane({
 
   const filterLabel = onlyShown ? "Show all files" : "Show only files Luke showed";
   return (
-    <aside
+    <PanePin
       ref={pane}
       className="file-tree-pane ph-no-capture"
       aria-label={label}
@@ -228,7 +229,7 @@ export function FileTreePane({
       style={
         width === undefined ? undefined : cssCustomProperties({ "--file-tree-width": `${width}px` })
       }
-      onPointerDown={float?.onPointerDown}
+      onPin={float?.onPressWithin}
       onPointerLeave={float?.onPointerLeave}
       onKeyDown={(event) => {
         float?.onKeyDown(event);
@@ -271,6 +272,6 @@ export function FileTreePane({
       ) : (
         <Fill className="file-tree-host" ref={host} />
       )}
-    </aside>
+    </PanePin>
   );
 }

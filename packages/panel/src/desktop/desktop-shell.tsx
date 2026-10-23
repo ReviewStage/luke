@@ -16,6 +16,8 @@ import {
   ONE_LINE_END,
   OneLine,
   PAGE_FRAME,
+  PANE_PIN_ELEMENT,
+  PanePin,
   ScrollArea,
   SettingsPage,
   SettingsSectionsSkeleton,
@@ -944,11 +946,11 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      <div className="title-bar-controls" onPointerDown={keepOverlay}>
+      <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
         <SidebarToggle sidebar={sidebar} />
         {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
         {sidebar.collapsed ? <OfflineMark /> : null}
-      </div>
+      </PanePin>
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle

@@ -375,7 +375,7 @@ export function usePaneRoom(shown: {
     },
     pane: {
       floating: pane.floating,
-      onPointerDown: keep,
+      onPressWithin: keep,
       onPointerLeave: pane.onPointerLeave,
       onKeyDown: pane.onKeyDown,
     },

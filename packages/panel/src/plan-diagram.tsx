@@ -7,6 +7,7 @@ import {
   Card,
   IMAGE_OPENING,
   PictureTile,
+  PortalFence,
 } from "@luke/ui";
 import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import {
@@ -162,22 +163,12 @@ function RefusedLine(): React.JSX.Element {
   return <p className="plan-diagram-failed">{DIAGRAM_REFUSED_LINE}</p>;
 }
 
-/** What reaches the viewer stays there: React carries a portal's events up the tree it was drawn in, where the section would open to be edited at a press, or step its blocks at an arrow. */
-function stopped(event: React.SyntheticEvent): void {
-  event.stopPropagation();
-}
-
 /** A diagram opened over the window at its own pixels, until it is closed. */
 function OpenDiagram({ url, onClose }: { url: string; onClose: () => void }): React.JSX.Element {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the span takes nothing itself; it keeps what the viewer it holds took from reaching the section around it.
-    <span
-      className="plan-diagram-viewer"
-      onClick={stopped}
-      onKeyDown={stopped}
-      onPointerDown={stopped}
-      onMouseDown={stopped}
-    >
+    // Note that what the viewer takes stays there: React carries a portal's events up the tree it
+    // was drawn in, where the section would open to be edited at a press, or step its blocks at an arrow.
+    <PortalFence>
       <AttachmentViewer
         files={[{ name: DIAGRAM_FILE, mediaType: "image/svg+xml", url }]}
         at={0}
@@ -185,7 +176,7 @@ function OpenDiagram({ url, onClose }: { url: string; onClose: () => void }): Re
         onClose={onClose}
         opening={IMAGE_OPENING.OWN_PIXELS}
       />
-    </span>
+    </PortalFence>
   );
 }
 

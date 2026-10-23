@@ -1647,15 +1647,6 @@
   background: var(--luke-color-well);
 }
 
-.cloud-browser-canvas {
-  display: block;
-  outline: none;
-}
-
-.cloud-browser-canvas[data-driving] {
-  box-shadow: 0 0 0 1px var(--luke-color-border);
-}
-
 .cloud-browser-notice {
   position: absolute;
   inset: 0;
