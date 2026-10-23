@@ -124,6 +124,8 @@ let stored: InstalledSkillSummary[] = [];
 let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Whether the next install is refused, for a credential in the named skill. */
 let refuseInstall = false;
+/** The names the next source preview says no folder holds. */
+let missingNames: string[] = [];
 
 const roots: Root[] = [];
 
@@ -132,6 +134,7 @@ beforeEach(() => {
   stored = [RELEASE_NOTES, PR_STYLE];
   sent = [];
   refuseInstall = false;
+  missingNames = [];
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([
@@ -166,7 +169,9 @@ beforeEach(() => {
     },
     [ACT_KIND.INSTALLED_SKILLS_PREVIEW]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_PREVIEW, payload });
-      return Promise.resolve(payload.text.startsWith("npx") ? SOURCE : TEXT_PREVIEW);
+      return Promise.resolve(
+        payload.text.startsWith("npx") ? { ...SOURCE, missing: missingNames } : TEXT_PREVIEW,
+      );
     },
     [ACT_KIND.INSTALLED_SKILLS_INSTALL]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_INSTALL, payload });
@@ -366,6 +371,26 @@ test("a pasted command is previewed with the skills it asked for ticked, one wit
     installed.map((each) => each.name),
     ["web-design-guidelines"],
   );
+});
+
+test("only the found skills scroll: the box, its lines, and Install for stay on the card however many a repository holds", async () => {
+  missingNames = ["grill-me"];
+  await mountDialog();
+  await paste(COMMAND);
+
+  const scrolled = (element: Element | null | undefined) =>
+    (element ?? assert.fail("not drawn")).closest(".luke-scroll-area") !== null;
+  assert.equal(scrolled(document.querySelector('[aria-label="Skills found"]')), true);
+  assert.equal(scrolled(checkboxOf("web-design-guidelines")), true);
+  assert.equal(scrolled(document.querySelector("textarea")), false);
+  const lines = [...document.querySelectorAll('[role="status"], .settings-state')];
+  assert.equal(scrolled(lines.find((each) => each.textContent?.startsWith("Detected:"))), false);
+  assert.equal(
+    scrolled(lines.find((each) => each.textContent === "Not in the repository: grill-me")),
+    false,
+  );
+  assert.equal(scrolled(button("Everyone in Stage")), false);
+  assert.equal(scrolled(button("Install")), false);
 });
 
 test("a refused install says which skill and why in words, keeps the dialog, and marks that skill so it can no longer be ticked", async () => {

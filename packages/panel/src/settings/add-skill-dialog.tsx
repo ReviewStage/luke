@@ -25,6 +25,10 @@ import {
   Dialog,
   FormField,
   GAP,
+  INSET,
+  SCROLL_FADE,
+  SCROLL_SIZE,
+  ScrollArea,
   Stack,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
@@ -68,8 +72,11 @@ import {
  * line then says how many skills the repository holds at which commit, and
  * each is listed with a box ticked where the paste asked for it, a skill
  * with problems never tickable; names the paste asked for that no folder
- * holds are listed after. For text, the name it declares, and a field for
- * a name or a description where it has none. Install for offers Just me,
+ * holds are said under the line. However many a repository holds, the box
+ * and its line stay at the card's head and Install for and the answers at
+ * its foot: only the found skills give way and scroll. For text, the name
+ * it declares, and a field for a name or a description where it has none.
+ * Install for offers Just me,
  * and Everyone in the workspace to any member outside a personal
  * workspace. Install sends the paste again whole, as the service
  * reads it afresh; a refusal is said in plain words under the box.
@@ -133,7 +140,7 @@ function CandidateRow({
   );
 }
 
-/** What a repository holds, each skill with its box, and the names asked for that it does not hold. */
+/** What a repository holds, each skill with its box, in the part of the card that gives way and scrolls. */
 function SourcePreview({
   preview,
   ticked,
@@ -145,24 +152,20 @@ function SourcePreview({
   disabled: boolean;
   onTick: (name: string, ticked: boolean) => void;
 }): React.JSX.Element {
-  const missing = missingLine(preview.missing);
   return (
-    <Stack gap={GAP.CONTROL} aria-label="Skills found">
-      {preview.skills.map((candidate) => (
-        <CandidateRow
-          key={candidate.path}
-          candidate={candidate}
-          ticked={ticked.has(candidate.name)}
-          disabled={disabled}
-          onTick={(tick) => onTick(candidate.name, tick)}
-        />
-      ))}
-      {missing === undefined ? null : (
-        <span className="settings-state" data-state={LINE_STATE[DETECTED_TONE.PROBLEM]}>
-          {missing}
-        </span>
-      )}
-    </Stack>
+    <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+      <Stack gap={GAP.CONTROL} inset={INSET.RING} aria-label="Skills found">
+        {preview.skills.map((candidate) => (
+          <CandidateRow
+            key={candidate.path}
+            candidate={candidate}
+            ticked={ticked.has(candidate.name)}
+            disabled={disabled}
+            onTick={(tick) => onTick(candidate.name, tick)}
+          />
+        ))}
+      </Stack>
+    </ScrollArea>
   );
 }
 
@@ -280,6 +283,8 @@ export function AddSkillDialog({
       : "failure" in view
         ? { text: failureLine(view), tone: DETECTED_TONE.PROBLEM }
         : previewLine(view);
+  const missing =
+    preview?.kind === SKILL_PASTE_KIND.SOURCE ? missingLine(preview.missing) : undefined;
   const request = installRequest({
     workspaceId: workspace.id,
     text,
@@ -336,6 +341,7 @@ export function AddSkillDialog({
         </>
       }
     >
+      {/* Note that the card's parts are its own flex items, so the box and its line stay at its head, the found skills give way and scroll, and Install for stays above the answers however many a repository holds. */}
       <Stack gap={GAP.FIELD}>
         <FormField label={SKILLS_LINE.PASTE_LABEL} error={refusal}>
           {(field) => (
@@ -360,37 +366,42 @@ export function AddSkillDialog({
           )}
         </FormField>
         {line === undefined ? null : <DetectedText line={line} />}
-        {preview?.kind === SKILL_PASTE_KIND.SOURCE ? (
-          <SourcePreview
-            preview={preview}
-            ticked={ticked}
-            disabled={installing}
-            onTick={(name, tick) => {
-              const next = new Set(ticked);
-              if (tick) next.add(name);
-              else next.delete(name);
-              setTicked(next);
-            }}
-          />
-        ) : null}
-        {preview?.kind === SKILL_PASTE_KIND.TEXT ? (
-          <TextPreview preview={preview} fill={fill} disabled={installing} onFill={setFill} />
-        ) : null}
-        {scopes.length > 1 ? (
-          <FormField label={SKILLS_LINE.INSTALL_FOR}>
-            {() => (
-              <ChoiceBar
-                label={SKILLS_LINE.INSTALL_FOR}
-                items={scopes.map((each) => ({ value: each.value, label: each.label }))}
-                value={scope}
-                look={CHOICE_BAR_LOOK.SEGMENTED}
-                disabled={installing}
-                onChange={setScope}
-              />
-            )}
-          </FormField>
-        ) : null}
+        {missing === undefined ? null : (
+          <span className="settings-state" data-state={LINE_STATE[DETECTED_TONE.PROBLEM]}>
+            {missing}
+          </span>
+        )}
       </Stack>
+      {preview?.kind === SKILL_PASTE_KIND.SOURCE ? (
+        <SourcePreview
+          preview={preview}
+          ticked={ticked}
+          disabled={installing}
+          onTick={(name, tick) => {
+            const next = new Set(ticked);
+            if (tick) next.add(name);
+            else next.delete(name);
+            setTicked(next);
+          }}
+        />
+      ) : null}
+      {preview?.kind === SKILL_PASTE_KIND.TEXT ? (
+        <TextPreview preview={preview} fill={fill} disabled={installing} onFill={setFill} />
+      ) : null}
+      {scopes.length > 1 ? (
+        <FormField label={SKILLS_LINE.INSTALL_FOR}>
+          {() => (
+            <ChoiceBar
+              label={SKILLS_LINE.INSTALL_FOR}
+              items={scopes.map((each) => ({ value: each.value, label: each.label }))}
+              value={scope}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              disabled={installing}
+              onChange={setScope}
+            />
+          )}
+        </FormField>
+      ) : null}
     </Dialog>
   );
 }
