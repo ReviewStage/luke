@@ -1032,9 +1032,13 @@ export const runnerSessions = <
     /**
      * The session's runner ended, under the agent's runner lease, so the
      * next message relaunches it: a Stop written to it, its exit waited for
-     * at most `CODER.RUNNER_HALT`, then its command ended where it still
-     * runs, and its bearer let go, so nothing it posts on the way down is
-     * taken. A session no runner runs in has nothing to end.
+     * at most `CODER.RUNNER_HALT`, its command ended where it still runs and
+     * waited for again, its bearer let go, so nothing it posts on the way
+     * down is taken, and the sandbox's tags cleared of it. Note that the tags
+     * are what say a runner runs (`liveRunner`), and Vercel may still answer
+     * a command it was just told to end as running, so a message sent next
+     * would otherwise be written to a runner on its way down and lost. A
+     * session no runner runs in has nothing to end.
      */
     const haltHolding = (sessionId: string, conversationId: string) =>
       Effect.gen(function* () {
@@ -1050,13 +1054,19 @@ export const runnerSessions = <
           line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
         );
         // Note that a read of the exit answers null for a command still running once its own wait is up.
-        const exited = yield* api
+        const exited = api
           .commandExit(live.sandboxSessionId, live.commandId)
           .pipe(Effect.timeoutOption(CODER.RUNNER_HALT));
-        if (Option.isNone(exited) || exited.value === null) {
+        const stopped = yield* exited;
+        if (Option.isNone(stopped) || stopped.value === null) {
           yield* api.kill(live.sandboxSessionId, live.commandId);
+          yield* exited;
         }
         yield* recordCodingAgentRunnerToken(userId, agent.id, null);
+        yield* api.updateTags(found.value.name, {
+          [SESSION_TAG]: sessionId,
+          [RUNNER_TAG.AGENT]: agent.id,
+        });
       });
 
     /** A change of model or effort, under the agent's runner lease. */

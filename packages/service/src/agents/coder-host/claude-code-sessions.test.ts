@@ -91,6 +91,7 @@ import {
   runnerEnded,
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
+import { RUNNER_TAG } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { codingAgentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -946,10 +947,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         });
 
         const halted = yield* sessions.halt(opened.sessionId, agent.conversationId);
+        // Note that the sandbox's tags no longer name the ended runner, so no message is written to it.
+        const tagsAfterHalt = { ...api.sandboxes[0]?.tags };
         yield* rewindConversation(target, lineId);
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Fix only the emails."));
 
         assert.equal(halted, true);
+        assert.equal(tagsAfterHalt[RUNNER_TAG.COMMAND], undefined);
+        assert.equal(tagsAfterHalt[RUNNER_TAG.AGENT], agent.id);
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.sandboxes[0]?.deleted, false);
