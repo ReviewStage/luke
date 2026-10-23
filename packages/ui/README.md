@@ -142,7 +142,7 @@ What the barrel holds (`src/index.ts`):
 
 | Kind | Components |
 | --- | --- |
-| Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `GlyphSlot` |
+| Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `FileText`, `GlyphSlot` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`, `SkillChip`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click, a pill in a box's words) |
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |

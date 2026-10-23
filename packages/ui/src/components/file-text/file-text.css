@@ -1,0 +1,39 @@
+/* file-text.css -- a file's words as written: mono, wrapped line for line, on
+   the code's ground in a control's corner; a peek clipped to its head and
+   faded at its foot, the whole scrolling inside a reading height. */
+
+@layer components {
+  .luke-file-text {
+    --luke-file-text-peek: calc(var(--luke-type-caption-leading) * 6);
+    --luke-file-text-whole: calc(var(--luke-type-caption-leading) * 18);
+
+    box-sizing: border-box;
+    min-width: 0;
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-code-ground);
+  }
+
+  .luke-file-text-words {
+    margin: 0;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-mono);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .luke-file-text[data-extent="peek"] {
+    max-height: calc(var(--luke-file-text-peek) + var(--luke-space-16));
+    overflow: clip;
+    mask-image: linear-gradient(to bottom, black calc(100% - var(--luke-scroll-fade)), transparent);
+  }
+
+  .luke-file-text[data-extent="whole"] {
+    max-height: calc(var(--luke-file-text-whole) + var(--luke-space-16));
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+}

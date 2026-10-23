@@ -1,11 +1,15 @@
 import {
   INSTALLED_SKILL_FILES_REFUSAL,
   INSTALLED_SKILL_PROBLEM,
+  INSTALLED_SKILL_STANDING,
   type InstalledSkillCandidate,
   type InstalledSkillFilesRefusal,
   type InstalledSkillPreview,
   type InstalledSkillProblem,
+  type InstalledSkillStanding,
   type InstalledSkillSummary,
+  SKILL_AUDIT_RISK,
+  type SkillAuditRisk,
 } from "@luke/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
@@ -19,8 +23,14 @@ import {
   type InstalledSkillScope,
   type InstalledSkillSource,
 } from "@luke/features/installed-skill-wire";
-import { SKILL_FILE_BOUNDS, SKILL_NAME_RULE } from "@luke/features/skill-file";
 import {
+  readSkillFile,
+  SKILL_FILE_BOUNDS,
+  SKILL_KEY,
+  SKILL_NAME_RULE,
+} from "@luke/features/skill-file";
+import {
+  ALL_SKILLS,
   SKILL_PASTE_KIND,
   SKILL_PASTE_UNSUPPORTED,
   type SkillPaste,
@@ -38,8 +48,11 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
  * came from, a GitHub folder at the commit it is pinned to or a paste, and
  * who installed it. The dialog reads its one box twice: at once, with
  * `parseSkillPaste`, so the member sees what they pasted was understood,
- * and then from the service's preview, which reads GitHub. Every refusal
- * the service names is said here in plain words, once.
+ * and then from the service's preview, which reads GitHub. What it draws
+ * of a preview follows `npx skills add`: the screen, the choice and the
+ * skills it pulls in, where a skill of each name already stands in the
+ * scope chosen, the button's words, and the list's order, groups, and
+ * search. Every refusal the service names is said here in plain words, once.
  */
 
 /** How many characters of a commit a row and the dialog show. */
@@ -58,8 +71,14 @@ export const SKILLS_LINE = {
   PASTED: "pasted",
   NONE: "No skills installed yet.",
   READ_FAILED: "Your skills could not be read.",
-  PASTE_LABEL: "Paste an npx skills add command or a skill's text",
+  ADD_SKILL: "Add skill",
+  PASTE_LABEL: "Command, GitHub link, or SKILL.md text",
+  PASTE_HINT:
+    "Paste an npx skills add command, a GitHub link to a repo or skill folder, or a skill's SKILL.md text.",
   READING: "Reading…",
+  INSTALLED: "Installed",
+  UPDATE_AVAILABLE: "Update available",
+  INSTALL: "Install",
   INSTALL_FOR: "Install for",
   JUST_ME: "Just me",
   VIEW: "View",
@@ -68,6 +87,17 @@ export const SKILLS_LINE = {
   REMOVE: "Remove",
   FILES: "Files",
   VIEW_FAILED: "The skill could not be read.",
+  CHANGE: "Change",
+  EDIT: "Edit",
+  BROWSE: "Browse them",
+  SEARCH: "Search skills",
+  SELECT_ALL: "Select all",
+  VIEW_SKILL_FILE: "View SKILL.md",
+  HIDE_SKILL_FILE: "Hide SKILL.md",
+  NAME: "Name",
+  WHEN: "When should agents use it?",
+  DECLARED: "Set in the text's frontmatter. Edit the text to change it.",
+  NO_MATCH: "No skills match.",
 } as const;
 
 /** The workspace's group heading. */
@@ -394,7 +424,7 @@ export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
       return { text: UNSUPPORTED_WORDS[paste.reason], tone: DETECTED_TONE.PROBLEM };
     case SKILL_PASTE_KIND.SOURCE:
       return {
-        text: `GitHub ${paste.owner}/${paste.repo} · ${SKILLS_LINE.READING}`,
+        text: `Reading ${paste.owner}/${paste.repo}…`,
         tone: DETECTED_TONE.WAITING,
       };
     case SKILL_PASTE_KIND.TEXT:
@@ -410,54 +440,459 @@ function skillsText(count: number): string {
   return count === 1 ? "1 skill" : `${count} skills`;
 }
 
-/** What the service's preview says the box would install, as the line under it. */
+/** What a preview that leaves nothing to show says under the box: no skill in the repository, or a source Luke does not read. */
 export function previewLine(preview: InstalledSkillPreview): DetectedLine | undefined {
-  switch (preview.kind) {
-    case SKILL_PASTE_KIND.EMPTY:
-      return undefined;
-    case SKILL_PASTE_KIND.UNSUPPORTED:
-      return { text: UNSUPPORTED_WORDS[preview.reason], tone: DETECTED_TONE.PROBLEM };
-    case SKILL_PASTE_KIND.SOURCE: {
-      const where = `${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}`;
-      if (preview.skills.length === 0) {
-        return { text: `No skills found in ${where}.`, tone: DETECTED_TONE.PROBLEM };
-      }
-      return {
-        text: `Detected: ${skillsText(preview.skills.length)} in ${where}`,
-        tone: DETECTED_TONE.DETECTED,
-      };
-    }
-    case SKILL_PASTE_KIND.TEXT:
-      return {
-        text: `Detected: skill text${preview.name === undefined ? "" : ` · ${preview.name}`} · ${sizeText(preview.bytes)}`,
-        tone: DETECTED_TONE.DETECTED,
-      };
+  if (preview.kind === SKILL_PASTE_KIND.UNSUPPORTED) {
+    return { text: UNSUPPORTED_WORDS[preview.reason], tone: DETECTED_TONE.PROBLEM };
   }
+  if (preview.kind !== SKILL_PASTE_KIND.SOURCE || preview.skills.length > 0) return undefined;
+  return {
+    text: `No skills found in ${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}.`,
+    tone: DETECTED_TONE.PROBLEM,
+  };
 }
 
-/** The line under a found skill: what it does and how large it is, or what keeps it from installing. */
-export function candidateLine(candidate: InstalledSkillCandidate): string {
-  if (candidate.problems.length > 0) return problemsLine(candidate.problems);
-  const size = `${filesText(candidate.fileCount)}, ${sizeText(candidate.bytes)}`;
-  return candidate.description === undefined ? size : `${candidate.description} · ${size}`;
+/** Whether a change to the box came at once, as a paste does, rather than a keystroke at a time; only then does the box fold away once previewed. */
+export function pastedAtOnce(previous: string, next: string): boolean {
+  return next.length - previous.length > 1;
 }
 
-/** "Not in the repository: x, y", for names the paste asked for that no folder holds. */
-export function missingLine(missing: readonly string[]): string | undefined {
-  return missing.length === 0 ? undefined : `Not in the repository: ${missing.join(", ")}`;
+/** Which of the dialog's screens it stands on. */
+export const ADD_SKILL_SCREEN = {
+  /** The box alone: nothing previewed yet, or a preview with nothing to install. */
+  PASTE: "paste",
+  /** The skills the paste named, as cards to confirm: the `skills` tool's "Selected N skills", with no picker. */
+  CONFIRM: "confirm",
+  /** Every skill the repository holds, to search and tick, nothing ticked the paste did not name. */
+  BROWSE: "browse",
+  /** A skill's own text, its name and description. */
+  TEXT: "text",
+} as const;
+
+export type AddSkillScreen = (typeof ADD_SKILL_SCREEN)[keyof typeof ADD_SKILL_SCREEN];
+
+/**
+ * The screen a preview is drawn on, as `npx skills add` decides between
+ * "Selected N skills" and its picker: a paste that named skills, or a
+ * repository with one, is confirmed as cards; one that named none, named
+ * every one (`--skill '*'`), or named one the repository does not hold is
+ * browsed, since the tool lists what there is to pick from. A member who
+ * asked to browse the rest browses.
+ */
+export function addSkillScreen(
+  preview: InstalledSkillPreview | undefined,
+  paste: SkillPaste,
+  browsing: boolean,
+): AddSkillScreen {
+  if (preview?.kind === SKILL_PASTE_KIND.TEXT) return ADD_SKILL_SCREEN.TEXT;
+  if (preview?.kind !== SKILL_PASTE_KIND.SOURCE || preview.skills.length === 0) {
+    return ADD_SKILL_SCREEN.PASTE;
+  }
+  const everyOne = paste.kind === SKILL_PASTE_KIND.SOURCE && paste.skills === ALL_SKILLS;
+  const named = preview.skills.some((each) => each.selected);
+  const confirms = named && !everyOne && preview.missing.length === 0 && !browsing;
+  return confirms ? ADD_SKILL_SCREEN.CONFIRM : ADD_SKILL_SCREEN.BROWSE;
 }
 
-/** Whether a found skill may be ticked: one with problems never installs. */
-export function tickable(candidate: InstalledSkillCandidate): boolean {
+/** The dialog's title on each screen: the one skill a paste named, or the repository browsed. */
+export function addSkillTitle(
+  screen: AddSkillScreen,
+  preview: InstalledSkillPreview | undefined,
+): string {
+  if (preview?.kind !== SKILL_PASTE_KIND.SOURCE) return SKILLS_LINE.ADD_SKILL;
+  if (screen === ADD_SKILL_SCREEN.BROWSE) return `Add skills from ${preview.owner}/${preview.repo}`;
+  const named = preview.skills.filter((each) => each.selected);
+  const [only] = named;
+  if (screen !== ADD_SKILL_SCREEN.CONFIRM || only === undefined) return SKILLS_LINE.ADD_SKILL;
+  return named.length === 1 ? `Add ${only.name}` : `Add ${named.length} skills`;
+}
+
+/** The one line the box folds into once previewed: where the skills come from, or the text's size. */
+export function previewSourceLine(screen: AddSkillScreen, preview: InstalledSkillPreview): string {
+  if (preview.kind === SKILL_PASTE_KIND.TEXT) return `Pasted text · ${sizeText(preview.bytes)}`;
+  if (preview.kind !== SKILL_PASTE_KIND.SOURCE) return "";
+  const where = `${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}`;
+  return screen === ADD_SKILL_SCREEN.BROWSE
+    ? `${where} · ${skillsText(preview.skills.length)}`
+    : `From ${where}`;
+}
+
+/** "No skill named grill-mee in mattpocock/skills. Pick from its 38 skills.", for names the paste asked for that no folder holds. */
+export function missingLine(preview: InstalledSkillPreview): string | undefined {
+  if (preview.kind !== SKILL_PASTE_KIND.SOURCE || preview.missing.length === 0) return undefined;
+  const names = preview.missing.join(", ");
+  const noun = preview.missing.length === 1 ? "skill" : "skills";
+  return `No ${noun} named ${names} in ${preview.owner}/${preview.repo}. Pick from its ${skillsText(preview.skills.length)}.`;
+}
+
+/** "36 other skills in this repo", under the cards. */
+export function othersLine(count: number): string {
+  return `${count} other ${count === 1 ? "skill" : "skills"} in this repo`;
+}
+
+/** What a found skill holds and where: "2 files · 0.4 KB · skills/productivity/grill-me". */
+export function candidateFacts(candidate: InstalledSkillCandidate): string {
+  const where = candidate.path === "" ? "repository root" : candidate.path;
+  return `${filesText(candidate.fileCount)} · ${sizeText(candidate.bytes)} · ${where}`;
+}
+
+/** Whether a found skill may be ticked at all: one with problems never installs. */
+function tickable(candidate: InstalledSkillCandidate): boolean {
   return candidate.problems.length === 0;
 }
 
-/** The skills ticked as a preview lands: those the paste asked for that may install. */
-export function initialTicks(preview: InstalledSkillPreview): ReadonlySet<string> {
-  if (preview.kind !== SKILL_PASTE_KIND.SOURCE) return new Set();
-  return new Set(
-    preview.skills.filter((each) => each.selected && tickable(each)).map((each) => each.name),
+/** The skill of its name already installed in a scope, by how an install there would meet it; nothing where none is. */
+function standingIn(
+  candidate: InstalledSkillCandidate,
+  scope: InstalledSkillScope,
+): InstalledSkillStanding | undefined {
+  return candidate.installed?.find((each) => each.scope === scope)?.standing;
+}
+
+/**
+ * Whether a found skill would install into a scope. Note that the store
+ * keeps one skill of a name in each scope and refuses a second whatever its
+ * source, so any skill of its name there keeps it out: one already current
+ * needs nothing, one whose folder moved is brought up to date from the
+ * Skills page's Update, and another source's holds the name.
+ */
+export function installable(
+  candidate: InstalledSkillCandidate,
+  scope: InstalledSkillScope,
+): boolean {
+  return tickable(candidate) && standingIn(candidate, scope) === undefined;
+}
+
+/** How a mark beside a found skill's name reads, as a badge's tone does. */
+export const SKILL_MARK_TONE = {
+  NEUTRAL: "neutral",
+  COMPLETE: "complete",
+  WORKING: "working",
+  ATTENTION: "attention",
+} as const;
+
+export type SkillMarkTone = (typeof SKILL_MARK_TONE)[keyof typeof SKILL_MARK_TONE];
+
+/** One mark beside a found skill's name. */
+export interface SkillMark {
+  readonly text: string;
+  readonly tone: SkillMarkTone;
+}
+
+/** The skills.sh partners the `skills` tool names, by the key skills.sh answers under. */
+const SKILL_AUDIT_PARTNER = {
+  GEN: "ath",
+  SOCKET: "socket",
+  SNYK: "snyk",
+} as const;
+
+/** Each known partner's name, in the order the `skills` tool lists them. */
+const PARTNER_NAMES: ReadonlyMap<string, string> = new Map([
+  [SKILL_AUDIT_PARTNER.GEN, "Gen"],
+  [SKILL_AUDIT_PARTNER.SOCKET, "Socket"],
+  [SKILL_AUDIT_PARTNER.SNYK, "Snyk"],
+]);
+
+/** A partner's rating in a word or two. */
+const RISK_WORDS = {
+  [SKILL_AUDIT_RISK.SAFE]: "safe",
+  [SKILL_AUDIT_RISK.LOW]: "low risk",
+  [SKILL_AUDIT_RISK.MEDIUM]: "medium risk",
+  [SKILL_AUDIT_RISK.HIGH]: "high risk",
+  [SKILL_AUDIT_RISK.CRITICAL]: "critical risk",
+  [SKILL_AUDIT_RISK.UNKNOWN]: "unrated",
+} as const satisfies Record<SkillAuditRisk, string>;
+
+/** The ratings marked as a warning. */
+const WARNING_RISKS: ReadonlySet<SkillAuditRisk> = new Set([
+  SKILL_AUDIT_RISK.HIGH,
+  SKILL_AUDIT_RISK.CRITICAL,
+]);
+
+/** One partner's rating as the card says it: "Snyk high risk", a warning where it is high or critical. */
+export interface AuditPart {
+  readonly text: string;
+  readonly warn: boolean;
+}
+
+/**
+ * skills.sh's ratings of a skill, each partner's in a word or two: Gen,
+ * Socket, and Snyk first as the `skills` tool lists them, any other by its
+ * key after. Advisory only: a rating never keeps a skill from installing.
+ */
+export function auditParts(candidate: InstalledSkillCandidate): readonly AuditPart[] {
+  const audit = candidate.audit;
+  if (audit === undefined) return [];
+  const known = [...PARTNER_NAMES.keys()];
+  const keys = Object.keys(audit).sort((one, other) => {
+    const rank = (key: string) => (known.includes(key) ? known.indexOf(key) : known.length);
+    return rank(one) - rank(other) || one.localeCompare(other);
+  });
+  return keys.flatMap((key) => {
+    const rating = audit[key];
+    if (rating === undefined) return [];
+    const partner = PARTNER_NAMES.get(key) ?? key;
+    return [
+      { text: `${partner} ${RISK_WORDS[rating.risk]}`, warn: WARNING_RISKS.has(rating.risk) },
+    ];
+  });
+}
+
+/** The scope a taken name is taken in, as the Skills page heads its group. */
+function scopeName(scope: InstalledSkillScope, workspace: Pick<Workspace, "name">): string {
+  return scope === INSTALLED_SKILL_SCOPE.WORKSPACE
+    ? workspaceGroupTitle(workspace)
+    : SKILLS_LINE.PERSONAL;
+}
+
+/**
+ * The marks beside a found skill's name for the scope chosen: where a skill
+ * of its name already stands there, and whether it ships scripts. Its
+ * ratings are `auditParts`, drawn beside them.
+ */
+export function candidateMarks(
+  candidate: InstalledSkillCandidate,
+  scope: InstalledSkillScope,
+  workspace: Pick<Workspace, "name">,
+): readonly SkillMark[] {
+  const marks: SkillMark[] = [];
+  const standing = standingIn(candidate, scope);
+  if (standing === INSTALLED_SKILL_STANDING.CURRENT) {
+    marks.push({ text: SKILLS_LINE.INSTALLED, tone: SKILL_MARK_TONE.COMPLETE });
+  } else if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
+    marks.push({ text: SKILLS_LINE.UPDATE_AVAILABLE, tone: SKILL_MARK_TONE.WORKING });
+  } else if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
+    marks.push({
+      text: `Name taken in ${scopeName(scope, workspace)}`,
+      tone: SKILL_MARK_TONE.ATTENTION,
+    });
+  }
+  if (candidate.hasScripts === true) marks.push({ text: "scripts", tone: SKILL_MARK_TONE.NEUTRAL });
+  return marks;
+}
+
+/** What a found skill's card or row says under it where it will not install: its problems, or what to do instead. */
+export function candidateNote(
+  candidate: InstalledSkillCandidate,
+  scope: InstalledSkillScope,
+): DetectedLine | undefined {
+  if (!tickable(candidate)) {
+    return { text: problemsLine(candidate.problems), tone: DETECTED_TONE.PROBLEM };
+  }
+  const standing = standingIn(candidate, scope);
+  if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
+    return { text: "Update it from the Skills page instead.", tone: DETECTED_TONE.WAITING };
+  }
+  if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
+    return {
+      text: `Another skill named ${candidate.name} is installed there. Remove it first, or install for the other scope.`,
+      tone: DETECTED_TONE.WAITING,
+    };
+  }
+  return undefined;
+}
+
+/**
+ * What the member chose: the skills they ticked, and the ones a ticked
+ * skill pulls in that they unticked. Both are kept whatever the scope, so
+ * switching Install for and back, or browsing and back, loses no choice.
+ */
+export interface SkillTicks {
+  readonly ticked: ReadonlySet<string>;
+  readonly declined: ReadonlySet<string>;
+}
+
+/** The choice as a preview lands: the skills the paste asked for that may install, and nothing declined. */
+export function initialTicks(preview: InstalledSkillPreview | undefined): SkillTicks {
+  const ticked =
+    preview?.kind === SKILL_PASTE_KIND.SOURCE
+      ? preview.skills.filter((each) => each.selected && tickable(each)).map((each) => each.name)
+      : [];
+  return { ticked: new Set(ticked), declined: new Set() };
+}
+
+/** What Install would do with the member's choice. */
+export interface InstallPlan {
+  /** The skills it sends, in order: the ticked ones, then those they pull in. */
+  readonly install: readonly string[];
+  /** Each skill a ticked skill's references reach that is not itself ticked, by the skill that hands off to it first. */
+  readonly pulled: ReadonlyMap<string, string>;
+}
+
+/**
+ * The skills the member's choice installs into a scope. A ticked skill
+ * pulls in every other skill of the repository its `SKILL.md` names, and
+ * each of those the skills it names in turn, unless the member unticked
+ * it; a skill that will not install there is listed as reached but neither
+ * sent nor followed further. The `skills` tool has no such step: a skill
+ * that hands off to another works only with it, so it comes along, ticked
+ * and in sight.
+ */
+export function installPlan(
+  skills: readonly InstalledSkillCandidate[],
+  ticks: SkillTicks,
+  scope: InstalledSkillScope,
+): InstallPlan {
+  const byName = new Map(skills.map((each) => [each.name, each]));
+  const roots = skills.filter((each) => ticks.ticked.has(each.name) && installable(each, scope));
+  const install = roots.map((each) => each.name);
+  const pulled = new Map<string, string>();
+  const queue = [...roots];
+  // Note that a for-of over an array reads its length at every step, so what is pushed is visited too.
+  for (const from of queue) {
+    for (const name of from.references ?? []) {
+      const to = byName.get(name);
+      if (to === undefined || ticks.ticked.has(name) || pulled.has(name)) continue;
+      pulled.set(name, from.name);
+      if (ticks.declined.has(name) || !installable(to, scope)) continue;
+      install.push(name);
+      queue.push(to);
+    }
+  }
+  return { install, pulled };
+}
+
+/**
+ * The choice once one skill is ticked or unticked. Ticking one a ticked
+ * skill pulls in takes back its untick; unticking one a ticked skill still
+ * pulls in records the untick, so it stays out.
+ */
+export function withTick(
+  skills: readonly InstalledSkillCandidate[],
+  ticks: SkillTicks,
+  scope: InstalledSkillScope,
+  name: string,
+  on: boolean,
+): SkillTicks {
+  const ticked = new Set(ticks.ticked);
+  const declined = new Set(ticks.declined);
+  if (on) {
+    declined.delete(name);
+    if (!installPlan(skills, { ticked, declined }, scope).install.includes(name)) ticked.add(name);
+  } else {
+    ticked.delete(name);
+    if (installPlan(skills, { ticked, declined }, scope).install.includes(name)) declined.add(name);
+  }
+  return { ticked, declined };
+}
+
+/**
+ * The choice once every one of some skills is ticked, or every one
+ * unticked: Select all over what the search shows. Note that Select all
+ * ticks each skill itself, so one it shows that another pulls in stays
+ * ticked when that other is unticked later.
+ */
+export function withEvery(
+  skills: readonly InstalledSkillCandidate[],
+  ticks: SkillTicks,
+  scope: InstalledSkillScope,
+  names: readonly string[],
+  on: boolean,
+): SkillTicks {
+  if (!on) return names.reduce((held, name) => withTick(skills, held, scope, name, false), ticks);
+  const ticked = new Set([...ticks.ticked, ...names]);
+  const declined = new Set([...ticks.declined].filter((name) => !names.includes(name)));
+  return { ticked, declined };
+}
+
+/** Select all's box over the skills shown that may install: ticked once every one is, mixed while some are. */
+export function everyTicked(
+  names: readonly string[],
+  install: readonly string[],
+): { readonly checked: boolean; readonly mixed: boolean } {
+  const ticked = names.filter((name) => install.includes(name)).length;
+  return {
+    checked: names.length > 0 && ticked === names.length,
+    mixed: ticked > 0 && ticked < names.length,
+  };
+}
+
+/** The primary button's words: what Install will do. */
+export function installLabel(install: readonly string[]): string {
+  const [only] = install;
+  if (only === undefined) return SKILLS_LINE.INSTALL;
+  return install.length === 1 ? `Install ${only}` : `Install ${install.length} skills`;
+}
+
+/** One skill a confirmed skill pulls in, and the skill that hands off to it. */
+export interface PulledSkill {
+  readonly candidate: InstalledSkillCandidate;
+  readonly by: string;
+}
+
+/** What the confirm screen shows: a card for each skill the paste named, the skills they pull in, and how many more the repository holds. */
+export interface ConfirmView {
+  readonly cards: readonly InstalledSkillCandidate[];
+  readonly pulled: readonly PulledSkill[];
+  readonly others: number;
+}
+
+/** The confirm screen's cards for a source's preview and the plan the choice makes. */
+export function confirmView(
+  skills: readonly InstalledSkillCandidate[],
+  plan: InstallPlan,
+): ConfirmView {
+  const cards = skills.filter((each) => each.selected);
+  const pulled = [...plan.pulled].flatMap(([name, by]) => {
+    const candidate = skills.find((each) => each.name === name);
+    return candidate === undefined || candidate.selected ? [] : [{ candidate, by }];
+  });
+  return { cards, pulled, others: skills.length - cards.length - pulled.length };
+}
+
+/** Why a pulled-in skill comes along, under its name: "grill-me hands off to it · Runs the interview". */
+export function pulledLine(pulled: PulledSkill): string {
+  const why = `${pulled.by} hands off to it`;
+  return pulled.candidate.description === undefined
+    ? why
+    : `${why} · ${pulled.candidate.description}`;
+}
+
+/** The heading of skills no plugin manifest groups, where others are grouped. */
+const UNGROUPED = "Other";
+
+/** One heading of the browse list and the skills under it; no heading where the repository groups none. */
+export interface SkillListGroup {
+  readonly title: string | undefined;
+  readonly skills: readonly InstalledSkillCandidate[];
+}
+
+/** Whether a skill answers the search: its name or its description holds the words, in any case. */
+function answers(candidate: InstalledSkillCandidate, query: string): boolean {
+  const words = query.trim().toLocaleLowerCase();
+  if (words === "") return true;
+  return (
+    candidate.name.toLocaleLowerCase().includes(words) ||
+    (candidate.description?.toLocaleLowerCase().includes(words) ?? false)
   );
+}
+
+/**
+ * The browse list as the `skills` tool's picker sorts it: by name, and
+ * under the plugin a `.claude-plugin` manifest groups each in only where the
+ * repository groups any, the rest under Other, last; never by folder. A
+ * group the search leaves empty is left out.
+ */
+export function skillList(
+  skills: readonly InstalledSkillCandidate[],
+  query: string,
+): readonly SkillListGroup[] {
+  const shown = skills
+    .filter((each) => answers(each, query))
+    .sort((one, other) => one.name.localeCompare(other.name));
+  if (!skills.some((each) => each.group !== undefined)) {
+    return shown.length === 0 ? [] : [{ title: undefined, skills: shown }];
+  }
+  const groups = new Map<string, InstalledSkillCandidate[]>();
+  for (const each of shown) {
+    const title = each.group ?? UNGROUPED;
+    groups.set(title, [...(groups.get(title) ?? []), each]);
+  }
+  return [...groups.entries()]
+    .sort(([one], [other]) =>
+      one === UNGROUPED ? 1 : other === UNGROUPED ? -1 : one.localeCompare(other),
+    )
+    .map(([title, grouped]) => ({ title, skills: grouped }));
 }
 
 /** The problem a refused file names, where the preview has a word for it. */
@@ -503,43 +938,66 @@ export function installScopes(
   return [mine, { value: INSTALLED_SKILL_SCOPE.WORKSPACE, label: everyoneIn(workspace) }];
 }
 
-/** What the member typed beside a skill's text: a name where it has none, a description where it has none. */
+/** A skill's text's name and description as the dialog's fields hold them. */
 export interface TextFill {
   readonly name: string;
   readonly description: string;
 }
 
-/** Which of a skill's text's fields the dialog asks for, from the service's preview of it. */
-export function textFields(preview: InstalledSkillPreview): {
-  readonly name: boolean;
-  readonly description: boolean;
-} {
-  if (preview.kind !== SKILL_PASTE_KIND.TEXT) return { name: false, description: false };
-  return {
-    name: preview.problems.includes(INSTALLED_SKILL_PROBLEM.NAME_MISSING),
-    description: preview.problems.includes(INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING),
-  };
+/** The fields as a text's preview lands: its name and description, or one suggested from its heading, else empty. */
+export function textFill(preview: InstalledSkillPreview | undefined): TextFill {
+  if (preview?.kind !== SKILL_PASTE_KIND.TEXT) return { name: "", description: "" };
+  return { name: preview.name ?? "", description: preview.description ?? "" };
 }
 
-/** The problems a typed name or description mends, which no longer keep the text from installing. */
-const FILLED_PROBLEMS: ReadonlySet<InstalledSkillProblem> = new Set([
+/** Which of a text's name and description its own frontmatter declares. */
+export interface TextDeclares {
+  readonly name: boolean;
+  readonly description: boolean;
+}
+
+/**
+ * Which fields a skill's text declares itself. Note that the service
+ * refuses a name or description that contradicts the text's own
+ * frontmatter, so a declared one is shown as it stands and changed by
+ * editing the text; one the text lacks, a name suggested from its heading
+ * among them, is the member's to type.
+ */
+export function textDeclares(paste: SkillPaste): TextDeclares {
+  if (paste.kind !== SKILL_PASTE_KIND.TEXT) return { name: false, description: false };
+  const keys = readSkillFile(paste.markdown)?.keys;
+  const declared = (key: string) => (keys?.get(key)?.trim() ?? "") !== "";
+  return { name: declared(SKILL_KEY.NAME), description: declared(SKILL_KEY.DESCRIPTION) };
+}
+
+/** The problems of a name, and of a description, which the member's own field answers where the text declares neither. */
+const NAME_PROBLEMS: ReadonlySet<InstalledSkillProblem> = new Set([
   INSTALLED_SKILL_PROBLEM.NAME_MISSING,
+  INSTALLED_SKILL_PROBLEM.NAME_INVALID,
+]);
+const DESCRIPTION_PROBLEMS: ReadonlySet<InstalledSkillProblem> = new Set([
   INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING,
+  INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG,
 ]);
 
-/** What still keeps a skill's text from installing once the member's fields are read. */
+/** What still keeps a skill's text from installing once the member's fields are read in place of what the text lacks. */
 export function textProblems(
   problems: readonly InstalledSkillProblem[],
   fill: TextFill,
+  declares: TextDeclares,
 ): readonly InstalledSkillProblem[] {
   const name = fill.name.trim();
   const description = fill.description.trim();
-  const left = problems.filter((problem) => !FILLED_PROBLEMS.has(problem));
-  if (problems.includes(INSTALLED_SKILL_PROBLEM.NAME_MISSING)) {
+  const left = problems.filter(
+    (problem) =>
+      !(!declares.name && NAME_PROBLEMS.has(problem)) &&
+      !(!declares.description && DESCRIPTION_PROBLEMS.has(problem)),
+  );
+  if (!declares.name) {
     if (name === "") left.push(INSTALLED_SKILL_PROBLEM.NAME_MISSING);
     else if (!SKILL_NAME_RULE.test(name)) left.push(INSTALLED_SKILL_PROBLEM.NAME_INVALID);
   }
-  if (problems.includes(INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING)) {
+  if (!declares.description) {
     if (description === "") left.push(INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING);
     else if (description.length > TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS) {
       left.push(INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG);
@@ -550,33 +1008,31 @@ export function textProblems(
 
 /**
  * The install the dialog's state asks for, or nothing while it would
- * install nothing: a source with no skill ticked, text with a problem left,
- * or a preview not yet in. The paste goes again whole, since the service
- * reads it afresh; a source names the skills ticked, and text the name and
- * description the member typed where it lacks them.
+ * install nothing: a source whose plan installs nothing, text with a
+ * problem left, or a preview not yet in. The paste goes again whole, since
+ * the service reads it afresh; a source names the skills the plan
+ * installs, and text the name and description the member's fields hold
+ * where the text declares neither.
  */
 export function installRequest(state: {
   readonly workspaceId: string;
   readonly text: string;
   readonly scope: InstalledSkillScope;
   readonly preview: InstalledSkillPreview | undefined;
-  readonly ticked: ReadonlySet<string>;
+  readonly install: readonly string[];
   readonly fill: TextFill;
+  readonly declares: TextDeclares;
 }): InstalledSkillInstallParams | undefined {
-  const { workspaceId, text, scope, preview, ticked, fill } = state;
+  const { workspaceId, text, scope, preview, install, fill, declares } = state;
   const base = { text, workspaceId, scope };
   if (preview?.kind === SKILL_PASTE_KIND.SOURCE) {
-    const skills = preview.skills
-      .filter((each) => tickable(each) && ticked.has(each.name))
-      .map((each) => each.name);
-    return skills.length === 0 ? undefined : { ...base, skills };
+    return install.length === 0 ? undefined : { ...base, skills: [...install] };
   }
   if (preview?.kind !== SKILL_PASTE_KIND.TEXT) return undefined;
-  if (textProblems(preview.problems, fill).length > 0) return undefined;
-  const asks = textFields(preview);
+  if (textProblems(preview.problems, fill, declares).length > 0) return undefined;
   return {
     ...base,
-    ...(asks.name ? { name: fill.name.trim() } : undefined),
-    ...(asks.description ? { description: fill.description.trim() } : undefined),
+    ...(declares.name ? undefined : { name: fill.name.trim() }),
+    ...(declares.description ? undefined : { description: fill.description.trim() }),
   };
 }
