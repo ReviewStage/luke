@@ -610,8 +610,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /**
      * Every coding agent of the plan stopped for good first, as a Stop stops
      * one, so none works on for a plan that is gone; then the
-     * plan's eve sessions and its agents' retired (`retire-sessions.ts`);
-     * then the plan. An eve that refuses a Stop, an agent with a turn still
+     * plan's eve sessions and its agents' retired (`retire-sessions.ts`),
+     * with no transaction open; then the plan, under its lock, which reads
+     * again which agents stand. An eve that refuses a Stop, an agent with a turn still
      * coming that no Stop can name yet, or an agent started while the others
      * were stopped, leaves the plan standing and refused.
      *
@@ -632,13 +633,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         listCodingAgents(userId, taskId, { includeArchived: true }),
       );
       yield* everyStoppedForGood(seams, writer, request, userId, agents);
+      // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on eve;
+      // an agent started meanwhile is none of these, keeps its session, and refuses the delete below.
+      yield* hostedStoreOrUnavailable(
+        retiredBeforeDelete(eveAt)(agents.map(({ conversationId }) => conversationId)),
+      );
       const stopped = new Set(agents.map(({ id }) => id));
       const deleted = yield* hostedStoreOrUnavailable(
-        deleteTaskCommitted(userId, taskId, {
-          stoppedAgentIds: stopped,
-          // Note that a delete an agent started meanwhile refuses before it retires anything.
-          beforeDelete: retiredBeforeDelete(eveAt),
-        }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
+        deleteTaskCommitted(userId, taskId, { stoppedAgentIds: stopped }).pipe(
+          Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined)),
+        ),
       );
       // An agent started while the others were stopped is one this delete has not stopped yet.
       if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);

@@ -77,7 +77,7 @@ import {
   turnUsagesOf,
 } from "./message-reads.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
-import { TaskAgentUnstopped, type TaskDeleteGuard } from "./task-store.js";
+import { TaskAgentUnstopped } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
@@ -1852,8 +1852,10 @@ export function discardCodingAgent(
 export interface CodingAgentDeleteGuard<R> {
   /** Whether the agent, read under its conversation's lock, still stands as the caller's Stop left it; false refuses the delete. */
   readonly standsStopped: (agent: CodingAgent) => Effect.Effect<boolean, StoreFailure, R>;
-  /** Run under that lock before anything is deleted, given the agent's conversation, as a task's delete runs its own. */
-  readonly beforeDelete: TaskDeleteGuard<R>["beforeDelete"];
+  /** Run under that lock before anything is deleted, given the agent's conversation. */
+  readonly beforeDelete: (
+    conversationIds: readonly string[],
+  ) => Effect.Effect<void, StoreFailure, R>;
 }
 
 /** Every call into the agent, open or ended, locked against a segment its voice writes meanwhile, which waits and then finds the conversation stamped (`voice-writer.ts`). */
