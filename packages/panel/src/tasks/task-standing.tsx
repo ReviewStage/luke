@@ -15,6 +15,7 @@ import {
   CHIP_WIDTH,
   GAP,
   Inline,
+  Spinner,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -133,7 +134,7 @@ function TaskAssigneePicker({
   /** Where a pick is sent; without one the chip only says. */
   onPick: ((assigneeId: string | null) => void) | undefined;
 }): React.JSX.Element {
-  const { members, readerId } = useMemberDirectory();
+  const { members, readerId, reading } = useMemberDirectory();
   const person = usePerson(assignee);
   return (
     <Picker
@@ -149,7 +150,8 @@ function TaskAssigneePicker({
       }
       rows={assigneeRows(members, readerId)}
       placeholder="Assign to…"
-      noMatch="No such member"
+      noMatch="No people match"
+      note={reading ? <Spinner delay label="Reading members" /> : undefined}
       align={PICKER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
@@ -239,7 +241,7 @@ function TaskStatusPicker({
       valueLabel={TASK_STATUS_WORDS[status]}
       valueIcon={<TaskStatusMark status={status} />}
       rows={STATUS_ROWS}
-      noMatch="No such status"
+      noMatch="No statuses match"
       align={PICKER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
@@ -274,7 +276,7 @@ export function TaskStandingChips({
           valueLabel={TASK_PRIORITY_WORDS[priority]}
           valueIcon={<TaskPriorityMark priority={priority} />}
           rows={PRIORITY_ROWS}
-          noMatch="No such priority"
+          noMatch="No priorities match"
           align={PICKER_ALIGN.START}
           width={CHIP_WIDTH.AUTO}
           disabled={onSet === undefined}

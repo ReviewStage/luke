@@ -93,7 +93,7 @@ import { SwitchRow } from "./switch-row.js";
 const PAGE_LINE = {
   FAILED: "The default could not be read.",
   MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
-  MODELS_NONE_MATCH: "No models match.",
+  MODELS_NONE_MATCH: "No models match",
   SIGNED_OUT: "Sign in to choose the model your agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;

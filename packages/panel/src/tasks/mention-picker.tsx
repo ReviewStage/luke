@@ -32,6 +32,7 @@ import {
   MenuGlyph,
   MenuSurface,
   ProviderMark,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -290,7 +291,7 @@ const PER_KIND = 50;
 const MENU_LABEL = "Mention";
 
 /** What the list says where it has no row. */
-const NO_MATCH = "Nothing matches";
+const NO_MATCH = "No results match";
 
 /** The keys the list hears, said at its foot as far as it hears them now. */
 const MENU_KEY = {
@@ -979,6 +980,7 @@ function MentionMenu({
   at,
   keys,
   place,
+  reading,
   onHover,
   onChoose,
 }: {
@@ -988,6 +990,8 @@ function MentionMenu({
   at: number;
   keys: readonly string[];
   place: MenuPlace;
+  /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
+  reading: boolean;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
@@ -1011,7 +1015,8 @@ function MentionMenu({
         }}
         // A narrowed list's one group is named by its crumb.
         headed={crumb === undefined}
-        empty={NO_MATCH}
+        empty={reading ? undefined : NO_MATCH}
+        note={reading ? <Spinner delay label="Reading" /> : undefined}
       />
       <div className="task-compose-menu-foot mention-menu-foot" aria-hidden="true">
         {keys.map((key) => (
@@ -1459,6 +1464,13 @@ export function useMentionPicker({
           members !== undefined,
         );
   const rows = groups.flatMap((group) => group.rows);
+  // The list says it is reading, never that nothing matches, while a read it draws rows from is out.
+  const reading =
+    open &&
+    ((members === undefined && directory.reading) ||
+      (readAgents !== undefined && wantsAgents) ||
+      (read === undefined && treeKey(taskId, workspaceId, repository) !== undefined) ||
+      (skills !== undefined && skills.known === undefined));
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
   const shown = naming || (open && (rows.length > 0 || !/\s/u.test(term.trim())));
   const held =
@@ -1611,6 +1623,7 @@ export function useMentionPicker({
         at={at}
         keys={keys}
         place={placeOf(trigger, placed, box.clientWidth)}
+        reading={reading}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}
       />

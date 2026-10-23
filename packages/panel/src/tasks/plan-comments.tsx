@@ -48,6 +48,8 @@ import {
   MenuSurface,
   SCROLL_FADE,
   ScrollArea,
+  Skeleton,
+  SkeletonRegion,
   SUBMIT_STATE,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
@@ -1880,6 +1882,29 @@ function ResolvedOnly({
   );
 }
 
+/** The widths of each stand-in card's author line and its words, while the threads are read. */
+const COMMENTS_SKELETON = [
+  { author: "30%", words: ["100%", "70%"] },
+  { author: "24%", words: ["100%", "85%", "40%"] },
+  { author: "34%", words: ["90%"] },
+] as const;
+
+/** The threads as quiet cards while they are read, in a card's own type. */
+function CommentsSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label="Reading the comments…">
+      {COMMENTS_SKELETON.map((card) => (
+        <div key={card.author} className="comments-row">
+          <Skeleton width={card.author} />
+          {card.words.map((width) => (
+            <Skeleton key={width} width={width} />
+          ))}
+        </div>
+      ))}
+    </SkeletonRegion>
+  );
+}
+
 /** What the Comments tab says over a list holding nothing, by its filter. */
 const NO_COMMENTS = {
   [COMMENTS_FILTER.OPEN]: {
@@ -1974,7 +1999,9 @@ export function PlanCommentsTab({
                 <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
                   {NO_COMMENTS[filter].line}
                 </EmptyState>
-              ) : null
+              ) : (
+                <CommentsSkeleton />
+              )
             ) : (
               listed.map((thread) => (
                 <div key={thread.id} className="comments-row">

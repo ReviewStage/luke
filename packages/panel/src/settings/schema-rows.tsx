@@ -24,7 +24,7 @@ type SettingOption = NonNullable<
 >["options"][number];
 
 /** What the menu says when a search over a choice's values matches nothing. */
-const NO_MATCH = "Nothing matches.";
+const NO_MATCH = "No options match";
 
 /** Where a pressed search result lands: the row's one control, for a row the schema names. */
 function anchorOf(id: string) {
