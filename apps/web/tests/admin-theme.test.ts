@@ -97,7 +97,7 @@ test("the page opens light, tinted in the light ground, and forces no color sche
   assert.equal(ADMIN_PAGE.querySelector('meta[name="color-scheme"]'), null);
   assert.equal(
     ADMIN_PAGE.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
-    "#f6f4ef",
+    "#fbfaf7",
   );
 });
 
