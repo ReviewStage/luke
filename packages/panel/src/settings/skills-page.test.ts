@@ -13,11 +13,12 @@ import { SKILL_PASTE_KIND } from "@luke/features/skill-paste";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { ToastHost } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { SkillsPage } from "./skills-page.js";
 
@@ -25,9 +26,12 @@ import { SkillsPage } from "./skills-page.js";
  * Settings › Skills and its Add skill dialog over a host answering as the
  * service would: the workspace's skills stand before the account's own,
  * each with its source and who installed it; a member who is not an owner
- * or admin sees a workspace skill's switch unavailable and no ⋯; a switch
- * and Update available send their acts and draw the answer; Remove asks
- * first. In the dialog, a pasted command is previewed with its skills ticked
+ * or admin sees a workspace skill's switch unavailable and View alone in
+ * its ⋯; a switch and Update send their acts and draw the answer; View
+ * reads the skill's text and files; Share asks in plain words, moves the
+ * skill into the workspace, and says a taken name in the question; Remove
+ * asks first; and an install lights its rows and says how to call one. In
+ * the dialog, a pasted command is previewed with its skills ticked
  * where it asked for them, a skill with problems never tickable; Install
  * sends the ticked ones; a refusal is said in words; text with no
  * description asks for one; and Everyone in the workspace is offered to
@@ -126,6 +130,8 @@ let sent: { kind: PortActKind; payload: unknown }[] = [];
 let refuseInstall = false;
 /** The names the next source preview says no folder holds. */
 let missingNames: string[] = [];
+/** Whether the workspace already holds a skill of the shared one's name. */
+let nameTaken = false;
 
 const roots: Root[] = [];
 
@@ -135,6 +141,7 @@ beforeEach(() => {
   sent = [];
   refuseInstall = false;
   missingNames = [];
+  nameTaken = false;
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([
@@ -162,6 +169,23 @@ beforeEach(() => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_UPDATE, payload });
       return Promise.resolve({ skill: RELEASE_NOTES, changed: true });
     },
+    [ACT_KIND.INSTALLED_SKILLS_READ]: (payload) => {
+      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_READ, payload });
+      return Promise.resolve({
+        id: payload.skillId,
+        skillFile: "---\nname: pr-style\n---\n# PR style",
+        files: [
+          { path: "SKILL.md", bytes: 48 },
+          { path: "examples/good.md", bytes: 2_048 },
+        ],
+      });
+    },
+    [ACT_KIND.INSTALLED_SKILLS_SHARE]: (payload) => {
+      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_SHARE, payload });
+      if (nameTaken) return Promise.resolve({ failure: INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN });
+      const shared = stored.find((each) => each.id === payload.skillId) ?? assert.fail("no skill");
+      return Promise.resolve({ skill: { ...shared, scope: INSTALLED_SKILL_SCOPE.WORKSPACE } });
+    },
     [ACT_KIND.INSTALLED_SKILLS_REMOVE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_REMOVE, payload });
       stored = stored.filter((each) => each.id !== payload.skillId);
@@ -182,7 +206,11 @@ beforeEach(() => {
           skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES,
         });
       }
-      return Promise.resolve({ skills: [skill("web-design-guidelines", payload.scope)] });
+      return Promise.resolve({
+        skills: (payload.skills ?? ["web-design-guidelines"]).map((name, at) =>
+          skill(name, payload.scope, { id: `33333333-3333-4333-8333-33333333333${at}` }),
+        ),
+      });
     },
   });
 });
@@ -218,16 +246,22 @@ function mount(element: React.ReactElement): void {
 
 async function mountPage(shown = workspace()): Promise<void> {
   mount(
-    createElement(SkillsPage, {
-      control: {
-        workspaces: [shown],
-        workspaceId: shown.id,
-        onLeft: () => undefined,
-        listFailed: false,
-        onRetryList: () => undefined,
-      },
-      readerId: READER,
-    }),
+    createElement(
+      Fragment,
+      null,
+      createElement(SkillsPage, {
+        control: {
+          workspaces: [shown],
+          workspaceId: shown.id,
+          onLeft: () => undefined,
+          listFailed: false,
+          onRetryList: () => undefined,
+        },
+        readerId: READER,
+        pause: () => Promise.resolve(),
+      }),
+      createElement(ToastHost),
+    ),
   );
   await settle();
 }
@@ -278,6 +312,43 @@ async function paste(text: string): Promise<void> {
   await settle();
 }
 
+/** The row a skill's name labels. */
+const rowOf = (name: string) =>
+  [...document.querySelectorAll<HTMLElement>(".luke-settings-row")].find(
+    (each) => each.querySelector(".luke-settings-row-label")?.textContent === name,
+  ) ?? assert.fail(`no row for ${name}`);
+
+/** The ⋯ of a skill's row, none where it draws none. */
+const moreOf = (name: string) =>
+  rowOf(name).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+
+/** What a skill's ⋯ offers, opened and closed again. */
+function menuOf(name: string): (string | null)[] {
+  const more = moreOf(name) ?? assert.fail(`no ⋯ for ${name}`);
+  act(() => more.click());
+  const items = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
+  act(() => more.click());
+  return items;
+}
+
+/** Chooses `words` in a skill's ⋯, and lets what it asked settle. */
+async function choose(name: string, words: string): Promise<void> {
+  const more = moreOf(name) ?? assert.fail(`no ⋯ for ${name}`);
+  act(() => more.click());
+  act(() =>
+    (
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === words,
+      ) ?? assert.fail(`no ${words} in the ⋯`)
+    ).click(),
+  );
+  await settle();
+}
+
+/** The dialog standing over the page. */
+const dialog = (role = "dialog") =>
+  document.querySelector<HTMLElement>(`[role="${role}"]`) ?? assert.fail(`no ${role}`);
+
 const sentOf = (kind: PortActKind) =>
   sent.filter((each) => each.kind === kind).map((each) => each.payload);
 
@@ -294,18 +365,107 @@ test("the workspace's skills stand before the account's own, each with its sourc
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
 });
 
-test("a GitHub skill whose folder moved offers Update available, which updates it and goes", async () => {
+test("a GitHub skill whose folder moved offers Update in its ⋯, which updates it and goes", async () => {
   await mountPage();
 
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), [
     { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
   ]);
-  act(() => button("Update available").click());
-  await settle();
+  assert.deepEqual(menuOf("release-notes"), ["View", "Update", "Remove"]);
+  await choose("release-notes", "Update");
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_UPDATE), [
     { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
   ]);
-  assert.ok(!(document.body.textContent ?? "").includes("Update available"));
+  assert.deepEqual(menuOf("release-notes"), ["View", "Remove"]);
+});
+
+test("the account's own skill offers Share with workspace, which asks in plain words and moves it there", async () => {
+  await mountPage();
+
+  assert.deepEqual(menuOf("pr-style"), ["View", "Share with workspace", "Remove"]);
+  await choose("pr-style", "Share with workspace");
+  const question = dialog("alertdialog");
+  assert.match(question.textContent ?? "", /Share pr-style with Stage\?/u);
+  assert.match(
+    question.textContent ?? "",
+    /Everyone in Stage will get pr-style\. It leaves your personal skills\./u,
+  );
+  act(() => button("Share", question).click());
+  await settle();
+
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_SHARE), [
+    { workspaceId: "workspace-stage", skillId: PR_STYLE.id },
+  ]);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  const [, shared, personal] = [...document.querySelectorAll("section")];
+  assert.match(shared?.textContent ?? "", /pr-styleWorkspace/u);
+  assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
+});
+
+test("a share the workspace already has the name for is refused in the question, and the skill stays the account's own", async () => {
+  nameTaken = true;
+  await mountPage();
+
+  await choose("pr-style", "Share with workspace");
+  act(() => button("Share", dialog("alertdialog")).click());
+  await settle();
+
+  assert.match(
+    dialog("alertdialog").textContent ?? "",
+    /Stage already has a skill named pr-style\. Remove one of them first\./u,
+  );
+  assert.match(rowOf("pr-style").textContent ?? "", /pr-stylePersonal/u);
+});
+
+test("Share is never offered in a personal workspace", async () => {
+  stored = [PR_STYLE];
+  await mountPage(workspace({ personal: true }));
+
+  assert.deepEqual(menuOf("pr-style"), ["View", "Remove"]);
+});
+
+test("View reads the skill and draws its text as written and every file with its size", async () => {
+  await mountPage();
+
+  await choose("pr-style", "View");
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_READ), [{ skillId: PR_STYLE.id }]);
+  const shown = dialog();
+  assert.equal(shown.querySelector("h2")?.textContent, "pr-style");
+  assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u);
+  assert.deepEqual(
+    [...shown.querySelectorAll("dt, dd")].map((each) => each.textContent),
+    ["SKILL.md", "48 B", "examples/good.md", "2.0 KB"],
+  );
+  act(() => button("Close", shown).click());
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test("Remove asks first, then takes the skill off the page", async () => {
+  await mountPage();
+
+  await choose("pr-style", "Remove");
+  act(() => button("Remove", dialog("alertdialog")).click());
+  await settle();
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
+  assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
+});
+
+test("an install lights its own rows once and says which skills and how to call one", async () => {
+  await mountPage();
+
+  act(() => button("Add skill").click());
+  await paste(COMMAND);
+  act(() => checkboxOf("react-best-practices").click());
+  act(() => button("Install").click());
+  await settle();
+
+  const lit = [...document.querySelectorAll(".luke-settings-row[data-landed]")].map(
+    (each) => each.querySelector(".luke-settings-row-label")?.textContent,
+  );
+  assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
+  const toast = document.querySelector('[aria-label="Notifications"]')?.textContent ?? "";
+  assert.match(toast, /Installed web-design-guidelines and react-best-practices/u);
+  assert.match(toast, /Type \/web-design-guidelines in any new agent/u);
 });
 
 test("a switch turns its skill off and draws the service's answer", async () => {
@@ -319,14 +479,13 @@ test("a switch turns its skill off and draws the service's answer", async () => 
   assert.equal(switchOf("pr-style").getAttribute("aria-checked"), "false");
 });
 
-test("a workspace skill a member may not change draws its switch unavailable and no ⋯, and asks no update", async () => {
+test("a workspace skill a member may not change draws its switch unavailable and View alone in its ⋯, and asks no update", async () => {
   stored = [{ ...RELEASE_NOTES, manageable: false }, PR_STYLE];
   await mountPage(workspace({ role: WORKSPACE_ROLE.MEMBER }));
 
   assert.equal(switchOf("release-notes").disabled, true);
   assert.equal(switchOf("pr-style").disabled, false);
-  assert.equal(document.querySelector('[aria-label="release-notes actions"]'), null);
-  assert.ok(document.querySelector('[aria-label="pr-style actions"]'));
+  assert.deepEqual(menuOf("release-notes"), ["View"]);
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), []);
 });
 
@@ -369,7 +528,7 @@ test("a pasted command is previewed with the skills it asked for ticked, one wit
   ]);
   assert.deepEqual(
     installed.map((each) => each.name),
-    ["web-design-guidelines"],
+    ["web-design-guidelines", "react-best-practices"],
   );
 });
 

@@ -46,6 +46,8 @@ interface MenuRowWords {
   control?: ReactNode;
   /** A control drawn from the row's ids, where the row's words and error must describe it. */
   describedControl?: (control: SettingsRowControl) => ReactNode;
+  /** Whether the row just arrived, which lights it once. */
+  landed?: boolean;
 }
 
 /** What the row draws: its words for the shared row, or its own children in the window's row. */
@@ -115,6 +117,7 @@ export function MenuRow({
             adornment={row.adornment}
             description={row.description}
             error={row.error}
+            landed={row.landed}
             below={row.below === undefined || row.below === null ? undefined : () => row.below}
           >
             {(control) => (

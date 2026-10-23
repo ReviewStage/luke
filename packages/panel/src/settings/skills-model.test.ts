@@ -14,11 +14,17 @@ import { test } from "vitest";
 import {
   DETECTED_TONE,
   failureLine,
+  fencedSkillFile,
   initialTicks,
+  installedNotice,
   installRequest,
   installScopes,
   pastedLine,
   previewLine,
+  SKILL_ACTION,
+  shareFailureLine,
+  shareQuestion,
+  skillActions,
   skillGroups,
 } from "./skills-model.js";
 
@@ -27,8 +33,9 @@ import {
  * the account's own, each saying where its files came from and who
  * installed it; the scopes the dialog offers by role and workspace; what
  * the box says at once and once the service previewed it; the skills
- * ticked as a preview lands; what an install sends; and every refusal said
- * in words that name the skill. Synthetic names and ids.
+ * ticked as a preview lands; what an install sends; every refusal said
+ * in words that name the skill; what each row's ⋯ holds and what Share asks;
+ * and what the page says once an install lands. Synthetic names and ids.
  */
 
 const READER = "user-ada";
@@ -308,5 +315,84 @@ test("every refusal is said in words, a taken name and refused files naming the 
       skillRefusal: "credential-shaped",
     }),
     /looks like a credential/u,
+  );
+});
+
+/** The one row a skill draws, wherever its group puts it. */
+function rowOf(one: InstalledSkillSummary) {
+  const groups = skillGroups([one], READER, []);
+  return [...groups.workspace, ...groups.personal][0] ?? assert.fail("no row");
+}
+
+test("a row's ⋯ holds View, Share for the account's own skill, and Update where one is out, then Remove", () => {
+  const own = rowOf(skill("pr-style", INSTALLED_SKILL_SCOPE.PERSONAL, { source: GITHUB }));
+  assert.deepEqual(skillActions(own, { workspace: workspace(), updateAvailable: true }), [
+    [SKILL_ACTION.VIEW, SKILL_ACTION.SHARE, SKILL_ACTION.UPDATE],
+    [SKILL_ACTION.REMOVE],
+  ]);
+  assert.deepEqual(skillActions(own, { workspace: workspace(), updateAvailable: false }), [
+    [SKILL_ACTION.VIEW, SKILL_ACTION.SHARE],
+    [SKILL_ACTION.REMOVE],
+  ]);
+});
+
+test("Share is never offered for a workspace's skill or in a personal workspace", () => {
+  const shared = rowOf(skill("release-notes", INSTALLED_SKILL_SCOPE.WORKSPACE));
+  const own = rowOf(skill("pr-style", INSTALLED_SKILL_SCOPE.PERSONAL));
+  assert.deepEqual(skillActions(shared, { workspace: workspace(), updateAvailable: false }), [
+    [SKILL_ACTION.VIEW],
+    [SKILL_ACTION.REMOVE],
+  ]);
+  assert.deepEqual(
+    skillActions(own, { workspace: workspace({ personal: true }), updateAvailable: false }),
+    [[SKILL_ACTION.VIEW], [SKILL_ACTION.REMOVE]],
+  );
+});
+
+test("a skill the account may not change offers View alone, even with an update out", () => {
+  const locked = rowOf(
+    skill("release-notes", INSTALLED_SKILL_SCOPE.WORKSPACE, { manageable: false, source: GITHUB }),
+  );
+  assert.deepEqual(skillActions(locked, { workspace: workspace(), updateAvailable: true }), [
+    [SKILL_ACTION.VIEW],
+  ]);
+});
+
+test("Share asks in plain words who gets the skill and that it leaves the account's own, and a taken name is said for the workspace", () => {
+  assert.deepEqual(shareQuestion("grill-me", workspace()), {
+    title: "Share grill-me with Stage?",
+    body: "Everyone in Stage will get grill-me. It leaves your personal skills.",
+    verb: "Share",
+    running: "Sharing…",
+  });
+  assert.equal(
+    shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN }, "grill-me", workspace()),
+    "Stage already has a skill named grill-me. Remove one of them first.",
+  );
+  assert.equal(
+    shareFailureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED }, "grill-me", workspace()),
+    "Luke couldn't reach the service. Try again.",
+  );
+});
+
+test("an install names one or two skills and counts the rest, and says how to call the first one a member can call", () => {
+  const made = (name: string, userInvocable = true) => ({ name, userInvocable });
+  assert.deepEqual(installedNotice([made("grill-me"), made("grilling")]), {
+    words: "Installed grill-me and grilling",
+    detail: "Type /grill-me in any new agent",
+  });
+  assert.deepEqual(installedNotice([made("grilling", false), made("grill-me"), made("tdd")]), {
+    words: "Installed grilling, grill-me, and 1 more",
+    detail: "Type /grill-me in any new agent",
+  });
+  assert.deepEqual(installedNotice([made("helper", false)]), { words: "Installed helper" });
+  assert.equal(installedNotice([]), undefined);
+});
+
+test("View draws a skill's text in one fence nothing inside it can close, ending on its last line", () => {
+  assert.equal(fencedSkillFile("# Grill me\n\n"), "```markdown\n# Grill me\n```");
+  assert.equal(
+    fencedSkillFile("Run:\n````sh\nnpm test\n````"),
+    "`````markdown\nRun:\n````sh\nnpm test\n````\n`````",
   );
 });

@@ -56,13 +56,18 @@ export const SKILLS_LINE = {
   WORKSPACE_BADGE: "Workspace",
   PERSONAL_BADGE: "Personal",
   PASTED: "pasted",
-  UPDATE_AVAILABLE: "Update available",
   NONE: "No skills installed yet.",
   READ_FAILED: "Your skills could not be read.",
   PASTE_LABEL: "Paste an npx skills add command or a skill's text",
   READING: "Reading…",
   INSTALL_FOR: "Install for",
   JUST_ME: "Just me",
+  VIEW: "View",
+  SHARE: "Share with workspace",
+  UPDATE: "Update",
+  REMOVE: "Remove",
+  FILES: "Files",
+  VIEW_FAILED: "The skill could not be read.",
 } as const;
 
 /** The workspace's group heading. */
@@ -166,6 +171,114 @@ export function withSkill(
   changed: InstalledSkillSummary,
 ): readonly InstalledSkillSummary[] {
   return skills.map((each) => (each.id === changed.id ? changed : each));
+}
+
+/* ----- A row's menu ----- */
+
+/** What a row's ⋯ may hold. */
+export const SKILL_ACTION = {
+  VIEW: "view",
+  SHARE: "share",
+  UPDATE: "update",
+  REMOVE: "remove",
+} as const;
+
+export type SkillAction = (typeof SKILL_ACTION)[keyof typeof SKILL_ACTION];
+
+/**
+ * What a row's ⋯ holds: View for every row, since anyone who sees a skill
+ * may read it, Share with workspace for the account's own skill outside a
+ * personal workspace, and Update where a GitHub skill's folder moved; then,
+ * a rule apart, Remove. A row the account may not change holds View alone.
+ */
+export function skillActions(
+  row: SkillRow,
+  state: {
+    readonly workspace: Pick<Workspace, "personal">;
+    readonly updateAvailable: boolean;
+  },
+): readonly (readonly SkillAction[])[] {
+  const { skill } = row;
+  if (!skill.manageable) return [[SKILL_ACTION.VIEW]];
+  const shareable =
+    skill.scope === INSTALLED_SKILL_SCOPE.PERSONAL && state.workspace.personal !== true;
+  const acts = [
+    SKILL_ACTION.VIEW,
+    ...(shareable ? [SKILL_ACTION.SHARE] : []),
+    ...(state.updateAvailable && row.fromGitHub ? [SKILL_ACTION.UPDATE] : []),
+  ];
+  return [acts, [SKILL_ACTION.REMOVE]];
+}
+
+/** What Share with workspace asks first: it moves the skill, so it says who gains it and that it leaves the account's own. */
+export function shareQuestion(
+  skillName: string,
+  workspace: Pick<Workspace, "name">,
+): {
+  readonly title: string;
+  readonly body: string;
+  readonly verb: string;
+  readonly running: string;
+} {
+  return {
+    title: `Share ${skillName} with ${workspace.name}?`,
+    body: `${everyoneIn(workspace)} will get ${skillName}. It leaves your personal skills.`,
+    verb: "Share",
+    running: "Sharing…",
+  };
+}
+
+/** Why a share was refused: a name the workspace already holds is said for that workspace, the rest as any call says them. */
+export function shareFailureLine(
+  failed: { readonly failure: InstalledSkillCallFailure },
+  skillName: string,
+  workspace: Pick<Workspace, "name">,
+): string {
+  if (failed.failure === INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN) {
+    return `${workspace.name} already has a skill named ${skillName}. Remove one of them first.`;
+  }
+  return failureLine(failed);
+}
+
+/**
+ * A skill's `SKILL.md` as Markdown that draws it as written: one fenced
+ * block, its fence a backtick longer than any run of them in the text, so
+ * nothing inside can close it early, and its trailing newlines left out so
+ * the block ends on its last line.
+ */
+export function fencedSkillFile(text: string): string {
+  const longest = Math.max(0, ...[...text.matchAll(/`+/gu)].map((run) => run[0].length));
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return `${fence}markdown\n${text.replace(/\n+$/u, "")}\n${fence}`;
+}
+
+/* ----- After an install ----- */
+
+/** How many installed skills the notice names before it counts the rest. */
+const NAMED_INSTALLS = 2;
+
+/** "grill-me", "grill-me and grilling", "grill-me, grilling, and 3 more". */
+function namesText(names: readonly string[]): string {
+  if (names.length <= NAMED_INSTALLS) return names.join(" and ");
+  const named = names.slice(0, NAMED_INSTALLS).join(", ");
+  return `${named}, and ${names.length - NAMED_INSTALLS} more`;
+}
+
+/**
+ * What the page says once an install lands: which skills, one or two by
+ * name and the rest counted, and, under it, how to call the first one a
+ * member can call, since that is what they will want to do next. Nothing
+ * where nothing was installed.
+ */
+export function installedNotice(
+  made: readonly Pick<InstalledSkillSummary, "name" | "userInvocable">[],
+): { readonly words: string; readonly detail?: string } | undefined {
+  if (made.length === 0) return undefined;
+  const words = `Installed ${namesText(made.map((each) => each.name))}`;
+  const callable = made.find((each) => each.userInvocable);
+  return callable === undefined
+    ? { words }
+    : { words, detail: `Type /${callable.name} in any new agent` };
 }
 
 /* ----- Words for what went wrong ----- */
