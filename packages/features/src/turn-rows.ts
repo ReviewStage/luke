@@ -66,6 +66,14 @@ export const CALL_KIND = {
   INBOX_REPLY: "inbox-reply",
   /** An ask on one of the agent's inbox threads taken back with why (`withdraw_ask`), its row naming the thread's key. */
   INBOX_WITHDRAW: "inbox-withdraw",
+  /** A message posted in the workspace's chat (`post_chat`), to a channel, a member, or a thread, its row saying the words. */
+  CHAT_POST: "chat-post",
+  /** The workspace's chat read (`read_chat`), its row naming the channel where the call named one. */
+  CHAT_READ: "chat-read",
+  /** An ask posted in chat taken back with why (`resolve_ask`), its row naming the ask's key. */
+  CHAT_RESOLVE: "chat-resolve",
+  /** A topic channel renamed, given a purpose, or archived (`edit_channel`), its row naming the channel. */
+  CHAT_EDIT_CHANNEL: "chat-edit-channel",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
@@ -143,6 +151,10 @@ export const CALL_WORDS = {
   [CALL_KIND.INBOX_READ]: { verb: "Read your inbox", code: false },
   [CALL_KIND.INBOX_REPLY]: { verb: "Replied in your inbox:", code: false },
   [CALL_KIND.INBOX_WITHDRAW]: { verb: "Withdrew an ask in your inbox:", code: false },
+  [CALL_KIND.CHAT_POST]: { verb: "Posted in the chat:", code: false },
+  [CALL_KIND.CHAT_READ]: { verb: "Read the chat", code: false },
+  [CALL_KIND.CHAT_RESOLVE]: { verb: "Resolved an ask in the chat:", code: false },
+  [CALL_KIND.CHAT_EDIT_CHANNEL]: { verb: "Changed the channel", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
