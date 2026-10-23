@@ -19,6 +19,7 @@ import {
   OneLine,
   Tooltip,
   useImageZoom,
+  usePictureExpand,
   ZoomImage,
 } from "@luke/ui";
 import {
@@ -28,7 +29,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
@@ -50,7 +51,8 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
  * `@luke/ui`'s dialog fitted to the file shown: the window dims, Tab stays inside the card, and
  * Escape, a press on the dimmed window, and the way out all close it and
- * hand focus back to the chip that opened it. The
+ * hand focus back to the chip that opened it. A picture opened from its
+ * tile grows out of the tile and, closed on that picture, shrinks back into it. The
  * file's bytes are the chip's own, so a file in the message box and one
  * read back with the transcript open the same. A message's files are its
  * developer's own, so everything the card holds is left out of the screen
@@ -224,6 +226,11 @@ export function AttachmentViewer({
   const titleId = useId();
   const file = files[at];
   const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
+  // A picture opened from its tile grows from it, and goes back into it
+  // only while the picture it was opened on is the one shown.
+  const [openedOn] = useState(file?.url);
+  const expand = usePictureExpand(file?.url === openedOn);
+  const close = () => expand.close(onClose);
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -249,7 +256,13 @@ export function AttachmentViewer({
   // does, so no ring stands on a control nobody chose; Tab goes on to the
   // buttons from there.
   return (
-    <Dialog size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose} onKeyDown={walkKey}>
+    <Dialog
+      size={DIALOG_SIZE.MEDIA}
+      labelledBy={titleId}
+      onDismiss={close}
+      onKeyDown={walkKey}
+      expand={expand}
+    >
       <div
         className="attachment-viewer ph-no-capture"
         data-view={attachmentView(file)}
@@ -309,7 +322,7 @@ export function AttachmentViewer({
             onClick={() => download(file)}
             icon={<DownloadIcon aria-hidden="true" />}
           />
-          <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={onClose} icon={<CloseIcon />} />
+          <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={close} icon={<CloseIcon />} />
         </header>
         <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
       </div>
