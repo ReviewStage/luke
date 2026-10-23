@@ -7,8 +7,11 @@
  * that did not go or a draft kept per channel is laid in again. Words that
  * wear no mark are written exactly as they stand, never escaped, so a
  * message holding no mark reads out byte for byte as it did before the box
- * had any; what is read back keeps every character it does not take as a
- * mark's own (a backslash's escape, an unmatched `*`) as the words it is.
+ * had any; what is read back there keeps every character it does not take
+ * as a mark's own (a backslash's escape, an unmatched `*`) as the words it
+ * is. Words wearing a mark have their backslashes, `*`, `~`, and brackets
+ * escaped, so none of them closes the mark early or opens another, and
+ * read back with those escapes taken out again.
  * The reading follows CommonMark's delimiter runs for `*` and GFM's `~~`;
  * `_` and a single `~` are left as words, since a name written `__init__`
  * or `my_var` is a word far more often than it is emphasis. A code span
@@ -98,6 +101,9 @@ const LEADING_SPACE = /^\s*/u;
 const TRAILING_SPACE = /\s*$/u;
 const TICK_RUNS = /`+/gu;
 
+/** A character words wearing a mark escape, which would otherwise close it, open another, or escape the delimiter after it. */
+const MARK_SPECIAL = /[\\*~[\]]/u;
+
 /** A link's address right after its words: no space and no parenthesis in it. */
 const LINK_TARGET = /^\(([^\s()]+)\)/u;
 
@@ -136,6 +142,8 @@ interface Reading {
   readonly dropped: boolean[];
   readonly ranges: MarkRange[];
   readonly codes: { range: MarkRange; syntax: readonly number[] }[];
+  /** Where each backslash escaping a punctuation character stands. */
+  readonly escapes: number[];
 }
 
 /** How long the run of `char` starting at `at` is. */
@@ -306,8 +314,10 @@ function scanned(reading: Reading): void {
     const atomEnd = reading.atoms.get(at);
     const char = line[at] ?? "";
     if (atomEnd !== undefined) at = atomEnd;
-    else if (char === BACKSLASH && ASCII_PUNCTUATION.test(line[at + 1] ?? "")) at += 2;
-    else if (char === TICK) at = codeSpan(reading, at);
+    else if (char === BACKSLASH && ASCII_PUNCTUATION.test(line[at + 1] ?? "")) {
+      reading.escapes.push(at);
+      at += 2;
+    } else if (char === TICK) at = codeSpan(reading, at);
     else if (char === STAR || char === TILDE) {
       const run = runLength(line, at, char);
       if (char === STAR || run === STRIKE_RUN) {
@@ -337,6 +347,16 @@ function settledCodes(reading: Reading): void {
   }
 }
 
+/** Each escape in words wearing a mark taken out, as the writer put it there; one in words wearing none stays the words it is. */
+function settledEscapes(reading: Reading): void {
+  for (const at of reading.escapes) {
+    const marked = reading.ranges.some(
+      (range) => range.mark.name !== INLINE_MARK.CODE && at >= range.start && at < range.end,
+    );
+    if (marked) reading.dropped[at] = true;
+  }
+}
+
 /** Whether two lists of marks are the same marks. */
 function sameMarks(a: readonly InlineMark[], b: readonly InlineMark[]): boolean {
   return (
@@ -356,9 +376,11 @@ export function readInline(line: string, atoms: readonly LineRange[]): InlineSpa
     dropped: Array.from({ length: line.length }, () => false),
     ranges: [],
     codes: [],
+    escapes: [],
   };
   scanned(reading);
   settledCodes(reading);
+  settledEscapes(reading);
   const spans: InlineSpan[] = [];
   let words: { from: number; to: number; marks: readonly InlineMark[] } | undefined;
   const flush = () => {
@@ -457,6 +479,17 @@ export function writeInline(pieces: readonly InlinePiece[]): {
     }
     text += words;
   };
+  // Each character a mark's words escape is written after its backslash, so every segment stays the piece's words in order.
+  const writeMarked = (words: string, piece: number, from: number) => {
+    let start = 0;
+    for (let at = 0; at < words.length; at += 1) {
+      if (!MARK_SPECIAL.test(words[at] ?? "")) continue;
+      write(words.slice(start, at), piece, from + start);
+      text += BACKSLASH;
+      start = at;
+    }
+    write(words.slice(start), piece, from + start);
+  };
   const closeTo = (keep: number) => {
     for (let mark = open.pop(); mark !== undefined; mark = open.pop()) {
       if (open.length < keep) {
@@ -492,7 +525,9 @@ export function writeInline(pieces: readonly InlinePiece[]): {
       text += opening(mark);
       open.push(mark);
     }
-    write(piece.text.slice(lead, piece.text.length - trail), index, lead);
+    const core = piece.text.slice(lead, piece.text.length - trail);
+    if (marks.length === 0) write(core, index, lead);
+    else writeMarked(core, index, lead);
     if (trail > 0) {
       trailing = { piece: index, from: piece.text.length - trail, words: piece.text.slice(-trail) };
     }

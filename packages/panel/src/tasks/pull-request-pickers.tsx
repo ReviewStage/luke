@@ -18,9 +18,12 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
-import { PlusIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react";
+import type { Actor } from "@luke/ui/actor-model";
+import { PlusIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useState } from "react";
+import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { useNamer } from "./pull-request-people.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -164,6 +167,57 @@ function PickerButton({
 }
 
 /**
+ * One picker: its press, which reads what the repository offers as it first
+ * opens, and the menu of `groups` under it, headed `heading`. It stands
+ * disabled while a change is out or the pull request is read again.
+ */
+function OptionsPicker({
+  label,
+  word,
+  heading,
+  groups,
+  options,
+  writes,
+  refreshing,
+}: {
+  label: string;
+  /** What it adds, in a word: “Reviewer”, “Label”. */
+  word: string;
+  heading: string;
+  groups: readonly (readonly MenuAction[])[];
+  options: ReviewOptions;
+  writes: PullRequestWrites;
+  refreshing: boolean;
+}): React.JSX.Element {
+  const menu = useMenu(true);
+  return (
+    <>
+      <PickerButton
+        label={label}
+        word={word}
+        disabled={writes.pending !== undefined || refreshing}
+        trigger={{
+          ...menu.trigger(dropBelowStart),
+          onClick: (event: React.MouseEvent<HTMLElement>) => {
+            options.ask();
+            menu.trigger(dropBelowStart).onClick(event);
+          },
+        }}
+      />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={heading}
+          heading={heading}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/**
  * The reviewer picker: a menu of the teams that reach the repository, then
  * its collaborators, the pull request's author left out, each checked while
  * a review is asked of them; choosing one asks a review of them, or asks it
@@ -186,44 +240,30 @@ export function ReviewerPicker({
   /** Whether the pull request is being read again, until which what it holds may be stale. */
   refreshing: boolean;
 }): React.JSX.Element {
-  const menu = useMenu(true);
   const asked = new Set(requested.map((person) => person.login));
   const askedTeams = new Set(requestedTeams.map((team) => team.slug));
-  const groups = reviewerGroups(options.read, author, asked, askedTeams, writes);
+  const name = useNamer();
   return (
-    <>
-      <PickerButton
-        label={PICKER_WORDS.REVIEWERS}
-        word={PICKER_WORDS.REVIEWER}
-        disabled={writes.pending !== undefined || refreshing}
-        trigger={{
-          ...menu.trigger(dropBelowStart),
-          onClick: (event: React.MouseEvent<HTMLElement>) => {
-            options.ask();
-            menu.trigger(dropBelowStart).onClick(event);
-          },
-        }}
-      />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={PICKER_WORDS.REVIEWERS_MENU}
-          heading={PICKER_WORDS.REVIEWERS_MENU}
-          menu={menu.drawn}
-          groups={groups}
-          onClose={menu.close}
-        />
-      )}
-    </>
+    <OptionsPicker
+      label={PICKER_WORDS.REVIEWERS}
+      word={PICKER_WORDS.REVIEWER}
+      heading={PICKER_WORDS.REVIEWERS_MENU}
+      groups={reviewerGroups(options.read, author, asked, askedTeams, writes, name)}
+      options={options}
+      writes={writes}
+      refreshing={refreshing}
+    />
   );
 }
 
-/** The reviewer picker's groups: the teams, then the people, each checked while asked; a stand-in while what they offer is read. */
+/** The reviewer picker's groups: the teams, then the people by their GitHub face and card, each checked while asked; a stand-in while what they offer is read. */
 function reviewerGroups(
   read: OptionsRead,
   author: string | undefined,
   asked: ReadonlySet<string>,
   askedTeams: ReadonlySet<string>,
   writes: PullRequestWrites,
+  name: (person: GitHubPerson) => Actor,
 ): readonly (readonly MenuAction[])[] {
   if (read.kind !== OPTIONS.LANDED) return [[standInItem(read)]];
   const busy = writes.pending !== undefined;
@@ -249,9 +289,11 @@ function reviewerGroups(
     .map((user): MenuAction => {
       const on = asked.has(user.login);
       const reviewer = { kind: REVIEWER_KIND.USER, name: user.login };
+      const actor = name(user);
       return {
         label: user.login,
-        icon: <UserRoundIcon aria-hidden="true" />,
+        icon: <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />,
+        card: actorCard(actor),
         checked: on,
         disabled: busy,
         onSelect: () =>
@@ -285,33 +327,17 @@ export function LabelPicker({
   /** Whether the pull request is being read again, until which the labels it holds may be stale. */
   refreshing: boolean;
 }): React.JSX.Element {
-  const menu = useMenu(true);
   const on = new Set(labels.map((label) => label.name));
-  const items = labelItems(options.read, on, writes);
   return (
-    <>
-      <PickerButton
-        label={PICKER_WORDS.LABELS}
-        word={PICKER_WORDS.LABEL}
-        disabled={writes.pending !== undefined || refreshing}
-        trigger={{
-          ...menu.trigger(dropBelowStart),
-          onClick: (event: React.MouseEvent<HTMLElement>) => {
-            options.ask();
-            menu.trigger(dropBelowStart).onClick(event);
-          },
-        }}
-      />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={PICKER_WORDS.LABELS_MENU}
-          heading={PICKER_WORDS.LABELS_MENU}
-          menu={menu.drawn}
-          groups={[items]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+    <OptionsPicker
+      label={PICKER_WORDS.LABELS}
+      word={PICKER_WORDS.LABEL}
+      heading={PICKER_WORDS.LABELS_MENU}
+      groups={[labelItems(options.read, on, writes)]}
+      options={options}
+      writes={writes}
+      refreshing={refreshing}
+    />
   );
 }
 

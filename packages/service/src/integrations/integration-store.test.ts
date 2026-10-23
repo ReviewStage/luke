@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { getTestDB } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer } from "effect";
 import { openGithubUser } from "../testing/github-app-fake.js";
 import { firstIntegrationAccount } from "../testing/integration-connect.js";
 import {
@@ -14,7 +15,6 @@ import {
   endIntegrationSignIn,
   expireIntegrationConnection,
   fillIntegrationLabel,
-  INTEGRATION_ROW_STATUS,
   readIntegrationConnection,
   readIntegrationConnections,
   renameIntegrationConnection,
@@ -23,75 +23,21 @@ import {
 /**
  * An account's integration rows over the real migration on PGlite: a
  * sign-in is found by its state alone and by no other account's, it settles
- * once, whether with a grant or without one, an account reads only its own rows, and the rows go with the account
- * that owns them. Connect's handle on a sign-in stands and goes with its state.
+ * once, whether with a grant or without one, an account reads only its own
+ * rows, and the rows go with the account that owns them.
  */
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection rows", (it) => {
-  it.effect("Connect's handle on a sign-in stands while it is under way and goes with it", () =>
-    Effect.gen(function* () {
-      const completing = yield* openGithubUser();
-      const reconnecting = yield* openGithubUser();
-      yield* beginIntegrationSignIn(
-        completing,
-        firstIntegrationAccount(completing, LINEAR),
-        "state-h1",
-        Redacted.make("verifier-1"),
-      );
-      yield* beginIntegrationSignIn(
-        reconnecting,
-        firstIntegrationAccount(reconnecting, LINEAR),
-        "state-h2",
-        Redacted.make("verifier-2"),
-      );
-      yield* completeIntegrationSignIn(reconnecting, LINEAR, "state-h2");
-      yield* beginIntegrationSignIn(
-        reconnecting,
-        firstIntegrationAccount(reconnecting, LINEAR),
-        "state-h3",
-        Redacted.make("verifier-3"),
-      );
-
-      const verifierOf = (userId: string) =>
-        Effect.map(readIntegrationConnection(userId, LINEAR), (row) =>
-          row?.verifier === undefined ? undefined : Redacted.value(row.verifier),
-        );
-      assert.equal(yield* verifierOf(completing), "verifier-1");
-      // A sign-in begun again holds its own handle.
-      assert.equal(yield* verifierOf(reconnecting), "verifier-3");
-
-      yield* completeIntegrationSignIn(completing, LINEAR, "state-h1");
-      yield* endIntegrationSignIn(reconnecting, LINEAR, "state-h3");
-      assert.equal(yield* verifierOf(completing), undefined);
-      // The connected row it ended over stands, without the handle.
-      const standing = yield* readIntegrationConnection(reconnecting, LINEAR);
-      assert.deepEqual(
-        [standing?.status, standing?.verifier],
-        [INTEGRATION_ROW_STATUS.CONNECTED, undefined],
-      );
-    }),
-  );
-
   it.effect("an account reads its own rows and never another account's", () =>
     Effect.gen(function* () {
       const mine = yield* openGithubUser();
       const theirs = yield* openGithubUser();
-      yield* beginIntegrationSignIn(
-        mine,
-        firstIntegrationAccount(mine, LINEAR),
-        "state-own",
-        Redacted.make("connect-verifier"),
-      );
+      yield* beginIntegrationSignIn(mine, firstIntegrationAccount(mine, LINEAR), "state-own");
       yield* completeIntegrationSignIn(mine, LINEAR, "state-own");
-      yield* beginIntegrationSignIn(
-        theirs,
-        firstIntegrationAccount(theirs, LINEAR),
-        "state-other",
-        Redacted.make("connect-verifier"),
-      );
+      yield* beginIntegrationSignIn(theirs, firstIntegrationAccount(theirs, LINEAR), "state-other");
 
       const mineRows = yield* readIntegrationConnections(mine);
       assert.deepEqual(
@@ -124,30 +70,18 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
       Effect.gen(function* () {
         const again = yield* openGithubUser();
         const connected = yield* openGithubUser();
-        yield* beginIntegrationSignIn(
-          again,
-          firstIntegrationAccount(again, LINEAR),
-          "state-first",
-          Redacted.make("connect-verifier"),
-        );
-        yield* beginIntegrationSignIn(
-          again,
-          firstIntegrationAccount(again, LINEAR),
-          "state-again",
-          Redacted.make("connect-verifier"),
-        );
+        yield* beginIntegrationSignIn(again, firstIntegrationAccount(again, LINEAR), "state-first");
+        yield* beginIntegrationSignIn(again, firstIntegrationAccount(again, LINEAR), "state-again");
         yield* beginIntegrationSignIn(
           connected,
           firstIntegrationAccount(connected, LINEAR),
           "state-connected",
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(connected, LINEAR, "state-connected");
         yield* beginIntegrationSignIn(
           connected,
           firstIntegrationAccount(connected, LINEAR),
           "state-reconnect",
-          Redacted.make("connect-verifier"),
         );
 
         yield* endIntegrationSignIn(again, LINEAR, "state-first");
@@ -183,20 +117,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
           userId,
           firstIntegrationAccount(userId, NOTION),
           "state-acme-notion",
-          Redacted.make("verifier-acme"),
         );
-        yield* beginIntegrationSignIn(
-          userId,
-          second,
-          "state-personal-notion",
-          Redacted.make("verifier-2"),
-        );
+        yield* beginIntegrationSignIn(userId, second, "state-personal-notion");
         // Another account's first Notion takes the same name as this one's, which names no row of this one's.
         yield* beginIntegrationSignIn(
           other,
           firstIntegrationAccount(other, NOTION),
           "state-other-notion",
-          Redacted.make("verifier-other"),
         );
         yield* completeIntegrationSignIn(userId, "notion-2", "state-personal-notion");
 
@@ -229,7 +156,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
             userId,
             firstIntegrationAccount(userId, provider),
             `state-first-${provider}-${userId}`,
-            Redacted.make("verifier"),
           );
           yield* completeIntegrationSignIn(userId, provider, `state-first-${provider}-${userId}`);
         }
@@ -253,12 +179,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
       Effect.gen(function* () {
         const userId = yield* openGithubUser();
         const begin = (state: string) =>
-          beginIntegrationSignIn(
-            userId,
-            firstIntegrationAccount(userId, NOTION),
-            state,
-            Redacted.make("verifier-label"),
-          );
+          beginIntegrationSignIn(userId, firstIntegrationAccount(userId, NOTION), state);
         yield* begin("state-label-1");
         yield* completeIntegrationSignIn(userId, NOTION, "state-label-1", "Acme");
         assert.equal((yield* readIntegrationConnection(userId, NOTION))?.label, "Acme");
@@ -284,13 +205,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
           userId,
           named("subject-a"),
           `state-race-a-${userId}`,
-          Redacted.make("verifier-a"),
         );
         const second = yield* beginIntegrationSignIn(
           userId,
           named("subject-b"),
           `state-race-b-${userId}`,
-          Redacted.make("verifier-b"),
         );
         const row = yield* readIntegrationConnection(userId, "notion-2");
         assert.deepEqual(
@@ -311,7 +230,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
               userId,
               { provider: NOTION, connectionName: "notion-2", connectSubject },
               state,
-              Redacted.make("verifier"),
             ),
             completeIntegrationSignIn(userId, "notion-2", state),
           );
@@ -337,7 +255,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
               userId,
               { provider: NOTION, connectionName: "notion-2", connectSubject },
               state,
-              Redacted.make("verifier"),
             ),
             completeIntegrationSignIn(userId, "notion-2", state),
           );

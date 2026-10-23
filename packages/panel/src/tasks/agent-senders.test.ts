@@ -10,6 +10,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -285,12 +286,11 @@ test("another agent's message wears the mark of the harness its model runs in, a
     const sender = drawn[MESSAGES.findIndex((message) => message.id === id)]?.querySelector(
       ".message-sender .actor-mark",
     );
-    const mark = sender?.querySelector(".harness-mark");
-    return mark === null || mark === undefined ? undefined : mark.tagName.toLowerCase();
+    const mark = sender?.querySelector(".luke-harness-mark");
+    return mark?.getAttribute("data-provider") ?? undefined;
   };
 
-  // Claude Code's mark is its Clawd, drawn as an SVG.
-  assert.equal(harnessOf("claude-agent"), "svg");
+  assert.equal(harnessOf("claude-agent"), MODEL_PROVIDER.ANTHROPIC);
   assert.equal(harnessOf("agent"), undefined);
   fakeAppBridge({});
 });
@@ -333,8 +333,11 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   act(() => sender.click());
 
   assert.ok(card.includes("Split view, merged"), card);
-  // The line still wears Claude Code's mark it was sent under, though the agent runs on Codex now.
-  assert.equal(sender.querySelector(".harness-mark")?.tagName.toLowerCase(), "svg");
+  // The line still wears Claude's mark it was sent under, though the agent runs on Codex now.
+  assert.equal(
+    sender.querySelector(".luke-harness-mark")?.getAttribute("data-provider"),
+    MODEL_PROVIDER.ANTHROPIC,
+  );
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: SENDER_TASK, agentId: SENDER_ID }]);
   fakeAppBridge({});
 });

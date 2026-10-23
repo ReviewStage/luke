@@ -47,6 +47,7 @@ import { readEither } from "@luke/wire/effect";
 import {
   type Cause,
   Clock,
+  DateTime,
   Deferred,
   Duration,
   Effect,
@@ -67,7 +68,7 @@ import type {
 } from "../agents/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
-import { unparsedWire } from "../core.js";
+import { jsonOf } from "../http/http-effect.js";
 import { frameBytes } from "../voice/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {
@@ -165,14 +166,6 @@ const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema
 const readResize = readEither(terminalRelayResizeSchema);
 const readPtyExit = readEither(PtyExitSchema);
 
-/** A text frame's JSON, or nothing a reader takes where it is none. */
-function jsonOf(text: string) {
-  const parsed = Result.try(() => JSON.parse(text));
-  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
-}
-
-const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis));
-
 /** The instant the lease reaches to from a write at the instant given: the idle bound, and the minute a keystroke after this write may wait for the next. */
 function heldFrom(instant: Date): Date {
   const reach = Duration.sum(TERMINAL_RELAY_BOUNDS.IDLE, TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY);
@@ -216,7 +209,7 @@ function renewCredential(
         Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not set")),
       );
     }
-    const at = yield* now;
+    const at = yield* DateTime.nowAsDate;
     const renewedBefore = new Date(at.getTime() - Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH));
     const claimed = yield* deps.claimRenewal(
       agent.conversationId,
@@ -270,12 +263,12 @@ function deviceToPty(
   pty: RelaySocket,
 ): Effect.Effect<PipeEnd> {
   return Effect.gen(function* () {
-    const lastHeld = yield* Ref.make((yield* now).getTime());
+    const lastHeld = yield* Ref.make(yield* Clock.currentTimeMillis);
     yield* Stream.runForEach(fromDevice, (frame) => {
       if ("bytes" in frame) {
         return Effect.andThen(
           Effect.gen(function* () {
-            const at = yield* now;
+            const at = yield* DateTime.nowAsDate;
             yield* Ref.set(lastTyped, at.getTime());
             const since = at.getTime() - (yield* Ref.get(lastHeld));
             if (since < Duration.toMillis(TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY)) return;
@@ -321,7 +314,7 @@ function ptyToDevice(device: RelaySocket, pty: RelaySocket): Effect.Effect<PipeE
 /** Ends once nobody has typed in this connection for the idle bound, whatever the sandbox's other terminals do. */
 function idleWatch(lastTyped: Ref.Ref<number>): Effect.Effect<PipeEnd> {
   const typedLately = Effect.gen(function* () {
-    const since = (yield* now).getTime() - (yield* Ref.get(lastTyped));
+    const since = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastTyped));
     return since < Duration.toMillis(TERMINAL_RELAY_BOUNDS.IDLE);
   });
   return Effect.as(
@@ -364,7 +357,7 @@ export function relayTerminal(
       );
     }
     // An attach is the developer using the terminal: it holds the sandbox, and starts its idle bound.
-    const attachedAt = yield* now;
+    const attachedAt = yield* DateTime.nowAsDate;
     const lastTyped = yield* Ref.make(attachedAt.getTime());
     yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
     // The sandbox is kept alive from the attach for as long as the connection stands, which nobody typing ends.

@@ -12,17 +12,17 @@ import {
   Fill,
   INLINE_EDIT_LOOK,
   InlineEdit,
+  RetryButton,
   TABS_GROUND,
   VisuallyHidden,
 } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
-import { memo, useEffect, useRef } from "react";
+import { memo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
-import { RetryButton } from "../retry-button.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab } from "../tasks/agent-tab.js";
@@ -39,6 +39,7 @@ import type { ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
 import {
@@ -134,13 +135,8 @@ function RenamableTab({
   slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
-  const refocus = useRef(false);
   const editing = rename?.editing === true;
-  useEffect(() => {
-    if (editing || !refocus.current) return;
-    refocus.current = false;
-    tab.current?.focus();
-  }, [editing]);
+  const endedByKey = useRefocusAfterEdit(editing, tab);
   const editor =
     rename?.editing === true ? (
       <InlineEdit
@@ -150,7 +146,7 @@ function RenamableTab({
         look={INLINE_EDIT_LOOK.WELL}
         editing
         onEnd={(edit) => {
-          refocus.current = edit.byKey;
+          endedByKey(edit.byKey);
           rename.end(edit.value);
         }}
       />

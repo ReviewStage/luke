@@ -89,7 +89,7 @@ function SkillElement({ node }: MarkdownNodeProps): ReactNode {
   const name = String(node?.properties[SKILL_ELEMENT.NAME] ?? "");
   const skill = doors?.skills?.get(name);
   if (doors === undefined || skill === undefined) return skillWord(name);
-  return <SkillRef subject={{ skill, onOpen: () => doors.onOpen(skill) }} />;
+  return <SkillRef name={name} skill={skill} onOpen={() => doors.onOpen(skill)} />;
 }
 
 const SKILL_COMPONENTS: MarkdownComponents = { [SKILL_ELEMENT.TAG]: SkillElement };

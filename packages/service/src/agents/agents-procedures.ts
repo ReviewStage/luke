@@ -82,11 +82,12 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
-import { controlsAgent, pathUuid, reachedAgentById } from "./agent-reach.js";
+import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { ensureOperator } from "./coder-host/operator.js";
@@ -266,12 +267,14 @@ const listedShells = /* @__PURE__ */ Effect.fnUntraced(function* (sessionId: str
 
 /** Whether the agent, read again under its conversation's lock, still stands as a Stop left it, as a task's archive reads each of its own. */
 function agentStandsStopped(agent: CodingAgent) {
-  return standsStopped({
-    id: agent.id,
-    conversationId: agent.conversationId,
-    createdAt: agent.createdAt,
-    blank: startedBlank(agent),
-  });
+  return standsStopped([
+    {
+      id: agent.id,
+      conversationId: agent.conversationId,
+      createdAt: agent.createdAt,
+      blank: startedBlank(agent),
+    },
+  ]);
 }
 
 /** The agents resource: every procedure to a signed-in caller, a body read under its own cap. */

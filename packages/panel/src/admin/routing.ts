@@ -34,15 +34,6 @@ const DAY_VIEW_PARAM = "day";
 
 const TAB_PARAM = "view";
 
-const USERS_TAB_VALUE = "users";
-
-const COST_TAB_VALUE = "cost";
-const WORKSPACES_TAB_VALUE = "workspaces";
-
-const ANIMATIONS_TAB_VALUE = "animations";
-
-const RELIABILITY_TAB_VALUE = "reliability";
-
 const WINDOW_VIEW_PARAM = "days";
 
 const SEARCH_VIEW_PARAM = "q";
@@ -53,34 +44,44 @@ const SEARCH_VIEW_PARAM = "q";
  */
 export const SEARCH_DEBOUNCE_MS = 250;
 
-/** The sidebar's destinations; an open account highlights Users. */
-export type AdminTab = "dashboard" | "cost" | "reliability" | "workspaces" | "users" | "animations";
+/**
+ * The sidebar's destinations, in the order it lists them, each the view it
+ * opens and the address's `view` value naming it (the Overview names none);
+ * an open account highlights Users.
+ */
+export const ADMIN_TAB = {
+  DASHBOARD: "dashboard",
+  COST: "cost",
+  RELIABILITY: "reliability",
+  WORKSPACES: "workspaces",
+  USERS: "users",
+  ANIMATIONS: "animations",
+} as const;
+
+export type AdminTab = (typeof ADMIN_TAB)[keyof typeof ADMIN_TAB];
+
+/** The pages under a section, each opened from one of its rows rather than the sidebar. */
+export const ADMIN_PAGE = {
+  ACCOUNT: "account",
+  DAY: "day",
+} as const;
 
 /** Which of the page's views the address bar names. */
 export type AdminView =
-  | { kind: "dashboard" }
-  | { kind: "cost" }
-  | { kind: "reliability" }
-  | { kind: "workspaces" }
-  | { kind: "users" }
-  | { kind: "animations" }
-  | { kind: "account"; id: string }
-  | { kind: "day"; day: string };
+  | { kind: AdminTab }
+  | { kind: typeof ADMIN_PAGE.ACCOUNT; id: string }
+  | { kind: typeof ADMIN_PAGE.DAY; day: string };
 
 export function viewFromLocation(): AdminView {
   const params = new URLSearchParams(window.location.search);
   const id = params.get(ACCOUNT_VIEW_PARAM);
-  if (id) return { kind: "account", id };
+  if (id) return { kind: ADMIN_PAGE.ACCOUNT, id };
   // An address naming no real UTC day is the plain dashboard rather than a
   // broken page, the same reading an out-of-set window gets.
   const day = params.get(DAY_VIEW_PARAM);
-  if (day !== null && isUtcDayKey(day)) return { kind: "day", day };
-  if (params.get(TAB_PARAM) === COST_TAB_VALUE) return { kind: "cost" };
-  if (params.get(TAB_PARAM) === RELIABILITY_TAB_VALUE) return { kind: "reliability" };
-  if (params.get(TAB_PARAM) === WORKSPACES_TAB_VALUE) return { kind: "workspaces" };
-  if (params.get(TAB_PARAM) === USERS_TAB_VALUE) return { kind: "users" };
-  if (params.get(TAB_PARAM) === ANIMATIONS_TAB_VALUE) return { kind: "animations" };
-  return { kind: "dashboard" };
+  if (day !== null && isUtcDayKey(day)) return { kind: ADMIN_PAGE.DAY, day };
+  const tab = params.get(TAB_PARAM);
+  return { kind: Object.values(ADMIN_TAB).find((each) => each === tab) ?? ADMIN_TAB.DASHBOARD };
 }
 
 /**
@@ -166,11 +167,7 @@ export function dayHref(day: string): string {
 
 export function tabHref(tab: AdminTab): string {
   const params = new URLSearchParams();
-  if (tab === "cost") params.set(TAB_PARAM, COST_TAB_VALUE);
-  if (tab === "reliability") params.set(TAB_PARAM, RELIABILITY_TAB_VALUE);
-  if (tab === "workspaces") params.set(TAB_PARAM, WORKSPACES_TAB_VALUE);
-  if (tab === "users") params.set(TAB_PARAM, USERS_TAB_VALUE);
-  if (tab === "animations") params.set(TAB_PARAM, ANIMATIONS_TAB_VALUE);
+  if (tab !== ADMIN_TAB.DASHBOARD) params.set(TAB_PARAM, tab);
   return hrefWithWindow(params);
 }
 
@@ -281,7 +278,7 @@ export function adminViewOfLink(fields: {
   readonly userId?: string | undefined;
   readonly day?: string | undefined;
 }): AdminView | undefined {
-  if (fields.userId !== undefined) return { kind: "account", id: fields.userId };
-  if (fields.day !== undefined) return { kind: "day", day: fields.day };
+  if (fields.userId !== undefined) return { kind: ADMIN_PAGE.ACCOUNT, id: fields.userId };
+  if (fields.day !== undefined) return { kind: ADMIN_PAGE.DAY, day: fields.day };
   return fields.section === undefined ? undefined : { kind: fields.section };
 }

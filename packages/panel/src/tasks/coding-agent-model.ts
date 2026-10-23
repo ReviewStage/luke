@@ -611,7 +611,7 @@ function credentialMissingWords(
   provider: ModelProvider | undefined,
   action: (typeof ACTION)[keyof typeof ACTION],
 ): string {
-  const harness = provider === undefined ? "Claude Code or Codex" : harnessNameOf(provider);
+  const harness = provider === undefined ? "Claude or Codex" : harnessNameOf(provider);
   return `Connect ${harness} in Settings to ${action}.`;
 }
 
@@ -2107,7 +2107,7 @@ export const SENT_LINE_STATE = {
   UNDELIVERED: "undelivered",
 } as const;
 
-export type SentLineState = (typeof SENT_LINE_STATE)[keyof typeof SENT_LINE_STATE];
+type SentLineState = (typeof SENT_LINE_STATE)[keyof typeof SENT_LINE_STATE];
 
 /**
  * A line the developer sent that the transcript has not read back yet:

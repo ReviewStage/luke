@@ -13,14 +13,14 @@ import type {
   InboxItemToast,
 } from "@luke/host/agent-notices";
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
-import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
+import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
 import { type AppStateStore, voiceWindowGone, WindowAppStates } from "@luke/host/client";
 import { PUSH, type PushName, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { Effect, Exit, Scope } from "effect";
+import { Effect } from "effect";
 import {
   app,
   type BrowserWindow,
@@ -41,6 +41,8 @@ import { PanelManager } from "../window/panel-manager";
 import { reportRendererErrors } from "../window/renderer-errors";
 import { followResponsiveness } from "../window/renderer-health";
 import { VoiceWindow } from "../window/voice-window";
+import { windowMaterialFor } from "../window/window-material";
+import { grantWindowPermissions } from "../window/window-permissions";
 import { windowPushes } from "../window/window-pushes";
 import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
@@ -134,7 +136,6 @@ export interface WindowService extends DesktopService {
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
-  recycleVoiceWindow: () => void;
 }
 
 /**
@@ -172,6 +173,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const panels = new PanelManager({
     runMode,
+    material: windowMaterialFor(process.getSystemVersion()),
     instance: config.instance,
     mediaDuck: native.mediaDuck,
     preloadPath,
@@ -223,8 +225,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
-  /** What the panels' grounds follow the appearance in; closing it takes the listener back. */
-  const appearanceScope = Scope.makeUnsafe();
   /** The panel windows standing now, the ones a zoom is applied to. */
   const withPanelWindows = Effect.provideService(PanelWindows, {
     standing: () => panels.windows(),
@@ -253,17 +253,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     payload: PushPayload<Name>,
   ): boolean {
     return windowPushes.push(sender, push, payload);
-  }
-
-  function broadcast<Name extends PushName>(
-    push: Name,
-    payload: PushPayload<Name>,
-    except?: WebContents,
-  ): void {
-    panels.broadcast(push, payload, except);
-    const voice = voiceWindow.current();
-    if (!voice || voice.webContents === except) return;
-    sendTo(voice.webContents, push, payload);
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
@@ -389,25 +378,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function configurePermissions(): void {
-    const ownWindow = (webContents: Electron.WebContents) =>
-      panels.owns(webContents) || voiceWindow.owns(webContents);
-    session.defaultSession.setPermissionCheckHandler(
-      (webContents, permission, _origin, details) =>
-        webContents !== null &&
-        ownWindow(webContents) &&
-        permission === "media" &&
-        details.mediaType === "audio",
-    );
-    session.defaultSession.setPermissionRequestHandler(
-      (webContents, permission, callback, details) => {
-        const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
-        callback(
-          ownWindow(webContents) &&
-            permission === "media" &&
-            mediaTypes.length > 0 &&
-            mediaTypes.every((mediaType: string) => mediaType === "audio"),
-        );
-      },
+    grantWindowPermissions(
+      session.defaultSession,
+      (webContents) => panels.owns(webContents) || voiceWindow.owns(webContents),
     );
   }
 
@@ -434,7 +407,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // Named one at a time because Electron's `on` is typed per event name.
   const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
     handleDisplayChange();
-    broadcast(PUSH.LIFECYCLE, eventName);
     // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
     if (eventName === "resume") void run(operator.host.terminalWake());
   };
@@ -471,11 +443,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       return url === rendererUrl || url === voiceUrl || url === callUrl;
     },
     applyLoginItem,
-    recycleVoiceWindow: () => {
-      if (!voiceWindow.current()) return;
-      voiceWindow.close();
-      raiseVoiceWindow();
-    },
     start: async () => {
       followDockIcon(path.join(config.resourceDirectory, "icon"));
       const settings = await run(operator.ensureSettings());
@@ -486,12 +453,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // The theme is steered before any panel opens, so the first frame of
       // every window is already drawn in the appearance it will keep.
       await run(applyThemePreference(settings?.stored.theme).pipe(withNativeTheme));
-      await run(
-        followAppearance((dark) => panels.paint(dark)).pipe(
-          Scope.provide(appearanceScope),
-          withNativeTheme,
-        ),
-      );
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
       if (runMode.observesProviders) {
         native.setMediaDuckEnabled(
@@ -569,7 +530,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.removeListener("user-did-become-active", wakeHandlers["user-did-become-active"]);
       for (const wait of pendingWaits) clearTimeout(wait);
       pendingWaits.clear();
-      await run(Scope.close(appearanceScope, Exit.void));
       if (session.defaultSession.protocol.isProtocolHandled(PAGE_SCHEME)) {
         session.defaultSession.protocol.unhandle(PAGE_SCHEME);
       }

@@ -26,6 +26,7 @@ import {
   readCodingAgentHeaderOfConversation,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
+import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
@@ -53,8 +54,6 @@ import {
 } from "./native-relay.js";
 import { nativeRuntimeOfSession } from "./native-runtime.js";
 import { NativeAgentSessions, type NativeSessions } from "./runtime-sessions.js";
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 /** The most a call may carry: a message's words and the files attached to it, under the platform's own bound. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;

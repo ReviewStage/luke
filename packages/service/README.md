@@ -35,8 +35,8 @@ record onto the answer's own `Headers` and a redirect's are immutable; a HEAD
 is the exception, where that record is all the web handler reads, and there
 the status and headers are carried and the body dropped.
 `apps/web/fixtures/auth-route/` records what the group answers for a sign-in, a
-provider redirect, an unknown endpoint, a refused method, a HEAD, and a path
-outside the group, and `apps/web/tests/auth-app.test.ts` answers each twice — through
+provider redirect, an unknown endpoint, and a refused method, and
+`apps/web/tests/auth-app.test.ts` answers each twice — through
 the group and by calling the handler the way the route called it before — and
 compares the two.
 
@@ -153,7 +153,7 @@ the service could not reach is `unavailable`.
 read one repository of that installation for a place no task names, such as
 an agent an automation started: the `workspaceId` and `repository` queries
 name it, each exactly once, and the answer is a task's own tree or skills
-read (`src/plans/plan-tree.ts`, `src/plans/plan-skills.ts`), through the
+read (`src/tasks/task-tree.ts`, `src/tasks/task-skills.ts`), through the
 same reach, to a member of the workspace; a repository the installation does
 not reach is refused as `not-reachable`, as a task's is.
 `GET /api/github/repositories/pull-request` reads one pull request of such a
@@ -225,7 +225,7 @@ URLs, beside the sign-in's.
 The page draws a fixed card per status and interpolates nothing the address
 brought it; the desktop's repository chip picks the installation up by
 reading the workspace's repositories again when the window next takes focus
-(`apps/desktop/src/renderer/tasks/repository-chip.tsx`).
+(`packages/panel/src/tasks/repository-chip.tsx`).
 
 The App's webhook is `POST /api/github/webhook` (`src/github/github-webhook-app.ts`),
 which keeps what a coding agent published current on the agent's row
@@ -548,7 +548,7 @@ over the ring it holds and the key-encryption keys never leave Vercel. It
 unwraps each older row's data key and wraps it under the head version,
 leaving the sealed key itself untouched, and moves members' GitHub
 personal access tokens (`github_personal_token`, sealed under the same ring
-by `src/github/github-token-app.ts`) the same way, and answers counts: the version,
+by `src/github/github-token-procedures.ts`) the same way, and answers counts: the version,
 moved, already current, changed meanwhile, and unreadable. Run it again
 until nothing is changed meanwhile; once nothing names the old version,
 drop it from the list and redeploy. A row counted unreadable reads
@@ -662,30 +662,21 @@ more than one sees exactly what it saw before:
 
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
   status }, accounts?: [{ provider, connection, label?, status }],
-  addable?: [provider], signInFailures?: [{ provider, connection?, reason,
-  message? }] }`: each provider's first account's word, every account the
-  Luke account holds but one whose first sign-in ended without a grant, the
-  providers it may add another account at, and each failure; each
-  status `connected`, `pending`, `expired`, `disconnected`, or
-  `unavailable` (no connector for it on this deployment). For a caller
-  that carries a bearer, as the desktop does, a sign-in still
-  under way, begun within the last fifteen minutes, is settled here by
-  asking Connect for a token afresh, and stands `pending` until it settles,
-  over an `expired` row as over none. One with no token yet is asked after
-  by the `verifier` Connect's `startAuthorization` answered it with, kept in
-  the row's `connect_verifier` beside its state (never logged, never
-  answered): Connect's `GET /v1/connect/result/{verifier}`, the read its
-  CLI polls, under the deployment's OIDC token. One Connect answers
-  `canceled` (the developer cancelled on Connect's page) or `error` (Connect
-  or the provider refused it) is ended here and named once in
-  `signInFailures`, `reason` `canceled` or `error`, with the first line of
-  Connect's error message, cut to 200 characters, where it is shaped like no
-  credential (`credentialFreeLine` in `src/integrations/mcp-tools.ts`).
-  A caller with only the browser's session cookie is answered where each
-  row stands as stored, a sign-in within its window `pending`, and nothing
-  is settled, ended, or labelled, and Connect is not asked: a Lax cookie
-  rides a link another site sends the browser on, which must not settle
-  the account's sign-in or spend its one `signInFailures` notice. The
+  addable?: [provider] }`: each provider's first account's word, every
+  account the Luke account holds but one whose first sign-in ended without
+  a grant, and the providers it may add another account at; each status
+  `connected`, `pending`, `expired`, `disconnected`, or `unavailable` (no
+  connector for it on this deployment). For a caller that carries a bearer,
+  as the desktop does, a sign-in still under way, begun within the last
+  fifteen minutes, is settled here by asking Connect for a token afresh,
+  and stands `pending` until it settles or its fifteen minutes run out,
+  over an `expired` row as over none. Connect is asked nothing else about
+  it: Connect documents no way to read why a sign-in that never came back
+  ended, so the service does not ask. A caller with only the browser's
+  session cookie is answered where each row stands as stored, a sign-in
+  within its window `pending`, and nothing is settled, ended, or labelled,
+  and Connect is not asked: a Lax cookie rides a link another site sends
+  the browser on, which must not settle the account's sign-in. The
   endpoint reads the `Authorization` header itself (`hostedCarriesBearer`
   in `src/http/http-effect.ts`), since every function holding the group
   answers every path it declares.
@@ -697,7 +688,7 @@ more than one sees exactly what it saw before:
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
   `startAuthorization` for the account under its row's subject, with
   `/api/account/integrations/connected?state=…` as the callback, records the
-  sign-in's one-time state and Connect's verifier, and answers the address
+  sign-in's one-time state, and answers the address
   and the account it signs in (`{ url, connection }`). With `add=true` it
   signs in a new account under a minted subject and the next free name,
   where the provider offers more than one and the account holds fewer than
@@ -1148,7 +1139,7 @@ taken) and named from the agent's row at read time, so the window's "Updated
 by" line and the "recent edits by coding agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
 notes. `edit_plan` and
-`show_page` resolve at each turn's start (`tool-set.ts`'s `planToolsOf`):
+`show_page` resolve at each turn's start (`tool-set.ts`'s `taskToolsOf`):
 an agent on no plan, as an automation's run starts one, is offered
 neither, and one handed a prompt on a plan only `show_page`, so no agent is
 offered a tool its every call would refuse.
@@ -2123,7 +2114,8 @@ conversations per account: a coding agent's conversation and its workers',
 their messages, the turns that ran over them, and the asks handed to them.
 Every row is keyed by
 `user_id` and cascades with the user row, so
-`apps/web/server/routes/account/delete.ts` erases them with the account.
+the account `delete` procedure (`src/accounts/account-procedures.ts`)
+erases them with the account.
 `packages/database/src/models/` is the store the coder host composes against; every
 module there is an `Effect<A, SqlError | Schema.SchemaError, SqlClient>`
 whose rows a `Schema` decodes and whose path rule is that schema too, which
@@ -2838,22 +2830,22 @@ scheduler's secret opens no session. Without it the route answers 503 and the sc
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.
 
-## The events and maintenance groups
+## The maintenance group
 
-`src/events/events-app.ts` and `src/maintenance/maintenance-app.ts` are two route groups of
-one path each — `apps/web/server/routes/events.ts` mounts `eventsApp()` and
+`src/maintenance/maintenance-app.ts` is a route group of one path —
 `apps/web/server/routes/maintenance/sweep.ts` mounts `maintenanceApp()` — since
-the root `vercel.json` already sends each function only the requests for its own path.
-Each path is declared with `HttpRouter.add` under `ANY_METHOD` rather than a
-method-specific builder, because each handler still enforces its own method
-and answers its own 405 exactly as it did before conversion; only a path
-neither declares reaches the group's own wildcard route, `hostedNotFoundRoute`,
-and the hosted vocabulary's `not-found`. Each handler's own logic is carried
-unchanged — `src/events/events.ts` and `src/maintenance/maintenance-sweep.ts` —
-behind a passthrough shaped like the auth group's (`effectPassthrough` in
+the root `vercel.json` already sends the function only the requests for its own path.
+The path is declared with `HttpRouter.add` under `ANY_METHOD` rather than a
+method-specific builder, because the handler enforces its own method and
+answers its own 405; only a path it does not declare reaches the group's own
+wildcard route, `hostedNotFoundRoute`, and the hosted vocabulary's
+`not-found`. The handler's own logic, `src/maintenance/maintenance-sweep.ts`,
+sits behind a passthrough shaped like the auth group's (`effectPassthrough` in
 `src/http/http-effect.ts`): the `HttpServerRequest` becomes the `Request`
-the handler always took, and its `Response` is carried back with
+the handler takes, and its `Response` is carried back with
 `HttpServerResponse.raw`.
-`src/events/events-app.ts` holds one query of its own, the events handler's
-PostHog person read (`readPerson`), a `SqlSchema` query whose builder renders
-against the auth schema module and runs on the ambient `SqlClient`.
+
+The desktop's product events are no route group: `POST /api/events` is the
+oRPC procedure in `src/events/events-procedures.ts`, over `src/events/events.ts`,
+and its PostHog person read is `src/accounts/account-person.ts`'s
+`readAccountPerson`.

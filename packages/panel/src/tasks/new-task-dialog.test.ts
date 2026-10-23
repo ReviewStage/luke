@@ -24,12 +24,7 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
-import {
-  TASK_SKILL_SOURCE,
-  TASK_STATUS,
-  TASK_TREE_ENTRY,
-  type TaskStatus,
-} from "@luke/features/task-wire";
+import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -144,9 +139,7 @@ async function mount(
   const asks: LinearIssuesAsk[] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
   const fromIssues: (readonly (string | number)[] | undefined)[] = [];
-  const briefs: (string | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
-  const statuses: (TaskStatus | undefined)[] = [];
   const control = tasksControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -179,9 +172,7 @@ async function mount(
           agents.push(from?.handed);
           fromIssues.push(from?.issues?.map((issue) => ("id" in issue ? issue.id : issue.number)));
           choices.push(from?.issues);
-          briefs.push(from?.brief);
           startedIn.push(workspaceId);
-          statuses.push(from?.status);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -242,12 +233,8 @@ async function mount(
     choices,
     /** Every read of a repository's GitHub issues, by repository, and what it asked. */
     githubAsks,
-    /** The brief each start handed Luke, where it handed one. */
-    briefs,
     /** The workspace each start asked for. */
     startedIn,
-    /** The status each start asked its task to stand in, where it asked for one. */
-    statuses,
     /** The coding agent each start handed its words, where it asked for one. */
     agents,
     /** Every Settings link the dialog's presses followed. */
@@ -346,7 +333,6 @@ test("Return starts the task without planning, Untitled, on the repository last 
     choice: DEFAULT_CHOICE,
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
-  assert.deepEqual(card.briefs, [undefined], "an agent's words are no brief");
 });
 
 test("a model picked on the chip runs this agent alone, and the account's default is not written", async () => {
@@ -538,7 +524,7 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
   pressInComposer(document, "Enter");
   await settle();
   const chip =
-    composerEditor(document).querySelector<HTMLElement>(".luke-skill-chip[data-opens]") ??
+    composerEditor(document).querySelector<HTMLElement>("[data-skill-ref]") ??
     assert.fail("the skill is a chip that opens");
   act(() => chip.click());
 
@@ -1240,53 +1226,6 @@ test("Command-L from the words opens the Linear search, but not while an input m
   assert.ok(card.dialog());
 });
 
-test("File for later files the task in the backlog with no call and no agent, named by the words' first line and keeping them as its brief", async () => {
-  const card = await mount();
-  card.type("Rate limit the public search\nThirty a minute per installation.");
-  act(() => card.button("File for later").click());
-  await settle();
-
-  assert.deepEqual(card.starts, [["Rate limit the public search", "acme/web"]]);
-  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG]);
-  assert.deepEqual(card.agents, [undefined]);
-  assert.deepEqual(card.briefs, [
-    "Rate limit the public search\nThirty a minute per installation.",
-  ]);
-});
-
-test("File for later is held while the box is empty, and Start's task names no status, so it starts to do", async () => {
-  const card = await mount();
-  assert.equal(card.button("File for later").disabled, true);
-
-  card.type("Fix the refresh");
-  await card.key("Enter");
-
-  assert.deepEqual(card.statuses, [undefined]);
-});
-
-test("Retry after a refused File for later files the task for later again, rather than starting it", async () => {
-  const card = await mount("Luke can't reach acme/web.");
-  card.type("Rate limit search");
-  act(() => card.button("File for later").click());
-  await settle();
-  act(() => card.button("Retry").click());
-  await settle();
-
-  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG, TASK_STATUS.BACKLOG]);
-});
-
-test("a task filed for later is named by as much of its first line as a name holds, an emoji kept whole", async () => {
-  const card = await mount();
-  card.type(`${"a".repeat(199)}🚀 and more`);
-  act(() => card.button("File for later").click());
-  await settle();
-
-  assert.deepEqual(
-    card.starts.map(([name]) => name),
-    ["a".repeat(199)],
-  );
-});
-
 /** A GitHub issue of `repository`, opened by `author` standing to it as `association`. */
 function githubIssue(
   repository: string,
@@ -1496,11 +1435,10 @@ test("a repository whose installation grants Luke no issues says so in the GitHu
   assert.deepEqual(card.starts, []);
 });
 
-test("for an automation's agent the card is titled for it, offers no File for later, and Return hands the agent the brief with the words fenced last", async () => {
+test("for an automation's agent the card is titled for it, and Return hands the agent the brief with the words fenced last", async () => {
   const card = await mount(undefined, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
   assert.equal(card.dialog()?.querySelector("h2")?.textContent, "Create with an agent");
   assert.equal(card.placeholder(), "Describe what to automate for a coding agent…");
-  assert.ok(!card.controls().includes("File for later"), "no task is filed for later");
   card.type("Every Monday, audit our agents' tool sets.");
   await card.key("Enter");
 

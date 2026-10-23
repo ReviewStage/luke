@@ -55,7 +55,7 @@ import {
   namedOverviewPullRequest,
   namedPendingReview,
 } from "../github/github-people.js";
-import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
+import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { pullRequestMerging } from "../github/pull-request-merging.js";
 import {
   addLineComment,
@@ -72,6 +72,7 @@ import {
   setAutoMerge,
   setFileViewed,
   setLabelled,
+  setPullRequestDescription,
   setPullRequestDraft,
   setPullRequestOpen,
   setPullRequestTitle,
@@ -87,20 +88,18 @@ import {
   pullRequestConversation,
   pullRequestDeployments,
   pullRequestOverview,
+  viewerCanUpdateOf,
   viewerPendingReviewOf,
   viewerReactionsOf,
 } from "../github/pull-requests.js";
-import {
-  HOSTED_REFUSAL,
-  hostedStoreOrUnavailable,
-  type UserIdResolver,
-} from "../http/http-effect.js";
+import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { reachedAgentById } from "./agent-reach.js";
 import {
   askedPublished,
   askedPullRequest,
   forgetPublished,
+  githubReadRefusal,
   pullRequestNumberOf,
 } from "./asked-pull-request.js";
 import {
@@ -163,20 +162,7 @@ const overviewPart = <A, R>(
     const part = yield* Effect.gen(function* () {
       const { token } = yield* agentPullRequestReach(userId, agent);
       return yield* read(token, agent, pullRequest, userId);
-    }).pipe(
-      Effect.catch((failure) => {
-        switch (failure._tag) {
-          case "RepositoryNotReachable":
-            return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-          case "SqlError":
-          case "EffectDrizzleQueryError":
-          case "SchemaError":
-            return hostedStoreOrUnavailable(Effect.fail(failure));
-          default:
-            return githubReadOrRefusal(Effect.fail(failure));
-        }
-      }),
-    );
+    }).pipe(githubReadRefusal);
     // Note that a part may carry what is the reader's own, such as the reactions they gave or the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
     return { pullRequest: part };
   });
@@ -200,29 +186,38 @@ const mergingOrNone = (token: Redacted.Redacted, repository: string, number: num
     ),
   );
 
+/** Whether the member may edit the pull request's description, read on their own token; not where they hold no sign-in GitHub takes. */
+const memberCanEdit = (userId: string, repository: string, number: number) =>
+  Effect.flatMap(memberReadToken(userId), (token) =>
+    token === undefined ? Effect.succeed(false) : viewerCanUpdateOf(token, repository, number),
+  );
+
 /**
  * The pull request itself: its description, branches, mergeability, who
  * opened it, who it asks for a review, its labels, and, while it was open as
  * last read, the stack it stands in, its people named against the
  * workspace's members and its stack by their agents (`github-people.ts`),
- * with who its row says it writes as; none where the repository no longer
- * holds it.
+ * with who its row says it writes as; and, read beside it on the member's
+ * own token, whether they may edit its description. None where the
+ * repository no longer holds it.
  */
 const overviewPullRequestRead = (
   token: Redacted.Redacted,
   agent: WithRepository<CodingAgent>,
   pullRequest: CodingAgentPullRequest,
+  userId: string,
 ) =>
   Effect.gen(function* () {
-    const [read, merging] = yield* Effect.all(
+    const [read, merging, canEditDescription] = yield* Effect.all(
       [
         pullRequestOverview(token, agent.repository, pullRequest.number, stackable(pullRequest)),
         mergingOrNone(token, agent.repository, pullRequest.number),
+        memberCanEdit(userId, agent.repository, pullRequest.number),
       ],
       { concurrency: "unbounded" },
     );
     if (Option.isNone(read)) return null;
-    const named = yield* namedOverviewPullRequest(agent, read.value);
+    const named = { ...(yield* namedOverviewPullRequest(agent, read.value)), canEditDescription };
     return Option.isNone(merging) ? named : { ...named, merging: merging.value };
   });
 
@@ -332,6 +327,8 @@ function writeOf(
       return setPullRequestOpen(token, id, true);
     case PULL_REQUEST_ACTION.EDIT_TITLE:
       return setPullRequestTitle(token, id, request.title);
+    case PULL_REQUEST_ACTION.EDIT_DESCRIPTION:
+      return setPullRequestDescription(token, id, request);
     case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
       return submitPullRequestReview(token, id, request);
     case PULL_REQUEST_ACTION.REPLY_TO_THREAD:

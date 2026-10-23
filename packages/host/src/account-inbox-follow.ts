@@ -6,19 +6,15 @@ import {
   accountInboxOfLiveRows,
   nextFailedRunExpiry,
 } from "@luke/features/live-wire";
-import {
-  Clock,
-  Duration,
-  Effect,
-  Option,
-  RcMap,
-  Schema,
-  type Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect";
+import { Clock, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { LiveBroken, type LiveClient, liveRows, liveShown } from "./live-follow.js";
+import {
+  decodedLiveRows,
+  LIVE_STATE,
+  type LiveClient,
+  liveShown,
+  restarting,
+} from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and told to main each time it moves.
@@ -36,22 +32,23 @@ import { LiveBroken, type LiveClient, liveRows, liveShown } from "./live-follow.
 
 /** How long a subscription no follow holds is kept, so a follow started again soon finds it standing. */
 const IDLE = Duration.seconds(30);
-/** How long a subscription that stopped, or a seal refused, waits before it is sealed again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** A seal the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
 
 /** A subscription before its first rows, with the answer they make, or stopped for good. */
 type LiveState =
-  | { readonly kind: "waiting" }
-  | { readonly kind: "standing"; readonly answer: AccountInboxAnswer }
-  | { readonly kind: "broken" };
+  | { readonly kind: typeof LIVE_STATE.WAITING }
+  | { readonly kind: typeof LIVE_STATE.STANDING; readonly answer: AccountInboxAnswer }
+  | { readonly kind: typeof LIVE_STATE.BROKEN };
 
 /** What an account's read is answered from: its subscription, or that the service sealed none. */
 type Standing =
-  | { readonly kind: "live"; readonly inbox: SubscriptionRef.SubscriptionRef<LiveState> }
-  | { readonly kind: "broken" };
+  | {
+      readonly kind: typeof LIVE_STATE.LIVE;
+      readonly inbox: SubscriptionRef.SubscriptionRef<LiveState>;
+    }
+  | { readonly kind: typeof LIVE_STATE.BROKEN };
 
 export interface AccountInboxDependencies {
   /** The account's read sealed for following for the account named, or with `poll` its rows inline; signed out, or a failure where the service sealed none. */
@@ -91,15 +88,14 @@ function answersOf(rows: AccountInboxLiveRows): Stream.Stream<AccountInboxAnswer
 export function accountInboxes(
   dependencies: AccountInboxDependencies,
 ): Effect.Effect<AccountInboxes, never, Scope.Scope> {
-  const decode = Schema.decodeUnknownOption(accountInboxLiveRowsSchema);
   return RcMap.make({
     idleTimeToLive: IDLE,
     lookup: (userId: string) =>
       Effect.gen(function* () {
         const first = yield* dependencies.seal(userId, false);
-        if ("failure" in first) return { kind: "broken" } as const;
-        const inbox = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
-        const rows = liveRows(
+        if ("failure" in first) return { kind: LIVE_STATE.BROKEN } as const;
+        const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
+        const rows = decodedLiveRows(
           {
             openLive: dependencies.openLive,
             reseal: () => dependencies.seal(userId, false),
@@ -108,23 +104,17 @@ export function accountInboxes(
             onTxWait: dependencies.txWaits.hook(),
           },
           first,
-        ).pipe(
-          Stream.mapEffect((read) =>
-            Option.match(decode(read), {
-              onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-              onSome: Effect.succeed,
-            }),
-          ),
+          accountInboxLiveRowsSchema,
         );
         yield* Effect.forkScoped(
           Stream.runForEach(liveShown(Stream.switchMap(rows, answersOf)), (answer) =>
-            SubscriptionRef.set(inbox, { kind: "standing", answer }),
+            SubscriptionRef.set(inbox, { kind: LIVE_STATE.STANDING, answer }),
           ).pipe(
             Effect.catch(() => Effect.void),
-            Effect.ensuring(SubscriptionRef.set(inbox, { kind: "broken" })),
+            Effect.ensuring(SubscriptionRef.set(inbox, { kind: LIVE_STATE.BROKEN })),
           ),
         );
-        return { kind: "live", inbox } as const;
+        return { kind: LIVE_STATE.LIVE, inbox } as const;
       }),
   });
 }
@@ -139,22 +129,19 @@ export function followAccountInbox(
   inboxes: AccountInboxes,
   userId: string,
   tell: (answer: AccountInboxAnswer) => Effect.Effect<void>,
-): Effect.Effect<never> {
+): Effect.Effect<void> {
   const attempt = Effect.scoped(
     Effect.gen(function* () {
       const standing = yield* RcMap.get(inboxes, userId);
-      if (standing.kind === "broken") return;
+      if (standing.kind === LIVE_STATE.BROKEN) return;
       yield* SubscriptionRef.changes(standing.inbox).pipe(
-        Stream.takeWhile((state) => state.kind !== "broken"),
-        Stream.filter((state) => state.kind === "standing"),
+        Stream.takeWhile((state) => state.kind !== LIVE_STATE.BROKEN),
+        Stream.filter((state) => state.kind === LIVE_STATE.STANDING),
         Stream.runForEach((state) => tell(state.answer)),
       );
     }),
   );
-  return Effect.forever(
-    attempt.pipe(
-      Effect.andThen(RcMap.invalidate(inboxes, userId)),
-      Effect.andThen(Effect.sleep(LIVE_RESTART)),
-    ),
+  return restarting(
+    attempt.pipe(Effect.andThen(RcMap.invalidate(inboxes, userId)), Effect.as(true)),
   );
 }

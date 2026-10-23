@@ -25,6 +25,7 @@ import {
   CHIP_WIDTH,
   FoldingButton,
   type FoldingButtonHint,
+  PageToolbar,
   Spinner,
   TEXT_FIELD_SIZE,
   TextField,
@@ -77,7 +78,7 @@ interface ComposeDraft {
 const EMPTY_DRAFT: ComposeDraft = { subject: "", note: "", attachments: [] };
 
 /** A started thread, and the agent it went to, whose task the Inbox opens it under. */
-export interface InboxStarted {
+interface InboxStarted {
   readonly item: InboxItem;
   readonly agent: MentionableAgent;
 }
@@ -260,19 +261,19 @@ export function InboxCompose({
   const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
-      <header className="desktop-toolbar">
-        {onBack === undefined ? null : (
-          <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
-        )}
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>
-        </div>
-        <div className="desktop-toolbar-actions">
+      <PageToolbar
+        lead={
+          onBack === undefined ? null : (
+            <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
+          )
+        }
+        heading={<h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>}
+        actions={
           <Button variant={BUTTON_VARIANT.QUIET} onClick={onDiscard} disabled={sending}>
             {DISCARD}
           </Button>
-        </div>
-      </header>
+        }
+      />
       <div className="desktop-inbox inbox-compose">
         <div className="inbox-compose-head">
           <div className="inbox-compose-row">

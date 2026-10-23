@@ -1,3 +1,4 @@
+import { keySpansIn } from "@luke/features/workspace-key";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   MARKDOWN_LOOK,
@@ -12,6 +13,7 @@ import { isWireString } from "@luke/wire";
 import type { Element, ElementContent, Root, RootContent, Text } from "hast";
 import { createContext, memo, type ReactNode, useContext, useMemo } from "react";
 import { PlanDiagram } from "./plan-diagram.js";
+import { useTaskKeyTargets } from "./tasks/use-known-names.js";
 import { TextLink } from "./text-link.js";
 
 const SAFE_LINK = /^https?:\/\//i;
@@ -32,7 +34,7 @@ export interface MarkdownSpan {
 export const MARKDOWN_MARK = {
   INSERTED: "inserted",
   DELETED: "deleted",
-  /** Words a comment thread is anchored to (`planning/plan-comments.tsx`). */
+  /** Words a comment thread is anchored to (`tasks/plan-comments.tsx`). */
   COMMENT: "comment",
 } as const;
 
@@ -338,6 +340,58 @@ const markFound =
     for (const child of tree.children) if (child.type === "element") markFoundIn(child, tokens);
   };
 
+/** The elements whose words hold no key: code, read literally, and a link, which already goes somewhere. */
+const KEYLESS_TAGS: ReadonlySet<string> = new Set(["a", "code", "pre"]);
+
+/** A run of text with each key `targets` holds in it written as a link to its task, the words between left as they were. */
+function keyedText(
+  text: HastText,
+  targets: ReadonlyMap<string, string>,
+): readonly HastElementChild[] {
+  const spans = keySpansIn(text.value, targets);
+  if (spans.length === 0) return [text];
+  const parts: HastElementChild[] = [];
+  let from = 0;
+  for (const span of spans) {
+    if (span.start > from) parts.push({ type: "text", value: text.value.slice(from, span.start) });
+    parts.push({
+      type: "element",
+      tagName: "a",
+      properties: { href: span.known },
+      children: [{ type: "text", value: span.key }],
+    });
+    from = span.end;
+  }
+  if (from < text.value.length) parts.push({ type: "text", value: text.value.slice(from) });
+  return parts;
+}
+
+/** Writes each listed task's key in the words under an element as a link to its task, but in code or a link. */
+function linkKeysIn(element: HastElement, targets: ReadonlyMap<string, string>): void {
+  element.children = element.children.flatMap((child) => {
+    if (child.type === "text") return keyedText(child, targets);
+    if (child.type === "element" && !KEYLESS_TAGS.has(child.tagName)) linkKeysIn(child, targets);
+    return [child];
+  });
+}
+
+/**
+ * The rehype step that writes each listed task's key among the words
+ * (`ACME-42`) as a link to its task, block by block, which the place draws
+ * as the task's chip saying the key as written (`linkChip`). Note that it
+ * runs after an edit is drawn, which places its marks by each node's place
+ * in the words, and that the words themselves are left as written.
+ */
+const linkTaskKeys =
+  (targets: ReadonlyMap<string, string>) =>
+  (tree: HastParent): void => {
+    for (const child of tree.children) {
+      if (child.type === "element" && !KEYLESS_TAGS.has(child.tagName)) {
+        linkKeysIn(child, targets);
+      }
+    }
+  };
+
 /** Whether a node is a link the place draws itself, a mention's chip say. */
 function isDrawnLink(node: HastElementChild, link: LinkDrawer): boolean {
   if (node.type !== "element" || node.tagName !== "a") return false;
@@ -630,13 +684,18 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   /** Ticks or clears a task item pressed, as a plan the developer can edit does; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
 }): React.JSX.Element {
+  const keyTargets = useTaskKeyTargets();
   const rehypePlugins = useMemo(() => {
     const plugins: MarkdownSteps = [];
     if (edit !== undefined) plugins.push(markdownStep(drawEdit, edit, words));
+    // Note that a task's key is written as its link only where the place draws links as chips.
+    if (link !== undefined && keyTargets.size > 0) {
+      plugins.push(markdownStep(linkTaskKeys, keyTargets));
+    }
     if (found !== undefined && found.length > 0) plugins.push(markdownStep(markFound, found));
     if (link !== undefined) plugins.push(markdownStep(glueDrawnLinks, link));
     return plugins;
-  }, [edit, words, found, link]);
+  }, [edit, words, found, link, keyTargets]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.

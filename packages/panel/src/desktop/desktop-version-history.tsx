@@ -26,8 +26,11 @@ import {
   ListRow,
   NavItem,
   OneLine,
+  PageToolbar,
   ResizeEdge,
   RetryRowLabel,
+  RowHint,
+  RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
   Shortcut,
@@ -45,7 +48,7 @@ import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
@@ -259,38 +262,43 @@ function RevisionRow({
   // Note that the ⋯ is what a right-click's menu hands focus back to, since
   // it is the menu's own door from the keyboard.
   const showMenu = menu.contextMenu(ellipsis);
+  // Note that the author's card hangs beside the row as the pointer rests on it; an author with none, Luke or an agent, hangs nothing.
+  const card = actorCard(author);
   return (
     <>
-      <ListRow
-        ref={rowRef}
-        leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
-        title={
-          <span className="version-row-author" data-author={author.kind}>
-            {actorName(author)}
-            <LeftWords actor={author} />
-          </span>
-        }
-        description={<span className="version-row-summary">{summary}</span>}
-        meta={<Time at={lastEdit.at} now={now} />}
-        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
-        onPress={onSelect}
-        contextMenu={offered ? showMenu : undefined}
-        actionsAt={LIST_ROW_ACTIONS.HOVER}
-        menuOpen={menu.open !== undefined}
-        actions={
-          offered ? (
-            <Tooltip label={ACTIONS_LABEL}>
-              <IconButton
-                ref={ellipsis}
-                icon={<EllipsisIcon />}
-                label={ACTIONS_LABEL}
-                size={BUTTON_SIZE.COMPACT}
-                {...menu.trigger()}
-              />
-            </Tooltip>
-          ) : null
-        }
-      />
+      <RowHintOptions card={card} cardBeside>
+        <ListRow
+          ref={rowRef}
+          leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
+          title={
+            <span className="version-row-author" data-author={author.kind}>
+              {actorName(author)}
+              <LeftWords actor={author} />
+            </span>
+          }
+          description={<span className="version-row-summary">{summary}</span>}
+          meta={<Time at={lastEdit.at} now={now} />}
+          current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+          onPress={onSelect}
+          contextMenu={offered ? showMenu : undefined}
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
+          menuOpen={menu.open !== undefined}
+          hint={card === undefined ? undefined : { Hint: RowHint, label: actorName(author) }}
+          actions={
+            offered ? (
+              <Tooltip label={ACTIONS_LABEL}>
+                <IconButton
+                  ref={ellipsis}
+                  icon={<EllipsisIcon />}
+                  label={ACTIONS_LABEL}
+                  size={BUTTON_SIZE.COMPACT}
+                  {...menu.trigger()}
+                />
+              </Tooltip>
+            ) : null
+          }
+        />
+      </RowHintOptions>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
@@ -599,11 +607,7 @@ function VersionPage({
   }
   return (
     <>
-      {lead === undefined ? (
-        <div className="desktop-drag-strip" />
-      ) : (
-        <header className="desktop-toolbar">{lead}</header>
-      )}
+      {lead === undefined ? <div className="desktop-drag-strip" /> : <PageToolbar lead={lead} />}
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>

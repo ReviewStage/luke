@@ -19,11 +19,11 @@ import {
   workspacesOfLiveRows,
 } from "@luke/features/workspace-live";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { Effect, Option, Schema, Stream } from "effect";
+import { type Effect, type Schema, Stream } from "effect";
 import {
-  LiveBroken,
+  decodedLiveRows,
+  type LiveBroken,
   type LiveClient,
-  liveRows,
   type SealedRead,
   type TxWait,
 } from "./live-follow.js";
@@ -66,24 +66,17 @@ function liveMoves<Part extends string, Rows, Built>(
   schema: Schema.Decoder<Rows>,
   build: (rows: Rows) => Built,
 ): Stream.Stream<Built, LiveBroken> {
-  const decode = Schema.decodeUnknownOption(schema);
-  return liveRows(
+  return decodedLiveRows(
     {
       openLive: dependencies.openLive,
       reseal: dependencies.seal,
       poll: dependencies.poll,
       now: dependencies.now,
-      ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
+      onTxWait: dependencies.onTxWait,
     },
     first,
-  ).pipe(
-    Stream.mapEffect((read) =>
-      Option.match(decode(read), {
-        onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: (rows) => Effect.succeed(build(rows)),
-      }),
-    ),
-  );
+    schema,
+  ).pipe(Stream.map(build));
 }
 
 /** The account's workspaces each time their rows change, as the held read would list them. */

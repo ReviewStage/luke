@@ -5,6 +5,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
+import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -14,23 +15,23 @@ import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
-  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
   INBOX_FILE_TYPE,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { paddedTo, webmBytes } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import {
+  acknowledgeInboxItem,
   answerInboxAsk,
   closeInboxItemAsMember,
   type InboxAgent,
@@ -187,11 +188,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           ],
         });
         const first = yield* onlyItem(agent);
-        assert.deepEqual(first.response, {
-          type: INBOX_RESPONSE.CHOICE,
-          options: QUEUE.ask.options,
-          recommended: QUEUE.ask.recommended,
-        });
+        assert.deepEqual(openAsk(first).ask, { ...QUEUE.ask, status: INBOX_ASK_STATUS.OPEN });
 
         yield* TestClock.adjust(Duration.seconds(1));
         yield* post(agent, { key: QUEUE.key, body: "Redis would need a new service." });
@@ -221,9 +218,10 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             ["Redis is gone; how many workers?", INBOX_ASK_STATUS.OPEN],
           ],
         );
-        assert.deepEqual(item.response, {
-          type: INBOX_RESPONSE.FORM,
+        assert.deepEqual(openAsk(item).ask, {
+          type: INBOX_ASK.ANSWER,
           fields: [{ type: INBOX_FIELD.NUMBER, label: "Workers" }],
+          status: INBOX_ASK_STATUS.OPEN,
         });
       }),
   );
@@ -360,7 +358,11 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         };
         yield* post(agent, answer([channel]));
         const item = yield* onlyItem(agent);
-        assert.deepEqual(item.response, { type: INBOX_RESPONSE.FORM, fields: [channel] });
+        assert.deepEqual(openAsk(item).ask, {
+          type: INBOX_ASK.ANSWER,
+          fields: [channel],
+          status: INBOX_ASK_STATUS.OPEN,
+        });
       }),
   );
 
@@ -385,7 +387,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           recommendations: ["Slack", "Email"],
         };
         assert.deepEqual(openAsk(several).ask, { ...kept, status: INBOX_ASK_STATUS.OPEN });
-        assert.deepEqual(several.response, { ...kept, type: INBOX_RESPONSE.CHOICE });
 
         yield* TestClock.adjust(Duration.seconds(1));
         yield* post(agent, {
@@ -490,10 +491,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         assert.deepEqual(
           Option.map(kept, (file) => [file.contentType, file.bytes.byteLength]),
           Option.some([INBOX_FILE_TYPE.WEBM, recording.byteLength]),
-        );
-        assert.ok(
-          item.blocks.every((block) => block.type !== INBOX_BLOCK.IMAGE),
-          "an old desktop would draw a video as a broken picture",
         );
       }),
   );
@@ -776,6 +773,57 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
               { type: INBOX_ASK.DO, status: INBOX_ASK_STATUS.WITHDRAWN },
             ],
           ].sort(),
+        );
+      }),
+  );
+
+  it.effect(
+    "the agent reads back a notice the member nodded as answered, with nothing beside its own message, and one closed before threads by its reason alone",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        yield* post(agent, { key: "pr-ready", title: "PR ready", body: "Opened." });
+        yield* post(agent, { key: "pr-merged", title: "PR merged", body: "Merged." });
+        const items = yield* taskInboxItems(agent.userId, agent.taskId);
+        const itemOf = (key: string) => items.find((item) => item.key === key);
+        const ready = itemOf("pr-ready");
+        const merged = itemOf("pr-merged");
+        assert.ok(ready && merged);
+        const nodded = yield* acknowledgeInboxItem(
+          agent.userId,
+          ready.id,
+          ready.revision,
+          randomUUID(),
+        );
+        assert.ok(Option.isSome(nodded));
+        // A deployment from before threads closed a notice with why; no tool from version 5 closes one.
+        yield* Database.use((db) =>
+          db
+            .update(inboxItem)
+            .set({ status: INBOX_STATUS.CLOSED, closedReason: "Merged by hand." })
+            .where(eq(inboxItem.id, merged.id)),
+        );
+
+        const read = yield* readOwnInbox(agent);
+
+        assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.deepEqual(
+          read.inbox?.toSorted((left, right) => left.key.localeCompare(right.key)),
+          [
+            {
+              key: "pr-merged",
+              title: "PR merged",
+              status: INBOX_STATUS.CLOSED,
+              thread: [{ from: "you", text: "Merged." }],
+              closedReason: "Merged by hand.",
+            },
+            {
+              key: "pr-ready",
+              title: "PR ready",
+              status: INBOX_STATUS.ANSWERED,
+              thread: [{ from: "you", text: "Opened." }],
+            },
+          ],
         );
       }),
   );

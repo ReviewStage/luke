@@ -15,7 +15,7 @@ import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { Clock, DateTime, Effect, Redacted, Result } from "effect";
+import { Clock, DateTime, Effect, Exit, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -297,6 +297,42 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
 });
 
+/** How many agents a task's archive or delete reads or stops at once: under the web pool's five connections, so one request leaves room for the rest of its instance. */
+const AGENT_STOP_CONCURRENCY = 3;
+
+/**
+ * Every agent stopped for good, as `stoppedForGood` stops each, a few at
+ * once; the first refusal answered once every Stop has settled.
+ * Note that no Stop is cut off by another's refusal, because one cut off
+ * between eve's cancel and the row's stamp would leave a turn cancelled
+ * that the row still reads as running.
+ */
+export const everyStoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
+  reach: EveReach,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  account: string,
+  agents: readonly CodingAgent[],
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  const stops = yield* Effect.forEach(
+    agents,
+    (agent) => Effect.exit(stoppedForGood(reach, writer, request, account, agent)),
+    { concurrency: AGENT_STOP_CONCURRENCY },
+  );
+  const refused = stops.find(Exit.isFailure);
+  if (refused !== undefined) return yield* refused;
+});
+
+/** Whether `stoppedForGood` would stop every agent rather than refuse one, each read as `stopsForGood` reads it, a few at once. */
+export const everyStopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
+  agents: readonly CodingAgent[],
+) {
+  const ready = yield* Effect.forEach(agents, stopsForGood, {
+    concurrency: AGENT_STOP_CONCURRENCY,
+  });
+  return !ready.includes(false);
+});
+
 /**
  * Whether `stoppedForGood` would stop the agent rather than refuse it, read
  * before any Stop is sent: no line awaits the turn it opens, it is past its
@@ -321,21 +357,27 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
 });
 
 /**
- * Whether an agent stands stopped, read under its conversation's lock as a
- * task's finish holds it (`tasks/task-finish.ts`): neither starting, nor
+ * Whether every agent stands stopped, read under their conversations' locks
+ * as a task's finish holds them (`tasks/task-finish.ts`): none starting, nor
  * running, nor holding a line awaiting the turn it opens, a turn whose Stop
  * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
+ * Note that the agents are read by one id list, because the finish's
+ * transaction holds one connection and a read per agent only adds trips.
  */
 export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agent: TaskStandingAgent,
+  agents: readonly TaskStandingAgent[],
 ) {
-  const turns = yield* latestTurnsOfReached([agent.conversationId]);
-  const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
-  const status = codingAgentStatusOf(turns.get(agent.conversationId), {
-    createdAt: agent.createdAt,
-    now: yield* Clock.currentTimeMillis,
-    awaitingLineAt: awaiting.get(agent.conversationId),
-    blank: agent.blank,
+  const conversationIds = agents.map(({ conversationId }) => conversationId);
+  const turns = yield* latestTurnsOfReached(conversationIds);
+  const awaiting = yield* awaitingLinesOfReached(conversationIds);
+  const now = yield* Clock.currentTimeMillis;
+  return agents.every((agent) => {
+    const status = codingAgentStatusOf(turns.get(agent.conversationId), {
+      createdAt: agent.createdAt,
+      now,
+      awaitingLineAt: awaiting.get(agent.conversationId),
+      blank: agent.blank,
+    });
+    return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
   });
-  return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
 });

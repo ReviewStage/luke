@@ -13,14 +13,15 @@ import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
-import type {
-  EditorSpan,
-  MentionDrawer,
-  PlacedWords,
-  PlanEditorHandle,
-  PlanEditorPictures,
-  PlanEditorPlacement,
-  PlanEditorProps,
+import {
+  type EditorSpan,
+  type MentionDrawer,
+  PLAN_PLACEHOLDER,
+  type PlacedWords,
+  type PlanEditorHandle,
+  type PlanEditorPictures,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
 } from "./contract.js";
 import { diagramPreview } from "./diagram-preview.js";
 import {
@@ -45,16 +46,17 @@ import {
 import { planMentions } from "./plan-mentions.js";
 import { planSlash } from "./plan-slash.js";
 import { editorFormatting, formatReports } from "./writing-format.js";
-import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
+import { blockRulesOutOfCells, withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
 /**
- * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
+ * plan-editor.ts -- a Markdown document's text, a plan's or another's, edited in place on TipTap, drawn exactly as the document draws it.
  *
  * What the text may hold, and every Markdown rule for writing it, is
  * TipTap's own: StarterKit, `@tiptap/markdown`, task lists, tables, and
  * pictures (`./picture-node.ts`), each inline in a paragraph even where it
  * stands alone on its line; its chords are the writing vocabulary's
- * (`./writing-keys.ts`), in place of TipTap's;
+ * (`./writing-keys.ts`), in place of TipTap's, and neither a chord nor a
+ * Markdown rule lays a block into a table's cell;
  * underline alone is left out, because Markdown cannot store it and the
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
@@ -65,8 +67,12 @@ import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
  * which an empty line under the caret offers in its placeholder, as an empty
  * heading names its level. A Mermaid code block stays code, its diagram
  * previewed under it where the panel draws one (`./diagram-preview.ts`).
- * Esc and ⌘↩ finish, naming the section the caret
- * stood in; ↑ on the text's first line goes to the title above it.
+ * A document's own `/` blocks lay in the Markdown they name. Esc and ⌘↩
+ * finish, naming the section the caret stood in; ↑ on the text's first line
+ * goes to the title above it, where one stands. What a plan alone takes
+ * (mentions, pictures, comment threads, a diagram's preview, and the title
+ * above) is each left out where the document takes none, which leaves a
+ * Markdown editor that keeps every untouched block's source.
  */
 
 /** The key code a browser gives a key an input method takes. */
@@ -74,9 +80,6 @@ const COMPOSING_KEY_CODE = 229;
 
 /** The class the editor's own element wears beside the read view's, which `tasks.css` styles. */
 const EDITOR_CLASS = "plan-document-text";
-
-/** What an empty plan says until a word is typed. */
-const PLAN_PLACEHOLDER = "Write the plan";
 
 /** What an empty line under the caret says where the `/` menu stands over the text. */
 const LINE_PLACEHOLDER = "Write, or press / for blocks";
@@ -128,9 +131,11 @@ const TASK_MARK_LENGTH = "- [ ] ".length;
  * a bullet saying "[ ]", and which loses its trailing space the moment a
  * block's ending is trimmed; so its words are written as `&nbsp;`, which
  * GFM reads as a task, and read back as no words. They are laid in after
- * the mark rather than as a text node, which would escape the `&`.
+ * the mark rather than as a text node, which would escape the `&`. Its
+ * Markdown rule is kept out of a table's cell before it is extended, because
+ * extending it after would hand its own writing to itself as its parent's.
  */
-const DocumentTaskItem = TaskItem.extend({
+const DocumentTaskItem = blockRulesOutOfCells(TaskItem).extend({
   parseMarkdown(token, helpers) {
     const empty = token.text === EMPTY_TASK_WORDS;
     return this.parent?.(empty ? { ...token, text: "", tokens: [] } : token, helpers) ?? [];
@@ -200,9 +205,9 @@ export function markdownExtensions(
     link: { openOnClick: false },
   });
   return [
-    withoutTipTapChords(kit),
+    blockRulesOutOfCells(withoutTipTapChords(kit)),
     withoutTipTapChords(DocumentParagraph),
-    withoutTipTapChords(DocumentHeading),
+    blockRulesOutOfCells(withoutTipTapChords(DocumentHeading)),
     Markdown,
     withoutTipTapChords(TaskList),
     DocumentTaskItem,
@@ -396,7 +401,10 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     mentions === undefined
       ? undefined
       : planMentions(manager, (node) => held.sources.get(node), mentions);
-  const slash = blocks === undefined ? undefined : planSlash(blocks);
+  const slash =
+    blocks === undefined
+      ? undefined
+      : planSlash(blocks, (markdown) => manager.parse(markdown).content ?? []);
   const opened = documentOpened(manager, markdown);
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
@@ -445,7 +453,8 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         }
         const { selection } = view.state;
         const first = selection.empty && selection.$from.index(0) === 0;
-        if (event.key !== "ArrowUp" || !first || !view.endOfTextblock("up")) return false;
+        if (onLeaveUp === undefined || event.key !== "ArrowUp" || !first) return false;
+        if (!view.endOfTextblock("up")) return false;
         onLeaveUp();
         return true;
       },

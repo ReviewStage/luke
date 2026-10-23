@@ -54,6 +54,7 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -1774,9 +1775,7 @@ async function handFiles(box: HTMLElement, files: readonly File[], how: "pick" |
 
 /** The names of the files a box holds, as its chips say them. */
 function chipNames(box: HTMLElement): (string | null)[] {
-  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
-    chip.getAttribute("title"),
-  );
+  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName);
 }
 
 test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them with words or alone, each drawn in the channel over the words and opened larger on a press", async () => {
@@ -1839,7 +1838,7 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
   );
 });
 
-test("a recording a message carries plays in its own player, left out of the replay, with no press opening it as a picture", async () => {
+test("a recording a message carries plays where it stands, left out of the replay, and its Expand opens the viewer a picture does, which plays it", async () => {
   const created: string[] = [];
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
@@ -1865,13 +1864,38 @@ test("a recording a message carries plays in its own player, left out of the rep
     await settle();
 
     const posted = [...page.querySelectorAll(".chat-message")].at(-1);
-    const player = posted?.querySelector("video");
-    assert.ok(player, "the recording is played, not drawn");
-    assert.equal(player.getAttribute("src"), "blob:video-1");
+    const inline = posted?.querySelector("video");
+    assert.ok(inline, "the recording plays where the message draws it");
+    assert.equal(inline.getAttribute("src"), "blob:video-1");
+    assert.deepEqual(
+      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Expand", "Full screen"],
+      "under Luke's own bar, with an Expand into the viewer",
+    );
+    assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
+    assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.equal(posted?.querySelector('button[aria-label^="Enlarge"]'), null);
+    const expand = posted?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
+    assert.ok(expand, "the recording's Expand opens the viewer");
+    act(() => expand.click());
+    await settle();
+
+    const player = document.querySelector('[role="dialog"] video');
+    assert.ok(player, "the viewer plays the recording");
+    assert.deepEqual(
+      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Full screen"],
+      "under Luke's own bar",
+    );
+    assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
+    assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.equal(player.getAttribute("aria-label"), "Video: invite-flow.webm");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
-    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM]);
-    assert.equal(posted?.querySelector(".picture-block img, .picture-block button"), null);
+    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM, CONVERSATION_MEDIA_TYPE.WEBM]);
   } finally {
     URL.createObjectURL = own.create;
     URL.revokeObjectURL = own.revoke;
@@ -2633,10 +2657,16 @@ test("an agent the plans' summaries do not name is read as its chip's mark reads
   const page = mount((chat) => ({ ...chat, agents: [] }));
   // Until its task's agents are read it stands by the name the chat read carries, on the mark of no known harness.
   const before = railRow(page, "Invite emails").closest("li");
-  assert.equal(before?.querySelector(".actor-mark img.harness-mark"), null);
+  assert.equal(
+    before?.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    null,
+  );
   await settle();
   const after = railRow(page, "Nova").closest("li");
-  assert.ok(after?.querySelector(".actor-mark img.harness-mark"), "its row wears Codex's mark");
+  assert.ok(
+    after?.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    "its row wears Codex's mark",
+  );
   assert.equal(after?.querySelector(".failed-mark")?.getAttribute("aria-label"), "Failed");
   // One with no title is named by the automation that started it, as its tab is, and drawn at
   // rest, since a read is not followed and a face never stays working after its agent stopped.

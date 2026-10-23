@@ -188,24 +188,25 @@ side panel's first tab, the transcript, and Settings' page list all read down
 that one edge. Controls in a row stand `--luke-control-gap` apart, a glyph
 `--luke-icon-gap` from its words, a column's groups `--luke-section-gap`, and a page's
 content `--luke-page-inset` from its column, each the desktop profile's role.
-No pixel of padding, margin, or gap in `shell.css`, `desktop.css`,
-`sign-in.css`, and `tooltip.css` is anything but one of these; the optical
+No pixel of padding, margin, or gap in `shell.css` and `desktop.css` is
+anything but one of these; the optical
 exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.
 
-The window draws two buttons of its own, both in `desktop.css`, and no screen
-of it mounts `@luke/ui`'s Button and IconButton yet. A glyph alone is an
-`.icon-button`: a `--luke-control-height` square with a `--luke-control-icon` glyph in
+The window's buttons are `@luke/ui`'s Button and IconButton
+(`packages/ui/src/components/button/`); `desktop.css` keeps one of its own,
+`.toolbar-button`, for the file tree's Retry, a button the tree's own DOM
+builds. A glyph alone is an IconButton: a `--luke-control-height` square with a `--luke-control-icon` glyph in
 `--luke-color-text-muted`, nothing behind it at rest, the `--luke-color-fill-selected` fill and
 `--luke-color-text` under the pointer, `--luke-color-fill-pressed` held down, and the
 `--luke-color-focus-ring` for the keyboard. A glyph and words, or words alone, is a
-`.toolbar-button` of the same height, corner, glyph, and states, its glyph
-`--luke-icon-gap` from its words; `.primary-button` and `.danger-button` are that
+Button of the same height, corner, glyph, and states, its glyph
+`--luke-icon-gap` from its words; its `primary` and `danger` variants are that
 button filled with the accent or with red. Every glyph is drawn in a 24 box at
 the one stroke `glyphs.tsx` draws with, so the button sizes the glyph and
 never the glyph its button. A button floating over something that moves
 beneath it, the title bar over a sliding pane or the transcript's way back to
-its newest line, sets `--button-ground` and fills over that rather than over
+its newest line, sets `--luke-button-ground` and fills over that rather than over
 what passes. What is not one of these is a row, a tab, or a round control and
 says why where it is drawn: the call bar's round mutes, its solid End call
 disc, and its start pill, Chat's round send, and a tab's ×, which brightens

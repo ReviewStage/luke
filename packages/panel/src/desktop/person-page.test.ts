@@ -13,7 +13,9 @@ import {
 import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_RESPONSE,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -182,10 +184,21 @@ function item(n: number, title: string, agentId: string, ago: number): InboxItem
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.CHOICE, options: [{ label: "Yes" }, { label: "No" }] },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
+    thread: [
+      {
+        id: `e1b2c3d4-0000-4000-8000-${String(n).padStart(12, "0")}`,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: title,
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Yes" }, { label: "No" }],
+          status: INBOX_ASK_STATUS.OPEN,
+        },
+        createdAt: NOW - ago,
+      },
+    ],
     postedAt: NOW - ago,
     updatedAt: NOW - ago,
   };
@@ -343,9 +356,7 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [...section.querySelectorAll(".sidebar-task-name, .luke-list-row-title")].map(
-        (name) => name.textContent,
-      ),
+      [...section.querySelectorAll(".luke-list-row-title")].map((name) => name.textContent),
     ]),
   );
 }

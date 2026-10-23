@@ -29,12 +29,12 @@ import { LANDING_TONE } from "@luke/features/landing-outcome";
 import { AuthMark, AuthPage, SIGN_IN_FAILURE, SocialSignInChoices } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
-import { StrictMode, useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useEffect, useRef, useState } from "react";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { mountPrerenderedPage } from "./mount-page";
 
 const authClient = createAuthClient();
 
@@ -136,11 +136,4 @@ function DesktopSession(): React.JSX.Element {
 
 startSiteAnalytics();
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <DesktopSession />
-  </StrictMode>,
-);
+mountPrerenderedPage(<DesktopSession />);

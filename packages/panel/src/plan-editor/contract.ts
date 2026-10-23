@@ -1,8 +1,9 @@
 /**
- * contract.ts -- what the panel and the editor bundle say to each other: the plan's text and the composer's words, the two mount calls, and nothing that pulls TipTap into the panel.
+ * contract.ts -- what the panel and the editor bundle say to each other: a Markdown document's text and the composer's words, the two mount calls, and nothing that pulls TipTap into the panel.
  *
  * TipTap is too large for the bundle every window parses, so the panel's two
- * editors, a plan's text and an agent's message box, ship as one bundle of
+ * editors, a Markdown document's text (a plan's, and any other document the
+ * panel edits, `../tasks/markdown-editor.tsx`) and an agent's message box, ship as one bundle of
  * their own (`plan-editor.js`, built from `./index.ts`) that the panel starts
  * loading after its first paint (`../bundle-loader.ts`), as the whiteboard
  * and a File tab's tree load the first time they are shown. That bundle exports
@@ -30,7 +31,8 @@ export interface EditorBox {
 /**
  * The selection as a format toolbar reads it: where it stands in the text,
  * which moves the toolbar as it changes; whether it holds any words;
- * whether it touches a code block, where no toolbar stands; the marks every
+ * whether it touches a code block, where no toolbar stands; whether it
+ * touches a table's cell, where no block can be turned; the marks every
  * selected word wears, Link's among them; the one kind of block it stands
  * in, none where it spans several; and the link it or the caret stands in.
  */
@@ -39,6 +41,7 @@ export interface EditorFormat {
   readonly to: number;
   readonly empty: boolean;
   readonly code: boolean;
+  readonly cell: boolean;
   readonly marks: readonly WritingMark[];
   readonly block: WritingBlock | undefined;
   readonly link: string | undefined;
@@ -102,6 +105,9 @@ export type PlanEditorPlacement =
 /** The caret at the end of the text, as a press on the room under its last line puts it. */
 export const PLACEMENT_END = { end: true } as const;
 
+/** What an empty plan says until a word is typed, the editor's own where a document names none. */
+export const PLAN_PLACEHOLDER = "Write the plan";
+
 /** What the `/` menu lays in beyond the writing vocabulary's blocks, each the menu's own. */
 export const SLASH_INSERT = {
   DIAGRAM: "slash-diagram",
@@ -115,6 +121,14 @@ type SlashInsert = (typeof SLASH_INSERT)[keyof typeof SLASH_INSERT];
 /** A block the `/` menu offers: one a line is turned into, the divider, or one of the menu's own. */
 export type SlashBlock = WritingBlock | WritingInsert | SlashInsert;
 
+/** A block of a document's own its `/` menu offers, laid in as the Markdown it names. */
+interface SlashMarkdown {
+  readonly markdown: string;
+}
+
+/** What a choice in the `/` menu lays in: one of the menu's blocks, or a document's own. */
+export type SlashChoice = SlashBlock | SlashMarkdown;
+
 /**
  * The plan editor's `/`, as the panel draws its menu: the `/` word the caret
  * ends reported (`onTrigger`), and the keys the menu over it takes first
@@ -125,11 +139,18 @@ export interface PlanEditorBlocks {
   readonly onKey: (event: KeyboardEvent) => boolean;
 }
 
-/** What the document hands the editor as it mounts it in place of the text's drawn sections. */
+/**
+ * What a document hands the editor as it mounts it: a plan in place of its
+ * text's drawn sections, or another Markdown document in place of its drawn
+ * words. What a plan alone takes, its sections' placement, mentions,
+ * pictures, comment threads, and diagrams, is each left out where the
+ * document takes none.
+ */
 export interface PlanEditorProps {
   /** The text as the document holds it, which the editor opens on. */
   readonly markdown: string;
-  readonly placement: PlanEditorPlacement | undefined;
+  /** Where the caret goes as the editor opens; the start of the text where none is given. */
+  readonly placement?: PlanEditorPlacement | undefined;
   /** Whether the editor takes the keyboard as it mounts, as a task opened by a click or a key does and a page drawing it does not. */
   readonly focus: boolean;
   readonly label: string;
@@ -141,8 +162,8 @@ export interface PlanEditorProps {
   readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
   /** Esc or ⌘↩, with the section the caret stood in, counted as `planSections` counts them. */
   readonly onFinish: (section: number) => void;
-  /** ↑ from the first line of the text, which goes to the title above it. */
-  readonly onLeaveUp: () => void;
+  /** ↑ from the first line of the text, which goes to the title above it; none where nothing stands above the text, where ↑ is the editor's own. */
+  readonly onLeaveUp?: (() => void) | undefined;
   /** What the text's mentions are drawn and picked with; none where the text takes no mentions, as a template does not. */
   readonly mentions?: PlanEditorMentions | undefined;
   /**
@@ -322,8 +343,8 @@ export interface PlanEditorHandle extends EditorFormatting {
   readonly take: (sent: string, merged: string) => { readonly base: string; readonly text: string };
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
-  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in. */
-  readonly insertBlock: (block: SlashBlock) => void;
+  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in, or a document's own Markdown laid in there. */
+  readonly insertBlock: (block: SlashChoice) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
@@ -351,6 +372,21 @@ export interface ComposerTrigger {
   readonly start: number;
   readonly query: string;
   readonly rect: { readonly left: number; readonly top: number; readonly bottom: number };
+}
+
+/** Whether two reports say the same, so an unchanged word is not reported again. */
+export function sameTrigger(
+  a: ComposerTrigger | undefined,
+  b: ComposerTrigger | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.start === b.start &&
+    a.query === b.query &&
+    a.rect.left === b.rect.left &&
+    a.rect.top === b.rect.top &&
+    a.rect.bottom === b.rect.bottom
+  );
 }
 
 /** A chip the composer draws in its words: a skill, written `/name`. */

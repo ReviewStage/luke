@@ -188,7 +188,8 @@ export function DataTable<Row, Key extends string = string>({
                     press
                       ? (event) => {
                           if (onOwnControl(event)) return;
-                          pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
+                          // Note that a row runs the card's width, so its press leaves its fill and rule standing.
+                          pulsePress(event.currentTarget, PRESS_PULSE.FLUSH);
                           press(row);
                         }
                       : undefined

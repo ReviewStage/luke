@@ -1,5 +1,5 @@
 import { WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
-import type { Editor } from "@tiptap/core";
+import type { Editor, JSONContent } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
@@ -7,22 +7,28 @@ import {
   type PlanEditorBlocks,
   SLASH_INSERT,
   type SlashBlock,
+  type SlashChoice,
+  sameTrigger,
 } from "./contract.js";
 import { turnInto } from "./writing-format.js";
+import { inTableCell } from "./writing-keys.js";
 
 /**
  * plan-slash.ts -- the plan editor's `/`: the word the caret ends reported to the panel, which draws the block menu over it, and the block it chooses laid in in the word's place.
  *
- * A `/` at the start of a line or after a space, outside code, opens the
- * panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
+ * A `/` at the start of a line or after a space, outside code and outside
+ * a table's cell, opens the panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
  * no space in it, so a space typed after it ends it and closes the menu.
  * A choice deletes the word, through its end where the caret stands inside
  * it, and runs the block's command on the block the caret stands in
  * (`insert`): a block is set rather than toggled, as Turn into sets it; a
  * diagram is a Mermaid code block; a table is three by three under a
  * header row; a mention lays in the `@` that opens the panel's `@` list;
- * and a picture lays in nothing, the panel opening its chooser. The keys the
- * menu takes are the panel's first (`./plan-editor.ts`'s `handleKeyDown`).
+ * a picture lays in nothing, the panel opening its chooser; and a
+ * document's own block lays in the Markdown it names, read as the editor
+ * reads its text, in place of the line where the word stood alone on it.
+ * The keys the menu takes are the panel's first (`./plan-editor.ts`'s
+ * `handleKeyDown`).
  */
 
 /** The `/` word the caret ends: `/`, at the start of the line or after a space, then anything but a space or another `/`. */
@@ -82,12 +88,12 @@ const INSERTS = {
   },
 } as const satisfies Record<SlashBlock, (editor: Editor) => void>;
 
-/** The `/` word the caret ends in plain text, outside code; nothing while the editor has no caret or the caret ends none. */
+/** The `/` word the caret ends in plain text, outside code and outside a table's cell; nothing while the editor has no caret or the caret ends none. */
 function slashAt(view: EditorView): SlashWord | undefined {
   const { selection, doc } = view.state;
   if (!selection.empty || !view.hasFocus()) return undefined;
   const { $from } = selection;
-  if ($from.parent.type.spec.code === true) return undefined;
+  if ($from.parent.type.spec.code === true || inTableCell($from)) return undefined;
   const before = $from.parent.textBetween(0, $from.parentOffset, undefined, LEAF_CHARACTER);
   const match = SLASH_WORD.exec(before);
   if (match === null) return undefined;
@@ -113,18 +119,6 @@ function slashAt(view: EditorView): SlashWord | undefined {
   };
 }
 
-/** Whether two reports say the same, so an unchanged word is not reported again. */
-function sameTrigger(a: ComposerTrigger | undefined, b: ComposerTrigger | undefined): boolean {
-  if (a === undefined || b === undefined) return a === b;
-  return (
-    a.start === b.start &&
-    a.query === b.query &&
-    a.rect.left === b.rect.left &&
-    a.rect.top === b.rect.top &&
-    a.rect.bottom === b.rect.bottom
-  );
-}
-
 /** The `/` word found again, and reported where it changed. */
 function reported(view: EditorView, state: SlashState, blocks: PlanEditorBlocks): void {
   state.found = slashAt(view);
@@ -134,8 +128,15 @@ function reported(view: EditorView, state: SlashState, blocks: PlanEditorBlocks)
   blocks.onTrigger(next);
 }
 
-/** The plan editor's `/`: the word reported as the editor's state moves and as it takes or loses the caret, and a block chosen laid in in its place. */
-export function planSlash(blocks: PlanEditorBlocks) {
+/**
+ * The plan editor's `/`: the word reported as the editor's state moves and
+ * as it takes or loses the caret, and a block chosen laid in in its place,
+ * a document's own Markdown read into blocks by `parse`.
+ */
+export function planSlash(
+  blocks: PlanEditorBlocks,
+  parse: (markdown: string) => readonly JSONContent[],
+) {
   const state: SlashState = { found: undefined, reported: undefined };
   const plugin = new Plugin({
     key: new PluginKey("plan-slash"),
@@ -153,12 +154,13 @@ export function planSlash(blocks: PlanEditorBlocks) {
       },
     },
   });
-  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in. */
-  const insert = (editor: Editor, block: SlashBlock): void => {
+  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in, or a document's own Markdown laid in there. */
+  const insert = (editor: Editor, block: SlashChoice): void => {
     const word = state.found;
     if (word === undefined) return;
     editor.chain().focus().deleteRange({ from: word.from, to: word.to }).run();
-    INSERTS[block](editor);
+    if (typeof block === "string") INSERTS[block](editor);
+    else editor.commands.insertContent([...parse(block.markdown)]);
   };
   return { plugin, insert };
 }

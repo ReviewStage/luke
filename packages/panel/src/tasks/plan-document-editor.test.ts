@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
+import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { ACT_KIND } from "@luke/host/acts";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -17,6 +20,7 @@ import {
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -310,6 +314,75 @@ test("a mouse's press on a diagram in a wide room, which enlarges nothing, opens
     "nothing opened over the window",
   );
   assert.ok(container.querySelector(".plan-document-editor") !== null, "the editor opened");
+});
+
+test("a press on a video in a section, on its frame, its scrubber, Play, Full screen, or Expand, opens no editor, while a press on its caption still does", async () => {
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.TASKS_PICTURE_READ]: () =>
+      Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
+  });
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  URL.createObjectURL = () => "blob:plan-recording";
+  URL.revokeObjectURL = () => undefined;
+  // The window's playing and full screen, which jsdom does not implement.
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockReturnValue(undefined);
+  const fullScreen = Object.getOwnPropertyDescriptor(Element.prototype, "requestFullscreen");
+  Object.defineProperty(Element.prototype, "requestFullscreen", {
+    configurable: true,
+    value: () => Promise.resolve(),
+  });
+  try {
+    const address = planAttachmentAddress(
+      { taskId: DOCUMENT_TASK.id, attachmentId: "8c2d4e6f-1a3b-4c5d-9e7f-0a1b2c3d4e5f" },
+      "acme",
+    );
+    const { container } = mount([], {
+      ...DOCUMENT_TASK,
+      document: {
+        body: `## Flow\n\n![Inviting a member](${address} "The flow")\n`,
+        assumptions: [],
+      },
+    });
+    await settle();
+    const block = container.querySelector<HTMLElement>(".picture-block[data-video]");
+    const video = block?.querySelector("video");
+    const seek = block?.querySelector<HTMLElement>('[aria-label="Seek"]');
+    const named = (label: string) =>
+      block?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ?? undefined;
+    const [play, fullScreen, expand] = ["Play", "Full screen", "Expand"].map(named);
+    const caption = block?.querySelector<HTMLElement>(".picture-caption");
+    assert.ok(
+      video && seek && play && fullScreen && expand && caption,
+      "the video plays in its section, under its caption",
+    );
+
+    // The frame, the scrubber, Play, and Full screen, each as a mouse's press lands on it, then Expand.
+    for (const pressed of [video, seek, play, fullScreen]) {
+      act(() => {
+        pressed.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+        );
+      });
+    }
+    act(() => expand.click());
+
+    // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+    assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+    assert.ok(document.querySelector(".attachment-viewer"), "the Expand opened the viewer");
+
+    act(() => {
+      caption.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 40, clientY: 12 }));
+    });
+
+    assert.ok(container.querySelector(".plan-document-editor") !== null, "the editor opened");
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+    if (fullScreen === undefined) Reflect.deleteProperty(Element.prototype, "requestFullscreen");
+    else Object.defineProperty(Element.prototype, "requestFullscreen", fullScreen);
+  }
 });
 
 test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused, and opens no editor", async () => {

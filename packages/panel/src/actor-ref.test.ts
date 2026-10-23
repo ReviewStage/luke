@@ -118,7 +118,7 @@ test("an agent whose harness is not known yet stands on an empty box, named by t
   assert.ok(waiting && known);
 
   assert.equal(waiting.childElementCount, 0, "the box draws no glyph");
-  assert.ok(known.classList.contains("harness-mark"), "a known harness wears its mark");
+  assert.ok(known.classList.contains("luke-harness-mark"), "a known harness wears its mark");
   assert.equal(view.querySelector(".luke-inline-ref-label")?.textContent, "Fix auth flow");
 });
 

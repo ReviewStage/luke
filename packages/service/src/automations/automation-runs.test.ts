@@ -42,7 +42,7 @@ import {
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
-import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
+import { INBOX_ASK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
@@ -60,7 +60,7 @@ import {
 } from "../agents/brain-host/eve-sessions.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { closeInboxItem, postInboxItem } from "../inbox/inbox-store.js";
+import { closeInboxItem, postInboxThread } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
@@ -722,9 +722,14 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* ranTurn(departing.owner, orphaned, TURN_STATUS.SETTLED);
         // Its starter gone from the workspace, the agent is no one's to archive, so it is not counted archived.
         yield* leaveWorkspace(departing.workspaceId, departing.owner);
-        const question = yield* postInboxItem(
+        const question = yield* postInboxThread(
           { userId: archiving.owner, taskId: null, agentId: asking },
-          { key: "which-queue", title: "Which queue?", response: { type: INBOX_RESPONSE.TEXT } },
+          {
+            key: "which-queue",
+            title: "Which queue?",
+            body: "Which queue should the retries go to?",
+            ask: { type: INBOX_ASK.ANSWER },
+          },
         );
         assert.ok(Result.isSuccess(question));
 

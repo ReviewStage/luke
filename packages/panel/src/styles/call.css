@@ -1,4 +1,4 @@
-/* The call card (`renderer/call/call-card.tsx`): the standing call wherever
+/* The call card (`call/call-card.tsx`): the standing call wherever
    it is not otherwise on screen, drawn as a player's card is in a browser's
    sidebar. One card in three places: at the foot of the column at the
    window's left (the plans' sidebar, Settings' page list, or a version

@@ -405,6 +405,11 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type { AppAccessSlice } from "./app-state.js";
+import {
+  type MacCommandAnswer,
+  type MacCommandAsk,
+  macCommandAsksSchema,
+} from "./mac-command-ask.js";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -445,6 +450,8 @@ export interface HostOperator {
   macRepositories(): Effect.Effect<MacRepositoriesAnswer | undefined>;
   /** One repository's run command set on this Mac, or forgotten with null; the repositories as they then stand. */
   setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
+  /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
+  answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -943,6 +950,8 @@ export interface HostOperator {
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
+  /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
+  onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
   /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
   terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
   terminalCreate(params: {
@@ -995,12 +1004,18 @@ export interface HostOperator {
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
 }
 
-/** The host's answer to a terminal call, read by its schema; none where the host refused it or the shape is not read. */
-function terminalAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) {
-  return (answer: GatewayCallResult): Answer | undefined =>
-    answer.ok
+/**
+ * The host's answer to a call, read by its schema; `unanswered` where the
+ * host refused it or answered a shape its method does not document.
+ */
+function answerOf<Answer, Encoded, Unanswered>(
+  schema: EffectSchema.Codec<Answer, Encoded>,
+  unanswered: Unanswered,
+) {
+  return (answer: GatewayCallResult): Answer | Unanswered =>
+    (answer.ok
       ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-      : undefined;
+      : undefined) ?? unanswered;
 }
 
 interface HostOperatorOptions {
@@ -1044,26 +1059,7 @@ function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Ef
  * rest on to the act, whose own answer guard is checked in the router and
  * again in the window that asked.
  */
-/** A workspace method's answer as its schema reads it; unanswered where the host refused or the shape is not read. */
-function workspaceAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) {
-  return (answer: GatewayCallResult): Answer | typeof WORKSPACE_UNANSWERED =>
-    (answer.ok
-      ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-      : undefined) ?? WORKSPACE_UNANSWERED;
-}
-
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
-
-/** A GitHub page's answer as its schema reads it; unanswered where the host refused or the shape is not read. */
-function githubPage(answer: GatewayCallResult): TasksGitHubPageAnswer {
-  return (
-    (answer.ok
-      ? Result.getOrUndefined(
-          readEither(tasksGitHubPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-        )
-      : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED }
-  );
-}
 
 function record(result: GatewayCallResult): WireRecord | undefined {
   return result.ok && isRecord(result.result) ? result.result : undefined;
@@ -1088,8 +1084,14 @@ const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
-/** A call on a task's linked issues that reached no answer. */
-const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+/** A task call that reached no answer, as every task method answers one. */
+const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
+/** A GitHub disconnect that reached no answer. */
+const GITHUB_DISCONNECT_UNANSWERED = { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED } as const;
+
+/** An admin read that reached no answer. */
+const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
 
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
@@ -1134,34 +1136,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const wireValue = <Value>(value: Value | undefined) =>
     value !== undefined ? { value: carried(value) } : undefined;
 
-  /**
-   * A coding-agent answer as the host's method documents it, or unanswered
-   * where the host refused the call or answered a shape the view cannot
-   * read: the window draws why and offers to try again either way.
-   */
-  const codingAgentAnswer =
-    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof CODING_AGENT_UNANSWERED =>
-      (answer.ok
-        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? CODING_AGENT_UNANSWERED;
-
-  /** An automation answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const automationAnswer =
-    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof AUTOMATION_UNANSWERED =>
-      (answer.ok
-        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? AUTOMATION_UNANSWERED;
-
-  /** An installed skills answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const installedSkillAnswer =
-    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof INSTALLED_SKILL_UNANSWERED =>
-      (answer.ok
-        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? INSTALLED_SKILL_UNANSWERED;
-
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
     provider: params.provider,
@@ -1169,47 +1143,31 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     ...(params.add !== undefined ? { add: params.add } : undefined),
   });
 
-  /** An answer on a task's linked issues as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const taskIssueAnswer =
-    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof TASK_ISSUES_UNANSWERED =>
-      (answer.ok
-        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? TASK_ISSUES_UNANSWERED;
-
-  /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const integrationAnswer =
-    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof INTEGRATION_UNANSWERED =>
-      (answer.ok
-        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? INTEGRATION_UNANSWERED;
-
   return {
     integrationsStatus: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_STATUS),
-        integrationAnswer(integrationStatusesViewSchema),
+        answerOf(integrationStatusesViewSchema, INTEGRATION_UNANSWERED),
       ),
     integrationsConnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, integrationTarget(params)),
-        integrationAnswer(integrationConnectViewSchema),
+        answerOf(integrationConnectViewSchema, INTEGRATION_UNANSWERED),
       ),
     integrationsTools: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, integrationTarget(params)),
-        integrationAnswer(integrationToolsViewSchema),
+        answerOf(integrationToolsViewSchema, INTEGRATION_UNANSWERED),
       ),
     integrationsCancel: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, integrationTarget(params)),
-        integrationAnswer(integrationStatusViewSchema),
+        answerOf(integrationStatusViewSchema, INTEGRATION_UNANSWERED),
       ),
     integrationsDisconnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, integrationTarget(params)),
-        integrationAnswer(integrationStatusViewSchema),
+        answerOf(integrationStatusViewSchema, INTEGRATION_UNANSWERED),
       ),
     integrationsRename: (params) =>
       Effect.map(
@@ -1218,7 +1176,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           connection: params.connection,
           label: params.label,
         }),
-        integrationAnswer(integrationAccountViewSchema),
+        answerOf(integrationAccountViewSchema, INTEGRATION_UNANSWERED),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
@@ -1227,7 +1185,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     macRepositories: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ),
-        terminalAnswer(macRepositoriesAnswerSchema),
+        answerOf(macRepositoriesAnswerSchema, undefined),
       ),
     setMacRepository: (entry) =>
       Effect.map(
@@ -1235,7 +1193,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           repository: entry.repository,
           command: entry.command,
         }),
-        terminalAnswer(macRepositoriesAnswerSchema),
+        answerOf(macRepositoriesAnswerSchema, undefined),
+      ),
+    answerMacCommand: (answer) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MAC_COMMAND_ANSWER, {
+          id: answer.id,
+          decision: answer.decision,
+        }),
+        (result) => record(result)?.answered === true,
       ),
     settingsSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
@@ -1394,14 +1360,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.TASKS_REPOSITORIES,
           params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
         ),
-        (answer): TasksRepositoriesAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksRepositoriesAnswerSchema, TASK_UNANSWERED),
       ),
     tasksFile: (params) =>
       Effect.map(
@@ -1413,12 +1372,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.raw === undefined ? undefined : { raw: params.raw }),
           ...(params.ref === undefined ? undefined : { ref: params.ref }),
         }),
-        (answer): TasksFileAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksFileAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksFileAnswerSchema, TASK_UNANSWERED),
       ),
     tasksTree: (params) =>
       Effect.map(
@@ -1429,12 +1383,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           path: params.path,
           ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
         }),
-        (answer): TasksTreeAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksTreeAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksTreeAnswerSchema, TASK_UNANSWERED),
       ),
     tasksSkills: (params) =>
       Effect.map(
@@ -1449,12 +1398,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                   : { repository: params.repository }),
               },
         ),
-        (answer): TasksSkillsAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksSkillsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksSkillsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksPullRequest: (params) =>
       Effect.map(
@@ -1463,14 +1407,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           repository: params.repository,
           number: params.number,
         }),
-        (answer): TasksPullRequestAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksPullRequestAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksPullRequestAnswerSchema, TASK_UNANSWERED),
       ),
     tasksIssue: (params) =>
       Effect.map(
@@ -1479,12 +1416,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           repository: params.repository,
           number: params.number,
         }),
-        (answer): TasksIssueAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksIssueAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksIssueAnswerSchema, TASK_UNANSWERED),
       ),
     tasksGitHubIssues: (params) =>
       Effect.map(
@@ -1494,24 +1426,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("query" in params ? { query: params.query } : undefined),
           ...("number" in params ? { number: params.number } : undefined),
         }),
-        (answer): TasksGitHubIssuesAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksGitHubIssuesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksGitHubIssuesAnswerSchema, TASK_UNANSWERED),
       ),
     tasksIssueLinks: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId: params.taskId }),
-        taskIssueAnswer(tasksIssueLinksAnswerSchema),
+        answerOf(tasksIssueLinksAnswerSchema, TASK_UNANSWERED),
       ),
     tasksBrowserTabs: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
-        taskIssueAnswer(tasksBrowserTabsAnswerSchema),
+        answerOf(tasksBrowserTabsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksBrowserTabOpen: (params) =>
       Effect.map(
@@ -1520,7 +1445,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           address: params.address,
         }),
-        taskIssueAnswer(tasksBrowserTabOpenAnswerSchema),
+        answerOf(tasksBrowserTabOpenAnswerSchema, TASK_UNANSWERED),
       ),
     tasksIssueLink: (params) =>
       Effect.map(
@@ -1528,7 +1453,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           taskId: params.taskId,
           issue: params.issue,
         }),
-        taskIssueAnswer(tasksIssueLinkAnswerSchema),
+        answerOf(tasksIssueLinkAnswerSchema, TASK_UNANSWERED),
       ),
     tasksIssueRelate: (params) =>
       Effect.map(
@@ -1537,7 +1462,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           linkId: params.linkId,
           relation: params.relation,
         }),
-        taskIssueAnswer(tasksIssueRelateAnswerSchema),
+        answerOf(tasksIssueRelateAnswerSchema, TASK_UNANSWERED),
       ),
     tasksIssueUnlink: (params) =>
       Effect.map(
@@ -1545,7 +1470,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           taskId: params.taskId,
           linkId: params.linkId,
         }),
-        taskIssueAnswer(tasksIssueUnlinkAnswerSchema),
+        answerOf(tasksIssueUnlinkAnswerSchema, TASK_UNANSWERED),
       ),
     tasksRevisions: (params) =>
       Effect.map(
@@ -1553,22 +1478,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           taskId: params.taskId,
           ...(params.before === undefined ? undefined : { before: params.before }),
         }),
-        (answer): TasksRevisionsAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksRevisionsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksRevisionsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksRevision: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_REVISION, { taskId: params.taskId, seq: params.seq }),
-        (answer): TasksRevisionAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksRevisionAnswerSchema, TASK_UNANSWERED),
       ),
     tasksComments: (params) =>
       Effect.map(
@@ -1576,12 +1491,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           planId: params.planId,
           after: params.after,
         }),
-        (answer): TasksCommentsAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksCommentsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksCommentsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksCommentStart: (params) =>
       Effect.map(
@@ -1589,12 +1499,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           planId: params.planId,
           start: params.start,
         }),
-        (answer): TasksCommentAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksCommentAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksCommentAnswerSchema, TASK_UNANSWERED),
       ),
     tasksCommentAct: (params) =>
       Effect.map(
@@ -1603,12 +1508,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           threadId: params.threadId,
           action: params.action,
         }),
-        (answer): TasksCommentAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksCommentAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksCommentAnswerSchema, TASK_UNANSWERED),
       ),
     tasksPictureKeep: (params) =>
       Effect.map(
@@ -1616,14 +1516,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           planId: params.planId,
           picture: params.picture,
         }),
-        (answer): TasksPictureKeepAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksPictureKeepAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksPictureKeepAnswerSchema, TASK_UNANSWERED),
       ),
     tasksPicture: (params) =>
       Effect.map(
@@ -1631,12 +1524,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           planId: params.planId,
           attachmentId: params.attachmentId,
         }),
-        (answer): TasksPictureAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksPictureAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksPictureAnswerSchema, TASK_UNANSWERED),
       ),
     tasksPage: (params) =>
       Effect.map(
@@ -1645,12 +1533,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           pageId: params.pageId,
           version: params.version,
         }),
-        (answer): TasksPageAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksPageAnswerSchema, TASK_UNANSWERED),
       ),
     tasksPagesFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, scope)),
     tasksPagesUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, scope)),
@@ -1694,30 +1577,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.TASKS_PAGES,
           "taskId" in params ? { taskId: params.taskId } : { agentId: params.agentId },
         ),
-        (answer): TasksPagesAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksPagesAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksPagesAnswerSchema, TASK_UNANSWERED),
       ),
     tasksRestore: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
-    githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
+    githubConnect: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_CONNECT),
+        answerOf(tasksGitHubPageAnswerSchema, TASK_UNANSWERED),
+      ),
     githubDisconnect: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_DISCONNECT),
-        (answer): TasksGitHubDisconnectAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksGitHubDisconnectAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED },
+        answerOf(tasksGitHubDisconnectAnswerSchema, GITHUB_DISCONNECT_UNANSWERED),
       ),
     adminRead: (params) =>
       Effect.map(
@@ -1725,12 +1600,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           procedure: params.procedure,
           query: params.query,
         }),
-        (answer): AdminReadAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(adminReadAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { refused: ADMIN_UNANSWERED },
+        answerOf(adminReadAnswerSchema, ADMIN_READ_UNANSWERED),
       ),
     adminFavorite: (params) =>
       Effect.map(
@@ -1740,7 +1610,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     workspaceCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: params.name }),
-        workspaceAnswer(tasksWorkspaceAnswerSchema),
+        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceRename: (params) =>
       Effect.map(
@@ -1748,7 +1618,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           name: params.name,
         }),
-        workspaceAnswer(tasksWorkspaceAnswerSchema),
+        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspacePhotoSet: (params) =>
       Effect.map(
@@ -1756,31 +1626,31 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           photo: params.photo,
         }),
-        workspaceAnswer(tasksWorkspaceAnswerSchema),
+        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceGitHubConnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspaceGitHubConnectAnswerSchema),
+        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceGitHubDisconnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
           workspaceId: params.workspaceId,
         }),
-        workspaceAnswer(tasksWorkspaceAnswerSchema),
+        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceLinearConnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspaceGitHubConnectAnswerSchema),
+        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceLinearDisconnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT, {
           workspaceId: params.workspaceId,
         }),
-        workspaceAnswer(tasksWorkspaceAnswerSchema),
+        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceLinearIssues: (params) =>
       Effect.map(
@@ -1789,17 +1659,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("query" in params ? { query: params.query } : undefined),
           ...("identifier" in params ? { identifier: params.identifier } : undefined),
         }),
-        workspaceAnswer(tasksLinearIssuesAnswerSchema),
+        answerOf(tasksLinearIssuesAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceSentry: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_SENTRY, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspaceSentryAnswerSchema),
+        answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceSentryInstall: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspaceGitHubConnectAnswerSchema),
+        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceSentryDisconnect: (params) =>
       Effect.map(
@@ -1807,12 +1677,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           installationId: params.installationId,
         }),
-        workspaceAnswer(tasksWorkspaceSentryAnswerSchema),
+        answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceMembers: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
+        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspacePeopleFollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW, scope)),
@@ -1843,14 +1713,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     workspacePhoto: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspacePhotoAnswerSchema),
+        answerOf(tasksWorkspacePhotoAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceTokenRepositories: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES, {
           workspaceId: params.workspaceId,
         }),
-        workspaceAnswer(tasksWorkspaceTokenRepositoriesAnswerSchema),
+        answerOf(tasksWorkspaceTokenRepositoriesAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceTokenRepositorySet: (params) =>
       Effect.map(
@@ -1859,7 +1729,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           repository: params.repository,
           added: params.added,
         }),
-        workspaceAnswer(tasksWorkspaceTokenRepositoriesAnswerSchema),
+        answerOf(tasksWorkspaceTokenRepositoriesAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceMemberRemove: (params) =>
       Effect.map(
@@ -1867,7 +1737,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           userId: params.userId,
         }),
-        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
+        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceMemberRole: (params) =>
       Effect.map(
@@ -1876,7 +1746,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           userId: params.userId,
           role: params.role,
         }),
-        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
+        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceTransfer: (params) =>
       Effect.map(
@@ -1884,17 +1754,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           userId: params.userId,
         }),
-        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
+        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceLeave: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspaceLeaveAnswerSchema),
+        answerOf(tasksWorkspaceLeaveAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceInvitations: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS, { workspaceId: params.workspaceId }),
-        workspaceAnswer(tasksWorkspaceInvitationsAnswerSchema),
+        answerOf(tasksWorkspaceInvitationsAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceInvite: (params) =>
       Effect.map(
@@ -1903,7 +1773,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           email: params.email,
           role: params.role,
         }),
-        workspaceAnswer(tasksWorkspaceInvitationAnswerSchema),
+        answerOf(tasksWorkspaceInvitationAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceInvitationCancel: (params) =>
       Effect.map(
@@ -1911,7 +1781,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           invitationId: params.invitationId,
         }),
-        workspaceAnswer(tasksWorkspaceInvitationsAnswerSchema),
+        answerOf(tasksWorkspaceInvitationsAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     tasksSetRepository: (params) =>
       Effect.map(
@@ -1919,14 +1789,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           taskId: params.taskId,
           repository: params.repository,
         }),
-        (answer): TasksSetRepositoryAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksSetRepositoryAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksSetRepositoryAnswerSchema, TASK_UNANSWERED),
       ),
     tasksMove: (params) =>
       Effect.map(
@@ -1934,22 +1797,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           taskId: params.taskId,
           workspaceId: params.workspaceId,
         }),
-        (answer): TasksMoveAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksMoveAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksMoveAnswerSchema, TASK_UNANSWERED),
       ),
     tasksEdit: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_EDIT, { taskId: params.taskId, edit: params.edit }),
-        (answer): TasksEditAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksEditAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksEditAnswerSchema, TASK_UNANSWERED),
       ),
     tasksStart: (request) =>
       Effect.map(
@@ -1965,12 +1818,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("status" in request ? { status: request.status } : undefined),
           ...("priority" in request ? { priority: request.priority } : undefined),
         }),
-        (answer): TasksStartAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksStartAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-              )
-            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
       ),
     tasksBoardSave: (params) =>
       fire(
@@ -1984,12 +1832,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentModels: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_MODELS),
-        codingAgentAnswer(codingAgentModelsAnswerSchema),
+        answerOf(codingAgentModelsAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentDefaultRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ),
-        codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
+        answerOf(codingAgentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentDefaultWrite: (choice) =>
       Effect.map(
@@ -2000,12 +1848,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             ? undefined
             : { contextWindow: choice.contextWindow }),
         }),
-        codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
+        answerOf(codingAgentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentWorkspaceList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST, params),
-        codingAgentAnswer(codingAgentListAnswerViewSchema),
+        answerOf(codingAgentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentList: (params) =>
       Effect.map(
@@ -2015,7 +1863,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             ? undefined
             : { includeArchived: params.includeArchived }),
         }),
-        codingAgentAnswer(codingAgentListAnswerViewSchema),
+        answerOf(codingAgentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentStart: (params) =>
       Effect.map(
@@ -2033,7 +1881,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("from" in params ? { from: params.from } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentMessages: (params) =>
       Effect.map(
@@ -2042,7 +1890,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           after: params.after,
           ...("callId" in params ? { callId: params.callId } : undefined),
         }),
-        codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
+        answerOf(codingAgentMessagesAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentMessage: (params) =>
       Effect.map(
@@ -2052,7 +1900,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentChoose: (params) =>
       Effect.map(
@@ -2062,7 +1910,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           effort: params.effort,
           ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentRename: (params) =>
       Effect.map(
@@ -2070,7 +1918,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           title: params.title,
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentServers: (params) =>
       Effect.map(
@@ -2078,12 +1926,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           disabledServers: params.disabledServers,
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentStop: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentRewind: (params) =>
       Effect.map(
@@ -2091,7 +1939,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           messageId: params.messageId,
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentArchive: (params) =>
       Effect.map(
@@ -2099,12 +1947,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           archived: params.archived,
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentDelete: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: params.agentId }),
-        codingAgentAnswer(codingAgentDeleteAnswerViewSchema),
+        answerOf(codingAgentDeleteAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPin: (params) =>
       Effect.map(
@@ -2113,7 +1961,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           pinned: params.pinned,
           ...(params.position === undefined ? undefined : { position: params.position }),
         }),
-        codingAgentAnswer(codingAgentAgentAnswerSchema),
+        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentEnsureOperator: (params) =>
       Effect.map(
@@ -2121,52 +1969,52 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           ...(params.reset === undefined ? undefined : { reset: params.reset }),
         }),
-        codingAgentAnswer(codingAgentOperatorEnsureAnswerViewSchema),
+        answerOf(codingAgentOperatorEnsureAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPage: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
-        codingAgentAnswer(codingAgentPageAnswerViewSchema),
+        answerOf(codingAgentPageAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentCalls: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CALLS, { agentId: params.agentId }),
-        codingAgentAnswer(codingAgentCallsAnswerViewSchema),
+        answerOf(codingAgentCallsAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     automationList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_LIST, params),
-        automationAnswer(automationListViewSchema),
+        answerOf(automationListViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_CREATE, params),
-        automationAnswer(automationViewSchema),
+        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationChange: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, params),
-        automationAnswer(automationViewSchema),
+        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationDelete: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_DELETE, params),
-        automationAnswer(automationDeletedViewSchema),
+        answerOf(automationDeletedViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationRun: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_RUN, params),
-        automationAnswer(automationRunViewSchema),
+        answerOf(automationRunViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationRuns: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_RUNS, params),
-        automationAnswer(automationRunsViewSchema),
+        answerOf(automationRunsViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationNewWebhookSecret: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
-        automationAnswer(automationViewSchema),
+        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
       ),
     automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
     automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
@@ -2182,12 +2030,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, pullRequestRead(params)),
-        codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
+        answerOf(codingAgentPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     pullRequestChapters: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
-        codingAgentAnswer(pullRequestChaptersAnswerViewSchema),
+        answerOf(pullRequestChaptersAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     pullRequestChaptersGenerate: (params) =>
       Effect.map(
@@ -2195,77 +2043,77 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE,
           pullRequestChaptersRead(params),
         ),
-        codingAgentAnswer(pullRequestChaptersAnswerViewSchema),
+        answerOf(pullRequestChaptersAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     chaptersModelRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHAPTERS_MODEL_READ),
-        codingAgentAnswer(chaptersModelAnswerViewSchema),
+        answerOf(chaptersModelAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     chaptersModelWrite: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
-        codingAgentAnswer(chaptersModelAnswerViewSchema),
+        answerOf(chaptersModelAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     installedSkillsList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_LIST, params),
-        installedSkillAnswer(installedSkillListViewSchema),
+        answerOf(installedSkillListViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsRead: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_READ, params),
-        installedSkillAnswer(installedSkillContentViewSchema),
+        answerOf(installedSkillContentViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsPreview: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
-        installedSkillAnswer(installedSkillPreviewViewSchema),
+        answerOf(installedSkillPreviewViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsPreviewFile: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, params),
-        installedSkillAnswer(installedSkillPreviewFileViewSchema),
+        answerOf(installedSkillPreviewFileViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsInstall: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
-        installedSkillAnswer(installedSkillInstallViewSchema),
+        answerOf(installedSkillInstallViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsSetEnabled: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED, params),
-        installedSkillAnswer(installedSkillViewSchema),
+        answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsCheckUpdate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE, params),
-        installedSkillAnswer(installedSkillUpdateCheckViewSchema),
+        answerOf(installedSkillUpdateCheckViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsUpdate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, params),
-        installedSkillAnswer(installedSkillUpdatedViewSchema),
+        answerOf(installedSkillUpdatedViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsShare: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SHARE, params),
-        installedSkillAnswer(installedSkillViewSchema),
+        answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsRemove: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, params),
-        installedSkillAnswer(installedSkillRemovedViewSchema),
+        answerOf(installedSkillRemovedViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     codingAgentChanges: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, pullRequestRead(params)),
-        codingAgentAnswer(codingAgentChangesAnswerViewSchema),
+        answerOf(codingAgentChangesAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentGitHubImage: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
-        codingAgentAnswer(codingAgentGitHubImageViewSchema),
+        answerOf(codingAgentGitHubImageViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPullRequestAction: (params) =>
       Effect.map(
@@ -2273,37 +2121,37 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...pullRequestRead(params),
           request: params.request,
         }),
-        codingAgentAnswer(codingAgentPullRequestWriteAnswerViewSchema),
+        answerOf(codingAgentPullRequestWriteAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPullRequestViewed: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
-        codingAgentAnswer(codingAgentPullRequestViewedAnswerViewSchema),
+        answerOf(codingAgentPullRequestViewedAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentOverviewPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
-        codingAgentAnswer(codingAgentOverviewPullRequestAnswerViewSchema),
+        answerOf(codingAgentOverviewPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentReviewOptions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
-        codingAgentAnswer(codingAgentReviewOptionsAnswerViewSchema),
+        answerOf(codingAgentReviewOptionsAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentOverviewChecks: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
-        codingAgentAnswer(codingAgentOverviewChecksAnswerViewSchema),
+        answerOf(codingAgentOverviewChecksAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentOverviewConversation: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
-        codingAgentAnswer(codingAgentOverviewConversationAnswerViewSchema),
+        answerOf(codingAgentOverviewConversationAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     providerKeysRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_READ),
-        codingAgentAnswer(providerKeysAnswerViewSchema),
+        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     providerKeySave: (params) =>
       Effect.map(
@@ -2312,7 +2160,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.kind === undefined ? undefined : { kind: params.kind }),
           key: params.key,
         }),
-        codingAgentAnswer(providerKeysAnswerViewSchema),
+        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     providerKeyRemove: (params) =>
       Effect.map(
@@ -2320,7 +2168,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           provider: params.provider,
           ...(params.kind === undefined ? undefined : { kind: params.kind }),
         }),
-        codingAgentAnswer(providerKeysAnswerViewSchema),
+        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     providerKeyForAgents: (params) =>
       Effect.map(
@@ -2329,33 +2177,33 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           kind: params.kind,
           forAgents: params.forAgents,
         }),
-        codingAgentAnswer(providerKeysAnswerViewSchema),
+        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     chatGptSignIn: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN),
-        codingAgentAnswer(chatGptSignInAnswerViewSchema),
+        answerOf(chatGptSignInAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
     githubTokenRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_READ),
-        codingAgentAnswer(githubTokenAnswerViewSchema),
+        answerOf(githubTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     githubTokenSave: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: params.token }),
-        codingAgentAnswer(githubTokenAnswerViewSchema),
+        answerOf(githubTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     githubTokenRemove: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
-        codingAgentAnswer(githubTokenAnswerViewSchema),
+        answerOf(githubTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     memoriesRead: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: params.workspaceId }),
-        codingAgentAnswer(memoriesAnswerViewSchema),
+        answerOf(memoriesAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     memoryForget: (params) =>
       Effect.map(
@@ -2363,17 +2211,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           id: params.id,
         }),
-        codingAgentAnswer(memoriesAnswerViewSchema),
+        answerOf(memoriesAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     planTemplateRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_READ),
-        codingAgentAnswer(planTemplateAnswerViewSchema),
+        answerOf(planTemplateAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     planTemplateWrite: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: params.template }),
-        codingAgentAnswer(planTemplateAnswerViewSchema),
+        answerOf(planTemplateAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     planTemplateRevisions: (params) =>
       Effect.map(
@@ -2381,17 +2229,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS,
           params.before === undefined ? {} : { before: params.before },
         ),
-        codingAgentAnswer(planTemplateRevisionsAnswerViewSchema),
+        answerOf(planTemplateRevisionsAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     planTemplateRevision: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: params.seq }),
-        codingAgentAnswer(planTemplateRevisionAnswerViewSchema),
+        answerOf(planTemplateRevisionAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     planTemplateRestore: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: params.seq }),
-        codingAgentAnswer(planTemplateAnswerViewSchema),
+        answerOf(planTemplateAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     dictationTranscribe: (params) =>
       Effect.map(
@@ -2400,7 +2248,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           durationMs: params.durationMs,
           keywords: [...params.keywords],
         }),
-        codingAgentAnswer(dictationTranscribeAnswerViewSchema),
+        answerOf(dictationTranscribeAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxFollow: (scope) =>
       fire(
@@ -2428,13 +2276,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           revision: params.revision,
           reply: params.reply,
-          ...("choices" in params ? { choices: params.choices } : undefined),
-          ...("values" in params ? { values: params.values } : undefined),
-          ...("note" in params ? { note: params.note } : undefined),
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
         }),
-        codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
+        answerOf(codingAgentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxClose: (params) =>
       Effect.map(
@@ -2443,7 +2287,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           revision: params.revision,
           clientKey: params.clientKey,
         }),
-        codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
+        answerOf(codingAgentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxMessage: (params) =>
       Effect.map(
@@ -2455,7 +2299,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.answers === undefined ? undefined : { answers: params.answers }),
           ...(params.revision === undefined ? undefined : { revision: params.revision }),
         }),
-        codingAgentAnswer(codingAgentInboxMessagedViewSchema),
+        answerOf(codingAgentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxStart: (params) =>
       Effect.map(
@@ -2466,7 +2310,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
         }),
-        codingAgentAnswer(codingAgentInboxMessagedViewSchema),
+        answerOf(codingAgentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxReadState: (params) =>
       Effect.map(
@@ -2474,7 +2318,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           unread: params.unread,
         }),
-        codingAgentAnswer(codingAgentInboxReadStateViewSchema),
+        answerOf(codingAgentInboxReadStateViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxReadAll: (params) =>
       Effect.map(
@@ -2482,7 +2326,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL,
           params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
         ),
-        codingAgentAnswer(codingAgentInboxReadAllViewSchema),
+        answerOf(codingAgentInboxReadAllViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentAccountInboxFollow: () =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
@@ -2509,7 +2353,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...transcriptParams(params),
           before: params.before,
         }),
-        codingAgentAnswer(codingAgentTranscriptOlderAnswerSchema),
+        answerOf(codingAgentTranscriptOlderAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     transcriptUnfollow: (transcript) =>
       fire(
@@ -2530,17 +2374,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           attachmentId: params.attachmentId,
         }),
-        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+        answerOf(codingAgentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPicture: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
-        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+        answerOf(codingAgentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PART, params),
-        codingAgentAnswer(codingAgentPartViewSchema),
+        answerOf(codingAgentPartViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentChatFollow: (workspaceId) =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId })),
@@ -2561,7 +2405,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           write: params.write,
         }),
-        codingAgentAnswer(codingAgentChatWriteAnswerViewSchema),
+        answerOf(codingAgentChatWriteAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentChatAttachment: (params) =>
       Effect.map(
@@ -2570,7 +2414,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           messageId: params.messageId,
           attachmentId: params.attachmentId,
         }),
-        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+        answerOf(codingAgentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
       ),
     onSettingsChanged: (listener) =>
       on(
@@ -2622,10 +2466,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<TasksView>(payload) : undefined),
         listener,
       ),
+    onMacCommandAsksChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MAC_COMMAND_ASKS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(macCommandAsksSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          )?.asks,
+        listener,
+      ),
     terminalList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: params.agentId }),
-        terminalAnswer(terminalsActAnswerSchema),
+        answerOf(terminalsActAnswerSchema, undefined),
       ),
     terminalCreate: (params) =>
       Effect.map(
@@ -2633,7 +2486,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           ...(params.title === undefined ? undefined : { title: params.title }),
         }),
-        terminalAnswer(terminalCreatedActAnswerSchema),
+        answerOf(terminalCreatedActAnswerSchema, undefined),
       ),
     terminalRename: (params) =>
       Effect.map(
@@ -2642,7 +2495,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           terminalId: params.terminalId,
           title: params.title,
         }),
-        terminalAnswer(terminalsActAnswerSchema),
+        answerOf(terminalsActAnswerSchema, undefined),
       ),
     terminalKill: (params) =>
       Effect.map(
@@ -2650,12 +2503,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           terminalId: params.terminalId,
         }),
-        terminalAnswer(terminalsActAnswerSchema),
+        answerOf(terminalsActAnswerSchema, undefined),
       ),
     terminalResume: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TERMINALS_RESUME, { agentId: params.agentId }),
-        terminalAnswer(terminalResumedActAnswerSchema),
+        answerOf(terminalResumedActAnswerSchema, undefined),
       ),
     terminalConnect: (params) =>
       Effect.map(

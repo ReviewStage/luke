@@ -16,6 +16,7 @@ import {
   commitShaSchema,
   workspaceIdSchema,
 } from "./task-wire.js";
+import { boundedText, filledText } from "./text-schema.js";
 import { WEBM_TYPE } from "./video-signature.js";
 
 /**
@@ -25,86 +26,55 @@ import { WEBM_TYPE } from "./video-signature.js";
  * service as a row of its own rather than in the agent's transcript, so it
  * stands where the developer looks whatever the transcript has scrolled
  * past, and the agent can change it or take it back. The agent names each
- * item by a key of its own: posting under a key it used before replaces
- * that item, and reopens it where it was answered or closed, so an item is
- * kept current rather than posted twice. An item is a title, the blocks
- * of context under it, and the response it asks for. The blocks are a
- * closed set of shapes, Markdown, a link, a reference to lines of the
- * agent's repository at a commit, and an image, each a tagged record, so a
- * later block type is one more member rather than a new column. An image
- * is one the agent took in its sandbox, a screenshot of what it rendered:
- * the agent posts it by the file's path there, the service reads the file
- * and keeps it as an attachment of the item's, and the block the desktop
- * reads names the attachment, which the desktop fetches under the account
- * and never by an address the agent wrote. The
- * response is a closed set too, each answered its own way: a choice among
- * the agent's options, one or several, or in the developer's own words;
- * an approval or a decline of a step; words; a task the developer does by
- * hand and marks done or not possible; a form of typed fields; or nothing
- * but an acknowledgement, for something the developer should know. An
- * item says whether the agent needs to hear back: where it does, the
- * answer reaches the agent as one of the developer's messages, which
- * steers its turn or opens one; where it does not, the answer is kept and
- * the agent reads it the next time it reads its inbox. Every item carries
- * a revision the agent's every change moves on, and an answer names the
- * revision it answers, so an answer to an item the agent has since changed
- * is refused rather than taken for the item as it now stands. An answer may
- * carry files, as a message to an agent may: they reach the agent with the
- * answer, and the service keeps them beside the item as its answer files,
- * which the item names by attachment, file name, and type until the answer
- * is taken back or the agent posts the item again.
+ * item by a key of its own: posting under a key it used before posts on
+ * that item's thread, and reopens it where it was answered or closed, so an
+ * item is kept current rather than posted twice. An item is a title and a
+ * thread: messages its agent or a member of its workspace adds at any
+ * point, open or settled, each in Markdown with the files it carried, read
+ * oldest first. A picture the agent took in its sandbox, a screenshot of
+ * what it rendered, is posted by the file's path there; the service reads
+ * the file, keeps it as a file of the agent's message, and writes its
+ * address into the words, which the desktop fetches under the account and
+ * never by an address the agent wrote.
  *
- * An item is closed by its agent, which takes it back with why, or by a
+ * An agent's message may end with an ask, and a member's may carry the
+ * answer to one. An ask is one of three, each answered its own way:
+ * `decide` among options, `do` steps the reader ticks, or `answer` with
+ * typed fields or the reply's own words. A read carries where an ask
+ * stands: open, answered, replaced by a newer ask, or withdrawn with why.
+ * An answer is a member's message naming the message whose ask it answers,
+ * with how they answered; the words under it are the message's own. Every
+ * item carries a revision the agent's every post moves on. An answer to
+ * any ask but a `do` the agent hears as one of the developer's messages,
+ * which steers its turn or opens one, and a `do`'s where the item says the
+ * agent waits on it (`needsReply`); otherwise the answer is kept and the
+ * agent reads it the next time it reads its inbox. A thread whose agent
+ * asks nothing, a notice, holds no ask open and waits on the developer's
+ * nod alone, Got it, which names the revision it was shown and which its
+ * agent never hears, or on a reply, which settles it as it reaches the
+ * agent.
+ *
+ * An item is closed by its agent, which withdraws its ask with why, or by a
  * member, who puts it away without answering it, at the revision they were
- * shown, as an answer is taken. A member's close names the member and
- * reaches the agent under its own lead where the item asks to be heard
- * back, so an agent waiting on it is not left waiting; otherwise the agent
- * reads it the next time it reads its inbox. Either close is undone by the
- * agent posting under the item's key again. Note that a member's close is
- * the closed status an older desktop already reads, with `closedBy`
- * beside it, which such a desktop ignores, so it draws the item as closed
- * rather than refusing the inbox.
- *
- * Beside its one answer, an item holds a thread: messages a member of its
- * workspace or its agent adds at any point, open or settled, each in
- * Markdown with the files it carried, read oldest first. A message changes
- * neither the item's status, nor its answer, nor its revision, and moves
- * the instant the item last changed, so the item comes to the top of the
- * inbox. A member's message reaches the agent as one of the developer's
- * messages, under its own lead, as an answer does, and wakes an agent that
- * stopped as a message typed in its tab does. The thread outlives a post
- * under the item's key, which changes what the item asks and not what was
- * said about it.
+ * shown. A member's close names the member and reaches the agent under its
+ * own lead where the item asks to be heard back, so an agent waiting on it
+ * is not left waiting; otherwise the agent reads it the next time it reads
+ * its inbox. Either close is undone by the agent posting under the item's
+ * key again. A message moves the instant the item last changed, so the
+ * item comes to the top of the inbox, and a member's reaches the agent
+ * under its own lead and wakes an agent that stopped, as a message typed
+ * in its tab does.
  *
  * The agent posts, withdraws, and reads its items through the tools named
  * below, whose inputs are declared here so the model is shown, eve holds,
  * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
  * Every request refuses a key it does not name; an answer ignores one a
- * newer service added. The item a desktop reads carries the version of
- * this vocabulary the service wrote it in, and reads a block or a response
- * of a type this build does not know as its type alone, so a desktop
- * behind the service draws what it knows and a placeholder for the rest
- * rather than refusing the whole inbox.
- *
- * From version 5 a message on the thread may carry an ask, or the answer
- * to one. An ask is one of three, each answered its own way: `decide`
- * among options, `do` steps the reader ticks, or `answer` with typed
- * fields or the reply's own words. A read carries where an ask stands:
- * open, answered, replaced by a newer ask, or withdrawn with why. An
- * answer is a member's message naming the message whose ask it answers,
- * with how they answered; the words under it are the message's own. The
- * item still carries its title, blocks, response, and status, as a view of
- * its open ask for a desktop before version 5, which reads the messages'
- * new keys as nothing, and its `messages` leave out every message that
- * asks or answers, which those fields stand for, so such a desktop draws
- * neither twice; its `thread` carries every message, for a desktop from
- * version 5. A thread whose agent asks nothing, a notice, holds no ask and
- * waits open on the developer's nod alone, which its agent never hears, and
- * stands to an older desktop as a note to answer with Got it. The functions at the end
- * of this file map an ask to the version 4 response nearest it, a stored
- * response to the ask it stands for, and an older desktop's answer to the
- * answer of the open ask.
+ * newer service added. An ask of a type this build does not know reads as
+ * its type alone, so a desktop behind the service draws what it knows and a
+ * placeholder for the rest rather than refusing the whole inbox. The
+ * blocks and the responses below are the vocabulary a workspace chat's ask
+ * is written in (`chat-wire.ts`), and an old transcript's post.
  */
 
 /**
@@ -115,7 +85,7 @@ import { WEBM_TYPE } from "./video-signature.js";
  * Markdown details field; version 2 is blocks and a response; version 3
  * adds the code block; version 4 adds the image block; version 5 adds an
  * ask (decide, do, or answer) and the answer to one on a thread's
- * messages, the item's response kept as a view of its open ask.
+ * messages, which an item is made of alone.
  */
 export const INBOX_WIRE_VERSION = 5;
 
@@ -342,17 +312,6 @@ export const INBOX_APPROVAL_OPTION = {
   DECLINE: "Decline",
 } as const;
 
-function boundedText(maximumChars: number) {
-  return EffectSchema.String.check(EffectSchema.isMaxLength(maximumChars));
-}
-
-function filledText(maximumChars: number) {
-  return EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(maximumChars),
-  );
-}
-
 /** An item's key as the agent spells it: a short slug, the same each time it means the same item. */
 export const inboxKeySchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
@@ -439,7 +398,7 @@ const inboxPostBlockSchema = EffectSchema.Union([
 export type InboxPostBlock = typeof inboxPostBlockSchema.Type;
 
 /** An item's context as the agent posts it: its blocks in order, few. */
-export const inboxPostBlocksSchema = EffectSchema.Array(inboxPostBlockSchema).check(
+const inboxPostBlocksSchema = EffectSchema.Array(inboxPostBlockSchema).check(
   EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
 );
 
@@ -527,7 +486,7 @@ export function keptRecommendation(choice: Recommending): {
  * with what the box says while empty; a task; a form of fields, each select
  * naming the option it recommends; or nothing but an acknowledgement.
  */
-export const inboxResponseSchema = EffectSchema.Union([
+const inboxResponseSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_RESPONSE.CHOICE),
     options: EffectSchema.Array(inboxOptionSchema).check(
@@ -632,28 +591,6 @@ function unknownTypeOf(known: readonly string[]) {
     EffectSchema.brand("UnknownInboxType"),
   );
 }
-
-/** A block or a response type this build does not know. */
-const unknownTypeSchema = unknownTypeOf([
-  ...Object.values(INBOX_BLOCK),
-  ...Object.values(INBOX_RESPONSE),
-]);
-
-/** A block as a desktop reads one: one this build knows, or the type alone of one it does not. */
-const inboxReadBlockSchema = EffectSchema.Union([
-  ...inboxBlockSchema.members,
-  EffectSchema.Struct({ type: unknownTypeSchema }),
-]);
-
-export type InboxReadBlock = typeof inboxReadBlockSchema.Type;
-
-/** A response as a desktop reads one: one this build knows, or the type alone of one it does not. */
-export const inboxReadResponseSchema = EffectSchema.Union([
-  ...inboxResponseSchema.members,
-  EffectSchema.Struct({ type: unknownTypeSchema }),
-]);
-
-export type InboxReadResponse = typeof inboxReadResponseSchema.Type;
 
 /** A step of a `do` ask by its place in the ask's steps, from the first at 0. */
 const stepIndexSchema = EffectSchema.Int.check(
@@ -856,8 +793,7 @@ export const inboxItemSchema = EffectSchema.Struct({
   /** The version of this vocabulary the service wrote the item in. */
   version: countedNumber,
   title: EffectSchema.String,
-  blocks: EffectSchema.Array(inboxReadBlockSchema),
-  response: inboxReadResponseSchema,
+  /** Whether the agent hears an answer to its open `do` ask as a message, rather than reading it in its own time; every other ask's answer it always hears. */
   needsReply: EffectSchema.Boolean,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
   /**
@@ -874,10 +810,6 @@ export const inboxItemSchema = EffectSchema.Struct({
    * the desktop reads as waiting on `startedBy`.
    */
   waitsOn: EffectSchema.optionalKey(memberRefSchema),
-  /** The developer's answer, on an answered item. */
-  answer: EffectSchema.optionalKey(inboxReplySchema),
-  /** The files the answer carried, in the order they were attached; absent where it carried none. */
-  answerFiles: EffectSchema.optionalKey(EffectSchema.Array(inboxAnswerFileSchema)),
   /**
    * The member who answered, on an answered item, any member of the task's
    * workspace; absent for an answer nobody can be named for, and from a
@@ -894,18 +826,10 @@ export const inboxItemSchema = EffectSchema.Struct({
    */
   closedBy: EffectSchema.optionalKey(memberRefSchema),
   /**
-   * The item's thread as a desktop before version 5 draws it under the
-   * item's blocks and answer, oldest first, the latest `MAX_MESSAGES_READ`
-   * of its messages that carry neither an ask nor answers, since the item's
-   * blocks, response, and answer stand for those; absent where it has none.
-   */
-  messages: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
-  /**
-   * The item's whole thread, from version 5, oldest first: the latest
-   * `MAX_MESSAGES_READ` of every message, asks and answers included, and
-   * the first message and the one whose ask is open however long ago they
-   * were written; absent where nobody wrote one, and from a service before
-   * version 5.
+   * The item's thread, oldest first: the latest `MAX_MESSAGES_READ` of every
+   * message, asks and answers included, and the first message and the one
+   * whose ask is open however long ago they were written; absent where
+   * nobody wrote one.
    */
   thread: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
   /** When the agent first posted the item under its key. */
@@ -945,18 +869,19 @@ export const inboxAnswerSchema = EffectSchema.Struct({
 export type InboxAnswer = typeof inboxAnswerSchema.Type;
 
 /**
- * An answer to one item: the revision it answers, the answer, the files the
- * developer attached, bounded as a message's to an agent are, and a key the
- * client made, so an answer sent again after a lost reply is taken once.
+ * A member's nod on a notice, Got it, which settles it as acknowledged: the
+ * revision they were shown, so a notice the agent posted over since is not
+ * settled unseen, and a key the client made, so a nod sent again after a
+ * lost reply is taken once. Every other answer is a message on the thread
+ * carrying the answer to its open ask (`inboxMessageRequestSchema`).
  */
-export const inboxAnswerRequestSchema = EffectSchema.Struct({
+export const inboxAcknowledgeRequestSchema = EffectSchema.Struct({
   revision: countedNumber,
-  ...inboxReplySchema.fields,
-  attachments: codingAgentMessageRequestSchema.fields.attachments,
+  reply: EffectSchema.Literal(INBOX_REPLY.ACKNOWLEDGED),
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
 });
 
-export type InboxAnswerRequest = typeof inboxAnswerRequestSchema.Type;
+export type InboxAcknowledgeRequest = typeof inboxAcknowledgeRequestSchema.Type;
 
 /**
  * The transaction a member's write on the inbox committed in, as Neon's
@@ -966,7 +891,7 @@ export type InboxAnswerRequest = typeof inboxAnswerRequestSchema.Type;
  */
 const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
 
-/** What an answer comes back as: the item as it then stands, whether the answer was taken, which it is not where the agent changed the item first, and the transaction it was taken in. */
+/** What a nod or a close comes back as: the item as it then stands, whether it was taken, which it is not where the agent changed the item first, and the transaction it was taken in. */
 export const inboxAnsweredSchema = EffectSchema.Struct({
   item: inboxItemSchema,
   taken: EffectSchema.Boolean,
@@ -980,8 +905,8 @@ export const INBOX_ANSWER_LEAD = "Inbox answer";
  * A member's close of one item without an answer: the revision they were
  * shown, so an item the agent changed since is not closed unseen, and a key
  * the client made, so a close sent again after a lost reply reaches the
- * agent once. It answers as an answer does (`inboxAnsweredSchema`): the
- * item as it then stands, and whether the close was taken.
+ * agent once. It answers as a nod does (`inboxAnsweredSchema`): the item
+ * as it then stands, and whether the close was taken.
  */
 export const inboxCloseRequestSchema = EffectSchema.Struct({
   revision: countedNumber,
@@ -1159,16 +1084,6 @@ const INBOX_LINE_HEAD = new RegExp(
  */
 export function inboxLineWords(text: string): string {
   return text.replace(INBOX_LINE_HEAD, "$1 on $2:");
-}
-
-/** Whether a response read off the wire is one this build knows, which its type decides. */
-export function knownResponse(response: InboxReadResponse): response is InboxResponse {
-  return Object.values<string>(INBOX_RESPONSE).includes(response.type);
-}
-
-/** Whether a block read off the wire is one this build knows, which its type decides. */
-export function knownBlock(block: InboxReadBlock): block is InboxBlock {
-  return Object.values<string>(INBOX_BLOCK).includes(block.type);
 }
 
 /** A field's value as words: a number as it prints, yes or no for a boolean. */
@@ -1366,20 +1281,18 @@ function ownWordsRefusal(words: string, files: AnswerFiles): string | undefined 
 }
 
 /**
- * Why an answer does not fit its item, or nothing where it does: the
- * response takes the reply, a pick names offered options, a form's values
- * fit it, filling it or giving something beside the note or the files,
- * and words or files stand where the answer is the developer's own, as a
- * message to an agent may be files alone. A response this build does not
- * know takes nothing.
+ * Why an answer does not fit the response it answers, or nothing where it
+ * does: the response takes the reply, a pick names offered options, a
+ * form's values fit it, filling it or giving something beside the note or
+ * the files, and words or files stand where the answer is the developer's
+ * own, as a message to an agent may be files alone. A chat ask answers by
+ * this vocabulary (`chat-wire.ts`).
  */
 export function inboxReplyRefusal(
-  item: Pick<InboxItem, "response">,
+  response: InboxResponse,
   reply: InboxReply,
   files: AnswerFiles = [],
 ): string | undefined {
-  const response = item.response;
-  if (!knownResponse(response)) return "The item asks something this Luke does not know.";
   const takes: readonly InboxReplyKind[] = INBOX_REPLIES_OF[response.type];
   if (!takes.includes(reply.reply)) return "The item does not take that answer.";
   if (reply.reply === INBOX_REPLY.CHOSE && response.type === INBOX_RESPONSE.CHOICE) {
@@ -1453,31 +1366,10 @@ export function inboxAnswersRefusal(
 }
 
 /**
- * The version 4 response nearest an ask, which the item carries as a view
- * of its open ask for a desktop before version 5: a `decide` is a choice of
- * the same options, a `do` a to-do, whose steps the item's blocks must say,
- * and an `answer` a form of its fields, or words where it has none.
- */
-export function inboxAskResponse(ask: InboxAsk): InboxResponse {
-  switch (ask.type) {
-    case INBOX_ASK.DECIDE:
-      // A choice is a decide's own keys, its options, multiple, and recommended, under its own type.
-      return { ...ask, type: INBOX_RESPONSE.CHOICE };
-    case INBOX_ASK.DO:
-      return { type: INBOX_RESPONSE.TODO };
-    case INBOX_ASK.ANSWER:
-      return ask.fields === undefined
-        ? { type: INBOX_RESPONSE.TEXT }
-        : { type: INBOX_RESPONSE.FORM, fields: ask.fields };
-  }
-}
-
-/**
- * The ask a stored version 4 response stands for, which the first message
- * of the item's thread ends with: a choice is a `decide` of its options, an
- * approval a `decide` between Approve and Decline, a to-do a `do` of no
- * steps, a form an `answer` of its fields, words an `answer` of none, and
- * an acknowledgement no ask at all.
+ * The ask a response stands for, as a chat ask's answer is read: a choice
+ * is a `decide` of its options, an approval a `decide` between Approve and
+ * Decline, a to-do a `do` of no steps, a form an `answer` of its fields,
+ * words an `answer` of none, and an acknowledgement no ask at all.
  */
 export function inboxResponseAsk(response: InboxResponse): InboxAsk | undefined {
   switch (response.type) {
@@ -1566,32 +1458,9 @@ export function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
   return EffectSchema.is(inboxAskSchema)(kept) ? kept : undefined;
 }
 
-/**
- * Whether the item's response still stands for the ask: the ask a response
- * maps to is the ask itself, a to-do any `do` ask, whose steps its blocks
- * carry. A post from before version 5 rewrites the response and not the
- * thread, so an ask it posted over stands for it no longer.
- */
-function askStandsFor(response: InboxResponse, ask: InboxAsk): boolean {
-  const asked = inboxResponseAsk(response);
-  if (asked === undefined || asked.type !== ask.type) return false;
-  // Note that the two are built apart, so they are compared by their shape rather than by who they are.
-  return asked.type === INBOX_ASK.DO || sameAsk(asked, ask);
-}
-
-/** Whether two asks say the same, key by key, as the held read compared them. */
-const sameAsk = EffectSchema.toEquivalence(inboxAskSchema);
-
-/** Whether the ask held open is still the one the item asks: an ask, or a response, of a type a newer deployment wrote is taken at its word. */
-export function askStillAsked(response: InboxReadResponse, ask: InboxReadAsk): boolean {
-  const known = knownAsk(ask);
-  return known === undefined || !knownResponse(response) || askStandsFor(response, known);
-}
-
 /** Where an item stands, as each ask of its thread is read against it. */
 export interface InboxAskStanding {
   readonly status: InboxStatus;
-  readonly response: InboxReadResponse;
   readonly openAskMessageId: string | null;
   readonly closedReason: string | null;
 }
@@ -1601,8 +1470,7 @@ export interface InboxAskStanding {
  * the item no longer holds it open, which a deployment from before version
  * 5 leaves by closing the item without a word to the ask; then withdrawn
  * with the item's reason where the item closed on it, answered where the
- * item was answered on it, and replaced where the item holds another or,
- * posted over from before version 5, asks something else.
+ * item was answered on it, and replaced where the item holds another.
  * Note that an ask withdrawn with no reason is a member's close without an
  * answer, the item's `closedBy` naming the member while the close stands,
  * because an agent's close always says why: a reader tells the two closes
@@ -1618,7 +1486,7 @@ export function standingAsk(
   if (messageId !== item.openAskMessageId) return replaced;
   switch (item.status) {
     case INBOX_STATUS.OPEN:
-      return askStillAsked(item.response, ask) ? ask : replaced;
+      return ask;
     case INBOX_STATUS.ANSWERED:
       return { ...ask, status: INBOX_ASK_STATUS.ANSWERED };
     case INBOX_STATUS.CLOSED:

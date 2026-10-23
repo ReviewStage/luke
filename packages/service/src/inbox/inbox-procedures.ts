@@ -22,7 +22,9 @@ import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK_STATUS,
   INBOX_CURSOR_START,
+  INBOX_REPLY,
   INBOX_STATUS,
   type InboxAnswers,
   type InboxItem,
@@ -31,16 +33,14 @@ import {
   inboxAnswerMessage,
   inboxAnswersReply,
   inboxClosedMessage,
-  inboxReplyRefusal,
   inboxStartTitle,
   inboxThreadMessage,
   inboxTodoTicks,
 } from "@luke/features/inbox-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { readEither } from "@luke/wire/effect";
 import type { LanguageModel } from "ai";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { ownKeyOf } from "../agents/coder-host/account-keys.js";
@@ -54,7 +54,6 @@ import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { unparsedWire, wireUuidSchema } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
@@ -62,14 +61,15 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { providerModelOf } from "../providers/model-catalog.js";
 import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
 import {
+  acknowledgeInboxItem,
   answerInboxAsk,
-  answerInboxItem,
   closeInboxItemAsMember,
   INBOX_ASK_ANSWER,
   INBOX_MESSAGE_OUTCOME,
@@ -138,118 +138,72 @@ const retitled = (
     yield* retitleInboxThread(item.id, item.title, title.value);
   });
 
-/** The id a path named, where it is a UUID; any other names no row, and is not found. */
-const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
-
 /** Whether a hand-off was refused because the agent's session has ended for good, so no message will ever reach it. */
 function retiredRefusal(refusal: HostedRefusal): boolean {
   return refusal.error === HOSTED_REFUSAL.AGENT_RETIRED.error;
 }
 
+/** The nod a member's Got it is, as the agent hears it where it waits on the notice. */
+const NOD: InboxReply = { reply: INBOX_REPLY.ACKNOWLEDGED };
+
+/** Whether the item holds an ask open on its thread, which a nod never settles. */
+function holdsAsk(item: InboxItem): boolean {
+  return (item.thread ?? []).some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN);
+}
+
 /**
- * The item with the answer standing on it under the request's key: taken
- * now where the item is open at the revision named and takes the answer,
- * or as an earlier send under the same key took it; nothing where it was
- * not taken. Refused where the answer does not fit the item.
+ * The notice with the nod standing on it under the request's key: taken
+ * now where it is open at the revision named, or as an earlier send under
+ * the same key took it; nothing where it was not taken. Refused where the
+ * item holds an ask open, which only an answer to the ask settles.
  */
-const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+const takenNod = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   stored: StoredInboxItem,
-  asked: {
-    readonly revision: number;
-    readonly clientKey: string;
-    readonly reply: InboxReply;
-    readonly attachments: readonly CodingAgentAttachment[];
-  },
+  asked: { readonly revision: number; readonly clientKey: string },
 ) {
   const { item, answerKey } = stored;
   // Taken by an earlier send, so this one wrote nothing to wait for.
   const standing: InboxItemWritten = item;
   if (answerKey === asked.clientKey) return standing;
   if (item.status !== INBOX_STATUS.OPEN || item.revision !== asked.revision) return undefined;
-  if (inboxReplyRefusal(item, asked.reply, asked.attachments) !== undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const answered = yield* hostedStoreOrUnavailable(
-    answerInboxItem(
-      userId,
-      item.id,
-      asked.revision,
-      asked.reply,
-      asked.clientKey,
-      asked.attachments,
-    ),
+  if (holdsAsk(item)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const nodded = yield* hostedStoreOrUnavailable(
+    acknowledgeInboxItem(userId, item.id, asked.revision, asked.clientKey),
   );
-  return Option.getOrUndefined<InboxItemWritten>(answered);
+  return Option.getOrUndefined<InboxItemWritten>(nodded);
 });
 
 /**
- * Answers one item of a task of the account's workspaces, whichever
- * member started its agent. An answer naming a revision the agent has
- * since moved on from, or an item no longer open, is answered with the
- * item as it stands and not taken. Otherwise the answer is taken first, at
- * the revision it names, with the files it carries kept as the item's, and
- * only then, where the item asks to be heard back or the developer typed a
- * note or attached a file, handed to the agent as one of the developer's
- * messages, its files with it, under the answer's own key through the one
- * steer path (`coder-host/steer.ts`), so an answer the item no longer takes
- * never reaches the agent. A hand-off that fails, is interrupted, or dies
- * takes the answer back, so an item never reads answered while the agent
- * was not told; and an answer sent again under the key it was taken by is
- * handed off again, which the steer's own key makes reach the agent once,
- * so a hand-off cut short by the function's own end is finished by the
- * retry rather than reported done. An agent whose session has ended for
- * good can hear nothing again, so its item keeps the answer rather than
- * waiting on the developer for ever.
+ * An answer taken, handed to its item's agent as the member's message under
+ * the answer's key through the one steer path (`coder-host/steer.ts`), then
+ * counted and the agent's task settled where the answer finished its work.
+ * A hand-off that fails, is interrupted, or dies takes the answer back, so
+ * an item never reads answered while the agent was not told; an agent whose
+ * session has ended for good can hear nothing again, so its item keeps the
+ * answer.
  */
-const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
+const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: InboxProcedureSeams,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
   userId: string,
   itemId: string,
-  asked: {
-    readonly revision: number;
+  agentId: string,
+  message: {
+    readonly text: string;
     readonly clientKey: string;
-    readonly reply: InboxReply;
     readonly attachments: readonly CodingAgentAttachment[];
   },
+  counted: Effect.Effect<void>,
 ) {
-  const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
-  if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { clientKey, attachments } = asked;
-  // An answer sent again under the key it was taken under is the same answer, counted once.
-  const counted =
-    stored.value.answerKey === clientKey
-      ? Effect.void
-      : recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {});
-  const written = yield* takenAnswer(userId, stored.value, asked);
-  if (written === undefined) {
-    // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
-    const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
-    if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return { item: now.value.item, taken: now.value.answerKey === clientKey };
-  }
-  const { txid, ...taken } = written;
-  const writtenIn = txid === undefined ? {} : { txid };
-  if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer, taken.answerFiles)) {
-    yield* counted;
-    yield* settleAgentTaskIfFinished(userId, taken.agentId);
-    return { item: taken, taken: true, ...writtenIn };
-  }
-  const answer = taken.answer;
+  const { text, clientKey, attachments } = message;
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
+    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
-      text: inboxAnswerMessage(taken, answer),
+      text,
       attachments,
       clientKey,
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
@@ -268,7 +222,64 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* counted;
   // The question settled may have finished the task's work, asked once the agent was told, so one
   // woken by the answer reads as running (`tasks/task-finish.ts`).
-  yield* settleAgentTaskIfFinished(userId, taken.agentId);
+  yield* settleAgentTaskIfFinished(userId, agentId);
+});
+
+/**
+ * Acknowledges one notice of a task of the account's workspaces, Got it,
+ * whichever member started its agent. A nod naming a revision the agent
+ * has since moved on from, or an item no longer open, is answered with the
+ * item as it stands and not taken. Otherwise the nod is taken first, at the
+ * revision it names, and only then, where the notice asks to be heard back,
+ * as one posted before threads may, handed to the agent as one of the
+ * developer's messages under the nod's own key through the one steer path
+ * (`coder-host/steer.ts`). A hand-off that fails, is interrupted, or dies
+ * takes the nod back, so a notice never reads acknowledged while the agent
+ * was not told; a nod sent again under the key it was taken by is handed
+ * off again, which the steer's own key makes reach the agent once. An agent
+ * whose session has ended for good can hear nothing again, so its notice
+ * keeps the nod rather than waiting on the developer for ever.
+ */
+const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: InboxProcedureSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  userId: string,
+  itemId: string,
+  asked: { readonly revision: number; readonly clientKey: string },
+) {
+  const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
+  if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { clientKey } = asked;
+  // A nod sent again under the key it was taken under is the same nod, counted once.
+  const counted =
+    stored.value.answerKey === clientKey
+      ? Effect.void
+      : recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {});
+  const written = yield* takenNod(userId, stored.value, asked);
+  if (written === undefined) {
+    // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
+    const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
+    if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return { item: now.value.item, taken: now.value.answerKey === clientKey };
+  }
+  const { txid, ...taken } = written;
+  const writtenIn = txid === undefined ? {} : { txid };
+  if (!inboxAnswerHeard(taken, NOD)) {
+    yield* counted;
+    yield* settleAgentTaskIfFinished(userId, taken.agentId);
+    return { item: taken, taken: true, ...writtenIn };
+  }
+  yield* handedAnswer(
+    seams,
+    writer,
+    request,
+    userId,
+    itemId,
+    taken.agentId,
+    { text: inboxAnswerMessage(taken, NOD), clientKey, attachments: [] },
+    counted,
+  );
   return { item: taken, taken: true, ...writtenIn };
 });
 
@@ -276,14 +287,14 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
  * A member's reply that answers the thread's open ask, as the window sends
  * one from version 5: the answer taken first, with the reply's words and
  * files, as the member's message that carries it (`answerInboxAsk`), and
- * then, by the rule an answer by revision follows (`inboxAnswerHeard`),
+ * then, by the rule every answer follows (`inboxAnswerHeard`),
  * handed to the agent under the answer's own lead, its files with it, under
  * the reply's key through the one steer path; otherwise kept for the agent
  * to read in its own time. An item put away with its task is not answered.
  * An answer to an ask the thread no longer holds open, to another message,
  * or one the ask does not take is refused, as a message's request is. A
  * hand-off that fails, is interrupted, or dies takes the answer back, as
- * one by revision does, so the thread never reads answered while the agent
+ * a nod's does, so the thread never reads answered while the agent
  * was not told; an answer sent again under the key it was taken by is
  * handed off again, which the steer's own key makes reach the agent once.
  * An agent whose session has ended for good can hear nothing again, so its
@@ -324,29 +335,21 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* settleAgentTaskIfFinished(userId, item.agentId);
     return { item, ...writtenIn };
   }
-  const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
-    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
-      text: inboxAnswerMessage(item, reply, inboxTodoTicks(item, answers, answered.value.ask)),
-      attachments,
-      clientKey,
-      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
-    });
-  });
-  yield* handedOver.pipe(
-    Effect.catchIf(retiredRefusal, () => Effect.void),
-    Effect.onError(() =>
-      withdrawInboxAnswer(userId, itemId, clientKey).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.ignore,
-      ),
-    ),
+  const message = inboxAnswerMessage(
+    item,
+    reply,
+    inboxTodoTicks(item, answers, answered.value.ask),
   );
-  // Counted only once the hand-off stands, since a failed one withdraws the answer above.
-  yield* counted;
-  yield* settleAgentTaskIfFinished(userId, item.agentId);
+  yield* handedAnswer(
+    seams,
+    writer,
+    request,
+    userId,
+    itemId,
+    item.agentId,
+    { text: message, clientKey, attachments },
+    counted,
+  );
   return { item, ...writtenIn };
 });
 
@@ -596,14 +599,14 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       return yield* hostedStoreOrUnavailable(accountInboxPast(context.userId, after));
     }),
     task: signedIn.task.effect(function* ({ input, context }) {
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
       if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(taskInboxPast(context.userId, taskId, after));
     }),
     agent: signedIn.agent.effect(function* ({ input, context }) {
-      const agentId = yield* rowIdOf(input.id);
+      const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
@@ -613,20 +616,18 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       input,
       context,
     }) {
-      const itemId = yield* rowIdOf(input.params.id);
-      const { revision, clientKey, attachments = [], ...reply } = input.body;
-      return yield* answered(seams, writer, context.request, context.userId, itemId, {
+      const itemId = yield* pathUuid(input.params.id);
+      const { revision, clientKey } = input.body;
+      return yield* acknowledged(seams, writer, context.request, context.userId, itemId, {
         revision,
         clientKey,
-        reply,
-        attachments,
       });
     }),
     message: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).message.effect(function* ({
       input,
       context,
     }) {
-      const itemId = yield* rowIdOf(input.params.id);
+      const itemId = yield* pathUuid(input.params.id);
       const { text, clientKey, attachments = [], answers, revision } = input.body;
       return yield* messaged(seams, writer, context.request, context.userId, itemId, {
         text,
@@ -640,7 +641,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       input,
       context,
     }) {
-      const agentId = yield* rowIdOf(input.agentId);
+      const agentId = yield* pathUuid(input.agentId);
       const { text, clientKey, attachments = [] } = input;
       return yield* started(seams, writer, context.request, context.userId, {
         agentId,
@@ -655,17 +656,17 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       input,
       context,
     }) {
-      const itemId = yield* rowIdOf(input.params.id);
+      const itemId = yield* pathUuid(input.params.id);
       return yield* closed(seams, writer, context.request, context.userId, itemId, input.body);
     }),
     markItemRead: signedIn.markItemRead.effect(function* ({ input, context }) {
-      const itemId = yield* rowIdOf(input.id);
+      const itemId = yield* pathUuid(input.id);
       const marked = yield* hostedStoreOrUnavailable(markInboxItemRead(context.userId, itemId));
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: false, ...marked };
     }),
     markItemUnread: signedIn.markItemUnread.effect(function* ({ input, context }) {
-      const itemId = yield* rowIdOf(input.id);
+      const itemId = yield* pathUuid(input.id);
       const marked = yield* hostedStoreOrUnavailable(markInboxItemUnread(context.userId, itemId));
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: true, ...marked };

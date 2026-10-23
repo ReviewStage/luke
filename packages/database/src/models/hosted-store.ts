@@ -1,25 +1,20 @@
 import type { ToolSet } from "ai";
-import type { Effect, Schema } from "effect";
-import type { DatabaseServices, QueryError } from "../core/query.js";
+import type { Effect } from "effect";
+import type { DatabaseServices, StoreFailure } from "../core/query.js";
 import {
   type MessageListRead,
   readMessageByClientId,
-  type SpokenAskRow,
   type StoredTurnRecord,
-  spokenAskRowsOf,
   turnsNamed,
 } from "./message-reads.js";
 import { purgeClearedConversations, purgeDeletedTaskCalls } from "./soft-delete.js";
-
-/** How a store read or write fails: the driver's own refusal, or a row this build cannot decode. */
-type HostedStoreFailure = QueryError | Schema.SchemaError;
 
 /**
  * What every `HostedStore` method answers: an effect over the ambient client,
  * so a caller composes it into the transaction it already holds and the edge
  * that owns the connection is the one that runs it.
  */
-type HostedStoreEffect<A> = Effect.Effect<A, HostedStoreFailure, DatabaseServices>;
+type HostedStoreEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /**
  * The hosted store, over Postgres and keyed by user: the conversation rows
@@ -38,12 +33,6 @@ export interface HostedStore {
       tools: ToolSet,
       clientId: string,
     ): HostedStoreEffect<MessageListRead>;
-    /** The developer's spoken lines each turn named took as its ask, by the client id the voice minted for each and where on its call each began, in the order they were said. */
-    spokenAskRows(
-      userId: string,
-      conversationId: string,
-      turnIds: readonly string[],
-    ): HostedStoreEffect<ReadonlyMap<string, readonly SpokenAskRow[]>>;
   };
   turns: {
     /** The turn rows the given ids name, over standing conversations, in the order they last changed. */
@@ -65,8 +54,6 @@ export function hostedStore(): HostedStore {
     messages: {
       byClientId: (userId, conversationId, tools, clientId) =>
         readMessageByClientId(userId, conversationId, tools, clientId),
-      spokenAskRows: (userId, conversationId, turnIds) =>
-        spokenAskRowsOf(userId, conversationId, turnIds),
     },
     turns: {
       named: (userId, turnIds) => turnsNamed(userId, turnIds),

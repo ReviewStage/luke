@@ -55,12 +55,14 @@ import {
   Stream,
 } from "effect";
 import type { HttpClient } from "effect/http";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire, WireValueSchema } from "../../core.js";
+import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
+import { jsonOf } from "../../http/http-effect.js";
 import type { RelayFrame, RelaySocket } from "../../terminal/relay.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import { SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
+  SANDBOX_STATUS,
   type SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -108,9 +110,6 @@ const AGENT_BROWSER = {
   PTY: { COLS: 80, ROWS: 24, CWD: "/", ENV: ["TERM=dumb", "LANG=C.UTF-8"] },
 } as const;
 
-/** Vercel's state of a sandbox that runs. */
-const RUNNING_STATUS = "running";
-
 /** Why an agent's browser could not be reached. */
 export const BROWSER_UNREACHABLE = {
   /** The agent has opened no sandbox yet: it has not run a sandbox tool. */
@@ -157,7 +156,7 @@ export interface BrowserStanding {
 }
 
 /** A recording stopped, as the sandbox answered it: the video's length, its bytes, and the absolute path it stays at in the sandbox; or why there is none. */
-export type BrowserRecordingRead =
+type BrowserRecordingRead =
   | {
       readonly ok: true;
       readonly seconds: number;
@@ -237,12 +236,6 @@ const readLine = readEither(BridgeLineSchema, { excess: EXCESS_KEYS.DROP });
 const readPages = readEither(PagesSchema, { excess: EXCESS_KEYS.DROP });
 const readCreated = readEither(CreatedSchema, { excess: EXCESS_KEYS.DROP });
 const readPtyExit = readEither(PtyExitSchema, { excess: EXCESS_KEYS.DROP });
-
-/** A line's JSON, or nothing a reader takes where it is none, as a PTY's stray output is. */
-function jsonOf(text: string): UnparsedWireValue {
-  const parsed = Result.try(() => JSON.parse(text));
-  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
-}
 
 const unreachable = (reason: BrowserUnreachableReason, status?: number) =>
   new BrowserUnreachable(status === undefined ? { reason } : { reason, status });
@@ -470,7 +463,7 @@ export function agentBrowserOver(
     Effect.gen(function* () {
       const [sandbox] = yield* api.listTagged(sessionId).pipe(Effect.mapError(sandboxUnavailable));
       if (sandbox === undefined) return yield* unreachable(BROWSER_UNREACHABLE.NOT_OPENED);
-      if (sandbox.status === RUNNING_STATUS && sandbox.currentSessionId !== undefined) {
+      if (sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined) {
         return sandbox.currentSessionId;
       }
       // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
@@ -481,7 +474,7 @@ export function agentBrowserOver(
       const resumed = api.resume(sandbox.name).pipe(
         Effect.mapError(sandboxUnavailable),
         Effect.flatMap((found) =>
-          found.status === RUNNING_STATUS && found.currentSessionId !== undefined
+          found.status === SANDBOX_STATUS.RUNNING && found.currentSessionId !== undefined
             ? Effect.succeed(found.currentSessionId)
             : Effect.fail(unreachable(BROWSER_UNREACHABLE.NOT_RESUMED)),
         ),

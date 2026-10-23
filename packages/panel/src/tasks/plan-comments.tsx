@@ -115,6 +115,7 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
+import { useFileDrop } from "../use-file-drop.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -123,7 +124,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
-import { CommentFiles, carriesFiles, useCommentAttaching } from "./plan-comment-files.js";
+import { CommentFiles, useCommentAttaching } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
@@ -729,7 +730,7 @@ function ReplyField({
   const dictates = useCommentEditor() !== undefined;
   const [words, setWords] = useState("");
   const files = useCommentAttaching();
-  const [dropping, setDropping] = useState(false);
+  const fileDrop = useFileDrop((dropped) => files.attach(Array.from(dropped)));
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
   const attempt = useRef<
@@ -762,7 +763,7 @@ function ReplyField({
       look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
       className="comment-field"
       data-variant={variant}
-      dropping={dropping}
+      dropping={fileDrop.dropping}
       // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
       data-held={
         (words === "" ? inFlight : words).trim() !== "" ||
@@ -770,22 +771,7 @@ function ReplyField({
         files.reading > 0 ||
         dictating
       }
-      onDragOver={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        // A drag moving onto one of the field's own children has not left it.
-        const into = event.relatedTarget;
-        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(false);
-        files.attach(Array.from(event.dataTransfer.files));
-      }}
+      {...fileDrop.target}
     >
       <AttachedFileChips
         files={attachmentChips(files.attachments)}
@@ -1233,6 +1219,11 @@ function pendingOf(
     : { ...span, scope, quote: quote.slice(0, PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) };
 }
 
+/** Whether two measures stand every card at the same top. */
+function sameTops(a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>): boolean {
+  return a.size === b.size && [...b].every(([id, top]) => a.get(id) === top);
+}
+
 /** Where an element's top stands in the plan body's own box. */
 function topIn(body: HTMLElement, element: Element): number {
   return element.getBoundingClientRect().top - body.getBoundingClientRect().top;
@@ -1374,9 +1365,40 @@ export function PlanCommentLayer({
     },
     [body, sections, unitClass],
   );
+  // Note that the margin is measured again only when what it stands on
+  // changes, or the plan's words or a card are resized, never on every draw,
+  // because each measure lays the page out, a draw for every word typed among
+  // it. A resize is measured once in the frame after it, however many land.
+  const { threads } = doors.control;
+  const [resized, setResized] = useState(0);
+  // Whether the last measure found no body to measure in, as the first does, the body's ref being its ancestor's and attached after this layer's own effects.
+  const unmeasured = useRef(false);
+  useEffect(() => {
+    const element = body.current;
+    if (element === null) return;
+    if (unmeasured.current) {
+      unmeasured.current = false;
+      setResized((count) => count + 1);
+    }
+    let frame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        setResized((count) => count + 1);
+      });
+    });
+    observer.observe(element);
+    for (const card of cards.current.values()) observer.observe(card);
+    return () => {
+      observer.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
+  }, [body, threads, pending, wide]);
   useLayoutEffect(() => {
+    unmeasured.current = body.current === null;
     const placed = [
-      ...open.map((thread) => ({ id: thread.id, section: thread.section })),
+      ...threads.filter(openThread).map((thread) => ({ id: thread.id, section: thread.section })),
       ...(pending === undefined ? [] : [{ id: PENDING_THREAD, section: "" }]),
     ].flatMap(({ id, section }) => {
       const top = anchorTop(id, section);
@@ -1389,14 +1411,10 @@ export function PlanCommentLayer({
       active ?? (pending === undefined ? undefined : PENDING_THREAD),
       CARD_GAP,
     );
-    const same = next.size === tops.size && [...next].every(([id, top]) => tops.get(id) === top);
-    if (!same) setTops(next);
+    setTops((held) => (sameTops(held, next) ? held : next));
     const nextAnchors = new Map(placed.map((card) => [card.id, card.top]));
-    const sameAnchors =
-      nextAnchors.size === anchors.size &&
-      [...nextAnchors].every(([id, top]) => anchors.get(id) === top);
-    if (!sameAnchors) setAnchors(nextAnchors);
-  });
+    setAnchors((held) => (sameTops(held, nextAnchors) ? held : nextAnchors));
+  }, [threads, pending, active, anchorTop, text, wide, resized]);
 
   // An ask to show a thread scrolls the document's own scroller to its words, once per ask.
   const scrolled = useRef<number | undefined>(undefined);

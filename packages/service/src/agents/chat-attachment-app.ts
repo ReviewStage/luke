@@ -2,7 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { readAttachment } from "@luke/database/models/chat-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { CHAT_ATTACHMENT_QUERY } from "@luke/features/chat-wire";
-import { unparsedWire } from "@luke/wire";
+import { HTTP_METHOD, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -31,8 +31,6 @@ import { chatAccount, workspaceOf } from "./workspace-chat.js";
  * workspace reads it, and anyone else, an account that has not turned on
  * the Chat experiment among them, finds nothing there.
  */
-
-const HTTP_METHOD = { GET: "GET" } as const;
 
 export interface ChatAttachmentAppSeams {
   resolveUserId: UserIdResolver;

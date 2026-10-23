@@ -55,9 +55,7 @@
     "./styles/settings.css": "./src/styles/settings.css",
     "./styles/shell.css": "./src/styles/shell.css",
     "./styles/shortcut.css": "./src/styles/shortcut.css",
-    "./styles/sign-in.css": "./src/styles/sign-in.css",
     "./styles/tasks.css": "./src/styles/tasks.css",
-    "./styles/theme.css": "./src/styles/theme.css",
     "./tasks/tasks-fixture-loader": "./src/tasks/tasks-fixture-loader.js",
     "./testing/action-label": "./src/testing/action-label.js",
     "./testing/app-bridge": "./src/testing/app-bridge.js",
@@ -65,6 +63,7 @@
     "./testing/copy-feedback": "./src/testing/copy-feedback.js",
     "./testing/match-media": "./src/testing/match-media.js",
     "./testing/resize-observer": "./src/testing/resize-observer.js",
+    "./testing/tailwind.css": "./src/testing/tailwind.css",
     "./use-app-state": "./src/use-app-state.js",
     "./use-voice-view": "./src/use-voice-view.js",
     "./voice/live-peer": "./src/voice/live-peer.js",
@@ -125,6 +124,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@luke/gateway": "workspace:*",
+    "@tailwindcss/vite": "4.3.3",
     "@types/hast": "3.0.5",
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
@@ -132,6 +132,7 @@
     "ai": "catalog:",
     "jsdom": "^30.0.1",
     "streamdown": "2.7.0",
+    "tailwindcss": "4.3.3",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

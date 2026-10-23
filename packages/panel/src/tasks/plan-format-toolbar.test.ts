@@ -42,6 +42,8 @@ const TEXT = [
   "Admins can withdraw an invite from [the members page](https://example.com/members).",
   "- Send the email\n- Record the invite",
   "> Only admins invite.",
+  "| Role | Invites |\n| --- | --- |\n| Admin | Anyone |",
+  "Admins see every invite they sent.",
   "",
 ].join("\n\n");
 
@@ -226,6 +228,38 @@ test("words selected with the pointer raise the toolbar once it is let go, in pl
   select(editor, "withdraw");
   assert.ok(toolbarIn(container), "the keyboard's selection raises it at once");
   assert.equal(press(container, "Turn into Text").textContent, "Text");
+});
+
+test("words in a table's cell raise the toolbar with its marks and Link, and no Turn into", async () => {
+  const { container, editor } = await opened();
+
+  select(editor, "Anyone");
+
+  const toolbar = toolbarIn(container) ?? assert.fail("the toolbar stands");
+  const names = [...toolbar.querySelectorAll("button")].map(
+    (each) => each.getAttribute("aria-label") ?? each.textContent ?? "",
+  );
+  assert.ok(names.includes("Bold"), "the marks stand");
+  assert.ok(names.includes("Link"), "Link stands");
+  assert.ok(!names.some((name) => name.startsWith("Turn into")), "Turn into stands nowhere");
+});
+
+test("words that run through a table, from a line before it to one after, raise no Turn into", async () => {
+  const { container, editor } = await opened();
+
+  act(() => {
+    editor.commands.setTextSelection({
+      from: positionsOf(editor, "Only admins").from,
+      to: positionsOf(editor, "every invite").to,
+    });
+  });
+
+  const toolbar = toolbarIn(container) ?? assert.fail("the toolbar stands");
+  const names = [...toolbar.querySelectorAll("button")].map(
+    (each) => each.getAttribute("aria-label") ?? each.textContent ?? "",
+  );
+  assert.ok(names.includes("Bold"), "the marks stand");
+  assert.ok(!names.some((name) => name.startsWith("Turn into")), "Turn into stands nowhere");
 });
 
 test("words in a code block raise no toolbar", async () => {

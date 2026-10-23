@@ -8,10 +8,11 @@ import type { ShownCode } from "./task-wire.js";
  * action settled, one sentence of the reply, the turn ended — and nothing
  * wider: no tool part, no reasoning, and no message, only what a voice needs
  * to speak commentary while the turn runs. Each event is numbered from one inside its
- * turn, so a reader that took some hears the rest exactly once. The same
- * words as the brain's own run stream (`brain/run-events.ts`), spelled apart
- * from it because they were two packages until the brain joined this one; a
- * test above both holds them equal.
+ * turn, so a reader that took some hears the rest exactly once. The kinds
+ * are the brain's own run stream's words (`brain/run-events.ts`), spelled
+ * apart from it because they were two packages until the brain joined this
+ * one; a test above both holds them members of its set. The slow step's set
+ * is one value, declared here and named `SLOW_STEP_KIND` there.
  */
 
 export const TURN_EVENT_KIND = {

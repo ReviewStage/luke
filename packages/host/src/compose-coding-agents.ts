@@ -99,20 +99,9 @@ import {
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
+  readParams,
 } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import {
-  Effect,
-  Equal,
-  FiberHandle,
-  FiberMap,
-  Option,
-  RcMap,
-  Result,
-  type Schema,
-  type Scope,
-} from "effect";
+import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followWorkspaceChat } from "./chat-follow.js";
@@ -432,23 +421,13 @@ function composed(
         ? Effect.succeed(LIVE_SIGNED_OUT)
         : asked(client.workspaceChatLive(workspaceId, userId, poll, after));
 
-  /** The params read against the method's own schema, or the invalid-params refusal worded. */
-  const read = <Params>(
-    schema: Schema.Codec<Params, unknown>,
-    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
-    sentence: string,
-  ) => {
-    const result = readEither(schema)(unparsedWire(params));
-    return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
-  };
-
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
   const agentTranscriptOf = (
     params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
   ) =>
     Effect.gen(function* () {
       const sentence = "following a transcript names an agent, and a worker's call where it is one";
-      const transcript = yield* read(codingAgentTranscriptKeySchema, params, sentence);
+      const transcript = yield* readParams(codingAgentTranscriptKeySchema, params, sentence);
       if (transcript.kind !== TRANSCRIPT_KIND.AGENT) return yield* invalid(sentence);
       return {
         transcript,
@@ -465,7 +444,7 @@ function composed(
       ),
     [GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE]: (params) =>
       Effect.gen(function* () {
-        const choice = yield* read(
+        const choice = yield* readParams(
           codingAgentDefaultWriteParamsSchema,
           params,
           "the default names a model and its effort",
@@ -480,7 +459,7 @@ function composed(
     [GATEWAY_METHOD.PROVIDER_KEYS_SAVE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a key.
-        const save = yield* read(
+        const save = yield* readParams(
           providerKeySaveParamsSchema,
           params,
           "a save names a provider and a key",
@@ -490,13 +469,17 @@ function composed(
       }),
     [GATEWAY_METHOD.MEMORIES_READ]: (params) =>
       Effect.gen(function* () {
-        const reading = yield* read(memoriesReadParamsSchema, params, "a read names a workspace");
+        const reading = yield* readParams(
+          memoriesReadParamsSchema,
+          params,
+          "a read names a workspace",
+        );
         const answer = yield* asked(client.readMemories(reading));
         return carried<MemoriesAnswerView>(answer);
       }),
     [GATEWAY_METHOD.MEMORIES_FORGET]: (params) =>
       Effect.gen(function* () {
-        const forget = yield* read(
+        const forget = yield* readParams(
           memoryForgetParamsSchema,
           params,
           "a forget names a workspace and a memory's id",
@@ -510,7 +493,7 @@ function composed(
       ),
     [GATEWAY_METHOD.PLAN_TEMPLATE_WRITE]: (params) =>
       Effect.gen(function* () {
-        const write = yield* read(
+        const write = yield* readParams(
           planTemplateWriteParamsSchema,
           params,
           "a template write names a template within the bound, or null for the default",
@@ -520,7 +503,7 @@ function composed(
       }),
     [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS]: (params) =>
       Effect.gen(function* () {
-        const page = yield* read(
+        const page = yield* readParams(
           planTemplateRevisionsParamsSchema,
           params,
           "a page of the template's history names the revision it is read before, or none",
@@ -530,7 +513,7 @@ function composed(
       }),
     [GATEWAY_METHOD.PLAN_TEMPLATE_REVISION]: (params) =>
       Effect.gen(function* () {
-        const revision = yield* read(
+        const revision = yield* readParams(
           planTemplateRevisionParamsSchema,
           params,
           "a revision of the template names its number",
@@ -540,7 +523,7 @@ function composed(
       }),
     [GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE]: (params) =>
       Effect.gen(function* () {
-        const revision = yield* read(
+        const revision = yield* readParams(
           planTemplateRevisionParamsSchema,
           params,
           "a restore of the template names the revision it brings back",
@@ -551,7 +534,7 @@ function composed(
     [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the words, because they are the developer's voice.
-        const clip = yield* read(
+        const clip = yield* readParams(
           dictationTranscribeParamsSchema,
           params,
           "a clip names its audio, its length, and its words",
@@ -561,7 +544,7 @@ function composed(
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_REMOVE]: (params) =>
       Effect.gen(function* () {
-        const removal = yield* read(
+        const removal = yield* readParams(
           providerKeyRemoveParamsSchema,
           params,
           "a removal names a provider",
@@ -571,7 +554,7 @@ function composed(
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: (params) =>
       Effect.gen(function* () {
-        const change = yield* read(
+        const change = yield* readParams(
           providerKeyForAgentsParamsSchema,
           params,
           "a default names a provider, a plan, and on or off",
@@ -586,7 +569,7 @@ function composed(
     [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a token.
-        const save = yield* read(githubTokenSaveParamsSchema, params, "a save names a token");
+        const save = yield* readParams(githubTokenSaveParamsSchema, params, "a save names a token");
         const answer = yield* asked(client.saveGitHubToken(save));
         return carried<GitHubTokenAnswerView>(answer);
       }),
@@ -596,7 +579,7 @@ function composed(
       ),
     [GATEWAY_METHOD.CODING_AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
-        const { taskId, includeArchived } = yield* read(
+        const { taskId, includeArchived } = yield* readParams(
           codingAgentListParamsSchema,
           params,
           "listing a task's agents names one task",
@@ -606,7 +589,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST]: (params) =>
       Effect.gen(function* () {
-        const listed = yield* read(
+        const listed = yield* readParams(
           codingAgentWorkspaceListParamsSchema,
           params,
           "listing a workspace's agents names one workspace",
@@ -615,7 +598,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_START]: (params) =>
       Effect.gen(function* () {
-        const { taskId, ...request } = yield* read(
+        const { taskId, ...request } = yield* readParams(
           codingAgentStartParamsSchema,
           params,
           "starting an agent names a task or an agent to start from, and the press's own key",
@@ -629,7 +612,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
       Effect.gen(function* () {
-        const { agentId, after, callId } = yield* read(
+        const { agentId, after, callId } = yield* readParams(
           codingAgentMessagesParamsSchema,
           params,
           "reading an agent's transcript names the agent and a cursor",
@@ -663,7 +646,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER]: (params) =>
       Effect.gen(function* () {
-        const { agentId, callId, before } = yield* read(
+        const { agentId, callId, before } = yield* readParams(
           codingAgentTranscriptOlderParamsSchema,
           params,
           "reading an older page names the transcript and where to read below",
@@ -679,7 +662,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>
       Effect.gen(function* () {
-        const { agentId, ...request } = yield* read(
+        const { agentId, ...request } = yield* readParams(
           codingAgentMessageParamsSchema,
           params,
           "messaging an agent names the agent, its words, and the send's key",
@@ -707,7 +690,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHOOSE]: (params) =>
       Effect.gen(function* () {
-        const { agentId, ...choice } = yield* read(
+        const { agentId, ...choice } = yield* readParams(
           codingAgentChooseParamsSchema,
           params,
           "changing an agent's model names the agent, a model, and its effort",
@@ -717,7 +700,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_RENAME]: (params) =>
       Effect.gen(function* () {
-        const { agentId, ...request } = yield* read(
+        const { agentId, ...request } = yield* readParams(
           codingAgentRenameParamsSchema,
           params,
           "renaming an agent names the agent and its title",
@@ -728,7 +711,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_SERVERS]: (params) =>
       Effect.gen(function* () {
-        const { agentId, ...request } = yield* read(
+        const { agentId, ...request } = yield* readParams(
           codingAgentServersParamsSchema,
           params,
           "switching an agent's MCP servers names the agent and the servers off",
@@ -738,7 +721,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ARCHIVE]: (params) =>
       Effect.gen(function* () {
-        const { agentId, ...request } = yield* read(
+        const { agentId, ...request } = yield* readParams(
           codingAgentArchiveParamsSchema,
           params,
           "archiving an agent names the agent and whether it is archived",
@@ -751,7 +734,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PIN]: (params) =>
       Effect.gen(function* () {
-        const { agentId, ...request } = yield* read(
+        const { agentId, ...request } = yield* readParams(
           codingAgentPinParamsSchema,
           params,
           "pinning an agent names the agent and whether it is pinned",
@@ -762,7 +745,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId, ...request } = yield* read(
+        const { workspaceId, ...request } = yield* readParams(
           codingAgentOperatorEnsureParamsSchema,
           params,
           "ensuring the operator names its workspace",
@@ -774,7 +757,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
-        const { agentId } = yield* read(
+        const { agentId } = yield* readParams(
           codingAgentStopParamsSchema,
           params,
           "stopping an agent names one agent",
@@ -784,7 +767,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_REWIND]: (params) =>
       Effect.gen(function* () {
-        const { agentId, messageId } = yield* read(
+        const { agentId, messageId } = yield* readParams(
           codingAgentRewindParamsSchema,
           params,
           "rewinding an agent names one agent and one of its lines",
@@ -794,7 +777,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_DELETE]: (params) =>
       Effect.gen(function* () {
-        const { agentId } = yield* read(
+        const { agentId } = yield* readParams(
           codingAgentStopParamsSchema,
           params,
           "deleting an agent names one agent",
@@ -805,7 +788,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PAGE]: (params) =>
       Effect.gen(function* () {
-        const { agentId } = yield* read(
+        const { agentId } = yield* readParams(
           codingAgentPageParamsSchema,
           params,
           "reading an agent's page names one agent",
@@ -815,7 +798,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CALLS]: (params) =>
       Effect.gen(function* () {
-        const { agentId } = yield* read(
+        const { agentId } = yield* readParams(
           codingAgentPageParamsSchema,
           params,
           "reading an agent's calls names one agent",
@@ -825,7 +808,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           codingAgentPullRequestReadParamsSchema,
           params,
           "reading what an agent published names one agent",
@@ -835,7 +818,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHANGES]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           codingAgentPullRequestReadParamsSchema,
           params,
           "reading an agent's changes names one agent",
@@ -845,7 +828,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAPTERS]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           pullRequestChaptersParamsSchema,
           params,
           "reading a pull request's chapters names one agent",
@@ -855,7 +838,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           pullRequestChaptersParamsSchema,
           params,
           "generating a pull request's chapters names one agent",
@@ -869,7 +852,7 @@ function composed(
       ),
     [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: (params) =>
       Effect.gen(function* () {
-        const { model } = yield* read(
+        const { model } = yield* readParams(
           chaptersModelWriteParamsSchema,
           params,
           "the chapters model names one of the models Settings offers",
@@ -879,7 +862,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           codingAgentPullRequestReadParamsSchema,
           params,
           "reading an agent's pull request names one agent",
@@ -889,7 +872,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS]: (params) =>
       Effect.gen(function* () {
-        const { agentId } = yield* read(
+        const { agentId } = yield* readParams(
           codingAgentPullRequestParamsSchema,
           params,
           "reading what an agent's pickers offer names one agent",
@@ -899,7 +882,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           codingAgentPullRequestReadParamsSchema,
           params,
           "reading an agent's pull request's checks names one agent",
@@ -909,7 +892,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           codingAgentPullRequestReadParamsSchema,
           params,
           "reading an agent's pull request's conversation names one agent",
@@ -919,7 +902,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number, request } = yield* read(
+        const { agentId, number, request } = yield* readParams(
           codingAgentPullRequestActionParamsSchema,
           params,
           "changing an agent's pull request names the agent and the change",
@@ -929,7 +912,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number } = yield* read(
+        const { agentId, number } = yield* readParams(
           codingAgentPullRequestReadParamsSchema,
           params,
           "reading which files of an agent's pull request were viewed names the agent",
@@ -939,7 +922,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {
-        const { agentId, src } = yield* read(
+        const { agentId, src } = yield* readParams(
           codingAgentGitHubImageParamsSchema,
           params,
           "reading an image of an agent's pull request names the agent and the image's address",
@@ -949,7 +932,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const scope = yield* read(
+        const scope = yield* readParams(
           codingAgentInboxScopeSchema,
           params,
           "following an inbox names a plan or an agent",
@@ -963,7 +946,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const scope = yield* read(
+        const scope = yield* readParams(
           codingAgentInboxScopeSchema,
           params,
           "letting an inbox go names a plan or an agent",
@@ -973,7 +956,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
       Effect.gen(function* () {
-        const { itemId, attachmentId } = yield* read(
+        const { itemId, attachmentId } = yield* readParams(
           codingAgentInboxAttachmentParamsSchema,
           params,
           "reading an inbox item's image names the item and the attachment",
@@ -983,7 +966,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PICTURE]: (params) =>
       Effect.gen(function* () {
-        const { agentId, pictureId, callId } = yield* read(
+        const { agentId, pictureId, callId } = yield* readParams(
           codingAgentPictureParamsSchema,
           params,
           "reading an agent's picture names the agent and the picture",
@@ -993,7 +976,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PART]: (params) =>
       Effect.gen(function* () {
-        const { agentId, messageId, index, callId } = yield* read(
+        const { agentId, messageId, index, callId } = yield* readParams(
           codingAgentPartParamsSchema,
           params,
           "reading a part of an agent's transcript names the agent, the message, and the part",
@@ -1003,17 +986,17 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>
       Effect.gen(function* () {
-        const { itemId, ...request } = yield* read(
+        const { itemId, ...request } = yield* readParams(
           codingAgentInboxAnswerParamsSchema,
           params,
-          "answering an inbox item names the item, the revision it answers, the answer, and the answer's key",
+          "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgement, and the nod's key",
         );
         const answer = yield* confirmed(asked(client.answerInbox(itemId, request)));
         return carried<CodingAgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE]: (params) =>
       Effect.gen(function* () {
-        const { itemId, ...request } = yield* read(
+        const { itemId, ...request } = yield* readParams(
           codingAgentInboxCloseParamsSchema,
           params,
           "closing an inbox item names the item, the revision it closes, and the close's key",
@@ -1023,7 +1006,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE]: (params) =>
       Effect.gen(function* () {
-        const { itemId, ...request } = yield* read(
+        const { itemId, ...request } = yield* readParams(
           codingAgentInboxMessageParamsSchema,
           params,
           "a message on an inbox item names the item, the words or files, and the message's key",
@@ -1033,7 +1016,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_START]: (params) =>
       Effect.gen(function* () {
-        const request = yield* read(
+        const request = yield* readParams(
           codingAgentInboxStartParamsSchema,
           params,
           "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
@@ -1043,7 +1026,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE]: (params) =>
       Effect.gen(function* () {
-        const { itemId, unread } = yield* read(
+        const { itemId, unread } = yield* readParams(
           codingAgentInboxReadStateParamsSchema,
           params,
           "marking an inbox item names the item and whether it reads as unread",
@@ -1055,7 +1038,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL]: (params) =>
       Effect.gen(function* () {
-        const request = yield* read(
+        const request = yield* readParams(
           inboxReadAllRequestSchema,
           params,
           "marking the inbox read names no more than the workspace it lists",
@@ -1065,7 +1048,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_POST]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId, write } = yield* read(
+        const { workspaceId, write } = yield* readParams(
           codingAgentChatPostParamsSchema,
           params,
           "writing to a workspace's chat names the workspace and one post, answer, resolve, or read",
@@ -1077,7 +1060,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId } = yield* read(
+        const { workspaceId } = yield* readParams(
           codingAgentChatFollowParamsSchema,
           params,
           "following a workspace's chat names the workspace",
@@ -1110,7 +1093,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId } = yield* read(
+        const { workspaceId } = yield* readParams(
           codingAgentChatFollowParamsSchema,
           params,
           "letting a workspace's chat go names the workspace",
@@ -1120,7 +1103,7 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT_ATTACHMENT]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId, messageId, attachmentId } = yield* read(
+        const { workspaceId, messageId, attachmentId } = yield* readParams(
           codingAgentChatAttachmentParamsSchema,
           params,
           "reading a chat message's picture names the workspace, the message, and the attachment",
