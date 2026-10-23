@@ -65,4 +65,9 @@ test("a thread started with no subject is titled by its message's first line tha
     "Can you also draft the annual plan copy for the pricing…",
   );
   assert.equal(inboxStartTitle({ text: "", attachments: [PDF] }), "invoice.pdf");
+  assert.equal(
+    inboxStartTitle({ text: "[](".repeat(2_000) }).length <= 61,
+    true,
+    "a line of unclosed links is cut as any other",
+  );
 });

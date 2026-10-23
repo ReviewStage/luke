@@ -966,7 +966,8 @@ const STARTED_TITLE_FALLBACK = "New thread";
 function plainLine(line: string): string {
   return line
     .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/gu, "$1")
+    // Note that a label holds no bracket and an address no parenthesis, so a failed match stops at the next one and the scan stays linear.
+    .replace(/!?\[([^[\]]*)\]\([^()]*\)/gu, "$1")
     .replace(/[*_`~]/gu, "")
     .replace(/\s+/gu, " ")
     .trim();
