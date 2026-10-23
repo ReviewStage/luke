@@ -24,12 +24,12 @@ import { NO_LOOKS } from "./use-task-looks.js";
 
 /**
  * Where a Browser tab is offered: the side panel's "+" lists New Browser tab
- * under Browser while the account has the Browser tab experiment on, and a
- * pick opens one; with it off, the "+" offers none, as a feature still behind
- * Settings › Experimental stands nowhere. On a task with coding agents it
- * offers a new tab in each agent's browser too, the agent viewed first, and
- * a pick lands on a draft of it, which opens nothing until its bar's Enter
- * (`cloud-browser-tab.test.ts`). A synthetic plan and agents throughout.
+ * under Browser while the account has the Browser tab experiment on and the
+ * task has a coding agent, always in an agent's cloud browser: one agent's
+ * at once, and with several, a submenu of whose, the one viewed first. A
+ * pick lands on a draft, which opens nothing until its bar's Enter
+ * (`cloud-browser-tab.test.ts`). With no agent, or the experiment off, the
+ * "+" offers none. A synthetic plan and agents throughout.
  */
 
 const TASK: Task = {
@@ -154,23 +154,14 @@ async function browserRows(): Promise<HTMLElement[]> {
   );
 }
 
-test("with the experiment on, the panel's + offers New Browser tab, which opens one", async () => {
+test("on a task with no coding agent, the panel's + offers no Browser tab, and none with the experiment off", async () => {
   handState(experimentsOn(EXPERIMENT.BROWSER));
-  const task = await mount();
-
-  const rows = await browserRows();
-  assert.deepEqual(
-    rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
-    ["New Browser tab"],
-  );
-  await act(async () => rows[0]?.click());
-  assert.equal(task.opened(), 1);
-});
-
-test("with the experiment off, the panel's + offers no Browser tab", async () => {
-  handState({});
   await mount();
+  assert.deepEqual(await browserRows(), []);
 
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  handState({});
+  await mount([AGENT]);
   assert.deepEqual(await browserRows(), []);
 });
 
@@ -179,12 +170,41 @@ function rowWords(rows: readonly HTMLElement[]): readonly (string | null | undef
   return rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent);
 }
 
+/** Whether a draft cloud Browser tab is among the tabs the panel was asked to show. */
+function landedOnDraft(chosen: readonly SidePanelTab[]): boolean {
+  return chosen.some(
+    (tab) => tab instanceof Object && "cloudBrowser" in tab && tab.cloudBrowser.length > 0,
+  );
+}
+
+test("on a task with one coding agent, the panel's + New Browser tab drafts a tab in its browser at once, with no submenu, and opens nothing", async () => {
+  handState(experimentsOn(EXPERIMENT.BROWSER));
+  const asked: unknown[] = [];
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
+      asked.push(payload);
+      return Promise.resolve({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED });
+    },
+  });
+  const task = await mount([AGENT]);
+
+  const rows = await browserRows();
+  assert.deepEqual(rowWords(rows), ["New Browser tab"]);
+  await act(async () => rows[0]?.click());
+  await settle();
+
+  assert.deepEqual(submenuChoices(), [], "no submenu stands");
+  assert.ok(landedOnDraft(task.chosen), "the panel lands on a draft cloud Browser tab");
+  assert.equal(task.opened(), 0, "the Mac's own Browser tab is never opened");
+  assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
+});
+
 /** The choices of the submenu standing open beside a row of the "+". */
 function submenuChoices(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('.task-compose-submenu [role="option"]')];
 }
 
-test("on a task with coding agents, the panel's + offers New Browser tab alone, whose submenu lists each agent, the one viewed first, then this Mac; an agent drafts a tab in its browser and opens nothing", async () => {
+test("on a task with several coding agents, the panel's + New Browser tab opens a submenu of the agents alone, the one viewed first, and an agent drafts a tab in its browser and opens nothing", async () => {
   handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
@@ -202,39 +222,15 @@ test("on a task with coding agents, the panel's + offers New Browser tab alone, 
   // Choosing the row opens its submenu rather than a tab.
   await act(async () => row.click());
   await settle();
-  assert.equal(task.opened(), 0);
+  assert.deepEqual(task.chosen, []);
   const choices = submenuChoices();
-  assert.deepEqual(rowWords(choices), ["Invite emails", "Invite expiry", "This Mac"]);
+  assert.deepEqual(rowWords(choices), ["Invite emails", "Invite expiry"]);
 
   await act(async () => choices[1]?.click());
   await settle();
-  const [drafted] = task.chosen;
-  assert.ok(
-    drafted instanceof Object && "cloudBrowser" in drafted && drafted.cloudBrowser.length > 0,
-    "the panel lands on a draft cloud Browser tab",
-  );
+  assert.ok(landedOnDraft(task.chosen), "the panel lands on a draft cloud Browser tab");
+  assert.equal(task.opened(), 0, "the Mac's own Browser tab is never opened");
   assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
-});
-
-test("the submenu's This Mac opens the Mac's own Browser tab", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
-  const task = await mount([AGENT]);
-
-  const [row] = await browserRows();
-  assert.ok(row, "the one row");
-  await act(async () => row.click());
-  await settle();
-  const local = submenuChoices().find((choice) => choice.textContent?.includes("This Mac"));
-  await act(async () => local?.click());
-  assert.equal(task.opened(), 1);
-  assert.deepEqual(task.chosen, []);
-});
-
-test("with the experiment off, the panel's + offers no tab in an agent's browser", async () => {
-  handState({});
-  await mount([AGENT]);
-
-  assert.deepEqual(await browserRows(), []);
 });
 
 test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card naming the agent's browser and the page's address", async () => {

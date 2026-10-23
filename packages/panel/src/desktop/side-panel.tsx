@@ -563,43 +563,35 @@ export function showPullRequest(
   panel.onPreview(tab);
 }
 
-/** The submenu's choice of this Mac's own Browser tab, which no agent's row is named by. */
-const LOCAL_BROWSER_CHOICE = "this-mac";
-
 /**
  * The "+" menu's New Browser tab, opened afresh each time, as a browser's
- * new tab is, so its row names no tab: on a task with coding agents, a
- * submenu of where it opens, each agent's cloud browser wearing its glyph,
- * the one viewed first, then this Mac's own where the platform draws one; on
- * a task with none, this Mac's own at once; and nothing where neither stands.
+ * new tab is, so its row names no tab, and always in a coding agent's cloud
+ * browser: on a task with one agent, a draft in its browser at once; on a
+ * task with several, a submenu of whose browser, each wearing its glyph, the
+ * one viewed first; and no row at all on a task with none.
  */
 function browserEntries(browsers: Parameters<typeof panelEntries>[0]["browsers"]): AddEntry[] {
-  if (browsers === undefined) return [];
-  const { onLocal, agents, onAgent } = browsers;
+  const [only, ...more] = browsers?.agents ?? [];
+  if (browsers === undefined || only === undefined) return [];
   const look = tabLook({ kind: TAB_KIND.BROWSER, title: NEW_BROWSER_TAB });
-  if (agents.length === 0) {
-    if (onLocal === undefined) return [];
-    return [
-      { row: { id: ADD_SECTION.BROWSER, ...look, section: ADD_SECTION.BROWSER }, onPick: onLocal },
-    ];
+  const base = { id: ADD_SECTION.BROWSER, ...look, section: ADD_SECTION.BROWSER };
+  if (more.length === 0) {
+    // Note that the one agent's name is searched by too, as the submenu's choices are.
+    const row = { ...base, terms: [only.owner.name] };
+    return [{ row, onPick: () => browsers.onAgent(only.agentId) }];
   }
-  const local =
-    onLocal === undefined
-      ? []
-      : [{ id: LOCAL_BROWSER_CHOICE, ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }) }];
-  const rows = [
-    ...agents.map(({ agentId, owner }) => ({ id: agentId, label: owner.name, icon: owner.icon })),
-    ...local,
-  ];
   const submenu = {
     label: "Open the tab in",
-    rows,
+    rows: browsers.agents.map(({ agentId, owner }) => ({
+      id: agentId,
+      label: owner.name,
+      icon: owner.icon,
+    })),
     value: undefined,
-    onPick: (choice: string) => (choice === LOCAL_BROWSER_CHOICE ? onLocal?.() : onAgent(choice)),
+    onPick: browsers.onAgent,
   };
   // Note that a pick of the row itself opens its submenu, so its own press does nothing.
-  const row = { id: ADD_SECTION.BROWSER, ...look, section: ADD_SECTION.BROWSER, submenu };
-  return [{ row, onPick: () => undefined }];
+  return [{ row: { ...base, submenu }, onPick: () => undefined }];
 }
 
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open, the Plan's the task's own where it is known. */
@@ -638,12 +630,10 @@ export function panelEntries(input: {
   };
   /**
    * Where a new Browser tab may open, while the Browser tab experiment is
-   * on: this Mac's own, through the door given where the platform draws
-   * one, and each of the task's coding agents' cloud browsers, the one
-   * viewed first, drafted through `onAgent`; none where the caller offers none.
+   * on: each of the task's coding agents' cloud browsers, the one viewed
+   * first, drafted through `onAgent`; none where the caller offers none.
    */
   browsers?: {
-    readonly onLocal: (() => void) | undefined;
     readonly agents: readonly CloudBrowserOffer[];
     readonly onAgent: (agentId: string) => void;
   };
@@ -2354,8 +2344,6 @@ export function SidePanel({
           },
         }),
     browsers: {
-      onLocal:
-        browsing && holder !== SIDE_PANEL_HOLDER.INBOX ? () => panel.onOpenBrowser() : undefined,
       agents: cloudOffers,
       onAgent: (agentId: string) =>
         panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
