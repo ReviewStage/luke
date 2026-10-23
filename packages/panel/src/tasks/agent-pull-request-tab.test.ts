@@ -3247,6 +3247,42 @@ test("a pull request of the stack GitHub's merge queue holds says Queued in the 
   act(() => button.click());
 });
 
+test("the stack's menu draws each pull request's mark in its state's colour: a draft's, a queued one's, and an open one's", async () => {
+  const entry = (number: number, extra: { draft?: boolean; queued?: true }) => ({
+    number,
+    title: `Step ${number}`,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    draft: extra.draft === true,
+    ...(extra.queued === true ? { queued: true as const } : undefined),
+  });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            stack: [entry(40, { queued: true }), entry(42, {}), entry(44, { draft: true })],
+          },
+        }),
+    }),
+    PULL_REQUEST_VIEW.CONVERSATION,
+  );
+  const button =
+    tab.querySelector<HTMLButtonElement>(
+      '.pull-request-branch-row button[aria-label="Stack, 2 of 3"]',
+    ) ?? assert.fail("the stack stands beside the branches");
+
+  act(() => button.click());
+  const states = [
+    ...document.querySelectorAll(':is([role="menuitem"], [role="menuitemcheckbox"])'),
+  ].map((item) =>
+    item.querySelector("[data-pull-request-mark]")?.getAttribute("data-pull-request-state"),
+  );
+
+  assert.deepEqual(states, ["draft", "open", "queued"]);
+  act(() => button.click());
+});
+
 test("a pull request in no stack draws no stack", async () => {
   const tab = await draw(
     controlAnswering({

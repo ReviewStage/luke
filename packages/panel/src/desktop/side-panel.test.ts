@@ -19,7 +19,13 @@ import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { changesOffers, changesTabOf, showPullRequest } from "./side-panel.js";
+import {
+  ActivityList,
+  changesOffers,
+  changesTabOf,
+  type DrawnTab,
+  showPullRequest,
+} from "./side-panel.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -212,6 +218,43 @@ test("a Changes card names the coding agent whose pull request it is by its tile
   assert.equal(card?.textContent, "Expiry job", "the agent's own card hangs from its name");
   act(() => named.click());
   assert.deepEqual(opened, [THIRD.id]);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("the phone's Activity list hangs each tab's card on its row, as the tab hangs it in the strip", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  const tab: SidePanelTab = { changes: THIRD.id };
+  const strip: DrawnTab[] = [
+    {
+      tab,
+      look: {
+        icon: createElement("svg"),
+        label: "#42 Expire invitations",
+        selected: false,
+        card: createElement("div", { "data-tab-card": "" }, "Expire invitations"),
+        onSelect: () => undefined,
+      },
+      close: () => undefined,
+    },
+  ];
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ActivityList, { strip, offers: [], onListed: () => undefined }),
+      ),
+    ),
+  );
+  const row =
+    container.querySelector<HTMLElement>("button.luke-list-row-main") ??
+    assert.fail("the tab's row is drawn");
+  restOn(row);
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-tab-card]")?.textContent,
+    "Expire invitations",
+  );
   act(() => root.unmount());
   container.remove();
 });

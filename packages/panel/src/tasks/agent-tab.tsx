@@ -43,6 +43,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { skillWord } from "@luke/ui/skill-mention";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import {
@@ -1034,7 +1035,9 @@ function OriginSubject({
 }): React.JSX.Element {
   const doors = useMentionDoors();
   const words =
-    subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
+    subject.title === undefined
+      ? `#${subject.number}`
+      : pullRequestLabelOf({ number: subject.number, title: subject.title });
   const { url } = subject;
   if (url === undefined)
     return (
