@@ -100,6 +100,13 @@
     padding-top: var(--luke-section-gap);
   }
 
+  /* A filter line whose filters all stand hidden, a line of chips waiting
+     for its first, takes no room, so the line can stand ready for a chip
+     to arrive into without a gap where none is. */
+  .luke-collection-page-filters:not(:has(> :not([hidden]))) {
+    display: none;
+  }
+
   /* The header and filters stand still above the scroll, and reserve a
      scrollbar's gutter as the scroll does, so a scrollbar that takes room
      narrows the column under them no more than them. Their end gap is the

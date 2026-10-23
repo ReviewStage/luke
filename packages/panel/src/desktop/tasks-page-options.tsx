@@ -4,7 +4,11 @@ import {
   Chip,
   ChipName,
   IconButton,
+  LIST_MOTION_WAY,
+  ListMotion,
   MENU_ITEM_MARK,
+  motionKey,
+  motionRows,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_TONE,
@@ -12,6 +16,7 @@ import {
   Text,
   TextButton,
   Tooltip,
+  useLeaving,
   useMenu,
 } from "@luke/ui";
 import {
@@ -71,7 +76,7 @@ import {
   UserIcon,
   UserXIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -502,7 +507,88 @@ function chipWords(words: readonly string[]): string {
   return more > 0 ? `${named} +${more}` : named;
 }
 
-/** The chips on the page's filter line while the filter keeps anything: a field a chip, its values named, its × lifting it, and Clear lifting them all. */
+/** What the filter line's last place holds, after a chip for each field: its Clear. */
+const FILTER_LINE = {
+  CLEAR: "clear",
+} as const;
+
+/** One place on the filter line: a field's chip, with its words as last drawn, or the Clear after them. */
+type FilterLineEntry =
+  | { readonly key: TasksFilterField; readonly words: string }
+  | { readonly key: typeof FILTER_LINE.CLEAR };
+
+/** The filter line's places: a chip for each field filtered, its values named in the menu's order, whatever order they were chosen in, and Clear after them; none while nothing is filtered. */
+function filterLineEntries(
+  tasks: readonly TaskSummary[],
+  filter: TasksFilter,
+  reader: ReturnType<typeof useMemberDirectory>,
+): FilterLineEntry[] {
+  const fields = filteredFields(filter);
+  if (fields.length === 0) return [];
+  const chips = fields.map((field) => {
+    const kept = filterValues(filter, field);
+    const words = fieldValues(field, tasks, filter, reader, false)
+      .filter((each) => kept.includes(each.value))
+      .map((each) => each.words);
+    return { key: field, words: `${FIELD_WORDS[field]}: ${chipWords(words)}` };
+  });
+  return [...chips, { key: FILTER_LINE.CLEAR }];
+}
+
+/** What a press on a leaving chip or Clear does, out of reach as it is: nothing. */
+function stays(): void {}
+
+/**
+ * The filter line's chips and Clear. Note that it is its own component
+ * under the line's `ListMotion`, because `useLeaving` finds the motion
+ * through the context the motion provides.
+ */
+function FilterLine({
+  line,
+  tasks,
+  filter,
+  onFilter,
+}: {
+  line: RefObject<HTMLDivElement | null>;
+  tasks: readonly TaskSummary[];
+  filter: TasksFilter;
+  onFilter: (filter: TasksFilter) => void;
+}): React.JSX.Element {
+  const reader = useMemberDirectory();
+  // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
+  const listed = useMemo(() => filterLineEntries(tasks, filter, reader), [tasks, filter, reader]);
+  const drawn = useLeaving(listed, (entry) => entry.key);
+  return (
+    <div ref={line} className="tasks-filter-line" hidden={drawn.length === 0} {...motionRows()}>
+      {drawn.map(({ key, value, leaving }) =>
+        value.key === FILTER_LINE.CLEAR ? (
+          <span key={key} className="tasks-filter-clear" {...motionKey(key)}>
+            <TextButton onClick={leaving ? stays : () => onFilter({})}>Clear</TextButton>
+          </span>
+        ) : (
+          <Chip
+            key={key}
+            motionKey={key}
+            look={CHIP_LOOK.FILTER}
+            removeLabel={`Clear the ${FIELD_WORDS[value.key].toLowerCase()} filter`}
+            onRemove={leaving ? stays : () => onFilter(clearedField(filter, value.key))}
+          >
+            {FIELD_ICON[value.key]}
+            <ChipName>{value.words}</ChipName>
+          </Chip>
+        ),
+      )}
+    </div>
+  );
+}
+
+/**
+ * The chips on the page's filter line, a field a chip, its values named,
+ * its × lifting it, and Clear lifting them all. The line stands, hidden,
+ * while the filter keeps nothing, so a field's chip scales in as it is
+ * filtered and out as it is lifted, the last one too, under the line's
+ * `ListMotion`; Clear comes and goes with the first chip and the last.
+ */
 export function TasksFilterChips({
   tasks,
   filter,
@@ -511,32 +597,12 @@ export function TasksFilterChips({
   tasks: readonly TaskSummary[];
   filter: TasksFilter;
   onFilter: (filter: TasksFilter) => void;
-}): React.JSX.Element | null {
-  const reader = useMemberDirectory();
-  const fields = filteredFields(filter);
-  if (fields.length === 0) return null;
+}): React.JSX.Element {
+  const line = useRef<HTMLDivElement | null>(null);
   return (
-    <>
-      {fields.map((field) => {
-        // Note that a chip names its values in the menu's order, whatever order they were chosen in, and draws none of their marks.
-        const kept = filterValues(filter, field);
-        const words = fieldValues(field, tasks, filter, reader, false)
-          .filter((each) => kept.includes(each.value))
-          .map((each) => each.words);
-        return (
-          <Chip
-            key={field}
-            look={CHIP_LOOK.FILTER}
-            removeLabel={`Clear the ${FIELD_WORDS[field].toLowerCase()} filter`}
-            onRemove={() => onFilter(clearedField(filter, field))}
-          >
-            {FIELD_ICON[field]}
-            <ChipName>{`${FIELD_WORDS[field]}: ${chipWords(words)}`}</ChipName>
-          </Chip>
-        );
-      })}
-      <TextButton onClick={() => onFilter({})}>Clear</TextButton>
-    </>
+    <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
+      <FilterLine line={line} tasks={tasks} filter={filter} onFilter={onFilter} />
+    </ListMotion>
   );
 }
 

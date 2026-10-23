@@ -407,6 +407,26 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
+/* The Tasks page's filter line: a chip for each field filtered and Clear
+   after them, laid out as the collection page's filter line lays out what
+   it holds, standing hidden while nothing is filtered so a chip arriving
+   arrives into it (`tasks-page-options.tsx`). */
+.tasks-filter-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-width: 0;
+}
+
+.tasks-filter-line[hidden] {
+  display: none;
+}
+
+.tasks-filter-clear {
+  display: inline-flex;
+}
+
 /* The sidebar's View options and the Tasks page's Filter wear a dot while
    the view leaves tasks out, so a filtered list never passes for the whole
    of it: drawn by the box around the button, over its corner. */
