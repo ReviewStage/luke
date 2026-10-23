@@ -291,12 +291,10 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   call's lifecycle is a `forkDetach` and needs no door.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
   `apps/dev/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
-  `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
-  statement) so a suite or an offline eval still written on `node:assert` or a
+  `ManagedRuntime` over a throwaway database) so a suite or an offline eval still written on `node:assert` or a
   plain fixture can hold a promise where an effect is described; a test body is
   its own edge.
 
