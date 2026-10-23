@@ -13,6 +13,7 @@ import {
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
 import {
   EmptyState,
+  Reveal,
   SettingsSection,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
@@ -44,7 +45,8 @@ import type { SettingsWrites } from "./writes.js";
  * settings of its own, such as the avatar Video calls shows, draws them in
  * its card beneath the switch, from the schema section named for it, while
  * the schema says they stand: so they appear as the switch is turned on, and
- * read as that experiment's rather than the page's. The card wears no title,
+ * read as that experiment's rather than the page's, unrolling in as it turns
+ * on and rolling up as it turns off (`Reveal`). The card wears no title,
  * since its switch already names the experiment.
  *
  * Each card is `@luke/ui`'s `SettingsSection` and the signed-out note its
@@ -116,17 +118,22 @@ export function ExperimentalPage({
     <>
       {entries.map((entry) => {
         const section = sectionOf(entry.key);
+        const on = experimentOn(experiments, entry.key);
         return (
           <SettingsSection key={entry.key}>
-            <ExperimentRow entry={entry} on={experimentOn(experiments, entry.key)} />
-            {section !== undefined && view !== undefined ? (
-              <SchemaSettingRows
-                page={SCHEMA_SETTINGS_PAGE.EXPERIMENTAL}
-                section={section}
-                view={view}
-                writes={writes}
-              />
-            ) : null}
+            <ExperimentRow entry={entry} on={on} />
+            {section === undefined ? null : (
+              <Reveal shown={on && view !== undefined}>
+                {view === undefined ? null : (
+                  <SchemaSettingRows
+                    page={SCHEMA_SETTINGS_PAGE.EXPERIMENTAL}
+                    section={section}
+                    view={view}
+                    writes={writes}
+                  />
+                )}
+              </Reveal>
+            )}
           </SettingsSection>
         );
       })}

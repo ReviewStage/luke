@@ -63,6 +63,7 @@ import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
 import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
+import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
@@ -185,6 +186,7 @@ export const EXAMPLES: readonly Example[] = [
   GLYPH_SLOTS_EXAMPLE,
   CORNER_COUNTS_EXAMPLE,
   RESIZE_EDGES_EXAMPLE,
+  REVEALS_EXAMPLE,
   ZOOM_IMAGES_EXAMPLE,
   MESSAGES_EXAMPLE,
   PANE_PINS_EXAMPLE,

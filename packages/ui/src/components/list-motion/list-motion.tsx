@@ -45,6 +45,22 @@
  * `data-dragging` is the drag's to move while it lasts, and none of its rows
  * plays here.
  *
+ * A list whose rows unroll (`LIST_MOTION_WAY.UNROLL`), as the rows a
+ * setting reveals under it do (`reveal.tsx`), plays one gesture each way: a
+ * row arriving is unrolled from its top edge by a clip as it fades in, on
+ * the spring the rows under it glide down on, so its clip's foot and the
+ * row under it travel as one edge; a row leaving is rolled up the same way
+ * on the exit's tokens, and the rows under it close over it on those same
+ * tokens at once, rather than after it, since what it goes into is the
+ * room they close.
+ *
+ * Several motions over one root, each reveal of a page playing its own,
+ * play a commit that changes more than one of them as one: each reads the
+ * places the commit started from as the first read them, and the last to
+ * hear the commit plays every exit they were handed before any glide, so a
+ * row is never glided twice, nor to a place a row leaving below it is
+ * about to give up.
+ *
  * The one move the layout would still make above a leaving row is the
  * scroller's: a list scrolled to its end that grows shorter is scrolled back
  * by the browser as much as it shrank, which carries every row in sight
@@ -95,10 +111,17 @@ const SCALED_AWAY = 0.6;
 /** The most steps rows arriving together are staggered by; the rest arrive with the last. */
 const STAGGER_STEPS = 6;
 
-/** How a row arrives and leaves: sliding in from and out toward the list's leading edge, as a list's rows do, or scaling in and out where it stands, as a row of chips does. */
+/** The clip a row unrolled away stands behind: cut from its foot to its top. */
+const ROLLED_UP = "inset(0 0 100% 0)";
+
+/** The clip a row unrolled whole stands behind. Note that it names its inset, because a clip cannot be interpolated from none. */
+const UNROLLED = "inset(0)";
+
+/** How a row arrives and leaves: sliding in from and out toward the list's leading edge, as a list's rows do, scaling in and out where it stands, as a row of chips does, or unrolling from and rolling up toward its top edge, as the rows a setting reveals do. */
 export const LIST_MOTION_WAY = {
   SLIDE: "slide",
   SCALE: "scale",
+  UNROLL: "unroll",
 } as const;
 
 export type ListMotionWay = (typeof LIST_MOTION_WAY)[keyof typeof LIST_MOTION_WAY];
@@ -148,6 +171,13 @@ interface Snapshot {
   readonly lists: Set<Element>;
 }
 
+/** What the motions over one root playing one commit share: where it started from, how many have still to hear it, and the exits handed them so far. */
+interface Batch {
+  readonly before: Snapshot;
+  waiting: number;
+  readonly leavers: Leaver[];
+}
+
 /** A leaving element as the motion takes it, and what lets its entry go. */
 interface Exit {
   readonly element: HTMLElement;
@@ -158,6 +188,9 @@ const LeavesContext = createContext<Leaves | undefined>(undefined);
 
 /** The exits under way, by the element leaving, stopped where its entry is listed again. */
 const exits = new WeakMap<Element, Animation>();
+
+/** The commit each root is being played in, by the root, until the last motion over it has heard it. */
+const batches = new WeakMap<Element, Batch>();
 
 /** Whether the DOM plays motions at all. Note that a test's DOM has no animation engine, and runs none. */
 function animates(element: Element): boolean {
@@ -352,10 +385,16 @@ function standingTop(root: HTMLElement, element: HTMLElement, before: Snapshot):
 }
 
 /** Where a row stands once gone, the way it arrives and leaves, read where the list stands. */
-function awayOf(root: HTMLElement, way: ListMotionWay): string {
-  if (way === LIST_MOTION_WAY.SCALE) return `scale(${SCALED_AWAY})`;
+function awayOf(root: HTMLElement, way: ListMotionWay): Keyframe {
+  if (way === LIST_MOTION_WAY.UNROLL) return { clipPath: ROLLED_UP };
+  if (way === LIST_MOTION_WAY.SCALE) return { transform: `scale(${SCALED_AWAY})` };
   const travel = Number.parseFloat(getComputedStyle(root).getPropertyValue(TRAVEL)) || 0;
-  return `translateX(${-travel}px)`;
+  return { transform: `translateX(${-travel}px)` };
+}
+
+/** Where a row stands once it has arrived, the way it arrives and leaves. */
+function homeOf(way: ListMotionWay): Keyframe {
+  return way === LIST_MOTION_WAY.UNROLL ? { clipPath: UNROLLED } : { transform: "none" };
 }
 
 /**
@@ -399,8 +438,8 @@ function playExits(
     element.style.margin = "0";
     const out = element.animate(
       [
-        { opacity, transform: "none" },
-        { opacity: 0, transform: away },
+        { opacity, ...homeOf(way) },
+        { opacity: 0, ...away },
       ],
       { ...exit, fill: "forwards" },
     );
@@ -426,12 +465,13 @@ function arrive(root: HTMLElement, mover: Element, step: number, timing: MoveTim
   const delay = timing.wait + Math.min(step, STAGGER_STEPS) * timing.stagger;
   mover.animate([{ opacity: 0 }, { opacity: 1 }], { ...timing.arrive, delay, fill: "backwards" });
   if (!timing.travels) return;
-  const from = awayOf(root, timing.way);
-  mover.animate([{ transform: from }, { transform: "none" }], {
+  // Note that a clip is no offset to add onto one under way, so an unroll replaces any clip of its own.
+  const unrolls = timing.way === LIST_MOTION_WAY.UNROLL;
+  mover.animate([awayOf(root, timing.way), homeOf(timing.way)], {
     ...timing.travel,
     delay,
     fill: "backwards",
-    composite: "add",
+    composite: unrolls ? "replace" : "add",
   });
 }
 
@@ -525,55 +565,49 @@ type ListMotionPlayerState = Record<never, never>;
 class ListMotionPlayer extends Component<
   ListMotionPlayerProps,
   ListMotionPlayerState,
-  Snapshot | null
+  Batch | null
 > {
   /** Gives back the root's held height and stops following the scroller; none while nothing is held. */
   private release: (() => void) | undefined = undefined;
 
-  override getSnapshotBeforeUpdate(previous: ListMotionPlayerProps): Snapshot | null {
+  override getSnapshotBeforeUpdate(previous: ListMotionPlayerProps): Batch | null {
     const root = this.props.root.current;
     if (root === null) return null;
     if (this.props.change !== undefined && previous.change === this.props.change) return null;
-    return snapshotOf(root);
+    let batch = batches.get(root);
+    if (batch === undefined) {
+      const opened: Batch = { before: snapshotOf(root), waiting: 0, leavers: [] };
+      batch = opened;
+      batches.set(root, opened);
+      // Note that a commit no motion heard the end of is not one the next commit starts from.
+      queueMicrotask(() => {
+        if (batches.get(root) === opened) batches.delete(root);
+      });
+    }
+    batch.waiting += 1;
+    return batch;
   }
 
   override componentDidUpdate(
     previous: ListMotionPlayerProps,
     _state: ListMotionPlayerState,
-    before: Snapshot | null,
+    batch: Batch | null,
   ): void {
     const { pending, returned } = this.props.leaves;
     const leavers = pending.splice(0);
     const root = this.props.root.current;
     root?.setAttribute(ROOT_ATTRIBUTE, "");
     if (root !== null) this.standReturned(root, returned.splice(0));
-    if (root === null || before === null) {
+    if (root === null || batch === null) {
       for (const leaver of leavers) leaver.onLeft();
       return;
     }
-    const leaving = this.leavingOf(root, leavers, before);
-    if (leaving.length > 0) this.holdHeight(root);
-    // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
-    const engine = animates(root);
-    const exit = engine
-      ? tokenTiming(root, "--luke-duration-exit", "--luke-motion-exit")
-      : undefined;
-    playExits(root, leaving, before, exit, this.props.way);
-    const travel = engine ? tokenTiming(root, "--luke-duration-shape", "--luke-spring") : undefined;
-    if (travel === undefined) return;
-    // Note that the change that ends the read lands the last of it, which arrives as the rest of it did.
-    const { way } = this.props;
-    const reading = this.props.reading || previous.reading;
-    playMoves(root, before, {
-      wait: leaving.length > 0 && exit !== undefined ? Number(exit.duration) : 0,
-      travel,
-      arrive: tokenTiming(root, "--luke-duration-quick", "--luke-motion-exit"),
-      stagger: reading
-        ? 0
-        : milliseconds(getComputedStyle(root).getPropertyValue("--luke-row-stagger")),
-      way,
-      travels: !reading,
-    });
+    batch.leavers.push(...leavers);
+    batch.waiting -= 1;
+    // Note that the last motion over the root to hear the commit plays it, with every exit the others were handed.
+    if (batch.waiting > 0) return;
+    if (batches.get(root) === batch) batches.delete(root);
+    this.play(root, batch, this.props.reading || previous.reading);
   }
 
   override componentDidMount(): void {
@@ -586,6 +620,40 @@ class ListMotionPlayer extends Component<
 
   override render(): null {
     return null;
+  }
+
+  /**
+   * Plays a commit over the root: the exits of what leaves, the glides of
+   * what that moved, and the root's height held at the scroller's end.
+   * Note that the rows a leaving row unrolled away from close over it as it
+   * rolls up, on its exit's tokens, where the rest glide after it.
+   */
+  private play(root: HTMLElement, batch: Batch, reading: boolean): void {
+    const { before } = batch;
+    const leaving = this.leavingOf(root, batch.leavers, before);
+    if (leaving.length > 0) this.holdHeight(root);
+    // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
+    const engine = animates(root);
+    const exit = engine
+      ? tokenTiming(root, "--luke-duration-exit", "--luke-motion-exit")
+      : undefined;
+    const { way } = this.props;
+    playExits(root, leaving, before, exit, way);
+    const shape = engine ? tokenTiming(root, "--luke-duration-shape", "--luke-spring") : undefined;
+    if (shape === undefined) return;
+    const left = leaving.length > 0 && exit !== undefined;
+    const closes = left && way === LIST_MOTION_WAY.UNROLL;
+    // Note that the change that ends the read lands the last of it, which arrives as the rest of it did.
+    playMoves(root, before, {
+      wait: left && !closes ? Number(exit.duration) : 0,
+      travel: closes ? exit : shape,
+      arrive: tokenTiming(root, "--luke-duration-quick", "--luke-motion-exit"),
+      stagger: reading
+        ? 0
+        : milliseconds(getComputedStyle(root).getPropertyValue("--luke-row-stagger")),
+      way,
+      travels: !reading,
+    });
   }
 
   /** Stands again each element whose entry was listed again before its exit finished. */
