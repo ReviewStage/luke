@@ -9,6 +9,7 @@ import {
   useCallback,
   useState,
 } from "react";
+import { cn } from "../../cn.js";
 import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
@@ -17,7 +18,6 @@ import {
   type ButtonSize,
   type ButtonVariant,
 } from "../button/button.js";
-import { cn } from "../../cn.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**

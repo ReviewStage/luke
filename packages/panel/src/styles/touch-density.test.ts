@@ -230,11 +230,11 @@ function smallTargets(): ReadonlyMap<string, Element> {
               "span",
               { className: "actor-line" },
               "Last edited · ",
-              createElement(
-                TextButton,
-                { lines: TEXT_BUTTON_LINES.WHOLE, onClick: () => undefined },
-                "2h ago",
-              ),
+              createElement(TextButton, {
+                lines: TEXT_BUTTON_LINES.WHOLE,
+                onClick: () => undefined,
+                children: "2h ago",
+              }),
             ),
           ),
         ),
@@ -481,7 +481,9 @@ test("with a mouse those presses still wait for the pointer", () => {
 /** A transcript's rows that open something, each in the markup its component draws: a call's line, the docked to-do list's head, and the agent's pull request's row. */
 function transcriptRows(): [string, HTMLElement][] {
   const call = drawn(
-    createElement(Disclosure, {}, createElement(LineSummary, { "data-row": "a call's line" }, "")),
+    createElement(Disclosure, {
+      children: createElement(LineSummary, { "data-row": "a call's line", children: "" }),
+    }),
     "tool",
   );
   const host = document.body.appendChild(document.createElement("div"));

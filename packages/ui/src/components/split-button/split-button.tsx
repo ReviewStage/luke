@@ -8,9 +8,9 @@ import type {
   Ref,
 } from "react";
 import { useCallback, useRef } from "react";
+import { cn } from "../../cn.js";
 import { ChevronDownIcon } from "../../face/glyphs.js";
 import { BUTTON_VARIANT, Button, type ButtonVariant, IconButton } from "../button/button.js";
-import { cn } from "../../cn.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
