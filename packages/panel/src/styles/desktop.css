@@ -6001,6 +6001,13 @@ ul.actor-stack {
   height: 12px;
 }
 
+.new-task-issue-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
 .new-task-issue-key {
   flex: none;
   font-family: var(--luke-font-mono);
