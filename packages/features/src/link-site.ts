@@ -49,6 +49,9 @@ const MAPS_PAGE = {
 /** A step after a Maps page's names that is the view's and no name: its centre and zoom, `@37.8,-122.4,17z`, or its state, `data=…`. */
 const MAPS_VIEW_STEP = /^(?:@|data=)/u;
 
+/** What a route's waypoints are parted by in Maps's `?api=1` query. */
+const ROUTE_WAYPOINT_SEPARATOR = "|";
+
 /** What a route's stops are joined with. */
 const ROUTE_JOIN = " → ";
 
@@ -80,6 +83,12 @@ function routeName(stops: readonly (string | null)[]): string | undefined {
   return said.length === 0 ? undefined : named(said.join(ROUTE_JOIN));
 }
 
+/** A route Maps's `?api=1` query spells: its origin, the waypoints between, `|` apart, and its destination. */
+function queriedRoute(query: URLSearchParams): readonly (string | null)[] {
+  const waypoints = query.get("waypoints")?.split(ROUTE_WAYPOINT_SEPARATOR) ?? [];
+  return [query.get("origin"), ...waypoints, query.get("destination")];
+}
+
 /** Whether a page is Google Maps's: under `/maps` on Google's own host, anywhere on its `maps.` host, or one of its short links. */
 function isGoogleMaps(url: URL): boolean {
   const host = url.hostname.toLowerCase();
@@ -96,7 +105,7 @@ function isGoogleMaps(url: URL): boolean {
 /**
  * What a Google Maps address says of its page: the place's name, the
  * search's words, or the route's stops, from the path's steps, Maps's own
- * `?api=1` query, or the older `?q=` and `?saddr=&daddr=`; nothing for a
+ * `?api=1` query, waypoints and all, or the older `?q=` and `?saddr=&daddr=`; nothing for a
  * bare view or a short link.
  */
 function googleMapsName(url: URL): string | undefined {
@@ -110,11 +119,9 @@ function googleMapsName(url: URL): string | undefined {
     case MAPS_PAGE.PLACE:
       return named(stops[0] ?? "");
     case MAPS_PAGE.SEARCH:
-      return named(query.get("query") ?? stops[0] ?? "");
+      return named(query.get("query") ?? query.get("q") ?? stops[0] ?? "");
     case MAPS_PAGE.DIRECTIONS:
-      return routeName(
-        query.has("destination") ? [query.get("origin"), query.get("destination")] : stops,
-      );
+      return routeName(query.has("destination") ? queriedRoute(query) : stops);
   }
   if (query.has("daddr")) return routeName([query.get("saddr"), query.get("daddr")]);
   return named(query.get("q") ?? "");

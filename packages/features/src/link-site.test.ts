@@ -54,6 +54,7 @@ test("a search is called by its words, in its path or in Maps's own query", () =
     "Eiffel Tower",
   );
   assert.equal(mapsName("https://maps.google.com/?q=Pike+Place+Market"), "Pike Place Market");
+  assert.equal(mapsName("https://www.google.com/maps/search/?q=coffee"), "coffee");
 });
 
 test("a route is called by its stops in order, an empty stop, where you stand, left out", () => {
@@ -70,6 +71,12 @@ test("a route is called by its stops in order, an empty stop, where you stand, l
   assert.equal(
     mapsName("https://www.google.com/maps/dir/?api=1&origin=SFO&destination=Ferry%20Building"),
     "SFO → Ferry Building",
+  );
+  assert.equal(
+    mapsName(
+      "https://www.google.com/maps/dir/?api=1&origin=SFO&destination=Oakland&waypoints=Ferry+Building%7CPier+39",
+    ),
+    "SFO → Ferry Building → Pier 39 → Oakland",
   );
   assert.equal(mapsName("https://maps.google.com/maps?saddr=SFO&daddr=Oakland"), "SFO → Oakland");
 });
