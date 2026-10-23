@@ -3,14 +3,19 @@
  * alone in its region with Retry under it, one with no Retry, ones with a
  * remedy, Remove, or Dismiss beside Retry, one on a toolbar short of
  * room, long words and a long remedy in a pane narrower than the line,
- * and a list's foot that is itself the retry.
+ * a list's foot that is itself the retry, and a failure's Retry on its own
+ * beside its words, named for what it reads again.
  */
 
 import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  GAP,
+  Inline,
+  RetryButton,
   RetryRowLabel,
   TEXT_BUTTON_LINES,
+  Text,
   TextButton,
 } from "@luke/ui";
 import type { Example } from "../examples";
@@ -96,6 +101,15 @@ function ErrorStates(): React.JSX.Element {
           <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={stay}>
             <RetryRowLabel failure="Could not read older versions." />
           </TextButton>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-retry-button" title="A Retry beside a failure's words">
+        <div className="catalog-frame catalog-error-narrow">
+          <Inline gap={GAP.CONTROL}>
+            <Text>The agents could not be read.</Text>
+            <RetryButton label="Retry agents" onRetry={stay} />
+            <RetryButton onRetry={stay} />
+          </Inline>
         </div>
       </CatalogSection>
     </>
