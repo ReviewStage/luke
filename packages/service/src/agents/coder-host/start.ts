@@ -105,6 +105,7 @@ import {
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
+import { isNativeRuntime } from "./native-runtime.js";
 import {
   type FittedReplay,
   replayOf,
@@ -1079,8 +1080,6 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
       title,
-      // A continue keeps its source's human name, as the same teammate going on.
-      personaName: continued ? (from.source.personaName ?? undefined) : undefined,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
@@ -1113,25 +1112,24 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
     const mentioned =
       words === undefined ? undefined : mentionedContext(words, landing.task, reads);
-    // The first message is written here as the line awaiting its turn, with its sender, before the
-    // session is opened, as a steer's is (`steer.ts`): a native harness's runner names it back as it
-    // takes it (`native-events/`), and eve's receipt of it takes it by its words (`relay.ts`'s
-    // `takeAwaitingLine`). Note that eve is not left to write it as the turn's own row, because a row
-    // the relay writes keeps no sender, and a line no one is known to have sent reads as a stranger's
-    // (`mac-command-store.ts`). A launch refused discards the agent, line and all. A line that could
-    // not be written discards the agent, as a refused launch does, so a retry under the same key
-    // starts it afresh rather than finding an agent that was never launched.
-    const line = yield* openingLine(agent, handed, files, mentioned, ask.automationOrigin).pipe(
-      Effect.tapError(() =>
-        Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
-      ),
-    );
+    // eve writes the first message into the transcript as its session takes it; a native harness's
+    // runner only names its line back as it takes it (`native-events/`), so the line is written here,
+    // awaiting its turn, before the runner can name it. A launch refused discards the agent, line and all.
+    // A line that could not be written discards the agent, as a refused launch does, so a retry
+    // under the same key starts it afresh rather than finding an agent that was never launched.
+    const line = isNativeRuntime(runtime.runtime)
+      ? yield* openingLine(agent, handed, files, mentioned, ask.automationOrigin).pipe(
+          Effect.tapError(() =>
+            Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
+          ),
+        )
+      : undefined;
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
         turn: BRAIN_HOST_TURN.TYPED,
         message: eveContent(handed, files, mentioned),
-        lineId: line,
+        ...(line === undefined ? undefined : { lineId: line }),
       })
       .pipe(
         Effect.catchTag("EveUnreachable", (failure) =>

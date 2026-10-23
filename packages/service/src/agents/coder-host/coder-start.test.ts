@@ -3,12 +3,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
-import { lineSendersOf, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { messages } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, linearIssueLink, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -197,7 +196,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a fresh agent on eve keeps its prompt as one line the starter sent, which eve's receipt of it takes rather than writes again, so it has heard from no one else and its Mac is still its own",
+    "a fresh agent on eve, whose prompt eve's receipt writes as its first line with no sender, has heard from no one but its starter, so its Mac is still its own",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
@@ -242,13 +241,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
               eq(messages.role, MESSAGE_ROLE.USER),
             ),
           );
-        assert.equal(lines.length, 1, "the prompt is one line, not written again as received");
-        const [prompt] = lines;
-        assert.ok(prompt);
-        const senders = yield* lineSendersOf(target, [prompt.id]);
-        assert.deepEqual(senders.get(prompt.id)?.kind, MESSAGE_SENDER.MEMBER);
-        const sent = senders.get(prompt.id);
-        assert.equal(sent?.kind === MESSAGE_SENDER.MEMBER ? sent.member?.userId : undefined, owner);
+        assert.equal(lines.length, 1, "the prompt is the conversation's one line");
         assert.equal(yield* heardFromAnotherAccount(target), false);
       }),
   );
