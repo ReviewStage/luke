@@ -91,10 +91,12 @@ function styleRules(): CSSStyleRule[] {
 function before(element: Element): Map<string, string> {
   const declared = new Map<string, string>();
   for (const rule of styleRules()) {
+    // Note that a comma escaped in a utility's name (`transition-[a,b]`) parts
+    // no selectors, and a bare `::before` is every element's.
     const matching = rule.selectorText
-      .split(",")
+      .split(/(?<!\\),/)
       .map((part) => part.trim())
-      .some((part) => part.endsWith("::before") && element.matches(part.slice(0, -8)));
+      .some((part) => part.endsWith("::before") && element.matches(part.slice(0, -8) || "*"));
     if (!matching) continue;
     for (const name of [...rule.style]) declared.set(name, rule.style.getPropertyValue(name));
   }

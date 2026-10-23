@@ -389,3 +389,46 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
   expect(card()?.getAttribute("data-nudge")).toBe("true");
   expect(dismissals).toBe(1);
 });
+
+/** A dialog that opens a second over itself, as a confirm asked from inside a settings card is. */
+function Stacked({ onOuter, onInner }: { onOuter: () => void; onInner: () => void }) {
+  const [inner, setInner] = useState(false);
+  return createElement(Dialog, {
+    title: "Settings",
+    onDismiss: onOuter,
+    children: [
+      createElement("button", { key: "ask", type: "button", onClick: () => setInner(true) }, "Ask"),
+      inner
+        ? createElement(Dialog, {
+            key: "inner",
+            role: DIALOG_ROLE.ALERT_DIALOG,
+            title: "Delete key?",
+            onDismiss: () => {
+              onInner();
+              setInner(false);
+            },
+            children: createElement("button", { type: "button" }, "Keep"),
+          })
+        : null,
+    ],
+  });
+}
+
+test("a dialog opened over another is the one Escape puts away, and the one beneath stays until the next", () => {
+  const dismissed: string[] = [];
+  draw(
+    createElement(Stacked, {
+      onOuter: () => dismissed.push("outer"),
+      onInner: () => dismissed.push("inner"),
+    }),
+  );
+  act(() => button("Ask").click());
+  expect(card(DIALOG_ROLE.ALERT_DIALOG)).not.toBeNull();
+  key("Escape");
+  const afterFirst = [...dismissed];
+  key("Escape");
+
+  expect(afterFirst).toEqual(["inner"]);
+  expect(card(DIALOG_ROLE.ALERT_DIALOG)).toBeNull();
+  expect(dismissed).toEqual(["inner", "outer"]);
+});

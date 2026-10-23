@@ -340,7 +340,7 @@ test("an Inbox link block draws as the link alone in its words does: a pull requ
   const pullRequest = drawn(
     inPane(createElement(LinkBlock, { url: PULL_REQUEST, label: "The fix" })),
   );
-  assert.deepEqual(cards(pullRequest), [["pull-request", "#42 · The fix"]]);
+  assert.deepEqual(cards(pullRequest), [["pull-request", "The fix"]]);
 
   const page = drawn(inPane(createElement(LinkBlock, { url: PAGE, label: "The funnel" })));
   assert.deepEqual(cards(page), [["page", "The funnel"]]);

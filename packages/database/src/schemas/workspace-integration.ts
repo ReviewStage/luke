@@ -13,11 +13,10 @@ import { organization, user } from "./auth.js";
  * lets a member read issues through it; no row is a disconnected workspace,
  * so a Disconnect deletes the row before anything is asked of Connect.
  * `state` is the one-time value the browser sign-in carries back, unique
- * across every workspace so the callback finds the row by it alone, and
- * `connectVerifier` stands and goes with it. Who connected it is kept for
- * the settings row, and set null when that account goes, since the
- * connection is the workspace's and outlives them. The row leaves with its
- * workspace.
+ * across every workspace so the callback finds the row by it alone. Who
+ * connected it is kept for the settings row, and set null when that account
+ * goes, since the connection is the workspace's and outlives them. The row
+ * leaves with its workspace.
  */
 export const workspaceIntegrationConnection = pgTable(
   "workspace_integration_connection",
@@ -32,7 +31,7 @@ export const workspaceIntegrationConnection = pgTable(
     state: text("state"),
     /** When the sign-in under way began; null when none is. */
     stateIssuedAt: timestamptz("state_issued_at"),
-    /** Connect's handle on the sign-in under way; null when none is. Never logged, and never answered to a window. */
+    /** Retired: Connect's handle on a sign-in, read by nothing since Luke stopped asking Connect's undocumented result endpoint; dropped once that deployment drains. */
     connectVerifier: text("connect_verifier"),
     /** The owner or admin who last began a sign-in; null once that account is deleted. */
     connectedByUserId: text("connected_by_user_id").references(() => user.id, {

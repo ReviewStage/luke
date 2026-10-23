@@ -113,6 +113,14 @@ by the shadcn CLI (style `base-nova`, base `base`) and drawn in the Tailwind
 theme above; the `@luke/ui` component an app imports wraps it. Moved so far:
 `Switch`.
 
+The overlays: `Dialog` and `ConfirmDialog` stand on shadcn's dialog, and
+`TooltipPill` and `TooltipCard` on its tooltip and hover card, placed by
+Base UI. When a hint shows and goes stays `Tooltip`'s own (`hint.tsx`), and
+`AnchoredPopover` keeps its own placement (`popover-place.ts`), which holds
+an open menu by the edge of the button it hangs from as that button grows;
+it, `PopoverPanel`, the hover card's parts, `DrawerScrim`, and `PortalFence`
+are drawn in the theme's utilities.
+
 ## Using a component
 
 Import from the barrel:
@@ -160,7 +168,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `FileText`, `GlyphSlot` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `RetryButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
-| Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`, `SkillChip`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click, a pill in a box's words) |
+| Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click) |
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
