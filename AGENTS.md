@@ -48,7 +48,7 @@ Lint holds the UI half of this (`anti-slop/no-raw-press-outside-ui`): outside
 (lowercase) JSX element is never a control. A raw `button`, `input` (bar
 `type="hidden"`), `select`, `textarea`, or `summary`, a pressable `role`
 (`button`, `tab`, `option`, `menuitem*`, `radio`, `checkbox`, `switch`,
-`slider`, `link` off an `<a>`), and a press event (`onClick`, `onDoubleClick`,
+`slider`, `link` off an `<a>`, or one that is no literal), and a press event (`onClick`, `onDoubleClick`,
 `onAuxClick`, `onContextMenu`, `onMouseDown`/`Up`, `onPointerDown`/`Up`,
 `onTouchStart`/`End`, and their `Capture` forms) are errors, as is
 `onKeyDown`/`onKeyUp` on an element with `tabIndex` or `contentEditable`.

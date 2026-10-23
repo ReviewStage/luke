@@ -53,6 +53,11 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
     // A non-pressable role, and a link role on the anchor it names.
     panel('<div role="group" />'),
     panel('<a role="link" href={url} />'),
+    // A role left off on a branch, and a member of a capitalized namespace, which is a component.
+    panel('<div role={narrow ? "tabpanel" : undefined} />'),
+    panel('<span role={gone ? null : "status"} />'),
+    panel("<Controls.button onClick={go} />"),
+    panel("<example.Render />"),
     // `@luke/ui` is where controls are built.
     { code: "<button onClick={go} />", filename: UI_FILE },
     {
@@ -81,6 +86,23 @@ tester.run("no-raw-press-outside-ui", noRawPressOutsideUiRule, {
       ...panel("<button onClick={go} />"),
       errors: [{ messageId: "rawControl" }, { messageId: "pressEvent" }],
     },
+    // A hidden input whose type may be another, or which a spread may retype.
+    {
+      ...panel('<input type={hidden ? "hidden" : kind} />'),
+      errors: [{ messageId: "rawControl" }],
+    },
+    {
+      ...panel('<input type="hidden" {...props} />'),
+      errors: [{ messageId: "rawControl" }],
+    },
+    // A role that is no literal may be a pressable one.
+    { ...panel("<div role={role} />"), errors: [{ messageId: "unknownRole" }] },
+    {
+      ...panel('<div role={open ? "group" : role} />'),
+      errors: [{ messageId: "unknownRole" }],
+    },
+    // A lowercase factory's member renders the element it names.
+    { ...panel("<motion.div onClick={go} />"), errors: [{ messageId: "pressEvent" }] },
     // Pressable roles.
     ...[
       "button",
