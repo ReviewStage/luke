@@ -35,7 +35,6 @@ const merge = extendTailwindMerge({
         "control-icon",
         "control-gap",
         "icon-gap",
-        "field-gap",
         "menu-glyph",
         "control-compact",
         "time-inset",

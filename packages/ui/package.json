@@ -17,6 +17,7 @@
     "./time-format": "./src/time-format.js",
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
+    "./daily-bars": "./src/chart/daily-bars.js",
     "./markdown": "./src/markdown/markdown.js",
     "./markdown-class": "./src/markdown/markdown-class.js",
     "./markdown-words": "./src/markdown/markdown-words.js",

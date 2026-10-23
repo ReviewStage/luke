@@ -334,7 +334,7 @@
 
   /* A name cut short fades out at its end, once it is measured cut. */
   .luke-choice-name[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 var(--label-fade, 20px));
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   .luke-choice-list[data-look="picture"] > .luke-choice[aria-checked="true"] .luke-choice-name {

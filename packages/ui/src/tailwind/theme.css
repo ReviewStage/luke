@@ -24,7 +24,7 @@
   --ease-spring-fast: var(--luke-spring-fast);
 
   /* Text entry and the words around it (`text-field`, `search-field`,
-     `form-field`, `form-section`, `inline-edit`, `length-counter`): a
+     `form-field`, `inline-edit`, `length-counter`): a
      field's grounds and edges, the type roles its words are set in, and the
      lengths it stands at, each a profile's role. A name added here that
      tailwind-merge cannot read is listed in `../cn.ts`. */
@@ -69,7 +69,6 @@
   --spacing-control-icon: var(--luke-control-icon);
   --spacing-control-gap: var(--luke-control-gap);
   --spacing-icon-gap: var(--luke-icon-gap);
-  --spacing-field-gap: var(--luke-field-gap);
   --spacing-menu-glyph: var(--luke-menu-glyph);
   /* A field a step under a control, among a bar's controls. */
   --spacing-control-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-2));

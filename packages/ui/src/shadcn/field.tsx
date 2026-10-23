@@ -8,11 +8,10 @@ import { Label } from "./label.js";
  * The parts are shadcn's own source, kept as close to it as the window
  * allows, so a later `shadcn add field` reads as a small diff. The local
  * changes: only the parts a `@luke/ui` component draws are kept (`Field`,
- * `FieldGroup`, `FieldLabel`, `FieldDescription`, `FieldError`); a field is
- * one orientation, its parts one under another, so `Field` takes no
+ * `FieldLabel`, `FieldDescription`, `FieldError`); a field is one
+ * orientation, its parts one under another, so `Field` takes no
  * `orientation` and draws no `role="group"`, which an unnamed field would
- * only add to a reader's tree; `FieldGroup` is no container query, whose
- * containment would let a group shrink past its fields; and `FieldError`
+ * only add to a reader's tree; and `FieldError`
  * always stands, as a polite live region in place of `role="alert"`, empty
  * until it says something, because a reader announces a region filling more
  * surely than one arriving, and its words are what the caller says rather
@@ -29,16 +28,6 @@ export function Field({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="field"
       className={cn("flex min-w-0 flex-col gap-luke-6", className)}
-      {...props}
-    />
-  );
-}
-
-export function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="field-group"
-      className={cn("flex min-w-0 flex-col gap-field-gap", className)}
       {...props}
     />
   );

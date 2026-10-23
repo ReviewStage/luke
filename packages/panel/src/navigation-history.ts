@@ -90,7 +90,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import type { AdminView } from "./admin/routing.js";
+import { ADMIN_PAGE, type AdminView } from "./admin/routing.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
@@ -339,7 +339,7 @@ function samePage(one: Place, other: Place): boolean {
 
 /** Whether an Admin view is one of the place's sections, rather than an account's or a day's page under one. */
 function adminSection(view: AdminView): boolean {
-  return view.kind !== "account" && view.kind !== "day";
+  return view.kind !== ADMIN_PAGE.ACCOUNT && view.kind !== ADMIN_PAGE.DAY;
 }
 
 /**
@@ -354,8 +354,9 @@ function samePageAdminView(one: AdminView, other: AdminView): boolean {
 
 /** Whether two Admin views are the same view. */
 function sameAdminView(one: AdminView, other: AdminView): boolean {
-  if (one.kind === "account" && other.kind === "account") return one.id === other.id;
-  if (one.kind === "day" && other.kind === "day") return one.day === other.day;
+  if (one.kind === ADMIN_PAGE.ACCOUNT && other.kind === ADMIN_PAGE.ACCOUNT)
+    return one.id === other.id;
+  if (one.kind === ADMIN_PAGE.DAY && other.kind === ADMIN_PAGE.DAY) return one.day === other.day;
   return one.kind === other.kind;
 }
 
