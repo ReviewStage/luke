@@ -343,9 +343,11 @@ function carriedMarkdown(
 
 /**
  * What installing the candidate would meet in the installed skill of its
- * name: the same repository's same folder is current where its tree at
- * the commit previewed is the one pinned, else an update; any other
- * source is taken. A tree GitHub does not say is read as moved.
+ * name: the same repository's same folder at the same ref is current
+ * where its tree at the commit previewed is the one pinned, else an
+ * update; any other source is taken. Note that the ref counts, because an
+ * update reads the skill's own ref, so the folder on another branch is no
+ * update of it. A tree GitHub does not say is read as moved.
  */
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   source: PinnedSource,
@@ -357,7 +359,8 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     pinned.type === INSTALLED_SKILL_SOURCE.GITHUB &&
     pinned.owner.toLowerCase() === source.repository.owner.toLowerCase() &&
     pinned.repo.toLowerCase() === source.repository.name.toLowerCase() &&
-    pinned.path === candidate.folder.path;
+    pinned.path === candidate.folder.path &&
+    pinned.ref === source.ref;
   if (!same) return INSTALLED_SKILL_STANDING.TAKEN;
   if (pinned.sha === source.sha) return INSTALLED_SKILL_STANDING.CURRENT;
   const [then, now] = yield* Effect.all(

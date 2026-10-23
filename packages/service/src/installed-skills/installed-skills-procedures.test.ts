@@ -1219,6 +1219,22 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           moved.find((one) => one.name === "review")?.installed?.map((one) => one.standing),
           [INSTALLED_SKILL_STANDING.UPDATE],
         );
+        // The same folder on another branch is another source, since an update reads the skill's own branch.
+        commitTo(kit, "develop", {
+          ...kit.commits.get(first),
+          "skills/review/SKILL.md": skillFile("review", "Review on develop."),
+        });
+        const branched = installedOf(
+          yield* ask(
+            `${SKILLS}/preview`,
+            owner,
+            preview(workspace, "npx skills add https://github.com/acme/kit/tree/develop"),
+          ),
+        );
+        assert.deepEqual(
+          branched.find((one) => one.name === "review")?.installed?.map((one) => one.standing),
+          [INSTALLED_SKILL_STANDING.TAKEN],
+        );
         assert.deepEqual(
           installedOf(yield* ask(`${SKILLS}/preview`, stranger, preview(strangersOwn, paste))),
           [

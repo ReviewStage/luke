@@ -99,11 +99,11 @@ export const installedSkillPreviewRequestSchema = EffectSchema.Struct({
  * session.
  */
 export const INSTALLED_SKILL_STANDING = {
-  /** The same folder of the same repository, its tree unchanged at the commit previewed: installing would change nothing. */
+  /** The same folder of the same repository at the same ref, its tree unchanged at the commit previewed: installing would change nothing. */
   CURRENT: "current",
-  /** The same folder of the same repository, its tree moved since it was pinned: an update brings it to the files previewed. */
+  /** The same folder of the same repository at the same ref, its tree moved since it was pinned: an update, which reads that ref, brings it to the files previewed. */
   UPDATE: "update",
-  /** Another source holds the name: another repository or folder, or pasted text. */
+  /** Another source holds the name: another repository, folder, or ref, or pasted text. */
   TAKEN: "taken",
 } as const;
 
