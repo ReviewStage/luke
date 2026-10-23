@@ -19,11 +19,13 @@ import {
   type MentionPlace,
   mentionName,
   type PlanMention,
+  pageRepositoryOf,
   pastedLinkMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import { isGitHubAddress } from "@luke/host/acts";
 import {
   CommentsIcon,
   DocumentIcon,
@@ -106,7 +108,10 @@ import { useWordsDates } from "./words-dates.js";
  * at its top; a file, its tab, through the side panel's one door for a file
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
- * place can open none. An MCP server or one of its tools opens nothing
+ * place can open none; either, where no File tab opens it, opens its GitHub
+ * page where it was written as one. Words of no repository read a GitHub
+ * page of a file or a folder as of the repository its address names
+ * (`pageDoors`), so it is still that file's or folder's chip. An MCP server or one of its tools opens nothing
  * either, wearing its server's mark and hanging its server's row as the
  * MCP popover draws it, with what the mention does for the agent the words
  * go to (`server-card.tsx`); a page of an integration's, a Linear
@@ -259,11 +264,17 @@ function pressOf(
   switch (mention.kind) {
     case MENTION_KIND.LINK:
       return () => openLink(mention.url);
-    case MENTION_KIND.FILE: {
+    case MENTION_KIND.FILE:
+    case MENTION_KIND.FOLDER: {
       const { onOpenFile } = doors;
-      return onOpenFile === undefined ? undefined : () => onOpenFile(mention.path, mention.lines);
+      if (onOpenFile !== undefined) {
+        return mention.kind === MENTION_KIND.FILE
+          ? () => onOpenFile(mention.path, mention.lines)
+          : undefined;
+      }
+      // Where no File tab opens it, a file or a folder written as its GitHub page opens there, as its link would.
+      return isGitHubAddress(target) ? () => openLink(target) : undefined;
     }
-    case MENTION_KIND.FOLDER:
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
     case MENTION_KIND.DATE:
@@ -1028,6 +1039,19 @@ const NO_TASK_ID = "";
 const MENTION_KIND_PLACE = "place";
 
 /**
+ * The doors a link's chip opens through: the place's, or, where the place
+ * names no repository and the link is a GitHub page of a file or a folder,
+ * the place's under the repository the page names, so the chip is that
+ * file's or folder's, of that repository, and opens no File tab, which
+ * reads the place's repository alone.
+ */
+function pageDoors(doors: MentionDoors, href: string): MentionDoors {
+  const repository = doors.place.repository === null ? pageRepositoryOf(href) : undefined;
+  if (repository === undefined) return doors;
+  return { ...doors, place: { ...doors.place, repository }, onOpenFile: undefined };
+}
+
+/**
  * A link in words as its chip, through the doors given: a mention's where
  * its target names one (`linkMention`), a place's in Luke where it is a
  * Luke link no mention names (`readLink`); nothing where it is neither, and
@@ -1041,7 +1065,8 @@ export function linkChip(
   at?: MarkdownSpan | undefined,
 ): React.JSX.Element | undefined {
   const bare = isBareLink(label, href);
-  const found = linkMention(label, href, doors.place.repository);
+  const placed = pageDoors(doors, href);
+  const found = linkMention(label, href, placed.place.repository);
   if (found?.mention.kind === MENTION_KIND.DATE) {
     return <WrittenDateChip date={found.mention} at={at} place={doors.place} />;
   }
@@ -1051,7 +1076,7 @@ export function linkChip(
         mention={found.mention}
         target={href}
         name={found.name}
-        doors={doors}
+        doors={placed}
         bare={bare}
       />
     );

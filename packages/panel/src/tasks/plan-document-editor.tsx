@@ -109,15 +109,15 @@ const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
 );
 
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button bar a picture's, a task's checkbox or the label around it, or the section's byline. */
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button bar a picture's, a video's player, a task's checkbox or the label around it, or the section's byline. */
 function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike. A picture's press is a button that hands on only the press it does not take, a diagram's under a mouse in a wide room, which is the words' as the bare picture's was.
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike. A picture's press is a button that hands on only the press it does not take, a diagram's under a mouse in a wide room, which is the words' as the bare picture's was. A video's player is its own whole, its frame and every control in it, whatever they are drawn as, since a press there plays, seeks, or enlarges it; its caption is the words'.
   return !(
     target instanceof Element &&
     target.closest(
-      "a, button:not(.luke-picture-tile), input, label, [data-mention-ref], .plan-unit-row",
+      "a, button:not(.luke-picture-tile), input, label, [data-mention-ref], .plan-unit-row, .picture-block[data-video] > :not(.picture-caption)",
     ) !== null
   );
 }

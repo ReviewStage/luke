@@ -122,7 +122,14 @@ component, factored out of the surface where it builds the box by hand.
   told of a chat message is never handed the video, only told it is there
   (`coder-host/chat-notify.ts`), the inbox's and the chat's players are left
   out of session replay, and none of it goes into a trace, a counted event, a
-  fixture, or the voice window. And Sentry's SDKs run
+  fixture, or the voice window. Such a recording may also be added to its
+  task's plan, from the file viewer's Add to plan or an agent's `edit_plan`,
+  at most ten to a plan, kept beside the plan as its pictures are
+  (`packages/database/src/models/plan-attachments.ts`), shown to the members
+  who can open the task and deleted with the plan; `look_at_picture` refuses
+  it (`packages/service/src/tasks/picture-look.ts`), so no model is handed it,
+  the plan's player is left out of session replay, and none of it goes into a
+  trace, a counted event, a fixture, or the voice window. And Sentry's SDKs run
   with their default data collection, but that the service's and the eve roots'
   leave out model inputs and outputs and request bodies
   (`packages/service/src/observability/sentry.ts`, the eve roots'

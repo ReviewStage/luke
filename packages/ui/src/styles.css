@@ -65,7 +65,6 @@
 @import "./components/inline-edit/inline-edit.css";
 @import "./components/hold-press/hold-press.css";
 @import "./components/inline-ref/inline-ref.css";
-@import "./components/skill-chip/skill-chip.css";
 @import "./components/length-counter/length-counter.css";
 @import "./components/pagination/pagination.css";
 @import "./components/progress/progress.css";
@@ -80,6 +79,7 @@
 @import "./components/public-page/public-page.css";
 @import "./components/saved-tick/saved-tick.css";
 @import "./components/search-field/search-field.css";
+@import "./components/folding-search/folding-search.css";
 @import "./components/shortcut/shortcut.css";
 @import "./components/text-field/text-field.css";
 @import "./components/address-field/address-field.css";

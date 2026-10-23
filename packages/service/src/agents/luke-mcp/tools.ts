@@ -39,6 +39,7 @@ import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
+import { pictureTypeSchema } from "@luke/features/picture-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Schema } from "effect";
@@ -60,7 +61,11 @@ import {
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
-import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
+import {
+  LOOK_AT_PICTURE_TOOL,
+  lookNamedOnly,
+  PICTURE_LOOK_STATUS,
+} from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
@@ -208,12 +213,12 @@ function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
   return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
 }
 
-/** A look that answered a picture: its bytes as base64 and their type. */
+/** A look that answered a picture: its bytes as base64 and an image's type, never a video's, which no model is handed. */
 const isLooked = Schema.is(
   Schema.Struct({
     status: Schema.Literal(PICTURE_LOOK_STATUS.LOOKED),
     image: Schema.String,
-    mediaType: Schema.String,
+    mediaType: pictureTypeSchema,
   }),
 );
 
@@ -249,7 +254,7 @@ function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] 
   if (isLooked(result)) {
     return [LOOKED_TEXT, { type: "image", data: result.image, mimeType: result.mediaType }];
   }
-  return [{ type: "text", text: JSON.stringify(result) }];
+  return [{ type: "text", text: JSON.stringify(lookNamedOnly(unparsedWire(result))) }];
 }
 
 /**

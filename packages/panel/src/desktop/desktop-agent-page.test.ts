@@ -81,7 +81,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { focusRestOn } from "../testing/hint-rest.js";
+import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { bundleLanded } from "../testing/side-bundles.js";
@@ -1940,6 +1940,133 @@ test("an @ in the agent's box names an archived agent by its task's name, read f
     ]),
     [["Bill by seat", "Billing · Archived"]],
   );
+});
+
+test("an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents", async () => {
+  installEditorLayout();
+  installScrollIntoView();
+  pages = [{ agent: { ...PAGE, repository: null } }];
+  workspace = [
+    {
+      id: "3c3c3c3c-0000-4000-8000-000000000000",
+      planId: null,
+      model: PAGE.model,
+      effort: PAGE.effort,
+      title: "Bill by seat",
+      createdAt: 1,
+      status: CODING_AGENT_STATUS.COMPLETED,
+      turnId: null,
+    },
+  ];
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+
+  typeInComposer(page, "Ask @bill");
+  await settle();
+
+  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
+  assert.deepEqual(
+    rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
+    ["Bill by seat"],
+  );
+});
+
+test("on the page of an agent working in no repository, a GitHub page of a file or a folder in its words is that file's or folder's chip, of the repository its address names, and opens on GitHub", async () => {
+  pages = [{ agent: { ...PAGE, repository: null } }];
+  const file = "https://github.com/acme/relay/blob/HEAD/src/store.ts";
+  const folder = "https://github.com/acme/relay/tree/HEAD/src";
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Where is it?" }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: `In [@store.ts](${file}), under [@src](${folder}).` }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+  const chips = [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
+
+  assert.deepEqual(
+    chips.map((chip) => [
+      chip.dataset.kind,
+      chip.querySelector(".luke-inline-ref-label")?.textContent,
+    ]),
+    [
+      ["file", "store.ts"],
+      ["folder", "src"],
+    ],
+  );
+  const [fileChip, folderChip] = chips;
+  assert.ok(fileChip && folderChip);
+  restOn(fileChip);
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
+  assert.deepEqual(
+    [
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      card?.querySelector(".luke-hover-card-sub")?.textContent,
+    ],
+    ["src/store.ts", "acme/relay"],
+  );
+  act(() => fileChip.click());
+  act(() => folderChip.click());
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
+    [{ url: file }, { url: folder }],
+  );
+});
+
+test("a chip in the agent's words naming the pull request it opened, or a page under it, hangs its Pull request tab's card, as on a task", async () => {
+  const url = "https://github.com/acme/relay/pull/2911";
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url,
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: `Opened [@#2911](${url}), its [@files](${url}/files).` }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+  const chips = [...page.querySelectorAll(".agent-page [data-mention-ref]")];
+  assert.equal(chips.length, 2, "the pull request and its files are chips");
+
+  for (const chip of chips) {
+    restOn(chip);
+    const card = [...document.querySelectorAll(".luke-tooltip-card .luke-hover-card")].at(-1);
+    assert.equal(card?.hasAttribute("data-tab-card"), true, "the card is its tab's");
+    assert.equal(
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      "Await the payment mock",
+    );
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+  }
 });
 
 /** The page's dialog's button with these words, or a failure saying the dialog offers none. */
