@@ -15,6 +15,9 @@
 Luke is a macOS app for planning a change by talking it through, then handing
 it to coding agents and reviewing what they ship.
 
+**Status:** an early MVP. It runs on Apple silicon Macs with macOS 14 or newer,
+and nowhere else yet. It is free.
+
 You describe the change out loud. Luke reads the repository while you talk,
 asks about what you left open, and writes the plan as a design doc during the
 call. Press **Start** and a coding agent implements the plan in a cloud
@@ -27,8 +30,8 @@ Claude Code, Codex, or any other agent.
 ## How it works
 
 1. **Talk.** Create a task on a GitHub repository and start a voice chat, or
-   press Call on any of its agents. Luke answers by voice. While you talk he runs
-   `grep`, `cat`, and `git log` on a checkout of the repository, and hands
+   press Call on any of its agents. Luke answers by voice. While you talk it
+   runs `grep`, `cat`, and `git log` on a checkout of the repository, and hands
    longer searches to background workers so the call keeps going.
 2. **Plan.** A second model writes what the call settles into the task's plan:
    a Markdown document you can edit, comment on, and restore from version
@@ -66,8 +69,9 @@ Claude Code, Codex, or any other agent.
   offered to Luke and agents, and `/` in an agent's message box picks one.
 - **Run on this Mac** checks an agent's branch out in a local worktree with
   your own git login and opens a terminal on it inside Luke.
-- **Your own API keys**: coding agents run on your Anthropic or OpenAI key if
-  you add one in Settings › Coding agents, and on Luke's otherwise.
+- **Your own keys**: coding agents run on your Claude or ChatGPT subscription
+  or on your Anthropic or OpenAI API key, added in Settings › Agents. Luke
+  pays for no model calls.
 
 Automations (agents started on a schedule, a GitHub event, or a webhook),
 issue tracking, and video calls are behind Settings › Experimental.
@@ -98,19 +102,35 @@ repository.
   the service sets it at the sandbox's network firewall, so it never enters
   the sandbox. Each coding agent gets a sandbox of its own and pushes through
   the same App.
-- **Models.** Every model call runs on your own keys, added in Settings ›
-  Agents; Luke pays for none. Voice and dictation run on OpenAI, on your OpenAI
+- **Models.** Every model call runs on your own keys or subscriptions, added
+  in Settings › Agents; Luke pays for none. Voice and dictation run on OpenAI, on your OpenAI
   API key, and are off without one. Coding agents run on Anthropic or OpenAI,
   depending on the model you pick, on your subscription or API key. Your
   voice streams to OpenAI and does not pass through Luke's service.
 - **Commands on your Mac.** Luke and coding agents can run shell commands on
-  your Mac, in your login shell and without asking, and what they print goes
-  to the model. This is how an agent reads a local checkout or a server you
-  have running. It is on by default; turn it off in Settings › This Mac › Let
-  agents run commands on this Mac.
+  your Mac, from your home folder and without asking, and what they print goes
+  to the model and is kept with the conversation. This exists because the code
+  is otherwise read in a cloud sandbox: it is how an agent reads your local
+  checkout, uncommitted work, or a server you have running. It is on by
+  default. Turn it off in Settings › This Mac › Let agents run commands on
+  this Mac.
 
 [PRIVACY.md](PRIVACY.md) lists everything Luke stores, every provider it sends
 data to, and how long each keeps it.
+
+## Open source and the hosted service
+
+The app is open source under the [Apache License 2.0](LICENSE). It signs in to
+a hosted service at [tryluke.dev](https://tryluke.dev), run by Stage Inc.,
+which is free to use. The service's code is in this repository to read, but
+running your own copy of it is not supported yet.
+
+Hosted coding agents run Anthropic's Claude Code through the Claude Agent SDK,
+which is proprietary and not covered by this repository's license, or OpenAI's
+Codex, depending on the model you pick.
+
+Third-party names and logos, such as those of the integrations above, belong
+to their owners. Their use here does not mean those owners endorse Luke.
 
 ## Contributing
 

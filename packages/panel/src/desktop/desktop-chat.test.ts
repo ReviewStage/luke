@@ -926,7 +926,7 @@ test("a form none of whose fields must be filled may be sent empty", async () =>
   assert.equal(rail(page)[0], "▸ For you (3)");
 });
 
-test("an ask its poster resolved says it was withdrawn and why, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {
+test("an ask its poster resolved says it was withdrawn in its head and why in its body, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {
   const page = mount((chat) => ({
     ...chat,
     answer: {
@@ -958,7 +958,12 @@ test("an ask its poster resolved says it was withdrawn and why, and one asking n
   act(() => railRow(page, "teammate-invitations").click());
   assert.equal(
     settledAsk(page, 46).querySelector(".luke-card-head")?.textContent,
-    "Pick oneWithdrawn: Settled in the plan.",
+    "Pick oneWithdrawn",
+  );
+  assert.equal(
+    settledAsk(page, 46).querySelector("[data-inbox-withdrawn-why]")?.textContent,
+    "Settled in the plan.",
+    "why it was withdrawn stands under the head, as a sentence of its own",
   );
   assert.equal(settledAsk(page, 46).querySelector('[role="radio"]'), null);
   assert.equal(

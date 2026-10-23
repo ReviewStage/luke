@@ -1,15 +1,23 @@
 import {
   Avatar,
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
   CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
   CHOICE_TONE,
+  Checkbox,
   CheckIcon,
   type ChoiceFlow,
   ChoiceList,
   type ChoiceLook,
   type ChoiceOption,
   type ChoiceSelect,
+  GAP,
+  Inline,
+  Stack,
+  SteppedBack,
   Text,
   TextLink,
 } from "@luke/ui";
@@ -21,7 +29,8 @@ import { CatalogSection } from "../section";
  * choice-list.tsx -- a pick-one list with a recommended option and an
  * unavailable one, a pick-several list, both marked with their radios or
  * checkboxes and numbered, a yes and a no across, toned, pills, faces as pictures, cards holding controls of their own, rows with a mark before their words, an
- * unavailable list, a settled record of what was picked, and a
+ * unavailable list, a settled record of what was picked, a marked list
+ * stepped back beside a step and its presses, as an ask taken back, and a
  * narrow column of long words.
  */
 
@@ -233,6 +242,32 @@ function ChoiceLists(): React.JSX.Element {
           settled
           pickedNote="Your pick"
         />
+      </CatalogSection>
+      <CatalogSection id="choice-list-stepped-back" title="Stepped back, as an ask taken back">
+        <SteppedBack>
+          <Stack gap={GAP.CONTROL}>
+            <ChoiceList
+              legend="What was asked"
+              options={RETRIES}
+              value={[]}
+              select={CHOICE_SELECT.ONE}
+              look={CHOICE_LOOK.MARKED}
+              readOnly
+              onChange={() => undefined}
+            />
+            <Checkbox checked={false} readOnly onChange={() => undefined}>
+              Open the repository's settings, then add the secret.
+            </Checkbox>
+            <Inline>
+              <Button variant={BUTTON_VARIANT.OUTLINE} size={BUTTON_SIZE.COMPACT} readOnly>
+                Mark done
+              </Button>
+              <Button variant={BUTTON_VARIANT.QUIET} size={BUTTON_SIZE.COMPACT} readOnly>
+                Couldn't do it
+              </Button>
+            </Inline>
+          </Stack>
+        </SteppedBack>
       </CatalogSection>
       <CatalogSection id="choice-list-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">

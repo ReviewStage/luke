@@ -63,6 +63,14 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PLAN_TEMPLATE_REVISION: "planTemplate.revision",
   PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
+   * Settings › Memory: the facts and conventions the coding agents kept in
+   * the workspace Settings shows, shared by its members, read as the page
+   * opens, and one forgotten for good. Each answers the memories as the
+   * service then keeps them.
+   */
+  MEMORIES_READ: "memories.read",
+  MEMORIES_FORGET: "memories.forget",
+  /**
    * A clip dictated into a message box, carried once from the panel that
    * recorded it to the service and answered with its words. Nothing on the
    * way keeps it.
@@ -125,6 +133,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_RENAME: "codingAgents.rename",
   CODING_AGENTS_SERVERS: "codingAgents.servers",
   CODING_AGENTS_STOP: "codingAgents.stop",
+  CODING_AGENTS_REWIND: "codingAgents.rewind",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   CODING_AGENTS_PIN: "codingAgents.pin",
   /** The account's operator in a workspace, Luke, ensured: the one standing, made where none stands, or, with a reset, a fresh one in place of it. */
@@ -229,17 +238,20 @@ export const CHAPTERS_ACT_KIND = {
 
 /**
  * Settings' Skills: the skills the account sees in a workspace listed, a
- * pasted `skills add` command or skill text previewed and installed for the
- * account or its workspace, and one toggled, checked for an update,
+ * pasted `skills add` command or skill text previewed, one of its skills'
+ * `SKILL.md` read, and installed for the account or its workspace, and one toggled, checked for an update,
  * updated, or removed.
  */
 export const INSTALLED_SKILL_ACT_KIND = {
   INSTALLED_SKILLS_LIST: "installedSkills.list",
+  INSTALLED_SKILLS_READ: "installedSkills.read",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
+  INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
   INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
   INSTALLED_SKILLS_UPDATE: "installedSkills.update",
+  INSTALLED_SKILLS_SHARE: "installedSkills.share",
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
 } as const;
 

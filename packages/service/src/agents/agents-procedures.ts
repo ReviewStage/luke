@@ -96,6 +96,7 @@ import {
   type PublishedReach,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
+import { rewoundAgent } from "./coder-host/rewind.js";
 import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
 import {
   acceptedAgentChoice,
@@ -561,6 +562,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     stop: signedIn.stop.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
       yield* stoppedTurn(seams, writer, context.request, userId, agent);
+      return { agent: yield* summaryOf(userId, agent) };
+    }),
+    /** The agent taken back to just before one of the developer's lines (`rewind.ts`), answered as it then stands. */
+    rewind: signedIn.rewind.effect(function* ({ input, context }) {
+      const { userId, agent } = yield* reachedAgentById(context.userId, input.params.id);
+      yield* rewoundAgent(seams, writer, context.request, userId, agent, input.body.messageId);
       return { agent: yield* summaryOf(userId, agent) };
     }),
     /**

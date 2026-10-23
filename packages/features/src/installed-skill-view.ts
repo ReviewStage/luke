@@ -2,9 +2,12 @@ import { Schema as EffectSchema } from "effect";
 import {
   INSTALLED_SKILL_FILES_REFUSAL,
   installedSkillAnswerSchema,
+  installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillListAnswerSchema,
+  installedSkillPreviewFileRequestSchema,
+  installedSkillPreviewFileSchema,
   installedSkillPreviewRequestSchema,
   installedSkillPreviewSchema,
   installedSkillRemovedAnswerSchema,
@@ -74,6 +77,11 @@ export const installedSkillPreviewParamsSchema = installedSkillPreviewRequestSch
 
 export type InstalledSkillPreviewParams = typeof installedSkillPreviewParamsSchema.Type;
 
+/** A previewed skill's `SKILL.md` asked for by the repository, commit, and folder the preview named. */
+export const installedSkillPreviewFileParamsSchema = installedSkillPreviewFileRequestSchema;
+
+export type InstalledSkillPreviewFileParams = typeof installedSkillPreviewFileParamsSchema.Type;
+
 /** A paste installed, as the service takes it. */
 export const installedSkillInstallParamsSchema = installedSkillInstallRequestSchema;
 
@@ -100,6 +108,14 @@ export const installedSkillIdParamsSchema = EffectSchema.Struct({ skillId: wireU
 
 export type InstalledSkillIdParams = typeof installedSkillIdParamsSchema.Type;
 
+/** One personal skill shared with the workspace named, which it moves into. */
+export const installedSkillShareParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  skillId: wireUuidSchema,
+});
+
+export type InstalledSkillShareParams = typeof installedSkillShareParamsSchema.Type;
+
 /* ----- Views ----- */
 
 /** The skills the account sees in a workspace, or why there are none. */
@@ -110,6 +126,14 @@ export const installedSkillListViewSchema = EffectSchema.Union([
 
 export type InstalledSkillListView = typeof installedSkillListViewSchema.Type;
 
+/** One skill read whole, or why it was not. */
+export const installedSkillContentViewSchema = EffectSchema.Union([
+  installedSkillContentSchema,
+  failed,
+]);
+
+export type InstalledSkillContentView = typeof installedSkillContentViewSchema.Type;
+
 /** What a paste would install, or why the service did not say. */
 export const installedSkillPreviewViewSchema = EffectSchema.Union([
   installedSkillPreviewSchema,
@@ -117,6 +141,14 @@ export const installedSkillPreviewViewSchema = EffectSchema.Union([
 ]);
 
 export type InstalledSkillPreviewView = typeof installedSkillPreviewViewSchema.Type;
+
+/** A previewed skill's `SKILL.md`, or why the service did not answer it. */
+export const installedSkillPreviewFileViewSchema = EffectSchema.Union([
+  installedSkillPreviewFileSchema,
+  failed,
+]);
+
+export type InstalledSkillPreviewFileView = typeof installedSkillPreviewFileViewSchema.Type;
 
 /** The skills an install made, or why it made none. */
 export const installedSkillInstallViewSchema = EffectSchema.Union([
@@ -126,7 +158,7 @@ export const installedSkillInstallViewSchema = EffectSchema.Union([
 
 export type InstalledSkillInstallView = typeof installedSkillInstallViewSchema.Type;
 
-/** One skill as a toggle left it, or why it is unchanged. */
+/** One skill as a toggle or a share left it, or why it is unchanged. */
 export const installedSkillViewSchema = EffectSchema.Union([installedSkillAnswerSchema, failed]);
 
 export type InstalledSkillView = typeof installedSkillViewSchema.Type;

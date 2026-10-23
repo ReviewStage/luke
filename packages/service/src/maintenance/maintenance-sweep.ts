@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { causeKind } from "@luke/runtime/effect";
 import { Cause, Clock, Data, Effect, type Redacted } from "effect";
 import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js";
+import type { RepositorySnapshotSweepOutcome } from "../agents/repository-snapshot.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
 import type { TokenPullRequestSweepOutcome } from "../github/token-pull-request-sweep.js";
@@ -47,7 +48,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The fifteen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The sixteen sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -79,10 +80,12 @@ interface MaintenanceSweeps {
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
   /** Moves the native agents' image template on, building it where it is missing, and deletes older images' templates. */
   sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
+  /** Deletes the workspaces' repository snapshots past their age, or left unbuilt past their grace. */
+  sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the fifteen sweeps once
+ * How a run is told to the sweep's cron monitor: around the sixteen sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -129,6 +132,8 @@ interface MaintenanceSweepAnswer {
   tokenPullRequests: Swept<TokenPullRequestSweepOutcome>;
   /** What the sweep over the native agents' image templates did. */
   imageTemplates: Swept<TemplateSweepOutcome>;
+  /** What the sweep over the repository snapshots did. */
+  repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -157,7 +162,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The fifteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The sixteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -181,6 +186,10 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       sweeps.sweepTokenPullRequests(now),
     ),
     imageTemplates: yield* isolated("sweepImageTemplates", sweeps.sweepImageTemplates(now)),
+    repositorySnapshots: yield* isolated(
+      "sweepRepositorySnapshots",
+      sweeps.sweepRepositorySnapshots(now),
+    ),
   };
 });
 

@@ -154,6 +154,7 @@ export function codingAgentsControl(
     },
     startCall: undefined,
     onStop: () => Promise.resolve(),
+    onRewind: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onSwitchServers: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),

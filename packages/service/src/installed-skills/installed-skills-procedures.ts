@@ -1,5 +1,5 @@
 /**
- * installed-skills-procedures.ts -- the skills members install into Luke: list the ones a workspace offers the account, preview a paste, install from it, turn one on or off, check one for an update or update it, and remove it.
+ * installed-skills-procedures.ts -- the skills members install into Luke: list the ones a workspace offers the account, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check one for an update or update it, share a personal one with a workspace, and remove it.
  *
  * Every procedure resolves the caller (`accountMiddleware`, on the
  * resource so it runs before an input is read) before it touches a row.
@@ -21,7 +21,9 @@
  * An update reads a GitHub skill's folder at the commit its ref stands at
  * now and replaces its files; the check before it compares the folder's
  * tree at that commit with the one pinned, so a busy repository whose
- * skill did not move offers no update.
+ * skill did not move offers no update. A share moves the account's own
+ * personal skill into a workspace it is a member of, never its personal
+ * one, on the same rule as an install's scope.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -29,18 +31,24 @@ import {
   type InstalledSkill,
   type InstalledSkillFilesRefused,
   type InstalledSkillNameTaken,
+  type InstalledSkillWithFiles,
   installSkill,
   listInstalledSkills,
   readInstalledSkill,
   removeInstalledSkill,
   setInstalledSkillEnabled,
+  shareInstalledSkill,
   updateInstalledSkill,
 } from "@luke/database/models/installed-skill-store";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import { listWorkspaces, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { wireUuidSchema } from "@luke/features";
-import type { InstalledSkillSummary } from "@luke/features/installed-skill-route-wire";
+import type {
+  InstalledSkillContent,
+  InstalledSkillSummary,
+} from "@luke/features/installed-skill-route-wire";
 import {
+  INSTALLED_SKILL_MAIN_FILE,
   INSTALLED_SKILL_SCOPE,
   INSTALLED_SKILL_SOURCE,
   type InstalledSkillScope,
@@ -59,7 +67,12 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { madeFromPaste, previewOfPaste, revisionAtRef } from "./skill-paste-install.js";
+import {
+  madeFromPaste,
+  previewedSkillFile,
+  previewOfPaste,
+  revisionAtRef,
+} from "./skill-paste-install.js";
 import { folderTreeSha, pinnedCommit, reachSkillRepository } from "./skill-source.js";
 
 export interface InstalledSkillsProcedureSeams {
@@ -132,6 +145,16 @@ function summaryOf(skill: InstalledSkill, manageable: boolean): InstalledSkillSu
     manageable,
     createdAt: skill.createdAt.getTime(),
     updatedAt: skill.updatedAt.getTime(),
+  };
+}
+
+/** One skill read whole for the wire: its `SKILL.md` as text, and every file's path and size. */
+function contentOf(skill: InstalledSkillWithFiles): InstalledSkillContent {
+  const main = skill.files.find((file) => file.path === INSTALLED_SKILL_MAIN_FILE);
+  return {
+    id: skill.id,
+    skillFile: main === undefined ? "" : new TextDecoder().decode(main.bytes),
+    files: skill.files.map((file) => ({ path: file.path, bytes: file.bytes.byteLength })),
   };
 }
 
@@ -224,10 +247,24 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       };
     }),
 
+    /** One skill the account reads, whole: its `SKILL.md` and its files. */
+    read: skills.read.effect(function* ({ input, context: { userId } }) {
+      const id = yield* idOf(input.id);
+      const read = yield* hostedStoreOrUnavailable(readInstalledSkill(userId, id));
+      if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return contentOf(read.value);
+    }),
+
     /** What a paste would install, read as an install reads it; nothing is written. */
     preview: skills.preview.effect(function* ({ input, context: { userId } }) {
       const workspace = yield* memberWorkspace(userId, input.workspaceId);
       return yield* previewOfPaste(userId, workspace.id, parseSkillPaste(input.text));
+    }),
+
+    /** One previewed skill's `SKILL.md` at the commit the preview pinned, for a skill the preview carried none of. */
+    previewFile: skills.previewFile.effect(function* ({ input, context: { userId } }) {
+      const workspace = yield* memberWorkspace(userId, input.workspaceId);
+      return yield* previewedSkillFile(userId, workspace.id, input);
     }),
 
     /** The skills a paste makes, installed in the scope asked, all or none. */
@@ -324,6 +361,16 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
         skill: summaryOf(written.value, true),
         changed: written.value.computedHash !== skill.computedHash,
       };
+    }),
+
+    /** The account's own personal skill moved into a workspace it is a member of. */
+    share: skills.share.effect(function* ({ input: { params, body }, context: { userId } }) {
+      const id = yield* idOf(params.id);
+      const workspace = yield* memberWorkspace(userId, body.workspaceId);
+      yield* checkedScope(workspace, INSTALLED_SKILL_SCOPE.WORKSPACE);
+      const written = yield* storeWrite(shareInstalledSkill(userId, id, workspace.id), undefined);
+      if (Option.isNone(written)) return yield* refusedWrite(userId, id);
+      return { skill: summaryOf(written.value, true) };
     }),
 
     /** One skill removed with its files. */

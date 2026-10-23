@@ -41,6 +41,7 @@ import {
   type TranscriptNowAnswer,
   type WorkspaceChatLiveAnswer,
 } from "@luke/features/live-wire";
+import type { MemorySummary } from "@luke/features/memory-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -202,6 +203,16 @@ const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
 const GITHUB_TOKEN = "synthetic-classic-token-0000000000wxyz";
 
 /** What the service answers of a kept key: never the key. */
+const MEMORY: MemorySummary = {
+  id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+  text: "Deployments go out from the release branch.",
+  keptBy: { userId: "user-1", name: "Dean" },
+  forgettable: true,
+  private: false,
+  createdAt: 1,
+  updatedAt: 2,
+};
+
 const KEPT: ProviderKeySummary = {
   provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
   hint: "sk-ant-…wxyz",
@@ -375,6 +386,11 @@ function fakeService() {
         asked.push(`stop:${agentId}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
       }),
+    rewind: (agentId, messageId) =>
+      Effect.sync(() => {
+        asked.push(`rewind:${agentId}:${messageId}`);
+        return { agent: AGENT };
+      }),
     delete: (agentId) =>
       Effect.sync(() => {
         asked.push(`delete:${agentId}`);
@@ -506,6 +522,16 @@ function fakeService() {
       Effect.sync(() => {
         asked.push("remove-token");
         return { token: null };
+      }),
+    readMemories: (reading) =>
+      Effect.sync(() => {
+        asked.push(`memories:${reading.workspaceId}`);
+        return { memories: [MEMORY] };
+      }),
+    forgetMemory: (forget) =>
+      Effect.sync(() => {
+        asked.push(`forget:${forget.workspaceId}:${forget.id}`);
+        return { memories: [] };
       }),
     readPlanTemplate: () =>
       Effect.sync(() => {
@@ -1697,6 +1723,45 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a page read at another rewind than the window's has the follow read the newest page afresh and tell it as the newest, which the window takes in place of what it drew",
+  () =>
+    Effect.gen(function* () {
+      const {
+        call,
+        asked,
+        pages,
+        sealTranscript,
+        pageNow: script,
+        pageNewest,
+        realtime,
+      } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      pageNewest(newestPage("2:0", "Writing the expiry."));
+      script(pageNow("2:0", { holds: true }));
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 2);
+      yield* settled;
+
+      // The agent is taken back to before its second line: every page says so from now on.
+      const rewound = { ...newestPage("3:1", "Reading the invites."), rewound: 1 };
+      pageNewest(rewound);
+      script({ ...pageNow("3:1", { holds: true }), rewound: 1 });
+      transcriptRows(realtime, 3, 2);
+      yield* settled;
+
+      const newestTold = pages().filter(
+        (told) => isRecord(told) && isRecord(told.page) && told.page.newest === true,
+      );
+      assert.deepEqual(newestTold.at(-1), {
+        transcript: FOLLOWED,
+        page: { ...rewound, newest: true, caughtUp: false },
+      });
+      assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 2);
+    }),
+);
+
 it.effect("an older page is read below the place the window names, the agent's or a worker's", () =>
   Effect.gen(function* () {
     const { call, asked } = yield* subject();
@@ -2624,5 +2689,39 @@ it.effect(
 
       realtime.arrive("742");
       assert.deepEqual(yield* Fiber.join(sending), { agent: AGENT });
+    }),
+);
+
+it.effect(
+  "a workspace's memories are read and one is forgotten, each one ask of the service naming the workspace; a read naming no workspace or a forget naming no memory id is refused before it, and a closed gate answers unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      const signedOut = yield* subject({ signedIn: false });
+
+      const read = yield* call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: WORKSPACE_ID });
+      const forgotten = yield* call(GATEWAY_METHOD.MEMORIES_FORGET, {
+        workspaceId: WORKSPACE_ID,
+        id: MEMORY.id,
+      });
+      const refused = [
+        yield* Effect.flip(
+          call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: "not-a-memory" }),
+        ),
+        yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_READ, {})),
+      ];
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.MEMORIES_READ, {
+        workspaceId: WORKSPACE_ID,
+      });
+
+      assert.deepEqual(read, { memories: [MEMORY] });
+      assert.deepEqual(forgotten, { memories: [] });
+      assert.deepEqual(
+        refused.map((refusal) => refusal._tag),
+        ["InvalidParamsRefusal", "InvalidParamsRefusal"],
+      );
+      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, [`memories:${WORKSPACE_ID}`, `forget:${WORKSPACE_ID}:${MEMORY.id}`]);
+      assert.deepEqual(signedOut.asked, []);
     }),
 );

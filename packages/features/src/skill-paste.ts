@@ -20,7 +20,8 @@
  * fragment, a `github:` prefix, the tool's aliases, a github.com address,
  * or an ssh one; a path that steps out of its folder is refused. A source
  * on any host but GitHub, on disk, or as a download is named unsupported,
- * with a reason the window words.
+ * with a reason the window words. A github.com or skills.sh link pasted
+ * alone is read as that command's source would be.
  *
  * Anything else is a skill's text, held to the convention's rules: its
  * frontmatter's name and description where it opens with one, and
@@ -514,7 +515,15 @@ function readCommand(text: string): SkillPaste | undefined {
   if (source === undefined) {
     return { kind: SKILL_PASTE_KIND.UNSUPPORTED, reason: SKILL_PASTE_UNSUPPORTED.NO_SOURCE };
   }
-  const read = readSource(source);
+  return sourcePaste(readSource(source), skills, fullDepth);
+}
+
+/** A source read as what it installs, the skill it names among those asked for; or why it is not one Luke reads. */
+function sourcePaste(
+  read: SourceRead,
+  skills: SkillPasteSource["skills"],
+  fullDepth: boolean,
+): SkillPaste {
   if ("reason" in read) return { kind: SKILL_PASTE_KIND.UNSUPPORTED, reason: read.reason };
   const asked =
     read.skill === undefined || skills === ALL_SKILLS
@@ -530,6 +539,19 @@ function readCommand(text: string): SkillPaste | undefined {
     ...(asked === undefined ? {} : { skills: asked }),
     ...(fullDepth ? { fullDepth: true } : {}),
   };
+}
+
+/** A GitHub or skills.sh address alone on its line, with or without its scheme. */
+const BARE_ADDRESS = /^(?:https?:\/\/)?(?:www\.)?(?:github\.com|skills\.sh)\/\S+$/iu;
+
+/**
+ * A link to a repository, a skill's folder, or a skills.sh skill pasted
+ * alone, read as the source `skills add` would take it as. Note that only
+ * an address whose host says it is one is read this way: `owner/repo`
+ * alone could as well be the first words of a skill's text.
+ */
+function readAddress(text: string): SkillPaste | undefined {
+  return BARE_ADDRESS.test(text) ? sourcePaste(readSource(text), undefined, false) : undefined;
 }
 
 /* ----- The text ----- */
@@ -627,11 +649,11 @@ function readText(markdown: string): SkillPasteText {
 
 /**
  * What a member pasted into the Add skill box: a `skills add` command's
- * GitHub source, an unsupported source and why, a skill's text with what
+ * GitHub source or a GitHub link alone, an unsupported source and why, a skill's text with what
  * it breaks of the convention, or nothing.
  */
 export function parseSkillPaste(text: string): SkillPaste {
   const trimmed = text.trim();
   if (trimmed === "") return { kind: SKILL_PASTE_KIND.EMPTY };
-  return readCommand(trimmed) ?? readText(trimmed);
+  return readCommand(trimmed) ?? readAddress(trimmed) ?? readText(trimmed);
 }

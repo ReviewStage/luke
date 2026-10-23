@@ -15,6 +15,8 @@ export const SETTINGS_PAGE = {
   SHORTCUTS: "shortcuts",
   /** The Markdown the account's new tasks start from, which is the account's on the service rather than a stored setting. */
   PLAN_TEMPLATE: "plan-template",
+  /** What the workspace's coding agents remember, shared by its members, which is the workspace's on the service rather than a stored setting. */
+  MEMORY: "memory",
   /**
    * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
    * the service rather than stored settings.

@@ -312,6 +312,21 @@ test("the Settings filter lists every Settings page by its name, ahead of the se
   assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
 });
 
+test("the Settings filter lists Memory after Workspace only while the account has the Memory experiment on", async () => {
+  handState(experimentsOn(EXPERIMENT.MEMORY));
+  await paletteUnderState(tasksControl());
+  chooseFilter("Settings");
+
+  assert.deepEqual(rows().slice(0, 3), ["Profile", "Workspace", "Memory"]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  handState({});
+  await paletteUnderState(tasksControl());
+  chooseFilter("Settings");
+  assert.ok(!rows().includes("Memory"), "Memory off lists no Memory page");
+});
+
 test("on a platform without voice or Mac commands, the Settings filter lists neither page, and finds none of their rows", () => {
   const offered = DESKTOP_CAPABILITIES.filter(
     (each) => each !== HOST_CAPABILITY.VOICE && each !== HOST_CAPABILITY.MAC_COMMANDS,
@@ -570,6 +585,47 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   );
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
+});
+
+test("an agent with no task hangs its card beside its row and is named as its tab is, by the model catalog", () => {
+  const agent = {
+    id: "agent-5",
+    planId: null,
+    title: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: null,
+    activityAt: 2,
+  };
+  openPalette(
+    tasksControl({
+      agents: codingAgentsControl({
+        models: [
+          {
+            id: "anthropic/claude-opus-5.5",
+            name: "Cataloged Opus",
+            provider: "anthropic",
+            efforts: ["high"],
+          },
+        ],
+      }),
+      listedAgents: { standing: [agent], archived: [] },
+    }),
+  );
+  chooseFilter("Tasks");
+  assert.ok(rows().includes("Cataloged Opus"), "named by the catalog, as its tab is");
+  const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
+    option.textContent?.includes("Cataloged Opus"),
+  );
+  assert.ok(row, "the agent is listed");
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Cataloged Opus");
 });
 
 test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
@@ -1051,6 +1107,56 @@ test("a task's row hangs the task's card beside it while the pointer rests on it
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.ok(card, "the task's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Billing usage alerts");
+});
+
+test("a task's row ends as its sidebar row does, who is on it then an agent at work, and is found by its key", () => {
+  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
+  const listed = (number: number, name: string): TaskSummary => ({
+    id: `plan-${number}`,
+    workspaceId: acme.id,
+    name,
+    number,
+    createdAt: 1,
+    updatedAt: number,
+    repository: "acme/billing",
+  });
+  const worked: TaskSummary = {
+    ...listed(12, "Billing usage alerts"),
+    agents: {
+      total: 1,
+      working: 1,
+      agents: [
+        {
+          id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+          title: "Alerts",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.RUNNING,
+        },
+      ],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  openPalette(
+    tasksControl({
+      workspace: acme,
+      workspaces: [acme],
+      tasks: [worked, listed(7, "Invoice export")],
+    }),
+  );
+  chooseFilter("Tasks");
+  /** Each row's end, its marks in order: the face's kind, then the working mark. */
+  const ends = () =>
+    [...document.querySelectorAll('[role="option"] .luke-combobox-option-hint')].map((hint) =>
+      [...hint.querySelectorAll(".actor-mark, .state-glyph")].map(
+        (mark) => mark.getAttribute("data-kind") ?? mark.getAttribute("data-state"),
+      ),
+    );
+
+  assert.deepEqual(ends(), [["unassigned", "working"], ["unassigned"]]);
+  type("ACME-12");
+  assert.deepEqual(rows(), ["Billing usage alerts · acme/billing"]);
 });
 
 test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {

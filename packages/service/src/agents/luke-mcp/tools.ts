@@ -114,6 +114,7 @@ import {
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
+import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
@@ -355,6 +356,9 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(UPDATE_AUTOMATION_TOOL),
   agentTool(DELETE_AUTOMATION_TOOL),
   agentTool(RUN_AUTOMATION_TOOL),
+  // The workspace's shared memory.
+  agentTool(REMEMBER_TOOL),
+  agentTool(RECALL_TOOL),
   // Chat.
   entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
     runAgentChat(seams, admitted, {

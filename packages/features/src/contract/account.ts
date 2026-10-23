@@ -24,6 +24,7 @@ import {
   accountPreferencesAnswerSchema,
   accountPreferencesWriteSchema,
 } from "../account-wire.js";
+import { MEMORY_QUERY, memoriesAnswerSchema, memoryIdSchema } from "../memory-wire.js";
 import {
   PLAN_TEMPLATE_BOUNDS,
   planTemplateAnswerSchema,
@@ -42,7 +43,7 @@ import {
   providerKeysAnswerSchema,
 } from "../provider-key-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { planRevisionSeqSchema } from "../task-wire.js";
+import { planRevisionSeqSchema, workspaceIdSchema } from "../task-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
 /** A template write is the template at its bound with every character escaped, and the key around it. */
@@ -138,6 +139,27 @@ export const accountContract = {
       }),
     )
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
+  memories: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES }))
+    .input(EffectSchema.Struct({ [MEMORY_QUERY.WORKSPACE_ID]: workspaceIdSchema }))
+    .output(EffectSchema.flip(memoriesAnswerSchema)),
+  forgetMemory: hostedProcedure
+    .meta(
+      openapi({
+        method: HTTP_METHOD.DELETE,
+        path: HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES,
+        inputStructure: "detailed",
+      }),
+    )
+    .input(
+      EffectSchema.Struct({
+        query: EffectSchema.Struct({
+          [MEMORY_QUERY.WORKSPACE_ID]: workspaceIdSchema,
+          [MEMORY_QUERY.ID]: memoryIdSchema,
+        }),
+      }),
+    )
+    .output(EffectSchema.flip(memoriesAnswerSchema)),
   chatGptHost: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_HOST }))
     .output(EffectSchema.flip(chatGptHostAnswerSchema)),

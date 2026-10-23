@@ -47,22 +47,54 @@
     max-width: 100%;
   }
 
-  .luke-auth-status {
-    margin: var(--luke-space-16) 0 0;
-    padding: var(--luke-space-2) var(--luke-space-12);
+  /* The ring an AuthMark draws: the mark at about two thirds of it, on the
+     card's surface inside a hairline edge. */
+  .luke-auth-ring {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    box-sizing: border-box;
+    border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-radius-full);
-    background: var(--luke-color-complete-tint);
-    color: var(--luke-color-complete);
-    font-family: var(--luke-font-mono);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-semibold);
-    letter-spacing: 0.2px;
+    background: var(--luke-color-surface);
+    color: var(--luke-color-text);
   }
 
-  .luke-auth-status[data-tone="attention"] {
-    background: var(--luke-color-attention-tint);
-    color: var(--luke-color-attention);
+  .luke-auth-ring > svg {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* The badge sits on the ring's lower right, where its edge crosses the
+     diagonal, cut out of the card by a ring of the card's own colour. A
+     failure is the danger red every failure is drawn in. */
+  .luke-auth-badge {
+    position: absolute;
+    right: calc(var(--luke-space-2) * -1);
+    bottom: calc(var(--luke-space-2) * -1);
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-complete);
+    box-shadow: 0 0 0 3px var(--luke-color-surface);
+    color: var(--luke-color-surface);
+  }
+
+  .luke-auth-badge[data-tone="failed"] {
+    background: var(--luke-color-danger-fill);
+    color: var(--luke-color-on-danger);
+  }
+
+  .luke-auth-badge > svg {
+    width: 12px;
+    height: 12px;
+    color: inherit;
+    opacity: 1;
+    stroke-width: 3;
   }
 
   .luke-auth-title {
@@ -70,6 +102,8 @@
     font-size: var(--luke-type-title-size);
     line-height: var(--luke-type-title-leading);
     font-weight: var(--luke-weight-bold);
+    /* A title that wraps splits its words evenly rather than leaving one alone. */
+    text-wrap: balance;
   }
 
   /* The card's first child opens it flush, whichever part that is. */
@@ -80,6 +114,11 @@
   :is(.luke-auth-description, .luke-auth-footnote) {
     margin: var(--luke-space-8) 0 0;
     color: var(--luke-color-text-muted);
+  }
+
+  .luke-auth-description {
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
   }
 
   /* A footnote of several notes stands them one under another. */
@@ -105,14 +144,22 @@
     text-align: start;
   }
 
-  /* The footnote can hold a press (a wait's Cancel), which is no part of a window drag. */
-  [data-luke-profile="desktop"] .luke-auth-footnote {
+  /* The way on stands centred under the words, as wide as its own. */
+  .luke-auth-action {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--luke-space-24);
+  }
+
+  /* The footnote can hold a press (a wait's Cancel), and the way on is one,
+     which is no part of a window drag. */
+  [data-luke-profile="desktop"] :is(.luke-auth-footnote, .luke-auth-action) {
     -webkit-app-region: no-drag;
   }
 
   .luke-auth-error {
     margin: var(--luke-space-16) 0 0;
-    color: var(--luke-color-attention);
+    color: var(--luke-color-danger-text);
   }
 
   /* Empty, it keeps its place in the tree, so its alert region is standing

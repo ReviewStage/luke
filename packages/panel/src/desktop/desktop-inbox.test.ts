@@ -7564,7 +7564,7 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-test("a replaced or withdrawn ask draws no card: its controls as it offered them, dimmed, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or why it was withdrawn, or the member who closed the item where no reason was said", async () => {
+test("a replaced or withdrawn ask draws no card: its controls as it offered them, stepped back, nothing picked and taking nothing, over a quiet marker saying a newer question replaced it, or a newer message where none asks, or that it was withdrawn with why under it, or the member who closed the item where no reason was said", async () => {
   const withdrawnId = "e1b2c3d4-0000-4000-8000-000000000020";
   const closedId = "e1b2c3d4-0000-4000-8000-000000000021";
   const shown = threadItem(
@@ -7588,17 +7588,18 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
 
   assert.deepEqual(askBoxes(pane), [], "no settled ask draws a card");
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
-  for (const [id, settled, words] of [
-    [ASKING_ID, "replaced", "Replaced by a newer question"],
-    [withdrawnId, "withdrawn", "Withdrawn: Product picked 14 days."],
-    [closedId, "withdrawn", "Charles Pan · Resolved without an answer"],
+  for (const [id, settled, words, why] of [
+    [ASKING_ID, "replaced", "Replaced by a newer question", null],
+    [withdrawnId, "withdrawn", "Withdrawn", "Product picked 14 days."],
+    [closedId, "withdrawn", "Charles Pan · Resolved without an answer", null],
   ] as const) {
     const message =
       pane.querySelector(`[data-message-id="${id}"]`) ??
       assert.fail(`the ${settled} ask's message`);
     const offered =
-      message.querySelector<HTMLElement>("[data-inbox-replaced] .inbox-ask-replaced-controls") ??
-      assert.fail(`the ${settled} ask keeps its controls`);
+      message.querySelector<HTMLElement>(
+        "[data-inbox-replaced] .inbox-ask-replaced-controls [data-stepped-back]",
+      ) ?? assert.fail(`the ${settled} ask keeps its controls, stepped back`);
     const options = [...offered.querySelectorAll<HTMLElement>("[role='radio']")];
     assert.deepEqual(
       options.map((option) =>
@@ -7625,10 +7626,15 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     assert.deepEqual(
       [...message.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
         marker.dataset.inboxSettled,
-        wordsOf(marker),
+        wordsOf(marker.querySelector(".luke-badge")),
       ]),
       [[settled, words]],
       "the agent's message ends with the marker saying so",
+    );
+    assert.equal(
+      wordsOf(message.querySelector("[data-inbox-settled] [data-inbox-withdrawn-why]")),
+      why,
+      "with why it was withdrawn under the pill, where its agent said",
     );
   }
 
@@ -7713,10 +7719,15 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
     null,
     "a withdrawn ask of words alone draws no card",
   );
-  assert.equal(
-    wordsOf(takenBack?.querySelector('[data-inbox-settled="withdrawn"]') ?? null),
-    "Withdrawn: Found it in the README.",
-    "and ends with the withdrawn marker alone",
+  assert.deepEqual(
+    [
+      wordsOf(takenBack?.querySelector('[data-inbox-settled="withdrawn"] .luke-badge')),
+      wordsOf(
+        takenBack?.querySelector('[data-inbox-settled="withdrawn"] [data-inbox-withdrawn-why]'),
+      ),
+    ],
+    ["Withdrawn", "Found it in the README."],
+    "and ends with the withdrawn marker alone, why under its pill",
   );
 });
 

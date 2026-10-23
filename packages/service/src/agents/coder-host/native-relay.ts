@@ -55,6 +55,8 @@ export const NATIVE_RELAY_CALL = {
   RESET: "reset",
   /** The agent's model and effort as its row now holds them, handed to its runner (`runnerChoiceApplied`). */
   RETUNE: "retune",
+  /** The session's runner ended so a rewind can cut the harness's session (`runnerHalted`). */
+  HALT: "halt",
 } as const;
 
 /** Every native harness, by the prefix each mints its sessions under, so one added to the column is relayed with no change here. */
@@ -113,6 +115,13 @@ export const NativeRelayCallSchema = Schema.Union([
     sessionId: SessionIdSchema,
     conversationId: SessionIdSchema,
   }),
+  Schema.Struct({
+    call: Schema.Literal(NATIVE_RELAY_CALL.HALT),
+    runtime: NativeRuntimeSchema,
+    account: AccountSchema,
+    sessionId: SessionIdSchema,
+    conversationId: SessionIdSchema,
+  }),
 ]);
 
 export type NativeRelayCall = typeof NativeRelayCallSchema.Type;
@@ -165,6 +174,7 @@ const ResetSchema = Schema.Union([
 const RefusalSchema = Schema.Struct({ error: Schema.String });
 
 const RetunedSchema = Schema.Struct({ choice: Schema.Literals(Object.values(RUNNER_CHOICE)) });
+const HaltedSchema = Schema.Struct({ halted: Schema.Boolean });
 
 const OK_STATUS = 200;
 const JSON_CONTENT_TYPE = "application/json";
@@ -260,6 +270,15 @@ function relayOver(
             : RUNNER_CHOICE.FAILED;
         }),
         Effect.orElseSucceed(() => RUNNER_CHOICE.FAILED),
+      ),
+    // A halt the route did not answer as done is said as failed, so the rewind waiting on it cuts nothing.
+    halt: (sessionId, conversationId) =>
+      post({ call: NATIVE_RELAY_CALL.HALT, ...named, sessionId, conversationId }).pipe(
+        Effect.map(({ status, body }) => {
+          const read = readEither(HaltedSchema, { excess: EXCESS_KEYS.DROP })(body);
+          return status === OK_STATUS && Result.isSuccess(read) && read.success.halted;
+        }),
+        Effect.orElseSucceed(() => false),
       ),
   };
 }

@@ -46,14 +46,7 @@ import {
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import {
-  ACTOR_SIZE,
-  ActorMark,
-  ActorRef,
-  AssigneeHeard,
-  UnassignedHeard,
-  UnassignedMark,
-} from "../actor-ref.js";
+import { ActorRef, AssigneeFaceHeard, AssigneeFaceMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -61,6 +54,7 @@ import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
+import { PlanGlyph } from "../tasks/tab-look.js";
 import {
   copyTaskLinkItem,
   markReadItem,
@@ -77,7 +71,7 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
-import { TaskStatusMark, taskCardOf } from "./task-card.js";
+import { TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -577,16 +571,17 @@ function SidebarTaskCard({
 }
 
 /**
- * A task in the sidebar, pinned or listed alike: led by its
- * status's mark (`task-marks.tsx`), where its service gives it one; its name, in the
+ * A task in the sidebar, pinned or listed alike: led by its glyph
+ * (`PlanGlyph`), its status's mark or the document where its service gives
+ * it none; its name, in the
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
  * the first named in the row's card, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
  * their own words (`draft-mark.tsx`), and before that the face of who
- * is on it (`rowFaceOf`): its assignee's, where someone other than the
- * reader is assigned, read against the members of the directory around the
+ * is on it (`rowFaceOf`, drawn as `AssigneeFaceMark`): its assignee's,
+ * where someone other than the reader is assigned, read against the members of the directory around the
  * list, or the dashed unassigned mark where no one is; a task assigned to
  * the reader wears none. Its repository's name, muted, where the list hands one (in one run),
  * and no face where its group is its creator's. Its time is the one the
@@ -664,9 +659,7 @@ export function SidebarTask({
           motionKey={task.id}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
-          leading={
-            task.status === undefined ? undefined : <TaskStandingMark status={task.status} />
-          }
+          leading={<PlanGlyph status={task.status} />}
           title={
             rename.editing ? (
               <InlineEdit
@@ -683,11 +676,7 @@ export function SidebarTask({
               <>
                 {task.name}
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
-                {worn === undefined ? null : worn.assignee === undefined ? (
-                  <UnassignedHeard />
-                ) : (
-                  <AssigneeHeard actor={worn.assignee} />
-                )}
+                {worn === undefined ? null : <AssigneeFaceHeard face={worn} />}
               </>
             )
           }
@@ -700,13 +689,9 @@ export function SidebarTask({
                     {repository}
                   </OneLine>
                 )}
-                {worn === undefined ? null : worn.assignee === undefined ? (
-                  <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />
-                ) : (
-                  <ActorMark actor={worn.assignee} size={ACTOR_SIZE.MARK} />
-                )}
+                {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
-                <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
+                <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
                 <Time at={at} now={now} hint={false} />
               </span>
             )

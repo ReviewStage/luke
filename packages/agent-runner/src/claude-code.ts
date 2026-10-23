@@ -1,11 +1,12 @@
 /**
- * claude-code.ts -- the one door to the Agent SDK: `query()` in streaming input mode, and the session handle the runner drives it through.
+ * claude-code.ts -- the one door to the Agent SDK: `query()` in streaming input mode, the session handle the runner drives it through, and a stored session's chain read back.
  *
  * The handle is the part of the SDK's `Query` the runner uses, so a test
  * hands a scripted session where production hands the CLI.
  */
 
 import {
+  getSessionMessages,
   type Options,
   type Query,
   query,
@@ -27,6 +28,8 @@ export interface ClaudeCodeShape {
     readonly prompt: AsyncIterable<SDKUserMessage>;
     readonly options: Options;
   }) => ClaudeCodeSession;
+  /** The ids of a stored session's chain entries, oldest first, as the checkout's project holds it; none where it holds no such session. */
+  readonly sessionChain: (sessionId: string, cwd: string) => Promise<readonly string[]>;
 }
 
 export class ClaudeCode extends Context.Service<ClaudeCode, ClaudeCodeShape>()(
@@ -36,4 +39,8 @@ export class ClaudeCode extends Context.Service<ClaudeCode, ClaudeCodeShape>()(
 /** The CLI itself, through the pinned SDK. */
 export const claudeCodeLive: Layer.Layer<ClaudeCode> = Layer.succeed(ClaudeCode, {
   query: (params) => query(params),
+  sessionChain: async (sessionId, cwd) =>
+    (await getSessionMessages(sessionId, { dir: cwd, includeSystemMessages: true })).map(
+      (message) => message.uuid,
+    ),
 });

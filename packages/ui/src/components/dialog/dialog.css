@@ -123,6 +123,12 @@
     min-width: var(--luke-dialog-action-width);
   }
 
+  /* A picture's card growing from its tile flies on its own
+     (`picture-expand.ts`), so its fade and rise stand down. */
+  .luke-dialog[data-expanding="true"] {
+    animation: none;
+  }
+
   /* A drag the dimmed window would take rings the card that will take it. */
   .luke-dialog[data-dropping="true"] {
     box-shadow:

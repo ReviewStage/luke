@@ -90,6 +90,7 @@ import {
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentReviewOptionsAnswerView,
+  type CodingAgentRewindParams,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -135,6 +136,10 @@ import {
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
   githubTokenAnswerViewSchema,
+  type MemoriesAnswerView,
+  type MemoriesReadParams,
+  type MemoryForgetParams,
+  memoriesAnswerViewSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -153,21 +158,27 @@ import {
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
+  type InstalledSkillContentView,
   type InstalledSkillIdParams,
   type InstalledSkillInstallParams,
   type InstalledSkillInstallView,
   type InstalledSkillListParams,
   type InstalledSkillListView,
+  type InstalledSkillPreviewFileParams,
+  type InstalledSkillPreviewFileView,
   type InstalledSkillPreviewParams,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
+  type InstalledSkillShareParams,
   type InstalledSkillToggleParams,
   type InstalledSkillUpdateCheckView,
   type InstalledSkillUpdatedView,
   type InstalledSkillUpdateParams,
   type InstalledSkillView,
+  installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
   installedSkillListViewSchema,
+  installedSkillPreviewFileViewSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
   installedSkillUpdateCheckViewSchema,
@@ -705,6 +716,8 @@ export interface HostOperator {
   codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
+  codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
@@ -756,10 +769,16 @@ export interface HostOperator {
   chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's then its own; or why there are none. */
   installedSkillsList(params: InstalledSkillListParams): Effect.Effect<InstalledSkillListView>;
+  /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
+  installedSkillsRead(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillContentView>;
   /** What a paste would install, read by the service; or why it did not say. */
   installedSkillsPreview(
     params: InstalledSkillPreviewParams,
   ): Effect.Effect<InstalledSkillPreviewView>;
+  /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
+  installedSkillsPreviewFile(
+    params: InstalledSkillPreviewFileParams,
+  ): Effect.Effect<InstalledSkillPreviewFileView>;
   /** The skills a paste makes, installed all or none; or why none were. */
   installedSkillsInstall(
     params: InstalledSkillInstallParams,
@@ -774,6 +793,8 @@ export interface HostOperator {
   installedSkillsUpdate(
     params: InstalledSkillUpdateParams,
   ): Effect.Effect<InstalledSkillUpdatedView>;
+  /** The account's own personal skill moved into a workspace; the skill as it then stands, or why it is unchanged. */
+  installedSkillsShare(params: InstalledSkillShareParams): Effect.Effect<InstalledSkillView>;
   /** One installed skill removed; or why it stands. */
   installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
@@ -827,6 +848,10 @@ export interface HostOperator {
   /** The member's GitHub token removed; none then stands. */
   githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
   /** The account's plan template and whether it wrote it; or why there is none. */
+  /** The memories Luke's agents kept in a workspace; or why there are none. */
+  memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
+  /** One memory forgotten for good; the workspace's memories as they then stand, or why they are unchanged. */
+  memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
   planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
   /** The template kept verbatim, or the default again for null; the template as kept, or why it is unchanged. */
   planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
@@ -2060,6 +2085,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
+    codingAgentRewind: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_REWIND, {
+          agentId: params.agentId,
+          messageId: params.messageId,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
     codingAgentArchive: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
@@ -2179,10 +2212,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_LIST, params),
         installedSkillAnswer(installedSkillListViewSchema),
       ),
+    installedSkillsRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_READ, params),
+        installedSkillAnswer(installedSkillContentViewSchema),
+      ),
     installedSkillsPreview: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
         installedSkillAnswer(installedSkillPreviewViewSchema),
+      ),
+    installedSkillsPreviewFile: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, params),
+        installedSkillAnswer(installedSkillPreviewFileViewSchema),
       ),
     installedSkillsInstall: (params) =>
       Effect.map(
@@ -2203,6 +2246,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, params),
         installedSkillAnswer(installedSkillUpdatedViewSchema),
+      ),
+    installedSkillsShare: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SHARE, params),
+        installedSkillAnswer(installedSkillViewSchema),
       ),
     installedSkillsRemove: (params) =>
       Effect.map(
@@ -2303,6 +2351,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
         codingAgentAnswer(githubTokenAnswerViewSchema),
+      ),
+    memoriesRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: params.workspaceId }),
+        codingAgentAnswer(memoriesAnswerViewSchema),
+      ),
+    memoryForget: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MEMORIES_FORGET, {
+          workspaceId: params.workspaceId,
+          id: params.id,
+        }),
+        codingAgentAnswer(memoriesAnswerViewSchema),
       ),
     planTemplateRead: () =>
       Effect.map(

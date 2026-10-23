@@ -95,6 +95,13 @@ export const CODER = {
    * own default, written down so the two cannot drift apart.
    */
   COMPACTION_THRESHOLD_SHARE: 0.9,
+  /**
+   * The share of the context window past which an operator's next turn is
+   * told its history will soon be summarised, so it keeps what is durable
+   * first (`turn-context.ts`'s `FLUSH_LINE`): below eve's own mark, so the
+   * turn it is told on still runs before eve compacts.
+   */
+  FLUSH_THRESHOLD_SHARE: 0.8,
   /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing. */
@@ -161,6 +168,13 @@ export const CODER = {
     WAIT: Duration.minutes(2),
     POLL: Duration.millis(250),
   },
+  /**
+   * How long a rewind waits for a native agent's runner to end on its Stop
+   * before ending its command: a turn interrupted mid-step settles in a
+   * second or two, and a runner that never does is ended rather than left
+   * to write to the session the rewind cuts.
+   */
+  RUNNER_HALT: Duration.seconds(15),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

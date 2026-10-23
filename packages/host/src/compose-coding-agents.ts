@@ -57,6 +57,7 @@ import {
   codingAgentPullRequestParamsSchema,
   codingAgentPullRequestReadParamsSchema,
   codingAgentRenameParamsSchema,
+  codingAgentRewindParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
@@ -68,6 +69,9 @@ import {
   type GitHubTokenAnswerView,
   githubTokenSaveParamsSchema,
   INBOX_SCOPE_KIND,
+  type MemoriesAnswerView,
+  memoriesReadParamsSchema,
+  memoryForgetParamsSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionsAnswerView,
@@ -183,6 +187,7 @@ export type CodingAgentClient = Pick<
   | "pin"
   | "ensureOperator"
   | "stop"
+  | "rewind"
   | "delete"
   | "agent"
   | "calls"
@@ -203,6 +208,8 @@ export type CodingAgentClient = Pick<
   | "saveGitHubToken"
   | "removeGitHubToken"
   | "readPlanTemplate"
+  | "readMemories"
+  | "forgetMemory"
   | "writePlanTemplate"
   | "readPlanTemplateRevisions"
   | "readPlanTemplateRevision"
@@ -481,6 +488,22 @@ function composed(
         const answer = yield* asked(client.saveProviderKey(save));
         return carried<ProviderKeysAnswerView>(answer);
       }),
+    [GATEWAY_METHOD.MEMORIES_READ]: (params) =>
+      Effect.gen(function* () {
+        const reading = yield* read(memoriesReadParamsSchema, params, "a read names a workspace");
+        const answer = yield* asked(client.readMemories(reading));
+        return carried<MemoriesAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.MEMORIES_FORGET]: (params) =>
+      Effect.gen(function* () {
+        const forget = yield* read(
+          memoryForgetParamsSchema,
+          params,
+          "a forget names a workspace and a memory's id",
+        );
+        const answer = yield* asked(client.forgetMemory(forget));
+        return carried<MemoriesAnswerView>(answer);
+      }),
     [GATEWAY_METHOD.PLAN_TEMPLATE_READ]: () =>
       Effect.map(asked(client.readPlanTemplate()), (answer) =>
         carried<PlanTemplateAnswerView>(answer),
@@ -757,6 +780,16 @@ function composed(
           "stopping an agent names one agent",
         );
         const answer = yield* asked(client.stop(agentId));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_REWIND]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, messageId } = yield* read(
+          codingAgentRewindParamsSchema,
+          params,
+          "rewinding an agent names one agent and one of its lines",
+        );
+        const answer = yield* asked(client.rewind(agentId, messageId));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_DELETE]: (params) =>

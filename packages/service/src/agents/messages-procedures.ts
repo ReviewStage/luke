@@ -37,6 +37,7 @@
 
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readRewoundRevision } from "@luke/database/models/conversation-rewind";
 import { childConversationId } from "@luke/database/models/ids";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
@@ -324,37 +325,44 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const titleAwaited = titleAwaitedOf(target);
       const cursor = cursorOfWire(after);
       const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
-      const { page, holds, wakeIn } = readsNow(input.wait)
-        ? yield* hostedStoreOrUnavailable(
-            transcriptNow(
-              target,
-              CODER_TOOL_SET,
-              cursor,
-              standing,
-              agent,
-              titleAwaited,
-              titleEdgeOf(target),
-            ),
-          )
-        : {
-            page: yield* hostedStoreOrUnavailable(
-              transcriptPast(target, CODER_TOOL_SET, cursor, standing, agent, titleAwaited),
-            ),
-            holds: undefined,
-            wakeIn: undefined,
-          };
+      // Note that a cursor read before the transcript's last rewind is answered at once, never held, since its reader reads afresh.
+      const rewound = yield* hostedStoreOrUnavailable(readRewoundRevision(target));
+      const stale = rewound !== undefined && cursor.revision < rewound;
+      const { page, holds, wakeIn } =
+        readsNow(input.wait) || stale
+          ? yield* hostedStoreOrUnavailable(
+              transcriptNow(
+                target,
+                CODER_TOOL_SET,
+                cursor,
+                standing,
+                agent,
+                titleAwaited,
+                titleEdgeOf(target),
+              ),
+            )
+          : {
+              page: yield* hostedStoreOrUnavailable(
+                transcriptPast(target, CODER_TOOL_SET, cursor, standing, agent, titleAwaited),
+              ),
+              holds: undefined,
+              wakeIn: undefined,
+            };
       // The title is read after the page, since it lands after a turn ends, which a held read may span.
       const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
-      return transcriptAnswer(
-        page,
-        Option.match(titled, {
-          onNone: () => agent.title,
-          onSome: (now: CodingAgent) => now.title,
-        }),
-        readsCut(input.parts),
-        holds,
-        wakeIn,
-      );
+      return {
+        ...transcriptAnswer(
+          page,
+          Option.match(titled, {
+            onNone: () => agent.title,
+            onSome: (now: CodingAgent) => now.title,
+          }),
+          readsCut(input.parts),
+          holds,
+          wakeIn,
+        ),
+        ...(rewound === undefined ? undefined : { rewound }),
+      };
     }),
 
     send: hosted.messages
@@ -449,16 +457,21 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         );
       }
       const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
+      // The rewind is read before the page, so a page read after a rewind never carries the one before it.
+      const rewound = yield* hostedStoreOrUnavailable(readRewoundRevision(target));
       const newest = yield* hostedStoreOrUnavailable(
         transcriptNewest(target, CODER_TOOL_SET, standing, agent),
       );
       // The title is read after the page, as the forward read's is, so one that landed while the page was read is told rather than lost to a follow that starts after it.
       const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
-      return newestAnswer(
-        newest,
-        Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
-        readsCut(input.parts),
-      );
+      return {
+        ...newestAnswer(
+          newest,
+          Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
+          readsCut(input.parts),
+        ),
+        ...(rewound === undefined ? undefined : { rewound }),
+      };
     }),
 
     agentWorkerNewest: signedIn.agentWorkerNewest.effect(function* ({ input, context }) {
