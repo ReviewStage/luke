@@ -5,6 +5,30 @@ Last updated: 23 October 2026
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
 
+## In short
+
+- **What Luke stores.** On your Mac, only its window layout and the messages
+  you have not sent yet. On our service: your account, your tasks and their
+  plans, your agents' transcripts, and your conversation. Coding agents work
+  in sandboxes on our service, not on your Mac. See [What we
+  collect](#what-we-collect) and [Storage](#storage).
+- **Models run on your keys.** Voice and dictation go to OpenAI, and coding
+  agents go to Anthropic or OpenAI, on the API key or subscription you
+  saved, never ours.
+- **Who else gets data.** GitHub for your repositories. Vercel runs our
+  service and the sandboxes, and Neon hosts our database. PostHog gets usage
+  data and screen recordings with every word masked. Sentry gets crash,
+  error, and performance reports, which leave out what a model was sent or
+  answered. Any integration you connect gets what your agents ask it. See
+  [Who we send it to](#who-we-send-it-to).
+- **Commands on your Mac.** Coding agents can run commands on your Mac, and
+  what those commands print leaves it. See "Commands agents run on your Mac"
+  under [What we collect](#what-we-collect).
+- **Off switches.** Turn off "Share usage data" in Settings › Account, turn
+  off "Let agents run commands on this Mac", disconnect any integration, or
+  delete your account, which erases what our service keeps under it. See
+  [Your choices](#your-choices).
+
 ## What we collect
 
 **On your Mac.** Coding agents can run any shell command on your
@@ -1216,29 +1240,32 @@ browser's or app's user agent, and the query's text; every line they log;
 counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
 address a request came from. Luke's agents send what Sentry's SDK collects by
-default: every error they did not handle or that ended work they started
-apart from a turn, with its message, stack trace, the lines of code around it,
-and the values of local variables, apart from a tool's refusal the agent was
-handed back to go on from, which its agent trace still shows; performance
-traces of each request they answer, each database query, and each request they
-make, with their headers, bodies, addresses, the names of their query
-parameters, and database query parameters,
-and the IP address a request came from; every line they log; and Sentry's
-agent traces of each turn: the instructions and messages sent to the model
-(which include the plan, the conversation, what was said on a call, and what
-the agents and their workers read, such as code, a command's output from your Mac, and
-an integration's answer), the model's replies, and each tool call with its
-arguments and result. In what the agents send, Sentry replaces a value whose
+default, apart from request bodies and what a model is sent or answers: every
+error they did not handle or that ended work they started apart from a turn,
+with its message, stack trace, the lines of code around it, and the values of
+local variables, apart from a tool's refusal the agent was handed back to go
+on from, which its agent trace still shows; performance traces of each
+request they answer, each database query, and each request they make, with
+their headers, addresses, the names of their query parameters, and database
+query parameters, and the IP address a request came from; every line they
+log; and Sentry's agent traces of each turn, which name the model and each
+tool called and say how long each call took, how many tokens it used, and
+whether it failed. Neither the agents nor the web functions send Sentry the
+instructions or messages sent to a model (the plan, the conversation, what was
+said on a call, or what the agents read, such as code, a command's output from
+your Mac, or an integration's answer), a model's replies, or a tool call's
+arguments or result. The words of an error, a log line, or a local variable
+can still quote what an agent was working on, such as the path of a file a
+tool could not find. In what the agents send, Sentry replaces a value whose
 name looks like a credential (such as `auth`, `token`, `secret`, `password`,
 `key`, or `session`) before it leaves, but not a credential written in free
-text, such as a key pasted into a conversation. In the address of a request
+text, such as a key in an error's words. In the address of a request
 that the web functions or the agents give on a trace, an error, a breadcrumb,
 or a log line, the value of each query parameter and the fragment are replaced,
 and so is any part of its path shaped like a credential, such as a long token;
 the scheme, the host, the rest of the path, and the parameters' names are sent
-as the request carried them. An address written elsewhere, such as in a header,
-the words of an error or a log line, a tool call, or a message to the model, is
-sent as it was written. Terminal
+as the request carried them. An address written elsewhere, such as in a header
+or the words of an error or a log line, is sent as it was written. Terminal
 tabs' bytes are not sent. What reaches
 Sentry is kept under Sentry's retention, not tied to your account, and is not
 erased when you delete your account.
