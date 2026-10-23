@@ -169,6 +169,7 @@
     "./http/http-effect": "./src/http/http-effect.js",
     "./http/origin-guard": "./src/http/origin-guard.js",
     "./http/rate-brake": "./src/http/rate-brake.js",
+    "./http/relay-upgrade": "./src/http/relay-upgrade.js",
     "./http/store-failure": "./src/http/store-failure.js",
     "./inbox/inbox-store": "./src/inbox/inbox-store.js",
     "./live/realtime": "./src/live/realtime.js",

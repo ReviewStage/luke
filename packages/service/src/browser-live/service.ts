@@ -16,25 +16,21 @@
  * all, each handing back a takeover it took.
  */
 
-import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
-import type { Duplex } from "node:stream";
+import type { IncomingHttpHeaders } from "node:http";
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberSet, Option, Result, type Scope } from "effect";
-import { type WebSocket, WebSocketServer } from "ws";
+import { Effect, Option, Result, type Scope } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {
   RELAY_UPGRADE_STATUS,
   type RelayCredential,
-  refuseUpgrade,
+  type RelayServer,
   relayCredential,
+  relayServer,
+  standRelay,
 } from "../http/relay-upgrade.js";
-import { voiceSocket } from "../voice/socket.js";
 import { type BrowserLiveAsk, type BrowserLiveDependencies, relayBrowserTab } from "./relay.js";
-
-/** A plain request to the service's path: the answer says what the path is for. */
-const UPGRADE_REQUIRED = 426;
 
 /** The most bytes one message from a panel may carry: a text message's largest is well under it. */
 const MAXIMUM_FRAME_BYTES = 64 * 1024;
@@ -68,43 +64,9 @@ export function admitBrowserLiveUpgrade(
   return { credential, ask: { taskId: taskId.success, tabId: tabId.success } };
 }
 
-/** What a server hands a service that stands on it, which is what `ws` upgrades on. */
-type UpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
-
-export interface BrowserLiveServer {
-  /** The server a function module exports for Vercel to upgrade into. */
-  readonly server: http.Server;
-  /** The one service answering this server's upgrades: none until one stands, and none again once its scope closes. */
-  readonly serve: (handle: UpgradeHandler | undefined) => void;
-}
-
-/**
- * The HTTP face of the service, built where its function module is
- * evaluated, as the terminal relay's is. Until a service claims it, every
- * upgrade is refused with 503.
- */
-export function browserLiveServer(): BrowserLiveServer {
-  let handle: UpgradeHandler | undefined;
-  const server = http.createServer((request, response) => {
-    const path = new URL(request.url ?? "/", "http://localhost").pathname;
-    response
-      .writeHead(path === BROWSER_LIVE.PATH ? UPGRADE_REQUIRED : RELAY_UPGRADE_STATUS.NOT_FOUND)
-      .end();
-  });
-  server.on("upgrade", (request, socket, head) => {
-    socket.on("error", () => socket.destroy());
-    if (handle === undefined) {
-      refuseUpgrade(socket, RELAY_UPGRADE_STATUS.SERVICE_UNAVAILABLE);
-      return;
-    }
-    handle(request, socket, head);
-  });
-  return {
-    server,
-    serve: (next) => {
-      handle = next;
-    },
-  };
+/** The HTTP face of the live view at its path (`relayServer`). */
+export function browserLiveServer(): RelayServer {
+  return relayServer(BROWSER_LIVE.PATH);
 }
 
 /** Who may watch a tab: the account an upgrade's credential resolves to, and the tab it reaches. */
@@ -134,94 +96,29 @@ export function admitBrowserLiveAccount(
 }
 
 export interface BrowserLiveOptions {
-  readonly server: BrowserLiveServer;
+  readonly server: RelayServer;
   /** The origins the deployment's own pages are served from. */
   readonly ownOrigins: ReadonlySet<string>;
   readonly resolveUserId: BrowserLiveAdmission["resolveUserId"];
   readonly dependencies: BrowserLiveDependencies;
 }
 
-/**
- * The service for one function instance, standing for the scope it is built
- * in: the `ws` server, the set every connection's fiber joins, and the claim
- * on the server. The scope's close gives up the claim, ends every
- * connection, and closes the `ws` server.
- */
+/** The live view's service for one function instance (`standRelay`): one socket per tab a member watches, under the account its credential resolves to and the tab it reaches. */
 export function standBrowserLive(
   options: BrowserLiveOptions,
 ): Effect.Effect<void, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const fibers = yield* FiberSet.make<void>();
-    const fork = yield* FiberSet.runtime(fibers)();
-    const sockets = yield* Effect.acquireRelease(
-      Effect.sync(
-        () =>
-          new WebSocketServer({
-            noServer: true,
-            maxPayload: MAXIMUM_FRAME_BYTES,
-            perMessageDeflate: false,
-          }),
-      ),
-      (server) =>
-        Effect.callback<void>((resume) => {
-          server.close(() => resume(Effect.void));
-        }),
-    );
-    /** The socket the upgrade stands, paused until the connection's own reader stands. */
-    const upgraded = (request: IncomingMessage, socket: Duplex, head: Buffer) =>
-      Effect.callback<WebSocket>((resume) => {
-        sockets.handleUpgrade(request, socket, head, (webSocket) => {
-          webSocket.pause();
-          resume(Effect.succeed(webSocket));
-        });
-      });
-    const admission = {
-      resolveUserId: options.resolveUserId,
-      readTab: options.dependencies.readTab,
-    };
-    const connection = (
-      decision: Extract<BrowserLiveUpgrade, { credential: RelayCredential }>,
-      request: IncomingMessage,
-      socket: Duplex,
-      head: Buffer,
-    ) =>
-      Effect.gen(function* () {
-        const admitted = yield* admitBrowserLiveAccount(decision, admission);
-        if ("status" in admitted) {
-          refuseUpgrade(socket, admitted.status);
-          return;
-        }
-        const webSocket = yield* upgraded(request, socket, head);
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            const panel = yield* voiceSocket(webSocket);
-            yield* Effect.sync(() => webSocket.resume());
-            const viewer = { ...panel, buffered: Effect.sync(() => webSocket.bufferedAmount) };
-            yield* relayBrowserTab(viewer, admitted.ask, admitted.reached, options.dependencies);
-          }),
-        );
-      });
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        options.server.serve((request, socket, head) => {
-          const decision = admitBrowserLiveUpgrade(
-            request.url,
-            request.headers,
-            options.ownOrigins,
-          );
-          if ("status" in decision) {
-            refuseUpgrade(socket, decision.status);
-            return;
-          }
-          fork(Effect.andThen(Effect.yieldNow, connection(decision, request, socket, head)));
-        }),
-      ),
-      () =>
-        Effect.gen(function* () {
-          options.server.serve(undefined);
-          for (const client of sockets.clients) client.close(1001);
-          yield* FiberSet.awaitEmpty(fibers);
-        }),
-    );
+  const admission = {
+    resolveUserId: options.resolveUserId,
+    readTab: options.dependencies.readTab,
+  };
+  return standRelay({
+    server: options.server,
+    sockets: { maxPayload: MAXIMUM_FRAME_BYTES, perMessageDeflate: false },
+    admit: (request) => admitBrowserLiveUpgrade(request.url, request.headers, options.ownOrigins),
+    accept: (decision) => admitBrowserLiveAccount(decision, admission),
+    relay: (admitted, panel, webSocket) => {
+      const viewer = { ...panel, buffered: Effect.sync(() => webSocket.bufferedAmount) };
+      return relayBrowserTab(viewer, admitted.ask, admitted.reached, options.dependencies);
+    },
   });
 }
