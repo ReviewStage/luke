@@ -18,7 +18,7 @@
     margin: 0;
     padding: 0 var(--luke-control-inset);
     border: 1px solid var(--luke-button-edge);
-    border-radius: var(--luke-control-radius);
+    border-radius: var(--luke-radius-full);
     background: var(--luke-button-fill);
     color: var(--luke-button-ink);
     font-family: var(--luke-font-sans);
