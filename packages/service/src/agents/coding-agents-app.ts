@@ -11,7 +11,6 @@ import { unparsedWire } from "../core.js";
 import type { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { githubImage } from "../github/github-images.js";
-import { githubReadOrRefusal } from "../github/github-refusal.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_BYTES_HEADERS,
@@ -28,6 +27,7 @@ import { readInboxAttachment } from "../inbox/inbox-store.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { reachedAgent } from "./agent-reach.js";
+import { githubReadRefusal } from "./asked-pull-request.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 
 /**
@@ -120,20 +120,7 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
   const read = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
     return yield* githubImage(token, agent.repository, image);
-  }).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
-  );
+  }).pipe(githubReadRefusal);
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return HttpServerResponse.uint8Array(read.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,

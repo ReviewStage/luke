@@ -68,7 +68,11 @@ import {
 import { Cause, Clock, Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import { askedPullRequest, pullRequestNumberOf } from "../agents/asked-pull-request.js";
+import {
+  askedPullRequest,
+  githubReadRefusal,
+  pullRequestNumberOf,
+} from "../agents/asked-pull-request.js";
 import { ownKeyOf } from "../agents/coder-host/account-keys.js";
 import type { OwnKey } from "../agents/coder-host/model.js";
 import {
@@ -84,7 +88,6 @@ import {
   SERVER_EVENT,
 } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { githubReadOrRefusal } from "../github/github-refusal.js";
 import {
   type GitHubPullRequest,
   pullRequestByNumber,
@@ -129,26 +132,6 @@ const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string
   return agent;
 });
 
-/** A read of GitHub or the store on the agent's behalf, its failures as the refusals the tab's other reads answer. */
-function refusedAsRead<A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(effect, (failure) => {
-    switch (failure._tag) {
-      case "RepositoryNotReachable":
-        return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-      case "SqlError":
-      case "EffectDrizzleQueryError":
-      case "SchemaError":
-        // SAFETY: the three tags above are the store's own failures.
-        return hostedStoreOrUnavailable(Effect.fail(failure as never));
-      default:
-        // SAFETY: every other failure here is a read of GitHub or the App.
-        return githubReadOrRefusal(Effect.fail(failure as never));
-    }
-  });
-}
-
 /** What both procedures stand on: the pull request as GitHub holds it now, the token it was read on, and the workspace its chapters are kept under; none where there is no pull request. */
 interface ChaptersSubject {
   readonly agent: WithRepository<CodingAgent>;
@@ -168,7 +151,7 @@ const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const number = yield* pullRequestNumberOf(named === undefined ? [] : [named]);
   const asked = yield* askedPullRequest(yield* published, userId, agent, number);
   if (asked === null || !hasRepository(agent)) return Option.none();
-  const { token, workspace, found } = yield* refusedAsRead(
+  const { token, workspace, found } = yield* githubReadRefusal(
     Effect.gen(function* () {
       const { token } = yield* agentPullRequestReach(userId, agent);
       const workspace = yield* agentWorkspace(userId, agent);
@@ -362,7 +345,7 @@ const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** The pull request's files, words, and commit messages, as a generation reads them. */
 const generationInput = (subject: ChaptersSubject) => {
   const { token, agent, pullRequest } = subject;
-  return refusedAsRead(
+  return githubReadRefusal(
     Effect.all(
       [
         pullRequestFiles(token, agent.repository, pullRequest),
@@ -415,7 +398,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       if (yield* generatingNow(subject.value)) return yield* answerOf(subject.value, true);
       const read = yield* generationInput(subject.value);
       // The files are read by the pull request's number, so a push between the two reads would tell another head's diff under this one: the head is read again, and a moved one is answered as it now stands, to be generated on its own.
-      const after = yield* refusedAsRead(
+      const after = yield* githubReadRefusal(
         pullRequestByNumber(subject.value.token, held.repository, pullRequest.number),
       );
       if (Option.isNone(after)) return { pullRequest: null };
