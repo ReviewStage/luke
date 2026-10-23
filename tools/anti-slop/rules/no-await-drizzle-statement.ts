@@ -4,7 +4,7 @@ import { defineRule } from "@oxlint/plugins";
 /**
  * The `Database` service (`@luke/database/core/query`), read as `db`,
  * builds statements that are Effects of Drizzle's Effect driver, so a
- * statement is yielded, never awaited. The vendored skills' examples await plain Drizzle, and this is the
+ * statement is yielded, never awaited. Examples of plain Drizzle await it, and this is the
  * line an agent copying one would get wrong. `authDatabase`, Better Auth's
  * own promise-shaped handle, is not this handle and is left alone.
  */

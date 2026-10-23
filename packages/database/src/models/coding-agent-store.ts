@@ -65,6 +65,7 @@ import {
   type ConversationRuntime,
   MESSAGE_SENDER,
 } from "../storage-vocabulary.js";
+import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import {
@@ -1302,17 +1303,43 @@ function containing(words: string): string {
   return `%${words.replace(/[\\%_]/gu, (special) => `\\${special}`)}%`;
 }
 
-/** The condition that an agent's title, or its task's name, holds the words, whatever their case. */
-function agentNamed(words: string): SQL | undefined {
-  const pattern = containing(words);
-  return or(
-    ilike(codingAgent.title, pattern),
-    exists(
-      queryBuilder
-        .select({ one: task.id })
-        .from(task)
-        .where(and(eq(task.id, codingAgent.taskId), ilike(task.name, pattern))),
-    ),
+/**
+ * The name an agent is shown by, as `agentTabLabel` names it: Luke for an
+ * operator, else its title, else the name of the automation whose run started
+ * it, else its model. Note that the model is named as `modelLabel` spells an
+ * id the catalog has not been read for, its provider dropped and its words
+ * spaced, because the catalog's own names live with the client.
+ */
+const AGENT_SHOWN_NAME = sql<string>`coalesce(
+  ${agentGivenNameSql(codingAgent)},
+  ${codingAgent.title},
+  ${codingAgent.automationOrigin} ->> 'name',
+  replace(regexp_replace(${codingAgent.model}, '^[^/]*/', ''), '-', ' ')
+)`;
+
+/**
+ * The condition that every word of the query is held by the name an agent is
+ * shown by or its task's name, each word by either, whatever its case; none
+ * for a query of no words. Note that the query is split as the panel's
+ * `matchingRows` splits one, so a row matches on the service where it matches
+ * in a menu.
+ */
+function agentNamed(query: string): SQL | undefined {
+  const words = query.split(/\s+/u).filter(Boolean);
+  if (words.length === 0) return undefined;
+  return and(
+    ...words.map((word) => {
+      const pattern = containing(word);
+      return or(
+        ilike(AGENT_SHOWN_NAME, pattern),
+        exists(
+          queryBuilder
+            .select({ one: task.id })
+            .from(task)
+            .where(and(eq(task.id, codingAgent.taskId), ilike(task.name, pattern))),
+        ),
+      );
+    }),
   );
 }
 
@@ -1975,8 +2002,8 @@ function workspaceRequest(userId: string, organizationId: string, options: Works
  * account's own where `ownOnly` asks, newest started first, an archived one
  * left out unless `includeArchived` asks,
  * only those on the repository named where one is, on the plan named
- * where one is, and whose title or task's name holds the words where some
- * are given, and at most `limit`; a workspace the account is not in has
+ * where one is, and whose shown name (`agentTabLabel`) or task's name holds each of
+ * the words where some are given, and at most `limit`; a workspace the account is not in has
  * none.
  */
 export function listWorkspaceCodingAgents(

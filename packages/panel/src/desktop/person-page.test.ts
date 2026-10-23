@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationScope,
@@ -17,7 +18,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
@@ -32,6 +33,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
@@ -57,6 +59,7 @@ function automation(
   name: string,
   by: string,
   scope: AutomationScope,
+  overrides: Partial<AutomationSummary> = {},
 ): AutomationSummary {
   return {
     id: `5a0c4d2e-0000-4c3a-9e7d-${String(n).padStart(12, "0")}`,
@@ -74,11 +77,23 @@ function automation(
     createdAt: 1,
     scope,
     creatorId: by,
+    ...overrides,
   };
 }
 
 const AUTOMATIONS = [
-  automation(1, "Morning Sentry triage", "user-charles", AUTOMATION_SCOPE.WORKSPACE),
+  automation(1, "Morning Sentry triage", "user-charles", AUTOMATION_SCOPE.WORKSPACE, {
+    nextRunAt: NOW + 2 * MINUTE,
+    lastRun: {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "unavailable",
+      agent: null,
+      firedAt: 2,
+      settledAt: 3,
+    },
+  }),
   automation(2, "Charles's own reminders", "user-charles", AUTOMATION_SCOPE.PERSONAL),
   automation(3, "Weekly dependency bumps", "user-dean", AUTOMATION_SCOPE.WORKSPACE),
 ];
@@ -411,6 +426,24 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
+test("an agent's row says its failure at its end and hangs the agent's card while rested on, as the sidebar's row does", async () => {
+  const broken = agent(9, "Flaky retry", CHARLES, CODING_AGENT_STATUS.FAILED, 5 * MINUTE);
+  const failing = task(9, "Retry flake hunt", CHARLES, 5 * MINUTE, [broken]);
+  const { page } = mountWith(
+    { tasks: [...TASKS, failing], listed: { tasks: [...TASKS, failing], ...HOLDING } },
+    CHARLES.userId,
+  );
+  await settle();
+
+  const row = button(page, "Flaky retry");
+  assert.ok(row.querySelector(".failed-mark"));
+  assert.equal(button(page, "Jittered backoff").querySelector(".failed-mark"), null);
+
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Flaky retry");
+});
+
 test("a person's tasks wear no face of theirs, since the page's head already says whose they are", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
@@ -503,6 +536,30 @@ test("a person's tasks assigned to them stand above those they created, a task b
 
   button(page, "Show all 7 in sidebar").click();
   assert.equal(keptViews()[ACME.id]?.assignedTo, CHARLES.userId);
+});
+
+test("a person's task leads with its glyph as its sidebar row does, keeps its repository as context, and hangs its card where its time raises no pill", async () => {
+  const started = { ...DASHBOARD, status: TASK_STATUS.IN_PROGRESS };
+  const listed = [RETRIES, CACHE, started, SHIM];
+  const { page } = mountWith(
+    { tasks: listed, listed: { tasks: listed, ...HOLDING } },
+    CHARLES.userId,
+  );
+  await settle();
+  const row = (name: string) =>
+    [...page.querySelectorAll('section[aria-label="Created"] li')].find((each) =>
+      each.querySelector(".luke-list-row-title")?.textContent?.includes(name),
+    ) ?? assert.fail(`${name} is listed`);
+  const lead = (name: string) => row(name).querySelector(".luke-list-row-leading > svg");
+
+  assert.equal(lead(started.name)?.getAttribute("data-status"), TASK_STATUS.IN_PROGRESS);
+  assert.equal(lead(RETRIES.name)?.getAttribute("class"), "icon-button-glyph");
+  assert.equal(row(RETRIES.name).querySelector(".home-row-context")?.textContent, "acme/relay");
+
+  restOn(row(RETRIES.name).querySelector("time") ?? assert.fail("the row says its time"));
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, RETRIES.name);
+  assert.equal(document.querySelector(".luke-tooltip:not(.luke-tooltip-card)"), null);
 });
 
 test("a workspace of one offers no sidebar filter, since its sidebar filters by nobody", async () => {
@@ -602,6 +659,20 @@ test("a person's page lists the workspace's automations they made, never their o
   await settle();
 
   assert.deepEqual(sections(page).Automations, ["Morning Sentry triage"]);
+});
+
+test("an automation's row leads with its clock tile, ends with its failure and when it runs next, and hangs its card", async () => {
+  handState({});
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const row = page.querySelector<HTMLElement>('section[aria-label="Automations"] li');
+  assert.ok(row?.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
+  assert.ok(row?.querySelector(".failed-mark"), "a failed newest run is marked at the end");
+  assert.match(row?.textContent ?? "", /Next /u);
+  restOn(row?.querySelector("button") ?? assert.fail("no press"));
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="automation"]');
+  assert.match(card?.textContent ?? "", /Morning Sentry triage/u);
 });
 
 test("automations that could not be read say so and offer Retry, never passing for an empty page, and Retry reads them again", async () => {

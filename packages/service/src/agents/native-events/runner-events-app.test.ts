@@ -379,6 +379,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
                 reset: () => Effect.die(new Error("this test resets nothing")),
                 stream: () => Stream.empty,
                 retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+                halt: () => Effect.succeed(true),
               }),
             ),
         });

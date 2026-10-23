@@ -56,7 +56,7 @@ export function createElectronBuilderConfig(env = process.env) {
   return {
     appId: "dev.reviewstage.luke",
     productName,
-    copyright: `Copyright (c) ${new Date().getFullYear()} ReviewStage`,
+    copyright: `Copyright (c) ${new Date().getFullYear()} Stage Inc.`,
     electronVersion: desktopPackage.devDependencies.electron,
     generateUpdatesFilesForAllChannels: true,
     extraMetadata: {
@@ -80,6 +80,10 @@ export function createElectronBuilderConfig(env = process.env) {
       {
         from: packageAssets.licensePath,
         to: path.basename(packageAssets.licensePath),
+      },
+      {
+        from: packageAssets.noticePath,
+        to: path.basename(packageAssets.noticePath),
       },
     ],
     afterSign: notarizeElectronBuilderApp,

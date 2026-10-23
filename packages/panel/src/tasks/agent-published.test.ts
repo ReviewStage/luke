@@ -126,3 +126,8 @@ test("the box's foot wears the branch's chip, opening the branch compared on Git
     "a pull request's row stands over the box instead",
   );
 });
+
+test("the pull request's row reads as every place names it, its number then its title", () => {
+  const { row } = drawRow(true);
+  assert.match(row.textContent ?? "", /^#42 Expire invitations/u);
+});

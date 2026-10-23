@@ -9,6 +9,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
@@ -470,6 +471,7 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
     held: NOTHING_HELD,
     chosen: () => false,
     shownCode: [],
+    pages: undefined,
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -525,6 +527,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
     held: NOTHING_HELD,
     chosen: () => false,
     shownCode: [],
+    pages: undefined,
   });
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
@@ -719,6 +722,89 @@ test("a call about an agent the place lists not, whose answer names no model, we
     chip?.querySelector(".luke-harness-mark[data-provider='openai']"),
     "the chip wears Codex's mark",
   );
+  fakeAppBridge({});
+});
+
+test("a call that showed or read a page hangs the page's card as its tab does, previewing it, and one the window holds not yet its name as the row says it", async () => {
+  const taskId = "task-pricing";
+  const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
+  const state: AppStateSnapshot = {
+    ...snapshot,
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      activeTaskId: taskId,
+      pages: [{ id: "page-1", title: "Pricing explorer", version: 2, at: 1_000 }],
+    },
+  };
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+  });
+  fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
+  const cards = taskCards({
+    agents: codingAgentsControl({}),
+    held: NOTHING_HELD,
+    chosen: () => false,
+    shownCode: [],
+    pages: { taskId },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const message = assistant([
+    toolPart(
+      "show_page",
+      { title: "Pricing explorer", path: "pricing.html" },
+      { status: "accepted", page: { id: "page-1", version: 2 } },
+    ),
+    toolPart(
+      "read_page",
+      { pageId: "page-2" },
+      { status: "accepted", page: { id: "page-2", title: "Old pricing", isYourTask: true } },
+    ),
+  ]);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: true,
+          delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const cardOf = (callId: string) => {
+    const row = container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
+    assert.ok(row, "the call's row opens the page's tab");
+    document.documentElement.dataset.keyboard = "true";
+    focusRestOn(row);
+    const card = [...document.querySelectorAll(".luke-tooltip-card [data-page-card]")].at(-1);
+    return {
+      name: card?.querySelector(".luke-hover-card-name")?.textContent,
+      sub: card?.querySelector(".luke-hover-card-sub")?.textContent,
+      preview: card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+    };
+  };
+
+  assert.deepEqual(cardOf("show_page"), {
+    name: "Pricing explorer",
+    sub: "Version 2",
+    preview: pageFrameUrl({ taskId, pageId: "page-1", version: 2 }),
+  });
+  assert.deepEqual(cardOf("read_page"), {
+    name: "Old pricing",
+    sub: undefined,
+    preview: undefined,
+  });
   fakeAppBridge({});
 });
 

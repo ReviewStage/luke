@@ -536,6 +536,9 @@ const tasklessAgent = (
     readonly repository?: string;
     readonly createdAt?: Date;
     readonly taskId?: string;
+    readonly title?: string;
+    readonly automationName?: string;
+    readonly model?: string;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -548,7 +551,17 @@ const tasklessAgent = (
       userId,
       conversationId,
       ...(patch.taskId === undefined ? undefined : { taskId: patch.taskId }),
-      model: "anthropic/claude-opus-5.5",
+      ...(patch.title === undefined ? undefined : { title: patch.title }),
+      ...(patch.automationName === undefined
+        ? undefined
+        : {
+            automationOrigin: {
+              name: patch.automationName,
+              firing: { kind: "webhook", bytes: 0 },
+              prompt: "Triage the night's issues.",
+            },
+          }),
+      model: patch.model ?? "anthropic/claude-opus-5.5",
       effort: "high",
       prompt: "Sweep the flaky tests.",
       repository: patch.repository ?? "acme/api",
@@ -2451,6 +2464,71 @@ it.layer(getTestDB())("the coding-agent store's operator, private to its member"
           "low",
         );
         assert.ok(Option.isSome(yield* pinCodingAgent(owner, operator.id, true)));
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's search of a workspace's agents", (it) => {
+  it.effect(
+    "the words find an agent by the name it is shown by, Luke for the account's own operator, else its title, else its automation's name, else its model, or by its task's name, and never a teammate's operator or another workspace's agent",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const elsewhere = yield* openWorkspace(outsider);
+        yield* joinWorkspace(workspace, teammate);
+        const ownOperator = Option.getOrThrow(
+          yield* createCodingAgent(owner, operatorStart(workspace)),
+        ).agent;
+        const teammatesOperator = Option.getOrThrow(
+          yield* createCodingAgent(teammate, operatorStart(workspace)),
+        ).agent;
+        const titled = yield* tasklessAgent(teammate, workspace, {
+          title: "Fix the invite flow",
+          automationName: "Weekly digest",
+        });
+        const automated = yield* tasklessAgent(owner, workspace, {
+          automationName: "Nightly triage",
+        });
+        const untitled = yield* tasklessAgent(owner, workspace, {
+          model: "openai/gpt-5.1-codex",
+        });
+        const invitations = yield* createTask(owner, {
+          organizationId: workspace,
+          name: "Teammate invitations",
+        });
+        const onTask = yield* tasklessAgent(owner, workspace, {
+          taskId: invitations.id,
+          title: "Send the reminder",
+        });
+        yield* tasklessAgent(outsider, elsewhere, {
+          title: "Fix the invite flow",
+          automationName: "Nightly triage",
+        });
+        const found = (userId: string, words: string) =>
+          Effect.map(listWorkspaceCodingAgents(userId, workspace, { words, limit: 10 }), (agents) =>
+            agents.map((agent) => agent.id).toSorted(),
+          );
+
+        assert.deepEqual(yield* found(owner, "luke"), [ownOperator.id]);
+        assert.deepEqual(yield* found(teammate, "LUKE"), [teammatesOperator.id]);
+        assert.deepEqual(yield* found(owner, "night"), [automated.agentId]);
+        // A title names the agent in its automation's place.
+        assert.deepEqual(yield* found(owner, "weekly"), []);
+        assert.deepEqual(yield* found(owner, "invite"), [titled.agentId]);
+        assert.deepEqual(yield* found(owner, "GPT 5.1 Codex"), [untitled.agentId]);
+        assert.deepEqual(yield* found(owner, "invitations"), [onTask.agentId]);
+        // Each word is found in the name or in the task's name, whichever holds it.
+        assert.deepEqual(yield* found(owner, "send  INVITATIONS"), [onTask.agentId]);
+        assert.deepEqual(yield* found(owner, "invitations send"), [onTask.agentId]);
+        assert.deepEqual(yield* found(owner, "reminder nothing"), []);
+        assert.deepEqual(yield* found(owner, "send 100%"), []);
+        // A query of only whitespace narrows nothing.
+        assert.equal((yield* found(owner, "  \t ")).length, 5);
+        assert.deepEqual(yield* found(outsider, "invite"), []);
+        assert.deepEqual(yield* found(outsider, "luke"), []);
       }),
   );
 });

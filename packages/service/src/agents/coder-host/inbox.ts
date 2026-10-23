@@ -1,7 +1,6 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
-import { sniffImageType } from "@luke/features/image-signature";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ANSWER_LEAD,
@@ -15,7 +14,7 @@ import {
   INBOX_STATUS,
   INBOX_TOOL,
   type InboxAnswers,
-  type InboxAsk,
+  type InboxAskInput,
   type InboxField,
   type InboxItem,
   type InboxMessage,
@@ -25,6 +24,8 @@ import {
   inboxReadInputSchema,
   inboxThreadPostInputSchema,
   inboxWithdrawInputSchema,
+  keptInboxAsk,
+  recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
@@ -41,7 +42,11 @@ import {
 } from "../../inbox/inbox-store.js";
 import { noticedForOperator } from "../operator-notice.js";
 import { CODER } from "./bounds.js";
-import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from "./inbox-image.js";
+import {
+  type InboxSandboxDoor,
+  readSandboxMedia,
+  type SandboxImageRefusals,
+} from "./inbox-image.js";
 
 /**
  * inbox.ts -- the coding agent's three inbox tools: post a message on a thread of the developer's inbox, withdraw a thread's open ask, and read every thread back.
@@ -77,6 +82,9 @@ import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from 
 /** The inbox's picture bound in megabytes, as the words the model reads say it. */
 const MAX_PICTURE_MB = (INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1);
 
+/** The inbox's video bound in megabytes, as the words the model reads say it. */
+const MAX_VIDEO_MB = (INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1);
+
 /** The tools as the model is shown them (`apps/dev/tools/`): each one's name, words, and input. */
 export const INBOX_TOOLS = {
   POST: {
@@ -92,10 +100,11 @@ export const INBOX_TOOLS = {
       "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
       `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
       `Draw a picture where it belongs, such as a screenshot of a UI you rendered, as ![alt](<path> "caption"): path is the file's path in your sandbox, ` +
-      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
+      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a recording of a flow, which plays there, ` +
+      `at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
       "alt says in a sentence what it shows, and pictures written next to each other stand side by side. " +
       "ask is what the message asks of them, which ends it: " +
-      `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several; ` +
+      `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several, and recommended then takes a list of the labels you recommend; ` +
       "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
       "do (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, or testing by hand what you could not test yourself; " +
       `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
@@ -201,7 +210,9 @@ export const INBOX_REFUSAL = {
   TOO_MANY_NOTICES: `Not posted: the developer has ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} notices of yours to acknowledge. Follow up on one under its key, or wait until they do.`,
   TOO_MANY_PICTURES: `Not posted: a message draws at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} pictures from your sandbox.`,
   NO_OPTIONS: "Not posted: a decide's options each stand under a label of their own.",
-  UNKNOWN_RECOMMENDATION: "Not posted: recommended names no option's label.",
+  UNKNOWN_RECOMMENDATION: "Not posted: recommended names a label no option has.",
+  SEVERAL_RECOMMENDED:
+    "Not posted: recommended names each label once, and several only where multiple lets them pick several.",
   FIELD_LABELS: "Not posted: an answer names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
@@ -219,16 +230,13 @@ const SETTLED_MESSAGES_TOLD = 3;
 const readPost = readEither(inboxThreadPostInputSchema, { excess: EXCESS_KEYS.DROP });
 const readWithdraw = readEither(inboxWithdrawInputSchema, { excess: EXCESS_KEYS.DROP });
 
-/** How a post's picture is read from the sandbox: held to the inbox's picture bound, and refused in a post's own words. */
-const PICTURE_TERMS: SandboxImageTerms = {
-  maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
-  sniff: sniffImageType,
-  refusals: {
-    NO_FILE: "Not posted: a picture names no file in your sandbox:",
-    NOT_IMAGE: "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image:",
-    TOO_LARGE: `Not posted: a picture names a file larger than ${MAX_PICTURE_MB} MB; render it smaller, or at one screen scale:`,
-    UNREADABLE: "Not posted: a picture's file could not be read from your sandbox:",
-  },
+/** Why a post's picture was not read from the sandbox, in a post's own words; each is followed by the path. */
+const PICTURE_REFUSALS: SandboxImageRefusals = {
+  NO_FILE: "Not posted: a picture names no file in your sandbox:",
+  NOT_IMAGE:
+    "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image, or a WebM video that states its size:",
+  TOO_LARGE: `Not posted: a picture names a file larger than ${MAX_PICTURE_MB} MB, or a video larger than ${MAX_VIDEO_MB} MB; render it smaller, or record a shorter flow:`,
+  UNREADABLE: "Not posted: a picture's file could not be read from your sandbox:",
 };
 
 /** Who wrote a message, as the agent reads it: itself, or the member by name, or a former member whose account is gone. */
@@ -401,14 +409,18 @@ function fieldsRefusal(fields: readonly InboxField[]): string | undefined {
   return undefined;
 }
 
-/** An ask's own refusal, before the store is asked: a decide's label used twice or a recommendation naming none, or an answer's fields. */
-function askRefusal(ask: InboxAsk | undefined): string | undefined {
+/** An ask's own refusal, before the store is asked: a decide's label used twice, a recommendation naming none, one twice, or several where one may be picked, or an answer's fields. */
+function askRefusal(ask: InboxAskInput | undefined): string | undefined {
   switch (ask?.type) {
     case INBOX_ASK.DECIDE: {
       const labels = ask.options.map((option) => option.label);
       if (!distinct(labels)) return INBOX_REFUSAL.NO_OPTIONS;
-      if (ask.recommended !== undefined && !labels.includes(ask.recommended)) {
+      const recommended = recommendedLabels(ask);
+      if (!recommended.every((label) => labels.includes(label))) {
         return INBOX_REFUSAL.UNKNOWN_RECOMMENDATION;
+      }
+      if (!distinct(recommended) || (recommended.length > 1 && ask.multiple !== true)) {
+        return INBOX_REFUSAL.SEVERAL_RECOMMENDED;
       }
       return undefined;
     }
@@ -440,7 +452,7 @@ function storeRefusal(refusal: InboxPostRefusal): string {
  * and the developer who answered would wait on it for ever; a to-do, which
  * it mostly needs only done, only where the post says it waits.
  */
-function heardAnswer(ask: InboxAsk, waits: boolean | undefined): boolean {
+function heardAnswer(ask: InboxAskInput, waits: boolean | undefined): boolean {
   return ask.type !== INBOX_ASK.DO || waits === true;
 }
 
@@ -462,7 +474,7 @@ function bodyPictures(
   return Effect.gen(function* () {
     const read: InboxBodyPicture[] = [];
     for (const path of paths) {
-      const image = yield* readSandboxImage(sandbox, CODER.CHECKOUT_PATH, path, PICTURE_TERMS);
+      const image = yield* readSandboxMedia(sandbox, CODER.CHECKOUT_PATH, path, PICTURE_REFUSALS);
       if (Result.isFailure(image)) return Result.fail(image.failure);
       read.push({ ...image.success, path, name: posix.basename(path) || path });
     }
@@ -470,11 +482,11 @@ function bodyPictures(
   });
 }
 
-/** The post as the store writes it: its key, title, words, and ask, and whether the agent hears the answer (`heardAnswer`). */
+/** The post as the store writes it: its key, title, words, and ask as a message keeps it, and whether the agent hears the answer (`heardAnswer`). */
 function threadPost(post: InboxThreadPostInput) {
-  const { waits, ...written } = post;
-  if (post.ask === undefined) return written;
-  return { ...written, needsReply: heardAnswer(post.ask, waits) };
+  const { waits, ask, ...written } = post;
+  if (ask === undefined) return written;
+  return { ...written, ask: keptInboxAsk(ask), needsReply: heardAnswer(ask, waits) };
 }
 
 /** Runs one post: its pictures read from the sandbox, the message written on the thread under its key, and the agent's inbox answered, or why not. */

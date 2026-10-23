@@ -22,6 +22,7 @@ import {
   type InboxThreadPostInput,
   inboxPostInputSchema,
   inboxThreadPostInputSchema,
+  recommendedLabels,
 } from "@luke/features/inbox-wire";
 import {
   type IntegrationProvider,
@@ -60,7 +61,7 @@ import { askHeadWords } from "./inbox-ask-words.js";
  * Pure decisions over the tool part the SDK stored: the row's kind and
  * subject are read from the call's input alone, so a row drawn while the
  * call runs does not change shape when its answer lands, and the kind's
- * verb is `turn-rows.ts`'s, the same the Call tab says, but for a command
+ * verb is `turn-rows.ts`'s, but for a command
  * the model said the purpose of, whose line says that instead; the body's two
  * blocks are read from the input and the output in the tool's own terms
  * (a command, a patch, a file's words) where the tool is one eve gives the
@@ -360,12 +361,14 @@ function inboxPostView(input: WireValue | undefined): InboxPost | undefined {
   return Option.getOrUndefined(readPost(input));
 }
 
-/** What a post asks, as the row's body lists it: a choice's options, the recommended one saying so, or a form's fields with their types, a select's recommended option saying so. */
+/** What a post asks, as the row's body lists it: a choice's options, each recommended one saying so, or a form's fields with their types, a select's recommended option saying so. */
 function askLines(response: InboxPost["response"]): readonly string[] {
   switch (response.type) {
     case INBOX_RESPONSE.CHOICE:
       return response.options.map((option) => {
-        const recommended = response.recommended === option.label ? " (recommended)" : "";
+        const recommended = recommendedLabels(response).includes(option.label)
+          ? " (recommended)"
+          : "";
         const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
         return `- ${option.label}${recommended}${detail}`;
       });
@@ -416,7 +419,7 @@ function threadPostView(input: WireValue | undefined): InboxThreadPostInput | un
 
 /**
  * What a post's ask offers, as the row's body lists it under the ask's
- * kind: a `decide`'s options, the recommended one saying so, a `do`'s
+ * kind: a `decide`'s options, each recommended one saying so, a `do`'s
  * steps, or an `answer`'s fields with their types; none where the reply's
  * own words answer it.
  */
@@ -424,7 +427,7 @@ function threadAskLines(ask: NonNullable<InboxThreadPostInput["ask"]>): readonly
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return ask.options.map((option) => {
-        const recommended = ask.recommended === option.label ? " (recommended)" : "";
+        const recommended = recommendedLabels(ask).includes(option.label) ? " (recommended)" : "";
         const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
         return `- ${option.label}${recommended}${detail}`;
       });

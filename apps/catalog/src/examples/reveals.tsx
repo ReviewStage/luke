@@ -1,7 +1,8 @@
 import {
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
   Reveal,
   RevealChoice,
-  Select,
   SettingsPage,
   SettingsRow,
   SettingsSection,
@@ -61,7 +62,15 @@ function Reveals(): React.JSX.Element {
       </SettingsSection>
       <SettingsSection title="Trigger">
         <SettingsRow label="Type">
-          {() => <Select label="Type" options={TRIGGERS} value={trigger} onChange={setTrigger} />}
+          {() => (
+            <ChoiceBar
+              label="Type"
+              items={TRIGGERS}
+              value={trigger}
+              onChange={setTrigger}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+            />
+          )}
         </SettingsRow>
         <RevealChoice value={trigger}>
           {(value) =>

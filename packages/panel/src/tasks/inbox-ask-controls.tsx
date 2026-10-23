@@ -8,6 +8,7 @@ import {
   type InboxChoice,
   type InboxField,
   type InboxForm,
+  recommendedLabels,
 } from "@luke/features/inbox-wire";
 import {
   Badge,
@@ -19,6 +20,8 @@ import {
   Checkbox,
   ChoiceList,
   type ChoiceOption,
+  COMPOSER_LOOK,
+  ComposerFrame,
   type FieldControl,
   FormField,
   GAP,
@@ -27,8 +30,6 @@ import {
   Stack,
   TEXT_FIELD_TYPE,
   TextField,
-  COMPOSER_LOOK,
-  ComposerFrame,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { CheckIcon, CircleSlashIcon, Undo2Icon } from "lucide-react";
@@ -77,7 +78,7 @@ const CHOICE_LEGEND = "Options";
 /** The badge an option the agent recommends wears, a choice's or a form's select's. */
 const RECOMMENDED = "Recommended";
 
-/** A choice's options as `@luke/ui`'s ChoiceList draws them, the one the agent recommends wearing its badge. */
+/** A choice's options as `@luke/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
 export function choiceOptions(
   options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
 ): ChoiceOption<string>[] {
@@ -117,7 +118,7 @@ export function ChoiceOptions({
   readOnly = false,
   onDraft,
 }: {
-  choice: Pick<InboxChoice, "options" | "multiple" | "recommended">;
+  choice: Pick<InboxChoice, "options" | "multiple" | "recommended" | "recommendations">;
   draft: InboxDraft;
   disabled: boolean;
   numbered?: boolean;
@@ -127,7 +128,7 @@ export function ChoiceOptions({
   const options = choiceOptions(
     choice.options.map((option) => ({
       ...option,
-      recommended: choice.recommended === option.label,
+      recommended: recommendedLabels(choice).includes(option.label),
     })),
   );
   return (
@@ -810,12 +811,14 @@ export function AnsweredCard({
 /** What an ask's line says of one answered, where the answer itself is not drawn beside it. */
 export const ANSWERED = "Answered";
 
-/** What an ask's line says of one taken back, before why. */
+/** What an ask's line says of one taken back. */
 const WITHDRAWN = "Withdrawn";
 
 /**
- * How a withdrawn ask's line reads: why it was taken back, or, where none
- * was said, who closed it without answering, where that is known.
+ * How a withdrawn ask's line reads, after a slashed circle: "Withdrawn"
+ * where its agent said why, the why standing apart (`WithdrawnWhy`) so a
+ * long one never wraps inside the line, or, where none was said, who closed
+ * it without answering, where that is known.
  */
 export function WithdrawnWords({
   reason,
@@ -828,7 +831,8 @@ export function WithdrawnWords({
   if (reason !== undefined) {
     return (
       <span className="inbox-ask-standing">
-        {WITHDRAWN}: {reason}
+        <CircleSlashIcon aria-hidden="true" />
+        {WITHDRAWN}
       </span>
     );
   }
@@ -844,6 +848,17 @@ export function WithdrawnWords({
         </ActorLine>
       )}
     </span>
+  );
+}
+
+/** Why an ask was taken back, as a muted sentence under its line; nothing where none was said. */
+export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.JSX.Element | null {
+  if (reason === undefined) return null;
+  return (
+    // Note that its words may be quoted into a reply, as the agent's own words may.
+    <p className="inbox-ask-why" data-inbox-withdrawn-why="" {...{ [REPLY_SCOPE]: "" }}>
+      {reason}
+    </p>
   );
 }
 

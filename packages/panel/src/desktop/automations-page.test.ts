@@ -20,6 +20,7 @@ import {
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -237,6 +238,10 @@ let creates: AutomationCreateParams[] = [];
 let deletes: string[] = [];
 /** Every ask for a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
+/** The workspace's newest agents on the repository, as a read with no words answers them. */
+let workspaceAgents: readonly CodingAgentSummary[] = [];
+/** The agents a search for `words` finds, as the service answers it. */
+let agentsFound: (words: string) => readonly CodingAgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
@@ -299,6 +304,8 @@ beforeEach(() => {
   creates = [];
   deletes = [];
   agentsAsked = [];
+  workspaceAgents = [CI_DIGEST];
+  agentsFound = () => [];
   runs = [];
   runsAsked = [];
   runsHeld = false;
@@ -459,9 +466,10 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
+        const { words } = request.payload;
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { agents: [CI_DIGEST] },
+          value: { agents: words === undefined ? workspaceAgents : agentsFound(words) },
         });
       }
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
@@ -583,6 +591,20 @@ test("an automation turned off reads Off where its next run would, and a failed 
   assert.equal(off.querySelector(".automation-row-when")?.textContent, "Off");
   assert.equal(off.querySelector(".failed-mark"), null);
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
+});
+
+test("an automation's row leads with its clock tile, wearing its newest run's state, and hangs its card", async () => {
+  standing = [FAILING];
+  const page = mount();
+  await settle();
+
+  const row = rowOf(page, "Dependency bumps");
+  assert.ok(row.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
+  assert.equal(row.querySelector(".automation-row-glyph"), null, "no trigger glyph on a tile");
+  restOn(row.querySelector<HTMLElement>("button") ?? assert.fail("no press"));
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="automation"]');
+  assert.match(card?.textContent ?? "", /Dependency bumps/u);
+  assert.match(card?.textContent ?? "", /Last ran/u);
 });
 
 test("a switch turns its automation off, and the row takes the service's answer in its place", async () => {
@@ -1061,6 +1083,10 @@ test("a row opens its automation's page, under crumbs naming it, with what it wa
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   assert.equal(crumbs(page), "AutomationsNightly flaky-test sweep");
+  assert.ok(
+    page.querySelector('.automation-crumbs .actor-mark[data-kind="automation"]'),
+    "the clock tile stands before the name",
+  );
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
     SWEEP.name,
@@ -2017,6 +2043,162 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
   ]);
 });
 
+/** Whether the picker named wears a glyph before its name, a chip's chevron not being one. */
+function chipWearsGlyph(page: HTMLElement, label: string): boolean {
+  return picker(page, label).querySelector(".luke-chip-name")?.previousElementSibling != null;
+}
+
+/** The Agent picker's rows, each as its glyph, its name, and its detail beside it, and the marks at its end. */
+function agentRows(): {
+  glyph: boolean;
+  name: string | null;
+  detail: string | null;
+  ends: string[];
+}[] {
+  return [...document.querySelectorAll("[role=option]")].map((option) => ({
+    glyph:
+      option.querySelector(".luke-combobox-option-glyph svg, .luke-combobox-option-glyph img") !==
+      null,
+    name: option.querySelector(".luke-combobox-option-label")?.textContent ?? null,
+    detail: option.querySelector(".luke-combobox-option-detail")?.textContent ?? null,
+    ends: [...(option.querySelector(".luke-combobox-option-hint")?.children ?? [])].map(
+      (mark) => mark.className,
+    ),
+  }));
+}
+
+test("the Agent picker draws each agent as every agent menu does: its glyph, its name, its task, and the failed mark where its turn failed, the chip wearing the chosen agent's glyph and name", async () => {
+  const BROKEN = {
+    ...CI_DIGEST,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
+    title: "Nightly sweep",
+    status: "failed",
+  } as const;
+  workspaceAgents = [BROKEN, CI_DIGEST];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  assert.equal(picked(page, "Agent"), "Choose an agent");
+  assert.equal(
+    chipWearsGlyph(page, "Agent"),
+    false,
+    "no agent is chosen, so the chip wears no glyph",
+  );
+
+  act(() => picker(page, "Agent").click());
+  assert.deepEqual(agentRows(), [
+    { glyph: true, name: "Nightly sweep", detail: "No task", ends: ["failed-mark"] },
+    { glyph: true, name: "CI digest", detail: "No task", ends: [] },
+  ]);
+
+  const row = [...document.querySelectorAll<HTMLElement>("[role=option]")][1];
+  assert.ok(row, "the menu lists the second agent");
+  act(() => row.click());
+  assert.equal(picked(page, "Agent"), "CI digest");
+  assert.equal(chipWearsGlyph(page, "Agent"), true, "the chip wears the chosen agent's glyph");
+});
+
+test("the Agent picker's rows each hang their agent's card while the pointer rests on them", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+
+  restOn(document.querySelector("[role=option]") ?? assert.fail("the menu lists the agent"));
+  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "CI digest");
+});
+
+test("a word typed in the Agent picker asks the service for the repository's agents it names, so one past the newest is found, chosen, kept named, and saved", async () => {
+  const OLDER = {
+    ...CI_DIGEST,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b23",
+    title: "Seat limits",
+  } as const;
+  agentsFound = (words) => (words === "seat" ? [OLDER] : []);
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+
+  type(
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
+    "seat",
+  );
+  await settle();
+  assert.deepEqual(agentsAsked.at(-1), {
+    workspaceId: WORKSPACE.id,
+    repository: "acme/ledger",
+    words: "seat",
+  });
+  assert.deepEqual(
+    agentRows().map((row) => row.name),
+    ["Seat limits"],
+  );
+
+  act(() => (document.querySelector<HTMLElement>("[role=option]") ?? assert.fail("found")).click());
+  await settle();
+  assert.equal(picked(page, "Agent"), "Seat limits");
+  act(() => button("Save").click());
+  await settle();
+  assert.deepEqual(changes, [
+    {
+      automationId: SWEEP.id,
+      change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: OLDER.id } },
+    },
+  ]);
+});
+
+test("a word typed in the Agent picker keeps the newest agents whose rows hold it, so one named by its model stays where the service matches no model", async () => {
+  const UNTITLED = { ...CI_DIGEST, title: null } as const;
+  workspaceAgents = [UNTITLED, { ...CI_DIGEST, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27" }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+  const [named] = agentRows();
+  assert.ok(named?.name, "the untitled agent is drawn under a name of its own");
+
+  type(
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
+    named.name.toLowerCase(),
+  );
+  await settle();
+
+  assert.deepEqual(
+    agentRows().map((row) => row.name),
+    [named.name],
+  );
+});
+
+test("the agent a same-agent automation was saved with, once the list no longer holds it, is left out of a search's results and offered again once the search is cleared", async () => {
+  const gone = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8f";
+  const following = automation(11, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: gone },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+  act(() => picker(page, "Agent").click());
+  const names = () => agentRows().map((row) => row.name);
+  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
+
+  const search = () =>
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input');
+  type(search(), "ci");
+  await settle();
+  assert.deepEqual(names(), ["CI digest"]);
+  type(search(), "");
+  await settle();
+
+  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
+});
+
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
@@ -2030,7 +2212,7 @@ function glyphs(rows: readonly Element[]): string[] {
   });
 }
 
-test("each run and each automation wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play", async () => {
+test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play, while each automation's row leads with its clock tile whatever fires it", async () => {
   standing = [
     SWEEP,
     automation(7, {
@@ -2045,7 +2227,12 @@ test("each run and each automation wears what fires it: a schedule's clock, GitH
   ];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(glyphs(automationRows(list)), ["clock", "github", "webhook"]);
+  assert.deepEqual(
+    automationRows(list).map(
+      (row) => row.querySelector('.actor-mark[data-kind="automation"]') !== null,
+    ),
+    [true, true, true],
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -2948,13 +3135,16 @@ const ISSUE_FIRING = {
   },
 } as const;
 
-test("a Sentry automation and its runs wear Sentry's mark, its row says its event and filters, and a skipped run says its issue and opens it", async () => {
+test("a Sentry automation's runs wear Sentry's mark, its row says its event and filters, and a skipped run says its issue and opens it", async () => {
   const opened: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, openWeb: (url: string) => opened.push(url) });
   standing = [SENTRY_ALERTS];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(glyphs(automationRows(list)), ["sentry"]);
+  assert.ok(
+    rowOf(list, "Fix Sentry errors").querySelector('.actor-mark[data-kind="automation"]'),
+    "the row leads with its clock tile, Sentry's mark left to its runs",
+  );
   assert.ok(
     says(rowOf(list, "Fix Sentry errors"), "When an alert fires in Sentry · web, api · error"),
   );

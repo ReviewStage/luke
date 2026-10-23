@@ -12,10 +12,22 @@ import {
 } from "@luke/ui/chart";
 import { formatCount } from "@luke/ui/time-format";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
-import { ChartEmpty, ChartFrame, SeriesLegend } from "./chart-frame.js";
+import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
 /** The room each class's bar takes, the sign-in methods chart's own. */
 const BREAKDOWN_ROW_HEIGHT = 36;
+
+/**
+ * How many classes a breakdown's skeleton stands a bar for: its height is
+ * the answer's, which no read has given yet, so it stands a few classes'
+ * worth, a usual week's.
+ */
+const BREAKDOWN_SKELETON_ROWS = 4;
+
+/** A legend for a breakdown counting more than one way, and none for a single series. */
+function breakdownLegend(parts: readonly BreakdownSeries[]): React.ReactNode {
+  return parts.length > 1 ? <SeriesLegend series={parts} /> : undefined;
+}
 
 /** One series of the breakdown: its key in each row's counts, its name, and its ink. */
 export interface BreakdownSeries {
@@ -67,10 +79,7 @@ export function BreakdownChart({
     labelAt: series.findLast((key) => (row.counts[key] ?? 0) > 0),
   }));
   return (
-    <ChartFrame
-      title={title}
-      legend={parts.length > 1 ? <SeriesLegend series={parts} /> : undefined}
-    >
+    <ChartFrame title={title} legend={breakdownLegend(parts)}>
       <ChartContainer
         config={config}
         className="aspect-auto w-full"
@@ -99,5 +108,22 @@ export function BreakdownChart({
         </BarChart>
       </ChartContainer>
     </ChartFrame>
+  );
+}
+
+/** A breakdown while it is read: its heading and its legend, which the page declares, over a few classes' block. */
+export function BreakdownChartSkeleton({
+  title,
+  series,
+}: {
+  title: string;
+  series: readonly BreakdownSeries[];
+}): React.JSX.Element {
+  return (
+    <ChartFrameSkeleton
+      title={title}
+      legend={breakdownLegend(series)}
+      plot={`${BREAKDOWN_SKELETON_ROWS * BREAKDOWN_ROW_HEIGHT}px`}
+    />
   );
 }

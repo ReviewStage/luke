@@ -21,9 +21,19 @@ import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { formatDayTick } from "@luke/ui/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { barTopRadius } from "./bar-radius.js";
-import { ChartEmpty, ChartFrame, ChartTrend, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";
+import {
+  ChartEmpty,
+  ChartFrame,
+  ChartFrameSkeleton,
+  ChartTrend,
+  LEGEND,
+  LEGEND_ENTRY,
+} from "./chart-frame.js";
 
 const ACTIVITY_TITLE = "Activity by feature per day";
+
+/** The plot's height, which the chart and its skeleton both stand. */
+const ACTIVITY_PLOT_HEIGHT = "15rem";
 
 /** Each feature's name and its slot's hue, keyed by the series it draws. */
 const ACTIVITY_CHART = {
@@ -113,7 +123,8 @@ export function ActivityChart({
     >
       <ChartContainer
         config={ACTIVITY_CHART}
-        className={`aspect-auto h-60 w-full ${onOpenDay ? "cursor-pointer" : ""}`}
+        className={`aspect-auto w-full ${onOpenDay ? "cursor-pointer" : ""}`}
+        style={{ height: ACTIVITY_PLOT_HEIGHT }}
       >
         <BarChart data={[...daily]} {...barChartProps}>
           <CartesianGrid vertical={false} />
@@ -152,5 +163,17 @@ export function ActivityChart({
         </BarChart>
       </ChartContainer>
     </ChartFrame>
+  );
+}
+
+/** The chart while the window is read: its heading and legend, which it knows, over its plot's block, and a bone for the trend it reads. */
+export function ActivityChartSkeleton(): React.JSX.Element {
+  return (
+    <ChartFrameSkeleton
+      title={ACTIVITY_TITLE}
+      aside
+      legend={<ActivityLegend />}
+      plot={ACTIVITY_PLOT_HEIGHT}
+    />
   );
 }

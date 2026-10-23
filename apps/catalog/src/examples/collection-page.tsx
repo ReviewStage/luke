@@ -14,6 +14,7 @@ import {
   PAGE_FRAME,
   PAGE_WIDTH,
   PlusIcon,
+  Skeleton,
   TextField,
 } from "@luke/ui";
 import { useState } from "react";
@@ -27,7 +28,9 @@ import { CatalogSection } from "../section";
  * toolbar, which holds its title and acts, and a board under it standing
  * across the room and scrolling sideways. The empty and failed states
  * here are plain words, standing in for the shared EmptyState and
- * ErrorState. Every name is made up.
+ * ErrorState. A read in progress stands the rows' own skeleton, the same
+ * `ListRow`s with blocks for their words, or, handed none, the page's rows
+ * of blocks. Every name is made up.
  */
 
 const TASKS = [
@@ -54,7 +57,29 @@ type Scope = (typeof SCOPES)[number]["value"];
 
 const STATES = Object.values(COLLECTION_STATE).map((state) => ({ value: state, label: state }));
 
-function Tasks({ state }: { state: CollectionState }): React.JSX.Element {
+/** The tasks' rows while they are read: the same rows, blocks where their words will be. */
+function TasksSkeleton(): React.JSX.Element {
+  return (
+    <List label="Tasks">
+      {TASKS.map((task) => (
+        <ListRow
+          key={task.id}
+          title={<Skeleton width="40%" />}
+          description={<Skeleton width="65%" />}
+          meta={<Skeleton width="48px" />}
+        />
+      ))}
+    </List>
+  );
+}
+
+function Tasks({
+  state,
+  skeleton,
+}: {
+  state: CollectionState;
+  skeleton?: React.ReactNode;
+}): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<Scope>("all");
   const [open, setOpen] = useState<string>("billing");
@@ -81,6 +106,7 @@ function Tasks({ state }: { state: CollectionState }): React.JSX.Element {
       }
       state={state}
       loadingLabel="Reading tasks"
+      skeleton={skeleton}
       empty={<p>No tasks yet. Start one by talking it through.</p>}
       error={<p role="alert">Tasks could not be read. Try again in a moment.</p>}
     >
@@ -215,6 +241,16 @@ function CollectionPages(): React.JSX.Element {
             <Tasks state={COLLECTION_STATE.LOADING} />
           </div>
           <div className="catalog-screen catalog-screen-phone catalog-screen-collection">
+            <Tasks state={COLLECTION_STATE.READY} />
+          </div>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="collection-page-skeleton" title="Loading in the rows' own shape">
+        <div className="catalog-screens">
+          <div className="catalog-screen catalog-screen-collection">
+            <Tasks state={COLLECTION_STATE.LOADING} skeleton={<TasksSkeleton />} />
+          </div>
+          <div className="catalog-screen catalog-screen-collection">
             <Tasks state={COLLECTION_STATE.READY} />
           </div>
         </div>

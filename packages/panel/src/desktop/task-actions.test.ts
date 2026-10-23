@@ -390,6 +390,23 @@ test("a sidebar task Luke or a coding agent made wears who is on it rather than 
   unmountAll();
 });
 
+test("a sidebar task leads with its glyph as every place naming a task does: its status's mark, or the document where it has no status", () => {
+  /** The class of the mark the row leads with, and the status it says. */
+  const lead = (task: TaskSummary) => {
+    const { tasks, asked } = openTab();
+    const container = mount(sidebarTask(tasks, task, asked));
+    const mark = container.querySelector(".luke-list-row-leading > svg");
+    unmountAll();
+    return [mark?.getAttribute("class"), mark?.getAttribute("data-status")];
+  };
+
+  assert.deepEqual(lead({ ...OTHER, status: TASK_STATUS.IN_PROGRESS }), [
+    "luke-task-mark luke-task-status-mark",
+    TASK_STATUS.IN_PROGRESS,
+  ]);
+  assert.deepEqual(lead(OTHER), ["icon-button-glyph", null]);
+});
+
 test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows, its plan's or its Chat's", () => {
   const drawn = (tab: MainTab | undefined) => {
     const container = mount(
@@ -649,7 +666,7 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
           ),
   });
 }
-test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task cancels it, and a task already done offers neither Mark done nor its check", async () => {
+test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task, drawn red, cancels it, and a task already done offers neither Mark done nor its check", async () => {
   const working: TaskSummary = {
     ...OTHER,
     status: TASK_STATUS.IN_PROGRESS,
@@ -682,6 +699,8 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   rightClick(rowButton, 40, 60);
   choose("Mark done");
   rightClick(rowButton, 40, 60);
+  const cancel = menuItems().find((item) => item.textContent === "Cancel task");
+  assert.equal(cancel?.dataset.danger, "true", "Cancel task is drawn red");
   choose("Cancel task");
   assert.deepEqual(settled, [
     [[working.id], TASK_STATUS.DONE],

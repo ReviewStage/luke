@@ -260,3 +260,29 @@ it.effect("every batch says which version it came from and whether that build is
     });
   }),
 );
+
+it.effect(
+  "usage data turned off sends nothing, queued before or recorded after, until it is on again",
+  () =>
+    Effect.gen(function* () {
+      const { sender, requests } = yield* sharingSender();
+      sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+
+      sender.disarm();
+      sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+      yield* sender.markDayActive();
+      yield* sender.flush;
+      assert.equal(requests.length, 0);
+
+      // Turned on again, the day is counted after all, and nothing from while it was off rides along.
+      sender.arm();
+      yield* sender.markDayActive();
+      yield* sender.flush;
+      assert.deepEqual(
+        requests.flatMap((request) =>
+          JSON.parse(request.body ?? "{}").events.map((event: { name: string }) => event.name),
+        ),
+        [PRODUCT_EVENT.APP_DAY_ACTIVE],
+      );
+    }),
+);

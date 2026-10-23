@@ -2,8 +2,8 @@
 
 The hosted store's schema, queries, and migrations. The schema modules under
 `src/schemas/` are the source of truth; Drizzle's Effect driver runs every
-statement (`src/core/query.ts`'s `Database`), and the vendored `drizzle` and
-`db-migrations` skills say how to write a query and roll out a migration.
+statement (`src/core/query.ts`'s `Database`). `AGENTS.md`'s Drizzle idioms say
+how to write a query and roll out a migration.
 
 ## Migrations
 

@@ -412,6 +412,20 @@ export function titleSubagent(
 }
 
 /**
+ * The title the agent-title model gives a thread a member started with no
+ * subject, named from the opening of their message as an agent's task is
+ * named from its first words; nothing where the message says nothing or
+ * the call answers nothing.
+ */
+export function titleInboxThread(
+  model: LanguageModel,
+  text: string,
+): Effect.Effect<Option.Option<string>> {
+  const words = text.trim().slice(0, AGENT_TITLE.EXCERPT_CHARS);
+  return words === "" ? Effect.succeed(Option.none()) : generateAgentTitle(model, words);
+}
+
+/**
  * An agent's title generated from its first exchange and written where
  * none stands, as words are received in, or as one ends, one of its first
  * `CODER.TITLE_TURNS` turns: a title

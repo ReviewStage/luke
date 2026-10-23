@@ -193,6 +193,7 @@ export function macTerminalProcedures(
             trash: path.join(worktreesRoot, "trash"),
             branch: params.branch,
             pullRequest: params.pullRequest,
+            pullRequestHead: params.pullRequestHead === true,
             command,
             ttyFile,
             size: { cols: params.cols, rows: params.rows },

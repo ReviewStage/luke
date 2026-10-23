@@ -31,6 +31,7 @@ import type {
   CodingAgentInboxReadStateParams,
   CodingAgentInboxReadStateView,
   CodingAgentInboxScope,
+  CodingAgentInboxStartParams,
   CodingAgentPictureParams,
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
@@ -54,6 +55,9 @@ export interface AgentInboxProceduresDependencies {
     ): Effect.Effect<CodingAgentInboxAnsweredView>;
     codingAgentInboxMessage(
       params: CodingAgentInboxMessageParams,
+    ): Effect.Effect<CodingAgentInboxMessagedView>;
+    codingAgentInboxStart(
+      params: CodingAgentInboxStartParams,
     ): Effect.Effect<CodingAgentInboxMessagedView>;
     codingAgentInboxReadState(
       params: CodingAgentInboxReadStateParams,
@@ -218,6 +222,12 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.codingAgentInboxMessage(input);
+    }),
+    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START]: actPort[
+      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentInboxStart(input);
     }),
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE

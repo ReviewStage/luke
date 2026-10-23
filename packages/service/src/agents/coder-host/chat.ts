@@ -49,9 +49,10 @@ import {
   CHAT_TARGET_SIGIL,
   CHAT_TOOL,
   type ChannelKind,
-  chatAskSchema,
+  chatAskInputSchema,
   chatPostBlocksSchema,
   editChannelInputSchema,
+  keptChatAsk,
   MEMBER_KIND,
   type MemberKind,
   postChatAskInputSchema,
@@ -154,13 +155,14 @@ export const CHAT_TOOLS = {
       "the file in your sandbox of a picture you made, such as a screenshot of a UI you rendered, relative to the checkout " +
       "or absolute; or attachmentId, the id of a picture you were told, such as one beside an image you received " +
       '("Image <name> is attachment <id>") or one in a chat line ("[image: <alt> (attachment <id>)]"), which hands it on. ' +
-      `Either is a PNG, JPEG, or WebP of at most ${(CHAT_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt ` +
-      "says in a sentence what it shows. An image block reaches the agents a post tells as a real image. " +
+      `Either is a PNG, JPEG, or WebP of at most ${(CHAT_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, or, by its path, ` +
+      `a WebM video of at most ${(CHAT_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1)} MB, such as a recording of a flow, which plays in the chat; alt ` +
+      "says in a sentence what it shows. An image block reaches the agents a post tells as a real image, and a video as its words alone. " +
       "ask makes the message something you need answered; an ask needs a key, your own short lowercase slug for it, such as " +
       "branch-protection: posting under a key you used before updates that ask where it was first posted and opens it " +
       "again, so keep an ask current under its key and never ask it twice. ask.response is what you ask: choice (two to " +
       "six options, each a short label and an optional detail; name the label you recommend; multiple lets them pick " +
-      "several), approval (a yes or no on one step you propose), text (an open answer in their words), task (something " +
+      "several, and recommended then takes a list of the labels you recommend), approval (a yes or no on one step you propose), text (an open answer in their words), task (something " +
       "only a person can do by hand, such as changing a GitHub setting or adding a secret: say exactly what to do), form " +
       "(one to eight typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and " +
       "required where it must be filled; never ask for a credential or a secret in a form, since the answer reaches your " +
@@ -406,7 +408,7 @@ function replyAndTarget(input: UnparsedWireValue): boolean {
 const readAskWithoutKey = readEither(
   Schema.Struct({
     ...postChatInputSchema.fields,
-    ask: chatAskSchema,
+    ask: chatAskInputSchema,
     blocks: Schema.optionalKey(chatPostBlocksSchema),
   }),
   { excess: EXCESS_KEYS.DROP },
@@ -775,7 +777,11 @@ function writePost(
     const asked =
       post.ask === undefined || post.key === undefined
         ? undefined
-        : yield* postAsk(userId, seat.organizationId, { ...message, key: post.key, ask: post.ask });
+        : yield* postAsk(userId, seat.organizationId, {
+            ...message,
+            key: post.key,
+            ask: keptChatAsk(post.ask),
+          });
     const posted = asked ?? (yield* postMessage(userId, seat.organizationId, message));
     const { images } = written.pictures;
     if (Result.isFailure(posted)) return posted;

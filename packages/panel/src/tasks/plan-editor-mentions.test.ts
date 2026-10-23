@@ -228,9 +228,20 @@ test("words typed past a space that match nothing close the list, and words that
   const proseClosed = task.container.querySelector(".mention-menu") === null;
   await task.typeAtEnd(" Ask @Teammate inv");
 
-  assert.match(oneWord, /Nothing matches/u);
+  assert.match(oneWord, /No results match/u);
   assert.ok(proseClosed, "the list closes once the words past a space match nothing");
   assert.deepEqual(listed(task.container), [["Plan", ["Teammate invitations"]]]);
+});
+
+test("the list says it is reading, never that nothing matches, while the repository's files are unread", async () => {
+  fakeActPort({ [ACT_KIND.TASKS_TREE]: () => new Promise(() => undefined) });
+  const task = await opened();
+
+  await task.typeAtEnd(" See @zzq");
+  const reading = task.container.querySelector(".mention-menu");
+
+  assert.match(reading?.querySelector(".luke-combobox-note")?.textContent ?? "", /Reading/u);
+  assert.equal(reading?.querySelector(".luke-combobox-empty"), null);
 });
 
 test("a heading just renamed is offered by its new words, before the editor hands its draft over", async () => {

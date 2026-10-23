@@ -82,7 +82,12 @@ import {
   windowTranscriptFollower,
 } from "./use-agent-transcript.js";
 import { type InboxFollower, windowInboxFollower } from "./use-followed-inboxes.js";
-import type { InboxAnswerer, InboxImageReader, InboxMessenger } from "./use-task-inbox.js";
+import type {
+  InboxAnswerer,
+  InboxImageReader,
+  InboxMessenger,
+  InboxThreadStarter,
+} from "./use-task-inbox.js";
 
 /** A pull request's chapters the port refused to answer, as the tab hears any answer that never came. */
 const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
@@ -312,6 +317,8 @@ export interface CodingAgentsControl {
   startCall: ((draft: AgentDraft) => Promise<DraftCallStart>) | undefined;
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
+  /** Takes one agent back to just before one of the developer's lines, stopping it first, and takes the agent as the service answers it. */
+  onRewind: (agentId: string, messageId: string) => Promise<CodingAgentAgentAnswer>;
   /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
   onMessage: MessageSender;
   /** Changes one agent's model and effort for its next step, and takes the agent as the service answers it. */
@@ -407,6 +414,8 @@ export interface CodingAgentsControl {
   answerInbox: InboxAnswerer;
   /** One message on an inbox item's thread, as its box sends it. */
   messageInbox: InboxMessenger;
+  /** One thread started with an agent, as the Inbox's New thread sends it. */
+  startInboxThread: InboxThreadStarter;
   /** One read of an inbox item's image, as its card asks it. */
   readInboxImage: InboxImageReader;
 }
@@ -1162,6 +1171,24 @@ export function useCodingAgents(input: {
     readAgain();
   };
 
+  const onRewind = useCallback(
+    async (agentId: string, messageId: string): Promise<CodingAgentAgentAnswer> => {
+      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_REWIND, {
+        agentId,
+        messageId,
+      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      if (!("failure" in answer)) {
+        setList((was) =>
+          was.agents === undefined
+            ? was
+            : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
+        );
+      }
+      return answer;
+    },
+    [act],
+  );
+
   const onMessage = useCallback<MessageSender>(
     async (agentId, text, clientKey, attachments) => {
       // A message that opens the agent's sandbox anew may wait on its image, and is asked again under its key.
@@ -1518,6 +1545,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const startInboxThread = useCallback<InboxThreadStarter>(
+    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_START, params),
+    [act],
+  );
+
   // Note that the skills are kept for the plan and its repository as they
   // stand, so another plan, or the plan moved to another repository, reads
   // afresh; an agent no plan holds reads its repository's through the
@@ -1591,6 +1623,7 @@ export function useCodingAgents(input: {
     },
     startCall: taskId !== undefined ? startCall : undefined,
     onStop,
+    onRewind,
     onMessage,
     onChoose,
     onSwitchServers,
@@ -1624,6 +1657,7 @@ export function useCodingAgents(input: {
     inboxFollower,
     answerInbox,
     messageInbox,
+    startInboxThread,
     readInboxImage,
   });
 }

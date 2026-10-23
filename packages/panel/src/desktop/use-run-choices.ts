@@ -11,7 +11,9 @@ import { useAct } from "../act.js";
  * the models again as the chip's menu opens, so it shows the catalog as it
  * stands. The agents are read only while runs land in the same agent, and
  * again whenever the workspace or the repository changes, so the picker
- * offers the agents of the repository the automation works in. A read that
+ * offers the agents of the repository the automation works in; once a word
+ * is searched, the service finds the agents on that repository holding it,
+ * so one past the newest can be chosen. A read that
  * did not answer leaves what it would have drawn unread, which the row says
  * plainly rather than offering a list that is not one.
  */
@@ -35,6 +37,12 @@ export interface RunChoices {
   readonly defaultFailed: boolean;
   /** The workspace's agents on the repository, newest first, where the picker asks for them. */
   readonly agents: AgentsRead;
+  /** The agents on the repository the last search found, standing until the next answers; nothing while no word is searched. */
+  readonly found: readonly CodingAgentSummary[] | undefined;
+  /** The words the agents are being searched for, trimmed; empty while none is typed. */
+  readonly searched: string;
+  /** Searches the agents on the repository for the words, or, with none, stops searching. */
+  readonly searchAgents: (words: string) => void;
 }
 
 /** What the row chooses from, the agents read only while `wantsAgents`. */
@@ -49,6 +57,8 @@ export function useRunChoices(input: {
   const [defaultChoice, setDefaultChoice] = useState<ModelChoice | undefined>(undefined);
   const [defaultFailed, setDefaultFailed] = useState(false);
   const [agents, setAgents] = useState<AgentsRead>(undefined);
+  const [found, setFound] = useState<readonly CodingAgentSummary[] | undefined>(undefined);
+  const [words, setWords] = useState("");
   const readModels = useCallback(() => {
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
@@ -72,6 +82,7 @@ export function useRunChoices(input: {
     let live = true;
     // Nothing of another repository's list stands while this one's is out.
     setAgents(undefined);
+    setFound(undefined);
     act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
       workspaceId,
       ...(repository === null ? undefined : { repository }),
@@ -87,5 +98,35 @@ export function useRunChoices(input: {
       live = false;
     };
   }, [act, workspaceId, repository, wantsAgents]);
-  return { models, readModels, defaultChoice, defaultFailed, agents };
+  // Once a word is typed the service finds the agents it names, however many the repository holds.
+  const asked = words.trim();
+  useEffect(() => {
+    if (!wantsAgents || workspaceId === undefined || asked === "") return;
+    let live = true;
+    act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
+      workspaceId,
+      words: asked,
+      ...(repository === null ? undefined : { repository }),
+    }).then(
+      (answer) => {
+        if (live) setFound("failure" in answer ? [] : answer.agents);
+      },
+      () => {
+        if (live) setFound([]);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [act, workspaceId, repository, wantsAgents, asked]);
+  return {
+    models,
+    readModels,
+    defaultChoice,
+    defaultFailed,
+    agents,
+    found: asked === "" ? undefined : found,
+    searched: asked,
+    searchAgents: setWords,
+  };
 }

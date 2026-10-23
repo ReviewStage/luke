@@ -51,6 +51,7 @@ import {
   LAYOUT_ELEMENT,
   ONE_LINE_END,
   Stack,
+  SteppedBack,
   TEXT_TONE,
   Text,
   Time,
@@ -67,7 +68,7 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
-import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon } from "lucide-react";
+import { CheckIcon, CircleSlashIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActorLine, ActorRef, AutomationCard } from "../actor-ref.js";
 import {
@@ -109,6 +110,7 @@ import {
   sendFromPane,
   takesTyping,
   WaitingMarker,
+  WithdrawnWhy,
   WithdrawnWords,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
@@ -116,6 +118,7 @@ import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
 import { type FormTextDoors, InboxFormText } from "./inbox-form-text.js";
+import { HolderGlyph } from "./inbox-list.js";
 import {
   answerOf,
   askNumberedPick,
@@ -265,13 +268,15 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * again takes it off. Answered, it leaves the agent's message
  * for the reply that answered it, or says "Answered" alone where that
  * reply is no longer read; replaced, it keeps its controls as it offered
- * them, dimmed and taking nothing, over a pill saying a newer question, or
- * message, replaced it;
- * withdrawn, it says why, or who closed the item.
+ * them, stepped back to the muted ink and taking nothing, over a pill
+ * saying a newer question, or message, replaced it; withdrawn, the same
+ * over a pill saying so and its why as a muted sentence, or who closed the
+ * item.
  *
  * Words selected in what the agent wrote, its question's Markdown, its
- * messages on the thread, and why it took the item back, stand Reply over
- * them, as an agent's words do in its tab (`reply-to-selection.tsx`): a
+ * messages on the thread, and why it took the item or an ask back, stand
+ * Reply over them, as an agent's words do in its tab
+ * (`reply-to-selection.tsx`): a
  * press lays them into the box as a quote block, so an answer or a message
  * can answer the agent point by point. Reply stands only while the box
  * takes a quote: never while an answer is out, a dictation holds the box,
@@ -1324,9 +1329,10 @@ function AnsweredMarker(): React.JSX.Element {
 
 /**
  * What ends an agent's message whose ask was replaced or withdrawn: its
- * controls as it offered them (`HeldControls`), dimmed, nothing picked and
- * taking nothing, so what it used to ask still reads in the thread, then
- * `marker`, the small pill saying what became of it. An `answer` of words
+ * controls as it offered them (`HeldControls`), stepped back to the muted
+ * ink (`SteppedBack`), nothing picked and taking nothing, so what it used to
+ * ask still reads in the thread and never as an answer, then `marker`, the
+ * small pill saying what became of it. An `answer` of words
  * alone, which has no controls, ends with the pill alone, as does a to-do
  * naming no steps, whose one step was the item's title as it stood then,
  * which a later post may have renamed.
@@ -1346,7 +1352,9 @@ function HeldAsk({
   return (
     <div className="inbox-ask-replaced" data-inbox-replaced="">
       <div className="inbox-ask-replaced-controls" aria-disabled="true">
-        <HeldControls ask={ask} title={title} draft={EMPTY_INBOX_DRAFT} />
+        <SteppedBack>
+          <HeldControls ask={ask} title={title} draft={EMPTY_INBOX_DRAFT} />
+        </SteppedBack>
       </div>
       {marker}
     </div>
@@ -1376,7 +1384,12 @@ function ReplacedMarker({
   );
 }
 
-/** The pill ending a withdrawn ask's message: why its agent took it back, or who closed the item without answering, while the close stands. */
+/**
+ * What ends a withdrawn ask's message: the pill saying it was withdrawn, or
+ * who closed the item without answering while the close stands, and why its
+ * agent took it back as a muted sentence under the pill, so a long why
+ * reads as words rather than wrapping inside it.
+ */
 function WithdrawnMarker({
   item,
   reason,
@@ -1386,11 +1399,12 @@ function WithdrawnMarker({
 }): React.JSX.Element {
   const closer = usePerson(item.closedBy);
   return (
-    <span data-inbox-settled="withdrawn">
+    <div className="inbox-ask-withdrawn" data-inbox-settled="withdrawn">
       <Badge>
         <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
       </Badge>
-    </span>
+      <WithdrawnWhy reason={reason} />
+    </div>
   );
 }
 
@@ -1414,10 +1428,10 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | 
  * alone, which draws no card, a small "Answered" marker (`AnsweredMarker`);
  * a card saying
  * "Answered" alone where the thread read no longer carries that reply; for
- * a replaced ask, no card, its controls as it offered them, dimmed, over a
- * small marker saying a newer question, or message, replaced it
- * (`HeldAsk`); for a withdrawn one the same, over a marker saying why, or
- * who closed the item; and an ask this build does not know a card naming a
+ * a replaced ask, no card, its controls as it offered them, stepped back,
+ * over a small marker saying a newer question, or message, replaced it
+ * (`HeldAsk`); for a withdrawn one the same, over a marker saying so and
+ * why, or who closed the item; and an ask this build does not know a card naming a
  * newer Luke.
  */
 function AskBox({
@@ -1767,7 +1781,7 @@ function useAutomationCrumb(
   return {
     label: holder.name,
     // Note that the agents no automation names stand under no automation, so their crumb wears the factory glyph, as their group's header does.
-    glyph: holder.automationId === null ? <FactoryIcon /> : <ClockIcon />,
+    glyph: <HolderGlyph holder={holder} />,
     hint: holder.name,
     card:
       known === undefined ? undefined : (

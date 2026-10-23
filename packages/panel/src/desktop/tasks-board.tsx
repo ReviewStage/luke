@@ -93,6 +93,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useTaskMenu } from "./task-actions.js";
+import { taskCardOf } from "./task-card.js";
 import {
   AssigneeChip,
   PriorityChip,
@@ -254,6 +255,7 @@ function TaskBoardCard({
     unread: reads.markedUnread(task.id),
   });
   const press = useRef<HTMLButtonElement | null>(null);
+  const item = useRef<HTMLElement | null>(null);
   const refocus = useRef(false);
   const drawn = (property: TaskProperty) => properties.includes(property);
   useEffect(() => {
@@ -306,6 +308,7 @@ function TaskBoardCard({
       hover={CARD_HOVER.LIFT}
       lit={actions.open}
       className="tasks-board-card"
+      ref={item}
       data-task-id={task.id}
       {...motionKey(task.id)}
       data-menu-open={actions.open ? "true" : undefined}
@@ -328,21 +331,23 @@ function TaskBoardCard({
           </span>
         </div>
       ) : (
-        <CardPress
-          ref={press}
-          disabled={actions.deletion.busy}
-          onPress={() => {
-            actions.close(false);
-            onOpen();
-          }}
-          onKeyDown={actions.keyMenu}
-          contextMenu={actions.contextMenu(press)}
-        >
-          <span className="tasks-board-card-face">
-            {head}
-            <span className="tasks-board-name">{task.name}</span>
-          </span>
-        </CardPress>
+        <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardRegion={item}>
+          <CardPress
+            ref={press}
+            disabled={actions.deletion.busy}
+            onPress={() => {
+              actions.close(false);
+              onOpen();
+            }}
+            onKeyDown={actions.keyMenu}
+            contextMenu={actions.contextMenu(press)}
+          >
+            <span className="tasks-board-card-face">
+              {head}
+              <span className="tasks-board-name">{task.name}</span>
+            </span>
+          </CardPress>
+        </Tooltip>
       )}
       {rename.refused ? (
         <span className="tasks-board-card-note" role="alert">

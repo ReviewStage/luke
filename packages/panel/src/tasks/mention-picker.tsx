@@ -1,4 +1,4 @@
-import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -30,10 +30,12 @@ import {
   KeepFocus,
   MENU_SURFACE_INSET,
   MenuGlyph,
+  type MenuKey,
+  MenuKeys,
   MenuSurface,
   ProviderMark,
+  Spinner,
   TEXT_ELEMENT,
-  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   UserIcon,
@@ -43,6 +45,7 @@ import {
 import { type Actor, LUKE_ACTOR, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
 import {
@@ -60,6 +63,8 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import type { MenuRow } from "../searchable-menu.js";
+import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -106,8 +111,9 @@ import { useTaskStatus } from "./use-known-names.js";
  * glyph, and the pull requests its agents published, each by its number
  * and title and its mark, a pick written as the pull request's GitHub
  * address, the link mention a pasted one becomes. And wherever the words go, it offers the coding agents of the
- * whole workspace, each by its tab's name and its harness's mark, labelled
- * by its task: the plan's own agents first, then the workspace's others,
+ * whole workspace, each drawn as every agent menu draws it
+ * (`agent-menu-row.tsx`): its tab's glyph and name, its task, a teammate's
+ * face and the failed mark at its end, and its card on rest; the plan's own agents first, then the workspace's others,
  * on another task or on none, as the place reads them the first time the
  * list opens (`MentionSource.readAgents`), the agent whose box it is left
  * out. Once a word is typed, the service finds the agents it names by
@@ -227,19 +233,8 @@ interface Closed {
 /** What a page's row says beside its title. */
 const PAGE_DETAIL = "Page";
 
-/** What an agent's row says beside its name: its task's, this one's, or none. */
-const AGENT_DETAIL = {
-  THIS_TASK: "This task",
-  NO_TASK: "No task",
-  OTHER_TASK: "Another task",
-  ARCHIVED: "Archived",
-} as const;
-
 /** What the reader's own row says beside their name. */
 const YOU_DETAIL = "You";
-
-/** What stands between an agent's task and its being archived in its row's detail. */
-const DETAIL_JOIN = " · ";
 
 /** What a pull request's row says beside its name where no agent is named for it. */
 const PULL_REQUEST_DETAIL = "Pull request";
@@ -290,17 +285,17 @@ const PER_KIND = 50;
 const MENU_LABEL = "Mention";
 
 /** What the list says where it has no row. */
-const NO_MATCH = "Nothing matches";
+const NO_MATCH = "No results match";
 
 /** The keys the list hears, said at its foot as far as it hears them now. */
 const MENU_KEY = {
-  MOVE: "↑↓ Move",
-  MENTION: "↵ Mention",
-  OPEN: "→ Open",
-  WIDEN: "⌫ All kinds",
-  UP: "⌫ Up",
-  CLOSE: "esc Close",
-} as const;
+  MOVE: { keys: "↑↓", does: "Move" },
+  MENTION: { keys: "↵", does: "Mention" },
+  OPEN: { keys: "→", does: "Open" },
+  WIDEN: { keys: "⌫", does: "All kinds" },
+  UP: { keys: "⌫", does: "Up" },
+  CLOSE: { keys: "esc", does: "Close" },
+} as const satisfies Record<string, MenuKey>;
 
 /** What a narrowed list's back arrow is read by: back to every kind, or up out of a folder. */
 const BACK_LABEL = {
@@ -322,13 +317,15 @@ type MenuPlace =
 /** One row the list offers: what it mentions, or the skill it names, the name it is written with, and a muted detail. */
 type MentionRow = {
   readonly name: string;
-  readonly detail: string | undefined;
+  readonly detail: React.ReactNode;
   /** The name a pick writes, where it is not the row's own: a date's in full, where its row says it from today. */
   readonly written?: string | undefined;
   /** The words it is found by. */
   readonly terms: string;
-  /** An agent's tile, or a person's picture, which its row wears; none for any other row. */
+  /** A person's picture, which their row wears; none for any other row. */
   readonly actor?: Actor | undefined;
+  /** An agent's row as every agent menu draws it (`agent-menu-row.tsx`): its tab's glyph, its end, and its card; none for any other row. */
+  readonly look?: Pick<MenuRow, "icon" | "end" | "card"> | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
   readonly pullRequest?: MentionablePullRequest | undefined;
 } & (
@@ -516,22 +513,11 @@ function pageRows(taskId: string, pages: readonly MentionablePage[]): MentionRow
   }));
 }
 
-/** What an agent's row says of its task: this one, another by its name, or none, and whether it is archived. */
-function agentDetail(agent: MentionableAgent, taskId: string): string {
-  const task =
-    agent.task === undefined
-      ? AGENT_DETAIL.NO_TASK
-      : agent.task.id === taskId
-        ? AGENT_DETAIL.THIS_TASK
-        : (agent.task.name ?? AGENT_DETAIL.OTHER_TASK);
-  return agent.archived === true ? `${task}${DETAIL_JOIN}${AGENT_DETAIL.ARCHIVED}` : task;
-}
-
 /**
- * Each agent's row, by its tab's name, wearing its tile, labelled and found
- * by its task: the plan's own agents first, then the workspace's others in
- * the order read, each once, an archived one only once a word is typed, and
- * the agent whose box it is left out.
+ * Each agent's row as every agent menu draws it (`agentMenuRow`), labelled
+ * and found by its task: the plan's own agents first, then the workspace's
+ * others in the order read, each once, an archived one only once a word is
+ * typed, and the agent whose box it is left out.
  */
 function agentRows(
   taskId: string,
@@ -539,6 +525,7 @@ function agentRows(
   workspace: readonly MentionableAgent[],
   self: string | undefined,
   query: string,
+  place: AgentRowPlace,
 ): MentionRow[] {
   const seen = new Set<string>(self === undefined ? [] : [self]);
   const typed = query.trim() !== "";
@@ -548,16 +535,16 @@ function agentRows(
     if (seen.has(agent.id) || (agent.archived === true && !typed)) continue;
     seen.add(agent.id);
     const task = agent.task;
-    const detail = agentDetail(agent, taskId);
+    const row = agentMenuRow(agent, place);
     rows.push({
       mention:
         task === undefined
           ? { kind: MENTION_KIND.AGENT, agentId: agent.id }
           : { kind: MENTION_KIND.AGENT, taskId: task.id, agentId: agent.id },
-      name: agent.name,
-      detail,
-      terms: `${agent.name} ${detail}`,
-      actor: agent.actor,
+      name: row.label,
+      detail: row.detail,
+      terms: (row.terms ?? [row.label]).join(" "),
+      look: { icon: row.icon, end: row.end, card: row.card },
     });
   }
   return rows;
@@ -621,7 +608,7 @@ function pullRequestRows(
 ): MentionRow[] {
   if (taskId === NO_TASK) return [];
   return pullRequests.map((pullRequest) => {
-    const name = `#${pullRequest.number} ${pullRequest.title}`;
+    const name = pullRequestLabelOf(pullRequest);
     const detail = pullRequest.agent ?? PULL_REQUEST_DETAIL;
     return {
       mention: {
@@ -895,11 +882,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT:
-      return row.actor === undefined ? (
-        <AgentMark provider={undefined} />
-      ) : (
-        <ActorMark actor={row.actor} size={ACTOR_SIZE.INLINE} />
-      );
+      return <AgentMark provider={undefined} />;
     case MENTION_KIND.PERSON:
       return row.actor === undefined ? (
         <UserIcon />
@@ -921,15 +904,17 @@ function rowKey(row: MentionRow): string {
   return JSON.stringify("from" in row ? row.from.narrow : row.mention);
 }
 
-/** The groups as the list draws them: each row its glyph, its name, its detail, and a chevron where it opens. */
+/** The groups as the list draws them: each row its glyph, its name, its detail, an agent's end and card, and a chevron where it opens. */
 function comboboxGroups(groups: readonly MentionGroup[]): ComboboxGroup[] {
   return groups.map((group) => ({
     label: group.label,
     options: group.rows.map((row) => ({
       id: rowKey(row),
       label: row.name,
-      icon: <RowGlyph row={row} />,
+      icon: row.look?.icon ?? <RowGlyph row={row} />,
       detail: row.detail,
+      hint: row.look?.end,
+      card: row.look?.card,
       opens: "from" in row,
     })),
   }));
@@ -979,6 +964,7 @@ function MentionMenu({
   at,
   keys,
   place,
+  reading,
   onHover,
   onChoose,
 }: {
@@ -986,8 +972,10 @@ function MentionMenu({
   crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
   at: number;
-  keys: readonly string[];
+  keys: readonly MenuKey[];
   place: MenuPlace;
+  /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
+  reading: boolean;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
@@ -1011,20 +999,10 @@ function MentionMenu({
         }}
         // A narrowed list's one group is named by its crumb.
         headed={crumb === undefined}
-        empty={NO_MATCH}
+        empty={reading ? undefined : NO_MATCH}
+        note={reading ? <Spinner delay label="Reading" /> : undefined}
       />
-      <div className="task-compose-menu-foot mention-menu-foot" aria-hidden="true">
-        {keys.map((key) => (
-          <Text
-            key={key}
-            as={TEXT_ELEMENT.SPAN}
-            variant={TEXT_VARIANT.CAPTION}
-            tone={TEXT_TONE.SUBTLE}
-          >
-            {key}
-          </Text>
-        ))}
-      </div>
+      <MenuKeys keys={keys} />
     </MenuSurface>
   );
 }
@@ -1062,6 +1040,8 @@ export interface MentionableAgent {
   /** The task it works on, by its id and, where the place knows it, its name; absent for an agent on none. */
   readonly task?: { readonly id: string; readonly name?: string | undefined } | undefined;
   readonly archived?: boolean | undefined;
+  /** The agent as the workspace's list read it, where a place drew it from that list: what a picker draws its tab's look and title from. */
+  readonly summary?: CodingAgentSummary | undefined;
 }
 
 /** A person as the list offers them: their account's id, their name, their email where the members read names it, and their picture, which their row wears. */
@@ -1310,6 +1290,7 @@ export function useMentionPicker({
   }>();
 
   const taskId = source?.taskId ?? NO_TASK;
+  const agentPlace = useAgentRowPlace(taskId);
   const workspaceId = source?.workspaceId;
   const repository = source?.repository ?? null;
   const place: MentionPlace = { workspace: source?.workspace ?? "", repository };
@@ -1439,8 +1420,9 @@ export function useMentionPicker({
                     agentsRead?.agents ?? NO_AGENTS,
                     self,
                     term,
+                    agentPlace,
                   )
-                : agentRows(taskId, NO_AGENTS, members.agents, self, term),
+                : agentRows(taskId, NO_AGENTS, members.agents, self, term, agentPlace),
             people: personRows(people, readerId),
             pullRequests: pullRequestRows(taskId, source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
@@ -1459,6 +1441,13 @@ export function useMentionPicker({
           members !== undefined,
         );
   const rows = groups.flatMap((group) => group.rows);
+  // The list says it is reading, never that nothing matches, while a read it draws rows from is out.
+  const reading =
+    open &&
+    ((members === undefined && directory.membersReading) ||
+      (readAgents !== undefined && wantsAgents) ||
+      (read === undefined && treeKey(taskId, workspaceId, repository) !== undefined) ||
+      (skills !== undefined && skills.known === undefined));
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
   const shown = naming || (open && (rows.length > 0 || !/\s/u.test(term.trim())));
   const held =
@@ -1611,6 +1600,7 @@ export function useMentionPicker({
         at={at}
         keys={keys}
         place={placeOf(trigger, placed, box.clientWidth)}
+        reading={reading}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}
       />

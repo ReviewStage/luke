@@ -1,4 +1,8 @@
-import { automationOwner, automationTriggerText } from "@luke/features/automation-list-model";
+import {
+  automationOwner,
+  automationRunStanding,
+  automationTriggerText,
+} from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -18,6 +22,8 @@ import {
   ONE_LINE_ELEMENT,
   OneLine,
   PAGE_FRAME,
+  RowHint,
+  RowHintOptions,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -47,19 +53,23 @@ import {
   personRef,
 } from "@luke/ui/person-page-model";
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref.js";
+import { type ReactNode, useCallback, useRef } from "react";
+import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
-import { lineSubject } from "../tasks/agent-ref.js";
+import { stateEndMark } from "../state-glyph.js";
+import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { holderName, INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
+import { agentEndMark } from "../tasks/tab-look.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { STANDING_GLYPH } from "./automation-runs-panel.js";
+import { automationNextText } from "./automation-words.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
 import { useAutomations } from "./use-automations.js";
@@ -197,24 +207,29 @@ function AgentRow({
 }): React.JSX.Element {
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
+  const card = <AgentCard subject={subject} models={tasks.agents.models} />;
   return (
-    <ListRow
-      leading={
-        <span className="home-row-picture">
-          <ActorMark actor={subject.tile} />
-        </span>
-      }
-      title={subject.name}
-      meta={
-        <span className="home-row-meta">
-          <OneLine className="home-row-context" words={task.name}>
-            {task.name}
-          </OneLine>
-          {agent.at === undefined ? null : <Time at={agent.at} now={now} />}
-        </span>
-      }
-      onPress={() => tasks.onShowAgent(task.id, agent.id)}
-    />
+    <RowHintOptions card={card} cardBeside>
+      <ListRow
+        leading={
+          <span className="home-row-picture">
+            <ActorMark actor={subject.tile} />
+          </span>
+        }
+        title={subject.name}
+        hint={{ Hint: RowHint, label: subject.name }}
+        meta={
+          <span className="home-row-meta">
+            <OneLine className="home-row-context" words={task.name}>
+              {task.name}
+            </OneLine>
+            {agentEndMark(agent, false)}
+            {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
+          </span>
+        }
+        onPress={() => tasks.onShowAgent(task.id, agent.id)}
+      />
+    </RowHintOptions>
   );
 }
 
@@ -345,34 +360,59 @@ function usePersonAutomations(workspaceId: string | undefined, userId: string): 
   return { ...none, automations };
 }
 
-/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it; a press opens it. */
+/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it, then a failure's mark and when it runs next, hanging its card; a press opens it. */
 function AutomationRow({
   automation,
+  workspaceName,
+  now,
   onOpen,
 }: {
   automation: AutomationSummary;
+  workspaceName: string | undefined;
+  now: number;
   onOpen: () => void;
 }): React.JSX.Element {
+  const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
+  const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
+  const item = useRef<HTMLElement | null>(null);
+  // Note that the row's item is its press's parent, which its card counts as its control.
+  const hold = useCallback((press: HTMLElement | null) => {
+    item.current = press?.parentElement ?? null;
+  }, []);
   return (
-    <ListRow
-      leading={
-        <span className="home-row-picture">
-          <ActorMark actor={automationActor(automation)} />
-        </span>
-      }
-      title={automation.name}
-      meta={
-        <span className="home-row-meta">
-          <OneLine
-            className="home-row-context"
-            words={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-          >
-            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
-          </OneLine>
-        </span>
-      }
-      onPress={onOpen}
-    />
+    <RowHintOptions
+      card={<AutomationCard automation={automation} workspaceName={workspaceName} />}
+      cardBeside
+      cardRegion={item}
+    >
+      <ListRow
+        ref={hold}
+        leading={
+          <span className="home-row-picture">
+            <ActorMark actor={automationActor(automation)} />
+          </span>
+        }
+        title={automation.name}
+        meta={
+          <span className="home-row-meta">
+            <OneLine className="home-row-context" words={trigger}>
+              {trigger}
+            </OneLine>
+            {stateEndMark(state, true)}
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.CAPTION}
+              tone={TEXT_TONE.MUTED}
+              truncate
+            >
+              {automationNextText(automation, now)}
+            </Text>
+          </span>
+        }
+        hint={{ Hint: RowHint, label: automation.name }}
+        onPress={onOpen}
+      />
+    </RowHintOptions>
   );
 }
 
@@ -444,8 +484,8 @@ function PersonTasks({
         {listed.slice(0, PERSON_TASKS_SHOWN).map((task) => (
           <RecentRow
             key={task.id}
+            tasks={tasks}
             task={task}
-            pictures={tasks.repositories.pictures}
             now={now}
             face={false}
             onOpen={() => tasks.onSelect(task.id)}
@@ -617,6 +657,8 @@ function PersonColumn({
             <AutomationRow
               key={automation.id}
               automation={automation}
+              workspaceName={tasks.workspace?.name}
+              now={now}
               onOpen={() =>
                 tasks.automationsView.onOpen({
                   kind: AUTOMATIONS_PAGE.EDIT,

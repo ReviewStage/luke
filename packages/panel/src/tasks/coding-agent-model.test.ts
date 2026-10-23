@@ -556,6 +556,8 @@ test("a working agent is starting until its turn opens, thinking until the turn 
   };
   // Before the session runs a turn, whatever stands, and before the turn writes its journal.
   assert.equal(agentWorkingPhase([task], true), "starting");
+  // A rewind under way is what the line says, whatever the transcript shows.
+  assert.equal(agentWorkingPhase([task, opened], false, true), "rewinding");
   assert.equal(agentWorkingPhase([task, opened], true), "starting");
   assert.equal(agentWorkingPhase([task], false), "starting");
   // The turn open with nothing past its step boundary is the model at its first step.

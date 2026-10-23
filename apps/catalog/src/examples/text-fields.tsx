@@ -196,6 +196,21 @@ function TextFields(): React.JSX.Element {
           </Held>
         </div>
       </CatalogSection>
+      <CatalogSection id="text-inline" title="Written in place, as a mail's subject">
+        <div className="catalog-column">
+          <Held start="">
+            {(value, onChange) => (
+              <TextField
+                label="Subject"
+                placeholder="Optional"
+                size={TEXT_FIELD_SIZE.INLINE}
+                value={value}
+                onChange={onChange}
+              />
+            )}
+          </Held>
+        </div>
+      </CatalogSection>
       <CatalogSection id="text-area" title="Many lines">
         <div className="catalog-column">
           <Held start={"Plan the release.\nWrite the changelog."}>

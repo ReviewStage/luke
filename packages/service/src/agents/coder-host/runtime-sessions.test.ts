@@ -33,6 +33,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
@@ -63,6 +64,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { deploymentEveForAccounts } from "../deployment-eve.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
+import { rewoundAgent } from "./rewind.js";
 import {
   NativeAgentSessions,
   type NativeSessions,
@@ -106,15 +108,22 @@ function recording(sessionPrefix: string) {
     status: number;
     planRefusal?: PlanRefusal;
     planResetsAt?: number;
+    halts: boolean;
   } = {
     open: EVE_SEND_OUTCOME.ACCEPTED,
     status: 0,
+    halts: true,
   };
   const sessions: NativeSessions = {
     retune: (sessionId, conversationId) =>
       Effect.sync(() => {
         calls.push(`retune:${sessionId}:${conversationId}`);
         return RUNNER_CHOICE.WRITTEN;
+      }),
+    halt: (sessionId, conversationId) =>
+      Effect.sync(() => {
+        calls.push(`halt:${sessionId}:${conversationId}`);
+        return answers.halts;
       }),
     open: (message) =>
       Effect.sync(() => {
@@ -541,6 +550,91 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
           }
           assert.deepEqual(eve.calls, []);
+        }),
+    );
+
+    it.effect(
+      "a rewind ends a Claude Code agent's runner, or retires an eve agent's session, before it cuts, and cuts nothing where the runner could not be ended",
+      () =>
+        Effect.gen(function* () {
+          const { owner, taskId } = yield* openTeam;
+          const onEve = yield* agentOn(owner, taskId, "eve");
+          const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
+          const unhalted = yield* agentOn(owner, taskId, "claude_code");
+          const { eve, claudeCode, native } = runtimes();
+          const writer = storeWriter({ tools: CODER_TOOL_SET });
+          const nativeSession = `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`;
+          const lines = new Map<string, string>();
+          for (const [agent, sessionId] of [
+            [onEve, "wrun_eve"],
+            [onClaudeCode, nativeSession],
+            [unhalted, `${nativeSession}0`],
+          ] as const) {
+            const target = { userId: owner, conversationId: agent.conversationId };
+            yield* claimRuntimeSession(target, sessionId, new Date(0));
+            const lineId = randomUUID();
+            lines.set(agent.id, lineId);
+            yield* (yield* Database).insert(messages).values({
+              id: lineId,
+              ...target,
+              seq: 100,
+              clientId: `line-${agent.id}`,
+              role: MESSAGE_ROLE.USER,
+              parts: [{ type: "text", text: "Expire invitations after a week." }],
+              placedAt: new Date(0),
+            });
+          }
+          const reach: EveReach = {
+            eveOrigin: () => "https://luke.test",
+            eveAs: () => eve.sessions,
+          };
+          const request = new Request("https://luke.test/api/agents/rewind");
+          const rewind = (agent: CodingAgent) =>
+            rewoundAgent(reach, writer, request, owner, agent, lines.get(agent.id) ?? "").pipe(
+              Effect.provide(native),
+              Effect.result,
+            );
+          const db = yield* Database;
+          const standing = (agent: CodingAgent) =>
+            Effect.map(
+              db
+                .select({ id: messages.id })
+                .from(messages)
+                .where(eq(messages.id, lines.get(agent.id) ?? "")),
+              (rows) => rows.length,
+            );
+
+          // A rewind to a line that is not there is refused before anything is stopped.
+          const missing = yield* rewoundAgent(
+            reach,
+            writer,
+            request,
+            owner,
+            onClaudeCode,
+            randomUUID(),
+          ).pipe(Effect.provide(native), Effect.result);
+          assert.deepEqual(missing, Result.fail(HOSTED_REFUSAL.NOT_FOUND));
+          assert.deepEqual(claudeCode.calls, []);
+
+          const eveRewound = yield* rewind(onEve);
+          const nativeRewound = yield* rewind(onClaudeCode);
+          claudeCode.answers.halts = false;
+          const refused = yield* rewind(unhalted);
+
+          assert.ok(Result.isSuccess(eveRewound));
+          assert.ok(Result.isSuccess(nativeRewound));
+          assert.deepEqual(refused, Result.fail(HOSTED_REFUSAL.UNAVAILABLE));
+          // Each is stopped before the cut and again after it, and a runner that could not be ended is not cut.
+          assert.deepEqual(eve.calls, ["reset:wrun_eve", "reset:wrun_eve"]);
+          assert.deepEqual(claudeCode.calls, [
+            `halt:${nativeSession}:${onClaudeCode.conversationId}`,
+            `halt:${nativeSession}:${onClaudeCode.conversationId}`,
+            `halt:${nativeSession}0:${unhalted.conversationId}`,
+          ]);
+          assert.deepEqual(
+            [yield* standing(onEve), yield* standing(onClaudeCode), yield* standing(unhalted)],
+            [0, 0, 1],
+          );
         }),
     );
 

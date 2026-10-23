@@ -7,6 +7,7 @@ import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
 import { BAR_ITEMS_EXAMPLE } from "./examples/bar-items";
 import { BLOCK_LISTS_EXAMPLE } from "./examples/block-lists";
+import { BLOCK_MENU_EXAMPLE } from "./examples/block-menu";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
@@ -35,6 +36,7 @@ import { FILE_TEXT_EXAMPLE } from "./examples/file-text";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
+import { FORMAT_TOOLBAR_EXAMPLE } from "./examples/format-toolbar";
 import { GLYPH_SLOTS_EXAMPLE } from "./examples/glyph-slots";
 import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
 import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
@@ -42,6 +44,7 @@ import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { KEEP_FOCUS_EXAMPLE } from "./examples/keep-focus";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
+import { LINK_FIELD_EXAMPLE } from "./examples/link-field";
 import { LIST_MOTION_EXAMPLE } from "./examples/list-motion";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { LOADING_INDICATORS_EXAMPLE } from "./examples/loading-indicators";
@@ -70,7 +73,6 @@ import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
-import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -160,6 +162,9 @@ export const EXAMPLES: readonly Example[] = [
   LIST_ROW_EXAMPLE,
   LIST_MOTION_EXAMPLE,
   MENU_EXAMPLE,
+  FORMAT_TOOLBAR_EXAMPLE,
+  BLOCK_MENU_EXAMPLE,
+  LINK_FIELD_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
@@ -176,7 +181,6 @@ export const EXAMPLES: readonly Example[] = [
   SCROLL_AREA_EXAMPLE,
   SAVED_TICKS_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
-  SELECT_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,

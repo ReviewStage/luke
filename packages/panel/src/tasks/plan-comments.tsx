@@ -27,6 +27,7 @@ import {
   CARD_PRESS_REACH,
   CARD_SHADOW,
   Card,
+  type CardHover,
   type CardLook,
   CardPress,
   type CardShadow,
@@ -48,6 +49,8 @@ import {
   MenuSurface,
   SCROLL_FADE,
   ScrollArea,
+  Skeleton,
+  SkeletonRegion,
   SUBMIT_STATE,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
@@ -57,7 +60,6 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
-  TIME_LOOK,
   Time,
   Tooltip,
   TrashIcon,
@@ -315,7 +317,7 @@ function EventLine({
         </span>
         <span className="comment-head-end">
           <span className="comment-time">
-            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
+            <Time at={entry.at} now={now} />
           </span>
         </span>
       </div>
@@ -461,7 +463,7 @@ function CommentEntry({
         <WriterRef writer={entry.writer} agents={doors.agents} />
         <span className="comment-head-end">
           <span className="comment-time">
-            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
+            <Time at={entry.at} now={now} />
             {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
           </span>
           <div className="comment-tools">
@@ -909,6 +911,49 @@ function threadFrame(place: ThreadPlace, open: boolean): { look: CardLook; shado
 }
 
 /**
+ * A thread's card, raised or outlined by where it stands and whether it is
+ * open (`threadFrame`), in a comment's own type and inset. Every thread
+ * draws it, and so do the Comments tab's placeholder cards, so a thread
+ * lands where its placeholder stood.
+ */
+function CommentCard({
+  place,
+  open,
+  hover = CARD_HOVER.NONE,
+  lit,
+  children,
+  ...data
+}: {
+  place: ThreadPlace;
+  open: boolean;
+  hover?: CardHover;
+  lit?: boolean | undefined;
+  "data-thread"?: string | undefined;
+  "data-pointed"?: boolean | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <Card
+      {...threadFrame(place, open)}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      hover={hover}
+      lit={lit}
+      className="comment-card"
+      data-open={String(open)}
+      {...data}
+    >
+      {children}
+    </Card>
+  );
+}
+
+/** One row of the Comments tab's list, a step from the next: a thread's card, or a placeholder's. */
+function CommentsRow({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="comments-row">{children}</div>;
+}
+
+/**
  * One thread as the margin, a count's card, or the Comments tab draws it:
  * open, every entry and the field that answers it; at rest, its first
  * comment and the faces and count of its replies, which opens it.
@@ -957,14 +1002,11 @@ function ThreadCard({
       ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
     ];
     return (
-      <Card
-        {...threadFrame(place, false)}
-        corner={CARD_CORNER.MENU}
-        padding={CARD_PADDING.NONE}
+      <CommentCard
+        place={place}
+        open={false}
         hover={CARD_HOVER.WASH}
         lit={pointed}
-        className="comment-card"
-        data-open="false"
         data-pointed={pointed}
         data-thread={thread.id}
       >
@@ -973,7 +1015,7 @@ function ThreadCard({
           <div className="comment-head">
             <WriterRef writer={first.writer} agents={doors.agents} />
             <span className="comment-time">
-              <Time at={first.at} now={now} look={TIME_LOOK.AGO} />
+              <Time at={first.at} now={now} />
             </span>
           </div>
         )}
@@ -1002,23 +1044,16 @@ function ThreadCard({
               {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
               <span className="comment-time">
                 {" · "}
-                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} look={TIME_LOOK.AGO} />
+                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} />
               </span>
             </span>
           )}
         </CardPress>
-      </Card>
+      </CommentCard>
     );
   }
   return (
-    <Card
-      {...threadFrame(place, true)}
-      corner={CARD_CORNER.MENU}
-      padding={CARD_PADDING.NONE}
-      className="comment-card"
-      data-open="true"
-      data-thread={thread.id}
-    >
+    <CommentCard place={place} open data-thread={thread.id}>
       {first === undefined ? head : null}
       {thread.entries.map((entry) =>
         entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
@@ -1061,7 +1096,7 @@ function ThreadCard({
           }}
         />
       ) : null}
-    </Card>
+    </CommentCard>
   );
 }
 
@@ -1083,14 +1118,7 @@ function PendingCard({
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   return (
-    <Card
-      {...threadFrame(THREAD_PLACE.MARGIN, true)}
-      corner={CARD_CORNER.MENU}
-      padding={CARD_PADDING.NONE}
-      className="comment-card"
-      data-open="true"
-      data-thread={PENDING_THREAD}
-    >
+    <CommentCard place={THREAD_PLACE.MARGIN} open data-thread={PENDING_THREAD}>
       {note === undefined ? null : (
         <div className="comment-note" role="alert">
           {note}
@@ -1123,7 +1151,7 @@ function PendingCard({
           return true;
         }}
       />
-    </Card>
+    </CommentCard>
   );
 }
 
@@ -1880,6 +1908,31 @@ function ResolvedOnly({
   );
 }
 
+/** The widths of each stand-in card's author line and its words, while the threads are read. */
+const COMMENTS_SKELETON = [
+  { author: "30%", words: ["100%", "70%"] },
+  { author: "24%", words: ["100%", "85%", "40%"] },
+  { author: "34%", words: ["90%"] },
+] as const;
+
+/** The threads as quiet cards while they are read, in a card's own type. */
+function CommentsSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label="Reading the comments…">
+      {COMMENTS_SKELETON.map((card) => (
+        <CommentsRow key={card.author}>
+          <CommentCard place={THREAD_PLACE.LIST} open={false}>
+            <Skeleton width={card.author} />
+            {card.words.map((width) => (
+              <Skeleton key={width} width={width} />
+            ))}
+          </CommentCard>
+        </CommentsRow>
+      ))}
+    </SkeletonRegion>
+  );
+}
+
 /** What the Comments tab says over a list holding nothing, by its filter. */
 const NO_COMMENTS = {
   [COMMENTS_FILTER.OPEN]: {
@@ -1974,10 +2027,12 @@ export function PlanCommentsTab({
                 <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
                   {NO_COMMENTS[filter].line}
                 </EmptyState>
-              ) : null
+              ) : (
+                <CommentsSkeleton />
+              )
             ) : (
               listed.map((thread) => (
-                <div key={thread.id} className="comments-row">
+                <CommentsRow key={thread.id}>
                   {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
                   <ThreadCard
                     thread={thread}
@@ -1994,7 +2049,7 @@ export function PlanCommentsTab({
                         : undefined
                     }
                   />
-                </div>
+                </CommentsRow>
               ))
             )}
           </div>

@@ -14,11 +14,16 @@ import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { formatCount, formatDayTick } from "@luke/ui/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { barRadius, barTopRadius } from "./bar-radius.js";
-import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame.js";
+import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
 
 const SIGNUPS_CHART = {
   count: { label: "New accounts", color: "var(--luke-color-chart-1)" },
 } satisfies ChartConfig;
+
+const SIGNUPS_TITLE = "New accounts per day";
+
+/** The plot's height, which the chart and its skeleton both stand. */
+const SIGNUPS_PLOT_HEIGHT = "10rem";
 
 /**
  * One series, so the heading names it and no legend box restates the heading.
@@ -36,7 +41,7 @@ export function SignupsChart({
 }): React.JSX.Element {
   if (seriesHasNoData(daily.map((point) => point.count))) {
     return (
-      <ChartFrame title="New accounts per day" aside={<ChartTrend trend={trend} />}>
+      <ChartFrame title={SIGNUPS_TITLE} aside={<ChartTrend trend={trend} />}>
         <ChartEmpty>No accounts created in this window yet.</ChartEmpty>
       </ChartFrame>
     );
@@ -44,8 +49,12 @@ export function SignupsChart({
 
   const partialDay = partialDayKey(daily, generatedAt);
   return (
-    <ChartFrame title="New accounts per day" aside={<ChartTrend trend={trend} />}>
-      <ChartContainer config={SIGNUPS_CHART} className="aspect-auto h-40 w-full">
+    <ChartFrame title={SIGNUPS_TITLE} aside={<ChartTrend trend={trend} />}>
+      <ChartContainer
+        config={SIGNUPS_CHART}
+        className="aspect-auto w-full"
+        style={{ height: SIGNUPS_PLOT_HEIGHT }}
+      >
         <BarChart data={[...daily]}>
           <CartesianGrid vertical={false} />
           <XAxis
@@ -78,6 +87,26 @@ export function SignupsChart({
   );
 }
 
+/** The chart while the window is read: its heading over its plot's block, and a bone for the trend it reads. */
+export function SignupsChartSkeleton(): React.JSX.Element {
+  return <ChartFrameSkeleton title={SIGNUPS_TITLE} aside plot={SIGNUPS_PLOT_HEIGHT} />;
+}
+
+const SIGN_IN_METHODS_TITLE = "Linked sign-in methods";
+
+/** The methods a bar stands for, in the order they stand, each read from the answer's counts. */
+const SIGN_IN_METHODS: readonly {
+  method: string;
+  accounts: (methods: AdminSignInMethods) => number;
+}[] = [
+  { method: "GitHub", accounts: (methods) => methods.github },
+  { method: "Google", accounts: (methods) => methods.google },
+  { method: "Other", accounts: (methods) => methods.other },
+];
+
+/** The room each method's bar takes. */
+const SIGN_IN_ROW_HEIGHT = 40;
+
 const SIGN_IN_METHODS_CHART = {
   accounts: { label: "Accounts", color: "var(--luke-color-chart-1)" },
 } satisfies ChartConfig;
@@ -99,11 +128,10 @@ export function SignInMethodsChart({
   methods: AdminSignInMethods;
   totalAccounts: number;
 }): React.JSX.Element {
-  const rows = [
-    { method: "GitHub", accounts: methods.github },
-    { method: "Google", accounts: methods.google },
-    { method: "Other", accounts: methods.other },
-  ]
+  const rows = SIGN_IN_METHODS.map((entry) => ({
+    method: entry.method,
+    accounts: entry.accounts(methods),
+  }))
     .filter((row) => row.accounts > 0)
     .map((row) => ({
       ...row,
@@ -114,18 +142,18 @@ export function SignInMethodsChart({
 
   if (rows.length === 0) {
     return (
-      <ChartFrame title="Linked sign-in methods">
+      <ChartFrame title={SIGN_IN_METHODS_TITLE}>
         <ChartEmpty>No linked sign-in methods recorded yet.</ChartEmpty>
       </ChartFrame>
     );
   }
 
   return (
-    <ChartFrame title="Linked sign-in methods">
+    <ChartFrame title={SIGN_IN_METHODS_TITLE}>
       <ChartContainer
         config={SIGN_IN_METHODS_CHART}
         className="aspect-auto w-full"
-        style={{ height: rows.length * 40 }}
+        style={{ height: rows.length * SIGN_IN_ROW_HEIGHT }}
       >
         <BarChart data={rows} layout="vertical" margin={{ right: 160 }}>
           <XAxis type="number" hide />
@@ -142,5 +170,18 @@ export function SignInMethodsChart({
         </BarChart>
       </ChartContainer>
     </ChartFrame>
+  );
+}
+
+/**
+ * The chart while the roster is read: its heading over a block of a bar for
+ * every method, as an answer where each was linked stands.
+ */
+export function SignInMethodsChartSkeleton(): React.JSX.Element {
+  return (
+    <ChartFrameSkeleton
+      title={SIGN_IN_METHODS_TITLE}
+      plot={`${SIGN_IN_METHODS.length * SIGN_IN_ROW_HEIGHT}px`}
+    />
   );
 }

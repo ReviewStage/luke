@@ -12,7 +12,7 @@ import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog.js";
-import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref.js";
+import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
 /**
@@ -27,7 +27,7 @@ import { WorkspaceTile } from "./workspace-tile.js";
  * first listed as the account's own too). A press
  * drops the menu of every workspace the account is a member of from its left
  * edge, each by its tile with who shares it under its name, the listed one
- * checked, then New workspace, which
+ * checked and the workspace's card hung beside it while the pointer rests on it, then New workspace, which
  * asks a name and lists the workspace made, and Workspace settings, which
  * opens Settings on the listed workspace's page, where its members and its
  * GitHub are managed. Nothing else stands in the menu. The head stands
@@ -48,6 +48,7 @@ function workspaceMenuGroups(
       label: workspace.name,
       icon: <WorkspaceTile workspace={workspace} />,
       detail: sharedWords(workspace.memberCount, workspace.id === first),
+      card: <WorkspaceCard workspace={workspace} personal={workspace.id === first} />,
       checked: workspace.id === listed.id,
       onSelect: () => tasks.onChooseWorkspace(workspace.id),
     }),

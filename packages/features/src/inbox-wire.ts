@@ -8,6 +8,7 @@ import {
   hasWordsOrFiles,
 } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { linkLabels } from "./mention-link.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import {
   CODE_PATH_MAX_CHARS,
@@ -15,6 +16,7 @@ import {
   commitShaSchema,
   workspaceIdSchema,
 } from "./task-wire.js";
+import { WEBM_TYPE } from "./video-signature.js";
 
 /**
  * inbox-wire.ts -- the developer's inbox: what a task's coding agents need of the developer, posted by the agents and answered on the desktop.
@@ -140,6 +142,13 @@ export const INBOX_BOUNDS = {
    * one a screenshot at a screen's own scale fits under.
    */
   MAX_IMAGE_BYTES: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  /**
+   * The most bytes one video may hold: a WebM the agent recorded of what it
+   * did, held to the bound a transcript keeps one under, which the
+   * recorder in its sandbox fits a recording to and which a function's
+   * answer serves whole.
+   */
+  MAX_VIDEO_BYTES: 4_000_000,
   /** The most characters a label may spell: a link's, an option's, a field's, a select's option, or a box's placeholder. */
   MAX_LABEL_CHARS: 160,
   /** The most options a choice or a select may offer: a choice a person makes at a glance. */
@@ -216,9 +225,21 @@ export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_
 /** An image's media type as the wire carries it: one of the three the service keeps. */
 export const inboxImageTypeSchema = EffectSchema.Literals(Object.values(INBOX_IMAGE_TYPE));
 
+/**
+ * The types a file of an item's may be kept and served under: any a
+ * message's file travels as, or a WebM the agent recorded of what it did and
+ * drew in its words as it draws a picture.
+ */
+export const INBOX_FILE_TYPE = {
+  ...CODING_AGENT_ATTACHMENT_TYPE,
+  WEBM: WEBM_TYPE,
+} as const;
+
+export type InboxFileType = (typeof INBOX_FILE_TYPE)[keyof typeof INBOX_FILE_TYPE];
+
 /** The responses an item asks for, each answered its own way. */
 export const INBOX_RESPONSE = {
-  /** Pick one of the agent's options, or several where it allows, one perhaps recommended, or answer in the developer's own words. */
+  /** Pick one of the agent's options, or several where it allows, some perhaps recommended, or answer in the developer's own words. */
   CHOICE: "choice",
   /** Approve or decline a step the agent proposes. */
   APPROVAL: "approval",
@@ -292,7 +313,7 @@ const INBOX_REPLIES_OF = {
 
 /** The asks a message on an item's thread may end with, from version 5, each answered its own way. */
 export const INBOX_ASK = {
-  /** Pick one of the agent's options, or several where it allows, one perhaps recommended. */
+  /** Pick one of the agent's options, or several where it allows, some perhaps recommended. */
   DECIDE: "decide",
   /** Do steps by hand, ticking each, then mark it done, or say it could not be done. */
   DO: "do",
@@ -446,8 +467,63 @@ export const inboxFieldSchema = EffectSchema.Struct({
 export type InboxField = typeof inboxFieldSchema.Type;
 
 /**
+ * What an agent recommends of a choice's options as it posts the choice:
+ * one label, or a list of them, several only where the choice lets several
+ * be picked.
+ */
+export const recommendedInputSchema = EffectSchema.Union([
+  EffectSchema.String,
+  EffectSchema.Array(EffectSchema.String).check(
+    EffectSchema.isMinLength(1),
+    EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+  ),
+]);
+
+/**
+ * A choice's recommendation as it is kept: the first label recommended,
+ * and every label in order where it recommends several. Note that the
+ * first stays a label of its own, because a desktop from before several
+ * reads `recommended` as one label and drops `recommendations` unread.
+ */
+export const RECOMMENDED_FIELDS = {
+  recommended: EffectSchema.optionalKey(EffectSchema.String),
+  recommendations: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.String).check(
+      EffectSchema.isMinLength(2),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+    ),
+  ),
+};
+
+/** A choice's recommendation as it was posted or as it is kept. */
+interface Recommending {
+  readonly recommended?: string | readonly string[];
+  readonly recommendations?: readonly string[];
+}
+
+/** The labels a choice recommends, in order, as it was posted or as it is kept: none, one, or several. */
+export function recommendedLabels(choice: Recommending): readonly string[] {
+  if (choice.recommendations !== undefined) return choice.recommendations;
+  if (choice.recommended === undefined) return [];
+  return typeof choice.recommended === "string" ? [choice.recommended] : choice.recommended;
+}
+
+/** A posted recommendation as a choice keeps it: nothing, its one label, or its first label and every label. */
+export function keptRecommendation(choice: Recommending): {
+  recommended?: string;
+  recommendations?: readonly string[];
+} {
+  const labels = recommendedLabels(choice);
+  const [first] = labels;
+  if (first === undefined) return {};
+  return labels.length === 1
+    ? { recommended: first }
+    : { recommended: first, recommendations: labels };
+}
+
+/**
  * What an item asks of the developer, one of six: a choice among options,
- * several where `multiple`, the label it recommends named; an approval; words,
+ * several where `multiple`, the labels it recommends named; an approval; words,
  * with what the box says while empty; a task; a form of fields, each select
  * naming the option it recommends; or nothing but an acknowledgement.
  */
@@ -459,7 +535,7 @@ export const inboxResponseSchema = EffectSchema.Union([
       EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
     ),
     multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
-    recommended: EffectSchema.optionalKey(EffectSchema.String),
+    ...RECOMMENDED_FIELDS,
   }),
   EffectSchema.Struct({ type: EffectSchema.Literal(INBOX_RESPONSE.APPROVAL) }),
   EffectSchema.Struct({
@@ -585,7 +661,7 @@ const stepIndexSchema = EffectSchema.Int.check(
   EffectSchema.isLessThan(INBOX_BOUNDS.MAX_STEPS),
 );
 
-/** A `decide` ask's own keys: two to six options, several to be picked where `multiple`, one perhaps recommended by its label. */
+/** A `decide` ask's own keys as it is kept: two to six options, several to be picked where `multiple`, and those recommended by their labels, several where several may be picked. */
 const DECIDE_FIELDS = {
   type: EffectSchema.Literal(INBOX_ASK.DECIDE),
   options: EffectSchema.Array(inboxOptionSchema).check(
@@ -593,7 +669,15 @@ const DECIDE_FIELDS = {
     EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
   ),
   multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
-  recommended: EffectSchema.optionalKey(EffectSchema.String),
+  ...RECOMMENDED_FIELDS,
+};
+
+/** A `decide` ask's own keys as the agent posts it: those it is kept by, but its recommendation one label or a list of them. */
+const DECIDE_INPUT_FIELDS = {
+  type: DECIDE_FIELDS.type,
+  options: DECIDE_FIELDS.options,
+  multiple: DECIDE_FIELDS.multiple,
+  recommended: EffectSchema.optionalKey(recommendedInputSchema),
 };
 
 /**
@@ -628,6 +712,22 @@ const inboxAskSchema = EffectSchema.Union([
 
 export type InboxAsk = typeof inboxAskSchema.Type;
 
+/** An ask as the agent posts it: one it is kept as, but a `decide`'s recommendation one label or a list of them. */
+const inboxAskInputSchema = EffectSchema.Union([
+  EffectSchema.Struct(DECIDE_INPUT_FIELDS),
+  EffectSchema.Struct(DO_FIELDS),
+  EffectSchema.Struct(ANSWER_FIELDS),
+]);
+
+export type InboxAskInput = typeof inboxAskInputSchema.Type;
+
+/** A posted ask as a message keeps it: a `decide`'s recommendation its first label and, where several, every one. */
+export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
+  if (ask.type !== INBOX_ASK.DECIDE) return ask;
+  const { recommended: _recommended, ...rest } = ask;
+  return { ...rest, ...keptRecommendation(ask) };
+}
+
 /**
  * What a post's tool part carries as its input from version 5: the
  * thread's key, its title, which a first post under the key names, the
@@ -640,7 +740,7 @@ export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
   body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
-  ask: EffectSchema.optionalKey(inboxAskSchema),
+  ask: EffectSchema.optionalKey(inboxAskInputSchema),
   waits: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
@@ -932,6 +1032,82 @@ export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
 /** What a member's message comes back as: the item as it then stands, its thread with the message on it, and, where the message answered the thread's open ask, the transaction it was taken in. */
 export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema, ...writtenIn });
+
+/**
+ * A thread a member starts with an agent, as a new mail is written: the
+ * agent it goes to, its subject, and its first message, which is a member's
+ * message as `inboxMessageRequestSchema` bounds one, words or files or both
+ * and never neither. The service mints the thread's key from its subject, so
+ * a member never names one the agent already keeps.
+ */
+export const inboxStartRequestSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  /** The thread's subject; absent where the member wrote none, which its first message's first line stands for (`inboxStartTitle`). */
+  title: EffectSchema.optionalKey(
+    EffectSchema.Trim.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_TITLE_CHARS),
+    ),
+  ),
+  text: inboxMessageRequestSchema.fields.text,
+  attachments: inboxMessageRequestSchema.fields.attachments,
+  clientKey: inboxMessageRequestSchema.fields.clientKey,
+}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
+
+export type InboxStartRequest = typeof inboxStartRequestSchema.Type;
+
+/** The longest title a thread's first line stands for its subject in, cut on a word where one ends near it. */
+const STARTED_TITLE_CHARS = 60;
+
+/** The title of a thread started with no subject where its message holds neither words nor a file. */
+const STARTED_TITLE_FALLBACK = "New thread";
+
+/** A code fence's line, which opens or closes a block and says nothing itself, its language among it. */
+const CODE_FENCE = /^\s*(?:```|~~~)/u;
+
+/** A thematic break's line, three or more of one of its marks alone, which separates and says nothing. */
+const THEMATIC_BREAK = /^\s*([-*_])(?:[ \t]*\1){2,}\s*$/u;
+
+/**
+ * A line of Markdown as plain words: its heading, quote, or list mark, each
+ * link as its label or its mention's name (`linkLabels`), and no emphasis
+ * or code marks, an underscore inside a word, as an identifier's, kept;
+ * nothing for a code fence's line or a thematic break's.
+ */
+function plainLine(line: string): string {
+  if (CODE_FENCE.test(line) || THEMATIC_BREAK.test(line)) return "";
+  return linkLabels(line.replace(/!\[/gu, "["))
+    .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
+    .replace(/[*`~]/gu, "")
+    .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/** Words cut to a title's short line, on a word where one ends near the cut. */
+function shortTitle(words: string): string {
+  if (words.length <= STARTED_TITLE_CHARS) return words;
+  const cut = words.slice(0, STARTED_TITLE_CHARS);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > STARTED_TITLE_CHARS / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * The title of a thread a member started: the subject they wrote, or,
+ * where they wrote none, the first line of their message that says
+ * anything, as plain words, or the name of its first file where it holds
+ * no words, each cut to a short line on a word.
+ */
+export function inboxStartTitle(
+  request: Pick<InboxStartRequest, "title" | "text" | "attachments">,
+): string {
+  if (request.title !== undefined) return request.title;
+  const line = request.text
+    .split("\n")
+    .map(plainLine)
+    .find((each) => each !== "");
+  return shortTitle(line ?? request.attachments?.[0]?.name ?? STARTED_TITLE_FALLBACK);
+}
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({

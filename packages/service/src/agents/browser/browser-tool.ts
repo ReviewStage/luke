@@ -118,9 +118,11 @@ export const BROWSER_TOOL = {
     "a key, scroll, wait, take a screenshot to see the page, take a snapshot to read it as " +
     "text with a ref beside each element, read its console, or close it. To show the developer " +
     "a flow you built or tested, record it: record starts a video of whatever the browser shows, " +
+    "your pointer drawn on the page while it records, " +
     `up to ${BROWSER_AGENT_LIMITS.RECORDING_MAX_SECONDS} seconds and across calls, and ` +
     "stop_recording, with a caption, stops it and keeps it in your transcript, where it plays; " +
-    "stop it before your turn ends, or it is lost. Take a snapshot for " +
+    "stop it before your turn ends, or it is lost. Its answer names the path the video stays at in " +
+    "your sandbox until your next recording, by which you can post it to the inbox or the chat. Take a snapshot for " +
     "the refs before you click or type on an element. Choose in a native dropdown, a select " +
     "the snapshot shows as a combobox or listbox, with select on its ref and the option's " +
     "label, rather than clicking it or its options, whose popup no click reaches. An action that leaves out its tab acts on the tab the action before " +
@@ -546,6 +548,7 @@ function sandboxRecorder(call: BrowserCall): BrowserRecorder<AgentBrowser | Data
           return {
             seconds: read.seconds,
             ...captioned,
+            path: read.path,
             omitted: PICTURE_OMISSION.LIMIT,
             byteCount: read.bytes.byteLength,
           };
@@ -553,6 +556,7 @@ function sandboxRecorder(call: BrowserCall): BrowserRecorder<AgentBrowser | Data
         return {
           seconds: read.seconds,
           ...captioned,
+          path: read.path,
           picture: { ...kept.value, mediaType: CONVERSATION_MEDIA_TYPE.WEBM },
         };
       }),

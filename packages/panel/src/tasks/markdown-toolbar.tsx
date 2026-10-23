@@ -1,4 +1,13 @@
-import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
+import {
+  SHORTCUT_KEY,
+  type ShortcutChord,
+  shortcutMatches,
+  WRITING_BLOCK,
+  WRITING_MARK,
+  WRITING_SHORTCUTS,
+  type WritingAction,
+  type WritingShortcut,
+} from "@luke/settings/shortcuts";
 import { IconButton, Tooltip } from "@luke/ui";
 import {
   BoldIcon,
@@ -10,6 +19,7 @@ import {
   ListChecksIcon,
   ListIcon,
   ListOrderedIcon,
+  StrikethroughIcon,
   TextQuoteIcon,
 } from "lucide-react";
 import {
@@ -29,13 +39,13 @@ import {
 } from "./markdown-edits.js";
 
 /**
- * markdown-toolbar.tsx -- the compact row of formatting presses over a comment's words, GitHub's own set: heading, bold, italic, quote, code, link, and the three lists, with a suggestion before them where the comment is on lines of the head.
+ * markdown-toolbar.tsx -- the compact row of formatting presses over a comment's words, GitHub's own set: heading, bold, italic, strikethrough, quote, code, link, and the three lists, with a suggestion before them where the comment is on lines of the head.
  *
  * Each press makes its edit (`markdown-edits.ts`) in the field as the
  * browser's own insertion, so ⌘Z takes it back as it takes back typing,
  * and leaves the field holding the focus, with what the press wrote
- * selected. ⌘B, ⌘I and ⌘K in the field press bold, italic and link, as
- * they do in GitHub's own box, and are the field's while it has the
+ * selected. The writing chords (`WRITING_SHORTCUTS`) in the field press their
+ * formats, and ⌘K presses link, as in GitHub's own box, and are the field's while it has the
  * keyboard rather than the window's. The row is one toolbar to the
  * keyboard: Tab stops on it once, and the arrows, Home and End move along
  * it. A press never takes the focus from the field under the pointer, so
@@ -48,12 +58,24 @@ const TOOLBAR_WORDS = {
   SUGGESTION: "Add a suggestion",
 } as const;
 
-/** One formatting press: what it writes, what it is called, its glyph, and the chord the field answers for it. */
+/**
+ * One formatting press: what it writes, what it is called, its glyph, and the
+ * writing action whose chord the field answers for it. Link has no chord in
+ * the vocabulary, so `chord` is the one this box keeps for it, ⌘K, as GitHub's does.
+ */
 interface FormatPress {
   readonly format: MarkdownFormat;
   readonly label: string;
   readonly icon: ReactNode;
+  readonly action?: WritingAction;
   readonly chord?: ShortcutChord;
+}
+
+/** The chord a press answers: the vocabulary's for its action, or its own where it has none. */
+function chordOf(press: FormatPress): ShortcutChord | undefined {
+  if (press.action === undefined) return press.chord;
+  const shortcut: WritingShortcut = WRITING_SHORTCUTS[press.action];
+  return shortcut.chord;
 }
 
 /** The presses in the order they are drawn, in groups a rule stands between, as GitHub's own are. */
@@ -68,18 +90,34 @@ const FORMAT_GROUPS: readonly (readonly FormatPress[])[] = [
       format: MARKDOWN_FORMAT.BOLD,
       label: "Bold",
       icon: <BoldIcon aria-hidden="true" />,
-      chord: { key: SHORTCUT_KEY.B },
+      action: WRITING_MARK.BOLD,
     },
     {
       format: MARKDOWN_FORMAT.ITALIC,
       label: "Italic",
       icon: <ItalicIcon aria-hidden="true" />,
-      chord: { key: SHORTCUT_KEY.I },
+      action: WRITING_MARK.ITALIC,
+    },
+    {
+      format: MARKDOWN_FORMAT.STRIKE,
+      label: "Strikethrough",
+      icon: <StrikethroughIcon aria-hidden="true" />,
+      action: WRITING_MARK.STRIKE,
     },
   ],
   [
-    { format: MARKDOWN_FORMAT.QUOTE, label: "Quote", icon: <TextQuoteIcon aria-hidden="true" /> },
-    { format: MARKDOWN_FORMAT.CODE, label: "Code", icon: <CodeIcon aria-hidden="true" /> },
+    {
+      format: MARKDOWN_FORMAT.QUOTE,
+      label: "Quote",
+      icon: <TextQuoteIcon aria-hidden="true" />,
+      action: WRITING_BLOCK.QUOTE,
+    },
+    {
+      format: MARKDOWN_FORMAT.CODE,
+      label: "Code",
+      icon: <CodeIcon aria-hidden="true" />,
+      action: WRITING_MARK.CODE,
+    },
     {
       format: MARKDOWN_FORMAT.LINK,
       label: "Link",
@@ -91,16 +129,19 @@ const FORMAT_GROUPS: readonly (readonly FormatPress[])[] = [
     {
       format: MARKDOWN_FORMAT.BULLETS,
       label: "Bulleted list",
+      action: WRITING_BLOCK.BULLETED_LIST,
       icon: <ListIcon aria-hidden="true" />,
     },
     {
       format: MARKDOWN_FORMAT.NUMBERS,
       label: "Numbered list",
+      action: WRITING_BLOCK.NUMBERED_LIST,
       icon: <ListOrderedIcon aria-hidden="true" />,
     },
     {
       format: MARKDOWN_FORMAT.TASKS,
       label: "Task list",
+      action: WRITING_BLOCK.TODO_LIST,
       icon: <ListChecksIcon aria-hidden="true" />,
     },
   ],
@@ -115,7 +156,7 @@ interface ToolbarPress {
 }
 
 /** Every press that answers a chord. */
-const CHORDED = FORMAT_GROUPS.flat().filter((press) => press.chord !== undefined);
+const CHORDED = FORMAT_GROUPS.flat().filter((press) => chordOf(press) !== undefined);
 
 /** Where each roving key moves the toolbar's one stop, from the stop it stands on among `count`. */
 const ROVING_KEYS = new Map([
@@ -144,12 +185,20 @@ export function applyMarkdownEdit(field: HTMLTextAreaElement, edit: MarkdownEdit
   field.setSelectionRange(edit.selectFrom, edit.selectTo);
 }
 
-/** The format a key pressed in the field asks for: ⌘B, ⌘I or ⌘K; none for any other key. */
+/** The format a key pressed in the field asks for: a writing chord, or ⌘K for a link; none for any other key. */
 export function formatForKey(
   event: Parameters<typeof shortcutMatches>[1],
 ): MarkdownFormat | undefined {
-  return CHORDED.find((press) => press.chord !== undefined && shortcutMatches(press.chord, event))
-    ?.format;
+  return CHORDED.find((press) => {
+    const chord = chordOf(press);
+    if (chord === undefined) return false;
+    // Note that Shift turns a digit into its symbol (⇧8 is "*"), so a shifted digit is told by its physical key.
+    if (chord.shift === true && /^\d$/u.test(chord.key.key)) {
+      const { metaKey, ctrlKey, altKey, shiftKey, code } = event;
+      return metaKey && shiftKey && !ctrlKey && !altKey && code === chord.key.code;
+    }
+    return shortcutMatches(chord, event);
+  })?.format;
 }
 
 /** The edit a press makes to the field as it stands now. */
@@ -204,7 +253,7 @@ export function MarkdownToolbar({
         (each): ToolbarPress => ({
           label: each.label,
           icon: each.icon,
-          chord: each.chord,
+          chord: chordOf(each),
           press: () => edit((area) => fieldEdit(area, each.format)),
         }),
       ),

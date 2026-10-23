@@ -21,6 +21,7 @@ import {
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
+import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
 import { installSkill } from "@luke/database/models/installed-skill-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -31,6 +32,7 @@ import {
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { messages } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_FAILURE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
@@ -40,6 +42,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import {
   Clock,
@@ -79,6 +82,8 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import {
@@ -88,6 +93,7 @@ import {
   runnerEnded,
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
+import { RUNNER_TAG } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { codingAgentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -342,6 +348,50 @@ const repositoryAgent = (
 
     return { userId, agent, sessions };
   });
+
+/** Another agent of the account's on the agent's own task, started on the branch given or the default one. */
+const anotherAgent = (userId: string, agent: CodingAgent, startBranch?: string) =>
+  Effect.gen(function* () {
+    assert.ok(agent.taskId !== null);
+    const started = yield* createCodingAgent(userId, {
+      taskId: agent.taskId,
+      idempotencyKey: `start-${randomUUID()}`,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Relay\n",
+      prompt: null,
+      repository: RELAY_FULL_NAME,
+      ...(startBranch === undefined ? undefined : { startBranch }),
+    });
+    return Option.getOrThrow(started).agent;
+  });
+
+/**
+ * An installation of its own reaching the Relay repository, since the tests
+ * share one store, in which an installation stays linked to the first
+ * workspace that connected it.
+ */
+function ownInstallation(): InstallationFixture {
+  return { ...RELAY_INSTALLATION, id: 1_000 + Math.floor(Math.random() * 1_000_000) };
+}
+
+/** Whether a run in the sandbox was the clone, by the variable only the clone is handed. */
+const isClone = (run: { readonly env: Readonly<Record<string, string>> }) =>
+  Object.hasOwn(run.env, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.URL);
+
+/** Whether a run in the sandbox was a repository snapshot's refresh. */
+const isRefresh = (run: { readonly env: Readonly<Record<string, string>> }) =>
+  Object.hasOwn(run.env, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.REFRESH);
+
+/** The repository snapshots' sandboxes still standing. */
+const repositorySnapshots = (api: ReturnType<typeof runnerSandboxApi>) =>
+  api.sandboxes.filter(
+    (each) => !each.deleted && each.name.startsWith(REPOSITORY_SNAPSHOT.NAME_PREFIX),
+  );
+
+/** The agent's own sandbox still standing, by the agent's tag. */
+const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: CodingAgent) =>
+  api.sandboxes.find((each) => !each.deleted && each.tags[RUNNER_TAG.AGENT] === agent.id);
 
 it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   it.effect(
@@ -914,6 +964,56 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a halt ends the running runner and keeps its sandbox, and the next message relaunches on the CLI's session cut before the line a rewind dropped",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        const target = { userId, conversationId: agent.conversationId };
+        const lineId = randomUUID();
+        yield* (yield* Database).insert(messages).values({
+          id: lineId,
+          ...target,
+          seq: 1,
+          clientId: "dropped-line",
+          role: MESSAGE_ROLE.USER,
+          parts: [{ type: "text", text: "Fix the invitations." }],
+          placedAt: new Date(0),
+        });
+
+        const halted = yield* sessions.halt(opened.sessionId, agent.conversationId);
+        // Note that the sandbox's tags no longer name the ended runner, so no message is written to it.
+        const tagsAfterHalt = { ...api.sandboxes[0]?.tags };
+        yield* rewindConversation(target, lineId);
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Fix only the emails."));
+
+        assert.equal(halted, true);
+        assert.equal(tagsAfterHalt[RUNNER_TAG.COMMAND], undefined);
+        assert.equal(tagsAfterHalt[RUNNER_TAG.AGENT], agent.id);
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 1);
+        assert.equal(api.sandboxes[0]?.deleted, false);
+        assert.deepEqual(linesOf(api.commands[0]).at(-1), { type: INPUT_LINE.STOP, launch: 0 });
+        assert.notEqual(api.commands[0]?.exitCode, null);
+        assert.equal(api.commands.length, 2);
+        const [config, line] = linesOf(api.commands[1]) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.equal(config.rewindBefore, "dropped-line");
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(line.content, [{ type: "text", text: "Fix only the emails." }]);
+        // The cut is handed over once.
+        assert.deepEqual(yield* readNativeRewind(target), Option.none());
       }),
   );
 
@@ -1684,13 +1784,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Push a branch."));
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        // The clone and the rest of its history are both fetched before the runner starts, so no
-        // fetch runs beside the agent's own git.
-        const ran = (words: string) =>
-          api.runs.findIndex((run) => run.args.join(" ").includes(words));
-        assert.ok(ran("clone") >= 0);
-        assert.ok(ran("--unshallow") > ran("clone"));
-        assert.ok(ran("--unshallow") < (runsAtStart[0] ?? -1));
+        // The repository is cloned whole, in one fetch, before the runner starts, so no fetch runs
+        // beside the agent's own git and none deepens it after.
+        const clone = api.runs.findIndex(isClone);
+        assert.ok(clone >= 0 && clone < (runsAtStart[0] ?? -1));
+        assert.equal(
+          Object.hasOwn(api.runs[clone]?.env ?? {}, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.DEPTH),
+          false,
+        );
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
         assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
         assert.equal(api.commands.length, 1);
@@ -1719,6 +1820,142 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           status: TURN_STATUS.FAILED,
           failure: CODING_AGENT_FAILURE.SANDBOX,
         });
+      }),
+  );
+  it.effect(
+    "a Start on a repository with no snapshot clones it whole, then builds its snapshot past the answer apart from the launch",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const kept = keptAfterResponse();
+
+        yield* sessions.open(message(agent, "Fix the relay.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        const launched = api.commands.length;
+        const builtWithLaunch = repositorySnapshots(api).length;
+        yield* kept.run;
+
+        assert.equal(launched, 1);
+        assert.equal(builtWithLaunch, 0);
+        const own = sandboxOfAgent(api, agent);
+        assert.equal(own?.snapshotId, SNAPSHOT);
+        assert.ok(api.runs.some((run) => run.session === own?.currentSessionId && isClone(run)));
+        const [snapshot] = repositorySnapshots(api);
+        assert.equal(snapshot?.snapshotId, SNAPSHOT);
+        assert.equal(snapshot?.status, "stopped");
+        assert.equal(snapshot?.currentSnapshotId, api.snapshots[0]);
+        // The snapshot holds no credential: the token stood at its firewall for the clone alone.
+        const visible = JSON.stringify([api.commands, api.runs, api.sandboxes]);
+        assert.equal(visible.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
+      }),
+  );
+
+  it.effect(
+    "the next agent on the repository opens from its snapshot, fetches only its branch, clones nothing, and launches with its write token standing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const kept = keptAfterResponse();
+        yield* sessions.open(message(agent, "Fix the relay.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        yield* kept.run;
+        const next = yield* anotherAgent(userId, agent);
+
+        yield* sessions.open(message(next, "Fix it again.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+
+        const own = sandboxOfAgent(api, next);
+        assert.equal(own?.snapshotId, api.snapshots[0]);
+        const ownRuns = api.runs.filter((run) => run.session === own?.currentSessionId);
+        assert.equal(ownRuns.filter(isClone).length, 0);
+        const [refresh] = ownRuns.filter(isRefresh);
+        assert.equal(
+          refresh?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH],
+          RELAY.defaultBranch,
+        );
+        assert.equal(
+          refresh?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.REPOSITORY],
+          RELAY_FULL_NAME,
+        );
+        assert.equal(api.commands.length, 2);
+        const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
+        const ownPolicies = api.policies.filter((each) => each.session === own?.currentSessionId);
+        assert.ok(JSON.stringify(ownPolicies.at(-1)?.policy).includes(writeHeader));
+        assert.equal(api.snapshots.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a repository snapshot gone under a launch, or whose checkout would not refresh, is forgotten, and the agent clones from the image instead",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const kept = keptAfterResponse();
+        yield* sessions.open(message(agent, "Fix the relay.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        yield* kept.run;
+        const [first] = api.snapshots;
+        assert.ok(first !== undefined);
+        api.goneSnapshots.add(first);
+        const afterGone = yield* anotherAgent(userId, agent);
+
+        yield* sessions.open(message(afterGone, "Go.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        const forgotten = repositorySnapshots(api).length;
+        yield* kept.run;
+        api.hooks.runExit = (args) =>
+          args.join(" ").includes("git fetch --quiet origin") ? 128 : 0;
+        const afterRefusal = yield* anotherAgent(userId, agent);
+        yield* sessions.open(message(afterRefusal, "Go.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+
+        assert.equal(forgotten, 0);
+        for (const each of [afterGone, afterRefusal]) {
+          const own = sandboxOfAgent(api, each);
+          assert.equal(own?.deleted, false);
+          assert.equal(own?.snapshotId, SNAPSHOT);
+          assert.ok(api.runs.some((run) => run.session === own?.currentSessionId && isClone(run)));
+        }
+        assert.equal(api.commands.length, 3);
+        // The sandbox the refusal opened from the second snapshot was deleted, and the snapshot with it.
+        const refusedOpen = api.sandboxes.find(
+          (each) => each.tags[RUNNER_TAG.AGENT] === afterRefusal.id && each.snapshotId !== SNAPSHOT,
+        );
+        assert.equal(refusedOpen?.deleted, true);
+        assert.equal(repositorySnapshots(api).length, 0);
+        assert.notEqual((yield* newestTurn(afterRefusal)).status, TURN_STATUS.FAILED);
+      }),
+  );
+
+  it.effect(
+    "an agent started on another branch neither opens from nor builds the repository's snapshot",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const kept = keptAfterResponse();
+        yield* sessions.open(message(agent, "Fix the relay.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        yield* kept.run;
+        const onBranch = yield* anotherAgent(userId, agent, "relay-fix");
+
+        yield* sessions.open(message(onBranch, "Go on.")).pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        yield* kept.run;
+
+        const own = sandboxOfAgent(api, onBranch);
+        assert.equal(own?.snapshotId, SNAPSHOT);
+        const clone = api.runs.find((run) => run.session === own?.currentSessionId && isClone(run));
+        assert.equal(clone?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH], "relay-fix");
+        assert.equal(api.snapshots.length, 1);
+        assert.equal(repositorySnapshots(api).length, 1);
       }),
   );
 });

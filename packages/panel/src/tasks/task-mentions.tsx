@@ -1,3 +1,4 @@
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -185,6 +186,25 @@ export function mentionablePullRequests(
   });
 }
 
+/** One agent of the workspace's list as a menu offers it: by its tab's name, wearing its tile, with its task named from `names`, the tasks' names by id. */
+export function mentionableAgent(
+  agent: CodingAgentSummary,
+  names: ReadonlyMap<string, string>,
+  models: readonly CatalogModel[] | undefined,
+): MentionableAgent {
+  const name = agentTabLabel(agent, models);
+  return {
+    id: agent.id,
+    name,
+    actor: agentActor(agent, name),
+    ...(agent.planId === null
+      ? undefined
+      : { task: { id: agent.planId, name: names.get(agent.planId) } }),
+    archived: agent.archivedAt !== undefined,
+    summary: agent,
+  };
+}
+
 /**
  * Reads the workspace's coding agents as an `@` list offers them: the
  * newest, or those the words name, archived ones among them, each by its
@@ -212,18 +232,9 @@ export function useMentionAgentsReader(
         (answer) => {
           if ("failure" in answer) return NO_AGENTS;
           const names = new Map(naming.current.tasks.map((task) => [task.id, task.name]));
-          return answer.agents.map((agent): MentionableAgent => {
-            const name = agentTabLabel(agent, naming.current.models);
-            return {
-              id: agent.id,
-              name,
-              actor: agentActor(agent, name),
-              ...(agent.planId === null
-                ? undefined
-                : { task: { id: agent.planId, name: names.get(agent.planId) } }),
-              archived: agent.archivedAt !== undefined,
-            };
-          });
+          return answer.agents.map((agent) =>
+            mentionableAgent(agent, names, naming.current.models),
+          );
         },
         () => NO_AGENTS,
       );

@@ -4,6 +4,8 @@ import {
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
+  SKELETON_SHAPE,
+  Skeleton,
   TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_TONE,
@@ -12,7 +14,7 @@ import {
 } from "@luke/ui";
 import { formatCount, formatDayTick } from "@luke/ui/time-format";
 import { Fragment } from "react";
-import { ChartEmpty, ChartFrame } from "./chart-frame.js";
+import { ChartEmpty, ChartFrame, PlotBox } from "./chart-frame.js";
 
 /**
  * The floor under a cell's fill, so a small nonzero share still reads as a
@@ -29,9 +31,26 @@ const RETENTION_FILL_FLOOR_PERCENT = 8;
  */
 const RETENTION_TEXT_FLIP_SHARE = 0.75;
 
+/** A cohort row's height at least, every cell's, which the grid's skeleton stands too. */
+const RETENTION_ROW_HEIGHT = "2.25rem";
+
+/** The room between the grid's rows and columns. */
+const RETENTION_GAP = "var(--luke-space-4)";
+
+/**
+ * How many weekly cohorts the grid stands, the service's
+ * `ADMIN_RETENTION_WEEKS`, not imported because the module exporting it
+ * carries query code the client bundle must not.
+ */
+const RETENTION_SKELETON_WEEKS = 8;
+
+/** Every cell's box: at least a row tall, so an empty cell holds its row as a filled one does. */
+const RETENTION_CELL_BOX: React.CSSProperties = { minHeight: RETENTION_ROW_HEIGHT };
+
 function retentionCellStyle(share: number): React.CSSProperties {
   const fill = Math.max(RETENTION_FILL_FLOOR_PERCENT, Math.round(share * 100));
   return {
+    ...RETENTION_CELL_BOX,
     backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
     color:
       share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-on-accent)" : "var(--luke-color-text)",
@@ -45,7 +64,8 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   if (cell.share === null) {
     return (
       <div
-        className={`flex min-h-9 items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
+        className={`flex items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
+        style={RETENTION_CELL_BOX}
         title="No accounts in this cohort"
       >
         —
@@ -59,7 +79,8 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   if (cell.share === 0) {
     return (
       <div
-        className={`flex min-h-9 items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
+        className={`flex items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
+        style={RETENTION_CELL_BOX}
         title={title}
       >
         {percent}
@@ -68,7 +89,7 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   }
   return (
     <div
-      className={`flex min-h-9 items-center justify-center rounded-sm ${provisional}`}
+      className={`flex items-center justify-center rounded-sm ${provisional}`}
       style={retentionCellStyle(cell.share)}
       title={title}
     >
@@ -131,8 +152,9 @@ export function RetentionGrid({
           <div className="w-fit min-w-full px-(--luke-card-inset)">
             <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
               <div
-                className="grid min-w-160 gap-(--luke-space-4) tabular-nums"
+                className="grid min-w-160 tabular-nums"
                 style={{
+                  gap: RETENTION_GAP,
                   gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
                 }}
               >
@@ -168,6 +190,23 @@ export function RetentionGrid({
           </div>
         </ScrollArea>
       </div>
+    </ChartFrame>
+  );
+}
+
+/**
+ * The grid while its cohorts are read: its card over a block as tall as the
+ * grid it stands for, its header row in the caption's line and a row a
+ * cohort, each the cells' own height and the grid's gap apart.
+ */
+export function RetentionGridSkeleton(): React.JSX.Element {
+  return (
+    <ChartFrame>
+      <PlotBox
+        height={`calc(var(--luke-type-caption-leading) + ${RETENTION_SKELETON_WEEKS} * (${RETENTION_ROW_HEIGHT} + ${RETENTION_GAP}))`}
+      >
+        <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+      </PlotBox>
     </ChartFrame>
   );
 }

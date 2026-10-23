@@ -37,7 +37,7 @@ import {
   UserIcon,
   useMinute,
 } from "@luke/ui";
-import { ACTOR_KIND, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   AppWindowIcon,
@@ -53,7 +53,8 @@ import {
   ZapIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
+import { useAutomation } from "../automation-directory.js";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
@@ -805,6 +806,27 @@ function WrittenDateChip({
   );
 }
 
+/** An automation's clock tile on a chip, wearing how its newest run went where the window reads the automation, and at rest where it does not. */
+function AutomationTile({
+  automationId,
+  name,
+}: {
+  automationId: string;
+  name: string;
+}): React.JSX.Element {
+  const known = useAutomation(automationId);
+  return (
+    <ActorMark
+      actor={
+        known === undefined
+          ? { kind: ACTOR_KIND.AUTOMATION, name, state: ACTOR_STATE.REST }
+          : automationActor(known.automation)
+      }
+      size={ACTOR_SIZE.INLINE}
+    />
+  );
+}
+
 /** The glyph a place in Luke wears, the one its tab or its row in the window wears: an agent's its harness's mark, where the window holds the agent. */
 function PlaceGlyph({
   place,
@@ -854,9 +876,10 @@ function PlaceGlyph({
     case LINK_PLACE.INBOX_ITEM:
       return <InboxIcon aria-hidden="true" />;
     case LINK_PLACE.AUTOMATIONS:
+      return <ZapIcon aria-hidden="true" />;
     case LINK_PLACE.AUTOMATION:
     case LINK_PLACE.AUTOMATION_RUN:
-      return <ZapIcon aria-hidden="true" />;
+      return <AutomationTile automationId={place.automationId} name={name} />;
     case LINK_PLACE.SETTINGS:
       return <GearIcon />;
     case LINK_PLACE.PERSON:

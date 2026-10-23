@@ -42,15 +42,19 @@ import {
   OneLine,
   ProviderMark,
   SETTINGS_ROW_INDENT,
+  SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
   SettingsRowActSlot,
   SettingsRowMark,
+  type SettingsRowSkeletonShape,
   SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsRowValue,
   SettingsSection,
+  type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
@@ -79,7 +83,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
-import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { actPort } from "../app-bridge.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
@@ -303,8 +307,53 @@ function refusedWith(refused: Error): ActionResult {
 /** The most rows that stand for the members while they are read, however many the workspace counts. */
 const MEMBERS_SKELETON_MOST = 5;
 
-/** How many rows each section stands before the workspaces are read: the identity, the members, and the integrations. */
-const WORKSPACE_SKELETON = [1, 2, 2] as const;
+/** A member's row while the members are read: their face at a card's size, the email under the name, the role and the ⋯. */
+const MEMBER_ROW_SKELETON: SettingsRowSkeletonShape = {
+  described: true,
+  mark: actorMarkWidth(ACTOR_SIZE.CARD),
+  controls: [SETTINGS_SKELETON_CONTROL.VALUE, SETTINGS_SKELETON_CONTROL.MORE],
+};
+
+/** An invitation's row while the invitations are read: the invited face, the role and expiry under the email, Copy link and the ⋯. */
+const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
+  described: true,
+  mark: actorMarkWidth(ACTOR_SIZE.CARD),
+  controls: [SETTINGS_SKELETON_CONTROL.BUTTON, SETTINGS_SKELETON_CONTROL.MORE],
+};
+
+/** The services the Integrations group draws a row for, in order, each by its own row. */
+const WORKSPACE_INTEGRATIONS = [
+  { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
+  { service: INTEGRATION_PROVIDER.LINEAR, Row: WorkspaceLinear },
+  { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
+] as const;
+
+/**
+ * The page's groups before the workspaces are read: the identity, unheaded,
+ * its tile at a card's size; the members; and a row to each integration, its
+ * mark leading and its press at its end.
+ */
+const WORKSPACE_SKELETON: readonly SettingsSectionSkeletonShape[] = [
+  {
+    headed: false,
+    rows: [
+      {
+        described: true,
+        mark: actorMarkWidth(ACTOR_SIZE.CARD),
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+    ],
+  },
+  { headed: true, rows: [MEMBER_ROW_SKELETON] },
+  {
+    headed: true,
+    rows: WORKSPACE_INTEGRATIONS.map(() => ({
+      described: true,
+      mark: SETTINGS_ROW_MARK_WIDTH,
+      controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+    })),
+  },
+];
 
 /** A list as the page reads it: still reading, read, or refused with a line. */
 type ListRead<Item> = { readonly items: readonly Item[] } | { readonly failed: string } | undefined;
@@ -803,8 +852,10 @@ function TeamMembers({
     return (
       <SettingsRowsSkeleton
         label="Loading the members"
-        rows={Math.min(workspace.memberCount ?? 1, MEMBERS_SKELETON_MOST)}
-        marked
+        rows={Array.from(
+          { length: Math.min(workspace.memberCount ?? 1, MEMBERS_SKELETON_MOST) },
+          () => MEMBER_ROW_SKELETON,
+        )}
       />
     );
   }
@@ -1045,7 +1096,7 @@ function Invitations({
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
-        <SettingsRowsSkeleton label="Loading the invitations" marked />
+        <SettingsRowsSkeleton label="Loading the invitations" rows={[INVITATION_ROW_SKELETON]} />
       ) : pending.length === 0 ? (
         <SettingsLine>{INVITATIONS_EMPTY}</SettingsLine>
       ) : null}
@@ -1057,6 +1108,7 @@ function Invitations({
             {
               label: "Cancel invitation",
               icon: <XIcon />,
+              danger: true,
               disabled: busy,
               onSelect: () => cancel(one.id),
             },
@@ -1716,11 +1768,7 @@ export function WorkspacePage({
         <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
       </SettingsSection>
     ) : (
-      <SettingsSectionsSkeleton
-        label="Loading your workspaces"
-        sections={WORKSPACE_SKELETON}
-        marked
-      />
+      <SettingsSectionsSkeleton label="Loading your workspaces" sections={WORKSPACE_SKELETON} />
     );
   }
   // Keyed to the workspace, so another one listed reads its own members and asks nothing left over.
@@ -1767,9 +1815,9 @@ function ShownWorkspace({
         </SettingsSection>
       ) : null}
       <SettingsSection title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
-        <WorkspaceGitHub workspace={workspace} />
-        <WorkspaceLinear workspace={workspace} />
-        <WorkspaceSentryRow workspace={workspace} />
+        {WORKSPACE_INTEGRATIONS.map(({ service, Row }) => (
+          <Row key={service} workspace={workspace} />
+        ))}
       </SettingsSection>
       {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup

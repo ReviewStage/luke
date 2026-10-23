@@ -10,21 +10,29 @@ import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
 import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useState } from "react";
-import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table.js";
+import {
+  ACCOUNTS_TABLE_MIN_WIDTH,
+  AccountsTable,
+  AccountsTableSkeleton,
+} from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
-import { ActivityChart } from "../charts/activity-chart.js";
-import { TrendMove } from "../charts/chart-frame.js";
-import { RetentionGrid } from "../charts/retention-grid.js";
-import { FunnelChart, ReachChart } from "../charts/share-bars.js";
-import { SignupsChart } from "../charts/signups-chart.js";
-import { AdminSection, StatCard, StatGroup } from "../charts/stat-card.js";
+import { ActivityChart, ActivityChartSkeleton } from "../charts/activity-chart.js";
+import { CHART_PAIR_WIDE, TrendMove } from "../charts/chart-frame.js";
+import { RetentionGrid, RetentionGridSkeleton } from "../charts/retention-grid.js";
+import {
+  FunnelChart,
+  FunnelChartSkeleton,
+  ReachChart,
+  ReachChartSkeleton,
+} from "../charts/share-bars.js";
+import { SignupsChart, SignupsChartSkeleton } from "../charts/signups-chart.js";
+import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
 import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { ActivityNote, RetentionNote, TopAccountsNote } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
-import { CHART_PAIR_WIDE, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
 import { type AdminReadHandle, adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 const METRICS_ERROR = "The metrics endpoint did not answer.";
@@ -38,24 +46,12 @@ const RETENTION_OPTIONS = [
   { value: RETENTION_BASIS.HOSTED_CALL, label: "Any hosted call" },
 ] as const;
 
-/** The dashboard's own sections, in the order the loaded page states them. */
-const DASHBOARD_SHAPES: readonly SkeletonShape[] = [
-  { kind: SKELETON_SHAPE.HEADING, label: "This week" },
-  { kind: SKELETON_SHAPE.STAT_GROUP, cards: 4 },
-  { kind: SKELETON_SHAPE.HEADING, label: "Activity by feature" },
-  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.ACTIVITY] },
-  { kind: SKELETON_SHAPE.STATIC, node: <ActivityNote /> },
-  { kind: SKELETON_SHAPE.HEADING, label: "Activation and reach" },
-  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.SHARE_BARS, SKELETON_PLOT.SHARE_BARS] },
-  { kind: SKELETON_SHAPE.HEADING, label: "Retention · weekly cohorts" },
-  { kind: SKELETON_SHAPE.RETENTION },
-  { kind: SKELETON_SHAPE.STATIC, node: <RetentionNote basis={RETENTION_BASIS.MEANINGFUL} /> },
-  { kind: SKELETON_SHAPE.HEADING, label: "Most active accounts" },
-  { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 6 },
-  { kind: SKELETON_SHAPE.STATIC, node: <TopAccountsNote /> },
-  { kind: SKELETON_SHAPE.HEADING, label: "Signups" },
-  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.SIGNUPS] },
-];
+/**
+ * How many accounts the most-active table's skeleton stands a row for, the
+ * service's `ADMIN_OVERVIEW_ACCOUNTS_LIMIT`, not imported because the module
+ * exporting it carries query code the client bundle must not.
+ */
+const TOP_ACCOUNTS_SKELETON_ROWS = 10;
 
 /**
  * The most active accounts' own columns after Active days: what each did in
@@ -99,30 +95,37 @@ function percentOf(part: number, whole: number): string {
   return `${Math.round((part / whole) * 100)}%`;
 }
 
-/** A tile's figure for the recent run, its move against the run before, and what else it says. */
-function TrendTile({
-  label,
+/** A tile's move against the run before, and what else it says. */
+function TrendHint({
   trend,
   detail,
 }: {
-  label: string;
   trend: AdminTrend;
   detail?: string | undefined;
 }): React.JSX.Element {
   return (
-    <StatCard
-      label={label}
-      value={formatCount(trend.recent)}
-      hint={
-        <>
-          <TrendMove trend={trend} /> vs the {trend.days} days before
-          {detail === undefined ? null : ` · ${detail}`}
-        </>
-      }
-      title={`against ${formatCount(trend.prior)} in the ${trend.days} days before`}
-      grouped
-    />
+    <>
+      <TrendMove trend={trend} /> vs the {trend.days} days before
+      {detail === undefined ? null : ` · ${detail}`}
+    </>
   );
+}
+
+/** A headline tile's figure, the recent run's, and its title, the run before it. */
+function trendTile(
+  key: string,
+  label: (headline: AdminOverview["headline"]) => string,
+  trendOf: (headline: AdminOverview["headline"]) => AdminTrend,
+  detail: (headline: AdminOverview["headline"]) => string | undefined = () => undefined,
+): StatSpec<AdminOverview["headline"]> {
+  return {
+    key,
+    label,
+    value: (headline) => formatCount(trendOf(headline).recent),
+    hint: (headline) => <TrendHint trend={trendOf(headline)} detail={detail(headline)} />,
+    title: (headline) =>
+      `against ${formatCount(trendOf(headline).prior)} in the ${trendOf(headline).days} days before`,
+  };
 }
 
 /**
@@ -130,40 +133,146 @@ function TrendTile({
  * seven before: who is active, and the tasks, agents, and pull requests the
  * product exists to move.
  */
-function HeadlineTiles({ headline }: { headline: AdminOverview["headline"] }): React.JSX.Element {
-  const { activeDevelopers, tasksCreated, agentsStarted, prsMerged, prsOpened } = headline;
-  const days = activeDevelopers.days;
+const HEADLINE_STATS: readonly StatSpec<AdminOverview["headline"]>[] = [
+  trendTile(
+    "active-developers",
+    () => "Weekly active developers",
+    (headline) => headline.activeDevelopers,
+  ),
+  trendTile(
+    "tasks-created",
+    (headline) => `Tasks created · ${headline.activeDevelopers.days} days`,
+    (headline) => headline.tasksCreated,
+    ({ activeDevelopers, tasksCreated }) =>
+      activeDevelopers.recent === 0
+        ? undefined
+        : `${(tasksCreated.recent / activeDevelopers.recent).toFixed(1)} per active developer`,
+  ),
+  trendTile(
+    "agents-started",
+    (headline) => `Agents started · ${headline.activeDevelopers.days} days`,
+    (headline) => headline.agentsStarted,
+    ({ agentsStarted, agentsFromAutomations }) =>
+      agentsStarted.recent === 0
+        ? undefined
+        : `${percentOf(agentsFromAutomations, agentsStarted.recent)} from automations`,
+  ),
+  trendTile(
+    "prs-merged",
+    (headline) => `PRs merged · ${headline.activeDevelopers.days} days`,
+    (headline) => headline.prsMerged,
+    ({ prsOpened }) =>
+      prsOpened.opened === 0
+        ? undefined
+        : `${percentOf(prsOpened.merged, prsOpened.opened)} of this week's agents' ${formatCount(prsOpened.opened)} PRs merged`,
+  ),
+];
+
+/**
+ * The page's sections under its toolbar, drawn from `metrics` once it is
+ * read and as their skeletons until then. The retention basis is the page's
+ * own choice, so its picker and its note stand live either way.
+ */
+function DashboardSections({
+  metrics,
+  windowDays,
+  basis,
+  onBasisChange,
+  onOpenAccount,
+  onOpenDay,
+}: {
+  metrics: AdminMetrics | undefined;
+  windowDays: AdminMetricsWindow;
+  basis: RetentionBasis;
+  onBasisChange: (basis: RetentionBasis) => void;
+  onOpenAccount: (id: string) => void;
+  onOpenDay: (day: string) => void;
+}): React.JSX.Element {
+  const overview = metrics?.overview;
+  const topAccounts = {
+    windowDays: metrics?.windowDays ?? windowDays,
+    minWidth: ACCOUNTS_TABLE_MIN_WIDTH.ROSTER,
+    onOpen: onOpenAccount,
+    hostedColumns: false,
+    trailingColumns: OVERVIEW_ACCOUNT_COLUMNS,
+  };
   return (
-    <StatGroup>
-      <TrendTile label="Weekly active developers" trend={activeDevelopers} />
-      <TrendTile
-        label={`Tasks created · ${days} days`}
-        trend={tasksCreated}
-        detail={
-          activeDevelopers.recent === 0
-            ? undefined
-            : `${(tasksCreated.recent / activeDevelopers.recent).toFixed(1)} per active developer`
-        }
-      />
-      <TrendTile
-        label={`Agents started · ${days} days`}
-        trend={agentsStarted}
-        detail={
-          agentsStarted.recent === 0
-            ? undefined
-            : `${percentOf(headline.agentsFromAutomations, agentsStarted.recent)} from automations`
-        }
-      />
-      <TrendTile
-        label={`PRs merged · ${days} days`}
-        trend={prsMerged}
-        detail={
-          prsOpened.opened === 0
-            ? undefined
-            : `${percentOf(prsOpened.merged, prsOpened.opened)} of this week's agents' ${formatCount(prsOpened.opened)} PRs merged`
-        }
-      />
-    </StatGroup>
+    <>
+      <AdminSection title="This week">
+        <StatCards layout={STAT_LAYOUT.GROUP} stats={HEADLINE_STATS} data={overview?.headline} />
+      </AdminSection>
+
+      <AdminSection title="Activity by feature">
+        {metrics === undefined ? (
+          <ActivityChartSkeleton />
+        ) : (
+          <ActivityChart
+            activity={metrics.overview.activity}
+            generatedAt={metrics.generatedAt}
+            onOpenDay={onOpenDay}
+          />
+        )}
+        <ActivityNote />
+      </AdminSection>
+
+      <AdminSection title="Activation and reach">
+        <div className={CHART_PAIR_WIDE}>
+          {metrics === undefined ? (
+            <FunnelChartSkeleton windowDays={windowDays} />
+          ) : (
+            <FunnelChart funnel={metrics.overview.funnel} windowDays={metrics.windowDays} />
+          )}
+          {overview === undefined ? <ReachChartSkeleton /> : <ReachChart reach={overview.reach} />}
+        </div>
+      </AdminSection>
+
+      <AdminSection title="Retention · weekly cohorts">
+        <div>
+          <ChoiceBar
+            label="Retained by"
+            items={RETENTION_OPTIONS}
+            value={basis}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            onChange={onBasisChange}
+          />
+        </div>
+        {metrics === undefined ? (
+          <RetentionGridSkeleton />
+        ) : (
+          <RetentionGrid
+            retention={
+              basis === RETENTION_BASIS.MEANINGFUL ? metrics.overview.retention : metrics.retention
+            }
+          />
+        )}
+        <RetentionNote basis={basis} />
+      </AdminSection>
+
+      <AdminSection title="Most active accounts">
+        {metrics === undefined ? (
+          <AccountsTableSkeleton rows={TOP_ACCOUNTS_SKELETON_ROWS} {...topAccounts} />
+        ) : (
+          <AccountsTable
+            rows={metrics.overview.topAccounts}
+            emptyText="No meaningful actions recorded in this window yet."
+            {...topAccounts}
+          />
+        )}
+        <TopAccountsNote />
+      </AdminSection>
+
+      <AdminSection title="Signups">
+        {metrics === undefined ? (
+          <SignupsChartSkeleton />
+        ) : (
+          <SignupsChart
+            daily={metrics.users.dailySignups}
+            trend={metrics.users.signupTrend}
+            generatedAt={metrics.generatedAt}
+          />
+        )}
+      </AdminSection>
+    </>
   );
 }
 
@@ -231,15 +340,20 @@ export function DashboardScreen({
     </>
   );
 
+  const sections = {
+    windowDays,
+    basis,
+    onBasisChange: setBasis,
+    onOpenAccount,
+    onOpenDay,
+  };
+
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title={OVERVIEW_TITLE}
-          note={windowWords(windowDays)}
-          controls={controls}
-          shapes={DASHBOARD_SHAPES}
-        />,
+        <PageSkeleton title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>
+          <DashboardSections metrics={undefined} {...sections} />
+        </PageSkeleton>,
       );
     case "signed-out":
       return gate.signedOut();
@@ -256,77 +370,16 @@ export function DashboardScreen({
           />
         </AdminPage>,
       );
-    case "ready": {
-      const metrics = state.value;
-      const overview = metrics.overview;
-
+    case "ready":
       return frame(
         <AdminPage title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>
           {/* A refetch dims the answer already on screen rather than replacing it:
           the numbers below stay the last ones actually read, and the dimming
           says so while the next read is in flight. */}
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <AdminSection title="This week">
-              <HeadlineTiles headline={overview.headline} />
-            </AdminSection>
-
-            <AdminSection title="Activity by feature">
-              <ActivityChart
-                activity={overview.activity}
-                generatedAt={metrics.generatedAt}
-                onOpenDay={onOpenDay}
-              />
-              <ActivityNote />
-            </AdminSection>
-
-            <AdminSection title="Activation and reach">
-              <div className={CHART_PAIR_WIDE}>
-                <FunnelChart funnel={overview.funnel} windowDays={metrics.windowDays} />
-                <ReachChart reach={overview.reach} />
-              </div>
-            </AdminSection>
-
-            <AdminSection title="Retention · weekly cohorts">
-              <div>
-                <ChoiceBar
-                  label="Retained by"
-                  items={RETENTION_OPTIONS}
-                  value={basis}
-                  look={CHOICE_BAR_LOOK.SEGMENTED}
-                  onChange={setBasis}
-                />
-              </div>
-              <RetentionGrid
-                retention={
-                  basis === RETENTION_BASIS.MEANINGFUL ? overview.retention : metrics.retention
-                }
-              />
-              <RetentionNote basis={basis} />
-            </AdminSection>
-
-            <AdminSection title="Most active accounts">
-              <AccountsTable
-                rows={overview.topAccounts}
-                windowDays={metrics.windowDays}
-                emptyText="No meaningful actions recorded in this window yet."
-                minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
-                onOpen={onOpenAccount}
-                hostedColumns={false}
-                trailingColumns={OVERVIEW_ACCOUNT_COLUMNS}
-              />
-              <TopAccountsNote />
-            </AdminSection>
-
-            <AdminSection title="Signups">
-              <SignupsChart
-                daily={metrics.users.dailySignups}
-                trend={metrics.users.signupTrend}
-                generatedAt={metrics.generatedAt}
-              />
-            </AdminSection>
+            <DashboardSections metrics={state.value} {...sections} />
           </Refreshing>
         </AdminPage>,
       );
-    }
   }
 }

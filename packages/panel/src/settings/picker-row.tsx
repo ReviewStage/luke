@@ -232,8 +232,8 @@ interface PickerProps {
   describedBy?: string | undefined;
   /** Whether the chip's last pick was refused, as its row says under it. */
   invalid?: true | undefined;
-  /** The id of the value chosen now, checked in the menu. */
-  value: string;
+  /** The id of the value chosen now, checked in the menu; none where nothing is chosen yet, which keeps no row a check's room. */
+  value: string | undefined;
   /** What the chip says: the chosen value's own words. */
   valueLabel: string;
   /** The chosen value's mark, where values carry one. */
@@ -253,6 +253,8 @@ interface PickerProps {
   width?: ChipWidth | undefined;
   /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
   onOpen?: (() => void) | undefined;
+  /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed unfiltered. */
+  onSearch?: ((query: string) => void) | undefined;
   onPick: (id: string) => void;
 }
 
@@ -277,6 +279,7 @@ export function Picker({
   align = PICKER_ALIGN.END,
   width = CHIP_WIDTH.FIELD,
   onOpen,
+  onSearch,
   onPick,
 }: PickerProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -328,6 +331,7 @@ export function Picker({
           value={value}
           note={note}
           noMatch={noMatch}
+          onSearch={onSearch}
           onPick={(id) => {
             close();
             onPick(id);

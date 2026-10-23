@@ -80,12 +80,14 @@ import { type ReactNode, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
+import { repositoryWords } from "../repository-row.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { type MenuAsk, useAskedMenu } from "./phone-head.js";
 
 /**
  * tasks-page-options.tsx -- the Tasks page's Filter and View options, the two buttons at its toolbar's end, and the chips under it saying what the filter keeps.
@@ -124,8 +126,8 @@ export interface TasksViewFrame {
 }
 
 /** What the buttons are called, on their tooltips and their menus alike. */
-const FILTER = "Filter";
-const VIEW_OPTIONS = "View options";
+export const FILTER = "Filter";
+export const VIEW_OPTIONS = "View options";
 
 /** What each field is called, on its submenu and its chip. */
 const FIELD_WORDS = {
@@ -236,11 +238,8 @@ interface FieldValue {
   readonly value: string | null;
   readonly words: string;
   readonly icon: React.JSX.Element;
-}
-
-/** A repository's own name, without its owner, as a menu and a chip have room for. */
-function repositoryName(repository: string): string {
-  return repository.slice(repository.indexOf("/") + 1);
+  /** Muted words after the name in the menu, a repository's owner; the chip names the value without them. */
+  readonly detail?: string | undefined;
 }
 
 /** Who a creator is, as the directory draws them, else as a listed task names them. */
@@ -379,10 +378,15 @@ function fieldValues(
       return [
         ...[...held]
           .filter((repository): repository is string => repository !== null)
-          .sort((a, b) => repositoryName(a).localeCompare(repositoryName(b)) || a.localeCompare(b))
+          .sort(
+            (a, b) =>
+              repositoryWords(a).label.localeCompare(repositoryWords(b).label) ||
+              a.localeCompare(b),
+          )
           .map((repository) => ({
             value: repository,
-            words: repositoryName(repository),
+            words: repositoryWords(repository).label,
+            detail: repositoryWords(repository).detail,
             icon: (
               <RepositoryPicture
                 repository={repository}
@@ -415,6 +419,16 @@ function offeredFields(shared: boolean): readonly TasksFilterField[] {
   );
 }
 
+/** The row standing last in a people's field while the members are read, which nothing picks. */
+const READING_MEMBERS: MenuAction = {
+  label: "Reading members…",
+  disabled: true,
+  onSelect: () => undefined,
+};
+
+/** What the Filter says of itself while it keeps anything. */
+export const FILTERED = "Filtered";
+
 /** The filter's menu: a submenu for each field, its values toggled where they stand, and Clear filters at its foot. */
 function filterEntries(
   tasks: readonly TaskSummary[],
@@ -429,15 +443,20 @@ function filterEntries(
     return {
       label: FIELD_WORDS[field],
       icon: FIELD_ICON[field],
-      items: fieldValues(field, tasks, filter, reader, pictures).map(
-        ({ value, words, icon }): MenuAction => ({
-          label: words,
-          icon,
-          checked: kept.includes(value),
-          stays: true,
-          onSelect: () => onFilter(toggledFilter(filter, field, value)),
-        }),
-      ),
+      items: [
+        ...fieldValues(field, tasks, filter, reader, pictures).map(
+          ({ value, words, icon, detail }): MenuAction => ({
+            label: words,
+            icon,
+            detail,
+            checked: kept.includes(value),
+            stays: true,
+            onSelect: () => onFilter(toggledFilter(filter, field, value)),
+          }),
+        ),
+        // Note that the members are read for the people's fields alone, so no other field says it is reading.
+        ...(reader.membersReading && PERSON_FIELDS.includes(field) ? [READING_MEMBERS] : []),
+      ],
     };
   });
   return [
@@ -460,6 +479,7 @@ export function TasksFilterButton({
   filter,
   onFilter,
   shared,
+  asked,
   pictures,
 }: {
   /** Whether the page is on screen, for the menu not to outlive it. */
@@ -470,24 +490,29 @@ export function TasksFilterButton({
   onFilter: (filter: TasksFilter) => void;
   /** Whether the workspace is shared, which alone filters by assignee or creator. */
   shared: boolean;
+  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
+  asked?: { readonly ask: MenuAsk | undefined } | undefined;
   /** Whether repositories' owners' pictures are drawn at all: not in a fixture run. */
   pictures: boolean;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   const reader = useMemberDirectory();
   const filtered = filteredFields(filter).length > 0;
   return (
     <>
-      <span className="tasks-page-option" data-filtered={filtered ? "true" : undefined}>
-        <Tooltip label={FILTER}>
-          <IconButton
-            icon={<ListFilterIcon />}
-            label={FILTER}
-            aria-description={filtered ? "Filtered" : undefined}
-            {...menu.trigger()}
-          />
-        </Tooltip>
-      </span>
+      {asked === undefined ? (
+        <span className="tasks-page-option" data-filtered={filtered ? "true" : undefined}>
+          <Tooltip label={FILTER}>
+            <IconButton
+              icon={<ListFilterIcon />}
+              label={FILTER}
+              aria-description={filtered ? FILTERED : undefined}
+              {...menu.trigger()}
+            />
+          </Tooltip>
+        </span>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={FILTER}
@@ -742,6 +767,7 @@ export function TasksViewOptions({
   initial,
   onDisplay,
   shared,
+  asked,
 }: {
   shown: boolean;
   /** Whether the view is the Board, which offers only what its columns and cards can draw. */
@@ -752,15 +778,20 @@ export function TasksViewOptions({
   onDisplay: (display: TasksDisplay) => void;
   /** Whether the workspace is shared, which alone groups by assignee or creator. */
   shared: boolean;
+  /** Where a phone's ⋯ stands for the button, as the Filter's (`TasksFilterButton`); none elsewhere. */
+  asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   return (
     <>
-      <span className="tasks-page-option">
-        <Tooltip label={VIEW_OPTIONS}>
-          <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-        </Tooltip>
-      </span>
+      {asked === undefined ? (
+        <span className="tasks-page-option">
+          <Tooltip label={VIEW_OPTIONS}>
+            <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+          </Tooltip>
+        </span>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}

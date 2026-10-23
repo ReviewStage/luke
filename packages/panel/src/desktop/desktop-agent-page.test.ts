@@ -24,6 +24,7 @@ import {
   type CodingAgentPage,
   type CodingAgentPullRequestAnswer,
   type CodingAgentSummary,
+  MERGE_STATE,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
@@ -80,6 +81,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { focusRestOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { bundleLanded } from "../testing/side-bundles.js";
@@ -100,6 +102,9 @@ import { DesktopAgentPage } from "./desktop-agent-page.js";
  */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** The task an agent on a task stands on, whose pages it shows. */
+const PAGE_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** The agent a Continue or a Fork on the page starts. */
 const STARTED_ID = "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
@@ -202,6 +207,8 @@ let told: AnyAct[] = [];
 let published: CodingAgentPullRequestAnswer | undefined;
 /** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
 let earlier = 0;
+/** The owner of the fork the published pull request's head is pushed to; none for the base repository's own. */
+let forkOwner: string | undefined;
 /** What the window copied, in order. */
 let copied: string[] = [];
 /** What the workspace's list of agents answers, whatever it was asked. */
@@ -236,6 +243,7 @@ beforeEach(() => {
   told = [];
   published = undefined;
   earlier = 0;
+  forkOwner = undefined;
   openedOnGitHub = [];
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS, pageFrameUrl });
@@ -316,6 +324,30 @@ beforeEach(() => {
         const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
+      if (
+        request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST &&
+        published?.pullRequest != null
+      ) {
+        // Note that the overview is read from what the agent published, as the service reads both from one pull request.
+        const { number, title, url, state } = published.pullRequest;
+        const value = {
+          pullRequest: {
+            number,
+            title,
+            url,
+            state,
+            html: "",
+            base: "main",
+            head: published.branch ?? "main",
+            ...(forkOwner === undefined ? undefined : { headOwner: forkOwner }),
+            createdAt: 1,
+            mergedAt: null,
+            merge: MERGE_STATE.CLEAN,
+            requested: [],
+          },
+        };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
       }
@@ -341,6 +373,14 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
+      }
+      // Only the task the agents here stand on holds a page; an agent's own pages hold none.
+      if (request.kind === ACT_KIND.TASKS_PAGES) {
+        const onTask = "taskId" in request.payload && request.payload.taskId === PAGE_TASK;
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: { pages: onTask ? [FUNNEL] : [] },
+        });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
         read.push(request.payload.agentId);
@@ -751,6 +791,48 @@ test("the row of a page the agent showed opens it in the panel beside the agent'
   act(() => row.click());
 
   assert.deepEqual(chosen, [{ page: FUNNEL.id }]);
+});
+
+test("the row of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
+  pages = [{ agent: { ...PAGE, planId: PAGE_TASK } }];
+  transcript = {
+    messages: [
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-show_page",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { title: FUNNEL.title, path: "funnel.html" },
+            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  const row =
+    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
+      (each.textContent ?? "").includes(FUNNEL.title),
+    ) ?? assert.fail("the call's row names the page it showed");
+  document.documentElement.dataset.keyboard = "true";
+  focusRestOn(row);
+  await settle();
+
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
+  assert.equal(
+    card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+    pageFrameUrl({ taskId: PAGE_TASK, pageId: FUNNEL.id, version: 2 }),
+    "the preview is the task's page",
+  );
 });
 
 /** The page drawn over the window's own side panel, held by the agent. */
@@ -1655,6 +1737,73 @@ test("Run in the header of the agent's Pull request tab runs its branch on this 
   assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
   assert.equal(tab.macTerminal, AGENT_ID);
   assert.equal(tab.repository, PAGE.repository);
+});
+
+test("Run in the header of a Pull request tab opened by its number runs that pull request's branch, not the agent's own", async () => {
+  takeDownTerminal = standTerminalDocument();
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "luke/view-commands",
+    pullRequest: {
+      number: 2905,
+      title: "View commands",
+      url: "https://github.com/acme/relay/pull/2905",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 5,
+      deletions: 2,
+      changedFiles: 2,
+    },
+  };
+  await mountPanelPage();
+  // Note that a link to another pull request opens its tab by number, as the Inbox's and a mention's do.
+  act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2905 }));
+  await settle();
+
+  const run =
+    document.querySelector<HTMLButtonElement>(
+      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
+    ) ?? assert.fail("the numbered Pull request tab's header offers Run");
+  act(() => run.click());
+  await settle();
+
+  const tab = drawnPanel?.tab;
+  assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
+  assert.equal(tab.macTerminal, AGENT_ID);
+  assert.equal(tab.number, 2905);
+});
+
+test("a fork's Pull request tab offers no Run, since its head's branch name would be read from the base repository", async () => {
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "main",
+    pullRequest: {
+      number: 2907,
+      title: "Contributed fix",
+      url: "https://github.com/acme/relay/pull/2907",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 1,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  forkOwner = "contributor";
+  await mountPanelPage();
+  act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2907 }));
+  await settle();
+
+  assert.ok(
+    document.querySelector("aside.side-panel .pull-request-title-actions"),
+    "the fork's Pull request tab draws its header",
+  );
+  assert.equal(
+    document.querySelector('aside.side-panel button[aria-label="Run on this Mac"]'),
+    null,
+    "no Run on a fork's pull request",
+  );
 });
 
 test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {

@@ -74,7 +74,7 @@ const SKILL_MENU_NOTE = {
   READING: "Reading skills…",
   NONE: "No skills yet",
   NONE_HINT: "Install one in Settings › Skills, or add one at .agents/skills/<name>/SKILL.md",
-  NO_MATCH: "No matching skills",
+  NO_MATCH: "No skills match",
 } as const;
 
 /** The list's own name, which its listbox is read by. */

@@ -9,8 +9,10 @@ import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
   ErrorState,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
 } from "@luke/ui";
@@ -39,6 +41,11 @@ const SECTION_LINE = {
   WRITE_FAILED: "The chapters model could not be saved. Try again.",
   DETAIL: "Runs on your own API key, or OpenAI's model of the same tier on an OpenAI key alone.",
 } as const;
+
+/** The row that stands while the model is read: Model over its note, and the models' segments. */
+const CHAPTERS_SKELETON: readonly SettingsRowSkeletonShape[] = [
+  { described: true, controls: [SETTINGS_SKELETON_CONTROL.CHOICE] },
+];
 
 /** The Chapters group, over the member's choice as the service holds it. */
 export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
@@ -116,7 +123,7 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsRowsSkeleton label="Loading your chapters model" />
+        <SettingsRowsSkeleton label="Loading your chapters model" rows={CHAPTERS_SKELETON} />
       )}
     </SettingsSection>
   );

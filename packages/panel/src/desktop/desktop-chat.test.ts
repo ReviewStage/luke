@@ -18,6 +18,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
 import {
@@ -37,7 +38,7 @@ import { act, createElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ChatComposer, type ChatComposerMentions } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
@@ -119,6 +120,7 @@ function mount(
     clientKey: string,
     reader: string | undefined,
   ) => Promise<string | undefined> = (land) => land(),
+  room: ShellRoom = SHELL_ROOM.WIDE,
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -146,7 +148,7 @@ function mount(
     // The reader this draw's posts go as, as the window's chat hook binds its post to its account and workspace.
     const sentAs = readingAs;
     return createElement(DesktopChat, {
-      room: SHELL_ROOM.WIDE,
+      room,
       accountName: "Dean Stratakos",
       tasks: tasksControl({
         workspace,
@@ -648,7 +650,7 @@ function menuRows(page: HTMLElement): string[] {
 
 /** The keys the open list says it hears at its foot. */
 function menuKeys(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".mention-menu .mention-menu-foot > *")].map(
+  return [...page.querySelectorAll(".mention-menu .luke-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }
@@ -926,7 +928,7 @@ test("a form none of whose fields must be filled may be sent empty", async () =>
   assert.equal(rail(page)[0], "▸ For you (3)");
 });
 
-test("an ask its poster resolved says it was withdrawn and why, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {
+test("an ask its poster resolved says it was withdrawn in its head and why in its body, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {
   const page = mount((chat) => ({
     ...chat,
     answer: {
@@ -958,7 +960,12 @@ test("an ask its poster resolved says it was withdrawn and why, and one asking n
   act(() => railRow(page, "teammate-invitations").click());
   assert.equal(
     settledAsk(page, 46).querySelector(".luke-card-head")?.textContent,
-    "Pick oneWithdrawn: Settled in the plan.",
+    "Pick oneWithdrawn",
+  );
+  assert.equal(
+    settledAsk(page, 46).querySelector("[data-inbox-withdrawn-why]")?.textContent,
+    "Settled in the plan.",
+    "why it was withdrawn stands under the head, as a sentence of its own",
   );
   assert.equal(settledAsk(page, 46).querySelector('[role="radio"]'), null);
   assert.equal(
@@ -1263,8 +1270,8 @@ test("an @ or a # word that names nothing says so, and Enter there still posts t
   pressInComposer(box, "Enter");
   await settle();
 
-  assert.equal(nobody, "Nothing matches");
-  assert.equal(nowhere, "Nothing matches");
+  assert.equal(nobody, "No results match");
+  assert.equal(nowhere, "No results match");
   assert.deepEqual(words(page).slice(-2), ["ask @zzz", "see #zzz"]);
   assert.equal(boxWords(box), "");
 });
@@ -1592,6 +1599,35 @@ test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag,
   );
 });
 
+test("on a phone the rail's Experimental tag is the experiment's glyph alone, still called Experimental, so Chat's title keeps its room", () => {
+  const page = mount(undefined, undefined, undefined, undefined, {}, undefined, SHELL_ROOM.NARROW);
+  const tag = page.querySelector(".chat-rail-head .experiment-tag");
+  assert.equal(tag?.getAttribute("role"), "img");
+  assert.equal(tag?.getAttribute("aria-label"), "Experimental");
+  assert.equal(tag?.textContent, "", "no words beside the title");
+  assert.equal(page.querySelector(".chat-rail-head h1")?.textContent, "Chat");
+  // The head holds one control a corner, New channel and the ⋯, which offers the rest.
+  assert.deepEqual(
+    [...page.querySelectorAll(".chat-rail-head button")].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    ["New channel", "More"],
+  );
+  act(() => page.querySelector<HTMLButtonElement>('.chat-rail-head [aria-label="More"]')?.click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
+      (each) => each.textContent,
+    ),
+    ["View options", "Send feedback"],
+  );
+  const options = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')][0];
+  act(() => options?.click());
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
+    "View options' own menu stands",
+  );
+});
+
 test("a For you row names a task's channel by its glyph and name, and a press on it opens the channel", () => {
   const page = mount();
   const where = page.querySelector<HTMLElement>(".chat-message .chat-byline-where");
@@ -1797,6 +1833,45 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
     document.querySelector('[role="dialog"] img[src^="data:image/png"]'),
     "a press opens the picture over the window",
   );
+});
+
+test("a recording a message carries plays in its own player, left out of the replay, with no press opening it as a picture", async () => {
+  const created: string[] = [];
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = (blob: Blob) => {
+    created.push(blob.type);
+    return `blob:video-${String(created.length)}`;
+  };
+  URL.revokeObjectURL = () => undefined;
+  try {
+    const page = mount(
+      (chat) => chat,
+      undefined,
+      () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
+    );
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    await handFiles(
+      box,
+      [new File([PNG_BYTES], "invite-flow.webm", { type: CHAT_IMAGE_TYPE.PNG })],
+      "pick",
+    );
+    pressInComposer(box, "Enter");
+    await settle();
+
+    const posted = [...page.querySelectorAll(".chat-message")].at(-1);
+    const player = posted?.querySelector("video");
+    assert.ok(player, "the recording is played, not drawn");
+    assert.equal(player.getAttribute("src"), "blob:video-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: invite-flow.webm");
+    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM]);
+    assert.equal(posted?.querySelector(".picture-block img, .picture-block button"), null);
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
 });
 
 test("in a listed workspace, a person is drawn with their photo from the members read, as everywhere else in the window", async () => {
@@ -2819,4 +2894,32 @@ test("a reader signed in to the window after another reads none of their posts, 
     "both went as the reader who wrote them",
   );
   assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
+});
+
+test("hovering a task's channel in the rail hangs its task's card beside it, and a topic's row hangs none", () => {
+  const page = mount((chat) => chat, undefined, undefined, undefined, { tasks: [INVITATIONS] });
+
+  restOn(railRow(page, "teammate-invitations"));
+
+  const card = document.querySelector('[role="tooltip"]');
+  assert.match(card?.textContent ?? "", /Teammate invitations/u);
+  assert.match(card?.textContent ?? "", /ada\/relay/u);
+
+  restOn(railRow(page, "general"));
+
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "general");
+});
+
+test("the rail's places stand in named lists, For you alone in its own and every group's places in its own", () => {
+  const page = mount();
+  const lists = [...page.querySelectorAll<HTMLElement>(".chat-rail ul[aria-label]")].map((list) => [
+    list.getAttribute("aria-label"),
+    [...list.querySelectorAll(".luke-list-row-main")].map(railName),
+  ]);
+
+  assert.deepEqual(lists[0], ["For you", ["For you"]]);
+  assert.ok(
+    lists.some(([name, places]) => name === "Channels" && (places as string[]).includes("general")),
+    "the channels stand in a list of their own",
+  );
 });

@@ -185,7 +185,12 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
   const launch = (agent: CodingAgent) =>
     Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? apiKeyEnv : planEnv));
 
-  const config = (agent: CodingAgent, resume: string | undefined, firstSequence: number) =>
+  const config = (
+    agent: CodingAgent,
+    resume: string | undefined,
+    firstSequence: number,
+    rewindBefore: string | undefined,
+  ) =>
     Effect.gen(function* () {
       const model = codexModelOf(agent);
       if (model === undefined) return yield* new LaunchRefused({ reason: "model" });
@@ -199,6 +204,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         ...(providerModelOf(agent.model)?.fast === true ? { fast: true } : undefined),
         developerInstructions: yield* options.instructions(agent),
         ...(resume === undefined ? undefined : { threadId: resume }),
+        ...(rewindBefore === undefined ? undefined : { rewindBefore }),
         firstSequence,
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,

@@ -21,6 +21,7 @@ export const MARKDOWN_FORMAT = {
   HEADING: "heading",
   BOLD: "bold",
   ITALIC: "italic",
+  STRIKE: "strike",
   QUOTE: "quote",
   CODE: "code",
   LINK: "link",
@@ -52,6 +53,7 @@ const PLACEHOLDER = {
   HEADING: "Heading",
   BOLD: "bold text",
   ITALIC: "italic text",
+  STRIKE: "struck text",
   QUOTE: "Quote",
   CODE: "code",
   LINK_TEXT: "link text",
@@ -246,6 +248,8 @@ export function markdownEdit(format: MarkdownFormat, field: FieldSelection): Mar
       return wrapEdit(field, "**", PLACEHOLDER.BOLD);
     case MARKDOWN_FORMAT.ITALIC:
       return wrapEdit(field, "_", PLACEHOLDER.ITALIC);
+    case MARKDOWN_FORMAT.STRIKE:
+      return wrapEdit(field, "~~", PLACEHOLDER.STRIKE);
     case MARKDOWN_FORMAT.QUOTE:
       return prefixEdit(field, LINE_PREFIX.QUOTE);
     case MARKDOWN_FORMAT.CODE:

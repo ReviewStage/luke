@@ -1,15 +1,16 @@
-import type { PullRequestStackEntry } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  PULL_REQUEST_STATE,
+  type PullRequestStackEntry,
+} from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@luke/ui";
-import {
-  GitMergeIcon,
-  GitPullRequestDraftIcon,
-  GitPullRequestIcon,
-  LayersIcon,
-} from "lucide-react";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
+import { LayersIcon } from "lucide-react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -37,6 +38,16 @@ function entryDetail(entry: PullRequestStackEntry, current: boolean): string | u
   return onGitHub === undefined ? QUEUED : `${QUEUED} · ${onGitHub}`;
 }
 
+/** What a stacked entry's mark is drawn from: the stack lists open and draft pull requests only, and carries no checks, so its mark says none of them. */
+function markOf(entry: PullRequestStackEntry): PullRequestMarked {
+  return {
+    number: entry.number,
+    state: entry.draft ? PULL_REQUEST_STATE.DRAFT : PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.NONE,
+    ...(entry.queued === true ? { queued: true } : undefined),
+  };
+}
+
 /** The place in Luke a stacked pull request's agent stands: its Pull request tab on its task, or its own page for an agent on none. */
 function placeOf(agent: NonNullable<PullRequestStackEntry["agent"]>): LinkPlace {
   return agent.taskId === null
@@ -60,7 +71,7 @@ function useOpenEntry(): (entry: PullRequestStackEntry) => void {
 /**
  * The stack the pull request numbered `number` stands in, as a button
  * saying where in it this one stands, whose menu lists the stack tip first,
- * each by its number and title with a draft's own mark, this one checked
+ * each by its number and title wearing its state's mark, this one checked
  * and not pressable; nothing where it stands in no stack.
  */
 export function PullRequestStack({
@@ -80,14 +91,8 @@ export function PullRequestStack({
   const actions: MenuAction[] = [...stack].reverse().map((entry) => {
     const current = entry.number === number;
     return {
-      label: `#${entry.number} ${entry.title}`,
-      icon: entry.draft ? (
-        <GitPullRequestDraftIcon aria-hidden="true" />
-      ) : entry.queued === true ? (
-        <GitMergeIcon aria-hidden="true" />
-      ) : (
-        <GitPullRequestIcon aria-hidden="true" />
-      ),
+      label: pullRequestLabelOf(entry),
+      icon: <PullRequestMark pullRequest={markOf(entry)} />,
       detail: entryDetail(entry, current),
       ...(current ? { checked: true, disabled: true } : undefined),
       onSelect: () => open(entry),

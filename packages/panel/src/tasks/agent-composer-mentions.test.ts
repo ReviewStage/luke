@@ -173,9 +173,12 @@ const NEWEST_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER];
 /** Every agent of the workspace, which a search finds among, archived ones included. */
 const WORKSPACE_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
 
+/** The newest agents the workspace's list answers now. */
+let newest: readonly CodingAgentSummary[] = NEWEST_AGENTS;
+
 /** The workspace's list as the service answers it: the newest, or those whose title or task's name holds the words, as the store finds them. */
 function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly CodingAgentSummary[] {
-  if (words === undefined) return NEWEST_AGENTS;
+  if (words === undefined) return newest;
   const lower = words.toLowerCase();
   return WORKSPACE_AGENTS.filter(
     (agent) =>
@@ -270,6 +273,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
 
 beforeEach(() => {
   standing = "acme/relay";
+  newest = NEWEST_AGENTS;
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
@@ -324,9 +328,13 @@ const STORE_AGENT = {
 } as const;
 const SELF_AGENT = { ...STORE_AGENT, id: SELF_ID, name: "Invite by email" };
 
-/** The plan's page holding its pages and agents, every link a chip was asked to open kept. */
+/** The plan's page holding its pages and agents, as the task's list read them, every link a chip was asked to open kept. */
 function taskPage(opened: Mention[] = []): TaskMentionsValue {
-  return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, STORE_AGENT] };
+  const store = {
+    ...STORE_AGENT,
+    summary: workspaceAgent(STORE_AGENT.id, STORE_AGENT.name, TASK_ID),
+  };
+  return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, store] };
 }
 
 /** The box on the composer's own control, its sends answered by `sender`. */
@@ -718,12 +726,14 @@ test("off a plan's page a sent message's page of an integration's is still its c
   assert.equal(carryingTarget(container), undefined);
 });
 
-test("an @ in the box on a plan's page offers the plan's pages and its other agents, each in its own group, and not the agent whose box it is", async () => {
+test("an @ in the box on a plan's page offers the plan's pages and its other agents, each in its own group, an agent leading with its tab's glyph, and not the agent whose box it is", async () => {
   const { container } = await box(taskPage());
 
   typeInComposer(container, "See @");
   await settle();
-  const agentGlyph = container.querySelector('.mention-menu [aria-label="Agents"] .actor-mark');
+  const agentGlyph = container.querySelector(
+    '.mention-menu [aria-label="Agents"] [role="option"] .luke-combobox-option-glyph',
+  )?.firstElementChild;
 
   assert.deepEqual(groupsListed(container), [
     ["Plan", ["Goal", "Rollout", "Invitations"]],
@@ -732,7 +742,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
     ["MCP servers", ["Linear"]],
     ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Dates", "Linear"]],
   ]);
-  assert.equal(agentGlyph?.getAttribute("data-kind"), ACTOR_KIND.AGENT);
+  assert.equal(agentGlyph?.className, "state-glyph", "the agent's row leads with its tab's glyph");
 });
 
 test("a page picked from the @ list is drawn as its chip and sent as its link, which names the page by its id alone", async () => {
@@ -913,6 +923,65 @@ test("a word typed after @ finds an agent the workspace's newest leave out, as t
   });
 });
 
+/** The box on the plan's page that reads its workspace's agents, among the workspace's members. */
+async function workspaceMemberBox() {
+  const sender: MessageSender = () => new Promise<CodingAgentAgentAnswer>(ignore);
+  const { container } = drawing(
+    amongMembers(
+      createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
+    ),
+    undefined,
+  );
+  await settle();
+  return container;
+}
+
+test("an @ row for an agent ends in its starter's face where a teammate started it and in nothing for the reader's own, then in the failed mark where its turn failed", async () => {
+  newest = [
+    {
+      ...BILLING_AGENT,
+      status: CODING_AGENT_STATUS.FAILED,
+      startedBy: { userId: DANA_ID, name: "Dana Reyes" },
+    },
+    { ...SWEEPER, startedBy: { userId: READER_ID, name: "Charles Pan" } },
+  ];
+  const container = await workspaceMemberBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+
+  const ends = [
+    ...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+  ].map((row) => [
+    row.querySelector(".luke-combobox-option-label")?.textContent,
+    ...[...(row.querySelector(".luke-combobox-option-hint")?.children ?? [])].map((mark) =>
+      mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
+    ),
+  ]);
+  assert.deepEqual(ends, [
+    ["Wire the desktop"],
+    ["Bill by seat", `face ${ACTOR_KIND.PERSON}`, "failed-mark"],
+    ["Sweep flaky tests"],
+  ]);
+});
+
+test("an @ row for an agent hangs the agent's own card while the pointer rests on it, naming its task, with nothing read for it", async () => {
+  const { container } = await workspaceBox();
+
+  typeInComposer(container, "See @bill");
+  await settle();
+  const option =
+    container.querySelector<HTMLElement>('.mention-menu [aria-label="Agents"] [role="option"]') ??
+    assert.fail("the list offers the agent");
+  const reads = told.length;
+  restOn(option);
+
+  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Bill by seat");
+  assert.match(card.textContent ?? "", new RegExp(`On ${BILLING.name}`, "u"));
+  assert.equal(told.length, reads, "the card is drawn from the agent the list read");
+});
+
 test("a sent mention of an agent of another task or none hangs a card naming where it works, never the task page's own card for an id it has no tab of", () => {
   const mention = (agentId: string, taskId: string | undefined) =>
     mentionMarkdown(
@@ -1029,7 +1098,7 @@ function crumb(container: HTMLElement): string | undefined {
 
 /** The keys the list's foot names. */
 function footKeys(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu-foot span")].map(
+  return [...container.querySelectorAll(".mention-menu .luke-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }

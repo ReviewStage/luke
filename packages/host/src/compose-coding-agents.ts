@@ -44,6 +44,7 @@ import {
   codingAgentInboxMessageParamsSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxScopeSchema,
+  codingAgentInboxStartParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
@@ -56,6 +57,7 @@ import {
   codingAgentPullRequestParamsSchema,
   codingAgentPullRequestReadParamsSchema,
   codingAgentRenameParamsSchema,
+  codingAgentRewindParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
@@ -185,6 +187,7 @@ export type CodingAgentClient = Pick<
   | "pin"
   | "ensureOperator"
   | "stop"
+  | "rewind"
   | "delete"
   | "agent"
   | "calls"
@@ -215,6 +218,7 @@ export type CodingAgentClient = Pick<
   | "answerInbox"
   | "closeInbox"
   | "messageInbox"
+  | "startInboxThread"
   | "markInboxItemRead"
   | "markInboxItemUnread"
   | "markInboxRead"
@@ -778,6 +782,16 @@ function composed(
         const answer = yield* asked(client.stop(agentId));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_REWIND]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, messageId } = yield* read(
+          codingAgentRewindParamsSchema,
+          params,
+          "rewinding an agent names one agent and one of its lines",
+        );
+        const answer = yield* asked(client.rewind(agentId, messageId));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_DELETE]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(
@@ -1015,6 +1029,16 @@ function composed(
           "a message on an inbox item names the item, the words or files, and the message's key",
         );
         const answer = yield* confirmed(asked(client.messageInbox(itemId, request)));
+        return carried<CodingAgentInboxMessagedView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_START]: (params) =>
+      Effect.gen(function* () {
+        const request = yield* read(
+          codingAgentInboxStartParamsSchema,
+          params,
+          "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
+        );
+        const answer = yield* confirmed(asked(client.startInboxThread(request)));
         return carried<CodingAgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE]: (params) =>

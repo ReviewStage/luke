@@ -1,7 +1,7 @@
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { PAGE_THUMB_SIZE, PageThumb } from "@luke/ui";
-import { AppWindowIcon, ImageOffIcon } from "lucide-react";
+import { isVideoDataUrl, PAGE_THUMB_SIZE, PageThumb } from "@luke/ui";
+import { AppWindowIcon, FilmIcon, ImageOffIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
@@ -158,10 +158,12 @@ export function useRowMediaReads(
   return { images, onImages, pages, onPages };
 }
 
-/** One picture's tile: the picture once read, its glyph where the read did not answer. */
+/** One picture's tile: the picture once read, a film's glyph for a recording, which a tile cannot play, and its glyph where the read did not answer. */
 function ImageTile({ image }: { image: InboxImage | undefined }): React.JSX.Element {
   if (image === undefined) return <PageThumb size={PAGE_THUMB_SIZE.ROW} />;
   if ("failed" in image) return <PageThumb size={PAGE_THUMB_SIZE.ROW} glyph={<ImageOffIcon />} />;
+  if (isVideoDataUrl(image.url))
+    return <PageThumb size={PAGE_THUMB_SIZE.ROW} glyph={<FilmIcon />} />;
   return <PageThumb size={PAGE_THUMB_SIZE.ROW} image={image.url} />;
 }
 

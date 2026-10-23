@@ -32,6 +32,10 @@ import {
   FILES_CHANGED_KEYS_LISTED,
   FILES_CHANGED_SHORTCUTS,
   shownShortcutGroups,
+  WRITING_ACTIONS_LISTED,
+  WRITING_GROUP_TITLE,
+  WRITING_SHORTCUTS,
+  type WritingShortcut,
 } from "@luke/settings/shortcuts";
 import {
   commandKeyshortcuts,
@@ -127,6 +131,9 @@ const EXPERIMENT_WORDS = "experiment preview beta labs early try";
 
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
+
+/** The words every writing chord and Markdown rule answers to besides. */
+const WRITING_WORDS = "format formatting markdown editor text";
 
 /**
  * The rows that are not stored settings, each gated by the condition that
@@ -335,7 +342,23 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         haystack: [APP_SHORTCUTS[command].label, WINDOW_SHORTCUT_WORDS, group.title],
       })),
     ),
-    // Files changed's own keys, listed under the window's.
+    // The writing chords and Markdown rules, listed under the window's, found by the rule typed too.
+    ...WRITING_ACTIONS_LISTED.map((action) => {
+      const { label, markdown }: WritingShortcut = WRITING_SHORTCUTS[action];
+      return {
+        id: action,
+        label,
+        page: SETTINGS_VIEW.SHORTCUTS,
+        haystack: [
+          label,
+          WINDOW_SHORTCUT_WORDS,
+          WRITING_GROUP_TITLE,
+          WRITING_WORDS,
+          markdown ?? "",
+        ],
+      };
+    }),
+    // Files changed's own keys, listed under Writing.
     ...FILES_CHANGED_KEYS_LISTED.map((key) => ({
       id: key,
       label: FILES_CHANGED_SHORTCUTS[key].label,
