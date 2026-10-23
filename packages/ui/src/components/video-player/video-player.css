@@ -23,6 +23,12 @@
     background: #000; /* off-scale: a video's letterbox */
   }
 
+  /* The frame takes focus only from a press, to hold the player's keys, so
+     it draws no ring of its own; its buttons draw theirs. */
+  .luke-video-player-frame:focus {
+    outline: none;
+  }
+
   .luke-video-player-video {
     display: block;
     max-width: 100%;

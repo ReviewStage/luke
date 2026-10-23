@@ -20,7 +20,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * video's foot of the same icon buttons, glyphs, and slider the window draws
  * everywhere, with play and pause, how far it has run of how long, a
  * scrubber, Expand where the place has a viewer to open, and Full screen. A
- * press on the video itself plays or pauses it. The bar stands while the
+ * press on the video itself plays or pauses it, and while focus is in the
+ * player, Space or K does too and the left and right arrows seek five
+ * seconds, kept from the place around it, such as the viewer whose arrows
+ * walk its files; a button's own Space presses the button. The bar stands while the
  * video is paused and, with a pointer, fades while it plays until the
  * pointer or the keyboard is in it; on a touch screen it always stands. Full
  * screen fills the screen with the frame, the bar with it, and Escape or its
@@ -45,6 +48,7 @@ import { Tooltip } from "../tooltip/hint.js";
 /** What the player and its controls are named for a reader. */
 const VIDEO_LABEL = {
   VIDEO: "Video",
+  PLAYER: "Video player",
   PLAY: "Play",
   PAUSE: "Pause",
   SEEK: "Seek",
@@ -58,6 +62,18 @@ const MINUTE_S = 60;
 
 /** How finely the scrubber moves, in seconds. */
 const SEEK_STEP_S = 0.1;
+
+/** How far an arrow key seeks, in seconds. */
+const ARROW_SEEK_S = 5;
+
+/** The keys that play or pause the player while focus is in it. */
+const TOGGLE_KEYS: ReadonlySet<string> = new Set([" ", "k", "K"]);
+
+/** How far each arrow seeks, in seconds, while focus is in the player. */
+const SEEK_KEYS: ReadonlyMap<string, number> = new Map([
+  ["ArrowLeft", -ARROW_SEEK_S],
+  ["ArrowRight", ARROW_SEEK_S],
+]);
 
 /** Where a video plays: in place of a picture, or in the file viewer. */
 export const VIDEO_PLAYER_PLACE = {
@@ -150,6 +166,27 @@ function toggleOf(video: HTMLVideoElement | null): void {
   if (video === null) return;
   if (video.paused) video.play().catch(() => undefined);
   else video.pause();
+}
+
+/**
+ * Answers a key pressed while focus is in the player: plays or pauses, or
+ * seeks, and keeps the key from the place around it. Note that Space on one
+ * of the bar's buttons is left to the button, which it presses.
+ */
+function playerKey(event: React.KeyboardEvent<HTMLElement>, video: HTMLVideoElement | null): void {
+  if (video === null || event.metaKey || event.ctrlKey || event.altKey) return;
+  const onButton = event.target instanceof HTMLButtonElement;
+  const seek = SEEK_KEYS.get(event.key);
+  if (TOGGLE_KEYS.has(event.key) && !(onButton && event.key === " ")) {
+    toggleOf(video);
+  } else if (seek !== undefined) {
+    const end = Number.isFinite(video.duration) ? video.duration : video.currentTime;
+    video.currentTime = Math.min(end, Math.max(0, video.currentTime + seek));
+  } else {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 /** One of the bar's buttons, its name its hint. */
@@ -259,11 +296,17 @@ export function VideoPlayer({
     if (video.current !== null) video.current.currentTime = at;
   };
   const player = (
+    // biome-ignore lint/a11y/useSemanticElements: a player holds a video and its bar, not a form's controls, so it is no `<fieldset>`.
     <span
       ref={frame}
       className="luke-video-player-frame"
       data-playing={playback.playing}
       data-full={full}
+      // Note that the frame takes focus, so a press on the video leaves the keys with the player.
+      tabIndex={-1}
+      role="group"
+      aria-label={VIDEO_LABEL.PLAYER}
+      onKeyDown={(event) => playerKey(event, video.current)}
     >
       {url === undefined ? null : (
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
@@ -278,7 +321,10 @@ export function VideoPlayer({
           muted
           playsInline
           preload={viewer ? "auto" : "metadata"}
-          onClick={() => toggleOf(video.current)}
+          onClick={() => {
+            frame.current?.focus({ preventScroll: true });
+            toggleOf(video.current);
+          }}
           onLoadedMetadata={(event) => {
             probeLength(event.currentTarget);
             read(event.currentTarget);
