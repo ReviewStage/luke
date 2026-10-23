@@ -20,8 +20,10 @@ import {
   PANE_PIN_ELEMENT,
   PanePin,
   ScrollArea,
-  SettingsPage,
-  SettingsSectionsSkeleton,
+  SETTINGS_ROW_MARK_WIDTH,
+  SETTINGS_SKELETON_CONTROL,
+  SettingsPageSkeleton,
+  type SettingsSectionSkeletonShape,
   Shortcut,
   SidebarIcon,
   Skeleton,
@@ -31,6 +33,7 @@ import {
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
@@ -276,14 +279,29 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
 }
 
 /**
- * How wide the placeholder title stands while Settings' chunk loads: a short
- * page name's, five controls' height across. Note that it is a length rather
- * than a share, because the title's line is only as wide as what it holds.
+ * The sections that stand while Settings' chunk loads, in the shape of the
+ * Account page Settings opens on: who is signed in, their face leading; the
+ * GitHub token, its mark leading; and Delete account. Note that they are not
+ * read from the page itself, because that would draw its chunk in with this one.
  */
-const SETTINGS_SKELETON_TITLE = "calc(5 * var(--luke-control-height))";
-
-/** How many rows each placeholder section stands while Settings' chunk loads. */
-const SETTINGS_SKELETON = [3, 2] as const;
+const SETTINGS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
+  {
+    headed: true,
+    rows: [
+      {
+        described: true,
+        mark: actorMarkWidth(ACTOR_SIZE.CARD),
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      {
+        described: false,
+        mark: SETTINGS_ROW_MARK_WIDTH,
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
+    ],
+  },
+];
 
 /**
  * What stands while Settings' chunk loads: its frame, the page list's column
@@ -308,9 +326,7 @@ function SettingsLoading({
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
-        <SettingsPage title={<Skeleton width={SETTINGS_SKELETON_TITLE} />}>
-          <SettingsSectionsSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
-        </SettingsPage>
+        <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
       </section>
     </div>
   );

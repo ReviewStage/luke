@@ -6,8 +6,10 @@ import {
   BUTTON_VARIANT,
   Button,
   ErrorState,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
   TEXT_FIELD_AUTO_COMPLETE,
@@ -29,6 +31,15 @@ import { useAct } from "../act.js";
  */
 
 const NOT_READ = "The repositories could not be read.";
+
+/** The rows that stand while the repositories are read: each a name alone, then its command's field and Save. */
+const REPOSITORIES_SKELETON: readonly SettingsRowSkeletonShape[] = Array.from(
+  { length: 2 },
+  () => ({
+    described: false,
+    controls: [SETTINGS_SKELETON_CONTROL.FIELD, SETTINGS_SKELETON_CONTROL.BUTTON],
+  }),
+);
 
 /** The repositories and what this Mac holds for each, as last read, or why they are not. */
 interface Read {
@@ -170,7 +181,7 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
           <ErrorState onRetry={read.reread}>{NOT_READ}</ErrorState>
         </SettingsLine>
       ) : read.names === undefined ? (
-        <SettingsRowsSkeleton label="Loading the repositories" rows={2} />
+        <SettingsRowsSkeleton label="Loading the repositories" rows={REPOSITORIES_SKELETON} />
       ) : read.names.length === 0 ? (
         <SettingsLine>This workspace reaches no repositories on GitHub yet.</SettingsLine>
       ) : (

@@ -229,7 +229,7 @@ test("while Settings is still loading its frame stands, a page of placeholder se
       placeholder?.textContent,
       placeholder?.querySelectorAll(".luke-settings-section-card").length,
     ],
-    [true, "Loading Settings", 2],
+    [true, "Loading Settings", 1],
   );
 
   act(() => {

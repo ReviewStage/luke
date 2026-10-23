@@ -16,8 +16,10 @@ import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
   ErrorState,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
   TEXT_LINK_LOOK,
@@ -98,8 +100,17 @@ const PAGE_LINE = {
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 
-/** How many rows stand in the Default model group's place while it is read: the model's, effort's, and context's, which every model draws. */
-const DEFAULT_SKELETON_ROWS = 3;
+/**
+ * The rows that stand in the Default model group's place while it is read:
+ * the model's picker over its note, Fast's switch over its own, and effort's
+ * segments, which every model draws; context's stands only for a model with a
+ * long window, so none stands for it.
+ */
+const DEFAULT_SKELETON: readonly SettingsRowSkeletonShape[] = [
+  { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+  { described: true, controls: [SETTINGS_SKELETON_CONTROL.SWITCH] },
+  { described: false, controls: [SETTINGS_SKELETON_CONTROL.CHOICE] },
+];
 
 /** The link under a resting Fast row that asks Anthropic for fast mode. */
 const FAST_ACCESS_WORD = "Request access";
@@ -408,7 +419,7 @@ function CodingAgentsSection({
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsRowsSkeleton label="Loading your default" rows={DEFAULT_SKELETON_ROWS} />
+        <SettingsRowsSkeleton label="Loading your default" rows={DEFAULT_SKELETON} />
       )}
     </SettingsSection>
   );

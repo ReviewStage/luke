@@ -13,8 +13,6 @@ import {
   Banner,
   BUTTON_VARIANT,
   Button,
-  CARD_PADDING,
-  Card,
   ConfirmDialog,
   type DialogQuestion,
   EmptyState,
@@ -24,7 +22,7 @@ import {
   GAP,
   IconButton,
   ResetIcon,
-  SettingsPage,
+  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   Stack,
@@ -40,8 +38,9 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
+import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
-import { PlanBody } from "../tasks/plan-body.js";
+import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
 import { TOAST_TONE, useToast } from "../toast.js";
 
@@ -330,6 +329,16 @@ function TemplateNote(): React.JSX.Element {
   );
 }
 
+/** Where the page's actions stand, at the end of its title line. */
+function TitleActionsLine({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <span className="task-title-actions">{children}</span>;
+}
+
+/** The template's document as the page draws it, in a plan's type and kept out of a recording. */
+function TemplateFrame({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <Fill className="desktop-document template-document ph-no-capture">{children}</Fill>;
+}
+
 /**
  * The page's actions at the right end of its title line, as every Settings
  * page carries its own: the version history, and Reset to default while the
@@ -346,7 +355,7 @@ function TitleActions({
   onReset: () => void;
 }): React.JSX.Element {
   return (
-    <span className="task-title-actions">
+    <TitleActionsLine>
       <Tooltip label={HISTORY_LABEL}>
         <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
@@ -355,7 +364,7 @@ function TitleActions({
           Reset to default
         </Button>
       ) : null}
-    </span>
+    </TitleActionsLine>
   );
 }
 
@@ -373,7 +382,7 @@ function TemplateDocument({
   const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
     <>
-      <Fill className="desktop-document template-document ph-no-capture">
+      <TemplateFrame>
         <PlanBody
           task={templateDocument(template.text, template.lastEdit)}
           live={false}
@@ -391,44 +400,53 @@ function TemplateDocument({
             note: <TemplateNote />,
           }}
         />
-      </Fill>
+      </TemplateFrame>
       <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
     </>
   );
 }
 
 /**
- * The template while it is read, as quiet blocks under the page's name: the
- * note's card, then headings over their lines in the body's own type, so the
- * template lands where the blocks stood.
+ * The template while it is read, drawn in the document's own frame: the
+ * page's head as the document draws it, its name and note whole, since
+ * neither waits on the read, and a block for its history's press; then
+ * headings over their lines in the plan's own type, so the template lands
+ * where the blocks stood.
  */
 function TemplateSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label={PAGE_LINE.READING}>
-      <Stack gap={GAP.SECTION}>
-        <Card padding={CARD_PADDING.SNUG}>
-          <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
-            <Skeleton width="54%" />
-          </Text>
-          <Text tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.DIV}>
-            <Skeleton width="42%" />
-          </Text>
-        </Card>
-        {TEMPLATE_SKELETON.map((section) => (
-          <Stack key={section.heading} gap={GAP.TIGHT}>
-            <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
-              <Skeleton width={section.heading} />
-            </Text>
-            <Text as={TEXT_ELEMENT.DIV}>
-              {section.lines.map((width, at) => (
-                // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
-                <Skeleton key={at} width={width} />
+    <TemplateFrame>
+      <DocumentScroll>
+        <PlanBodyColumn>
+          <PlanPageHead
+            name={TEMPLATE_TITLE}
+            actions={
+              <TitleActionsLine>
+                <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
+              </TitleActionsLine>
+            }
+            note={<TemplateNote />}
+          />
+          <SkeletonRegion label={PAGE_LINE.READING}>
+            <Stack gap={GAP.SECTION}>
+              {TEMPLATE_SKELETON.map((section) => (
+                <Stack key={section.heading} gap={GAP.TIGHT}>
+                  <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
+                    <Skeleton width={section.heading} />
+                  </Text>
+                  <div>
+                    {section.lines.map((width, at) => (
+                      // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
+                      <Skeleton key={at} width={width} />
+                    ))}
+                  </div>
+                </Stack>
               ))}
-            </Text>
-          </Stack>
-        ))}
-      </Stack>
-    </SkeletonRegion>
+            </Stack>
+          </SkeletonRegion>
+        </PlanBodyColumn>
+      </DocumentScroll>
+    </TemplateFrame>
   );
 }
 
@@ -456,12 +474,8 @@ function TemplateState({
       </Fill>
     );
   }
-  // While the read is out the page's name stands where every page's does, the template's blocks under it.
-  return (
-    <SettingsPage title={TEMPLATE_TITLE}>
-      <TemplateSkeleton />
-    </SettingsPage>
-  );
+  // While the read is out the page's head stands where the document's will, the template's blocks under it.
+  return <TemplateSkeleton />;
 }
 
 /**

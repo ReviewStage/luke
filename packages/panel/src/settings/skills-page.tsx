@@ -24,10 +24,13 @@ import {
   Facts,
   GAP,
   PlusIcon,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
+  type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   SpinnerRegion,
   Stack,
@@ -90,6 +93,29 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * drawn; each GitHub skill the account may change is then checked for an
  * update, once.
  */
+
+/** An installed skill's row while the skills are read: its words over its source, its switch, and its ⋯. */
+const SKILL_ROW_SKELETON: SettingsRowSkeletonShape = {
+  described: true,
+  controls: [SETTINGS_SKELETON_CONTROL.SWITCH, SETTINGS_SKELETON_CONTROL.MORE],
+};
+
+/** A group of skills while it is read, one row standing for however many land. */
+const SKILL_GROUP_SKELETON: SettingsSectionSkeletonShape = {
+  headed: true,
+  rows: [SKILL_ROW_SKELETON],
+};
+
+/**
+ * The page before the workspaces are read: Add a skill, unheaded, then the
+ * workspace's group and the reader's own, since whether the workspace is a
+ * personal one, which draws no group of its own, is not yet known.
+ */
+const SKILLS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
+  { headed: false, rows: [{ described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] }] },
+  SKILL_GROUP_SKELETON,
+  SKILL_GROUP_SKELETON,
+];
 
 /** The page's list as it stands: being read, refused, or read. */
 const LIST = {
@@ -420,8 +446,11 @@ function ShownSkills({
   );
 
   const groups = skills === undefined ? undefined : skillGroups(skills, readerId, members);
-  const rows = (shown: readonly SkillRow[]) =>
-    shown.length === 0 ? (
+  // A group still being read stands its placeholder row in the card the rows will.
+  const rows = (shown: readonly SkillRow[] | undefined) =>
+    shown === undefined ? (
+      <SettingsRowsSkeleton label="Loading your skills" rows={SKILL_GROUP_SKELETON.rows} />
+    ) : shown.length === 0 ? (
       <SettingsLine>{SKILLS_LINE.NONE}</SettingsLine>
     ) : (
       shown.map((row) => (
@@ -458,18 +487,14 @@ function ShownSkills({
             <ErrorState onRetry={() => setAttempt((count) => count + 1)}>{list.line}</ErrorState>
           </SettingsLine>
         </SettingsSection>
-      ) : groups === undefined ? (
-        <SettingsSection title={workspaceGroupTitle(workspace)}>
-          <SettingsRowsSkeleton label="Loading your skills" />
-        </SettingsSection>
       ) : (
         <>
           {workspace.personal === true ? null : (
             <SettingsSection title={workspaceGroupTitle(workspace)}>
-              {rows(groups.workspace)}
+              {rows(groups?.workspace)}
             </SettingsSection>
           )}
-          <SettingsSection title={SKILLS_LINE.PERSONAL}>{rows(groups.personal)}</SettingsSection>
+          <SettingsSection title={SKILLS_LINE.PERSONAL}>{rows(groups?.personal)}</SettingsSection>
         </>
       )}
       {adding ? (
@@ -507,7 +532,7 @@ export function SkillsPage({
         </SettingsLine>
       </SettingsSection>
     ) : (
-      <SettingsSectionsSkeleton label="Loading your skills" sections={[1, 2]} />
+      <SettingsSectionsSkeleton label="Loading your skills" sections={SKILLS_SKELETON} />
     );
   }
   // Keyed to the workspace, so another one listed reads its own skills and asks nothing left over.
