@@ -8,6 +8,11 @@
    vocabulary, no app maps a name to a role of its own, and no second gray or
    hairline is invented. Only the tokens something draws with. */
 @theme inline {
+  /* Note that Tailwind's numeric scale (`p-4`, `gap-2`) is a multiple of
+     one step, which it measures in rem; the step is the base scale's 4px
+     here, because the desktop's root type is 13px, under which a rem step
+     would put every numeric utility off the scale. */
+  --spacing: var(--luke-space-4);
   --font-mono: var(--luke-font-mono);
   --color-background: var(--luke-color-overlay);
   --color-foreground: var(--luke-color-text);
@@ -42,28 +47,24 @@
   --spacing-control-icon: var(--luke-control-icon);
   --spacing-icon-gap: var(--luke-icon-gap);
   --spacing-menu-row: var(--luke-menu-row-height);
-  /* The base scale by its own names (`px-luke-8` is `--luke-space-8`),
-     since Tailwind's numbered scale is in rem, which a root sized to its
-     words (the catalog's) would shrink. */
-  --spacing-luke-2: var(--luke-space-2);
-  --spacing-luke-4: var(--luke-space-4);
-  --spacing-luke-6: var(--luke-space-6);
-  --spacing-luke-8: var(--luke-space-8);
-  --spacing-luke-12: var(--luke-space-12);
-  --spacing-luke-16: var(--luke-space-16);
-  --spacing-luke-24: var(--luke-space-24);
+  --spacing-menu-glyph: var(--luke-menu-glyph);
+  --spacing-list-gap: var(--luke-list-gap);
   --radius-luke-6: var(--luke-radius-6);
   --radius-luke-8: var(--luke-radius-8);
+  --radius-luke-10: var(--luke-radius-10);
   --radius-luke-full: var(--luke-radius-full);
   --radius-control: var(--luke-control-radius);
   --radius-menu-row: var(--luke-menu-row-radius);
   --color-subtle-foreground: var(--luke-color-text-subtle);
+  --color-fill-strong: var(--luke-color-fill-strong);
   --color-fill-pressed: var(--luke-color-fill-pressed);
+  --color-border-selected: var(--luke-color-border-selected);
   --color-accent-ink: var(--luke-color-accent-text);
   --spacing-touch: var(--luke-touch-target);
   /* A box or a range a choice is drawn in: a field's ground inside a
      chosen row's edge, filled in the accent where it is on. */
   --color-field: var(--luke-color-input);
+  --color-surface: var(--luke-color-surface);
   --color-control-edge: var(--luke-color-border-selected);
   --color-accent-fill: var(--luke-color-accent);
   --color-on-accent: var(--luke-color-on-accent);

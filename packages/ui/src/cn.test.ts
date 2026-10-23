@@ -16,7 +16,7 @@ test("a theme type size stands beside an ink, and a later one replaces it", () =
 });
 
 test("a theme height, inset, and corner give way to the ones a later class names", () => {
-  assert.equal(cn("h-control", "size-luke-24"), "size-luke-24");
-  assert.equal(cn("px-control-inset", "px-luke-8"), "px-luke-8");
+  assert.equal(cn("h-control", "size-6"), "size-6");
+  assert.equal(cn("px-control-inset", "px-2"), "px-2");
   assert.equal(cn("rounded-control", "rounded-full"), "rounded-full");
 });

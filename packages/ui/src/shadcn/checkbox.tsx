@@ -34,10 +34,10 @@ function Checkbox({ className, indeterminate, ...props }: CheckboxPrimitive.Root
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-transform duration-(--luke-duration-fast) ease-spring-fast data-starting-style:scale-70 [&>svg]:size-luke-12 [&>svg]:text-current [&>svg]:stroke-3"
+        className="grid place-content-center text-current transition-transform duration-(--luke-duration-fast) ease-spring-fast data-starting-style:scale-70 [&>svg]:size-3 [&>svg]:text-current [&>svg]:stroke-3"
       >
         {indeterminate === true ? (
-          <span className="block h-luke-2 w-luke-8 rounded-luke-full bg-current" />
+          <span className="block h-0.5 w-2 rounded-luke-full bg-current" />
         ) : (
           <CheckIcon />
         )}

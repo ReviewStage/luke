@@ -299,7 +299,7 @@ function linkClasses(look: ButtonLook): string {
 function faceClasses(size: BoxSize | undefined, busy: boolean, done: boolean): string {
   return cn(
     "luke-button-face inline-flex items-center gap-icon-gap min-w-0",
-    size === "compact" && "gap-luke-4",
+    size === "compact" && "gap-1",
     busy && "invisible",
     done && "opacity-0",
   );

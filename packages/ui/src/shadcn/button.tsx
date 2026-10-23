@@ -27,10 +27,10 @@ const buttonVariants = cva(
     variants: {
       size: {
         control: "inline-flex h-control rounded-control text-label font-medium",
-        compact: "inline-flex h-luke-24 px-luke-8 rounded-control text-caption font-semibold",
+        compact: "inline-flex h-6 px-2 rounded-control text-caption font-semibold",
         icon: "inline-flex size-control p-0 rounded-control text-label font-medium",
-        "icon-compact": "inline-flex size-luke-24 p-0 rounded-luke-6 text-label font-medium",
-        row: "flex w-full justify-start h-menu-row px-luke-8 rounded-menu-row text-body font-regular",
+        "icon-compact": "inline-flex size-6 p-0 rounded-luke-6 text-label font-medium",
+        row: "flex w-full justify-start h-menu-row px-2 rounded-menu-row text-body font-regular",
       },
       shape: {
         square: "",

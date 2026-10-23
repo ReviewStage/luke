@@ -72,8 +72,9 @@ const LINE =
  * outweighs the box's `font: inherit`.
  */
 const LINE_LOOK = {
-  row: "min-h-[28px] pointer-coarse:min-h-touch py-luke-2 px-luke-4 rounded-luke-6 text-muted-foreground data-[look=row]:text-caption [&:hover:not(:active)]:bg-secondary [&:active]:bg-fill-pressed data-[brightens=true]:[&:hover]:text-foreground",
-  quote: "line-clamp-2 [line-clamp:2] wrap-anywhere [&:hover]:text-foreground [&:active]:opacity-70",
+  row: "min-h-[28px] pointer-coarse:min-h-touch py-0.5 px-1 rounded-luke-6 text-muted-foreground data-[look=row]:text-caption [&:hover:not(:active)]:bg-fill-strong [&:active]:bg-fill-pressed data-[brightens=true]:[&:hover]:text-foreground",
+  quote:
+    "line-clamp-2 [line-clamp:2] wrap-anywhere [&:hover]:text-foreground [&:active]:opacity-70",
   band: "decoration-1 underline-offset-[0.24em] [&:hover]:bg-muted [&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline",
 } as const satisfies Record<LineButtonLook, string>;
 
