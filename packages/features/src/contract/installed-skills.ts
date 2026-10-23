@@ -1,5 +1,5 @@
 /**
- * installed-skills.ts -- the skills members install into Luke (`installed-skill-route-wire.ts`), as procedures: list them, read one, preview a paste, install from it, turn one on or off, check it for an update or update it, share a personal one with a workspace, and remove it.
+ * installed-skills.ts -- the skills members install into Luke (`installed-skill-route-wire.ts`), as procedures: list them, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check it for an update or update it, share a personal one with a workspace, and remove it.
  *
  * Every output is its wire schema flipped, so oRPC's output check encodes
  * the handler's value into the bytes the wire carries. A body refuses a key
@@ -21,6 +21,8 @@ import {
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillListAnswerSchema,
+  installedSkillPreviewFileRequestSchema,
+  installedSkillPreviewFileSchema,
   installedSkillPreviewRequestSchema,
   installedSkillPreviewSchema,
   installedSkillRemovedAnswerSchema,
@@ -42,6 +44,9 @@ const PASTE_BODY_BYTES = INSTALLED_SKILL_PASTE_MAX_CHARS * 6 + 16_384;
 
 /** A toggle, an update, or a share carries a boolean or a workspace's id, so a body past this is none of them. */
 const SMALL_BODY_BYTES = 1_024;
+
+/** A previewed skill's `SKILL.md` read names a repository, a commit, and a folder, so a body past this is none. */
+const PREVIEW_FILE_BODY_BYTES = 8_192;
 
 /** One installed skill, by the id its path names. */
 const INSTALLED_SKILL_PATH = `${HOSTED_SERVICE_PATH.INSTALLED_SKILLS}/{id}` as const;
@@ -81,6 +86,16 @@ export const installedSkillsContract = {
     )
     .input(exactInput(installedSkillPreviewRequestSchema))
     .output(EffectSchema.flip(installedSkillPreviewSchema)),
+  previewFile: hostedProcedure
+    .meta(bodyCap(PREVIEW_FILE_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: `${HOSTED_SERVICE_PATH.INSTALLED_SKILLS}/preview/file` as const,
+      }),
+    )
+    .input(exactInput(installedSkillPreviewFileRequestSchema))
+    .output(EffectSchema.flip(installedSkillPreviewFileSchema)),
   install: hostedProcedure
     .meta(bodyCap(PASTE_BODY_BYTES))
     .meta(

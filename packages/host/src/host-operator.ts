@@ -158,6 +158,8 @@ import {
   type InstalledSkillInstallView,
   type InstalledSkillListParams,
   type InstalledSkillListView,
+  type InstalledSkillPreviewFileParams,
+  type InstalledSkillPreviewFileView,
   type InstalledSkillPreviewParams,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
@@ -170,6 +172,7 @@ import {
   installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
   installedSkillListViewSchema,
+  installedSkillPreviewFileViewSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
   installedSkillUpdateCheckViewSchema,
@@ -764,6 +767,10 @@ export interface HostOperator {
   installedSkillsPreview(
     params: InstalledSkillPreviewParams,
   ): Effect.Effect<InstalledSkillPreviewView>;
+  /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
+  installedSkillsPreviewFile(
+    params: InstalledSkillPreviewFileParams,
+  ): Effect.Effect<InstalledSkillPreviewFileView>;
   /** The skills a paste makes, installed all or none; or why none were. */
   installedSkillsInstall(
     params: InstalledSkillInstallParams,
@@ -2190,6 +2197,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
         installedSkillAnswer(installedSkillPreviewViewSchema),
+      ),
+    installedSkillsPreviewFile: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, params),
+        installedSkillAnswer(installedSkillPreviewFileViewSchema),
       ),
     installedSkillsInstall: (params) =>
       Effect.map(

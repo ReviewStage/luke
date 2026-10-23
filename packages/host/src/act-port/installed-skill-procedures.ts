@@ -5,6 +5,8 @@ import type {
   InstalledSkillInstallView,
   InstalledSkillListParams,
   InstalledSkillListView,
+  InstalledSkillPreviewFileParams,
+  InstalledSkillPreviewFileView,
   InstalledSkillPreviewParams,
   InstalledSkillPreviewView,
   InstalledSkillRemovedView,
@@ -20,7 +22,7 @@ import { INSTALLED_SKILL_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";
 
 /**
- * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: the skills listed, one read, a paste previewed and installed, one toggled, checked for an update, updated, shared with a workspace, or removed.
+ * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: the skills listed, one read, a paste previewed, a previewed skill's `SKILL.md` read, a paste installed, one toggled, checked for an update, updated, shared with a workspace, or removed.
  *
  * The one check these procedures make is who asked: only a panel draws
  * Settings, so the takeover and the hidden voice window are refused in each
@@ -34,6 +36,9 @@ export interface InstalledSkillProceduresDependencies {
     installedSkillsPreview(
       params: InstalledSkillPreviewParams,
     ): Effect.Effect<InstalledSkillPreviewView>;
+    installedSkillsPreviewFile(
+      params: InstalledSkillPreviewFileParams,
+    ): Effect.Effect<InstalledSkillPreviewFileView>;
     installedSkillsInstall(
       params: InstalledSkillInstallParams,
     ): Effect.Effect<InstalledSkillInstallView>;
@@ -79,6 +84,12 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
       if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
       return yield* host.installedSkillsPreview(input);
     }),
+    [KIND.INSTALLED_SKILLS_PREVIEW_FILE]: actPort[KIND.INSTALLED_SKILLS_PREVIEW_FILE].effect(
+      function* ({ input, context, errors }) {
+        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
+        return yield* host.installedSkillsPreviewFile(input);
+      },
+    ),
     [KIND.INSTALLED_SKILLS_INSTALL]: actPort[KIND.INSTALLED_SKILLS_INSTALL].effect(function* ({
       input,
       context,

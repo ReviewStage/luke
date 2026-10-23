@@ -253,6 +253,8 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_READ: "installedSkills.read",
   /** What a pasted `skills add` command or skill text would install, read by the service; nothing is written. */
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
+  /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
+  INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
   /** The skills a paste makes, installed for the account or its workspace, all or none; or why none were. */
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */

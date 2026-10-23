@@ -1,5 +1,5 @@
 /**
- * installed-skills-procedures.ts -- the skills members install into Luke: list the ones a workspace offers the account, read one, preview a paste, install from it, turn one on or off, check one for an update or update it, share a personal one with a workspace, and remove it.
+ * installed-skills-procedures.ts -- the skills members install into Luke: list the ones a workspace offers the account, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check one for an update or update it, share a personal one with a workspace, and remove it.
  *
  * Every procedure resolves the caller (`accountMiddleware`, on the
  * resource so it runs before an input is read) before it touches a row.
@@ -67,7 +67,12 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { madeFromPaste, previewOfPaste, revisionAtRef } from "./skill-paste-install.js";
+import {
+  madeFromPaste,
+  previewedSkillFile,
+  previewOfPaste,
+  revisionAtRef,
+} from "./skill-paste-install.js";
 import { folderTreeSha, pinnedCommit, reachSkillRepository } from "./skill-source.js";
 
 export interface InstalledSkillsProcedureSeams {
@@ -254,6 +259,12 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
     preview: skills.preview.effect(function* ({ input, context: { userId } }) {
       const workspace = yield* memberWorkspace(userId, input.workspaceId);
       return yield* previewOfPaste(userId, workspace.id, parseSkillPaste(input.text));
+    }),
+
+    /** One previewed skill's `SKILL.md` at the commit the preview pinned, for a skill the preview carried none of. */
+    previewFile: skills.previewFile.effect(function* ({ input, context: { userId } }) {
+      const workspace = yield* memberWorkspace(userId, input.workspaceId);
+      return yield* previewedSkillFile(userId, workspace.id, input);
     }),
 
     /** The skills a paste makes, installed in the scope asked, all or none. */

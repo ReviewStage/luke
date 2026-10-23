@@ -5,6 +5,8 @@ import {
   installedSkillInstallViewSchema,
   installedSkillListParamsSchema,
   installedSkillListViewSchema,
+  installedSkillPreviewFileParamsSchema,
+  installedSkillPreviewFileViewSchema,
   installedSkillPreviewParamsSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
@@ -42,6 +44,11 @@ export const installedSkillActsContract = {
   )
     .input(exactInput(installedSkillPreviewParamsSchema))
     .output(EffectSchema.flip(installedSkillPreviewViewSchema)),
+  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE]: actProcedure(
+    "Could not read that skill's SKILL.md on this system.",
+  )
+    .input(exactInput(installedSkillPreviewFileParamsSchema))
+    .output(EffectSchema.flip(installedSkillPreviewFileViewSchema)),
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_INSTALL]: actProcedure(
     "Could not install the skill on this system.",
   )

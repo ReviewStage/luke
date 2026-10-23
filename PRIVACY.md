@@ -629,6 +629,15 @@ and holds them in memory only; a skill named in a message opens its file in a
 File tab, by the rules above. Our service keeps no copy of the skills
 themselves.
 
+**Security ratings of skills you add.** When you paste a `skills add`
+command into Add skill, our service reads the repository it names from
+GitHub to show you its skills. Where GitHub says that repository is public,
+it also asks skills.sh, Vercel's skills directory, for its partners'
+security ratings of the skills shown in detail, as the `skills` command
+does: it sends the repository's owner and name and those skills' names, and
+nothing about you. It never asks for a private repository, and keeps
+nothing of the answer past showing it.
+
 **Pages an agent makes.** Coding agents can make a
 page for a task: an interactive HTML document, such as a chart or a mockup,
 that opens in the task's side panel. Our service stores each page with the

@@ -6,6 +6,8 @@ import {
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillListAnswerSchema,
+  installedSkillPreviewFileRequestSchema,
+  installedSkillPreviewFileSchema,
   installedSkillPreviewRequestSchema,
   installedSkillPreviewSchema,
   installedSkillRemovedAnswerSchema,
@@ -75,6 +77,11 @@ export const installedSkillPreviewParamsSchema = installedSkillPreviewRequestSch
 
 export type InstalledSkillPreviewParams = typeof installedSkillPreviewParamsSchema.Type;
 
+/** A previewed skill's `SKILL.md` asked for by the repository, commit, and folder the preview named. */
+export const installedSkillPreviewFileParamsSchema = installedSkillPreviewFileRequestSchema;
+
+export type InstalledSkillPreviewFileParams = typeof installedSkillPreviewFileParamsSchema.Type;
+
 /** A paste installed, as the service takes it. */
 export const installedSkillInstallParamsSchema = installedSkillInstallRequestSchema;
 
@@ -134,6 +141,14 @@ export const installedSkillPreviewViewSchema = EffectSchema.Union([
 ]);
 
 export type InstalledSkillPreviewView = typeof installedSkillPreviewViewSchema.Type;
+
+/** A previewed skill's `SKILL.md`, or why the service did not answer it. */
+export const installedSkillPreviewFileViewSchema = EffectSchema.Union([
+  installedSkillPreviewFileSchema,
+  failed,
+]);
+
+export type InstalledSkillPreviewFileView = typeof installedSkillPreviewFileViewSchema.Type;
 
 /** The skills an install made, or why it made none. */
 export const installedSkillInstallViewSchema = EffectSchema.Union([

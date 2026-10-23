@@ -8,6 +8,7 @@ import {
   type InstalledSkillFailedView,
   type InstalledSkillInstallView,
   type InstalledSkillListView,
+  type InstalledSkillPreviewFileView,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
   type InstalledSkillUpdateCheckView,
@@ -16,6 +17,7 @@ import {
   installedSkillIdParamsSchema,
   installedSkillInstallParamsSchema,
   installedSkillListParamsSchema,
+  installedSkillPreviewFileParamsSchema,
   installedSkillPreviewParamsSchema,
   installedSkillShareParamsSchema,
   installedSkillToggleParamsSchema,
@@ -31,7 +33,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-installed-skills.ts -- the skills the account installs into Luke, asked of the service on the window's behalf: listed, one read, a paste previewed and installed, one toggled, checked for an update, updated, shared with a workspace, or removed.
+ * compose-installed-skills.ts -- the skills the account installs into Luke, asked of the service on the window's behalf: listed, one read, a paste previewed and installed, a previewed skill's `SKILL.md` read, one toggled, checked for an update, updated, shared with a workspace, or removed.
  *
  * Nothing is held here. Every ask is one call of the service answered whole,
  * as the window's view of it: the service's answer, or the failure with the
@@ -45,6 +47,7 @@ export type InstalledSkillsClient = Pick<
   | "list"
   | "read"
   | "preview"
+  | "previewFile"
   | "install"
   | "setEnabled"
   | "checkUpdate"
@@ -142,6 +145,16 @@ function composed(
         );
         const view = yield* asked(client.preview(workspaceId, text), (preview) => preview);
         return carried<InstalledSkillPreviewView>(view);
+      }),
+    [GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE]: (params) =>
+      Effect.gen(function* () {
+        const candidate = yield* read(
+          installedSkillPreviewFileParamsSchema,
+          params,
+          "a previewed skill names a workspace, a repository, a commit, and a folder",
+        );
+        const view = yield* asked(client.previewFile(candidate), (markdown) => ({ markdown }));
+        return carried<InstalledSkillPreviewFileView>(view);
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL]: (params) =>
       Effect.gen(function* () {
