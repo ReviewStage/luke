@@ -1,3 +1,4 @@
+import { WRITING_BLOCK, WRITING_SHORTCUTS } from "@luke/settings/shortcuts";
 import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
 import { MARKDOWN_CLASS } from "@luke/ui/markdown-class";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
@@ -42,6 +43,7 @@ import {
   settledPicture,
 } from "./picture-node.js";
 import { planMentions } from "./plan-mentions.js";
+import { planSlash } from "./plan-slash.js";
 import { editorFormatting, formatReports } from "./writing-format.js";
 import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
@@ -58,7 +60,10 @@ import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
  * level, so the editor's words stand where the drawn words stood and opening
  * the text moves nothing. Each untouched block keeps its exact source
  * (`./document-source.ts`). A format toolbar over the text hears its
- * selection and acts on it (`./writing-format.ts`). A Mermaid code block stays code, its diagram
+ * selection and acts on it (`./writing-format.ts`), and a `/` at a line's
+ * start or after a space opens the panel's block menu (`./plan-slash.ts`),
+ * which an empty line under the caret offers in its placeholder, as an empty
+ * heading names its level. A Mermaid code block stays code, its diagram
  * previewed under it where the panel draws one (`./diagram-preview.ts`).
  * Esc and ⌘↩ finish, naming the section the caret
  * stood in; ↑ on the text's first line goes to the title above it.
@@ -72,6 +77,16 @@ const EDITOR_CLASS = "plan-document-text";
 
 /** What an empty plan says until a word is typed. */
 const PLAN_PLACEHOLDER = "Write the plan";
+
+/** What an empty line under the caret says where the `/` menu stands over the text. */
+const LINE_PLACEHOLDER = "Write, or press / for blocks";
+
+/** What an empty heading says, by its level: the block's own name. */
+const HEADING_PLACEHOLDERS: ReadonlyMap<number, string> = new Map([
+  [1, WRITING_SHORTCUTS[WRITING_BLOCK.HEADING_1].label],
+  [2, WRITING_SHORTCUTS[WRITING_BLOCK.HEADING_2].label],
+  [3, WRITING_SHORTCUTS[WRITING_BLOCK.HEADING_3].label],
+]);
 
 /** The heading levels that open a section, as `planSections` counts them. */
 const SECTION_LEVELS = new Set([1, 2]);
@@ -198,6 +213,22 @@ export function markdownExtensions(
     linkLook(namesMention),
     writingKeys,
   ];
+}
+
+/**
+ * What the empty block under the caret says: a heading its level's name,
+ * the empty text `plan`'s words, and a line, where the menu stands over the
+ * text, how to open it; nothing in code. Note that only a top-level block
+ * is asked, as TipTap asks only the block under the caret, so a list's or a
+ * table's empty line says nothing.
+ */
+function placeholderOf(plan: string, offersBlocks: boolean) {
+  return ({ editor, node }: { editor: Editor; node: PmNode }): string => {
+    if (node.type.name === "heading")
+      return HEADING_PLACEHOLDERS.get(Number(node.attrs.level)) ?? "";
+    if (editor.isEmpty) return plan;
+    return offersBlocks && node.type.name === "paragraph" ? LINE_PLACEHOLDER : "";
+  };
 }
 
 /** Whether a top-level block opens a section. */
@@ -355,6 +386,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     pictures,
     anchors,
     format,
+    blocks,
   } = props;
   const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention, pictures);
   const manager = documentManager(extensions);
@@ -364,6 +396,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     mentions === undefined
       ? undefined
       : planMentions(manager, (node) => held.sources.get(node), mentions);
+  const slash = blocks === undefined ? undefined : planSlash(blocks);
   const opened = documentOpened(manager, markdown);
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
@@ -375,7 +408,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     injectCSS: false,
     extensions: [
       ...extensions,
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: placeholderOf(placeholder, blocks !== undefined) }),
       commentAnchorMark,
       ...(drawDiagram === undefined ? [] : [diagramPreview(drawDiagram)]),
       ...formatReports(format),
@@ -403,8 +436,9 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {
           return false;
         }
-        // The keys a mention's list takes are its own first, Escape among them, which closes it.
+        // The keys a mention's list or the block menu takes are its own first, Escape among them, which closes it.
         if (mentions?.onKey(event) === true) return true;
+        if (blocks?.onKey(event) === true) return true;
         if (event.key === "Escape" || (event.key === "Enter" && event.metaKey)) {
           onFinish(caretSection(editor));
           return true;
@@ -430,6 +464,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   carried = anchors === undefined ? [] : anchorsLaidIn(editor, markdown, anchors);
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
+  if (slash !== undefined) editor.registerPlugin(slash.plugin);
   held = sourcesOf(editor.state.doc, opened);
   const onWords = placedOnWords(editor, placement);
   editor.view.dispatch(editor.state.tr.setSelection(onWords ?? placed(editor, placement)));
@@ -446,6 +481,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
       return { base: answer.base, text: documentMarkdown(manager, editor.state.doc, held) };
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
+    insertBlock: (block) => slash?.insert(editor, block),
     markdown: () => documentMarkdown(manager, editor.state.doc, held),
     focusAt: (placement) => {
       onWordsAs = undefined;

@@ -952,6 +952,18 @@ export function DividerIcon(): React.JSX.Element {
   );
 }
 
+/** A grid of cells under a header row: a table laid into a document, Lucide's `table`. */
+export function TableIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M3 15h18" />
+      <path d="M12 3v18" />
+    </Glyph>
+  );
+}
+
 /** A speech bubble with a plus: a comment begun on words, Lucide's `message-square-plus`. */
 export function CommentAddIcon(): React.JSX.Element {
   return (

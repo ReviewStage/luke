@@ -133,7 +133,7 @@ function selectionBox(editor: Editor): EditorBox | undefined {
 }
 
 /** The blocks the selection stands in turned into `block`: a list into another list in place, anything else through plain paragraphs. */
-function turnInto(editor: Editor, block: WritingBlock): void {
+export function turnInto(editor: Editor, block: WritingBlock): void {
   const now = formatOf(editor).block;
   if (now === block) return;
   const chain = editor.chain();
