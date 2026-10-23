@@ -84,8 +84,9 @@ const DESKTOP_WINDOW = {
   // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
   // The window's ground before the renderer paints, one per appearance; each
-  // is the desktop palette's `--luke-color-ground` for that appearance.
-  BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
+  // is the desktop palette's `--luke-color-sidebar` for that appearance, the
+  // frame the shell is drawn on and its work sheet laid over.
+  BACKGROUND: { DARK: "#0e0e10", LIGHT: "#f4f4f5" },
 } as const;
 
 /** The first frame of the window, centred in the display's work area. */

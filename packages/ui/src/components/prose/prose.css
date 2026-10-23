@@ -96,7 +96,7 @@
   }
 
   .luke-markdown-heading {
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-weight-semibold);
     letter-spacing: -0.01em;
   }
 

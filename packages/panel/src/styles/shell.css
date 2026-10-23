@@ -77,13 +77,55 @@
    already narrowed. Only the plans' shell folds, so Settings always keeps its
    page list. The shell clips what slides past its edges with `clip` rather
    than `hidden`, because `hidden` makes it a scroll container: a panel sliding
-   in from past the right edge, or the column's bars drawn on past both sides,
-   are room that focus or scrollIntoView would scroll the whole window
-   sideways into and leave it there. Every shell clips, Settings' and a
-   version history's too, whose toolbars draw their hairline past both
-   sides as the plans' column's do. */
+   in from past the right edge is room that focus or scrollIntoView would
+   scroll the whole window sideways into and leave it there. Every shell
+   clips, Settings' and a version history's too. */
 .desktop-shell {
   overflow: clip;
+}
+
+/* The work is a sheet laid on the window's frame: the shell's ground is the
+   sidebar's, so the sidebar stands on it with no edge of its own, and the
+   work column is a sheet a gap in from the window's edges, its corners
+   soft and its edge a hairline and a soft shadow. A narrow room shows one
+   column at a time and keeps it full bleed. */
+.desktop-shell {
+  --sheet-gap: var(--luke-space-8);
+  --sheet-radius: var(--luke-radius-14);
+
+  background: var(--luke-color-sidebar);
+}
+
+/* Note that the sheet rounds its corners without clipping what it holds,
+   because a menu hung in it may stand past its edge over the next column
+   (an AnchoredPopover bounded by the window), and a clip would cut it off;
+   what is drawn into a corner rounds that corner itself (the side panel). */
+.desktop-shell:not([data-room="narrow"]) > .desktop-main,
+.desktop-shell:not([data-room="narrow"])
+  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
+  > :is(.settings-page, .version-page, .admin-page) {
+  margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
+  border-radius: var(--sheet-radius);
+  background: var(--luke-color-ground);
+  box-shadow:
+    0 0 0 1px var(--luke-color-border),
+    0 1px 2px var(--luke-color-shadow-soft),
+    0 16px 40px -20px var(--luke-color-shadow);
+}
+
+.desktop-shell[data-sidebar-collapsed="true"]:not([data-room="narrow"]) > .desktop-main {
+  margin-left: var(--sheet-gap);
+}
+
+/* The side panel's well reaches the sheet's right edge, and its top and
+   bottom, so it rounds the sheet's corners it stands in; full screen it
+   covers the whole sheet and rounds all four. */
+.desktop-shell:not([data-room="narrow"]) > .desktop-main .side-panel {
+  border-radius: 0 var(--sheet-radius) var(--sheet-radius) 0;
+}
+
+.desktop-shell:not([data-room="narrow"]) > .desktop-main .side-panel[data-full-screen="true"] {
+  border-radius: var(--sheet-radius);
 }
 
 .desktop-shell[data-sidebar-collapsed="true"] {
@@ -227,7 +269,6 @@
   min-height: 0;
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
-  border-right: 1px solid var(--luke-color-border);
   background: var(--luke-color-sidebar);
 }
 
@@ -261,7 +302,7 @@
 
 .sidebar-identity-name {
   font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.01em;
 }
 
@@ -334,21 +375,6 @@
   gap: var(--luke-control-gap);
   min-height: var(--desktop-bar-height);
   padding: var(--luke-space-8) var(--content-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* A pane sliding in finds the work column already narrowed for it, so the
-   toolbar's hairline draws on past both its sides, beneath everything else,
-   and no gap opens between the column and a pane still on its way. */
-.desktop-toolbar::before {
-  position: absolute;
-  z-index: -1;
-  top: 0;
-  right: -100vw;
-  bottom: -1px;
-  left: -100vw;
-  border-bottom: 1px solid var(--luke-color-border);
-  content: "";
 }
 
 /* While the sidebar is folded, or a narrow room's drawer is away, the title
@@ -368,7 +394,7 @@
   margin: 0 0 0 calc(-1 * var(--luke-space-6));
   padding-left: var(--luke-space-6);
   font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.01em;
 }
 
