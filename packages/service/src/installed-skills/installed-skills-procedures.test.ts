@@ -9,9 +9,11 @@ import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH, installedSkillPath } from "@luke
 import {
   INSTALLED_SKILL_FILES_REFUSAL,
   INSTALLED_SKILL_PROBLEM,
+  INSTALLED_SKILL_STANDING,
   installedSkillAnswerSchema,
   installedSkillInstallAnswerSchema,
   installedSkillListAnswerSchema,
+  installedSkillPreviewFileSchema,
   installedSkillPreviewSchema,
   installedSkillUpdateCheckSchema,
   installedSkillUpdatedAnswerSchema,
@@ -253,6 +255,34 @@ const preview = (workspaceId: string, text: string) => ({
   method: "POST",
   body: { workspaceId, text },
 });
+
+/** skills.sh's audit API answering as given, every request it saw written down; any other request goes on to the repository. */
+function withAudit(
+  repository: (sent: SentToGitHub) => Response | undefined,
+  answer: (url: URL) => Response,
+  asked: URL[],
+) {
+  return (sent: SentToGitHub): Response | undefined => {
+    const url = new URL(sent.url);
+    if (url.host !== "www.skills.sh") return repository(sent);
+    asked.push(url);
+    return answer(url);
+  };
+}
+
+/** The one skill a list answered, by id. */
+function installedId(answer: Answer): string {
+  const [skill] = readAnswer(installedSkillListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).skills;
+  assert.ok(skill);
+  return skill.id;
+}
+
+/** The source preview read from an answer, failing the test where it is another kind. */
+function sourcePreview(answer: Answer) {
+  const previewed = readAnswer(installedSkillPreviewSchema, HOSTED_HTTP_STATUS.OK, answer);
+  if (previewed.kind !== SKILL_PASTE_KIND.SOURCE) assert.fail(`not a source: ${previewed.kind}`);
+  return previewed;
+}
 
 /** A credential-shaped literal, built at run time so no tracked file holds one (`scripts/repository-checks.sh`). */
 const FAKE_GITHUB_TOKEN = ["gh", "p_", "x".repeat(36)].join("");
@@ -989,6 +1019,340 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           body: { workspaceId: workspace },
         });
         assert.equal(notTheirs.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+      }),
+  );
+
+  it.effect(
+    "a named skill's preview carries the sibling skills its body calls on, their SKILL.md, and skills.sh's ratings of them",
+    () =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("mattpocock", "skills");
+        const grillMe = skillFile(
+          "grill-me",
+          "A relentless interview.",
+          'Call the Skill tool with "grilling".',
+        );
+        const grilling = skillFile(
+          "grilling",
+          "Runs the interview.",
+          "Ask one question at a time. When the plan holds, hand off to $tdd.",
+        );
+        const tdd = skillFile(
+          "tdd",
+          "Test first.",
+          "Grilling is no part of it, nor is skills/grilling, nor `grill-me-later`.",
+        );
+        commitTo(kit, "main", {
+          "skills/productivity/grill-me/SKILL.md": grillMe,
+          "skills/productivity/grilling/SKILL.md": grilling,
+          "skills/engineering/tdd/SKILL.md": tdd,
+          "skills/engineering/tdd/scripts/red.txt": "red",
+          "skills/misc/caveman/SKILL.md": skillFile("caveman", "Talk short.", "Use /tdd."),
+          "skills/misc/caveman/helper.py": "print('ug')",
+        });
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const audited: URL[] = [];
+        const ask = yield* routes(
+          githubReaching(
+            [],
+            undefined,
+            {},
+            withAudit(
+              repositoryScript(kit),
+              () =>
+                Response.json({
+                  "grill-me": {
+                    ath: { risk: "safe", analyzedAt: "2026-10-01T00:00:00Z" },
+                    socket: { risk: "low", alerts: 0 },
+                    snyk: { risk: "catastrophic" },
+                  },
+                  grilling: { snyk: "not a rating" },
+                  caveman: { ath: { risk: "high" } },
+                }),
+              audited,
+            ),
+          ),
+        );
+
+        const previewed = sourcePreview(
+          yield* ask(
+            `${SKILLS}/preview`,
+            owner,
+            preview(workspace, "npx skills@latest add mattpocock/skills --skill=grill-me"),
+          ),
+        );
+        const byName = new Map(previewed.skills.map((skill) => [skill.name, skill]));
+        assert.deepEqual(byName.get("grill-me")?.references, ["grilling"]);
+        assert.deepEqual(byName.get("grilling")?.references, ["tdd"]);
+        assert.equal(byName.get("tdd")?.references, undefined);
+        assert.deepEqual(byName.get("caveman")?.references, ["tdd"]);
+        assert.deepEqual(
+          previewed.skills.map(({ name, selected, hasScripts, markdown }) => ({
+            name,
+            selected,
+            hasScripts,
+            markdown,
+          })),
+          [
+            { name: "tdd", selected: false, hasScripts: true, markdown: tdd },
+            { name: "caveman", selected: false, hasScripts: true, markdown: undefined },
+            { name: "grill-me", selected: true, hasScripts: false, markdown: grillMe },
+            { name: "grilling", selected: false, hasScripts: false, markdown: grilling },
+          ],
+        );
+        // Only the skills shown in detail are rated, a rating that does not read is dropped, and a skill not asked about is ignored.
+        assert.equal(audited.length, 1);
+        assert.equal(audited[0]?.searchParams.get("source"), "mattpocock/skills");
+        assert.deepEqual(audited[0]?.searchParams.get("skills")?.split(",").sort(), [
+          "grill-me",
+          "grilling",
+          "tdd",
+        ]);
+        assert.deepEqual(byName.get("grill-me")?.audit, {
+          ath: { risk: "safe", analyzedAt: "2026-10-01T00:00:00Z" },
+          socket: { risk: "low", alerts: 0 },
+        });
+        assert.equal(byName.get("grilling")?.audit, undefined);
+        assert.equal(byName.get("caveman")?.audit, undefined);
+      }),
+  );
+
+  it.effect(
+    "a candidate says which installed skills of its name the account sees, and whether installing meets the same tree, an update, or another source",
+    () =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "kit");
+        const first = commitTo(kit, "main", {
+          "README.md": "# kit",
+          "skills/review/SKILL.md": skillFile("review", "Review a pull request."),
+          "skills/release/SKILL.md": skillFile("release", "Write release notes."),
+        });
+        const owner = yield* openGithubUser();
+        const stranger = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const strangersOwn = yield* openWorkspace(stranger);
+        const ask = yield* routes(githubReaching([], undefined, {}, repositoryScript(kit)));
+        const paste = "npx skills add acme/kit";
+        const [review] = readAnswer(
+          installedSkillInstallAnswerSchema,
+          201,
+          yield* ask(
+            SKILLS,
+            owner,
+            install({
+              workspaceId: workspace,
+              scope: INSTALLED_SKILL_SCOPE.PERSONAL,
+              text: paste,
+              skills: ["review"],
+            }),
+          ),
+        ).skills;
+        const [release] = readAnswer(
+          installedSkillInstallAnswerSchema,
+          201,
+          yield* ask(
+            SKILLS,
+            owner,
+            install({
+              workspaceId: workspace,
+              scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
+              text: skillFile("release", "Our own release notes."),
+            }),
+          ),
+        ).skills;
+        assert.ok(review !== undefined && release !== undefined);
+        // Another account's personal skill of a name is none of the owner's to see.
+        yield* ask(
+          SKILLS,
+          stranger,
+          install({
+            workspaceId: strangersOwn,
+            scope: INSTALLED_SKILL_SCOPE.PERSONAL,
+            text: paste,
+            skills: ["release"],
+          }),
+        );
+        const installedOf = (answer: Answer) =>
+          sourcePreview(answer).skills.map(({ name, installed }) => ({ name, installed }));
+
+        // A commit that leaves the skill's folder as it was is no update.
+        const unrelated = commitTo(kit, "main", {
+          ...kit.commits.get(first),
+          "README.md": "# kit!",
+        });
+        assert.notEqual(unrelated, first);
+        assert.deepEqual(
+          installedOf(yield* ask(`${SKILLS}/preview`, owner, preview(workspace, paste))),
+          [
+            {
+              name: "release",
+              installed: [
+                {
+                  id: release.id,
+                  scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
+                  standing: INSTALLED_SKILL_STANDING.TAKEN,
+                },
+              ],
+            },
+            {
+              name: "review",
+              installed: [
+                {
+                  id: review.id,
+                  scope: INSTALLED_SKILL_SCOPE.PERSONAL,
+                  standing: INSTALLED_SKILL_STANDING.CURRENT,
+                },
+              ],
+            },
+          ],
+        );
+
+        commitTo(kit, "main", {
+          ...kit.commits.get(unrelated),
+          "skills/review/SKILL.md": skillFile("review", "Review a pull request, carefully."),
+        });
+        const moved = installedOf(
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, paste)),
+        );
+        assert.deepEqual(
+          moved.find((one) => one.name === "review")?.installed?.map((one) => one.standing),
+          [INSTALLED_SKILL_STANDING.UPDATE],
+        );
+        assert.deepEqual(
+          installedOf(yield* ask(`${SKILLS}/preview`, stranger, preview(strangersOwn, paste))),
+          [
+            {
+              name: "release",
+              installed: [
+                {
+                  id: installedId(yield* ask(`${SKILLS}?workspaceId=${strangersOwn}`, stranger)),
+                  scope: INSTALLED_SKILL_SCOPE.PERSONAL,
+                  standing: INSTALLED_SKILL_STANDING.CURRENT,
+                },
+              ],
+            },
+            { name: "review", installed: undefined },
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a plugin manifest groups the skills it lists, and a private repository is never sent to skills.sh",
+    () =>
+      Effect.gen(function* () {
+        const files = {
+          ".claude-plugin/marketplace.json": JSON.stringify({
+            plugins: [
+              { name: "document-skills", source: "./", skills: ["./skills/pdf", "./skills/docx"] },
+              { name: 42, source: "./", skills: ["./skills/loose"] },
+              { name: "escapes", source: "./", skills: ["../outside"] },
+            ],
+          }),
+          "skills/pdf/SKILL.md": skillFile("pdf", "Read a PDF."),
+          "skills/docx/SKILL.md": skillFile("docx", "Read a Word file."),
+          "skills/loose/SKILL.md": skillFile("loose", "In no plugin."),
+        };
+        const open = fakeRepository("acme", "docs");
+        commitTo(open, "main", files);
+        const vault = fakeRepository("acme", "vault", true);
+        commitTo(vault, "main", files);
+        const installation = installationFor(vault);
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, installation);
+        const audited: URL[] = [];
+        const ask = yield* routes(
+          githubReaching(
+            [installation],
+            undefined,
+            {},
+            withAudit(
+              (sent) => repositoryScript(open)(sent) ?? repositoryScript(vault)(sent),
+              () => Response.json({ pdf: { ath: { risk: "medium" } } }),
+              audited,
+            ),
+          ),
+        );
+
+        const grouped = sourcePreview(
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, "npx skills add acme/docs")),
+        );
+        assert.deepEqual(
+          grouped.skills.map(({ name, group }) => ({ name, group })),
+          [
+            { name: "docx", group: "document-skills" },
+            { name: "loose", group: undefined },
+            { name: "pdf", group: "document-skills" },
+          ],
+        );
+        // Nothing asked for: the first skills listed are rated, and none is carried whole.
+        assert.deepEqual(audited[0]?.searchParams.get("skills"), "docx,loose,pdf");
+        assert.deepEqual(grouped.skills.find((one) => one.name === "pdf")?.audit, {
+          ath: { risk: "medium" },
+        });
+        assert.ok(grouped.skills.every((one) => one.markdown === undefined));
+
+        const hidden = sourcePreview(
+          yield* ask(
+            `${SKILLS}/preview`,
+            owner,
+            preview(workspace, "npx skills add acme/vault --skill pdf"),
+          ),
+        );
+        assert.equal(audited.length, 1);
+        assert.ok(hidden.skills.every((one) => one.audit === undefined));
+        assert.equal(
+          hidden.skills.find((one) => one.name === "pdf")?.markdown,
+          files["skills/pdf/SKILL.md"],
+        );
+      }),
+  );
+
+  it.effect(
+    "a previewed skill's SKILL.md is read at the commit the preview pinned, after its branch moved on",
+    () =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "kit");
+        const pinned = commitTo(kit, "main", {
+          "skills/review/SKILL.md": skillFile("review", "Review a pull request."),
+          "skills/leaky/SKILL.md": skillFile("leaky", "Leaks.", `token ${FAKE_GITHUB_TOKEN}`),
+        });
+        commitTo(kit, "main", {
+          "skills/review/SKILL.md": skillFile("review", "Something else now."),
+        });
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const stranger = yield* openGithubUser();
+        const ask = yield* routes(githubReaching([], undefined, {}, repositoryScript(kit)));
+        const read = (userId: string, path: string, sha = pinned) =>
+          ask(`${SKILLS}/preview/file`, userId, {
+            method: "POST",
+            body: { workspaceId: workspace, owner: "acme", repo: "kit", sha, path },
+          });
+
+        assert.deepEqual(
+          readAnswer(
+            installedSkillPreviewFileSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* read(owner, "skills/review"),
+          ),
+          { markdown: skillFile("review", "Review a pull request.") },
+        );
+        assert.equal((yield* read(owner, "skills/nowhere")).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.deepEqual(yield* read(owner, "skills/leaky"), {
+          status: HOSTED_HTTP_STATUS.CONFLICT,
+          body: {
+            error: HOSTED_API_ERROR.SKILL_FILES_REFUSED,
+            skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED,
+          },
+        });
+        assert.equal(
+          (yield* read(owner, "skills/review", "main")).status,
+          HOSTED_HTTP_STATUS.BAD_REQUEST,
+        );
+        assert.equal((yield* read(stranger, "skills/review")).status, HOSTED_HTTP_STATUS.NOT_FOUND);
       }),
   );
 });

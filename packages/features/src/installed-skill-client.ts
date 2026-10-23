@@ -14,6 +14,7 @@ import type {
   InstalledSkillSummary,
   InstalledSkillUpdateCheck,
   installedSkillInstallRequestSchema,
+  installedSkillPreviewFileRequestSchema,
 } from "./installed-skill-route-wire.js";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
@@ -55,6 +56,9 @@ export interface HostedInstalledSkillClientOptions {
 
 /** What an install sends: the paste, whose the skills are, and for a source the skills chosen, for text the name and description it lacks. */
 export type InstalledSkillInstallParams = typeof installedSkillInstallRequestSchema.Type;
+
+/** A previewed skill's `SKILL.md` asked for: the workspace, and the repository, commit, and folder the preview named. */
+export type InstalledSkillPreviewFileParams = typeof installedSkillPreviewFileRequestSchema.Type;
 
 /** The refusals an installed skills call names, by the service's own word for each. */
 const REFUSALS: ReadonlyMap<HostedApiError, InstalledSkillCallFailure> = new Map([
@@ -128,6 +132,16 @@ export class HostedInstalledSkillClient {
     return resultOf(
       askHosted(this.#hosted.installedSkills.preview, { workspaceId, text }, HOSTED_DEADLINE.START),
       (answer) => answer,
+    );
+  }
+
+  /** One previewed skill's `SKILL.md` at the commit the preview pinned, for "View" on a skill the preview carried none of. */
+  previewFile(
+    params: InstalledSkillPreviewFileParams,
+  ): Effect.Effect<InstalledSkillCallResult<string>, never, HttpClient.HttpClient> {
+    return resultOf(
+      askHosted(this.#hosted.installedSkills.previewFile, params, HOSTED_DEADLINE.START),
+      (answer) => answer.markdown,
     );
   }
 

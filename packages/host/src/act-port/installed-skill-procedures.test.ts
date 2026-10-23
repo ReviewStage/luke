@@ -50,6 +50,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
             return NOTHING;
           }),
         installedSkillsPreview: () => Effect.succeed(refused),
+        installedSkillsPreviewFile: () => Effect.succeed(refused),
         installedSkillsInstall: ({ scope }) =>
           Effect.sync(() => {
             asked.push(`install:${scope}`);

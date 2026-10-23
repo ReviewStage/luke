@@ -61,6 +61,11 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
         asked.push(`preview:${workspaceId}`);
         return { ok: true as const, answer: { kind: SKILL_PASTE_KIND.EMPTY } };
       }),
+    previewFile: (params) =>
+      Effect.sync(() => {
+        asked.push(`previewFile:${params.path}`);
+        return { ok: true as const, answer: "# grilling" };
+      }),
     install: (params) =>
       Effect.sync(() => {
         asked.push(`install:${params.scope}`);
@@ -159,6 +164,16 @@ it.effect("each ask reaches the service and answers the window its view", () =>
     assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, { skillId: SKILL_ID }), {
       id: SKILL_ID,
     });
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, {
+        workspaceId: WORKSPACE_ID,
+        owner: "acme",
+        repo: "agent-skills",
+        sha: "3f9c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5",
+        path: "skills/grilling",
+      }),
+      { markdown: "# grilling" },
+    );
     assert.deepEqual(asked, [
       `list:${WORKSPACE_ID}`,
       `install:${INSTALLED_SKILL_SCOPE.WORKSPACE}`,
@@ -166,6 +181,7 @@ it.effect("each ask reaches the service and answers the window its view", () =>
       `check:${SKILL_ID}`,
       `update:${SKILL_ID}`,
       `remove:${SKILL_ID}`,
+      "previewFile:skills/grilling",
     ]);
   }),
 );
@@ -210,6 +226,17 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
     );
 
     assert.equal(refused._tag, "InvalidParamsRefusal");
+    // A previewed skill is read at the commit the preview pinned, never at a branch's name.
+    const unpinned = yield* Effect.flip(
+      call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, {
+        workspaceId: WORKSPACE_ID,
+        owner: "acme",
+        repo: "agent-skills",
+        sha: "main",
+        path: "skills/grilling",
+      }),
+    );
+    assert.equal(unpinned._tag, "InvalidParamsRefusal");
     assert.deepEqual(asked, []);
   }),
 );

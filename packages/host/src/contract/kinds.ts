@@ -227,13 +227,14 @@ export const CHAPTERS_ACT_KIND = {
 
 /**
  * Settings' Skills: the skills the account sees in a workspace listed, a
- * pasted `skills add` command or skill text previewed and installed for the
- * account or its workspace, and one toggled, checked for an update,
+ * pasted `skills add` command or skill text previewed, one of its skills'
+ * `SKILL.md` read, and installed for the account or its workspace, and one toggled, checked for an update,
  * updated, or removed.
  */
 export const INSTALLED_SKILL_ACT_KIND = {
   INSTALLED_SKILLS_LIST: "installedSkills.list",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
+  INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
   INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
