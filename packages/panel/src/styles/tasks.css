@@ -583,7 +583,10 @@
   box-decoration-break: clone;
 }
 
-.plan-document-text p.is-editor-empty:first-child::before {
+/* What the empty block under the caret says, drawn before its words: the
+   empty plan's own words, an empty line how to open the `/` menu, an empty
+   heading its level's name (`plan-editor.ts`'s `placeholderOf`). */
+.plan-document-text > .is-empty::before {
   float: left;
   height: 0;
   color: var(--luke-color-text-subtle);

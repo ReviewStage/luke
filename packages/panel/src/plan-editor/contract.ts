@@ -12,7 +12,12 @@
  * parses none of them.
  */
 
-import type { WRITING_MARK, WritingBlock, WritingMark } from "@luke/settings/shortcuts";
+import type {
+  WRITING_MARK,
+  WritingBlock,
+  WritingInsert,
+  WritingMark,
+} from "@luke/settings/shortcuts";
 
 /** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
 export interface EditorBox {
@@ -97,6 +102,29 @@ export type PlanEditorPlacement =
 /** The caret at the end of the text, as a press on the room under its last line puts it. */
 export const PLACEMENT_END = { end: true } as const;
 
+/** What the `/` menu lays in beyond the writing vocabulary's blocks, each the menu's own. */
+export const SLASH_INSERT = {
+  DIAGRAM: "slash-diagram",
+  TABLE: "slash-table",
+  PICTURE: "slash-picture",
+  MENTION: "slash-mention",
+} as const;
+
+type SlashInsert = (typeof SLASH_INSERT)[keyof typeof SLASH_INSERT];
+
+/** A block the `/` menu offers: one a line is turned into, the divider, or one of the menu's own. */
+export type SlashBlock = WritingBlock | WritingInsert | SlashInsert;
+
+/**
+ * The plan editor's `/`, as the panel draws its menu: the `/` word the caret
+ * ends reported (`onTrigger`), and the keys the menu over it takes first
+ * (`onKey`), answering whether it took one.
+ */
+export interface PlanEditorBlocks {
+  readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  readonly onKey: (event: KeyboardEvent) => boolean;
+}
+
 /** What the document hands the editor as it mounts it in place of the text's drawn sections. */
 export interface PlanEditorProps {
   /** The text as the document holds it, which the editor opens on. */
@@ -130,6 +158,8 @@ export interface PlanEditorProps {
   readonly anchors?: readonly EditorAnchor[] | undefined;
   /** What a format toolbar over the text hears of its selection; none where no toolbar stands over it. */
   readonly format?: EditorFormatDoors | undefined;
+  /** What the `/` menu over the text hears of its `/` word and its keys; none where no menu stands over it, which an empty line then does not offer. */
+  readonly blocks?: PlanEditorBlocks | undefined;
 }
 
 /** The words one comment thread is on, as offsets into a plan's Markdown. */
@@ -292,6 +322,8 @@ export interface PlanEditorHandle extends EditorFormatting {
   readonly take: (sent: string, merged: string) => { readonly base: string; readonly text: string };
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
+  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in. */
+  readonly insertBlock: (block: SlashBlock) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
