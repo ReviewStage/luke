@@ -85,6 +85,14 @@ const SHARED_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(SHARED_PREFEREN
 /** The snapshot's own part for where the account's Luke links open. */
 const LINK_OPEN_PART = APP_SETTING_SCHEMA.linkOpen.field;
 
+/** Where a preferences record came from: the account's stored row, or a client's or the service's wire. */
+const PREFERENCE_SOURCE = {
+  STORED: "stored",
+  WIRE: "wire",
+} as const;
+
+type PreferenceSource = (typeof PREFERENCE_SOURCE)[keyof typeof PREFERENCE_SOURCE];
+
 /**
  * The preferences a record holds, each read by its own setting's guard.
  * A key outside `fields` is passed over wherever it comes from, so a
@@ -100,7 +108,7 @@ const LINK_OPEN_PART = APP_SETTING_SCHEMA.linkOpen.field;
 function parseAccountPreferences(
   value: UnparsedWireValue,
   fields: ReadonlySet<string>,
-  source: "stored" | "wire",
+  source: PreferenceSource,
 ): AccountPreferences | undefined {
   if (!isRecord(value)) return undefined;
   const preferences: Record<string, UnparsedWireValue> = {};
@@ -109,7 +117,7 @@ function parseAccountPreferences(
     const wireValue = rawValue === null ? undefined : rawValue;
     const parsed = APP_SETTING_SCHEMA[field].guard(wireValue);
     if (!parsed.valid) {
-      if (source === "wire") return undefined;
+      if (source === PREFERENCE_SOURCE.WIRE) return undefined;
       continue;
     }
     // SAFETY: The account-preference guard accepted this value as that setting's stored JSON shape.
@@ -126,13 +134,13 @@ function parseAccountPreferences(
 export function accountPreferencesFromWire(
   value: UnparsedWireValue,
 ): AccountPreferences | undefined {
-  return parseAccountPreferences(value, SHARED_PREFERENCE_FIELD_SET, "wire");
+  return parseAccountPreferences(value, SHARED_PREFERENCE_FIELD_SET, PREFERENCE_SOURCE.WIRE);
 }
 
 export function accountPreferencesFromStored(
   value: UnparsedWireValue,
 ): AccountPreferences | undefined {
-  return parseAccountPreferences(value, ACCOUNT_PREFERENCE_FIELD_SET, "stored");
+  return parseAccountPreferences(value, ACCOUNT_PREFERENCE_FIELD_SET, PREFERENCE_SOURCE.STORED);
 }
 
 /** Where the account's links open, as a write's own part names it; nothing where it names no choice. */
