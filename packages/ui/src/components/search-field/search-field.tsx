@@ -50,7 +50,8 @@ import type { ComboboxField } from "../combobox/use-combobox-field.js";
  * because its addons take the press by a handler of their own where the
  * label already does, and its button is another component's to vendor. The
  * parts are drawn in Tailwind utilities over the theme's field roles, and
- * the well keeps the `luke-search-field` name a test finds it by.
+ * the well, its field, and its clear keep the `luke-search-field` names a
+ * test and a folding search (`folding-search.css`) find them by.
  */
 
 /** How a search stands: a well among other controls, or a menu's head row. */
@@ -74,7 +75,7 @@ const SEARCH_LOOK_CLASS = {
 
 /** The field, bare in the well and taking the room left. */
 const SEARCH_INPUT =
-  "h-full flex-1 rounded-none border-0 bg-transparent p-0 outline-none focus:bg-transparent";
+  "luke-search-field-input h-full flex-1 rounded-none border-0 bg-transparent p-0 outline-none focus:bg-transparent";
 
 /** The tally in a caption's tabular figures, said rather than drawn where the bar is folded. */
 const SEARCH_TALLY =
@@ -84,9 +85,13 @@ const SEARCH_TALLY =
 const SEARCH_SHORTCUT =
   "inline-flex flex-none pr-luke-6 group-focus-within/search:hidden [@media(hover:none)_and_(pointer:coarse)]:hidden";
 
-/** The clear, nested in the well as far inside its edge on every side as from the end; it grows in and shrinks out. */
+/**
+ * The clear, nested in the well as far inside its edge on every side as from the end; it grows in and shrinks out.
+ * Note that it runs neither inside a container that is itself leaving, whose own exit
+ * (`folding-search.css`) is what it rides, since a utility would outrank that rule.
+ */
 const SEARCH_CLEAR =
-  "m-0 inline-flex size-search-clear flex-none animate-pop-in cursor-default items-center justify-center rounded-control-compact border-0 bg-transparent p-0 text-muted-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain hover:bg-fill-selected hover:text-foreground active:bg-fill-pressed data-[leaving=true]:animate-pop-out [&>svg]:size-control-icon";
+  "luke-search-field-clear m-0 inline-flex size-search-clear flex-none not-in-data-[leaving=true]:animate-pop-in cursor-default items-center justify-center rounded-control-compact border-0 bg-transparent p-0 text-muted-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain hover:bg-fill-selected hover:text-foreground active:bg-fill-pressed not-in-data-[leaving=true]:data-[leaving=true]:animate-pop-out [&>svg]:size-control-icon";
 
 /** How many results a query found, and which is current, where one is. */
 export interface SearchTally {
