@@ -1277,7 +1277,7 @@ function message(
   };
 }
 
-test("an open item nobody has written on previews what it asks: a choice by its options and whether one is recommended, a form by its fields, and anything else by its kind and the first words of its context", () => {
+test("an open item nobody has written on previews what it asks: a choice by its options and how many are recommended, a form by its fields, and anything else by its kind and the first words of its context", () => {
   const context = [
     { type: INBOX_BLOCK.MARKDOWN, text: "Add the token under **Production**." },
   ] as const;
@@ -1288,6 +1288,16 @@ test("an open item nobody has written on previews what it asks: a choice by its 
         type: INBOX_RESPONSE.CHOICE,
         options: [{ label: "Postgres" }, { label: "Redis" }, { label: "SQS" }],
         recommended: "Postgres",
+      },
+    },
+    {
+      ...QUEUE,
+      response: {
+        type: INBOX_RESPONSE.CHOICE,
+        options: [{ label: "Postgres" }, { label: "Redis" }, { label: "SQS" }],
+        multiple: true,
+        recommended: "Postgres",
+        recommendations: ["Postgres", "SQS"],
       },
     },
     QUEUE,
@@ -1307,6 +1317,7 @@ test("an open item nobody has written on previews what it asks: a choice by its 
   ].map((each) => inboxPreview(each, previewName));
   assert.deepEqual(previews, [
     "Choice · 3 options, one recommended",
+    "Choice · 3 options, 2 recommended",
     "Choice · 2 options",
     "Choice · 2 options",
     "Form · 4 fields",
@@ -1836,6 +1847,16 @@ test("a thread's row says the ask itself while one is open: a choice's options, 
   assert.equal(
     rowOf({ type: INBOX_ASK.DECIDE, options, multiple: true, recommended: "14 days" }),
     "7 days / 14 days ★ / 30 days",
+  );
+  assert.equal(
+    rowOf({
+      type: INBOX_ASK.DECIDE,
+      options,
+      multiple: true,
+      recommended: "7 days",
+      recommendations: ["7 days", "30 days"],
+    }),
+    "7 days ★ / 14 days / 30 days ★",
   );
   assert.equal(lineOf({ type: INBOX_ASK.DECIDE, options }), INBOX_LINE.DECIDE);
   const steps = { type: INBOX_ASK.DO, steps: ["Open **it**", "Add it", "Redeploy"] } as const;

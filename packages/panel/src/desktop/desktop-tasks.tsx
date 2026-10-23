@@ -836,7 +836,7 @@ function PlanDocument({
       pages,
       agents: (agents.agents ?? []).map((agent) => {
         const name = agentTabLabel(agent, agents.models);
-        return { id: agent.id, name, actor: agentActor(agent, name) };
+        return { id: agent.id, name, actor: agentActor(agent, name), summary: agent };
       }),
       readAgents: readMentionAgents,
       pullRequests: mentionablePullRequests(agents),

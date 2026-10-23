@@ -239,7 +239,7 @@ export type InboxFileType = (typeof INBOX_FILE_TYPE)[keyof typeof INBOX_FILE_TYP
 
 /** The responses an item asks for, each answered its own way. */
 export const INBOX_RESPONSE = {
-  /** Pick one of the agent's options, or several where it allows, one perhaps recommended, or answer in the developer's own words. */
+  /** Pick one of the agent's options, or several where it allows, some perhaps recommended, or answer in the developer's own words. */
   CHOICE: "choice",
   /** Approve or decline a step the agent proposes. */
   APPROVAL: "approval",
@@ -313,7 +313,7 @@ const INBOX_REPLIES_OF = {
 
 /** The asks a message on an item's thread may end with, from version 5, each answered its own way. */
 export const INBOX_ASK = {
-  /** Pick one of the agent's options, or several where it allows, one perhaps recommended. */
+  /** Pick one of the agent's options, or several where it allows, some perhaps recommended. */
   DECIDE: "decide",
   /** Do steps by hand, ticking each, then mark it done, or say it could not be done. */
   DO: "do",
@@ -467,8 +467,63 @@ export const inboxFieldSchema = EffectSchema.Struct({
 export type InboxField = typeof inboxFieldSchema.Type;
 
 /**
+ * What an agent recommends of a choice's options as it posts the choice:
+ * one label, or a list of them, several only where the choice lets several
+ * be picked.
+ */
+export const recommendedInputSchema = EffectSchema.Union([
+  EffectSchema.String,
+  EffectSchema.Array(EffectSchema.String).check(
+    EffectSchema.isMinLength(1),
+    EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+  ),
+]);
+
+/**
+ * A choice's recommendation as it is kept: the first label recommended,
+ * and every label in order where it recommends several. Note that the
+ * first stays a label of its own, because a desktop from before several
+ * reads `recommended` as one label and drops `recommendations` unread.
+ */
+export const RECOMMENDED_FIELDS = {
+  recommended: EffectSchema.optionalKey(EffectSchema.String),
+  recommendations: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.String).check(
+      EffectSchema.isMinLength(2),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+    ),
+  ),
+};
+
+/** A choice's recommendation as it was posted or as it is kept. */
+interface Recommending {
+  readonly recommended?: string | readonly string[];
+  readonly recommendations?: readonly string[];
+}
+
+/** The labels a choice recommends, in order, as it was posted or as it is kept: none, one, or several. */
+export function recommendedLabels(choice: Recommending): readonly string[] {
+  if (choice.recommendations !== undefined) return choice.recommendations;
+  if (choice.recommended === undefined) return [];
+  return typeof choice.recommended === "string" ? [choice.recommended] : choice.recommended;
+}
+
+/** A posted recommendation as a choice keeps it: nothing, its one label, or its first label and every label. */
+export function keptRecommendation(choice: Recommending): {
+  recommended?: string;
+  recommendations?: readonly string[];
+} {
+  const labels = recommendedLabels(choice);
+  const [first] = labels;
+  if (first === undefined) return {};
+  return labels.length === 1
+    ? { recommended: first }
+    : { recommended: first, recommendations: labels };
+}
+
+/**
  * What an item asks of the developer, one of six: a choice among options,
- * several where `multiple`, the label it recommends named; an approval; words,
+ * several where `multiple`, the labels it recommends named; an approval; words,
  * with what the box says while empty; a task; a form of fields, each select
  * naming the option it recommends; or nothing but an acknowledgement.
  */
@@ -480,7 +535,7 @@ export const inboxResponseSchema = EffectSchema.Union([
       EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
     ),
     multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
-    recommended: EffectSchema.optionalKey(EffectSchema.String),
+    ...RECOMMENDED_FIELDS,
   }),
   EffectSchema.Struct({ type: EffectSchema.Literal(INBOX_RESPONSE.APPROVAL) }),
   EffectSchema.Struct({
@@ -606,7 +661,7 @@ const stepIndexSchema = EffectSchema.Int.check(
   EffectSchema.isLessThan(INBOX_BOUNDS.MAX_STEPS),
 );
 
-/** A `decide` ask's own keys: two to six options, several to be picked where `multiple`, one perhaps recommended by its label. */
+/** A `decide` ask's own keys as it is kept: two to six options, several to be picked where `multiple`, and those recommended by their labels, several where several may be picked. */
 const DECIDE_FIELDS = {
   type: EffectSchema.Literal(INBOX_ASK.DECIDE),
   options: EffectSchema.Array(inboxOptionSchema).check(
@@ -614,7 +669,15 @@ const DECIDE_FIELDS = {
     EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
   ),
   multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
-  recommended: EffectSchema.optionalKey(EffectSchema.String),
+  ...RECOMMENDED_FIELDS,
+};
+
+/** A `decide` ask's own keys as the agent posts it: those it is kept by, but its recommendation one label or a list of them. */
+const DECIDE_INPUT_FIELDS = {
+  type: DECIDE_FIELDS.type,
+  options: DECIDE_FIELDS.options,
+  multiple: DECIDE_FIELDS.multiple,
+  recommended: EffectSchema.optionalKey(recommendedInputSchema),
 };
 
 /**
@@ -649,6 +712,22 @@ const inboxAskSchema = EffectSchema.Union([
 
 export type InboxAsk = typeof inboxAskSchema.Type;
 
+/** An ask as the agent posts it: one it is kept as, but a `decide`'s recommendation one label or a list of them. */
+const inboxAskInputSchema = EffectSchema.Union([
+  EffectSchema.Struct(DECIDE_INPUT_FIELDS),
+  EffectSchema.Struct(DO_FIELDS),
+  EffectSchema.Struct(ANSWER_FIELDS),
+]);
+
+export type InboxAskInput = typeof inboxAskInputSchema.Type;
+
+/** A posted ask as a message keeps it: a `decide`'s recommendation its first label and, where several, every one. */
+export function keptInboxAsk(ask: InboxAskInput): InboxAsk {
+  if (ask.type !== INBOX_ASK.DECIDE) return ask;
+  const { recommended: _recommended, ...rest } = ask;
+  return { ...rest, ...keptRecommendation(ask) };
+}
+
 /**
  * What a post's tool part carries as its input from version 5: the
  * thread's key, its title, which a first post under the key names, the
@@ -661,7 +740,7 @@ export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
   body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
-  ask: EffectSchema.optionalKey(inboxAskSchema),
+  ask: EffectSchema.optionalKey(inboxAskInputSchema),
   waits: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 

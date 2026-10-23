@@ -1763,15 +1763,12 @@ test("Add repository offers the repositories the reader's own token may push to 
 
   act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
   await settle();
-  const offered = [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent);
-  const side =
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (one) => one.textContent === "octo-member/side",
-    ) ?? assert.fail("octo-member/side is not offered");
+  const offered = [...document.querySelectorAll('[role="option"]')].map(optionWords);
+  const side = document.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("no option");
   act(() => side.click());
   await settle();
 
-  assert.deepEqual(offered, ["octo-member/side"]);
+  assert.deepEqual(offered, [["side", "octo-member"]]);
   assert.deepEqual(
     sent
       .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
@@ -1793,10 +1790,45 @@ test("Add repository offers the token's repositories from a service older than a
   act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
   await settle();
 
-  assert.deepEqual(
-    [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent),
-    ["octo-member/side"],
+  assert.deepEqual([...document.querySelectorAll('[role="option"]')].map(optionWords), [
+    ["side", "octo-member"],
+  ]);
+});
+
+/** A picker option's name and its muted owner, as the repository chip's menu draws a repository. */
+function optionWords(option: Element): (string | null | undefined)[] {
+  return [".luke-combobox-option-label", ".luke-combobox-option-detail"].map(
+    (part) => option.querySelector(part)?.textContent,
   );
+}
+
+test("Add repository draws each repository as the repository chip's menu does, by its owner's picture and name, and a search finds it by its owner", async () => {
+  githubRepositories = ["acme/relay"];
+  tokenReach = [
+    ...["a", "b", "c", "d", "e", "f", "g"].map((name) => `octo-member/${name}`),
+    "side-org/zed",
+  ];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+  const zed = () =>
+    [...document.querySelectorAll('[role="option"]')].find(
+      (one) => optionWords(one)[0] === "zed",
+    ) ?? assert.fail("zed is not offered");
+  const field = document.querySelector<HTMLInputElement>("input") ?? assert.fail("no search field");
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, "side-org");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.deepEqual(optionWords(zed()), ["zed", "side-org"]);
+  assert.equal(
+    zed().querySelector("img.luke-avatar-picture")?.getAttribute("src"),
+    "https://github.com/side-org.png?size=32",
+  );
+  assert.equal(document.querySelectorAll('[role="option"]').length, 1);
 });
 
 test("a token repositories read that lands after an add does not take back what the add answered", async () => {
@@ -1809,10 +1841,7 @@ test("a token repositories read that lands after an add does not take back what 
 
   act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
   await settle();
-  const side =
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (one) => one.textContent === "octo-member/side",
-    ) ?? assert.fail("octo-member/side is not offered");
+  const side = document.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("no option");
   act(() => side.click());
   await settle();
   release();

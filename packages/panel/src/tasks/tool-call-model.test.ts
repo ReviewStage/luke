@@ -987,6 +987,25 @@ test("a post from version 5 is a row naming its thread's title, or its key where
   });
   assert.equal(view.output, undefined);
 
+  const several = toolCallView({
+    tool: "post_to_inbox",
+    input: {
+      key: "invite-channels",
+      body: "Which channels send invitations?",
+      ask: {
+        type: "decide",
+        options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
+        multiple: true,
+        recommended: ["Email", "SMS"],
+      },
+    },
+    output: undefined,
+  });
+  assert.deepEqual(several.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Which channels send invitations?\nPick any\n- Email (recommended)\n- Slack\n- SMS (recommended)",
+  });
+
   const steps = toolCallView({
     tool: "post_to_inbox",
     input: {

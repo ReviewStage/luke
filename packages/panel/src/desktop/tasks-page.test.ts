@@ -995,6 +995,23 @@ test("a row leads its repository with its owner's picture, one address for every
   assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
 });
 
+test("the Filter's Repository names each repository as the repository chip does, its name with its owner muted after it, so two owners' same-named repositories read apart", async () => {
+  const page = await mountPage([
+    ...TASKS,
+    { ...task(50, "Docs for web", TASK_STATUS.TODO, TASK_PRIORITY.NONE), repository: "beta/web" },
+  ]);
+
+  openOptions(page, "Filter");
+  choose("Repository");
+  const offered = [
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
+  ]
+    .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
+    .map((item) => item.querySelector(".luke-menu-item-detail")?.textContent);
+
+  assert.deepEqual(offered, ["acme", "beta"]);
+});
+
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
   const page = await mountPage();
   const offered = () =>

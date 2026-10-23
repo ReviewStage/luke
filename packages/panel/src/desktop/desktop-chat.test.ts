@@ -650,7 +650,7 @@ function menuRows(page: HTMLElement): string[] {
 
 /** The keys the open list says it hears at its foot. */
 function menuKeys(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".mention-menu .mention-menu-foot > *")].map(
+  return [...page.querySelectorAll(".mention-menu .luke-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }

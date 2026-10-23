@@ -12,6 +12,8 @@ import {
   MENU_SURFACE_INSET,
   MenuItem,
   MenuSurface,
+  RowHint,
+  RowHintOptions,
   SEARCH_FIELD_LOOK,
   SearchField,
   Shortcut,
@@ -265,6 +267,8 @@ function submenuOptions(open: Submenu): ComboboxOption[] {
     label: row.label,
     icon: row.icon,
     detail: row.detail,
+    hint: rowHint(row),
+    card: row.card,
     current: row.id === open.value,
   }));
 }
@@ -287,12 +291,41 @@ function FootNote({
   );
 }
 
-/** A row's submenu drawn in place, with nowhere to open beside it: a row of each choice, named by the row and the choice after it. */
+/** One row of a list drawn in place: its glyph, name, detail and end marks, the card it hangs beside it where it has one. */
+function PlacedRow({
+  row,
+  title,
+  description,
+  disabled,
+  onPress,
+}: {
+  row: MenuRow;
+  title: string;
+  description: React.ReactNode;
+  disabled: boolean;
+  onPress: () => void;
+}): React.JSX.Element {
+  return (
+    <RowHintOptions card={row.card} cardBeside>
+      <ListRow
+        leading={row.icon}
+        title={title}
+        description={description}
+        meta={rowHint(row)}
+        hint={row.card === undefined ? undefined : { Hint: RowHint, label: title }}
+        disabled={disabled}
+        onPress={onPress}
+      />
+    </RowHintOptions>
+  );
+}
+
+/** A row's submenu drawn in place, with nowhere to open beside it: a row of each choice, named by the row and the choice after it, each wearing the choice's own end marks and card. */
 function submenuRows(row: MenuRow, submenu: Submenu): React.JSX.Element[] {
   return submenu.rows.map((choice) => (
-    <ListRow
+    <PlacedRow
       key={choice.id}
-      leading={choice.icon}
+      row={choice}
       title={row.label}
       description={choice.label}
       disabled={row.disabled !== undefined}
@@ -306,7 +339,8 @@ function submenuRows(row: MenuRow, submenu: Submenu): React.JSX.Element[] {
  * in the page's order, under its section's heading as the menu heads it,
  * with no search and no highlight of its own, as the side panel's well
  * offers what its "+" offers with every tab closed. A row that opens a
- * submenu stands as a row of each of its choices instead.
+ * submenu stands as a row of each of its choices instead. A row wears its
+ * end marks and hangs its card beside it, as the dropped menu's rows do.
  */
 export function MenuRowList({
   label,
@@ -335,12 +369,11 @@ export function MenuRowList({
               {section.rows.flatMap(({ row }) =>
                 row.submenu === undefined
                   ? [
-                      <ListRow
+                      <PlacedRow
                         key={row.id}
-                        leading={row.icon}
+                        row={row}
                         title={row.label}
                         description={row.detail}
-                        meta={rowHint(row)}
                         disabled={row.disabled !== undefined}
                         onPress={() => onPick(row.id)}
                       />,
