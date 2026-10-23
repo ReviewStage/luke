@@ -28,8 +28,11 @@ const TRANSCRIPT_LOADING_LABEL = "Loading transcript";
 /** How wide each of the log's placeholder lines stands, the newest last: one message's lines. */
 const LOG_LINE_WIDTHS = ["72%", "88%", "64%", "40%"] as const;
 
-/** The composer's controls' widths, the leading ones and the trailing send. */
-const COMPOSER_CONTROL_WIDTHS = { lead: "72px", trail: "96px" } as const;
+/** How wide the composer's model chip stands, a short model's name and its effort. */
+const MODEL_CHIP_WIDTH = "120px";
+
+/** A square control's width: the composer's + and every icon press, as tall as they are wide. */
+const SQUARE_CONTROL_WIDTH = "var(--luke-control-height)";
 
 /** The log's last lines, standing at its foot where the newest lines draw, which `label` names to a reader. */
 export function TranscriptSkeleton({
@@ -50,15 +53,32 @@ export function TranscriptSkeleton({
   );
 }
 
-/** The composer's card in its own frame and size, its field and its row of controls. */
+/**
+ * The composer's card in its own frame and size: its empty field in the
+ * field's own room, one line tall, and its foot's two ends as the composer
+ * lays them, the + at the left, and the model chip beside the round send at
+ * the right, so the card lands where it stood and its presses where their
+ * blocks were. The icon presses between the chip and Send are left out, as
+ * a narrow card folds them into its ⋯.
+ */
 export function ComposerSkeleton(): React.JSX.Element {
   return (
     <div className="agent-composer" aria-hidden="true">
       <ComposerFrame className="prompt-input">
-        <div className="agent-composer-input" />
+        <div className="agent-composer-field">
+          <div className="agent-composer-input" />
+        </div>
         <div className="prompt-input-footer">
-          <Skeleton shape={SKELETON_SHAPE.CONTROL} width={COMPOSER_CONTROL_WIDTHS.lead} />
-          <Skeleton shape={SKELETON_SHAPE.CONTROL} width={COMPOSER_CONTROL_WIDTHS.trail} />
+          <div className="prompt-input-tools">
+            {/* Note that the + stands in the attach press's own box, which the narrowest card folds away as it folds the +. */}
+            <span className="agent-composer-attach">
+              <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SQUARE_CONTROL_WIDTH} />
+            </span>
+          </div>
+          <div className="agent-composer-actions">
+            <Skeleton shape={SKELETON_SHAPE.CONTROL} width={MODEL_CHIP_WIDTH} />
+            <Skeleton shape={SKELETON_SHAPE.CIRCLE} />
+          </div>
         </div>
       </ComposerFrame>
     </div>

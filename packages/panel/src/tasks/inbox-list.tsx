@@ -1416,7 +1416,13 @@ export function InboxListSkeleton({
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
-            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
+            leading={
+              <>
+                {/* Note that the gutter stands here as on every item's row, so the tiles land where their blocks stood. */}
+                <span className="inbox-row-gutter" />
+                <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
+              </>
+            }
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={
