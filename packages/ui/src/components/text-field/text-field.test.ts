@@ -24,7 +24,7 @@ import {
  * composing, answers the caret leaving, says its chord, holds a busy text
  * area's words and keys still, stays out of spell check and autofill where asked, holds its
  * form back while empty where required, hands a paste to a
- * caller that takes pasted files itself, inside a field is named, described, and marked invalid by
+ * caller that takes pasted files itself, masks a secret's lines where asked, inside a field is named, described, and marked invalid by
  * the field's words, and standing alone in a settings row is described by the row's words
  * and marked invalid while the row says its error, selects its words as the
  * caret arrives and stays out of the system's corrections where asked, and
@@ -177,6 +177,33 @@ test("a text area holds the many lines its caller holds and hands back every cha
   type(area, "One\nTwo");
   assert.equal(page.querySelector("output")?.textContent, "2");
   assert.equal(area.value, "One\nTwo");
+});
+
+test("a masked text area keeps a secret's many lines and asks its stylesheet to draw them as discs, and a plain one does not", () => {
+  const certificate = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
+  function Secret({ masked }: { masked: boolean }): React.JSX.Element {
+    const [value, setValue] = useState("");
+    return createElement(TextArea, {
+      label: masked ? "Secret" : "Notes",
+      value,
+      onChange: setValue,
+      masked,
+    });
+  }
+  const page = render(
+    createElement(
+      "div",
+      null,
+      createElement(Secret, { masked: true }),
+      createElement(Secret, { masked: false }),
+    ),
+  );
+  const [secret, notes] = [...page.querySelectorAll("textarea")];
+  if (secret === undefined || notes === undefined) return assert.fail("no text areas");
+  type(secret, certificate);
+  assert.equal(secret.value, certificate);
+  assert.equal(secret.getAttribute("data-masked"), "true");
+  assert.equal(notes.hasAttribute("data-masked"), false);
 });
 
 test("a paste reaches a text area's caller, which may take it instead of the text", () => {

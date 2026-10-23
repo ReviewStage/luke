@@ -6,6 +6,10 @@ import type {
   TasksLinearIssuesParams,
   TasksWorkspaceAnswer,
   TasksWorkspaceCreateParams,
+  TasksWorkspaceEnvironmentAnswer,
+  TasksWorkspaceEnvironmentParams,
+  TasksWorkspaceEnvironmentRemoveParams,
+  TasksWorkspaceEnvironmentSaveParams,
   TasksWorkspaceGitHubConnectAnswer,
   TasksWorkspaceInvitationAnswer,
   TasksWorkspaceInvitationCancelParams,
@@ -66,6 +70,15 @@ export interface WorkspaceProceduresDependencies {
     ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
     workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
+    workspaceEnvironmentRead(
+      params: TasksWorkspaceEnvironmentParams,
+    ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+    workspaceEnvironmentSave(
+      params: TasksWorkspaceEnvironmentSaveParams,
+    ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+    workspaceEnvironmentRemove(
+      params: TasksWorkspaceEnvironmentRemoveParams,
+    ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
     workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
     workspaceSentryInstall(
       params: TasksWorkspaceParams,
@@ -368,6 +381,30 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const answer = yield* host.workspaceLinearIssues(input);
       if ("issues" in answer) return answer.issues;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_READ]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_READ
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceEnvironmentRead(input);
+      if ("entries" in answer) return answer;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceEnvironmentSave(input);
+      if ("entries" in answer) return answer;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceEnvironmentRemove(input);
+      if ("entries" in answer) return answer;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actPort[

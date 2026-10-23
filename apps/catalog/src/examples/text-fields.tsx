@@ -24,7 +24,7 @@ import { CatalogSection } from "../section";
  * text-fields.tsx -- a TextField empty with a placeholder, filled, invalid,
  * unavailable, as a secret, as code in the mono face, as a time of day, and as a number; a page's title
  * written in place; a TextArea, standing and growing with its words, and busy
- * sending what ⌘Return submitted; a compact TextField in a bar, selecting its
+ * sending what ⌘Return submitted, masked over a secret of many lines; a compact TextField in a bar, selecting its
  * address as the caret arrives; a bare TextArea growing without limit in a message box's card,
  * sent with Return; a TextField in a settings row, invalid while the row says
  * its error; and both in a narrow column.
@@ -71,6 +71,11 @@ function SubmittedNote(): React.JSX.Element {
         {sent === undefined ? "Nothing sent yet." : `Sent: ${sent}`}
       </Text>
       <TextArea label="Sending" value="On its way." onChange={() => undefined} rows={2} busy />
+      <Held start={"-----BEGIN CERTIFICATE-----\nMIIBsynthetic\n-----END CERTIFICATE-----"}>
+        {(value, onChange) => (
+          <TextArea label="Certificate" value={value} onChange={onChange} rows={3} masked />
+        )}
+      </Held>
     </Stack>
   );
 }

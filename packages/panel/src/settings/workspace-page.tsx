@@ -90,6 +90,7 @@ import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { useCapability } from "../use-app-state.js";
+import { EnvironmentGroup } from "./environment-section.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -1771,6 +1772,7 @@ function ShownWorkspace({
         <WorkspaceLinear workspace={workspace} />
         <WorkspaceSentryRow workspace={workspace} />
       </SettingsSection>
+      <EnvironmentGroup workspace={workspace} />
       {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup
         workspace={workspace}

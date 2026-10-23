@@ -43,6 +43,14 @@ import {
   type WorkspaceCallResult,
 } from "./workspace-call.js";
 import {
+  type WorkspaceEnvironmentAnswer,
+  type WorkspaceEnvironmentRemoveRequest,
+  type WorkspaceEnvironmentSaveRequest,
+  workspaceEnvironmentListRequestSchema,
+  workspaceEnvironmentRemoveRequestSchema,
+  workspaceEnvironmentSaveRequestSchema,
+} from "./workspace-environment-wire.js";
+import {
   WORKSPACE_INVITATIONS_QUERY,
   type WorkspaceInvitation,
   workspaceInvitationCancelSchema,
@@ -426,6 +434,52 @@ export class HostedWorkspaceClient {
     return hostedResult(
       askHosted(this.#hosted.workspaceLinear.issues, admitted),
       (answer) => answer.issues,
+    );
+  }
+
+  /** The workspace's environment variables and secrets: a variable with its value, a secret by its hint. */
+  environment(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceEnvironmentListRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceEnvironment.list, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /**
+   * One variable or secret saved, answering the list as it then stands and,
+   * where the service kept nothing, why; a save the service would refuse by
+   * shape never travels, so a secret is sent nowhere it would not be kept.
+   */
+  saveEnvironment(
+    request: WorkspaceEnvironmentSaveRequest,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceEnvironmentSaveRequestSchema)(request),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceEnvironment.save, admitted),
+      (answer) => answer,
+    );
+  }
+
+  /** One variable or secret removed, answering the list as it then stands. */
+  removeEnvironment(
+    request: WorkspaceEnvironmentRemoveRequest,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceEnvironmentRemoveRequestSchema)(request),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceEnvironment.remove, admitted),
+      (answer) => answer,
     );
   }
 
