@@ -108,7 +108,7 @@ import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { sectionGlyph } from "./section-icon-picker.js";
-import { taskMenuControl, useTaskMenu } from "./task-actions.js";
+import { useTaskMenu } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
   AssigneeChip,
@@ -601,7 +601,7 @@ function TaskListRow({
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
-  const actions = useTaskMenu(taskMenuControl(tasks), task.id, task.name, {
+  const actions = useTaskMenu(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),

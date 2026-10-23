@@ -127,10 +127,7 @@ function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | un
  * title, held to the wire's bound, and an icon; Enter in the title answers.
  * Every answer is drawn at once, so the card never waits on the service.
  */
-export function useSectionDialogs(
-  tasks: Pick<TasksControl, "taskSections" | "signedIn" | "onWriteSections">,
-  surfaceOpen: boolean,
-): SectionDialogs {
+export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): SectionDialogs {
   const [ask, setAsk] = useState<SectionAsk | undefined>(undefined);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState<TaskSectionIcon | undefined>(undefined);
@@ -242,7 +239,7 @@ export function rowMember(row: TaskRow): SectionMember {
  * would.
  */
 export function moveToSectionEntry(
-  tasks: Pick<TasksControl, "taskSections" | "onWriteSections">,
+  tasks: TasksControl,
   member: SectionMember,
   workspaceId: string,
   askNew: SectionDialogs["askNew"],

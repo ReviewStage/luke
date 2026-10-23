@@ -45,7 +45,7 @@ import {
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { ActorRef, AssigneeFaceHeard, AssigneeFaceMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
@@ -128,50 +128,8 @@ function listedTask(list: readonly TaskSummary[], taskId: string): TaskSummary |
   return index.get(taskId);
 }
 
-/**
- * What a task's menu, its sidebar row's marks, and its card read of the
- * window's tasks control. Note that what changes while agents work, the
- * list, the open plan, and the open task's agents and its history, is read
- * through `now` as the menu or the card is drawn rather than handed as a
- * value, so a row handed this, which holds while what it is handed does
- * (`memo`), is drawn again for its own task alone.
- */
-export interface TaskMenuControl
-  extends Pick<
-    TasksControl,
-    | "shown"
-    | "me"
-    | "signedIn"
-    | "workspaces"
-    | "taskSections"
-    | "copy"
-    | "onShowAgent"
-    | "onRenameTask"
-    | "onMarkTask"
-    | "onSettleTasks"
-    | "onDeleteTask"
-    | "onMoveTask"
-    | "onWriteSections"
-    | "onChangeRepository"
-    | "onOpenOnGitHub"
-  > {
-  /** The window's tasks as they stand now: the list, the open plan, its agents and history, and the repositories. */
-  readonly now: () => Pick<
-    TasksControl,
-    "tasks" | "region" | "agents" | "history" | "repositories"
-  >;
-}
-
-/** A task's menu over the window's whole tasks control, as a surface drawn again with it hands it. */
-export function taskMenuControl(tasks: TasksControl): TaskMenuControl {
-  return { ...tasks, now: () => tasks };
-}
-
 /** A task as the list or the open document holds it; nothing for a task neither holds. */
-export function taskOf(
-  tasks: Pick<TasksControl, "tasks" | "region">,
-  taskId: string,
-): TaskSummary | undefined {
+export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undefined {
   const listed = listedTask(tasks.tasks, taskId);
   if (listed !== undefined) return listed;
   const { region } = tasks;
@@ -190,10 +148,7 @@ interface PlaceMark {
 }
 
 /** Pin, offered as whichever way the task is not yet, and Mark done, offered on a task not yet done. */
-function placeMarks(
-  tasks: Pick<TasksControl, "onMarkTask" | "onSettleTasks">,
-  task: TaskSummary,
-): PlaceMark[] {
+function placeMarks(tasks: TasksControl, task: TaskSummary): PlaceMark[] {
   const marking = (mark: TaskMark) => () => tasks.onMarkTask(task.id, mark);
   const pin: PlaceMark =
     task.pinnedAt === undefined
@@ -215,10 +170,7 @@ function placeMarks(
 }
 
 /** Pin, Mark done, and Cancel task as the menu's items, Cancel task on a task not already canceled; nothing for a task neither the list nor the document holds. */
-function placeActions(
-  tasks: Pick<TasksControl, "onMarkTask" | "onSettleTasks">,
-  task: TaskSummary | undefined,
-): MenuAction[] {
+function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuAction[] {
   if (task === undefined) return [];
   const marks = placeMarks(tasks, task).map(({ label, icon, onSelect }) => ({
     label,
@@ -291,7 +243,7 @@ function SidebarTaskMarks({
   current,
   disabled,
 }: {
-  tasks: TaskMenuControl;
+  tasks: TasksControl;
   task: TaskSummary;
   current: boolean;
   disabled: boolean;
@@ -317,7 +269,7 @@ function SidebarTaskMarks({
  * moved; Permanently delete is last and alone.
  */
 function taskActionGroups(
-  tasks: TaskMenuControl,
+  tasks: TasksControl,
   taskId: string,
   doors: {
     rename: () => void;
@@ -329,10 +281,9 @@ function taskActionGroups(
     section: MenuEntry | undefined;
   },
 ): MenuEntry[][] {
-  const live = tasks.now();
-  const { region } = live;
+  const { region } = tasks;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.task.id === taskId;
-  const task = taskOf(live, taskId);
+  const task = taskOf(tasks, taskId);
   const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: tasks.copy.onPress };
   const link: MenuAction[] =
     task === undefined
@@ -342,7 +293,7 @@ function taskActionGroups(
           markReadItem(doors.read),
         ];
   const rename = renameTaskItem(doors.rename);
-  const versions = versionHistoryItem(() => tasks.now().history.onOpen(taskId));
+  const versions = versionHistoryItem(() => tasks.history.onOpen(taskId));
   const change: MenuAction = {
     label: "Change repository",
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
@@ -387,7 +338,7 @@ function TaskMenuFooter({
   tasks,
   task,
 }: {
-  tasks: TaskMenuControl;
+  tasks: TasksControl;
   task: TaskSummary;
 }): React.JSX.Element {
   const now = useMinute();
@@ -395,14 +346,13 @@ function TaskMenuFooter({
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskOrigin()(task);
-  const live = tasks.now();
-  const { region } = live;
+  const { region } = tasks;
   const opened = region.kind === DOCUMENT_REGION.READY && region.task.id === task.id;
   const edit = opened ? lastEditOf(region.task) : undefined;
   const place: EditPlace = {
     reader,
     sections: (opened ? region.task.sectionEdits : undefined) ?? [],
-    agents: { control: live.agents, onOpen: undefined },
+    agents: { control: tasks.agents, onOpen: undefined },
   };
   const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
@@ -463,7 +413,7 @@ function settledTask(task: TaskSummary | undefined): boolean {
  * next time the panel opens.
  */
 export function useTaskMenu(
-  tasks: TaskMenuControl,
+  tasks: TasksControl,
   taskId: string,
   name: string,
   doors: {
@@ -474,7 +424,7 @@ export function useTaskMenu(
     lead?: (() => readonly (readonly MenuEntry[])[]) | undefined;
   },
 ) {
-  const task = taskOf(tasks.now(), taskId);
+  const task = taskOf(tasks, taskId);
   const reads = useReadMarks();
   const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
     tasks.onDeleteTask(taskId),
@@ -491,7 +441,7 @@ export function useTaskMenu(
   const place = useRowPlace();
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
-    task !== undefined && drawn !== undefined
+    task !== undefined
       ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
   const menu =
@@ -567,7 +517,7 @@ export function TaskActions({
   lead?: (() => readonly (readonly MenuEntry[])[]) | undefined;
 }): React.JSX.Element {
   // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
-  const actions = useTaskMenu(taskMenuControl(tasks), task.id, task.name, {
+  const actions = useTaskMenu(tasks, task.id, task.name, {
     rename: onRename,
     drawn: button,
     unread: useReadMarks().markedUnread(task.id),
@@ -606,22 +556,8 @@ export interface RowFaces {
   readonly assignee: boolean;
 }
 
-/** The faces a row may wear, each choice one object, so a row handed the same choice is handed the same faces. */
-const ROW_FACES = {
-  EVERY: { creator: true, assignee: true },
-  NO_CREATOR: { creator: false, assignee: true },
-  NO_ASSIGNEE: { creator: true, assignee: false },
-  NONE: { creator: false, assignee: false },
-} as const satisfies Record<string, RowFaces>;
-
 /** Every face a row may wear, as a list naming nobody draws it. */
-const EVERY_FACE: RowFaces = ROW_FACES.EVERY;
-
-/** The faces a row may wear, as the one object standing for that choice. */
-export function rowFaces(faces: RowFaces): RowFaces {
-  if (faces.creator) return faces.assignee ? ROW_FACES.EVERY : ROW_FACES.NO_ASSIGNEE;
-  return faces.assignee ? ROW_FACES.NO_CREATOR : ROW_FACES.NONE;
-}
+const EVERY_FACE: RowFaces = { creator: true, assignee: true };
 
 /** The face a task's row wears (`assigneeFace`), nothing where `faces` keeps the assignee off the row, the list saying it already. */
 function rowFaceOf(
@@ -642,12 +578,11 @@ function SidebarTaskCard({
   task,
   now,
 }: {
-  tasks: TaskMenuControl;
+  tasks: TasksControl;
   task: TaskSummary;
   now: number;
 }): React.JSX.Element {
-  const { agents, repositories } = tasks.now();
-  return taskCardOf({ ...tasks, agents, repositories }, task, now);
+  return taskCardOf(tasks, task, now);
 }
 
 /**
@@ -672,10 +607,8 @@ function SidebarTaskCard({
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row.
  *
- * A memo boundary: the sidebar drawn again for another task's change hands
- * the row the same task, control, and press, and leaves it as it was.
  */
-export const SidebarTask = memo(function SidebarTask({
+export function SidebarTask({
   tasks,
   task,
   current,
@@ -687,7 +620,7 @@ export const SidebarTask = memo(function SidebarTask({
   faces = EVERY_FACE,
   onOpen,
 }: {
-  tasks: TaskMenuControl;
+  tasks: TasksControl;
   task: TaskSummary;
   /** Whether this is the task the work column is showing. */
   current: boolean;
@@ -703,8 +636,7 @@ export const SidebarTask = memo(function SidebarTask({
   repository?: string | undefined;
   /** Which faces the row may wear (`rowFaceOf`): a group by assignee, or a filter by assignee, says the one it names instead. */
   faces?: RowFaces;
-  /** Opens the task, by its id, so the one press stands for every row. */
-  onOpen: (taskId: string) => void;
+  onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   const actions = useTaskMenu(tasks, task.id, task.name, {
@@ -784,7 +716,7 @@ export const SidebarTask = memo(function SidebarTask({
               ? undefined
               : () => {
                   actions.close(false);
-                  onOpen(task.id);
+                  onOpen();
                 }
           }
           contextMenu={rename.editing ? undefined : showMenu}
@@ -805,4 +737,4 @@ export const SidebarTask = memo(function SidebarTask({
       {actions.dialog}
     </>
   );
-});
+}
