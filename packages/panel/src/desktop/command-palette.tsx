@@ -53,6 +53,7 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
+import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
@@ -165,9 +166,10 @@ import { useExperimentChoices } from "../use-app-state.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
+import { strandedHome } from "./move-task-dialog.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
-import { homeTaskCardOf } from "./task-card.js";
+import { homeTaskCardOf, TaskRowMark } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -356,7 +358,7 @@ interface PaletteRow {
   detail?: string | undefined;
   /** The workspace a task is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
-  /** The mark at the row's end: a failed agent's, or the face of who is on a task (`assigneeFace`). */
+  /** The mark at the row's end: a failed agent's, or a task's face of who is on it (`assigneeFace`) and its row's mark (`TaskRowMark`). */
   endMark?: React.JSX.Element | undefined;
   /** A task's assignee's and creator's names, the one the query found it by said after the detail. */
   people?: readonly string[] | undefined;
@@ -584,11 +586,12 @@ function taskDetail(task: TaskSummary): string | undefined {
  * its tab's look, an archived one saying so in its detail. Within each, the
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
- * switches the window to it. A task wears who is on it at its end, as its
- * sidebar row does (`assigneeFace`), and is found by its assignee's name and
- * its creator's. An agent opens on its own page, as its sidebar row does. An
- * agent's line on a task's card opens the task on its tab through
- * `showAgent`, which leaves the palette as a row does.
+ * switches the window to it. A task wears at its end who is on it and its
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`), and
+ * is found by its key, its assignee's name, and its creator's. An agent
+ * opens on its own page, as its sidebar row does. An agent's line on a
+ * task's card opens the task on its tab through `showAgent`, which leaves
+ * the palette as a row does.
  */
 function taskRows(
   tasks: TasksControl,
@@ -608,6 +611,11 @@ function taskRows(
     listedId === undefined || task.workspaceId === listedId
       ? undefined
       : tasks.workspaces.find((each) => each.id === task.workspaceId);
+  // Note that a task is found by its key, as its card and the Tasks list say it, read under its own workspace's name.
+  const keyOf = (task: TaskSummary): string | null => {
+    const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+    return home === undefined || task.number === undefined ? null : taskKey(home.name, task.number);
+  };
   const taskOf = (task: TaskSummary): PaletteRow => {
     const elsewhere = elsewhereOf(task);
     const worn = assigneeFace(task, readerOf(task));
@@ -625,10 +633,16 @@ function taskRows(
           : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
       card: <PaletteTaskCard tasks={carded} task={task} />,
-      endMark: worn === undefined ? undefined : <AssigneeFaceMark face={worn} />,
+      endMark: (
+        <>
+          {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
+          <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
+        </>
+      ),
       people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
       terms: [
         task.name,
+        keyOf(task),
         task.repository,
         elsewhere?.name ?? null,
         assignedTo,

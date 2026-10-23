@@ -452,8 +452,8 @@ function PersonTasks({
         {listed.slice(0, PERSON_TASKS_SHOWN).map((task) => (
           <RecentRow
             key={task.id}
+            tasks={tasks}
             task={task}
-            pictures={tasks.repositories.pictures}
             now={now}
             face={false}
             onOpen={() => tasks.onSelect(task.id)}

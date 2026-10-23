@@ -98,7 +98,7 @@ import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
-import { TaskStatusMark, taskCardOf } from "./task-card.js";
+import { TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -616,7 +616,7 @@ function RailRow({
       card={placeCard(tasks, row, actorOf)}
       end={
         task !== undefined ? (
-          <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
+          <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
         ) : row.between.length > 0 || row.other?.agent === undefined ? undefined : (
           // An agent the reader writes with wears where it stands at the row's end, as its sidebar row does.
           agentEndMark(row.other.agent, false)
