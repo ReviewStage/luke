@@ -27,7 +27,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Effect, Layer, Option } from "effect";
 import { Base64 } from "effect/encoding";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -822,7 +822,6 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           agent.userId,
           firstIntegrationAccount(agent.userId, "linear"),
           `state-${agent.userId}`,
-          Redacted.make("connect-verifier"),
         );
         yield* completeIntegrationSignIn(agent.userId, "linear", `state-${agent.userId}`);
         const heard = { calls: [], bearers: [] };
