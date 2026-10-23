@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { swiftCompilerArguments } from "./package-config.mjs";
-import { NATIVE_HELPERS } from "./package-layout.mjs";
+import { LIQUID_GLASS_ADDON, NATIVE_HELPERS } from "./package-layout.mjs";
 
 if (process.platform !== "darwin") {
   process.stdout.write("Skipping the macOS helpers on this platform.\n");
@@ -61,3 +61,15 @@ for (const helper of NATIVE_HELPERS) {
   fs.writeFileSync(stampPath, stamp);
   process.stdout.write(`Built macOS helper: ${output}\n`);
 }
+
+// Liquid Glass's addon is prebuilt by its package, so it is copied rather
+// than compiled, beside the helpers, where development and packaging both
+// read it from.
+const liquidGlassSource = path.join(
+  appRoot,
+  "node_modules",
+  LIQUID_GLASS_ADDON.packageName,
+  LIQUID_GLASS_ADDON.prebuild,
+);
+fs.copyFileSync(liquidGlassSource, path.join(outputDirectory, LIQUID_GLASS_ADDON.binary));
+process.stdout.write(`Copied the Liquid Glass addon: ${LIQUID_GLASS_ADDON.binary}\n`);
