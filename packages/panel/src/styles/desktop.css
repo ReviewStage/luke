@@ -84,6 +84,15 @@ body,
   background: var(--luke-color-ground);
 }
 
+/* The Mac panel window's page is clear under the shell, whose birch tint and
+   paper sheet paint everything there is, so the window's sidebar material
+   (`panel-manager.ts`) frosts through the frame; the voice and call windows,
+   which hold no shell, keep their ground. */
+:root[data-luke-profile="desktop"]:has(.desktop-shell),
+:root[data-luke-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
+  background: transparent;
+}
+
 /* Scrollbars ---------------------------------------------------------------- */
 
 /* Every scroller in the window draws the one scrollbar a Mac app does: a thin
