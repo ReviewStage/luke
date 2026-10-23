@@ -111,7 +111,20 @@ at a time, each behind the props it already has, so no call site changes
 as it moves. A vendored shadcn component lives in `src/shadcn/`, generated
 by the shadcn CLI (style `base-nova`, base `base`) and drawn in the Tailwind
 theme above; the `@luke/ui` component an app imports wraps it. Moved so far:
-`Switch`.
+`Switch`; the buttons (`Button`, `IconButton`, `ButtonLink`, `SplitButton`,
+`FoldingButton`, `LineButton`, `TextButton`), `Checkbox`, `Slider`,
+`ChoiceBar`, and `ChoiceList`; and `Tabs`, whose plain looks are drawn in the
+theme while the strip stays Luke's own, an editor's strip being no Base UI
+tabs.
+
+A component's own sheet keeps what another sheet restyles it by from the
+`components` layer, which a utility would outrank (a button's
+`--luke-button-*` inks, a choice row's fill under a stepped-back region), and
+what Tailwind has no words for (keyframes, scroll-state and style queries).
+The theme's custom variants say a control's conditions beside its states:
+`pointer-coarse:`, `fold-folded:`, `fold-bare:`, `fold-tight:`, and shadcn's
+`data-horizontal:` and `data-vertical:`. `cn` is told the theme's own sizes,
+or tailwind-merge reads `text-label` as an ink.
 
 ## Using a component
 
