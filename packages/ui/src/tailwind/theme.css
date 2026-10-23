@@ -77,6 +77,21 @@
      own literal. */
   --default-transition-duration: var(--luke-duration-quick);
   --default-transition-timing-function: var(--luke-spring);
+
+  /* The choice bar's own (`components/choice-bar/`): a compact fill
+     option's height, a step under the control's; a segment's height and
+     corner inside its trough, the trough's inset in from the control's; the
+     thumb a segment stands on; a count's glyph, at the caption's size; and
+     the state tones a count's parts are drawn in. */
+  --spacing-choice-fill-compact: calc(var(--luke-control-height) - var(--luke-space-4));
+  --spacing-choice-segment: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  --spacing-choice-segment-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-4));
+  --spacing-caption-glyph: var(--luke-type-caption-size);
+  --radius-choice-segment: calc(var(--luke-control-radius) - var(--luke-space-2));
+  --color-choice-thumb: var(--luke-color-thumb);
+  --color-complete: var(--luke-color-complete);
+  --color-attention: var(--luke-color-attention);
+  --color-danger-ink: var(--luke-color-danger-text);
 }
 
 /* The conditions a control answers beside its states: a finger's pointer,
@@ -93,3 +108,8 @@
    list's, a toggle group's). */
 @custom-variant data-horizontal (&[data-orientation="horizontal"]);
 @custom-variant data-vertical (&[data-orientation="vertical"]);
+
+/* The choice bar's: the room a toolbar short of it asks a bar folding
+   together, or named in words alone, to take in (`--luke-fold: tight`,
+   `components/choice-bar/`). */
+@custom-variant fold-tight (@container style(--luke-fold: tight));

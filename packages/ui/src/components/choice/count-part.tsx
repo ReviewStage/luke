@@ -34,12 +34,21 @@ export type CountPart = {
   readonly tone?: CountTone | undefined;
 } & Readonly<CountGlyph>;
 
+/**
+ * A part laid out as a row of its glyph and words, in its tone, which holds
+ * whether its option is chosen or not; quiet, it takes its count's ink. Its
+ * glyph stands at the caption's size.
+ */
+const PART =
+  "luke-count-part inline-flex items-center gap-0.5 data-[tone=complete]:text-complete data-[tone=attention]:text-attention data-[tone=danger]:text-danger-ink";
+const GLYPH = "luke-count-glyph inline-flex [&>svg]:size-caption-glyph";
+
 /** One part, its glyph named for a reader who cannot see it. */
 function CountPartView({ part }: { part: CountPart }): React.JSX.Element {
   return (
-    <span className="luke-count-part" data-tone={part.tone ?? COUNT_TONE.QUIET}>
+    <span className={PART} data-tone={part.tone ?? COUNT_TONE.QUIET}>
       {part.glyph === undefined ? null : (
-        <span className="luke-count-glyph" role="img" aria-label={part.glyphLabel}>
+        <span className={GLYPH} role="img" aria-label={part.glyphLabel}>
           {part.glyph}
         </span>
       )}

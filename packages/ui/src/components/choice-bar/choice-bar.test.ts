@@ -289,6 +289,7 @@ test("↑ and ↓ step a radio group and leave a tablist alone, and a key held w
   pressKey("ArrowDown");
   pressKey("ArrowUp");
   assert.deepEqual(reading(tabs).chosen, ["Checks"]);
+  assert.equal(focused(), "Checks", "nor does the keyboard move along the tablist");
   const radios = render(createElement(Held, { items: OPEN_ITEMS, start: VIEW.CHECKS }));
   act(() => option(radios, "Checks").focus());
   pressKey("ArrowDown");
