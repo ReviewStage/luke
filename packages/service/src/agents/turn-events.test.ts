@@ -9,7 +9,7 @@ import type { ToolSet } from "ai";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { BRAIN_RUN_EVENT, SLOW_STEP_KIND, TURN_STATUS } from "../core.js";
+import { BRAIN_RUN_EVENT, TURN_STATUS } from "../core.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
@@ -372,8 +372,7 @@ test("a plan save Luke started holds back no sentence of his: the turn goes on b
   );
 });
 
-test("the events' words are the brain's own: the event kinds are members of the run stream's set, and the slow step kinds are its", () => {
+test("the events' words are the brain's own: the event kinds are members of the run stream's set", () => {
   const runEventKinds = new Set<string>(Object.values(BRAIN_RUN_EVENT));
   for (const kind of Object.values(TURN_EVENT_KIND)) assert.equal(runEventKinds.has(kind), true);
-  assert.deepEqual(TURN_SLOW_STEP, SLOW_STEP_KIND);
 });

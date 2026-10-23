@@ -1997,14 +1997,13 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
-test("a task started hands on the brief it was given beside its issue, starts with no planning, and a blank brief is not sent", async () => {
+test("a task started hands on its issue and starts with no planning", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 
   await tab.control().newTask.start("", null, "workspace-acme", {
     issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
-    brief: "Keep the queue order stable.",
   });
-  await tab.control().newTask.start("", null, "workspace-acme", { brief: " \n " });
+  await tab.control().newTask.start("", null, "workspace-acme");
 
   assert.deepEqual(
     tab.payloads
@@ -2014,7 +2013,6 @@ test("a task started hands on the brief it was given beside its issue, starts wi
       {
         workspaceId: "workspace-acme",
         issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
-        brief: "Keep the queue order stable.",
         planning: false,
       },
       { workspaceId: "workspace-acme", planning: false },
@@ -3073,29 +3071,6 @@ test("a channel link the chat held before it was opened does not hold stands unt
   });
 });
 
-test("a task New task files for later asks the host to start it in the backlog, with no planning and its brief", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }) },
-  );
-  await settle();
-  await act(async () => {
-    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", {
-      status: TASK_STATUS.BACKLOG,
-      brief: "Thirty a minute.",
-    });
-  });
-
-  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
-    name: "Rate limit search",
-    repository: "acme/web",
-    workspaceId: "workspace-acme",
-    brief: "Thirty a minute.",
-    status: TASK_STATUS.BACKLOG,
-    planning: false,
-  });
-});
-
 /** A start's agent, read back where it names one. */
 const readAgentNamed = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -3189,9 +3164,9 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
   assert.equal(tab.control().sidePanel.open, false);
 
   await act(async () => {
-    await tab.control().newTask.start("Dark mode", null, undefined, { brief: "Later" });
+    await tab.control().newTask.start("Dark mode", null, undefined);
   });
-  assert.equal(tab.control().sidePanel.open, false, "File for later opens no plan beside it");
+  assert.equal(tab.control().sidePanel.open, false, "a bare task opens no plan beside it");
 
   await startAgentTask(tab);
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });

@@ -27,12 +27,7 @@ import { LIVE_POLL } from "./live-wire.js";
 
 import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@luke/wire";
 import { type Client, createORPCClient, ORPCError } from "@orpc/client";
-import {
-  type AnySchema,
-  getProcedureContractOrThrow,
-  type InferSchemaInput,
-  type ProcedureContract,
-} from "@orpc/contract";
+import type { InferSchemaInput, ProcedureContract } from "@orpc/contract";
 import { createEffectClient, type EffectClient } from "@orpc/experimental-effect";
 import { OpenAPILink } from "@orpc/openapi/fetch";
 import { Cause, type Context, Data, Duration, Effect, Exit, Result, Schema } from "effect";
@@ -51,6 +46,7 @@ import {
   repositoryNotReachableDataSchema,
 } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
+import { outputWireSchema } from "./contract/output-schema.js";
 import { installedSkillRefusedDataSchema } from "./installed-skill-route-wire.js";
 import {
   HOSTED_API_ERROR,
@@ -210,30 +206,13 @@ function refusalOf(payload: UnparsedWireValue): HostedRefused | undefined {
         ? planLimitReachedDataSchema
         : refusal === HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING
           ? credentialMissingDataSchema
-        : refusal === HOSTED_API_ERROR.SKILL_NAME_TAKEN ||
-            refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED
-          ? installedSkillRefusedDataSchema
-          : undefined;
+          : refusal === HOSTED_API_ERROR.SKILL_NAME_TAKEN ||
+              refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED
+            ? installedSkillRefusedDataSchema
+            : undefined;
   if (schema === undefined) return new HostedRefused({ refusal });
   const data = Result.getOrUndefined(readServiceAnswer(schema)(payload));
   return new HostedRefused({ refusal, ...(data === undefined ? undefined : { data }) });
-}
-
-/**
- * Whether a contract's schema is an Effect Schema, which every hosted
- * procedure's is; a wire schema decodes and encodes with no service, which
- * is what the narrowing states beyond what `Schema.isSchema` checks.
- */
-function isWireSchema(
-  schema: AnySchema | undefined,
-): schema is AnySchema & Schema.Codec<unknown, unknown> {
-  return Schema.isSchema(schema);
-}
-
-/** The wire schema a procedure's output is decoded with: the one its contract declares, flipped back. */
-function outputWireSchema(path: readonly string[]): Schema.Codec<unknown> | undefined {
-  const [declared] = getProcedureContractOrThrow(hostedContract, path)["~orpc"].outputSchemas ?? [];
-  return isWireSchema(declared) ? Schema.flip(declared) : undefined;
 }
 
 /** A body's text, read to its end. */

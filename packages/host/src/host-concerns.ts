@@ -107,7 +107,7 @@ export function hostCapabilities(
 
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
-  [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [],
+  [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: [
     GATEWAY_METHOD.MAC_REPOSITORIES_READ,
     GATEWAY_METHOD.MAC_REPOSITORY_SET,

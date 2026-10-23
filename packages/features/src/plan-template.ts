@@ -11,6 +11,7 @@ import { mentionLinksIn } from "./mention-link.js";
 import { taskPicturesIn } from "./plan-attachment-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
 import { PLAN_SECTION_BOUNDS, type PlanField, TASK_BOUNDS } from "./task-wire.js";
+import { trimmedText } from "./text-schema.js";
 
 /**
  * plan-template.ts -- the default template's sections and what each asks, the notes Luke takes into a plan's text, and the agents' journal of them.
@@ -62,11 +63,6 @@ export const PLAN_HEADING = {
   OPEN_QUESTIONS: "Open questions",
   ASSUMPTIONS: "Assumptions",
 } as const;
-
-/** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
-function trimmedText(maximumChars: number) {
-  return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
-}
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/u;

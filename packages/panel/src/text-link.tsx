@@ -7,9 +7,9 @@ import { opensAsLink } from "./tasks/use-open-link.js";
  * text-link.tsx -- a plain link in written words, drawn one way in every place that draws words: its label underlined quietly in the words' own ink, a bare address cut to its host and path with a small ↗, the whole address in the window's hint.
  *
  * A link the window knows better, a mention, is drawn as its chip
- * (`planning/mention-chip.tsx`) before it ever reaches here; what is left
+ * (`tasks/mention-chip.tsx`) before it ever reaches here; what is left
  * is a page the window has no chip for. Both Markdown renderers draw it
- * through this one element, a transcript's (`planning/transcript-blocks.tsx`)
+ * through this one element, a transcript's (`tasks/transcript-blocks.tsx`)
  * and a plan's (`markdown-message.tsx`), and the plan's editor gives its
  * link mark the same class, so a link reads alike wherever it is written.
  * Where words are their own address (`@luke/ui/link-face`), they say it as

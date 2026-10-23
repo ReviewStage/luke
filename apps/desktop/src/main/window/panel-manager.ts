@@ -13,8 +13,10 @@ import {
   screen,
   type WebContents,
 } from "electron";
+import { layLiquidGlass } from "../native/liquid-glass";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 import { followSwipes } from "./swipe-navigation";
+import { WINDOW_MATERIAL, type WindowMaterial } from "./window-material";
 import {
   placementOf,
   placeWindow,
@@ -30,6 +32,8 @@ interface PanelDuck {
 
 interface PanelManagerOptions {
   runMode: RunMode;
+  /** The native material its windows are drawn on (`window-material.ts`); the sidebar's where unset. */
+  material?: WindowMaterial | undefined;
   /** The named development instance this run is, which every window's title then carries; none for the plain one. */
   instance?: string | undefined;
   mediaDuck: PanelDuck;
@@ -83,10 +87,39 @@ const DESKTOP_WINDOW = {
   MIN_HEIGHT: 520,
   // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
-  // The window's ground before the renderer paints, one per appearance; each
-  // is the desktop palette's `--luke-color-ground` for that appearance.
-  BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
+  // The window's native ground is the Mac's own sidebar material, which
+  // follows the window's appearance and the Reduce transparency setting by
+  // itself; the page draws on it in clear, so the shell's grey frame is a
+  // tint over the frosted wallpaper, and the work sheet is laid over that.
+  MATERIAL: "sidebar",
+  CLEAR: "#00000000",
 } as const;
+
+/**
+ * The sidebar material, as a window before Tahoe is created on and as one
+ * whose glass could not be laid falls back to. Note that it stays frosted
+ * while the window is in the background, as Finder's sidebar does, rather
+ * than going flat grey.
+ */
+const SIDEBAR_VIBRANCY = {
+  vibrancy: DESKTOP_WINDOW.MATERIAL,
+  visualEffectState: "active",
+} as const satisfies BrowserWindowConstructorOptions;
+
+/**
+ * Lays Liquid Glass behind the window's page once it has loaded, as the
+ * addon needs the page's view in place. A transparent window hides the
+ * traffic lights unless asked, so they are shown. Where the glass cannot be
+ * laid, the window falls back to the sidebar material rather than standing
+ * clear over the desktop.
+ */
+function layGlassOnceLoaded(window: BrowserWindow): void {
+  window.webContents.once("did-finish-load", () => {
+    if (window.isDestroyed()) return;
+    window.setWindowButtonVisibility(true);
+    if (!layLiquidGlass(window)) window.setVibrancy(DESKTOP_WINDOW.MATERIAL);
+  });
+}
 
 /** The first frame of the window, centred in the display's work area. */
 function desktopBounds(display: Display): Rectangle {
@@ -125,12 +158,6 @@ export class PanelManager {
   readonly #closing: () => boolean;
   /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
-  /**
-   * Whether the app draws dark, as the window service last said. The launch
-   * paints from the resolved appearance before it opens the first window, so
-   * this initial value is never what a window is created on.
-   */
-  #dark = true;
   /** The windows whose renderer has drawn its first frame, the ones the avatar's grant may reach. */
   readonly #drawn = new WeakSet<BrowserWindow>();
   /** The windows hidden, minimized, or wholly covered since they last showed, the ones whose document is held. */
@@ -144,8 +171,11 @@ export class PanelManager {
     return { push: (push, payload) => windowPushes.push(page, push, payload) };
   });
 
+  readonly #material: WindowMaterial;
+
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
+    this.#material = options.material ?? WINDOW_MATERIAL.SIDEBAR;
     this.#instance = options.instance;
     this.#mediaDuck = options.mediaDuck;
     this.#preloadPath = options.preloadPath;
@@ -341,23 +371,6 @@ export class PanelManager {
     }
   }
 
-  /**
-   * Grounds every window, and every window opened after, in the appearance the
-   * app now resolves to, so a resize or a reload never flashes the other one.
-   * The renderer repaints itself from `prefers-color-scheme`; this is only the
-   * native ground under it.
-   */
-  paint(dark: boolean): void {
-    this.#dark = dark;
-    for (const window of this.#windows.values()) {
-      if (!window.isDestroyed()) window.setBackgroundColor(this.#background());
-    }
-  }
-
-  #background(): string {
-    return this.#dark ? DESKTOP_WINDOW.BACKGROUND.DARK : DESKTOP_WINDOW.BACKGROUND.LIGHT;
-  }
-
   /** Re-keys the living window under another display. */
   #rebind(fromDisplayId: number, toDisplayId: number): void {
     const window = this.#windows.get(fromDisplayId);
@@ -405,6 +418,7 @@ export class PanelManager {
     // keeps rather than jumping to it once the page has loaded.
     const zoomFactor = this.#zoomFactor();
 
+    const material = this.#material;
     const windowOptions: BrowserWindowConstructorOptions = {
       ...placement.bounds,
       // Only ever set when true, because a false here takes the green
@@ -414,7 +428,16 @@ export class PanelManager {
       minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
       title: this.#instance === undefined ? "Luke" : `Luke (${this.#instance})`,
       show: false,
-      backgroundColor: this.#background(),
+      backgroundColor: DESKTOP_WINDOW.CLEAR,
+      // On Tahoe the window is clear for the Liquid Glass laid behind its
+      // page once it loads; before it, it is drawn on the sidebar material
+      // (`window-material.ts`). Note that the glass window still names the
+      // material's active state, because Electron keeps it from construction
+      // and has no setter: the sidebar material a failed lay falls back to
+      // then stays frosted behind other apps too.
+      ...(material === WINDOW_MATERIAL.LIQUID_GLASS
+        ? { transparent: true, visualEffectState: SIDEBAR_VIBRANCY.visualEffectState }
+        : SIDEBAR_VIBRANCY),
       // The renderer draws its own title bar under the traffic lights, so the
       // window keeps its frame, its shadow, and its buttons, and nothing else.
       titleBarStyle: "hiddenInset",
@@ -431,6 +454,7 @@ export class PanelManager {
     const window = new BrowserWindow(windowOptions);
     this.#windows.set(displayId, window);
     const page = window.webContents;
+    if (material === WINDOW_MATERIAL.LIQUID_GLASS) layGlassOnceLoaded(window);
 
     refuseForeignNavigation(window, this.#rendererUrl);
     this.#followVisibility(window);

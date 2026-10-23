@@ -238,7 +238,7 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 
 One composer card whose words start a coding agent: the repository chip in
 its head row, the Issue chip beside it, and at its foot the model chip on
-the account's default, Dictate, File for later, and Start.
+the account's default, Dictate, and Start.
 
 1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
@@ -251,8 +251,7 @@ the account's default, Dictate, File for later, and Start.
    Untitled until the agent names it, and the agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent,
-   and File for later files it in the backlog with the words as its brief;
-   neither needs a repository. There is no Plan mode: starting a task never
+   which needs no repository. There is no Plan mode: starting a task never
    opens a call, which only an agent's own tab starts.
 
 ### Header
@@ -321,7 +320,7 @@ the account's default, Dictate, File for later, and Start.
 - The sections someone other than the developer changed since they last
   looked at the task on this Mac wear a still tint of Luke's accent, counted
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
-  Dismiss") until Dismiss or leaving the task (`planning/use-plan-looks.ts`),
+  Dismiss") until Dismiss or leaving the task (`tasks/use-task-looks.ts`),
   each section known by its heading.
   A look is the task held open three seconds: from then on every save while
   it stays open counts as seen, so an agent's save typing in while the task
@@ -341,7 +340,7 @@ the account's default, Dictate, File for later, and Start.
   with no mark, from another Mac, is unread once anything has been saved in
   it since it started.
 - The task's name, drawn as its title in the look of a `#` heading
-  (`planning/task-title.tsx`), over its text, the saved `body` rendered as
+  (`tasks/task-title.tsx`), over its text, the saved `body` rendered as
   Markdown, and nothing else: the text has no title line, its assumptions
   are a section of it, and nothing stands in for a section it leaves empty.
   The text is cut into sections as the service cuts it (`planSections` in
@@ -394,7 +393,7 @@ the document.
 
 The open task's supporting views stand in a panel at the window's right,
 beside the document and its microphone row, the way a devtool's secondary
-sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
+sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 - **Tabs.** `Plan`, the task's document; `Inbox`, what its agents need of
   the developer; `Board`, the task's whiteboard; `Code`, the code its agents
@@ -435,7 +434,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for an agent's first drawing on the
   task's board, the first code an agent puts up, each once per task
-  (`planning/use-panel-arrivals.ts`), and a subagent opened from an agent's
+  (`tasks/use-panel-arrivals.ts`), and a subagent opened from an agent's
   transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
   sets that tab's label in semibold until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
@@ -517,7 +516,7 @@ subagent's tab stays in the side panel.
   agent still works, so while a call into the agent stands the tab reads it
   through again for each line heard, and once more as the call ends.
 - **When it ends.** Main keeps a ledger of where each agent stands
-  (`main/agent-notices.ts`) and announces an agent that moves from writing
+  (`packages/host/src/agent-notices.ts`) and announces an agent that moves from writing
   to completed or failed once, with a macOS notification titled with the
   task's name and nothing of the transcript, unless the window is focused on
   that agent's tab. The agent's tab reads in semibold until it is shown.
@@ -635,8 +634,8 @@ the row says now.
 ### Editing
 
 The developer edits the plan whole, in place, with its title
-(`planning/plan-document-editor.tsx`; the editor is `renderer/plan-editor/`,
-its saves `planning/use-plan-editing.ts` and `@luke/features/plan-edit-model`).
+(`tasks/plan-document-editor.tsx`; the editor is `plan-editor/`,
+its saves `tasks/use-plan-editing.ts` and `@luke/features/plan-edit-model`).
 The service lays each save over what others wrote meanwhile
 (`packages/features/src/plan-edit.ts`).
 
@@ -645,7 +644,7 @@ The service lays each save over what others wrote meanwhile
   place, the caret where the click landed. The editor is TipTap, from the editor
   bundle (`plan-editor.js`), which the panel starts loading as it first paints
   and asks for again the first time a block is hovered or selected, and which
-  an agent's message box shares (`planning/composer-field.tsx`); it draws the words exactly as the sections were drawn, so
+  an agent's message box shares (`tasks/composer-field.tsx`); it draws the words exactly as the sections were drawn, so
   nothing moves as it opens; a click before the bundle has loaded keeps the
   sections drawn until it has. Everything TipTap's Markdown holds is edited
   as it reads (headings, lists, quotes, code, links, task lists, tables), with
@@ -746,7 +745,7 @@ save it names (the oldest whose latest save is at or after the save's
 moment, older pages read until one shows it, and the newest where one cannot
 be read), is read with the content before it
 (`GET /api/plans/{id}/revisions/{seq}`), and drawn read-only under the task's
-name as it stands, beside the list (`planning/version-view.tsx`), under a bar with its moment and Restore this
+name as it stands, beside the list (`tasks/version-view.tsx`), under a bar with its moment and Restore this
 version; the up and down arrows step through the list. A row's ⋯, standing
 in its time's place while the row is hovered or focused, and its right-click
 offer what applies: Show changes (its sections, for a revision of several
@@ -757,7 +756,7 @@ current one included, is drawn against the one just before it, which is what
 the row's change count describes: each section only one side holds is drawn
 whole, added or struck, and each section both hold that differs has its
 words written in on a green wash and struck out on a red one, word by word
-with jsdiff (`planning/plan-history-model.ts`), sections paired by their
+with jsdiff (`tasks/plan-history-model.ts`), sections paired by their
 headings, the assumptions among them as the section they are. The first
 version has nothing before it and is drawn with nothing marked. The view is one step of the window's back and forward
 whichever version is chosen, so Back, Escape, and ⌘[ return to the task as
@@ -811,7 +810,7 @@ and is kept; once anything else stands in a section, a point is added after
 it, and the developer's own edits are never rewritten.
 
 Settings › Plan template is where the developer edits it
-(`apps/desktop/src/renderer/settings/plan-template-page.tsx`), signed in
+(`packages/panel/src/settings/plan-template-page.tsx`), signed in
 only. The page reads the template as it opens and saves the words a second
 after the typing pauses and again as focus leaves the box, one write at a
 time, through the `planTemplate.read`/`planTemplate.write` acts and the
@@ -1038,7 +1037,7 @@ the exact shape.
 
 | Part | Reuse | New |
 | --- | --- | --- |
-| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-tasks-tab.ts`) (LUKE-347). |
+| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-tasks.tsx`) and its control (`use-tasks-tab.ts`) (LUKE-347). |
 | Acts | `ACT_KIND`, `@luke/host/act-port`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the task list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a task, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a task's repository, a page of GitHub's opened in the browser, the microphone, and a task's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Task list and new-task page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`packages/panel/src/markdown-message.tsx`) over `@luke/ui/markdown`'s note look (Streamdown, GitHub's dialect), raw HTML not rendered, only `http`/`https` links kept; `@luke/ui`'s `prose.css` | A document-scale style for it. |
@@ -1047,7 +1046,7 @@ the exact shape.
 | Levels, errors | The notice line (`useVoiceNotice`, `voice-notice-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The line floats just over the call's video. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with an agent of the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
-| Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
+| Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`tasks/agent-tab.tsx`), their control (`tasks/use-coding-agents.ts`) and the held transcript read (`tasks/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
 | The plan | Hosted storage; the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and a coding agent's `edit_plan` (`packages/service/src/agents/coder-host/plan-edit.ts`). |
 
 Two existing rules carry over unchanged:

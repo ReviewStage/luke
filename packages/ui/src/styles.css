@@ -60,7 +60,6 @@
 @import "./face/face-motion.css";
 @import "./face/glyphs.css";
 @import "./components/form-field/form-field.css";
-@import "./components/form-section/form-section.css";
 @import "./components/one-line/one-line.css";
 @import "./components/hover-card/hover-card.css";
 @import "./components/inline-edit/inline-edit.css";
@@ -74,6 +73,7 @@
 @import "./components/rolling-number/rolling-number.css";
 @import "./components/slider/slider.css";
 @import "./components/prose/prose.css";
+@import "./marks/harness-mark.css";
 @import "./marks/provider-mark.css";
 @import "./marks/task-marks.css";
 @import "./components/provider-button/provider-button.css";
@@ -89,7 +89,6 @@
 @import "./components/checkbox/checkbox.css";
 @import "./components/choice-list/choice-list.css";
 @import "./components/readable-controls/readable-controls.css";
-@import "./components/switch/switch.css";
 @import "./components/choice-bar/choice-bar.css";
 @import "./components/settings-page/settings-page.css";
 @import "./components/settings-section/settings-section.css";

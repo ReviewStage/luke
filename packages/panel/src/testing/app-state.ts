@@ -53,6 +53,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
+    macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
     network: { online: true },

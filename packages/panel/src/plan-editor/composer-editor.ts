@@ -50,6 +50,7 @@ import {
   type ComposerQuote,
   type ComposerTrigger,
   type MentionNode,
+  sameTrigger,
 } from "./contract.js";
 import {
   MENTION_NODE,
@@ -515,18 +516,6 @@ function triggerAt(
   };
 }
 
-/** Whether two reports say the same, so an unchanged word is not reported again. */
-function sameTrigger(a: ComposerTrigger | undefined, b: ComposerTrigger | undefined): boolean {
-  if (a === undefined || b === undefined) return a === b;
-  return (
-    a.start === b.start &&
-    a.query === b.query &&
-    a.rect.left === b.rect.left &&
-    a.rect.top === b.rect.top &&
-    a.rect.bottom === b.rect.bottom
-  );
-}
-
 /** The `skill` chip: an atom read out as `/name`, its look the panel's (`drawChip`), its name in the node and never in the DOM's attributes. */
 function skillNode(drawChip: ComposerEditorProps["drawChip"], known: (name: string) => boolean) {
   return Node.create({
@@ -763,23 +752,28 @@ function pasted(
   const files = [...(event.clipboardData?.files ?? [])];
   if (files.length > 0 && props.onPasteFiles(files)) return true;
   if (state.input === COMPOSER_INPUT.READ_ONLY) return true;
-  const { doc, selection } = view.state;
+  const { doc, selection, schema } = view.state;
   const words = fragmentText(slice.content);
-  const room =
-    props.maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
+  // Note that what goes over is read off the words as the paste would leave them, since a selection inside a mark leaves its delimiters standing around what replaces it.
+  const over = (pasting: string) =>
+    textOf(view.state.tr.replaceSelection(sliceOf(schema, pasting, state)).doc).length -
+    props.maxLength;
   // An address of Luke's own or a page of an integration's pasted whole, outside code, is laid in as its mention, where its link has room.
   const mention = props.mentions?.pasted(words);
   if (
     mention !== undefined &&
-    mentionLink(mention).length + SPACE.length <= room &&
+    over(`${mentionLink(mention)}${SPACE}`) <= 0 &&
     !caretInCode(textOf(doc), offsetAt(doc, selection.from))
   ) {
     return pastedMention(view, event, () => mention);
   }
-  if (words.length <= room) return false;
-  if (room > 0) {
-    const cut = sliceOf(view.state.schema, words.slice(0, room), state);
-    view.dispatch(view.state.tr.replaceSelection(cut).scrollIntoView());
+  let kept = words;
+  for (let excess = over(kept); excess > 0 && kept !== ""; excess = over(kept)) {
+    kept = kept.slice(0, Math.max(0, kept.length - excess));
+  }
+  if (kept === words) return false;
+  if (kept !== "") {
+    view.dispatch(view.state.tr.replaceSelection(sliceOf(schema, kept, state)).scrollIntoView());
   }
   return true;
 }
@@ -915,8 +909,8 @@ function choseWords(editor: Editor, word: ReturnType<typeof triggerAt>, words: s
 /**
  * A mention made elsewhere laid in where the caret stands, over what is
  * selected, a space after it unless one follows, the caret after the
- * mention and the box focused; nothing where the box takes no words now, or the mention's link
- * has no room left under the bound, as a key typed past it is not written.
+ * mention and the box focused; nothing where the box takes no words now, or the words with its
+ * link would stand past the bound, as a key typed past it is not written.
  */
 function laidInMention(
   editor: Editor,
@@ -926,14 +920,13 @@ function laidInMention(
 ): void {
   if (state.input !== COMPOSER_INPUT.EDITABLE) return;
   const { doc, selection, schema } = editor.state;
-  const room =
-    maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
   const spaced =
     doc.textBetween(selection.to, Math.min(selection.to + 1, doc.content.size)) === SPACE;
-  if (mentionLink(mention).length + (spaced ? 0 : SPACE.length) > room) return;
   const chip = schema.node(MENTION_NODE, { name: mention.name, target: mention.target });
-  const tr = editor.state.tr.replaceSelectionWith(chip, false);
-  editor.view.dispatch((spaced ? tr : tr.insertText(SPACE)).scrollIntoView());
+  const laid = editor.state.tr.replaceSelectionWith(chip, false);
+  const tr = spaced ? laid : laid.insertText(SPACE);
+  if (textOf(tr.doc).length > maxLength) return;
+  editor.view.dispatch(tr.scrollIntoView());
   editor.view.focus();
 }
 

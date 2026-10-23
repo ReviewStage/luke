@@ -26,7 +26,7 @@ import { useOpenLink } from "./use-open-link.js";
  * finger it stands under the words, clear of the handle that ends them,
  * since the system's own menu stands over them. A press on it keeps the
  * editor's focus, so the words stay selected; Turn into, offered where the
- * editor's blocks can be turned, hands the focus back to the editor as it
+ * editor's blocks can be turned and the words stand in no table's cell, hands the focus back to the editor as it
  * turns them. Its Link, or ⌘K, opens the link field under the words in its
  * place, where Enter links them, an address with no scheme taken as a web
  * page's, an empty field unlinks them, and Escape gives up, each handing
@@ -56,6 +56,7 @@ function sameFormat(a: EditorFormat | undefined, b: EditorFormat): boolean {
     a.to === b.to &&
     a.empty === b.empty &&
     a.code === b.code &&
+    a.cell === b.cell &&
     a.block === b.block &&
     a.link === b.link &&
     a.marks.length === b.marks.length &&
@@ -192,7 +193,7 @@ export function useSelectionToolbar({
           ref={toolbar}
           marks={format.marks}
           onMark={mark}
-          turnInto={blocks ? { current: format.block, onTurn: turn } : undefined}
+          turnInto={blocks && !format.cell ? { current: format.block, onTurn: turn } : undefined}
           onComment={onComment}
         />
       </RectFloat>

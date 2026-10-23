@@ -15,20 +15,18 @@ import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
 import { githubUnlink } from "@luke/service/github/github-unlink";
-import { cookieOriginGuard } from "@luke/service/http/origin-guard";
 import {
   integrationsAppSeams,
   workspaceLinearProcedureSeams,
 } from "@luke/service/integrations/integration-seams";
-import { sentryReportedFetch } from "@luke/service/observability/sentry";
 import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";
 import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router";
 import type { Route } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { waitUntil } from "@vercel/functions";
-import { type Context, Effect, type Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import { nativeAgents } from "./native-agents.js";
-import { webServicesWith } from "./runtime.js";
+import { routeFromWebServices } from "./route-effect.js";
 
 /**
  * The route every hosted path on the oRPC router answers through: the hosted
@@ -39,39 +37,16 @@ import { webServicesWith } from "./runtime.js";
  * and the dispatcher has already restored the public path the router
  * matches (`function-dispatch.ts`).
  *
- * The services each procedure runs on are read from the one web runtime
- * through `runWeb`, once per instance, and handed to every request as its
- * `effect/context`, as `route-effect.ts` hands them to a route layer; a read
- * that failed is not held, so the next invocation tries again. Every request
- * meets the cookie origin guard first (`packages/service/src/http/origin-guard.ts`).
- *
- * Sentry watches the whole of it, as it watches `route-effect.ts`'s routes
- * (`sentryReportedFetch`): a runtime that could not be built, or anything
- * else thrown on to the platform, is captured as it is thrown, and what a
- * request queued is sent under Vercel's `waitUntil` after the answer has left.
+ * The services each procedure runs on are read from the one web runtime once
+ * per instance and handed to every request as its `effect/context`, behind
+ * the cookie origin guard and Sentry, as `route-effect.ts`'s
+ * `routeFromWebServices` holds them for a route layer.
  */
 export function routeFromHostedFetch(
   answer: HostedFetch,
   beside?: Layer.Layer<NativeAgentSessions, never, WebServices>,
 ): Route {
-  const refuseCrossSite = cookieOriginGuard(process.env);
-  let reading: Promise<Context.Context<WebServices>> | undefined;
-  return {
-    fetch: sentryReportedFetch(async (request) => {
-      const refusal = refuseCrossSite(request);
-      if (refusal !== undefined) return refusal;
-      reading ??= webServicesWith(beside);
-      const attempt = reading;
-      let services: Context.Context<WebServices>;
-      try {
-        services = await attempt;
-      } catch (failure) {
-        if (reading === attempt) reading = undefined;
-        throw failure;
-      }
-      return answer(request, services);
-    }, waitUntil),
-  };
+  return routeFromWebServices((services) => (request) => answer(request, services), beside);
 }
 
 /**

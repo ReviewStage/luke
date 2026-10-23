@@ -1,4 +1,5 @@
 import {
+  ALIGN,
   BADGE_TONE,
   Badge,
   BUTTON_VARIANT,
@@ -180,7 +181,7 @@ function Chips(): React.JSX.Element {
         </Inline>
       </CatalogSection>
       <CatalogSection id="chips-widths" title="Widths">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           {Object.values(CHIP_WIDTH).map((width) => (
             <Chip key={width} look={CHIP_LOOK.FIELD} width={width} chevron>
               <ChipName>{width}</ChipName>
@@ -209,7 +210,7 @@ function Chips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="chips-narrow" title="Narrow column, long names">
         <div className="catalog-narrow">
-          <Stack gap={GAP.CONTROL} align="start">
+          <Stack gap={GAP.CONTROL} align={ALIGN.START}>
             {Object.values(CHIP_LOOK).map((look) => (
               <Chip key={look} look={look} chevron>
                 <ChipName>acme/a-repository-whose-name-runs-past-its-column</ChipName>

@@ -273,7 +273,7 @@ const VercelConfig = Schema.Struct({
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });
-type VercelConfig = typeof VercelConfig.Type;
+export type VercelConfig = typeof VercelConfig.Type;
 
 const decodeVercelConfig = Schema.decodeUnknownSync(Schema.fromJsonString(VercelConfig), {
   onExcessProperty: "error",
@@ -308,7 +308,8 @@ class TopLevelRoutesBesideServicesError extends Error {
   }
 }
 
-async function readVercelConfig(web: string): Promise<VercelConfig> {
+/** `vercel.json` as committed, refused unless it is exactly the shape this build knows. */
+export async function readVercelConfig(web: string): Promise<VercelConfig> {
   const source = await readFile(join(web, VERCEL_CONFIG_FILE), "utf8");
   if (hasTopLevelRoutesBesideServices(source)) throw new TopLevelRoutesBesideServicesError();
   return decodeVercelConfig(source);

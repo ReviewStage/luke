@@ -1,4 +1,3 @@
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { READ_WEB_PAGE_TOOL } from "@luke/service/agents/public-research";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
@@ -14,7 +13,6 @@ export default defineTool({
   execute: async (input, ctx) =>
     runResearchTool(
       host.admit,
-      CODER_TOOL.READ_WEB_PAGE,
       { auth: ctx.session.auth, sessionId: ctx.session.id, turnId: ctx.session.turn.id },
       // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
       unparsedWire(input as WireBoundaryInput),

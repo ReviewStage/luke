@@ -31,8 +31,6 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
-export { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-
 export type IntegrationStoreEffect<A> = Effect.Effect<
   A,
   QueryError | Schema.SchemaError,

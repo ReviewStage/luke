@@ -1,5 +1,6 @@
 import { pullRequestAddressOf } from "./github-repositories-wire.js";
 import { LINK_PLACE, readLink } from "./luke-link.js";
+import { parsedUrl } from "./parsed-url.js";
 
 /**
  * lone-link.ts -- what a link standing alone in a paragraph of a message is drawn as: a pull request's card, a Luke page's, or the lines of a file at a commit; nothing for any other link, which stays the chip or link it is.
@@ -76,15 +77,6 @@ export type LoneLink =
       readonly startLine: number;
       readonly endLine: number;
     };
-
-/** The address parsed, or nothing for text that is no URL; a constructor, since `URL.canParse` is missing from Safari before 17. */
-function parsedUrl(address: string): URL | undefined {
-  try {
-    return new URL(address);
-  } catch {
-    return undefined;
-  }
-}
 
 /** A path's step read back, or nothing where its encoding is broken. */
 function decodedStep(step: string): string | undefined {

@@ -242,6 +242,7 @@ export function initialAppState(
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
+    macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },

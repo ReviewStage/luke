@@ -5,7 +5,7 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
+import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Redacted, Result, Schema } from "effect";
 import {
@@ -88,8 +88,6 @@ import { setInstallationStatus } from "./github-installations.js";
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
 const GITHUB_WEBHOOK_PATH = "/api/github/webhook";
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 /** The headers a delivery carries that are read here. */
 const DELIVERY_HEADER = {
