@@ -34,13 +34,7 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
-import {
-  CircleXIcon,
-  ClockIcon,
-  GitMergeIcon,
-  TriangleAlertIcon,
-  UserRoundIcon,
-} from "lucide-react";
+import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { readKept, writeKept } from "../desktop/folded-groups.js";
@@ -51,13 +45,14 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  *
  * The chip is a status badge at the pill's size, in the tone of where the
  * merge stands, its glyph and its word: Checking, Conflicts, Behind,
- * Review required, Changes requested, Blocked, Ready, Auto-merge on. Its
- * hint, and a reader, have GitHub's fuller sentence ("A required review is
- * missing"). It stands only where it says what nothing else on the page
- * does: a pull request ready to merge shows the press alone, a draft
- * nothing, its pill saying Draft, one in the merge queue only Remove from
- * queue, its pill saying Queued and its place, as stage-cli's does, and one
- * held up by its checks alone no chip, since the Checks tab under the
+ * Review required, Changes requested, Blocked, Ready. Its hint, and a
+ * reader, have GitHub's fuller sentence ("A required review is missing").
+ * It stands only where it says what nothing else on the page does: a pull
+ * request ready to merge shows the press alone, a draft nothing, its pill
+ * saying Draft, one in the merge queue only Remove from queue, its pill
+ * saying Queued and its place, as stage-cli's does, one with auto-merge on
+ * no chip of its own, Disable auto-merge saying it is on, and one held up by
+ * its checks alone no chip, since the Checks tab under the
  * header says how they went in its glyph and its colour. A narrow header draws the chip's glyph alone,
  * its word still read.
  *
@@ -246,7 +241,6 @@ const CHIP_GLYPHS = {
   HELD: <CircleXIcon aria-hidden="true" />,
   BEHIND: <TriangleAlertIcon aria-hidden="true" />,
   REVIEW: <UserRoundIcon aria-hidden="true" />,
-  WAITING: <ClockIcon aria-hidden="true" />,
   READY: <GitMergeIcon aria-hidden="true" />,
 } as const;
 
@@ -271,8 +265,9 @@ function blockedChip(merging: PullRequestMerging | undefined): ChipFace | undefi
 /**
  * The chip for where the pull request stands and what the press offers, or
  * none where it would only say what the press, the pill, or the Checks tab
- * already does: a merge ready and offered, a draft, one in the merge queue,
- * or one waiting on its checks.
+ * already does: a merge ready and offered, auto-merge on, a draft, one in the
+ * merge queue, or one waiting on its checks. With auto-merge on, a chip
+ * still says what holds the merge up.
  */
 function chipOf(
   pullRequest: CodingAgentOverviewPullRequest,
@@ -280,9 +275,6 @@ function chipOf(
 ): ChipFace | undefined {
   const { merge, merging } = pullRequest;
   if ((merging?.queued ?? null) !== null) return undefined;
-  if ((merging?.autoMerge ?? null) !== null) {
-    return chip("Auto-merge on", BADGE_TONE.WORKING, CHIP_GLYPHS.WAITING);
-  }
   if (pullRequest.state === PULL_REQUEST_STATE.DRAFT || merge === MERGE_STATE.DRAFT) {
     return undefined;
   }
@@ -296,9 +288,9 @@ function chipOf(
     case MERGE_STATE.BLOCKED:
       return blockedChip(merging);
     default:
-      return action === MERGE_ACTION.MERGE || action === MERGE_ACTION.MERGE_WHEN_READY
-        ? undefined
-        : chip("Ready", BADGE_TONE.COMPLETE, CHIP_GLYPHS.READY);
+      return action === undefined
+        ? chip("Ready", BADGE_TONE.COMPLETE, CHIP_GLYPHS.READY)
+        : undefined;
   }
 }
 
