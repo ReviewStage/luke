@@ -32,7 +32,7 @@ import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
-import { openLukeFromMac } from "./connect-return";
+import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 

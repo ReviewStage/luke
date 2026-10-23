@@ -6,7 +6,7 @@ import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
-import { openLukeFromMac } from "./connect-return";
+import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 

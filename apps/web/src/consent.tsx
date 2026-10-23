@@ -5,7 +5,7 @@ import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
-import { openLukeFromMac } from "./connect-return";
+import { openLukeFromMac } from "./open-luke";
 import "./styles.css";
 
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });

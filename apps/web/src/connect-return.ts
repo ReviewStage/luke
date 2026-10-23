@@ -20,13 +20,13 @@
  */
 
 import { LANDING_CLOSE_TAB, LANDING_TONE, type LandingWords } from "@luke/features/landing-outcome";
-import { APP_HOME_LINK } from "@luke/features/link-home";
-import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
+import type { LinkPlatform } from "@luke/features/link-open";
 import type { AuthAction } from "@luke/ui";
 import { Option, Schema } from "effect";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { PANEL_PATH } from "./app/web-address";
 import { browserLinkPlatform } from "./link-platform";
+import { OPEN_LUKE, openMacApp } from "./open-luke";
 
 /** The broadcast channel a landing page and the app's tabs speak on. */
 export const CONNECT_CHANNEL = "luke:connect";
@@ -51,9 +51,6 @@ export const CONNECT_BOUND_MS = 30 * 60 * 1000;
  * every answer.
  */
 const LANDING = crypto.randomUUID();
-
-/** The words every way back is offered in. */
-export const OPEN_LUKE = "Open Luke";
 
 /** How a landing page goes back to Luke. */
 export const CONNECT_RETURN = {
@@ -186,7 +183,7 @@ export function openLuke(back: ConnectReturn, platform: LinkPlatform): AuthActio
     case CONNECT_RETURN.ADDRESS:
       return { label: OPEN_LUKE, href: back.href };
     case CONNECT_RETURN.ELSEWHERE:
-      return platform === LINK_PLATFORM.MAC ? { label: OPEN_LUKE, href: APP_HOME_LINK } : undefined;
+      return openMacApp(platform);
   }
 }
 
@@ -201,11 +198,6 @@ export function landingDescription(words: LandingWords, back: ConnectReturn): st
     (part): part is string => part !== undefined,
   );
   return said.length === 0 ? undefined : said.join(" ");
-}
-
-/** Open Luke on a page a flow the Mac started passes through, where nothing but the Mac app is there to go back to. */
-export function openLukeFromMac(): AuthAction | undefined {
-  return openLuke({ kind: CONNECT_RETURN.ELSEWHERE }, browserLinkPlatform());
 }
 
 /** The way back as a landing page offers it: where it came from, and Open Luke, where there is one. */
