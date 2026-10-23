@@ -103,7 +103,7 @@
 /* On the Mac the window's own ground is the system's sidebar material
    (`panel-manager.ts`), so the frame is a tint laid over it rather than a
    paint: the wallpaper frosts through the frame and the columns that stand
-   on it, while the sheet stays paper. A sidebar floating over the work, and
+   on it, while the sheet stays solid. A sidebar floating over the work, and
    a capture's frame, which must come out the same on every Mac, keep the
    frame opaque. */
 [data-luke-profile="desktop"] .desktop-shell {
