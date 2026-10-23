@@ -39,13 +39,14 @@
   .luke-text[data-variant="dialog"] {
     font-size: var(--luke-type-dialog-size);
     line-height: var(--luke-type-dialog-leading);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-weight-medium);
   }
 
   .luke-text[data-variant="title"] {
     font-size: var(--luke-type-title-size);
     line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-weight-medium);
+    letter-spacing: -0.01em;
   }
 
   .luke-text[data-variant="inherit"] {

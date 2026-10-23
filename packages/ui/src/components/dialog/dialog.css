@@ -35,7 +35,7 @@
     border: 1px solid var(--luke-color-border-strong);
     border-radius: var(--luke-dialog-radius);
     background: var(--luke-color-overlay);
-    box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+    box-shadow: 0 16px 56px var(--luke-color-shadow);
     color: var(--luke-color-text);
     font-size: var(--luke-type-body-size);
     animation:
