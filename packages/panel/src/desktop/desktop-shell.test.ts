@@ -1104,7 +1104,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     act(() => {
       runAppCommand(APP_COMMAND.FIND);
     });
-    found[place] = container.querySelector("search[aria-label='Find']") !== null;
+    found[place] = container.querySelector("[role='search'][aria-label='Find']") !== null;
     act(() => root?.unmount());
     container.remove();
   }

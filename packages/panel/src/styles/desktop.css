@@ -512,15 +512,6 @@ body,
   line-height: var(--luke-type-label-leading);
 }
 
-.sidebar-tasks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 /* Every row of the plans is one line, whatever section it stands in: what
    else there is to say of it is on its hover card. */
 .sidebar-task {
@@ -774,15 +765,6 @@ ul.actor-stack {
   display: flex;
   max-height: min(240px, calc(var(--luke-stage-height) * 0.4));
   flex-direction: column;
-}
-
-.actor-more-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .actor-more-row {
@@ -1142,15 +1124,6 @@ ul.actor-stack {
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
    Each is dragged among the others by its header, on the rows' own timing,
    and carried as a copy while held as a row is. */
-.sidebar-sections {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .sidebar-sections > .sidebar-sections-item {
   position: relative;
   transition:
@@ -2608,15 +2581,6 @@ ul.actor-stack {
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
 }
 
-.integration-tool-hints {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .integration-tool-description-whole {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -3104,11 +3068,8 @@ ul.actor-stack {
   --inbox-face: 20px;
   /* The chip's face, an actor's in a line (`ACTOR_SIZE.INLINE`). */
   --inbox-mark: 16px;
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  /* Note that the thread stands flush on what the log says under it, rather than a log line's step apart. */
+  margin-block-end: 0;
 }
 
 .inbox-comment {
@@ -3333,19 +3294,6 @@ ul.actor-stack {
   box-sizing: border-box;
   padding: var(--luke-space-6) var(--luke-control-inset);
   overflow-wrap: anywhere;
-}
-
-/* A settled form's values, a field a line in the form's order: its name in
-   the muted ink, then what was put in it, a text field's words drawn as a
-   sent message's are, their mentions chips. */
-.inbox-values {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* A value too long to stand beside its name in a narrow column drops to a
@@ -4546,24 +4494,13 @@ ul.actor-stack {
 
 /* Home has no toolbar, so its bar stands at the page's top, clear of the
    greeting and its New task. */
-/* The bar floats as a menu does, on the menu's ground, edge, and entrance,
-   and claims its presses back from any drag strip beneath it. */
+/* The bar floats on the menu's surface (`MenuSurface`, a row of its field
+   and buttons), and claims its presses back from any drag strip beneath it. */
 .find-bar {
   position: absolute;
   z-index: 3;
   top: var(--luke-space-8);
   right: var(--column-inset);
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-  padding: var(--luke-menu-inset);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
-    luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
 }
 
 [data-luke-profile="desktop"] .find-bar {
@@ -4601,16 +4538,6 @@ ul.actor-stack {
   display: flex;
   flex-direction: column;
   gap: var(--luke-section-gap);
-}
-
-.settings-pages ul,
-.admin-sections ul {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* The page list's three groups, a section's gap apart, each under its
@@ -5066,15 +4993,6 @@ ul.actor-stack {
 
 /* It grows out of the rail it stands over rather than dropping as a menu
    does, so its chevron never leaves the spot it shares with the rail's. */
-.task-summary-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .task-summary-row {
   display: flex;
   width: 100%;
@@ -5500,18 +5418,6 @@ ul.actor-stack {
   flex: none;
 }
 
-/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each
-   `@luke/ui`'s badge wearing the colour GitHub gives it as a dot, wrapping
-   where they run past the card's width. */
-.card-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 /* The plan's column's tabs and their "+" take what the toolbar leaves
    beside the plan's actions, as the side panel's row's do beside its
    full-screen button: the strip scrolls its tabs within that room and the
@@ -5897,15 +5803,6 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-}
-
-.feedback-dialog-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* The signature as one line: the choice at its start, and who the note is

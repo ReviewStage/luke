@@ -4,8 +4,11 @@ import {
   BUTTON_SIZE,
   ConfirmDialog,
   type DialogQuestion,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   OneLine,
+  Stack,
   Tooltip,
   UnarchiveIcon,
   useConfirmDialog,
@@ -208,11 +211,16 @@ export function ArchivedAgents({
         onToggle={() => setUnfolded((was) => !was)}
       />
       {unfolded ? (
-        <ul className="task-summary-rows" aria-label="Archived agents">
+        <Stack
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.ROW}
+          className="task-summary-rows"
+          aria-label="Archived agents"
+        >
           {archived.map((agent) => (
             <ArchivedAgentRow key={agent.id} agent={agent} agents={agents} shown={shown} />
           ))}
-        </ul>
+        </Stack>
       ) : null}
     </div>
   );

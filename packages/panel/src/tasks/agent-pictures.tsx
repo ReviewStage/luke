@@ -10,6 +10,7 @@ import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ALIGN,
   ATTACHMENT_CHIP_STATE,
   AttachmentChip,
   type AttachmentChipState,
@@ -17,6 +18,9 @@ import {
   CARD_ELEMENT,
   CARD_PADDING,
   Card,
+  GAP,
+  Inline,
+  LAYOUT_ELEMENT,
   PictureTile,
   SPINNER_SIZE,
   Spinner,
@@ -609,7 +613,10 @@ export function CallPictures({
     each.kept ? [{ picture: each.picture, words: each.name }] : [],
   );
   const list = (
-    <ul
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
       className="attached-files call-pictures ph-no-capture"
       aria-label="Pictures the call answered"
     >
@@ -635,7 +642,7 @@ export function CallPictures({
         ),
       )}
       {viewer}
-    </ul>
+    </Inline>
   );
   return (
     <>

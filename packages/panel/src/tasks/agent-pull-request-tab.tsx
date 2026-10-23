@@ -58,7 +58,9 @@ import {
   EmptyState,
   ErrorState,
   Fill,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   LINE_BUTTON_LOOK,
   LIST_DENSITY,
   LIST_VARIANT,
@@ -75,6 +77,7 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -1272,7 +1275,7 @@ function EntryCard({
       <EntryWords entry={entry} picture={picture} />
       <Reactions reactions={entry.reactions} subject={entry.subject} />
       {threads.length === 0 ? null : (
-        <ol className="pull-request-threads">
+        <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.ITEM} className="pull-request-threads">
           {threads.map((thread, at) => (
             // Note that a thread is keyed by its first comment's page, which no other thread shares, or its place.
             <ThreadCard
@@ -1282,7 +1285,7 @@ function EntryCard({
               picture={picture}
             />
           ))}
-        </ol>
+        </Stack>
       )}
     </li>
   );
@@ -1566,11 +1569,11 @@ function ConversationPart({
       ) : shown.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_MATCHING}</p>
       ) : (
-        <ol className="pull-request-conversation">
+        <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.CONTROL} className="pull-request-conversation">
           {shown.map((entry) => (
             <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
           ))}
-        </ol>
+        </Stack>
       )}
     </Section>
   );

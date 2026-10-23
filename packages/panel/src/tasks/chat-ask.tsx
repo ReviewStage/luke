@@ -14,6 +14,9 @@ import {
   Card,
   CardHead,
   ErrorState,
+  GAP,
+  LAYOUT_ELEMENT,
+  Stack,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -330,7 +333,7 @@ function AnsweredComment({
   const at = chatAnsweredAt(chat, message);
   const answerer = actorOf(answeredBy ?? "");
   return (
-    <ol className="inbox-thread" aria-label="Answer">
+    <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.NONE} className="inbox-thread" aria-label="Answer">
       <Comment
         kind={COMMENT.ANSWERED}
         head={
@@ -363,7 +366,7 @@ function AnsweredComment({
           </div>
         )}
       </Comment>
-    </ol>
+    </Stack>
   );
 }
 

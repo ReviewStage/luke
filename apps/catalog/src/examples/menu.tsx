@@ -1,5 +1,7 @@
 import {
   ArchiveIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
   BUTTON_VARIANT,
   Button,
   ComboboxList,
@@ -12,6 +14,7 @@ import {
   IconButton,
   Inline,
   MENU_ITEM_MARK,
+  MENU_SURFACE_FLOW,
   MENU_SURFACE_INSET,
   Menu,
   type MenuEntry,
@@ -19,6 +22,7 @@ import {
   MenuItem,
   MenuSurface,
   PencilIcon,
+  SearchField,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -38,8 +42,9 @@ import { CatalogSection } from "../section";
  * pointer; a searchable menu's pinned rows, steered from its field: one
  * opening a list beside it, a switch, and one that does not apply now; and
  * the menu's surface under lists an app hangs and keys itself: an `@` list
- * narrowed under its kind's crumb, edge to edge, and one press inset, as
- * one offered over selected words is.
+ * narrowed under its kind's crumb, edge to edge, one press inset, as
+ * one offered over selected words is, and a find bar's field and buttons
+ * laid side by side on it.
  */
 
 const ignore = () => undefined;
@@ -220,6 +225,18 @@ function NarrowedList(): React.JSX.Element {
   );
 }
 
+/** A find bar on the menu's surface: its field, then the buttons that step through what it found. */
+function FindBar(): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  return (
+    <MenuSurface flow={MENU_SURFACE_FLOW.ROW} role="search" aria-label="Find">
+      <SearchField label="Find" placeholder="Find" value={query} onChange={setQuery} />
+      <IconButton label="Previous match" icon={<ArrowUpIcon />} onClick={ignore} />
+      <IconButton label="Next match" icon={<ArrowDownIcon />} onClick={ignore} />
+    </MenuSurface>
+  );
+}
+
 function MenuExample(): React.JSX.Element {
   return (
     <>
@@ -244,6 +261,7 @@ function MenuExample(): React.JSX.Element {
               Copy
             </Button>
           </MenuSurface>
+          <FindBar />
         </Inline>
       </CatalogSection>
     </>

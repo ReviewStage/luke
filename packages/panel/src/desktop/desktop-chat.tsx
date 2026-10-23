@@ -16,7 +16,9 @@ import {
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
@@ -32,6 +34,7 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
+  Stack,
   Time,
   Tooltip,
   UnarchiveIcon,
@@ -822,7 +825,11 @@ function RailGroup({
           onClose={menu.close}
         />
       )}
-      {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
+      {drawn.length === 0 ? null : (
+        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">
+          {drawn.map(row)}
+        </Stack>
+      )}
     </div>
   );
 }
@@ -1128,7 +1135,7 @@ function ChatView({
         />
         <ScrollArea fade={SCROLL_FADE.START}>
           <div className="chat-rail-body">
-            <ul className="sidebar-tasks">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">
               <PlaceRow
                 mark={<AtSignIcon />}
                 title="For you"
@@ -1144,7 +1151,7 @@ function ChatView({
                 onRead={undefined}
                 onChoose={() => view.onChoose(FOR_YOU)}
               />
-            </ul>
+            </Stack>
             {groups.lead.map(group)}
             {groups.tasks.map(group)}
             {groups.trail.map(group)}

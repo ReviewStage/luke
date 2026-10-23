@@ -13,14 +13,17 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
   INLINE_REF_LOOK,
   InlineRef,
+  LAYOUT_ELEMENT,
   SCROLL_SIZE,
   ScrollArea,
+  Stack,
   TEXT_BUTTON_LINES,
   TextButton,
   TIME_LOOK,
@@ -757,7 +760,7 @@ function MoreFaces({
     <HoverCard data-actor-card="more">
       <div className="actor-more">
         <ScrollArea size={SCROLL_SIZE.CONTENT}>
-          <ul className="actor-more-list">
+          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
             {actors.map((actor, index) => (
               // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
               <li key={index} className="actor-more-row">
@@ -765,7 +768,7 @@ function MoreFaces({
                 <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
               </li>
             ))}
-          </ul>
+          </Stack>
         </ScrollArea>
       </div>
     </HoverCard>

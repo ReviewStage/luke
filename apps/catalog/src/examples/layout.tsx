@@ -17,9 +17,10 @@ import { CatalogSection } from "../section";
 
 /**
  * layout.tsx -- Stack and Inline at every gap role, along and across their
- * room, an Inline of long labels in a narrow column, wrapping and held, and
- * a Fill taking the room a pane's head leaves, down the pane and across it,
- * clipping what stands past its edge.
+ * room, an Inline of long labels in a narrow column, wrapping and held, a
+ * list of rows and a wrapping list of labels, each a `ul`, and a Fill taking
+ * the room a pane's head leaves, down the pane and across it, clipping what
+ * stands past its edge.
  */
 
 const LABELS = ["Repository", "Model", "A label long enough to need its own line", "Effort"];
@@ -89,6 +90,33 @@ function Layout(): React.JSX.Element {
             </Inline>
           </div>
         </Stack>
+      </CatalogSection>
+      <CatalogSection id="layout-lists" title="Lists">
+        <Inline gap={GAP.SECTION} align={ALIGN.START}>
+          <div className="catalog-narrow">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} aria-label="Rows">
+              {["First row", "Second row", "Third row"].map((row) => (
+                <li key={row}>
+                  <Swatch>{row}</Swatch>
+                </li>
+              ))}
+            </Stack>
+          </div>
+          <div className="catalog-narrow">
+            <Inline
+              as={LAYOUT_ELEMENT.UL}
+              gap={GAP.TIGHT}
+              align={ALIGN.STRETCH}
+              aria-label="Labels"
+            >
+              {LABELS.map((label) => (
+                <li key={label}>
+                  <Swatch>{label}</Swatch>
+                </li>
+              ))}
+            </Inline>
+          </div>
+        </Inline>
       </CatalogSection>
       <CatalogSection id="layout-fill" title="Fill">
         <Inline gap={GAP.CONTROL} align={ALIGN.START}>

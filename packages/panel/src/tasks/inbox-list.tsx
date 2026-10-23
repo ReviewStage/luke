@@ -15,6 +15,7 @@ import {
   EmptyState,
   type EmptyStateAction,
   ErrorState,
+  GAP,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -25,6 +26,7 @@ import {
   IconButton,
   INLINE_REF_LOOK,
   InlineRef,
+  LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -47,6 +49,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  Stack,
   TaskStatusMark,
   Time,
   Tooltip,
@@ -1740,9 +1743,9 @@ function InboxRows({
 }): React.JSX.Element {
   const drawn = useLeaving(items, (listed) => listed.item.id);
   return (
-    <ul className="sidebar-tasks" {...motionRows()}>
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks" moves>
       {drawn.map(({ value, leaving }) => row(value, leaving))}
-    </ul>
+    </Stack>
   );
 }
 

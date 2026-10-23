@@ -8,11 +8,14 @@ import {
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
 import {
+  ALIGN,
   ATTACHMENT_CHIP_STATE,
   AttachmentChip,
+  GAP,
+  Inline,
+  LAYOUT_ELEMENT,
   LIST_MOTION_WAY,
   ListMotion,
-  motionRows,
   useLeaving,
 } from "@luke/ui";
 import { isRecord, isWireString } from "@luke/wire";
@@ -153,12 +156,15 @@ function BoxRow({
   };
   const drawn = useLeaving(files, idOf);
   return (
-    <ul
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
       ref={row}
       className="attached-files"
       aria-label="Attached files"
       hidden={drawn.length === 0}
-      {...motionRows()}
+      moves
     >
       {drawn.map((entry) => {
         const index = files.indexOf(entry.value);
@@ -172,7 +178,7 @@ function BoxRow({
           />
         );
       })}
-    </ul>
+    </Inline>
   );
 }
 
@@ -228,7 +234,13 @@ export function AttachedFileChips({
   }
   if (files.length === 0) return null;
   return (
-    <ul className="attached-files" aria-label="Attached files">
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
+      className="attached-files"
+      aria-label="Attached files"
+    >
       {files.map((file, index) => (
         <FileChipOf
           key={`${String(index)}-${file.name}`}
@@ -239,6 +251,6 @@ export function AttachedFileChips({
         />
       ))}
       {viewer}
-    </ul>
+    </Inline>
   );
 }

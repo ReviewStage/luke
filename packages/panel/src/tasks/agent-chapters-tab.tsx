@@ -30,10 +30,12 @@ import {
   FILL_ELEMENT,
   FILL_FLOW,
   Fill,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  LAYOUT_ELEMENT,
   MarkStrip,
   NAV_CURRENT,
   NavItem,
@@ -42,6 +44,7 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -716,7 +719,7 @@ function ChaptersReading({
                     <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
                       {CHAPTERS_WORDS.WHAT_TO_REVIEW}
                     </Text>
-                    <ul>
+                    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL}>
                       {chapter.keyChanges.map((change, index) => (
                         <KeyChangeItem
                           // oxlint-disable-next-line react/no-array-index-key -- a chapter's key changes never move.
@@ -740,7 +743,7 @@ function ChaptersReading({
                           }
                         />
                       ))}
-                    </ul>
+                    </Stack>
                   </section>
                 )}
               </div>

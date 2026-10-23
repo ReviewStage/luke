@@ -1,10 +1,12 @@
 import {
   createElement,
   type HTMLAttributes,
+  type PointerEventHandler,
   type ReactNode,
   type Ref,
   type SyntheticEvent,
 } from "react";
+import { motionRows } from "../list-motion/list-motion.js";
 
 /**
  * layout.tsx -- the two arrangements every container is built from: a Stack sets what it holds one under another, an Inline one beside another.
@@ -16,6 +18,10 @@ import {
  * either way an item may shrink, so a long label gives way before the row
  * overflows its container.
  *
+ * An arrangement that is a list (`as` a `ul` or `ol`) may move its rows as
+ * they arrive, leave, and change places (`moves`, under a `ListMotion`), and
+ * take the press that starts a drag of one of them (`onPointerDown`).
+ *
  * A Fill is a region rather than an arrangement of items: it takes the room
  * its own column leaves and lays what it holds one under another, or beside
  * (`FILL_FLOW.ROW`), as a page fills its pane and a pane's body fills it.
@@ -24,13 +30,19 @@ import {
  * names it by its own class, never restyling the fill itself.
  */
 
-/** The room between items, by what they are: from none, through a glyph and its words, to two sections. */
+/** The room between items, by what they are: from none, through a list's rows and a glyph and its words, to two sections. */
 export const GAP = {
   NONE: "none",
+  /** A list's rows, as a list of rows stands them (`--luke-list-gap`). */
+  ROW: "row",
   TIGHT: "tight",
+  /** A list's items that each stand as a box of their own: cards, threads, people. */
+  ITEM: "item",
   ICON: "icon",
   CONTROL: "control",
   FIELD: "field",
+  /** Blocks of words one under another, as comments in a thread stand. */
+  BLOCK: "block",
   SECTION: "section",
   LOOSE: "loose",
 } as const;
@@ -90,7 +102,22 @@ interface LayoutProps {
   "aria-labelledby"?: string | undefined;
   /** What a submit does, on an Inline that is a `form`. */
   onSubmit?: (event: SyntheticEvent) => void;
+  /** The owner's own class, which names it for what it holds and sets nothing of its arrangement. */
+  className?: string | undefined;
+  /** Whether a list's rows move as they arrive, leave, and change places, under a `ListMotion` (`motionRows`). */
+  moves?: boolean | undefined;
+  /** A press on a list, where a press on a row's handle starts a drag that reorders its rows. */
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  /** Whether it stands out of the layout and out of reach, as a list with nothing in it yet does. */
+  hidden?: boolean | undefined;
+  /** The element, for an owner that measures it or finds its rows; a `data-` attribute its owner's script reads it by passes through as it is. */
+  ref?: Ref<HTMLElement> | undefined;
   children: ReactNode;
+}
+
+/** The class an arrangement wears, its owner's after its own. */
+function layoutClass(own: string, owner: string | undefined): string {
+  return owner === undefined ? own : `${own} ${owner}`;
 }
 
 /** What it holds, one under another, `gap` apart, each as wide as the Stack unless aligned otherwise. */
@@ -99,20 +126,25 @@ export function Stack({
   align = ALIGN.STRETCH,
   justify = JUSTIFY.START,
   as: Element = LAYOUT_ELEMENT.DIV,
+  className,
+  moves = false,
   children,
   ...named
 }: LayoutProps): React.JSX.Element {
-  return (
-    <Element
-      className="luke-stack"
-      role={listRole(Element)}
-      data-gap={gap}
-      data-align={align}
-      data-justify={justify}
-      {...named}
-    >
-      {children}
-    </Element>
+  // Note that the element is made rather than written, because a ref typed
+  // for any of the elements is no ref for their union.
+  return createElement(
+    Element,
+    {
+      ...named,
+      className: layoutClass("luke-stack", className),
+      role: listRole(Element),
+      ...(moves ? motionRows() : {}),
+      "data-gap": gap,
+      "data-align": align,
+      "data-justify": justify,
+    },
+    children,
   );
 }
 
@@ -125,6 +157,8 @@ export function Inline({
   grow = false,
   growFirst = false,
   as: Element = LAYOUT_ELEMENT.DIV,
+  className,
+  moves = false,
   children,
   ...named
 }: LayoutProps & {
@@ -134,20 +168,22 @@ export function Inline({
   /** Whether its first item takes the room the others leave, as a field does beside its presses. */
   growFirst?: boolean;
 }): React.JSX.Element {
-  return (
-    <Element
-      className="luke-inline"
-      role={listRole(Element)}
-      data-gap={gap}
-      data-align={align}
-      data-justify={justify}
-      data-wrap={wrap}
-      data-grow={grow ? "" : undefined}
-      data-grow-first={growFirst ? "" : undefined}
-      {...named}
-    >
-      {children}
-    </Element>
+  // Note that the element is made rather than written, as a Stack's is.
+  return createElement(
+    Element,
+    {
+      ...named,
+      className: layoutClass("luke-inline", className),
+      role: listRole(Element),
+      ...(moves ? motionRows() : {}),
+      "data-gap": gap,
+      "data-align": align,
+      "data-justify": justify,
+      "data-wrap": wrap,
+      "data-grow": grow ? "" : undefined,
+      "data-grow-first": growFirst ? "" : undefined,
+    },
+    children,
   );
 }
 

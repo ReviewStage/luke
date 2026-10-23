@@ -25,12 +25,15 @@ import {
   commandKeyshortcuts,
   Fill,
   FoldingButton,
+  GAP,
+  LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
   NavItemLink,
   SCROLL_FADE,
   ScrollArea,
   Shortcut,
+  Stack,
 } from "@luke/ui";
 import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
@@ -123,7 +126,7 @@ export function DesktopAdmin({
         <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
-              <ul>
+              <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                 {APP_SECTIONS.map((place) => (
                   <li key={place.tab}>
                     <NavItem
@@ -135,13 +138,13 @@ export function DesktopAdmin({
                     </NavItem>
                   </li>
                 ))}
-              </ul>
+              </Stack>
               <hr className="sidebar-rule" />
-              <ul>
+              <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                 <li>
                   <OpenInBrowserRow />
                 </li>
-              </ul>
+              </Stack>
             </div>
           </ScrollArea>
         </Fill>

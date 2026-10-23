@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENU_SURFACE_INSET, MenuSurface, type MenuSurfaceInset } from "@luke/ui";
+import {
+  MENU_SURFACE_FLOW,
+  MENU_SURFACE_INSET,
+  MenuSurface,
+  type MenuSurfaceFlow,
+  type MenuSurfaceInset,
+} from "@luke/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
@@ -51,18 +57,19 @@ function declared(element: Element, property: string): string | undefined {
   return value;
 }
 
-/** A surface drawn with the owner's class and inset under the laid sheets: what it declares for each property. */
+/** A surface drawn with the owner's class, inset, and flow under the laid sheets: what it declares for each property. */
 function surface(
   className: string,
   inset?: MenuSurfaceInset,
   placed?: boolean,
+  flow?: MenuSurfaceFlow,
 ): (property: string) => string | undefined {
   laid?.remove();
   document.body.replaceChildren();
   laid = layContainersAt({});
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = renderToStaticMarkup(
-    createElement(MenuSurface, { className, inset, placed }, "Row"),
+    createElement(MenuSurface, { className, inset, placed, flow }, "Row"),
   );
   const drawn = host.firstElementChild;
   assert.ok(drawn instanceof HTMLElement, "the surface is drawn");
@@ -78,6 +85,7 @@ test("a list hung by its owner wears the menu's own ground, edge, corner, and sh
     "file-crumb-tree",
     "reply-to-selection",
     "comment-bubble",
+    "find-bar",
   ]) {
     const says = surface(owner);
     assert.equal(says("background"), "var(--luke-color-overlay)", owner);
@@ -99,4 +107,12 @@ test("a searchable list runs edge to edge, and a press offered on the surface ke
 test("a crumb's tree stays hidden until it is measured into place", () => {
   assert.equal(surface("file-crumb-tree", undefined, false)("visibility"), "hidden");
   assert.equal(surface("file-crumb-tree", undefined, true)("visibility"), undefined);
+});
+
+test("a find bar lays its field and buttons side by side on the surface, a hair apart", () => {
+  const says = surface("find-bar", undefined, undefined, MENU_SURFACE_FLOW.ROW);
+  assert.equal(says("flex-direction"), "row");
+  assert.equal(says("align-items"), "center");
+  assert.equal(says("gap"), "var(--luke-space-2)");
+  assert.equal(says("padding"), "var(--luke-menu-inset)");
 });
