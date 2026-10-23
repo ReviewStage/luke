@@ -292,14 +292,15 @@ export interface HeadingsChange {
  * the caret ends reported (`onTrigger`), the keys a list over it takes first
  * (`onKey`), each mention the text holds drawn into its node's own element
  * (`drawMention`), and a target named again where the edit changed the
- * headings of the text (`retarget`), answering the new target or nothing
- * where the section it names kept its anchor, or names none.
+ * headings of the text (`retarget`), answering the new target under the
+ * section's new heading, or nothing where the section it names kept its
+ * anchor, or names none.
  */
 export interface PlanEditorMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly drawMention: MentionDrawer;
-  readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
+  readonly retarget: (target: string, change: HeadingsChange) => MentionNode | undefined;
   /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
   /** Whether a link's target names a mention, which the read view draws as its chip, so the editor draws the link in a chip's light look. */

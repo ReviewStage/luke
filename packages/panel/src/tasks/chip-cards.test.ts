@@ -599,6 +599,21 @@ test("an Inbox item's chip wears its agent's tile and hangs its Inbox row's own 
   assert.equal(sweep.name, "Quarantine the flaky test?");
 });
 
+test("an Inbox item's labelled chip is called by the item's title, whether it waits or was answered", async () => {
+  const container = await drawn(
+    [
+      `[@Inbox item](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,
+      `[@Inbox item](${HOME}/plan/${TASK_ID}/inbox/${ANSWERED_ITEM})`,
+      `[@Inbox item](${HOME}/agent/${SWEEP_AGENT}/inbox/${SWEEP_ITEM})`,
+    ].join(" "),
+  );
+
+  assert.deepEqual(
+    chipsOf(container).map((chip) => chip.querySelector(".luke-inline-ref-label")?.textContent),
+    ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+  );
+});
+
 test("an Inbox item's chip whose inbox could not be read keeps the card main's brief makes of a waiting item, and the chip's own for an item it does not hold", async () => {
   inboxRefused = true;
   const container = await drawn(

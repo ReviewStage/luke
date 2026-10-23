@@ -35,8 +35,9 @@ import { MENTION_NODE } from "./mention-node.js";
  * the wrong section. Each change that moves the text's headings hands the
  * panel the headings before and after it and which section each kept one
  * is now, its heading still the block it was, and the panel names every
- * mention of a section whose anchor moved again, target by target
- * (`retarget`), in the same change, since only it reads a target. A
+ * mention of a section whose anchor moved again, target by target and
+ * under the section's new heading (`retarget`), in the same change, since
+ * only it reads a target. A
  * heading laid in by Luke's merged answer replaces the block whole, so the
  * section it opened is none the change kept.
  */
@@ -197,9 +198,9 @@ function retargeted(
   const tr = state.tr.setMeta(RETARGETED_META, true);
   state.doc.descendants((node, position) => {
     if (node.type.name !== MENTION_NODE) return;
-    const target = mentions.retarget(String(node.attrs.target), change);
-    if (target !== undefined && target !== node.attrs.target) {
-      tr.setNodeMarkup(position, undefined, { ...node.attrs, target });
+    const named = mentions.retarget(String(node.attrs.target), change);
+    if (named !== undefined && named.target !== node.attrs.target) {
+      tr.setNodeMarkup(position, undefined, { ...node.attrs, ...named });
     }
   });
   return tr.docChanged ? tr : undefined;

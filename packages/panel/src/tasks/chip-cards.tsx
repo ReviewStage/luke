@@ -75,17 +75,19 @@ const OPEN_NOTHING = (): void => undefined;
 /**
  * The heading a section's anchor names in a plan the window holds the
  * words of: the plan's page's, or the open plan's; none where it holds
- * neither, or no heading spells the anchor.
+ * neither, no heading spells the anchor, or no plan is asked for.
  */
-function useSectionHeading(taskId: string, anchor: string): string | undefined {
+export function useSectionHeading(taskId: string | undefined, anchor: string): string | undefined {
   const page = useTaskMentions();
   const opened = useAppSlice(APP_SLICE.TASKS)?.document.task;
   const text =
-    page?.taskId === taskId
-      ? page.text()
-      : opened?.id === taskId
-        ? opened.document.body
-        : undefined;
+    taskId === undefined
+      ? undefined
+      : page?.taskId === taskId
+        ? page.text()
+        : opened?.id === taskId
+          ? opened.document.body
+          : undefined;
   if (text === undefined) return undefined;
   const headings = planSections(text).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(anchor)];

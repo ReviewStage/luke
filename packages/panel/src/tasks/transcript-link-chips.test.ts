@@ -110,13 +110,13 @@ function carriesTarget(container: HTMLElement): boolean {
     .some((attribute) => !masked.has(attribute.name) && attribute.value.includes("://"));
 }
 
-test("on a plan's page a plan's link, a file's lines, and a Linear page are chips, any other link a link, and code is code", () => {
+test("on a plan's page a plan's link, a file's lines, and a Linear page are chips, the section called by its heading now, any other link a link, and code is code", () => {
   const opened: Mention[] = [];
   const files: { path: string; lines: MentionLines | undefined }[] = [];
   const container = drawn(taskPage(opened, files));
 
   assert.deepEqual(chips(container), [
-    [MENTION_KIND.SECTION, "the rollout"],
+    [MENTION_KIND.SECTION, "Rollout"],
     [MENTION_KIND.FILE, "the store"],
     [MENTION_KIND.LINK, "LUKE-142/fix-the-thing"],
   ]);
