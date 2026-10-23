@@ -2,6 +2,8 @@ import type { AdminMetricsWindow } from "@luke/features/admin-wire";
 import type { ViewerAccount } from "@luke/panel/admin/chrome/page-header";
 import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
 import {
+  ADMIN_PAGE,
+  ADMIN_TAB,
   type AdminTab,
   type AdminView,
   accountHref,
@@ -18,6 +20,7 @@ import { DayScreen } from "@luke/panel/admin/screens/day";
 import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
 import { UsersScreen } from "@luke/panel/admin/screens/users";
 import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
+import { ADMIN_READ_STATUS } from "@luke/panel/admin/use-admin-read";
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./admin/auth-client";
 import { ForbiddenCard, SignInCard } from "./admin/chrome/gate-cards";
@@ -62,20 +65,15 @@ function AdminDashboardPage(): React.JSX.Element {
   }, []);
   const openAccount = useCallback((id: string) => {
     window.history.pushState(null, "", accountHref(id));
-    setView({ kind: "account", id });
+    setView({ kind: ADMIN_PAGE.ACCOUNT, id });
   }, []);
   const openDay = useCallback((day: string) => {
     window.history.pushState(null, "", dayHref(day));
-    setView({ kind: "day", day });
+    setView({ kind: ADMIN_PAGE.DAY, day });
   }, []);
   const navigate = useCallback((tab: AdminTab) => {
     window.history.pushState(null, "", tabHref(tab));
-    if (tab === "cost") setView({ kind: "cost" });
-    else if (tab === "reliability") setView({ kind: "reliability" });
-    else if (tab === "workspaces") setView({ kind: "workspaces" });
-    else if (tab === "users") setView({ kind: "users" });
-    else if (tab === "animations") setView({ kind: "animations" });
-    else setView({ kind: "dashboard" });
+    setView({ kind: tab });
   }, []);
   const changeWindow = useCallback((next: AdminMetricsWindow) => {
     setWindowDays((current) => {
@@ -96,7 +94,7 @@ function AdminDashboardPage(): React.JSX.Element {
   // The dashboard's read waits while another view is open; coming back re-runs
   // it, which refreshes the numbers while the last answer stands dimmed the
   // way any refetch does.
-  const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === "dashboard");
+  const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === ADMIN_TAB.DASHBOARD);
   const withdrawSession = metrics.withdraw;
   // Note that Better Auth answers a refused sign-out as a result rather than a
   // throw, so the refusal is thrown here: the session still stands, and
@@ -145,7 +143,7 @@ function AdminDashboardPage(): React.JSX.Element {
 
   if (loggedOut) return <SignInCard />;
 
-  if (view.kind === "account") {
+  if (view.kind === ADMIN_PAGE.ACCOUNT) {
     return (
       <AccountScreen
         id={view.id}
@@ -153,13 +151,13 @@ function AdminDashboardPage(): React.JSX.Element {
         onWindowDaysChange={changeWindow}
         account={viewer}
         onSignOut={signOut}
-        onBack={() => navigate("users")}
-        frame={(content) => shell("users", content)}
+        onBack={() => navigate(ADMIN_TAB.USERS)}
+        frame={(content) => shell(ADMIN_TAB.USERS, content)}
       />
     );
   }
 
-  if (view.kind === "day") {
+  if (view.kind === ADMIN_PAGE.DAY) {
     return (
       <DayScreen
         day={view.day}
@@ -167,27 +165,27 @@ function AdminDashboardPage(): React.JSX.Element {
         onHideAdminsChange={changeHideAdmins}
         account={viewer}
         onSignOut={signOut}
-        onBack={() => navigate("dashboard")}
+        onBack={() => navigate(ADMIN_TAB.DASHBOARD)}
         onOpenAccount={openAccount}
-        frame={(content) => shell("dashboard", content)}
+        frame={(content) => shell(ADMIN_TAB.DASHBOARD, content)}
       />
     );
   }
 
-  if (view.kind === "animations") {
+  if (view.kind === ADMIN_TAB.ANIMATIONS) {
     // The reference page fetches nothing, so it cannot learn the gate's
     // answers the way the data views do; it honors the refusals the overview's
     // read already holds and otherwise stands on the local sign-in press
     // alone, which the artwork — committed in the repository, observed from
     // nobody — is content with.
-    if (metrics.state.status === "signed-out") return <SignInCard />;
-    if (metrics.state.status === "forbidden") {
+    if (metrics.state.status === ADMIN_READ_STATUS.SIGNED_OUT) return <SignInCard />;
+    if (metrics.state.status === ADMIN_READ_STATUS.FORBIDDEN) {
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     }
-    return shell("animations", <AnimationsScreen />);
+    return shell(ADMIN_TAB.ANIMATIONS, <AnimationsScreen />);
   }
 
-  if (view.kind === "cost") {
+  if (view.kind === ADMIN_TAB.COST) {
     return (
       <CostScreen
         hideAdmins={hideAdmins}
@@ -197,12 +195,12 @@ function AdminDashboardPage(): React.JSX.Element {
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
-        frame={(content) => shell("cost", content)}
+        frame={(content) => shell(ADMIN_TAB.COST, content)}
       />
     );
   }
 
-  if (view.kind === "reliability") {
+  if (view.kind === ADMIN_TAB.RELIABILITY) {
     return (
       <ReliabilityScreen
         hideAdmins={hideAdmins}
@@ -212,12 +210,12 @@ function AdminDashboardPage(): React.JSX.Element {
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
-        frame={(content) => shell("reliability", content)}
+        frame={(content) => shell(ADMIN_TAB.RELIABILITY, content)}
       />
     );
   }
 
-  if (view.kind === "workspaces") {
+  if (view.kind === ADMIN_TAB.WORKSPACES) {
     return (
       <WorkspacesScreen
         hideAdmins={hideAdmins}
@@ -225,12 +223,12 @@ function AdminDashboardPage(): React.JSX.Element {
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
-        frame={(content) => shell("workspaces", content)}
+        frame={(content) => shell(ADMIN_TAB.WORKSPACES, content)}
       />
     );
   }
 
-  if (view.kind === "users") {
+  if (view.kind === ADMIN_TAB.USERS) {
     return (
       <UsersScreen
         hideAdmins={hideAdmins}
@@ -240,7 +238,7 @@ function AdminDashboardPage(): React.JSX.Element {
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
-        frame={(content) => shell("users", content)}
+        frame={(content) => shell(ADMIN_TAB.USERS, content)}
       />
     );
   }
@@ -256,7 +254,7 @@ function AdminDashboardPage(): React.JSX.Element {
       onSignOut={signOut}
       onOpenAccount={openAccount}
       onOpenDay={openDay}
-      frame={(content) => shell("dashboard", content)}
+      frame={(content) => shell(ADMIN_TAB.DASHBOARD, content)}
     />
   );
 }

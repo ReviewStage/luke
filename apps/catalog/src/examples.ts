@@ -23,6 +23,7 @@ import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
+import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
@@ -134,6 +135,7 @@ export const EXAMPLES: readonly Example[] = [
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
+  DAILY_BARS_EXAMPLE,
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,

@@ -19,11 +19,11 @@ import { signInMethodLabel } from "@luke/ui/admin-format";
 import { formatCount, formatDate, formatDayTick, formatInstant } from "@luke/ui/time-format";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminReadView } from "../admin-read-view.js";
 import { ActivityCalendar, ActivityCalendarSkeleton } from "../charts/activity-calendar.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { UsageChart, UsageChartSkeleton } from "../charts/usage-chart.js";
-import { AdminErrorState } from "../chrome/cards.js";
-import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
+import { AdminViewOptions, windowWords } from "../chrome/controls.js";
 import { AccountActivityNote } from "../chrome/notes.js";
 import {
   AccountAvatar,
@@ -32,7 +32,7 @@ import {
   type ViewerAccount,
 } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
-import { accountReadQuery } from "../routing.js";
+import { ADMIN_TAB, accountReadQuery } from "../routing.js";
 import { useAdminRead } from "../use-admin-read.js";
 import { AccountSupportSections } from "./account-support.js";
 
@@ -266,47 +266,41 @@ export function AccountScreen({
     { keeps: (shown) => shown.account.id === id },
   );
   const signOut = () => void withdraw(onSignOut);
-  const back: AdminWayBack = { tab: "users", onBack };
+  const back: AdminWayBack = { tab: ADMIN_TAB.USERS, onBack };
   const controls = (
     <AdminViewOptions windowDays={windowDays} onWindowDaysChange={onWindowDaysChange} />
   );
   const note = windowWords(windowDays);
 
-  switch (state.status) {
-    case "loading":
-      return frame(
+  return adminReadView({
+    read: { state, refreshing, reload },
+    gate,
+    email: account?.email,
+    onSignOut: signOut,
+    failure: ACCOUNT_ERROR,
+    loading: () =>
+      frame(
         <PageSkeleton title={ACCOUNT_TITLE} note={note} back={back} controls={controls}>
           <AccountSections detail={undefined} windowDays={windowDays} />
         </PageSkeleton>,
-      );
-    case "signed-out":
-      return gate.signedOut();
-    case "forbidden":
-      return gate.forbidden({ email: account?.email, onSignOut: signOut });
-    case "missing":
-      return frame(
+      ),
+    missing: () =>
+      frame(
         <AdminPage title={ACCOUNT_TITLE} back={back} note={note} controls={controls}>
           <NotFound thing={NOT_FOUND_THING.ACCOUNT} />
         </AdminPage>,
-      );
-    case "error":
-      return frame(
+      ),
+    failed: (error) =>
+      frame(
         <AdminPage title={ACCOUNT_TITLE} back={back} note={note} controls={controls}>
-          <AdminErrorState detail={state.detail} refreshing={refreshing} onRetry={reload} />
+          {error}
         </AdminPage>,
-      );
-    case "ready":
-      return frame(
-        <AdminPage
-          title={accountLabel(state.value.account)}
-          back={back}
-          note={note}
-          controls={controls}
-        >
-          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <AccountSections detail={state.value} windowDays={windowDays} />
-          </Refreshing>
+      ),
+    ready: (detail, refreshed) =>
+      frame(
+        <AdminPage title={accountLabel(detail.account)} back={back} note={note} controls={controls}>
+          {refreshed(<AccountSections detail={detail} windowDays={windowDays} />)}
         </AdminPage>,
-      );
-  }
+      ),
+  });
 }
