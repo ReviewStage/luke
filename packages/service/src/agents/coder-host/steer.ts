@@ -362,7 +362,11 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
     { concurrency: "unbounded" },
   );
   yield* Effect.fromResult(reached.repository);
-  const sessionId = yield* Effect.fromResult(read.sessionId);
+  // Note that a session found unclaimed is read again now that GitHub has answered, because a Start's session
+  // may have claimed its record meanwhile, and the stale read would refuse a send it now takes.
+  const sessionId =
+    (yield* Effect.fromResult(read.sessionId)) ??
+    (yield* hostedStoreOrUnavailable(recordedRuntimeSession(target)));
   if (sessionId === undefined && !(yield* opensUnclaimed(agent))) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
