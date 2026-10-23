@@ -258,7 +258,12 @@ export const RUNNER_TAG = {
   COMMAND: "lukeRunnerCommand",
   /** The launch's first event number. */
   LAUNCH: "lukeRunnerLaunch",
+  /** What the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
+  FINGERPRINT: "lukeRunnerFingerprint",
 } as const;
+
+/** How many hex characters of a launch's fingerprint its tag keeps. */
+const FINGERPRINT_CHARS = 32;
 
 /** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
 export const SANDBOX_NAME = "luke-agent-";
@@ -534,6 +539,8 @@ export interface TaggedRunner {
   readonly sandboxSessionId: string;
   readonly commandId: string;
   readonly firstSequence: number;
+  /** None for a launch from before fingerprints were tagged. */
+  readonly fingerprint?: string;
 }
 
 /** The launch tag read: its first event number; none where the tag is missing or unreadable. */
@@ -554,7 +561,42 @@ export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
     return undefined;
   }
-  return { sandboxSessionId, commandId, ...launch };
+  const fingerprint = tags[RUNNER_TAG.FINGERPRINT];
+  return {
+    sandboxSessionId,
+    commandId,
+    ...launch,
+    ...(fingerprint === undefined ? {} : { fingerprint }),
+  };
+}
+
+/** The tags of a sandbox whose runner is no longer told of: its session, its agent, and its launch, so a late END still reads as that launch's. */
+function launchTags(tags: Readonly<Record<string, string>>): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const key of [SESSION_TAG, RUNNER_TAG.AGENT, RUNNER_TAG.LAUNCH]) {
+    const value = tags[key];
+    if (value !== undefined) kept[key] = value;
+  }
+  return kept;
+}
+
+/**
+ * What a runner was launched with that it cannot take up while it runs: its
+ * credential, and the integrations it was handed, as a digest. A warm
+ * runner whose fingerprint no longer matches is relaunched rather than
+ * handed the next message (`sendHolding`). The digest is one-way and
+ * truncated, so the tag carries nothing of the credential.
+ */
+function launchFingerprint(
+  credential: HarnessLaunch,
+  integrations: readonly IntegrationServer[],
+): string {
+  const env = Object.entries(credential.env).sort(([one], [other]) => one.localeCompare(other));
+  const names = integrations.map((each) => each.name).sort();
+  return createHash("sha256")
+    .update(JSON.stringify({ env, names }))
+    .digest("hex")
+    .slice(0, FINGERPRINT_CHARS);
 }
 
 /** The tags of a sandbox running the runner given. */
@@ -565,6 +607,7 @@ function runnerTags(sessionId: string, agentId: string, runner: TaggedRunner) {
     [RUNNER_TAG.SANDBOX_SESSION]: runner.sandboxSessionId,
     [RUNNER_TAG.COMMAND]: runner.commandId,
     [RUNNER_TAG.LAUNCH]: String(runner.firstSequence),
+    ...(runner.fingerprint === undefined ? {} : { [RUNNER_TAG.FINGERPRINT]: runner.fingerprint }),
   };
 }
 
@@ -809,6 +852,7 @@ export const runnerSessions = <
               sandboxSessionId: sandbox.running,
               commandId,
               firstSequence,
+              fingerprint: launchFingerprint(credential, yield* options.integrations(agent)),
             }),
           );
           yield* api
@@ -1140,6 +1184,48 @@ export const runnerSessions = <
       });
 
     /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
+    /** The runner launched again in the running session given, its credential set afresh and the harness's session resumed. */
+    const relaunched = (
+      sessionId: string,
+      agent: CodingAgent,
+      name: string,
+      running: string,
+      sent: RunnerMessage,
+    ) =>
+      Effect.gen(function* () {
+        const target = { userId, conversationId: agent.conversationId };
+        const [, routing, credential] = yield* Effect.all(
+          [
+            renewCredential(target, agent, running),
+            readCodingAgentRouting(userId, agent.id),
+            harness.launch(agent),
+          ],
+          { concurrency: "unbounded" },
+        );
+        const resume = Option.getOrUndefined(
+          Option.flatMapNullishOr(routing, (read) => read.nativeSession),
+        );
+        yield* launch(sessionId, agent, { name, running }, sent, resume, credential, Effect.void);
+      });
+
+    /**
+     * Whether the runner is warm, no turn of the agent's under way, and was
+     * launched with a credential or integrations that have changed since,
+     * which it cannot take up while it runs. A runner at work keeps going on
+     * what it has, and one from before fingerprints were tagged is never
+     * read as stale.
+     */
+    const staleWarm = (agent: CodingAgent, runner: TaggedRunner) =>
+      Effect.gen(function* () {
+        if (runner.fingerprint === undefined) return false;
+        const { conversationId } = agent;
+        const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
+        if (turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status)) return false;
+        const credential = yield* harness.launch(agent);
+        const now = launchFingerprint(credential, yield* options.integrations(agent));
+        return now !== runner.fingerprint;
+      });
+
     const sendHolding = (sessionId: string, message: EveMessage<Turn>) =>
       Effect.gen(function* () {
         // The agent is read beside the sandbox, and its read answers only for a sandbox found.
@@ -1160,7 +1246,13 @@ export const runnerSessions = <
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
-        const live = yield* liveRunner(api, found.value);
+        const running = yield* liveRunner(api, found.value);
+        // A warm runner launched with what has changed since is ended, and the message relaunches it.
+        const stale = running !== undefined && (yield* staleWarm(agent, running));
+        if (running !== undefined && stale) {
+          yield* api.kill(running.sandboxSessionId, running.commandId);
+        }
+        const live = stale ? undefined : running;
         if (live !== undefined) {
           // The installation token lives an hour, so each message sets a fresh one; and the
           // harness's lines (the agent's model and effort as they stand) go ahead of the message,
@@ -1180,6 +1272,11 @@ export const runnerSessions = <
             live.commandId,
             [...ahead.lines, sent.line].map(line).join(""),
           );
+          return accepted;
+        }
+        // A warm runner ended above leaves its sandbox up, in which the runner is launched again.
+        if (running !== undefined) {
+          yield* relaunched(sessionId, agent, found.value.name, running.sandboxSessionId, sent);
           return accepted;
         }
         // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
@@ -1208,28 +1305,9 @@ export const runnerSessions = <
             );
           return accepted;
         }
-        const running = resumed.success.currentSessionId;
-        if (running === undefined) return yield* new SandboxUnavailable({});
-        const [, routing, credential] = yield* Effect.all(
-          [
-            renewCredential(target, agent, running),
-            readCodingAgentRouting(userId, agent.id),
-            harness.launch(agent),
-          ],
-          { concurrency: "unbounded" },
-        );
-        const resume = Option.getOrUndefined(
-          Option.flatMapNullishOr(routing, (read) => read.nativeSession),
-        );
-        yield* launch(
-          sessionId,
-          agent,
-          { name: found.value.name, running },
-          sent,
-          resume,
-          credential,
-          Effect.void,
-        );
+        const resumedSession = resumed.success.currentSessionId;
+        if (resumedSession === undefined) return yield* new SandboxUnavailable({});
+        yield* relaunched(sessionId, agent, found.value.name, resumedSession, sent);
         return accepted;
       });
 
@@ -1473,10 +1551,12 @@ export interface RunnerEnding {
  * END then stops the sandbox as any launch's end does. Answers whether the
  * line was written.
  */
-export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (
-  api: VercelSandboxApi,
-  retiring: { readonly sessionId: string; readonly agentId: string; readonly running: string },
-) {
+export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (retiring: {
+  readonly sessionId: string;
+  readonly agentId: string;
+  readonly running: string;
+}) {
+  const api = yield* vercelSandboxApi(deploymentOidcToken);
   return yield* holdingRunner(
     retiring.agentId,
     Effect.gen(function* () {
@@ -1489,6 +1569,9 @@ export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (
         live.commandId,
         line({ type: INPUT_LINE.RETIRE }),
       );
+      // The runner is told of no longer, before the lease goes, so a message sent while it ends
+      // relaunches it rather than landing behind the retire, which the runner ends on unread.
+      yield* api.updateTags(found.value.name, launchTags(found.value.tags ?? {}));
       return true;
     }),
   );

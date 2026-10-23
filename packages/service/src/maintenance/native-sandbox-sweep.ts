@@ -217,7 +217,7 @@ const retiredPastWarm = (api: VercelSandboxApi, sandbox: NativeSandbox, now: Dat
     if (Option.isNone(yield* runEnded(sandbox, now, CODER.RUNNER_WARM))) {
       return SANDBOX_ENDING.LEFT;
     }
-    const retired = yield* Effect.result(retireWarmRunner(api, sandbox));
+    const retired = yield* Effect.result(retireWarmRunner(sandbox));
     if (Result.isFailure(retired)) {
       yield* Effect.logWarning(`a warm native runner was not retired: ${retired.failure._tag}`);
       return SANDBOX_ENDING.FAILED;
@@ -239,7 +239,11 @@ const endSandbox = (
   sandbox: NativeSandbox,
   now: Date,
   budget: StopBudget,
-): Effect.Effect<SandboxEnding, QueryError | Schema.SchemaError, DatabaseServices> =>
+): Effect.Effect<
+  SandboxEnding,
+  QueryError | Schema.SchemaError,
+  DatabaseServices | HttpClient.HttpClient
+> =>
   Effect.gen(function* () {
     const going = yield* runGoesOn(sandbox);
     if (Option.isSome(going)) {

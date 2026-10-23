@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
+import { RUNNER_TAG } from "../agents/coder-host/runner-sessions.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
@@ -53,7 +54,7 @@ interface FakeSandbox {
   readonly name: string;
   status: string;
   readonly currentSessionId: string;
-  readonly tags: Record<string, string>;
+  tags: Record<string, string>;
 }
 
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
@@ -98,6 +99,13 @@ function vercel(
       const page = matching.slice(from, from + PAGE);
       const next = from + PAGE < matching.length ? String(from + PAGE) : null;
       return Response.json({ sandboxes: page, pagination: { count: page.length, next } });
+    }
+    const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(parsed.pathname);
+    if (method === "PATCH" && named !== null) {
+      const sandbox = sandboxes.find((each) => each.name === decodeURIComponent(named[1] ?? ""));
+      if (sandbox === undefined) return new Response(null, { status: 404 });
+      sandbox.tags = JSON.parse(String(init.body)).tags;
+      return Response.json({ sandbox });
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname);
     assert.ok(session !== null, `an unexpected call: ${method} ${parsed.pathname}`);
@@ -595,6 +603,9 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         );
         assert.equal(api.stdin.get("cmd_recent"), undefined);
         assert.deepEqual([retiring.status, warm.status], ["running", "running"]);
+        // The retired runner is no longer told of, so a message sent while it ends relaunches it.
+        assert.equal(retiring.tags[RUNNER_TAG.COMMAND], undefined);
+        assert.equal(warm.tags[RUNNER_TAG.COMMAND], "cmd_recent");
         assert.deepEqual([api.stopped, api.policies], [[], []]);
       }),
   );
