@@ -173,7 +173,7 @@ function layerOf(opener: HTMLElement): MenuLayer {
 }
 
 /** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
-function dropBelow(button: HTMLElement): MenuPlacement {
+export function dropBelow(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
   return { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END };
 }

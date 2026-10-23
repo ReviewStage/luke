@@ -592,7 +592,7 @@ function mount(
       },
     });
     if (sidebar) return createElement(SharedListing, { tasks: control });
-    const inbox = createElement(DesktopInbox, { tasks: control });
+    const inbox = createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
     return withSidebar
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
       : inbox;
@@ -8381,6 +8381,65 @@ function magnifier(page: HTMLElement): HTMLButtonElement | null {
 function paneTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items .inbox-subject-title")?.textContent;
 }
+
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, and the ⋯ opens the search and View options' own menu, so nothing is lost", async () => {
+  const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".inbox-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["New task", "More"],
+  );
+  assert.match(head.querySelector("h1")?.textContent ?? "", /^Inbox/);
+  assert.equal(magnifier(page), null, "no magnifier of its own");
+
+  const more = () =>
+    head.querySelector<HTMLButtonElement>('[aria-label="More"]') ?? assert.fail("the ⋯ stands");
+  const pick = (name: string) => {
+    act(() => more().click());
+    const item = [
+      ...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'),
+    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+    assert.ok(item, `the ⋯ offers ${name}`);
+    act(() => item.click());
+  };
+  act(() => more().click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
+      (each) => each.textContent,
+    ),
+    ["New thread", "Search inbox", "View options"],
+    "the ⋯ holds what the wide head draws as buttons",
+  );
+  act(() => more().click());
+  pick("View options");
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
+    "View options' own menu stands",
+  );
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  pick("Search inbox");
+  const field = page.querySelector<HTMLInputElement>(
+    '.inbox-head input[aria-label="Search inbox"]',
+  );
+  assert.ok(field, "the search opens");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(
+    document.activeElement,
+    more(),
+    "Escape folds it and hands the keyboard back to the ⋯",
+  );
+
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="New task"]')?.click());
+  assert.equal(asked.newTasks, 1);
+});
 
 test("the list's magnifier opens a search in the Inbox's name that narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties and folds it, handing the keyboard back to the magnifier", async () => {
   const { page } = mount();

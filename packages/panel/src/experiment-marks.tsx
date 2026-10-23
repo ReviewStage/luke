@@ -1,6 +1,7 @@
 import type { Experiment } from "@luke/settings";
 import { FoldingButton, Tooltip } from "@luke/ui";
 import { FlaskConicalIcon, MessageSquareIcon } from "lucide-react";
+import type { MenuAction } from "./desktop/action-menu.js";
 import { useOpenFeedback } from "./open-feedback.js";
 
 /**
@@ -36,14 +37,27 @@ export function ExperimentTag({ narrow = false }: { narrow?: boolean }): React.J
   );
 }
 
+/** What Send feedback is called, on the toolbar's button and a menu's item alike. */
+const SEND_FEEDBACK = "Send feedback";
+
 /** The toolbar's Send feedback: the feedback dialog, about `experiment`. */
 export function SendFeedbackButton({ experiment }: { experiment: Experiment }): React.JSX.Element {
   const openFeedback = useOpenFeedback();
   return (
     <FoldingButton
-      label="Send feedback"
+      label={SEND_FEEDBACK}
       icon={<MessageSquareIcon />}
       onClick={() => openFeedback(experiment)}
     />
   );
+}
+
+/** Send feedback as a menu's item, as a phone's ⋯ offers it where the toolbar has no room for its button (`phone-head.tsx`). */
+export function useSendFeedbackItem(experiment: Experiment): MenuAction {
+  const openFeedback = useOpenFeedback();
+  return {
+    label: SEND_FEEDBACK,
+    icon: <MessageSquareIcon />,
+    onSelect: () => openFeedback(experiment),
+  };
 }

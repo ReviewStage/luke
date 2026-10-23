@@ -119,6 +119,13 @@ import {
   type InboxWhoseChoice,
   useInboxListWidth,
 } from "../desktop/folded-groups.js";
+import {
+  type MenuAsk,
+  PhoneHead,
+  PlaceMore,
+  useAskedMenu,
+  useMenuAsk,
+} from "../desktop/phone-head.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { DraftMark } from "../draft-mark.js";
@@ -1186,6 +1193,7 @@ function ViewOptions({
   choices,
   readerId,
   readAll,
+  asked,
 }: {
   shown: boolean;
   show: InboxShowChoice;
@@ -1193,8 +1201,11 @@ function ViewOptions({
   choices: InboxViewChoices | undefined;
   readerId: string | undefined;
   readAll: InboxReadAll | undefined;
+  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
+  asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   const reader = useMemberDirectory();
   const scope: MenuEntry[] = INBOX_SCOPES.map((value) => ({
     ...SCOPE_WORDS[value],
@@ -1203,9 +1214,11 @@ function ViewOptions({
   }));
   return (
     <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-      </Tooltip>
+      {asked === undefined ? (
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+        </Tooltip>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}
@@ -1483,13 +1496,16 @@ const SEARCH_INBOX = "Search inbox";
  * caret in it. The field narrows the list as it is typed in, standing open
  * while it holds words; Escape empties and folds it, and so does the focus
  * leaving it empty, the keyboard then handed back to the magnifier where
- * Escape folded it.
+ * Escape folded it, or, on a phone's head, which draws no magnifier, to the
+ * ⋯ the search was opened from.
  */
 function useListSearch(search: InboxSearchHead | undefined) {
   const [asked, setAsked] = useState(false);
   const open = search !== undefined && (asked || search.query !== "");
   const field = useRef<HTMLInputElement | null>(null);
   const magnifier = useRef<HTMLButtonElement | null>(null);
+  // The ⋯ a phone's head opened the search from, which stands in the magnifier's place.
+  const opener = useRef<HTMLElement | null>(null);
   const backToMagnifier = useRef(false);
   useEffect(() => {
     if (open) {
@@ -1498,7 +1514,7 @@ function useListSearch(search: InboxSearchHead | undefined) {
     }
     if (!backToMagnifier.current) return;
     backToMagnifier.current = false;
-    magnifier.current?.focus();
+    (magnifier.current ?? opener.current)?.focus();
   }, [open]);
   const fold = (handBack: boolean) => {
     backToMagnifier.current = handBack;
@@ -1537,7 +1553,17 @@ function useListSearch(search: InboxSearchHead | undefined) {
         />
       </search>
     );
-  return { button, field: fieldDrawn };
+  return {
+    button,
+    field: fieldDrawn,
+    onOpen:
+      search === undefined
+        ? undefined
+        : (from: HTMLElement) => {
+            opener.current = from;
+            setAsked(true);
+          },
+  };
 }
 
 /**
@@ -1564,6 +1590,55 @@ function ListHead({
   const { shown, show, view } = head;
   const title = inboxTitle(show.show);
   const search = useListSearch(head.search);
+  const asked = useMenuAsk();
+  if (head.phone !== undefined && placement === INBOX_LIST_PLACEMENT.PAGE) {
+    const { onOpen } = search;
+    return (
+      <>
+        <PhoneHead
+          place="inbox"
+          start={head.phone.start}
+          title={search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
+          end={
+            <PlaceMore
+              shown={shown}
+              groups={(opener) => [
+                [
+                  ...(head.onCompose === undefined
+                    ? []
+                    : [{ label: NEW_THREAD, icon: <ComposeIcon />, onSelect: head.onCompose }]),
+                  ...(onOpen === undefined
+                    ? []
+                    : [
+                        {
+                          label: SEARCH_INBOX,
+                          icon: <SearchIcon />,
+                          onSelect: () => onOpen(opener),
+                        },
+                      ]),
+                  {
+                    label: VIEW_OPTIONS,
+                    icon: <SlidersHorizontalIcon />,
+                    opens: true,
+                    onSelect: () => asked.onAsk(opener),
+                  },
+                ],
+              ]}
+            />
+          }
+        />
+        <ViewOptions
+          shown={shown}
+          show={show}
+          choices={view?.choices}
+          readerId={readerId}
+          readAll={head.readAll}
+          asked={{ ask: asked.ask }}
+        />
+        {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+      </>
+    );
+  }
   const options = (
     <>
       {head.onCompose === undefined ? null : (
@@ -1714,6 +1789,12 @@ export interface InboxListHead {
   readonly search?: InboxSearchHead | undefined;
   /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
   readonly onCompose?: (() => void) | undefined;
+  /**
+   * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
+   * phone's places: its one start control, New task, the title centred, and
+   * the ⋯ holding New thread, the search, and View options; none elsewhere.
+   */
+  readonly phone?: { readonly start: React.ReactNode } | undefined;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */

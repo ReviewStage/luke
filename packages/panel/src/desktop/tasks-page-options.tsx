@@ -86,6 +86,7 @@ import {
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { type MenuAsk, useAskedMenu } from "./phone-head.js";
 
 /**
  * tasks-page-options.tsx -- the Tasks page's Filter and View options, the two buttons at its toolbar's end, and the chips under it saying what the filter keeps.
@@ -124,8 +125,8 @@ export interface TasksViewFrame {
 }
 
 /** What the buttons are called, on their tooltips and their menus alike. */
-const FILTER = "Filter";
-const VIEW_OPTIONS = "View options";
+export const FILTER = "Filter";
+export const VIEW_OPTIONS = "View options";
 
 /** What each field is called, on its submenu and its chip. */
 const FIELD_WORDS = {
@@ -422,6 +423,9 @@ const READING_MEMBERS: MenuAction = {
   onSelect: () => undefined,
 };
 
+/** What the Filter says of itself while it keeps anything. */
+export const FILTERED = "Filtered";
+
 /** The filter's menu: a submenu for each field, its values toggled where they stand, and Clear filters at its foot. */
 function filterEntries(
   tasks: readonly TaskSummary[],
@@ -471,6 +475,7 @@ export function TasksFilterButton({
   filter,
   onFilter,
   shared,
+  asked,
   pictures,
 }: {
   /** Whether the page is on screen, for the menu not to outlive it. */
@@ -481,24 +486,29 @@ export function TasksFilterButton({
   onFilter: (filter: TasksFilter) => void;
   /** Whether the workspace is shared, which alone filters by assignee or creator. */
   shared: boolean;
+  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
+  asked?: { readonly ask: MenuAsk | undefined } | undefined;
   /** Whether repositories' owners' pictures are drawn at all: not in a fixture run. */
   pictures: boolean;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   const reader = useMemberDirectory();
   const filtered = filteredFields(filter).length > 0;
   return (
     <>
-      <span className="tasks-page-option" data-filtered={filtered ? "true" : undefined}>
-        <Tooltip label={FILTER}>
-          <IconButton
-            icon={<ListFilterIcon />}
-            label={FILTER}
-            aria-description={filtered ? "Filtered" : undefined}
-            {...menu.trigger()}
-          />
-        </Tooltip>
-      </span>
+      {asked === undefined ? (
+        <span className="tasks-page-option" data-filtered={filtered ? "true" : undefined}>
+          <Tooltip label={FILTER}>
+            <IconButton
+              icon={<ListFilterIcon />}
+              label={FILTER}
+              aria-description={filtered ? FILTERED : undefined}
+              {...menu.trigger()}
+            />
+          </Tooltip>
+        </span>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={FILTER}
@@ -753,6 +763,7 @@ export function TasksViewOptions({
   initial,
   onDisplay,
   shared,
+  asked,
 }: {
   shown: boolean;
   /** Whether the view is the Board, which offers only what its columns and cards can draw. */
@@ -763,15 +774,20 @@ export function TasksViewOptions({
   onDisplay: (display: TasksDisplay) => void;
   /** Whether the workspace is shared, which alone groups by assignee or creator. */
   shared: boolean;
+  /** Where a phone's ⋯ stands for the button, as the Filter's (`TasksFilterButton`); none elsewhere. */
+  asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   return (
     <>
-      <span className="tasks-page-option">
-        <Tooltip label={VIEW_OPTIONS}>
-          <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-        </Tooltip>
-      </span>
+      {asked === undefined ? (
+        <span className="tasks-page-option">
+          <Tooltip label={VIEW_OPTIONS}>
+            <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+          </Tooltip>
+        </span>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}

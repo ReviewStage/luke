@@ -1601,11 +1601,31 @@ test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag,
 
 test("on a phone the rail's Experimental tag is the experiment's glyph alone, still called Experimental, so Chat's title keeps its room", () => {
   const page = mount(undefined, undefined, undefined, undefined, {}, undefined, SHELL_ROOM.NARROW);
-  const tag = page.querySelector(".chat-rail-bar .experiment-tag");
+  const tag = page.querySelector(".chat-rail-head .experiment-tag");
   assert.equal(tag?.getAttribute("role"), "img");
   assert.equal(tag?.getAttribute("aria-label"), "Experimental");
   assert.equal(tag?.textContent, "", "no words beside the title");
-  assert.equal(page.querySelector(".chat-rail-bar h1")?.textContent, "Chat");
+  assert.equal(page.querySelector(".chat-rail-head h1")?.textContent, "Chat");
+  // The head holds one control a corner, New channel and the ⋯, which offers the rest.
+  assert.deepEqual(
+    [...page.querySelectorAll(".chat-rail-head button")].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    ["New channel", "More"],
+  );
+  act(() => page.querySelector<HTMLButtonElement>('.chat-rail-head [aria-label="More"]')?.click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
+      (each) => each.textContent,
+    ),
+    ["View options", "Send feedback"],
+  );
+  const options = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')][0];
+  act(() => options?.click());
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
+    "View options' own menu stands",
+  );
 });
 
 test("a For you row names a task's channel by its glyph and name, and a press on it opens the channel", () => {
