@@ -5,7 +5,6 @@ import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
-  codingAgentBriefOf,
   hasRepository,
   readCodingAgentContext,
   readCodingAgentOfConversation,
@@ -29,8 +28,6 @@ import type { ConversationTarget, StoreWriter } from "@luke/database/models/writ
 import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -125,7 +122,7 @@ import { type DelegationAsk, delegationChoice, recordDelegation } from "./delega
 import type { InboxToolResult } from "./inbox.js";
 import { type InboxCall, runAgentInbox } from "./inbox-door.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
-import { CODER_HARNESS, coderInstructions } from "./instructions.js";
+import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
 import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
@@ -625,27 +622,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     chatOn: boolean,
     memoryOn: boolean,
   ): CoderSessionPrompt => {
-    const brief = codingAgentBriefOf(agent);
-    const taskLink =
-      agent.taskId === null
-        ? null
-        : encodeMention(
-            { kind: MENTION_KIND.TASK, taskId: agent.taskId },
-            { workspace, repository: null },
-          );
-    const text = coderInstructions(
-      agent.repository,
-      brief,
+    const text = agentCoderInstructions(agent, {
       ciReadable,
-      taskLink,
       coAuthor,
+      workspace,
       chatOn,
-      agent.startBranch,
-      agent.githubAccess === GITHUB_ACCESS.TOKEN,
-      CODER_HARNESS.EVE,
-      agent.kind,
       memoryOn,
-    );
+      harness: CODER_HARNESS.EVE,
+    });
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn, memoryOn };
   };
 
