@@ -813,6 +813,33 @@ function SummaryChevron({
   );
 }
 
+/** The summary's room beside the column, as wide as its mode stands it; its words left out where it only keeps that room. */
+function SummaryRoom({
+  mode,
+  kept = false,
+  children,
+}: {
+  mode: SummaryMode;
+  kept?: boolean;
+  children?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <aside
+      className="task-summary"
+      aria-label={kept ? undefined : "Summary"}
+      aria-hidden={kept || undefined}
+      data-mode={mode}
+    >
+      {children}
+    </aside>
+  );
+}
+
+/** The summary's room while the task is read, kept at the width it will stand at, so the column lands at its own. */
+export function SummarySkeleton({ mode }: { mode: SummaryMode }): React.JSX.Element | null {
+  return mode === SUMMARY_MODE.NONE ? null : <SummaryRoom mode={mode} kept />;
+}
+
 /**
  * The summary in the plan's column, pinned or as its rail, or nothing where
  * the column spares no rail, and the card while it hangs. The rail lists the panel's kinds alone, one glyph after
@@ -861,7 +888,7 @@ export function TaskSummary({
   return (
     <>
       {layout.mode === SUMMARY_MODE.NONE ? null : (
-        <aside className="task-summary" aria-label="Summary" data-mode={layout.mode}>
+        <SummaryRoom mode={layout.mode}>
           {/* Note that the chevron stands outside what scrolls, at one place in both modes, so its press keeps the focus as the summary turns and the fade never reaches it. */}
           <SummaryChevron layout={layout} cardId={cardId} />
           <ScrollArea fade={SCROLL_FADE.BOTH}>
@@ -882,7 +909,7 @@ export function TaskSummary({
               )}
             </div>
           </ScrollArea>
-        </aside>
+        </SummaryRoom>
       )}
       {!card.mounted || hungFrom === undefined ? null : (
         <SummaryCard

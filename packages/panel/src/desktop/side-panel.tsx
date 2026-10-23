@@ -184,6 +184,7 @@ import { paneTiming } from "./pane-motion.js";
 import {
   type AddEntry,
   AddTabButton,
+  AddTabSkeleton,
   contentActionGroups,
   DoorsTab,
   entryRow,
@@ -191,6 +192,7 @@ import {
   type TabDoors,
   type TabLook,
   type TabPin,
+  TabSkeleton,
   type TabViews,
   type TranscriptCopier,
   useTranscriptCopier,
@@ -1229,7 +1231,7 @@ function PanelTabs({
   };
   useShownTab(activity?.onShown, strip, doorsOf);
   return (
-    <div className="side-panel-tabs">
+    <PanelTabsRow>
       {activity?.slot
         ? createPortal(
             <ActivityList strip={strip} offers={offers} onListed={activity.onListed} />,
@@ -1262,7 +1264,7 @@ function PanelTabs({
         answers={keys}
         onAnswered={panel.onNewTabAnswered}
       />
-    </div>
+    </PanelTabsRow>
   );
 }
 
@@ -2588,6 +2590,41 @@ export function SidePanel({
           </div>
         </FindScope>
       )}
+    </PanelFrame>
+  );
+}
+
+/** The row a panel's tabs stand in, beside its actions: the strip, then the "+". */
+function PanelTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="side-panel-tabs">{children}</div>;
+}
+
+/**
+ * The side panel while its task is read, in the frame it lands in: at its
+ * width, its edge and its full-screen button its own, and one tab's block
+ * and the "+"'s where its strip will stand.
+ */
+export function SidePanelSkeleton({
+  drawing,
+  panel,
+}: {
+  drawing: Omit<SidePanelDrawing, "panel">;
+  panel: SidePanelControl;
+}): React.JSX.Element {
+  return (
+    <PanelFrame
+      {...drawing}
+      panel={panel}
+      label="Panel"
+      tabs={
+        <PanelTabsRow>
+          <TabSkeleton />
+          <AddTabSkeleton />
+        </PanelTabsRow>
+      }
+      actions={null}
+    >
+      {null}
     </PanelFrame>
   );
 }

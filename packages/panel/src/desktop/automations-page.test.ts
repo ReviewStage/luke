@@ -780,6 +780,55 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
   );
 });
 
+test("while the list is first read its blocks stand in an owner's card of rows, each with its clock tile, its owner's and next run's columns, and its switch's place, as a row of the list does", async () => {
+  listHeld = true;
+  const page = mount();
+  await settle();
+
+  const shape = (row: Element) => [
+    row.closest(".automation-group .luke-list") === null ? "loose" : "carded",
+    row.querySelector(".luke-list-row-leading") === null ? "no tile" : "tile",
+    row.querySelector(".automation-row-meta .automation-owner") === null ? "no owner" : "owner",
+    row.querySelector(".automation-row-meta .automation-row-next") === null ? "no next" : "next",
+    row.querySelector(".luke-list-row-actions") === null ? "no switch" : "switch",
+  ];
+  const placeholders = [...page.querySelectorAll("[role=status][aria-busy=true] li")];
+  assert.ok(placeholders.length > 0);
+  listHeld = false;
+  pushStanding();
+  await settle();
+  const listed = automationRows(page);
+  assert.ok(listed.length > 0);
+  for (const row of [...placeholders.slice(0, 1), ...listed]) {
+    assert.deepEqual(shape(row), ["carded", "tile", "owner", "next", "switch"]);
+  }
+});
+
+/** Each group of an automation's setup, by its heading, and its rows, each by whether it says words under its name. */
+function setupShape(page: HTMLElement): string[][] {
+  return [...page.querySelectorAll(".automation-form section[aria-labelledby]")].map((group) => [
+    group.querySelector("h2")?.textContent ?? "",
+    ...[...group.querySelectorAll(".luke-settings-row")].map((row) =>
+      row.querySelector(".luke-settings-row-description") === null ? "row" : "described row",
+    ),
+  ]);
+}
+
+test("an automation's page read before the list stands the groups and rows a scheduled automation's setup lands with, its acts' places in its toolbar", async () => {
+  listHeld = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const reading = setupShape(page);
+  const acts = page.querySelectorAll(".desktop-toolbar-actions .luke-skeleton").length;
+  assert.ok(acts > 0, "its acts stand as blocks");
+
+  listHeld = false;
+  pushStanding();
+  await settle();
+  assert.ok(page.querySelector("input[aria-label='Automation name']"), "the setup landed");
+  assert.deepEqual(reading, setupShape(page));
+});
+
 test("with no workspace listed the list and a linked automation stand as quiet blocks, never as empty or gone", async () => {
   // Note that the tasks are read apart from the workspaces, so a listed task list says nothing of them.
   const page = mount(tasksControl({ workspace: undefined, listRead: true, listFailed: false }));

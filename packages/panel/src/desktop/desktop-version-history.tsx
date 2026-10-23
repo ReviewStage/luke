@@ -31,6 +31,7 @@ import {
   SCROLL_FADE,
   ScrollArea,
   Shortcut,
+  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   TEXT_BUTTON_LINES,
@@ -52,7 +53,6 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { centreWithin } from "../tasks/code-pane.js";
-import { DocumentScroll } from "../tasks/document-frame.js";
 import {
   type ChangedSection,
   changedSections,
@@ -76,7 +76,7 @@ import {
 } from "../tasks/use-plan-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
-import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view.js";
+import { useVersionRestore, VersionPageSkeleton, VersionView } from "../tasks/version-view.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
@@ -175,6 +175,18 @@ const LOG_SKELETON = [
   { author: "28%", summary: "84%" },
   { author: "40%", summary: "56%" },
 ] as const;
+
+/** How wide each placeholder row of a revision's sections stands, a section's name as a share of its line. */
+const SECTIONS_SKELETON = ["46%", "62%", "38%"] as const;
+
+/** A placeholder revision's writer's mark, at a row's actor mark's size (`avatar.css`). */
+const ROW_MARK_SKELETON = "20px";
+
+/** How wide a placeholder revision's time stands, a short moment's ("2h", "Mon"). */
+const TIME_SKELETON = "28px";
+
+/** What the list of versions, and of a revision's sections, are called to a reader. */
+const LIST_LABEL = { VERSIONS: "Version list", SECTIONS: "Sections changed" } as const;
 
 /** The way from a revision to the place that wrote it: what its Open says, and the press. */
 interface SourceDoor {
@@ -378,18 +390,38 @@ function readerOf(
   return former === undefined ? read : { ...read, former };
 }
 
-/** The versions as quiet rows while they are read, in a row's own type. */
+/**
+ * The versions while they are read, as rows of a revision's own: its
+ * writer's mark, their name over its summary, and its time, so the
+ * revisions land where the blocks stood.
+ */
 function LogSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading the versions…">
-      {LOG_SKELETON.map((row) => (
-        <div key={row.author} className="version-skeleton-row">
-          <div className="version-skeleton-author">
-            <Skeleton width={row.author} />
-          </div>
-          <Skeleton width={row.summary} />
-        </div>
-      ))}
+      <List label={LIST_LABEL.VERSIONS}>
+        {LOG_SKELETON.map((row) => (
+          <ListRow
+            key={row.author}
+            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={ROW_MARK_SKELETON} />}
+            title={<Skeleton width={row.author} />}
+            description={<Skeleton width={row.summary} />}
+            meta={<Skeleton width={TIME_SKELETON} />}
+          />
+        ))}
+      </List>
+    </SkeletonRegion>
+  );
+}
+
+/** A revision's sections while they are read, as rows of a section's own: its name on one line. */
+function SectionsSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label="Reading the sections it changed…">
+      <List label={LIST_LABEL.SECTIONS}>
+        {SECTIONS_SKELETON.map((width) => (
+          <ListRow key={width} title={<Skeleton width={width} />} />
+        ))}
+      </List>
     </SkeletonRegion>
   );
 }
@@ -563,21 +595,7 @@ function VersionPage({
   // A list read that holds versions is still finding the one the view opened on.
   const finding = list.kind === HISTORY_READ.READY && list.revisions.length > 0;
   if (list.kind === HISTORY_READ.READING || finding) {
-    return (
-      <>
-        <header className="desktop-toolbar">
-          {lead}
-          <div className="desktop-toolbar-heading version-skeleton-title">
-            <Skeleton width="160px" />
-          </div>
-        </header>
-        <Fill className="desktop-document">
-          <DocumentScroll>
-            <VersionSkeleton />
-          </DocumentScroll>
-        </Fill>
-      </>
-    );
+    return <VersionPageSkeleton lead={lead} title={subject.title} section={section} />;
   }
   return (
     <>
@@ -755,7 +773,7 @@ export function DesktopVersionHistory({
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 <div className="sidebar-section-body">
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
-                  <List label="Version list">
+                  <List label={LIST_LABEL.VERSIONS}>
                     {revisions.map((line) => {
                       const author = revisionAuthorOf(line, reader, agents, subject.own);
                       return (
@@ -806,7 +824,7 @@ export function DesktopVersionHistory({
           <Fill
             as={FILL_ELEMENT.SECTION}
             className="sidebar-section version-log-pane"
-            aria-label="Sections changed"
+            aria-label={LIST_LABEL.SECTIONS}
             inert={opened === undefined}
           >
             <ScrollArea fade={SCROLL_FADE.BOTH}>
@@ -820,8 +838,8 @@ export function DesktopVersionHistory({
                       source={openedSource}
                       onBack={closeSections}
                     />
-                    {sections === undefined ? <LogSkeleton /> : null}
-                    <List label="Sections changed">
+                    {sections === undefined ? <SectionsSkeleton /> : null}
+                    <List label={LIST_LABEL.SECTIONS}>
                       {sections?.map((section) => (
                         <SectionRow
                           key={section.unit}

@@ -10,11 +10,13 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
+import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { dayAndTimeText, momentText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -59,13 +61,19 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
 const NO_CHANGE_LINE = "This version changed nothing from the one before it.";
 
 /**
- * The placeholder page's shape while a version is read: a heading over its
- * lines, twice, each line as wide as its share of the column.
+ * The placeholder page's shape while a version is read: a section's heading
+ * over its lines, twice, each as wide as its share of the column.
  */
 const PAGE_SKELETON = [
   { heading: "42%", lines: ["100%", "96%", "88%", "54%"] },
   { heading: "30%", lines: ["100%", "91%", "72%"] },
 ] as const;
+
+/** The level a plan's section heading stands at (`##`), which a placeholder section's heading is drawn in. */
+const SECTION_LEVEL = "2";
+
+/** How wide the placeholder bar's moment and its restore stand: a day and a time in the title's type, and Restore this version. */
+const BAR_SKELETON = { MOMENT: "160px", RESTORE: "148px" } as const;
 
 /** What the toast says once a version is restored, and why its Undo did nothing. */
 const VERSION_RESTORED_NOTE = "Version restored";
@@ -93,6 +101,29 @@ const CHANGE_CLASS = {
   [VERSION_CHANGE.CHANGED]: " version-changed",
 } as const;
 
+/** A version's text, as the plan's own tab sets it: its units a section apart, in the body's type. */
+function VersionText({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="plan-body">{children}</div>;
+}
+
+/** A unit of the plan in a note's own type, as `MarkdownMessage` sets one: its heading at a section's level over what follows it. */
+function NoteUnit({
+  heading,
+  children,
+}: {
+  heading: React.ReactNode;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className={markdownClass("plan-unit")}>
+      <p className={MARKDOWN_CLASS.HEADING} data-level={SECTION_LEVEL}>
+        {heading}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 /** The version's text under the task's name, each unit drawn as it stands against what it is compared with. */
 function VersionBody({
   diff,
@@ -110,7 +141,7 @@ function VersionBody({
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
   return (
-    <div className="plan-body">
+    <VersionText>
       {title === undefined || section !== undefined ? null : <TaskTitle name={title} />}
       {units.map((unit, at) => (
         <MarkdownMessage
@@ -126,28 +157,37 @@ function VersionBody({
           picture={picture}
         />
       ))}
-    </div>
+    </VersionText>
   );
 }
 
-/** The version's page as quiet blocks while it is read: headings over their lines, in the body's own type. */
-export function VersionSkeleton(): React.JSX.Element {
+/**
+ * The version's page as quiet blocks while it is read, in the text's own
+ * frame: the task's name over it where the whole version will stand, then
+ * sections in a note's own type, each heading at a section's level over its
+ * lines, a section apart.
+ */
+export function VersionSkeleton({
+  title,
+  section,
+}: {
+  title: string | undefined;
+  section: number | undefined;
+}): React.JSX.Element {
   return (
-    <div className="plan-body">
-      <SkeletonRegion label="Reading the version…">
-        {PAGE_SKELETON.map((section) => (
-          <div key={section.heading} className="version-skeleton-section">
-            <div className="version-skeleton-heading">
-              <Skeleton width={section.heading} />
-            </div>
-            {section.lines.map((width, at) => (
+    <SkeletonRegion label="Reading the version…">
+      <VersionText>
+        {title === undefined || section !== undefined ? null : <TaskTitle name={title} />}
+        {PAGE_SKELETON.map((unit) => (
+          <NoteUnit key={unit.heading} heading={<Skeleton width={unit.heading} />}>
+            {unit.lines.map((width, at) => (
               // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
               <Skeleton key={at} width={width} />
             ))}
-          </div>
+          </NoteUnit>
         ))}
-      </SkeletonRegion>
-    </div>
+      </VersionText>
+    </SkeletonRegion>
   );
 }
 
@@ -164,7 +204,8 @@ function VersionContent({
   task: MentionedTask | undefined;
 }): React.JSX.Element {
   const { read } = viewing;
-  if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
+  if (read.kind === HISTORY_READ.READING)
+    return <VersionSkeleton title={title} section={section} />;
   if (read.kind === HISTORY_READ.FAILED) {
     return (
       <div className="version-note">
@@ -246,6 +287,40 @@ export function sayRestored(
   });
 }
 
+/** The page a version stands on: its bar, led by `lead`, naming the version in `title` with `actions` at its end, over the version's document. */
+function VersionPageFrame({
+  lead,
+  title,
+  actions,
+  children,
+}: {
+  lead?: React.ReactNode;
+  title: React.ReactNode;
+  actions: React.ReactNode;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <>
+      <header className="desktop-toolbar">
+        {lead}
+        <div className="desktop-toolbar-heading">
+          <OneLine
+            as={ONE_LINE_ELEMENT.H1}
+            end={ONE_LINE_END.ELLIPSIS}
+            className="desktop-toolbar-title"
+          >
+            {title}
+          </OneLine>
+        </div>
+        <div className="desktop-toolbar-actions">{actions}</div>
+      </header>
+      <Fill className="desktop-document">
+        <DocumentScroll>{children}</DocumentScroll>
+      </Fill>
+    </>
+  );
+}
+
 /**
  * The version chosen in the version history, the page beside its list: the
  * bar with when it was saved and its restore, over the version itself.
@@ -276,22 +351,16 @@ export function VersionView({
   const { line } = viewing;
   return (
     <>
-      <header className="desktop-toolbar">
-        {lead}
-        <div className="desktop-toolbar-heading">
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
-          >
-            <Tooltip label={momentText(line.lastEdit.at)}>
-              <time dateTime={new Date(line.lastEdit.at).toISOString()}>
-                {dayAndTimeText(line.lastEdit.at)}
-              </time>
-            </Tooltip>
-          </OneLine>
-        </div>
-        <div className="desktop-toolbar-actions">
+      <VersionPageFrame
+        lead={lead}
+        title={
+          <Tooltip label={momentText(line.lastEdit.at)}>
+            <time dateTime={new Date(line.lastEdit.at).toISOString()}>
+              {dayAndTimeText(line.lastEdit.at)}
+            </time>
+          </Tooltip>
+        }
+        actions={
           <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
             <Button
               variant={BUTTON_VARIANT.PRIMARY}
@@ -302,14 +371,36 @@ export function VersionView({
               Restore this version
             </Button>
           </Tooltip>
-        </div>
-      </header>
-      <Fill className="desktop-document">
-        <DocumentScroll>
-          <VersionContent viewing={viewing} title={title} section={section} task={task} />
-        </DocumentScroll>
-      </Fill>
+        }
+      >
+        <VersionContent viewing={viewing} title={title} section={section} task={task} />
+      </VersionPageFrame>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
     </>
+  );
+}
+
+/**
+ * The page while the version it opens on is still found: its bar with
+ * blocks where the moment and its restore will stand, over the version as
+ * quiet blocks, so the page lands where they stood.
+ */
+export function VersionPageSkeleton({
+  lead,
+  title,
+  section,
+}: {
+  lead?: React.ReactNode;
+  title: string | undefined;
+  section: number | undefined;
+}): React.JSX.Element {
+  return (
+    <VersionPageFrame
+      lead={lead}
+      title={<Skeleton width={BAR_SKELETON.MOMENT} />}
+      actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={BAR_SKELETON.RESTORE} />}
+    >
+      <VersionSkeleton title={title} section={section} />
+    </VersionPageFrame>
   );
 }

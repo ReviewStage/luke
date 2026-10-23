@@ -1517,7 +1517,6 @@ ul.actor-stack {
    the tab's pill a row's inset in, as the side panel's row starts its own;
    the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
 .desktop-task-main .desktop-toolbar,
-.desktop-toolbar:has(.desktop-toolbar-heading > .luke-skeleton),
 .inbox-view-items .desktop-toolbar {
   padding-left: var(--column-inset);
 }
@@ -3647,12 +3646,6 @@ ul.actor-stack {
   gap: var(--luke-space-8);
 }
 
-/* An automation's toolbar while the list is read: its name's crumb is a
-   block with no words, so no baseline, and the heading centres instead. */
-.desktop-toolbar-heading.automation-toolbar-reading {
-  align-items: center;
-}
-
 .experiment-tag {
   flex: none;
   padding: 0 var(--luke-space-6);
@@ -3969,10 +3962,17 @@ ul.actor-stack {
   gap: var(--luke-section-gap);
 }
 
-/* The prompt's placeholder, the height of its five-row field
-   (`text-field.css`). */
+/* The prompt's placeholder, the height of its field at the rows it stands
+   (`--automation-prompt-rows`, the editor's `PROMPT_ROWS`), its insets and
+   its border (`text-field.css`). */
 .automation-prompt-skeleton {
-  height: calc(5 * var(--luke-type-body-leading) + 2 * var(--luke-space-6) + 2px);
+  height: calc(
+    var(--automation-prompt-rows) *
+    var(--luke-type-body-leading) +
+    2 *
+    var(--luke-space-6) +
+    2px
+  );
 }
 
 /* The servers left on, by their marks, inside the servers row's field chip. */
@@ -4806,40 +4806,6 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-/* The page while a version is read (`version-view.tsx`): each section's
-   heading a block in a heading's type over its lines in the body's, as far
-   apart as the plan's own sections stand. */
-.version-skeleton-section + .version-skeleton-section {
-  margin-top: var(--luke-space-24);
-}
-
-.version-skeleton-heading {
-  margin-bottom: var(--luke-space-8);
-  font-size: 1.35em;
-}
-
-/* The moment's place in the toolbar while the versions are read, in the
-   title's type. */
-.version-skeleton-title {
-  font-size: var(--luke-type-dialog-size);
-}
-
-/* A row while the versions are read: the author's block over the summary's,
-   in a row's own type and room, so the rows land where the blocks stood. */
-.version-skeleton-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-  padding: var(--luke-space-8) var(--row-inset);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.version-skeleton-author {
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
 }
 
 /* No call bar stands below a version, so it needs no room under its last line. */
