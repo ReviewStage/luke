@@ -182,6 +182,15 @@ test("the button opens the menu on its first item, the arrows pass over a dimmed
   expect(more.getAttribute("aria-expanded")).toBe("false");
 });
 
+test("typing the start of an item's name moves to it, as a system menu's typeahead does", () => {
+  mount(createElement(Harness, { groups: taskGroups([]) }));
+  press(button("More"));
+  expect(focused()).toBe("Rename");
+  key("a");
+  key("r");
+  expect(focused()).toBe("Archive");
+});
+
 test("Escape closes the menu with focus back on its button, and a second press on the button closes it too", () => {
   mount(createElement(Harness, { groups: taskGroups([]) }));
   const more = button("More");
