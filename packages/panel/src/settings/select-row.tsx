@@ -4,7 +4,7 @@ import type { ActionResult } from "@luke/wire";
 import { PickerRow } from "./picker-row.js";
 
 /** What the menu says when a search over a short fixed set matches nothing, which it has no search to say. */
-const NO_MATCH = "Nothing matches.";
+const NO_MATCH = "No options match";
 
 /**
  * A settings pop-up: its name, optional why, and one value from a small fixed

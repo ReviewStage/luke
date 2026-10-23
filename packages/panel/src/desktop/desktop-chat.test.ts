@@ -1270,8 +1270,8 @@ test("an @ or a # word that names nothing says so, and Enter there still posts t
   pressInComposer(box, "Enter");
   await settle();
 
-  assert.equal(nobody, "Nothing matches");
-  assert.equal(nowhere, "Nothing matches");
+  assert.equal(nobody, "No results match");
+  assert.equal(nowhere, "No results match");
   assert.deepEqual(words(page).slice(-2), ["ask @zzz", "see #zzz"]);
   assert.equal(boxWords(box), "");
 });

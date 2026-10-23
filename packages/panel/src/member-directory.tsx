@@ -31,6 +31,8 @@ export interface Directory {
   readonly workspaceId?: string | undefined;
   /** Whether the members or who left are still being read, neither read refused. */
   readonly reading: boolean;
+  /** Whether the members alone are still being read and not refused, which a menu of them says whatever became of the read of who left. */
+  readonly membersReading: boolean;
   /** Whether the members read or the read of who left was refused, until Retry asks again. */
   readonly refused: boolean;
   /** Reads again whichever of the members and who left was refused. */
@@ -42,6 +44,7 @@ const DirectoryContext = createContext<Directory>({
   readerId: undefined,
   former: undefined,
   reading: false,
+  membersReading: false,
   refused: false,
   retry: () => undefined,
 });
@@ -63,6 +66,7 @@ export function MemberDirectory({
   } = useWorkspaceMembersRead(workspace);
   const { former, refused: formerRefused, retry: retryFormer } = useFormerMembersRead(workspace);
   const refused = membersRefused || formerRefused;
+  const membersReading = workspace !== undefined && !membersRefused && members === undefined;
   const reading =
     workspace !== undefined && !refused && (members === undefined || former === undefined);
   // Note that Retry asks again only for a read that was refused, so the one that answered stays drawn meanwhile.
@@ -74,8 +78,8 @@ export function MemberDirectory({
   // face and name inside it is drawn again for a new one.
   const workspaceId = workspace?.id;
   const directory = useMemo(
-    () => ({ members, readerId, former, workspaceId, reading, refused, retry }),
-    [members, readerId, former, workspaceId, reading, refused, retry],
+    () => ({ members, readerId, former, workspaceId, reading, membersReading, refused, retry }),
+    [members, readerId, former, workspaceId, reading, membersReading, refused, retry],
   );
   return <DirectoryContext.Provider value={directory}>{children}</DirectoryContext.Provider>;
 }

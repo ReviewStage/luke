@@ -41,7 +41,7 @@ const WORDS = {
   REMOVE: "Remove",
   REMOVING: "Removing",
   SEARCH: "Search repositories",
-  NO_MATCH: "No matching repositories",
+  NO_MATCH: "No repositories match",
   NONE: "No repositories",
   READING: "Loading repositories",
   NOT_READ: "The repositories could not be read.",
