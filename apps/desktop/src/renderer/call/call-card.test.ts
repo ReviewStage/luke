@@ -4,7 +4,12 @@ import assert from "node:assert/strict";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
-import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-tile";
+import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-label";
+// Note that a call's video is loaded as the card and the agent's tab load it,
+// on first use (`@luke/panel`'s `experiments-on-demand.ts`), so the modules
+// are read here first and their load settles within the test's own ticks.
+import "@luke/panel/call/call-video-tile";
+import "@luke/panel/call/video-calls";
 import { AgentCallVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
 import { fakeActPortAnswering, fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
@@ -134,7 +139,7 @@ const card = (page: HTMLElement) => page.querySelector<HTMLElement>("section.cal
 const tileIn = (scope: Element | null) =>
   scope?.querySelector<HTMLElement>(`section[aria-label="${CALL_VIDEO_LABEL.TILE}"]`) ?? null;
 
-test("with video on, the card draws Luke's video over the plan's name, on the track it is handed, and with none to offer it is the card alone", () => {
+test("with video on, the card draws Luke's video over the plan's name, on the track it is handed, and with none to offer it is the card alone", async () => {
   const dock = (call: CallCardInput) =>
     createElement(CallCardDock, { call, surface: CALL_CARD_SURFACE.FLOATING });
   const container = document.createElement("div");
@@ -144,6 +149,7 @@ test("with video on, the card draws Luke's video over the plan's name, on the tr
   const registry = AtomRegistry.make();
   const video = { status: AVATAR_STATUS.LIVE, track: VIDEO, onSetVideo: () => undefined };
   act(() => root.render(onRegistry(registry, dock({ ...CARD, video }))));
+  await settle();
   const tile = tileIn(card(container));
   assert.ok(tile, "the card draws the video tile");
   // SAFETY: the stream global is stubbed with FakeMediaStream, so the tile made this one.

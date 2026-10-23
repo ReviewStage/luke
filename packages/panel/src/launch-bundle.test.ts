@@ -8,7 +8,10 @@ import { it } from "vitest";
  * launch-bundle.test.ts -- what `app.tsx` imports statically is what every
  * launch of the window parses, so the settings pages behind Settings' `lazy()`
  * boundary and a fixture run's synthetic tasks, which a live run never draws,
- * stay out of that reach, loaded by a dynamic `import()` where they are drawn.
+ * stay out of that reach, loaded by a dynamic `import()` where they are drawn;
+ * and so do the experiments' surfaces, which an account with them off never
+ * draws (`experiments-on-demand.ts`), the avatar the window's root mounts
+ * beside `App` (`call/panel-avatar.tsx`) among them.
  * Reads the panel's own source: a module reached only through `import()`,
  * a type-only import, or another package is not followed.
  */
@@ -50,4 +53,17 @@ it("the app's static imports reach no settings page and no fixture's tasks", () 
   // The panel statically imports every page, so reaching it is reaching them all.
   assert.equal(reached.has("settings/settings-panel.tsx"), false);
   assert.equal(reached.has("tasks/tasks-fixture.ts"), false);
+});
+
+it("the window's static imports reach no surface of an experiment", () => {
+  const reached = new Set([...reachedFrom("app.tsx"), ...reachedFrom("call/panel-avatar.tsx")]);
+  // Chat, its place and its plan tab alike, which draws the pane.
+  assert.equal(reached.has("desktop/desktop-chat.tsx"), false);
+  assert.equal(reached.has("tasks/chat-pane.tsx"), false);
+  // A cloud Browser tab.
+  assert.equal(reached.has("tasks/cloud-browser-pane.tsx"), false);
+  // A video call: the avatar's session, its tile, and what draws them.
+  assert.equal(reached.has("call/call-avatar.ts"), false);
+  assert.equal(reached.has("call/call-video-tile.tsx"), false);
+  assert.equal(reached.has("call/video-calls.tsx"), false);
 });

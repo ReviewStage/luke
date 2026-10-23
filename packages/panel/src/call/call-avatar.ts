@@ -51,6 +51,12 @@ import { tellAct } from "../act.js";
 import { appBridge } from "../app-bridge.js";
 import { avatarSessionAtom } from "../bundle-loader.js";
 import { rendererRegistry, rendererRuntime } from "../renderer-runtime.js";
+import {
+  avatarGrantAtom,
+  bridgeSubscription,
+  type CallAvatarTracks,
+  NO_AVATAR_TRACKS,
+} from "./avatar-grant.js";
 
 /** How long a refused play of the avatar's voice waits to be asked again, as the voice window's own element does. */
 const AUDIO_RETRY_MS = 1_000;
@@ -65,14 +71,6 @@ export interface CallAvatarDoors {
   readonly report: (avatar: AvatarReport) => Effect.Effect<void>;
   readonly module: Effect.Effect<AvatarSessionModule, Error>;
 }
-
-/** The avatar's two tracks, each once Keyframe has published it. */
-export interface CallAvatarTracks {
-  readonly video?: MediaStreamTrack;
-  readonly audio?: MediaStreamTrack;
-}
-
-export const NO_AVATAR_TRACKS: CallAvatarTracks = {};
 
 /** Why the session closed, as the document names an avatar's end. */
 const END_REASON_OF_CLOSE = {
@@ -216,41 +214,25 @@ export const callAvatar = (
     );
   });
 
-/** A bridge subscription as a stream, unsubscribed with the stream's scope. */
-const subscription = <A>(subscribe: (deliver: (value: A) => void) => () => void) =>
-  Stream.callback<A>((queue) =>
-    Effect.acquireRelease(
-      Effect.sync(() =>
-        subscribe((value) => {
-          Queue.offerUnsafe(queue, value);
-        }),
-      ),
-      (stop) => Effect.sync(stop),
-    ),
-  );
-
 /** The panel's own doors: main's two channels, the act it alone may send, and the SDK's bundle. */
 const windowDoors: CallAvatarDoors = {
-  feeds: subscription<AvatarFeed>((deliver) => appBridge().onAvatarFeed(deliver)),
+  feeds: bridgeSubscription<AvatarFeed>((deliver) => appBridge().onAvatarFeed(deliver)),
   report: (avatar) => Effect.sync(() => tellAct(ACT_KIND.AVATAR_REPORT, avatar)),
   module: AtomRegistry.getResult(rendererRegistry, avatarSessionAtom),
 };
 
 /**
- * The avatar the panel runs, as its tracks. Kept alive and mounted at the
- * renderer's root before anything is drawn, whatever tab is shown and while
- * the panel is hidden, because main hands a page the standing grant once it
- * has drawn its first frame, a subscription made later would miss it, and
- * the avatar's voice is what the developer hears. Only the panel is ever
- * handed a grant.
+ * The avatar the panel runs, as its tracks, over the grant held since
+ * before the first draw (`avatar-grant.ts`). Read from the renderer's root
+ * whatever tab is shown and while the panel is hidden, because the avatar's
+ * voice is what the developer hears, but only while the Video calls
+ * experiment is on (`panel-avatar.tsx`'s `panelAvatarAtom`): switched off,
+ * nothing reads it, and its scope closes the session standing. Only the
+ * panel is ever handed a grant.
  */
-export const callAvatarAtom = Atom.keepAlive(
-  rendererRuntime.atom(
-    callAvatar(
-      subscription<AvatarGrant | undefined>((deliver) => appBridge().onAvatarSession(deliver)),
-      windowDoors,
-    ),
-  ),
+export const callAvatarAtom = rendererRuntime.atom((get) =>
+  // Note that the grant's stream never fails, so a failure here is a defect.
+  callAvatar(get.streamResult(avatarGrantAtom).pipe(Stream.orDie), windowDoors),
 );
 
 /** The element the tile plays the avatar's voice on, while it is drawn. */

@@ -243,8 +243,8 @@ export function appSettingsNow(): AppSettingsView | undefined {
   return stored ? appSettingsView(stored) : undefined;
 }
 
-/** Whether the account has one experiment on, an atom per experiment, which tells its readers only as that one turns. */
-const experimentAtom = Atom.family((experiment: Experiment) =>
+/** Whether the account has one experiment on, an atom per experiment, which tells its readers only as that one turns: what `useExperiment` reads, and what an atom gated on an experiment derives from. */
+export const experimentAtom = Atom.family((experiment: Experiment) =>
   Atom.map(APP_SLICE.SETTINGS, (settings) =>
     experimentOn(settings?.experiments ?? NO_EXPERIMENTS, experiment),
   ),

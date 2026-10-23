@@ -60,8 +60,10 @@ import {
   OPENING_VIEW,
 } from "./cloud-browser-live.js";
 import {
+  browserOf,
   CLOUD_BROWSER_AGENT_RECENT,
   type CloudBrowserDraft,
+  type CloudBrowserOwner,
   noteOpenedCloudTab,
 } from "./cloud-browser-tabs.js";
 
@@ -141,17 +143,6 @@ function fitted(body: CloudBrowserViewport, aspect: number | undefined): CloudBr
   if (aspect === undefined || body.width < 1 || body.height < 1) return body;
   const width = Math.min(body.width, body.height * aspect);
   return { width: Math.floor(width), height: Math.floor(width / aspect) };
-}
-
-/** Whose browser a cloud Browser tab lives in: its agent's name, or Luke's, and the glyph its strip tab and its card wear. */
-export interface CloudBrowserOwner {
-  readonly name: string;
-  readonly icon: React.JSX.Element;
-}
-
-/** What a browser is called by whose it is: "Invite expiry's browser", and "Invite emails' browser" for a name that ends in an s. */
-export function browserOf(name: string): string {
-  return name.endsWith("s") ? `${name}' browser` : `${name}'s browser`;
 }
 
 /** Why a draft did not open, in words, naming the agent where the reason is its. */

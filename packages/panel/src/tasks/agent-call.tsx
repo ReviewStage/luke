@@ -25,7 +25,7 @@ import {
 } from "@luke/voice/voice-view";
 import { createContext, type ReactNode, useContext } from "react";
 import { useAct } from "../act.js";
-import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
+import { CALL_VIDEO_LABEL } from "../call/call-video-label.js";
 import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";

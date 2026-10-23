@@ -41,6 +41,10 @@ import { tasksControl } from "../testing/tasks-control.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
 // module is read here first and its load settles within the test's own ticks.
 import "./desktop-settings.js";
+// Note that Chat is loaded as the shell loads it, on first use
+// (`experiments-on-demand.ts`), so the module is read here first and its load
+// settles within the test's own ticks.
+import "./desktop-chat.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
 

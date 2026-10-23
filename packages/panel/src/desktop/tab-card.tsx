@@ -12,7 +12,7 @@ import { AgentCard, type AgentSubject } from "../tasks/agent-ref.js";
 import { AgentTabCard, type CardReading } from "../tasks/agent-tab-card.js";
 import { ChangesCard } from "../tasks/changes-card.js";
 import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
-import { browserOf } from "../tasks/cloud-browser-pane.js";
+import { browserOf } from "../tasks/cloud-browser-tabs.js";
 import { FileCard } from "../tasks/file-ref.js";
 import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { PageCard, PageNameCard } from "../tasks/page-card.js";

@@ -24,6 +24,7 @@ import {
   type SettingsSectionSkeletonShape,
   Shortcut,
   SidebarIcon,
+  SpinnerRegion,
   Tooltip,
   useDrawerSwipe,
 } from "@luke/ui";
@@ -35,6 +36,7 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
+import { CHAT_PLACE } from "../experiments-on-demand.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -66,9 +68,9 @@ import {
   AutomationsToolbar,
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
+import { useChatSurface } from "./chat-surface.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
-import { DesktopChat, useChatSurface } from "./desktop-chat.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -873,13 +875,16 @@ export function DesktopShell({
           <ChipCards value={chipCards}>
             {chatOpen ? (
               <PageFind page={FIND_PAGE.CHAT} active={tasks.shown}>
-                <DesktopChat
-                  tasks={chatSurface}
-                  room={room}
-                  accountName={
-                    account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined
-                  }
-                />
+                {/* Chat is an experiment, a chunk of its own read the first time it opens (`experiments-on-demand.ts`). */}
+                <Suspense fallback={<SpinnerRegion delay label="Loading chat" />}>
+                  <CHAT_PLACE.Route
+                    tasks={chatSurface}
+                    room={room}
+                    accountName={
+                      account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined
+                    }
+                  />
+                </Suspense>
               </PageFind>
             ) : inboxOpen ? (
               <DesktopInbox tasks={tasks} listing={sharedListing} room={room} />

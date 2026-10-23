@@ -29,15 +29,16 @@ import {
   type AnimationEvent,
   createContext,
   type ReactNode,
+  Suspense,
   useContext,
   useRef,
   useState,
 } from "react";
 import type { ActHandle } from "../act.js";
+import { CALL_VIDEO_TILE, VIDEO_TOGGLE } from "../experiments-on-demand.js";
 import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts.js";
 import { useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
-import { CallVideoTile, VideoToggle } from "./call-video-tile.js";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
 function returnLabel(taskName: string): string {
@@ -175,15 +176,24 @@ export function CallCard({
       data-leaving={leaving}
       onAnimationEnd={left}
     >
+      {/* The tile and Video on are the Video calls experiment's, chunks of their own (`experiments-on-demand.ts`). */}
       {tiled ? (
-        <CallVideoTile video={video.track} status={video.status} onSetVideo={video.onSetVideo} />
+        <Suspense fallback={null}>
+          <CALL_VIDEO_TILE.Route
+            video={video.track}
+            status={video.status}
+            onSetVideo={video.onSetVideo}
+          />
+        </Suspense>
       ) : null}
       <div className="call-card-head">
         <p className="call-card-title">
           <OneLine>{card.taskName}</OneLine>
         </p>
         {video?.status === AVATAR_STATUS.OFF ? (
-          <VideoToggle on={false} onSetVideo={video.onSetVideo} />
+          <Suspense fallback={null}>
+            <VIDEO_TOGGLE.Route on={false} onSetVideo={video.onSetVideo} />
+          </Suspense>
         ) : null}
         {/* The floating window is too small to hold a tooltip, so there the
             system's own hint names the task the button opens. */}

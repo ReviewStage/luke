@@ -25,7 +25,8 @@ import type { WhiteboardModule } from "./whiteboard/contract.js";
  * failed is not, so the next surface to read it imports it again, as a
  * connection that dropped for a moment has come back. A call's avatar is
  * the shell's to reach, imported through what it installed
- * (`shell-bundles.ts`).
+ * (`shell-bundles.ts`); the panel's own end of it, which runs that session,
+ * is read only while the Video calls experiment is on.
  *
  * A surface reads its bundle through `useSideBundles`, whose atoms are built
  * over `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
@@ -139,6 +140,16 @@ export const SIDE_BUNDLES = sideBundles();
  */
 export const avatarSessionAtom = bundleAtom(
   () => shellBundles().avatarSession(),
+  "The video could not be started.",
+);
+
+/**
+ * The avatar the panel runs (`call/call-avatar.ts`), the Video calls
+ * experiment's alone, so its code is read only once that is on
+ * (`call/panel-avatar.tsx`'s `panelAvatarAtom`), as the atom it exports.
+ */
+export const callAvatarBundleAtom = bundleAtom(
+  () => import("./call/call-avatar.js").then((entry) => entry.callAvatarAtom),
   "The video could not be started.",
 );
 

@@ -83,6 +83,7 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
+import { CLOUD_BROWSER_DRAFT, CLOUD_BROWSER_TAB } from "../experiments-on-demand.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
@@ -101,12 +102,8 @@ import {
 } from "../tasks/agent-tab-card.js";
 import { peopleOf } from "../tasks/changes-card.js";
 import {
-  CloudBrowserDraftPane,
-  type CloudBrowserOwner,
-  CloudBrowserPane,
-} from "../tasks/cloud-browser-pane.js";
-import {
   type CloudBrowserDraft,
+  type CloudBrowserOwner,
   discardCloudDraft,
   startCloudDraft,
   useCloudBrowserDrafts,
@@ -1781,27 +1778,32 @@ function TabContent({
     const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
     // The tab stands for one the service no longer lists only until the panel moves on, a render away.
     if (drawn === undefined) return <SpinnerRegion delay label="Loading page" />;
+    // The Browser tab is an experiment, a chunk of its own read the first time one is drawn (`experiments-on-demand.ts`).
     if ("draft" in drawn) {
       return (
-        <CloudBrowserDraftPane
-          key={drawn.id}
-          taskId={taskId}
-          draft={drawn.draft}
-          owner={drawn.owner}
-          onOpened={(opened) => cloudDrafts.onOpened(drawn.id, opened)}
-          onDiscard={() => cloudDrafts.onDiscard(drawn.id)}
-        />
+        <Suspense key={drawn.id} fallback={<SpinnerRegion delay label="Loading page" />}>
+          <CLOUD_BROWSER_DRAFT.Route
+            taskId={taskId}
+            draft={drawn.draft}
+            owner={drawn.owner}
+            onOpened={(opened) => cloudDrafts.onOpened(drawn.id, opened)}
+            onDiscard={() => cloudDrafts.onDiscard(drawn.id)}
+          />
+        </Suspense>
       );
     }
     return (
-      <CloudBrowserPane
-        key={tab.cloudBrowser}
-        taskId={taskId}
-        tab={drawn.tab}
-        owner={drawn.owner}
-        shown={shown}
-        memberName={(userId) => directory.members?.find((member) => member.userId === userId)?.name}
-      />
+      <Suspense key={tab.cloudBrowser} fallback={<SpinnerRegion delay label="Loading page" />}>
+        <CLOUD_BROWSER_TAB.Route
+          taskId={taskId}
+          tab={drawn.tab}
+          owner={drawn.owner}
+          shown={shown}
+          memberName={(userId) =>
+            directory.members?.find((member) => member.userId === userId)?.name
+          }
+        />
+      </Suspense>
     );
   }
   if (isTerminalTab(tab)) {

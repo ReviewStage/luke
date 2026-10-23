@@ -32,6 +32,17 @@ import { useEffect, useSyncExternalStore } from "react";
 import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 
+/** Whose browser a cloud Browser tab lives in: its agent's name, or Luke's, and the glyph its strip tab and its card wear. */
+export interface CloudBrowserOwner {
+  readonly name: string;
+  readonly icon: React.JSX.Element;
+}
+
+/** What a browser is called by whose it is: "Invite expiry's browser", and "Invite emails' browser" for a name that ends in an s. */
+export function browserOf(name: string): string {
+  return name.endsWith("s") ? `${name}' browser` : `${name}'s browser`;
+}
+
 /** How long after a follow broke or ended the tabs are read and followed again. */
 export const CLOUD_BROWSER_TABS_AGAIN = Duration.seconds(5);
 

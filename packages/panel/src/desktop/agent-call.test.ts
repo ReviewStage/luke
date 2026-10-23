@@ -19,7 +19,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
-import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
+import { CALL_VIDEO_LABEL } from "../call/call-video-label.js";
+// Note that a call's video is loaded as the agent's tab loads it, on first use
+// (`experiments-on-demand.ts`), so the module is read here first and its load
+// settles within the test's own ticks.
+import "../call/video-calls.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { handState } from "../testing/app-state.js";

@@ -41,16 +41,7 @@ import {
 } from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-/** What the tile says, for a reader and on screen. */
-export const CALL_VIDEO_LABEL = {
-  TILE: "Video call",
-  CONNECTING: "Connecting video",
-  ENDED: "Video ended",
-  VIDEO_OFF: "Turn video off",
-  VIDEO_ON: "Turn video on",
-  RESTART: "Restart video",
-} as const;
+import { CALL_VIDEO_LABEL } from "./call-video-label.js";
 
 /** Plays one track on the element it is handed, for as long as the track stands. */
 function useTrack(

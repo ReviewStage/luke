@@ -15,13 +15,8 @@ import {
 } from "@luke/voice/avatar";
 import { Deferred, Effect, Option, Queue, Stream } from "effect";
 import { Base64 } from "effect/encoding";
-import {
-  type AvatarReport,
-  type CallAvatarDoors,
-  type CallAvatarTracks,
-  callAvatar,
-  NO_AVATAR_TRACKS,
-} from "./call-avatar.js";
+import { type CallAvatarTracks, NO_AVATAR_TRACKS } from "./avatar-grant.js";
+import { type AvatarReport, type CallAvatarDoors, callAvatar } from "./call-avatar.js";
 
 /**
  * call-avatar.test.ts -- the call window's avatar over a fake Keyframe session: the grants main hands it, the feed it maps, and the reports it makes.

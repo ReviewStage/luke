@@ -6,7 +6,8 @@ import { AVATAR_STATUS } from "@luke/voice/avatar";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { AvatarVoice, CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile.js";
+import { CALL_VIDEO_LABEL } from "./call-video-label.js";
+import { AvatarVoice, CallVideoTile } from "./call-video-tile.js";
 
 type TileProps = Parameters<typeof CallVideoTile>[0];
 type VoiceProps = Parameters<typeof AvatarVoice>[0];

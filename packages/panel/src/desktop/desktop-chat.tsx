@@ -87,10 +87,10 @@ import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
+import type { ChatSurface } from "./chat-surface.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
@@ -149,65 +149,6 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * moves anything else draws none of Chat. The rail is read once per chat,
  * names, and grouping, and each place's time counts the minute itself.
  */
-
-/**
- * What Chat reads of the window's tasks, and nothing else: the chat's own
- * control, the tasks and workspaces it names, how the sidebar groups them,
- * the reader, the agents' models a card names, and the doors it opens a
- * task, an agent, and a file through.
- */
-export type ChatSurface = Pick<
-  TasksControl,
-  | "chatView"
-  | "tasks"
-  | "workspace"
-  | "workspaces"
-  | "taskSections"
-  | "me"
-  | "repositories"
-  | "onShowAgent"
-  | "onSelect"
-  | "onShowFile"
-  | "shown"
-> & { readonly agents: Pick<TasksControl["agents"], "models"> };
-
-/** What Chat reads of the window's tasks, the one value while none of it moves, so Chat holds (`memo`) through a delivery that moves only the rest. */
-export function useChatSurface(tasks: TasksControl): ChatSurface {
-  const { chatView, workspace, workspaces, taskSections, me, repositories, shown } = tasks;
-  const { onShowAgent, onSelect, onShowFile } = tasks;
-  const listed = tasks.tasks;
-  const { models } = tasks.agents;
-  return useMemo(
-    () => ({
-      chatView,
-      tasks: listed,
-      workspace,
-      workspaces,
-      taskSections,
-      me,
-      repositories,
-      onShowAgent,
-      onSelect,
-      onShowFile,
-      shown,
-      agents: { models },
-    }),
-    [
-      chatView,
-      listed,
-      workspace,
-      workspaces,
-      taskSections,
-      me,
-      repositories,
-      onShowAgent,
-      onSelect,
-      onShowFile,
-      shown,
-      models,
-    ],
-  );
-}
 
 /** The workspace a chip's link is written in, the chat's own; none while no workspace is listed. */
 function mentionPlaceOf(workspace: ChatSurface["workspace"]): MentionPlace | undefined {

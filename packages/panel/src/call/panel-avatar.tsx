@@ -9,61 +9,62 @@
  * speaks into, and on the call card wherever the window docks it.
  * Both draw the one track the session published, each on an element of its
  * own, so a second view costs no second subscription and never drifts from
- * the first.
+ * the first. Only the gates are here, in the bundle every window parses:
+ * the session and what draws it are chunks of their own, read only while
+ * the Video calls experiment is on (`video-calls.tsx`).
  */
 
-import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
+import { useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import {
-  cssCustomProperties,
-  RESIZE_CORNER,
-  ResizeCorner,
-  type ResizeCornerSide,
-  ResizeFrame,
-  type ResizeTravel,
-} from "@luke/ui";
 import { agentCallVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useMemo, useState } from "react";
+import * as Atom from "effect/reactivity/Atom";
+import { Suspense, useMemo } from "react";
 import { useAct } from "../act.js";
-import { useExperiment } from "../use-app-state.js";
-import { useStandingVoiceView, useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
-import { avatarViewShareAtom } from "./avatar-view.js";
-import {
-  type CallAvatarTracks,
-  callAvatarAtom,
-  callAvatarAudioElementAtom,
-  callAvatarPlaybackAtom,
-  NO_AVATAR_TRACKS,
-} from "./call-avatar.js";
+import { callAvatarBundleAtom } from "../bundle-loader.js";
+import { AGENT_CALL_VIDEO, AVATAR_VOICE } from "../experiments-on-demand.js";
+import { experimentAtom, useExperiment } from "../use-app-state.js";
+import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
+import { avatarGrantAtom, type CallAvatarTracks, NO_AVATAR_TRACKS } from "./avatar-grant.js";
 import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card.js";
-import { AvatarVoice, CallVideoTile } from "./call-video-tile.js";
-import { CALL_VIDEO_HEIGHT, useCallVideoHeight } from "./use-call-video-size.js";
+
+/**
+ * The avatar's tracks as published so far, none before a session stands,
+ * and none while the Video calls experiment is off: only then is the
+ * avatar's code read (`bundle-loader.ts`'s `callAvatarBundleAtom`) and its
+ * session run over the grant main hands (`avatar-grant.ts`), which is
+ * listened to whatever the experiment, because main hands the standing one
+ * only once, as the page first draws. Mounted at the renderer's root before
+ * anything is drawn, so the grant is never missed and the avatar runs
+ * whatever tab is shown and while the panel is hidden.
+ */
+export const panelAvatarAtom: Atom.Atom<CallAvatarTracks> = Atom.make((get) => {
+  get.mount(avatarGrantAtom);
+  if (!get(experimentAtom(EXPERIMENT.VIDEO_CALLS))) return NO_AVATAR_TRACKS;
+  const avatar = AsyncResult.value(get(callAvatarBundleAtom));
+  if (Option.isNone(avatar)) return NO_AVATAR_TRACKS;
+  return Option.getOrElse(AsyncResult.value(get(avatar.value)), () => NO_AVATAR_TRACKS);
+});
 
 /** The avatar's tracks as published so far, none before a session stands. */
 function useAvatarTracks(): CallAvatarTracks {
-  return Option.getOrElse(AsyncResult.value(useAtomValue(callAvatarAtom)), () => NO_AVATAR_TRACKS);
+  return useAtomValue(panelAvatarAtom);
 }
 
 /**
  * The avatar's voice, mounted once at the panel's root and played for as
- * long as its track stands, and beside it the panel's end of the call
- * window's view of the video, which only the call window offers.
+ * long as its track stands (`video-calls.tsx`), drawn only while the Video
+ * calls experiment is on, so its code is read only then.
  */
-export function PanelAvatarVoice(): React.JSX.Element {
-  useAtomMount(callAvatarPlaybackAtom);
-  useAtomMount(avatarViewShareAtom);
-  const { view } = useVoiceView();
-  const setAudioElement = useAtomSet(callAvatarAudioElementAtom);
+export function PanelAvatarVoice(): React.JSX.Element | null {
+  if (!useExperiment(EXPERIMENT.VIDEO_CALLS)) return null;
   return (
-    <AvatarVoice
-      audio={useAvatarTracks().audio}
-      speakerMuted={view.speakerMuted}
-      onAudioElement={setAudioElement}
-    />
+    <Suspense fallback={null}>
+      <AVATAR_VOICE.Route />
+    </Suspense>
   );
 }
 
@@ -94,86 +95,19 @@ export function useAgentCallVideo(agentId: string): AgentCallVideoState {
   };
 }
 
-/** What the video's resize controls are called, for a reader and the keyboard. */
-const CALL_VIDEO_RESIZE_LABEL = {
-  [RESIZE_CORNER.LEFT]: "Resize video from its top-left corner",
-  [RESIZE_CORNER.RIGHT]: "Resize video from its top-right corner",
-} as const;
-
-/** How far one arrow press on a corner grows or shrinks the video, in CSS pixels. */
-const KEY_STEP = 16;
-
-/** The stock avatars stream a square picture, which is what the video stands at until its own is known. */
-const SQUARE = 1;
-
-/**
- * How much a drag from a corner grows the video, in height: the way it went
- * up, or the way it went out sideways, whichever is the longer pull. The
- * video stands centred, so a corner moves out by half of what its width
- * grows, which is that over the aspect in height.
- */
-function cornerGrowth(corner: ResizeCornerSide, aspect: number, travel: ResizeTravel): number {
-  const up = -travel.y;
-  const out = corner === RESIZE_CORNER.LEFT ? -travel.x : travel.x;
-  const sideways = (2 * out) / aspect;
-  return Math.abs(sideways) > Math.abs(up) ? sideways : up;
-}
-
 /**
  * Luke's video while a call into one agent stands, in its own room between
- * the agent's transcript and its composer (desktop.css), so the transcript
- * ends above it and nothing is ever drawn over the words. It stands centred
- * in that room, a rectangle at the picture's own aspect that the picture
- * fills, as tall as the developer left it (`use-call-video-size.ts`), 120 px on
- * a first call. Hovering it, or a drag or a key on its controls, brings out
- * how it resizes: a handle on each top corner, since it grows upward. Nothing at all once video is off, so the room goes with it.
- * Video on and off are the composer's (`agent-call.tsx`), so the video
- * offers neither.
+ * the agent's transcript and its composer (`video-calls.tsx`), its code read
+ * the first time there is a video to draw. Nothing at all once video is off,
+ * so the room goes with it.
  */
 export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Element | null {
-  const { status, video, onSetVideo } = useAgentCallVideo(agentId);
-  const { height, onResize } = useCallVideoHeight();
-  const [aspect, setAspect] = useState(SQUARE);
-  const [hovered, setHovered] = useState(false);
-  const [dragging, setDragging] = useState(false);
+  const { status } = useAgentCallVideo(agentId);
   if (status === undefined || status === AVATAR_STATUS.OFF) return null;
   return (
-    <div
-      className="agent-call-video"
-      data-reveal={String(hovered || dragging)}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
-      style={cssCustomProperties({
-        "--call-video-height": `${height}px`,
-        "--call-video-aspect": String(aspect),
-      })}
-    >
-      <div className="agent-call-video-frame">
-        <ResizeFrame reveal={hovered || dragging}>
-          <CallVideoTile
-            video={video}
-            status={status}
-            onSetVideo={onSetVideo}
-            toggles={false}
-            onAspect={setAspect}
-          />
-          {Object.values(RESIZE_CORNER).map((corner) => (
-            <ResizeCorner
-              key={corner}
-              corner={corner}
-              label={CALL_VIDEO_RESIZE_LABEL[corner]}
-              value={height}
-              min={CALL_VIDEO_HEIGHT.MIN}
-              max={CALL_VIDEO_HEIGHT.MAX}
-              step={KEY_STEP}
-              growth={(travel) => cornerGrowth(corner, aspect, travel)}
-              onResize={onResize}
-              onDragging={setDragging}
-            />
-          ))}
-        </ResizeFrame>
-      </div>
-    </div>
+    <Suspense fallback={null}>
+      <AGENT_CALL_VIDEO.Route agentId={agentId} />
+    </Suspense>
   );
 }
 

@@ -13,6 +13,7 @@ import {
   Fill,
   SKELETON_SHAPE,
   Skeleton,
+  SpinnerRegion,
   useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
@@ -22,11 +23,12 @@ import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
-import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Fragment, memo, Suspense, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { TASK_CHAT_TAB } from "../experiments-on-demand.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
@@ -83,7 +85,6 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import type { MenuAction } from "./action-menu.js";
 import { useAgentCallDoors, useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
-import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
@@ -1307,7 +1308,10 @@ function PlanDocument({
                               className="desktop-task-chat"
                               aria-label="Chat"
                             >
-                              <TaskChatTab tasks={tasks} taskId={task.id} />
+                              {/* Chat is an experiment, a chunk of its own read the first time its tab is drawn (`experiments-on-demand.ts`). */}
+                              <Suspense fallback={<SpinnerRegion delay label="Loading chat" />}>
+                                <TASK_CHAT_TAB.Route tasks={tasks} taskId={task.id} />
+                              </Suspense>
                             </Fill>
                           ) : undefined
                         }

@@ -45,6 +45,10 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import "../file-tree/index.js";
+// Note that a plan's Chat tab is loaded as the plan loads it, on first use
+// (`experiments-on-demand.ts`), so the module is read here first and its load
+// settles within the test's own ticks.
+import "./desktop-chat.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
