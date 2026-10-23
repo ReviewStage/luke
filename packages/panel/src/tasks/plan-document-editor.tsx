@@ -14,6 +14,7 @@ import {
   EDITABLE_TEXT_BLOCK_SELECTOR,
   EditableBlock,
   EditableHeading,
+  RetryButton,
 } from "@luke/ui";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
@@ -38,7 +39,6 @@ import {
   SLASH_INSERT,
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { RetryButton } from "../retry-button.js";
 import { useBlockPicker } from "./block-picker.js";
 import { useEditorPictures } from "./editor-pictures.js";
 import {

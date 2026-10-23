@@ -19,6 +19,7 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  PageToolbar,
   SpinnerRegion,
   Tooltip,
   useMenu,
@@ -440,22 +441,23 @@ export function DesktopAgentPage({
           tasks.onShowMention,
           readMentionAgents,
         );
-  const toolbar = (
-    <header className="desktop-toolbar">
-      {agent === undefined ? (
-        <div className="desktop-toolbar-heading" />
-      ) : (
-        <AgentPageHeading
-          agent={agent}
-          agents={control}
-          shown={tasks.shown}
-          terminals={terminalDoors}
-          onClose={tasks.agentView.onClose}
-          luke={luke}
-        />
-      )}
-    </header>
-  );
+  const toolbar =
+    agent === undefined ? (
+      <PageToolbar heading={null} />
+    ) : (
+      <PageToolbar
+        lead={
+          <AgentPageHeading
+            agent={agent}
+            agents={control}
+            shown={tasks.shown}
+            terminals={terminalDoors}
+            onClose={tasks.agentView.onClose}
+            luke={luke}
+          />
+        }
+      />
+    );
   if (agent === undefined) {
     return (
       <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">

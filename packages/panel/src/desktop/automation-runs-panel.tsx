@@ -26,6 +26,7 @@ import {
   LIST_ROW_CURRENT,
   List,
   ListRow,
+  PageToolbar,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -380,11 +381,13 @@ export function AutomationRunsScreen({
       aria-label="Runs"
       hidden={hidden}
     >
-      <header className="desktop-toolbar">
-        <div className="automation-runs-back">
-          <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
-        </div>
-      </header>
+      <PageToolbar
+        lead={
+          <div className="automation-runs-back">
+            <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
+          </div>
+        }
+      />
       <RunsBody {...shown} />
     </Fill>
   );
