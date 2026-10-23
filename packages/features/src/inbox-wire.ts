@@ -8,6 +8,7 @@ import {
   hasWordsOrFiles,
 } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { linkLabels } from "./mention-link.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import {
   CODE_PATH_MAX_CHARS,
@@ -965,23 +966,23 @@ const STARTED_TITLE_FALLBACK = "New thread";
 /** A code fence's line, which opens or closes a block and says nothing itself, its language among it. */
 const CODE_FENCE = /^\s*(?:```|~~~)/u;
 
+/** A thematic break's line, three or more of one of its marks alone, which separates and says nothing. */
+const THEMATIC_BREAK = /^\s*([-*_])(?:[ \t]*\1){2,}\s*$/u;
+
 /**
- * A line of Markdown as plain words: its heading, quote, or list mark, its
- * links' labels for the links, and no emphasis or code marks, an underscore
- * inside a word, as an identifier's, kept; nothing for a code fence's line.
+ * A line of Markdown as plain words: its heading, quote, or list mark, each
+ * link as its label or its mention's name (`linkLabels`), and no emphasis
+ * or code marks, an underscore inside a word, as an identifier's, kept;
+ * nothing for a code fence's line or a thematic break's.
  */
 function plainLine(line: string): string {
-  if (CODE_FENCE.test(line)) return "";
-  return (
-    line
-      .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
-      // Note that a label holds no bracket and an address no parenthesis, so a failed match stops at the next one and the scan stays linear.
-      .replace(/!?\[([^[\]]*)\]\([^()]*\)/gu, "$1")
-      .replace(/[*`~]/gu, "")
-      .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
-      .replace(/\s+/gu, " ")
-      .trim()
-  );
+  if (CODE_FENCE.test(line) || THEMATIC_BREAK.test(line)) return "";
+  return linkLabels(line.replace(/!\[/gu, "["))
+    .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
+    .replace(/[*`~]/gu, "")
+    .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 /** Words cut to a title's short line, on a word where one ends near the cut. */
