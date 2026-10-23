@@ -544,6 +544,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -615,6 +616,44 @@ function credentialMissingWords(
   return `Connect ${harness} in Settings to ${action}.`;
 }
 
+/** What a Start refused by the plan that would pay says, to its own member, who mends it in Settings. */
+const START_PLAN_REFUSAL = {
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+    "Your plan is signed out. Sign in again in Settings to start an agent.",
+  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+    "Your plan isn't eligible to run this agent. Choose your API key in Settings to start one.",
+} as const;
+
+/** The one sentence an unreadable API key says: what happened, and that saving it again unblocks the action. */
+function keyUnreadableWords(action: (typeof ACTION)[keyof typeof ACTION]): string {
+  return `Your saved API key can't be read. Save it again in Settings to ${action}.`;
+}
+
+/**
+ * The note of a refusal Settings › Agents mends, whose press opens it: a
+ * missing credential, an API key saved but unreadable, and, on a Start,
+ * whose caller is the plan's own member, a plan signed out or ineligible.
+ * None else; Retry alone answers every other.
+ */
+function settingsFailure(
+  refused: RefusedCall,
+  action: (typeof ACTION)[keyof typeof ACTION],
+): Failure | undefined {
+  switch (refused.failure) {
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+      return credentialMissingFailure(refused, action);
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+      return { reason: FAILURE_REASON.CONNECT_AGENTS, text: keyUnreadableWords(action) };
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+      return action === ACTION.START
+        ? { reason: FAILURE_REASON.CONNECT_AGENTS, text: START_PLAN_REFUSAL[refused.failure] }
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
 /** A missing credential's note, whose press opens Settings › Agents. */
 function credentialMissingFailure(
   refused: RefusedCall,
@@ -682,10 +721,10 @@ export function startFailureNote(refused: RefusedCall, taskId: string | null): F
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
   }
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    return credentialMissingFailure(refused, ACTION.START);
-  }
-  return callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure));
+  return (
+    settingsFailure(refused, ACTION.START) ??
+    callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure))
+  );
 }
 
 /** A refused call's words, which trying again mends. */
@@ -806,14 +845,34 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return SHARED_FAILURE_NOTE[failure];
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.START);
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+      return keyUnreadableWords(ACTION.START);
   }
 }
 
-/** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
+/** What a teammate's agent says to a message its starter's own key refused: theirs to save in their Settings, which the reader's mend nothing of. */
+function starterKeyWords(failure: CodingAgentCallFailure, starter: string): string | undefined {
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE) {
+    return `${starter}'s saved API key can't be read. They save it again in Settings to unblock this agent.`;
+  }
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    return `${starter} has no API key or plan connected for this agent. They connect one in Settings to unblock it.`;
+  }
+  return undefined;
+}
+
+/**
+ * What a message that did not reach the agent says under the composer, and
+ * what mends it, on a task or, for an agent with none, where the remedy needs
+ * no task. A teammate's agent (`starter`, `teammateStarter`) runs on its
+ * starter's credentials, so a refusal of theirs names them and offers the
+ * reader no Settings of their own.
+ */
 export function messageFailureNote(
   refused: RefusedCall,
   taskId: string | null,
   payer?: CodingAgentPayer | undefined,
+  starter?: string | undefined,
 ): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
@@ -821,12 +880,18 @@ export function messageFailureNote(
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
   // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    return payer === CODING_AGENT_PAYER.LUKE
-      ? callFailure(LUKE_PAID_REFUSAL)
-      : credentialMissingFailure(refused, ACTION.MESSAGE);
+  if (
+    refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
+    payer === CODING_AGENT_PAYER.LUKE
+  ) {
+    return callFailure(LUKE_PAID_REFUSAL);
   }
-  return callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure));
+  const theirs = starter === undefined ? undefined : starterKeyWords(refused.failure, starter);
+  if (theirs !== undefined) return callFailure(theirs);
+  return (
+    settingsFailure(refused, ACTION.MESSAGE) ??
+    callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure))
+  );
 }
 
 /** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are. */
@@ -858,6 +923,8 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
       return SHARED_FAILURE_NOTE[failure];
     case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.MESSAGE);
+    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+      return keyUnreadableWords(ACTION.MESSAGE);
   }
 }
 
