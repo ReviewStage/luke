@@ -1,0 +1,90 @@
+/* rolling-number.css -- a count's digits in tabular figures, each in a slot
+   clipped to its line, so a digit that changed rolls through its slot on
+   `transform` while the line keeps its size. The digit arriving rides the
+   pair every arriving element rides, a fade and travel on the spring, and
+   the one leaving travels the same beat out the other side as it fades,
+   so the two read as one wheel turning. */
+
+@layer components {
+  .luke-rolling-number {
+    display: inline-flex;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Note that the slot clips by its clip-path rather than an overflow,
+     because an inline block that clips its overflow sits on its bottom edge
+     rather than on the words' baseline. */
+  .luke-rolling-number-slot {
+    position: relative;
+    display: inline-block;
+    clip-path: inset(0);
+  }
+
+  .luke-rolling-number-digit {
+    display: inline-block;
+  }
+
+  .luke-rolling-number-leaving {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    animation:
+      luke-rolling-number-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards,
+      luke-rolling-number-out-up var(--luke-duration-fast) var(--luke-spring-fast) forwards;
+  }
+
+  .luke-rolling-number-leaving::before {
+    content: attr(data-digit);
+  }
+
+  .luke-rolling-number-digit[data-roll] {
+    animation:
+      luke-rolling-number-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-rolling-number-in-up var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  /* A count that falls turns the wheel the other way. */
+  .luke-rolling-number-digit[data-roll="down"] {
+    animation-name: luke-rolling-number-fade, luke-rolling-number-in-down;
+  }
+
+  .luke-rolling-number-leaving[data-roll="down"] {
+    animation-name: luke-rolling-number-leave, luke-rolling-number-out-down;
+  }
+
+  @keyframes luke-rolling-number-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-rolling-number-leave {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-rolling-number-in-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes luke-rolling-number-in-down {
+    from {
+      transform: translateY(-100%);
+    }
+  }
+
+  @keyframes luke-rolling-number-out-up {
+    to {
+      transform: translateY(-100%);
+    }
+  }
+
+  @keyframes luke-rolling-number-out-down {
+    to {
+      transform: translateY(100%);
+    }
+  }
+}

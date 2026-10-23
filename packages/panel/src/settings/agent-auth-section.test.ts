@@ -240,7 +240,7 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
   };
   const connected = await mount();
   assert.equal(rowButton(connected, "Claude Code").textContent, "Connected via subscription");
-  assert.ok(rowButton(connected, "Claude Code").querySelector(".agent-auth-check"));
+  assert.ok(rowButton(connected, "Claude Code").querySelector(".luke-settings-saved-mark"));
   assert.equal(rowButton(connected, "Codex").textContent, "Connected via API key");
   for (const root of roots.splice(0)) act(() => root.unmount());
 
@@ -255,7 +255,7 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
   const attention = await mount();
   assert.equal(rowButton(attention, "Claude Code").textContent, "Connected via API key");
   assert.equal(rowButton(attention, "Codex").textContent, "Subscription needs reconnecting");
-  assert.equal(rowButton(attention, "Codex").querySelector(".agent-auth-check"), null);
+  assert.equal(rowButton(attention, "Codex").querySelector(".luke-settings-saved-mark"), null);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   held = {
@@ -321,7 +321,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     card(dialog, "API key").querySelector<HTMLInputElement>("input") ?? assert.fail("no hint");
   assert.equal(saved.value, "sk-ant-…wxyz");
   assert.equal(saved.readOnly, true);
-  assert.ok(radio(dialog, "API key").querySelector(".agent-auth-check"));
+  assert.ok(radio(dialog, "API key").querySelector(".luke-settings-saved-mark"));
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
   assert.equal(rowButton(page, "Claude Code").textContent, "Connected via API key");
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
@@ -382,7 +382,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     "an unchecked plan reads as a connected one",
   );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
-  assert.ok(radio(dialog, "Subscription").querySelector(".agent-auth-check"));
+  assert.ok(radio(dialog, "Subscription").querySelector(".luke-settings-saved-mark"));
   assert.equal(rowButton(page, "Claude Code").textContent, "Connected via subscription");
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 

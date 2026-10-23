@@ -35,10 +35,6 @@ it("every platform kind is refused in its own words, whatever it is sent", async
   assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.UPDATE_CHECK), {
     refused: "Could not check for updates on this system.",
   });
-  assert.deepEqual(
-    await port.call(PANEL, PLATFORM_PORT_ACT_KIND.BROWSER_CLOSE, { browserId: "browser-1" }),
-    { refused: "Could not close the page." },
-  );
   assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.MICROPHONE_ROUTE), {
     refused: "Could not read the microphone route on this system.",
   });

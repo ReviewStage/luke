@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { VISUALLY_HIDDEN_UNDER } from "../visually-hidden/visually-hidden.js";
 import { BADGE_TONE, Badge } from "./badge.js";
 
 /**
@@ -44,4 +45,46 @@ test("a badge with no colour of a provider's wears no dot", () => {
   const view = render(createElement(Badge, { tone: BADGE_TONE.WORKING, children: "Working" }));
   assert.equal(view.textContent, "Working");
   assert.equal(view.querySelectorAll('[aria-hidden="true"]').length, 0);
+});
+
+test("a badge that gives up its words in a narrow room still holds them for a reader", () => {
+  const view = render(
+    createElement(Badge, { hideWordsUnder: VISUALLY_HIDDEN_UNDER.SNUG, children: "Ready" }),
+  );
+  assert.equal(view.textContent, "Ready");
+});
+
+test("a badge with no glyph or swatch keeps its words drawn however narrow the room", () => {
+  const view = render(
+    createElement(Badge, { hideWordsUnder: VISUALLY_HIDDEN_UNDER.SNUG, children: "Ready" }),
+  );
+  assert.equal(view.querySelector(".luke-badge-words")?.getAttribute("data-under"), null);
+});
+
+test("a badge in a tone gives its words up to a reader in a narrow room, its dot saying the state", () => {
+  const view = render(
+    createElement(Badge, {
+      tone: BADGE_TONE.ATTENTION,
+      hideWordsUnder: VISUALLY_HIDDEN_UNDER.TIGHT,
+      children: "Pending",
+    }),
+  );
+  assert.equal(view.textContent, "Pending");
+  assert.equal(view.querySelector(".luke-badge-words")?.getAttribute("data-under"), "tight");
+});
+
+test("a label filled with its colour is read by its name, its words lifted to read on the dark ground", () => {
+  const view = render(createElement(Badge, { fill: "#1d1d1f", children: "needs design" }));
+  const badge = view.querySelector<HTMLElement>(".luke-badge");
+  assert.equal(view.textContent, "needs design");
+  assert.equal(badge?.style.getPropertyValue("--luke-badge-fill-light"), "#1d1d1f");
+  assert.notEqual(badge?.style.getPropertyValue("--luke-badge-words-dark"), "#1d1d1f");
+  assert.equal(badge?.style.getPropertyValue("--luke-badge-words-light"), "#ffffff");
+});
+
+test("a fill the badge cannot paint draws it as a neutral badge", () => {
+  const view = render(createElement(Badge, { fill: "not-a-colour", children: "imported" }));
+  const badge = view.querySelector<HTMLElement>(".luke-badge");
+  assert.equal(badge?.getAttribute("data-fill"), null);
+  assert.equal(badge?.getAttribute("style"), null);
 });

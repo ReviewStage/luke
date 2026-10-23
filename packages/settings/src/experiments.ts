@@ -8,7 +8,7 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
-  /** A Browser tab in the side panel: a web page beside the plan, the Mac's own `localhost` among them. */
+  /** A Browser tab in the side panel: an agent's cloud browser beside the plan, watched and taken over. */
   BROWSER: "browser",
   /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
   CHAT: "chat",
@@ -74,8 +74,8 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.BROWSER,
     name: "Browser tab",
     detail:
-      "Open a web page in a tab beside your plan, your own localhost included. Pages keep " +
-      "their own cookies, apart from Luke's.",
+      "Watch your agents' cloud browsers in a tab beside your plan, and take one over to " +
+      "sign in or steer.",
     owner: "Dean",
     since: "2026-10-16",
   },

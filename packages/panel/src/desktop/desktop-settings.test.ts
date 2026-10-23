@@ -8,7 +8,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
-  BROWSER_ACT_KIND,
   TASKS_ACT_KIND,
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
@@ -48,9 +47,8 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 /** The task kinds on the act port, which the call-card test's fake refuses. */
 const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
 
-/** The platform's updater, Browser tab, and window acts, which this window's fake refuses. */
+/** The platform's updater and window acts, which this window's fake refuses. */
 const PLATFORM_KINDS: ReadonlySet<string> = new Set([
-  ...Object.values(BROWSER_ACT_KIND),
   ...Object.values(UPDATE_ACT_KIND),
   ...Object.values(WINDOW_SURFACE_ACT_KIND),
 ]);
@@ -79,7 +77,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Profile", "Agents", "Integrations", "Plan template", "Experimental"],
+    rows: ["Profile", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
   },
   {
     heading: "This Mac",

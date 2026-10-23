@@ -1,10 +1,28 @@
-import { ALIGN, GAP, Inline, JUSTIFY, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  ALIGN,
+  Button,
+  FILL_FLOW,
+  Fill,
+  GAP,
+  INSET,
+  Inline,
+  JUSTIFY,
+  LAYOUT_ELEMENT,
+  Stack,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * layout.tsx -- Stack and Inline at every gap role, along and across their
- * room, and an Inline of long labels in a narrow column, wrapping and held.
+ * room, an Inline of long labels in a narrow column, wrapping and held, a
+ * list of rows and a wrapping list of labels, each a `ul`, lists keeping
+ * room inside their edge at each inset, and a Fill taking
+ * the room a pane's head leaves, down the pane and across it, clipping what
+ * stands past its edge.
  */
 
 const LABELS = ["Repository", "Model", "A label long enough to need its own line", "Effort"];
@@ -75,8 +93,88 @@ function Layout(): React.JSX.Element {
           </div>
         </Stack>
       </CatalogSection>
+      <CatalogSection id="layout-lists" title="Lists">
+        <Inline gap={GAP.SECTION} align={ALIGN.START}>
+          <div className="catalog-narrow">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} aria-label="Rows">
+              {["First row", "Second row", "Third row"].map((row) => (
+                <li key={row}>
+                  <Swatch>{row}</Swatch>
+                </li>
+              ))}
+            </Stack>
+          </div>
+          <div className="catalog-narrow">
+            <Inline
+              as={LAYOUT_ELEMENT.UL}
+              gap={GAP.TIGHT}
+              align={ALIGN.STRETCH}
+              aria-label="Labels"
+            >
+              {LABELS.map((label) => (
+                <li key={label}>
+                  <Swatch>{label}</Swatch>
+                </li>
+              ))}
+            </Inline>
+          </div>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="layout-insets" title="Room inside a list's edge">
+        <Inline gap={GAP.SECTION} align={ALIGN.START}>
+          {[INSET.RING, INSET.COLUMN, INSET.BLOCK].map((inset) => (
+            <div key={inset} className="catalog-narrow">
+              <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} inset={inset} aria-label={inset}>
+                {["First", "Second"].map((row) => (
+                  <li key={row}>
+                    <Swatch>{`${row}, ${inset}`}</Swatch>
+                  </li>
+                ))}
+              </Stack>
+            </div>
+          ))}
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="layout-fill" title="Fill">
+        <Inline gap={GAP.CONTROL} align={ALIGN.START}>
+          <div className="catalog-fill-pane">
+            <Swatch>Head</Swatch>
+            <Fill>
+              <Swatch>Column body</Swatch>
+            </Fill>
+          </div>
+          <div className="catalog-fill-pane">
+            <Swatch>Head</Swatch>
+            <Fill flow={FILL_FLOW.ROW} clip>
+              <Swatch>A row body whose words run past its edge and are cut there</Swatch>
+            </Fill>
+          </div>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="layout-grow" title="A form whose first item takes the room">
+        <Stack gap={GAP.CONTROL}>
+          {[false, true].map((narrow) => (
+            <div key={String(narrow)} className={narrow ? "catalog-narrow" : "catalog-frame"}>
+              <Inline
+                as={LAYOUT_ELEMENT.FORM}
+                justify={JUSTIFY.END}
+                growFirst
+                onSubmit={(event) => event.preventDefault()}
+              >
+                <Swatch>A field that fills what the buttons leave</Swatch>
+                <Button>Cancel</Button>
+                <Button>Save</Button>
+              </Inline>
+            </div>
+          ))}
+        </Stack>
+      </CatalogSection>
     </>
   );
 }
 
-export const LAYOUT_EXAMPLE: Example = { id: "layout", title: "Stack and Inline", Render: Layout };
+export const LAYOUT_EXAMPLE: Example = {
+  id: "layout",
+  title: "Stack, Inline, and Fill",
+  Render: Layout,
+};

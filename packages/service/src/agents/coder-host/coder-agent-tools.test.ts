@@ -27,6 +27,7 @@ import {
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { linkIntegrationInstallation } from "@luke/database/models/integration-installation-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import {
@@ -68,6 +69,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -123,6 +125,7 @@ import {
 import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
@@ -268,8 +271,8 @@ function seat(target: ConversationTarget): SessionAuth {
 
 interface StartedAgent extends ConversationTarget {
   readonly id: string;
-  /** The human name the store gave the agent, which names it in every answer and mention. */
-  readonly personaName: string;
+  /** The name the agent goes by in every answer and mention: its title, or its model before it has one. */
+  readonly name: string;
   readonly sessionId: string;
 }
 
@@ -309,7 +312,7 @@ async function claimed(
   return {
     ...target,
     id: started.value.agent.id,
-    personaName: started.value.agent.personaName ?? "",
+    name: started.value.agent.title ?? started.value.agent.model,
     sessionId: session,
   };
 }
@@ -449,13 +452,23 @@ async function issueReadingGitHub(workspaceId: string) {
   return github.layer;
 }
 
-/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog unless another is given. */
+/** Luke's Sentry integration as a deployment that configures it holds it. */
+const SENTRY_CONFIGURED = Layer.succeed(
+  SentryApp,
+  sentryAppService(
+    { slug: "luke", clientId: "sentry-client", clientSecret: Redacted.make("sentry-secret") },
+    [],
+  ),
+);
+
+/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog and a configured Sentry integration unless others are given. */
 async function peerCaller(
   host: CoderHost,
   agent: StartedAgent,
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"],
   catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
   linear: Layer.Layer<WorkspaceLinearConnect> = NO_WORKSPACE_LINEAR,
+  sentry: Layer.Layer<SentryApp> = SENTRY_CONFIGURED,
 ) {
   const admitted = await database.run(host.admit(seat(agent), agent.sessionId));
   if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
@@ -467,7 +480,7 @@ async function peerCaller(
     database.run(
       host
         .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear))),
+        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear, sentry))),
     );
 }
 
@@ -624,7 +637,7 @@ async function openWorkspaces() {
   const billing = await database.run(
     createTask(bob, { organizationId: workspaceId, name: "Billing", repository: RELAY_FULL_NAME }),
   );
-  const caller = await agentOn(alice, invitations.id);
+  const caller = { ...(await agentOn(alice, invitations.id)), name: CALLER_TITLE };
   assert.equal(await database.run(fillCodingAgentTitle(alice, caller.id, CALLER_TITLE)), true);
   const teammates = await agentOn(bob, billing.id);
   const archived = await agentOn(alice, invitations.id);
@@ -669,26 +682,24 @@ test("list_agents names every other agent of the caller's workspace, on any task
   const archived = {
     ...reading,
     id: agents.archived.id,
-    name: agents.archived.personaName,
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
     task: { id: tasks.invitations, name: "Teammate invitations" },
     onYourTask: true,
     archived: true,
-    mention: `[@${agents.archived.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
+    mention: `[@${agents.archived.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
   };
   const teammates = {
     ...reading,
     id: agents.teammates.id,
-    name: agents.teammates.personaName,
     status: CODING_AGENT_STATUS.STARTING,
     repository: RELAY_FULL_NAME,
     branch: null,
     task: { id: tasks.billing, name: "Billing" },
     onYourTask: false,
     archived: false,
-    mention: `[@${agents.teammates.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
+    mention: `[@${agents.teammates.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
   };
 
   const listed = await call(CODER_TOOL.LIST_AGENTS, {});
@@ -791,11 +802,10 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, tasks.invitations);
-  // The agent is answered with the mention its starter names it by, the human name it was given.
-  assert.equal(started.agent.name, stored.personaName);
+  // The agent is answered with the mention its starter names it by, its model while it has no title.
   assert.equal(
     started.agent.mention,
-    `[@${stored.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${stored.title ?? stored.model}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
@@ -806,7 +816,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const message = sentWords(opening?.body);
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
-  assert.ok(message.includes(`"${caller.personaName}"`) && message.includes(caller.id), message);
+  assert.ok(message.includes(`"${caller.name}"`) && message.includes(caller.id), message);
   // The developer's inbox is the starter's: what the agent would post there goes to it instead.
   assert.ok(message.includes("The developer's inbox is that agent's to keep"), message);
   // An agent's own pick of a model is no member's new default.
@@ -1086,12 +1096,12 @@ test("start_agent with a title names the agent by it from the start, and a title
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
   assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
   const startedId = started.agent.id;
-  // The agent goes by the human name it was given, its title standing beside it as what it works on.
+  // The agent goes by its title from the start.
   const named = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(named.title, title);
   assert.equal(
     started.agent.mention,
-    `[@${named.personaName}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${named.title}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
 
   // The title generated as the agent's words arrive is filled only where none stands.
@@ -2077,7 +2087,7 @@ test("update_agent archives a teammate's idle agent on another task for the call
     by: CODING_AGENT_ARCHIVER.AGENT,
     userId: agents.caller.userId,
     agentId: agents.caller.id,
-    agentName: agents.caller.personaName,
+    agentName: agents.caller.name,
     reason,
   };
   assert.ok((await row()).archivedAt !== null);
@@ -2141,7 +2151,7 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
   assert.equal(teammates.title, null, "a refused archive renames nothing");
 });
 
-test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, stamps no archive and leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
+test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
@@ -2166,21 +2176,11 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     },
     already,
   });
-  // The archive stamp is read off the row itself, since the store reads it no longer.
   const standing = async () => {
     const read = Option.getOrThrow(
       await database.run(readTask(agents.teammates.userId, tasks.billing)),
     ).task;
-    const [row] = await database.run(
-      Database.use((db) =>
-        db.select({ archivedAt: task.archivedAt }).from(task).where(eq(task.id, tasks.billing)),
-      ),
-    );
-    return {
-      status: read.status,
-      archivedAt: row?.archivedAt ?? undefined,
-      finished: read.completedAt !== undefined,
-    };
+    return { status: read.status, finished: read.completedAt !== undefined };
   };
   const archive = (archived: boolean, key: string) =>
     call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, archived }, key);
@@ -2194,11 +2194,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
       : [];
 
   assert.deepEqual(await archive(true, "call-1"), answered(TASK_STATUS.CANCELED, false));
-  assert.deepEqual(await standing(), {
-    status: TASK_STATUS.CANCELED,
-    archivedAt: undefined,
-    finished: true,
-  });
+  assert.deepEqual(await standing(), { status: TASK_STATUS.CANCELED, finished: true });
   assert.equal(
     await agentArchive(),
     null,
@@ -2217,11 +2213,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
     await archive(false, "call-3"),
     answered(TASK_STATUS.IN_PROGRESS, false, assignee),
   );
-  assert.deepEqual(await standing(), {
-    status: TASK_STATUS.IN_PROGRESS,
-    archivedAt: undefined,
-    finished: false,
-  });
+  assert.deepEqual(await standing(), { status: TASK_STATUS.IN_PROGRESS, finished: false });
 
   await database.run(
     recordCodingAgentPublished(agents.teammates.userId, agents.teammates.id, {
@@ -2284,6 +2276,22 @@ test("update_task renames a task, pins it for the caller's starter alone, sets i
     [RELAY_FULL_NAME, true],
     JSON.stringify(again),
   );
+  // The caller's own task, recorded as reached on its owner's token, is confirmed again through the App.
+  const ownRepository = (key: string) =>
+    call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.invitations, repository: RELAY_FULL_NAME }, key);
+  await database.run(
+    updateTask(agents.caller.userId, tasks.invitations, {
+      repository: RELAY_FULL_NAME,
+      githubAccess: GITHUB_ACCESS.TOKEN,
+    }),
+  );
+  const reached = await ownRepository("call-5c");
+  assert.equal(reached.already, false, JSON.stringify(reached));
+  const recorded = Option.getOrThrow(
+    await database.run(readTask(agents.caller.userId, tasks.invitations)),
+  );
+  assert.equal(recorded.githubAccess, GITHUB_ACCESS.APP);
+  assert.equal((await ownRepository("call-5d")).already, true);
 
   const own = await call(
     CODER_TOOL.UPDATE_TASK,
@@ -2666,7 +2674,7 @@ test("a direct message and stop_agent reach a teammate's Claude Code agent throu
     userId: agents.teammates.userId,
     conversationId: started.value.agent.conversationId,
     id: started.value.agent.id,
-    personaName: started.value.agent.personaName ?? "",
+    name: started.value.agent.title ?? started.value.agent.model,
     sessionId: `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`,
   };
   assert.equal(
@@ -2709,7 +2717,6 @@ test("stop_agent stops a teammate's running agent on another task by eve's cance
     status: ACTION_RESULT_STATUS.ACCEPTED,
     agent: {
       id: agents.teammates.id,
-      name: agents.teammates.personaName,
       title: OPUS,
       task: { id: tasks.billing, name: "Billing" },
       onYourTask: false,
@@ -2749,7 +2756,6 @@ test("stop_agent answers an idle agent as idle and changes nothing, refuses one 
     status: ACTION_RESULT_STATUS.ACCEPTED,
     agent: {
       id: agents.teammates.id,
-      name: agents.teammates.personaName,
       title: OPUS,
       task: { id: tasks.billing, name: "Billing" },
       onYourTask: false,
@@ -2948,7 +2954,7 @@ test("read_page reads a page an agent on no task of the caller's workspace showe
 
   assert.deepEqual(
     [read.title, read.html, read.agent, read.isYours, "task" in read],
-    ["Flaky tests", "<h1>Flaky</h1>", { id: sweeper.id, name: sweeper.personaName }, false, false],
+    ["Flaky tests", "<h1>Flaky</h1>", { id: sweeper.id, name: sweeper.name }, false, false],
   );
   assert.ok(
     isWireString(read.mention) &&
@@ -3950,7 +3956,7 @@ test("list_automations, create_automation, update_automation, and delete_automat
     [
       automation.name,
       automation.enabled,
-      automation.prompt,
+      automation.promptChars,
       automation.repositories,
       automation.runsLandOn,
       automation.scope,
@@ -3960,13 +3966,18 @@ test("list_automations, create_automation, update_automation, and delete_automat
     [
       "Agent audit",
       true,
-      prompt.trim(),
+      prompt.trim().length,
       [RELAY_FULL_NAME],
       "new-agent",
       "personal",
       true,
       "string",
     ],
+  );
+  // The answer carries the start of the prompt, as the list does, not the whole of it.
+  assert.ok(
+    isWireString(automation.prompt) && automation.prompt.length === 301,
+    JSON.stringify(automation.prompt),
   );
   assert.ok(isWireString(automation.id));
   const id = automation.id;
@@ -4025,6 +4036,29 @@ test("list_automations, create_automation, update_automation, and delete_automat
   const afterRefusals = await call(CODER_TOOL.LIST_AUTOMATIONS, {});
   assert.equal(Array.isArray(afterRefusals.automations) && afterRefusals.automations.length, 1);
 
+  assert.deepEqual(
+    await make({ disabledServers: ["neon", "not-a-server"] }, "unknown-server"),
+    rejected(`${AUTOMATION_TOOL_REFUSAL.UNKNOWN_SERVERS} not-a-server.`),
+  );
+
+  // Run now: one run under the call's key, started as a scheduled run starts, and the same call again names it.
+  const ran = await call(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "call-run");
+  assert.equal(ran.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(ran));
+  assert.ok(isRecord(ran.run) && isRecord(ran.run.agent), JSON.stringify(ran));
+  assert.deepEqual(
+    [ran.run.firedBy, ran.run.status, ran.alreadyRan, automationOf(ran).name],
+    ["manual", "started", false, "Agent audit"],
+  );
+  const again = await call(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "call-run");
+  assert.deepEqual(
+    [isRecord(again.run) ? again.run.id : undefined, again.alreadyRan],
+    [ran.run.id, true],
+  );
+  assert.deepEqual(
+    await stranger(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "stranger-run"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+
   // A change: paused, its next due cleared; a new prompt and model, and every run handed to one agent.
   const update = (asked: WireRecord, by = call, key = "call-change") =>
     by(CODER_TOOL.UPDATE_AUTOMATION, { automationId: id, ...asked } as WireBoundaryInput, key);
@@ -4053,7 +4087,13 @@ test("list_automations, create_automation, update_automation, and delete_automat
   // A teammate reads a personal automation of the starter's not at all, then a workspace's, which it may turn on but not change or delete.
   assert.deepEqual((await teammate(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
   assert.equal(
-    automationOf(await update({ scope: "workspace", agentId: null })).scope,
+    automationOf(
+      await update({
+        scope: "workspace",
+        agentId: null,
+        guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+      }),
+    ).scope,
     "workspace",
   );
   assert.deepEqual(
@@ -4064,6 +4104,23 @@ test("list_automations, create_automation, update_automation, and delete_automat
     automationOf(await update({ enabled: true }, teammate, "teammate-toggle")).enabled,
     true,
   );
+  // A teammate runs a workspace's automation as its creator: the run starts the creator's agent.
+  const teammateRan = await teammate(
+    CODER_TOOL.RUN_AUTOMATION,
+    { automationId: id },
+    "teammate-run",
+  );
+  assert.ok(
+    isRecord(teammateRan.run) && isRecord(teammateRan.run.agent),
+    JSON.stringify(teammateRan),
+  );
+  assert.equal(teammateRan.run.status, "started");
+  const started = await database.run(
+    readCodingAgent(agents.caller.userId, String(teammateRan.run.agent.id)),
+  );
+  assert.ok(Option.isSome(started) && started.value.userId === agents.caller.userId);
+  // eve is reached as the creator the run starts as, not as the teammate who fired it.
+  assert.equal(eve.sent.at(-1)?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), agents.caller.userId);
   assert.deepEqual(
     await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
     rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),
@@ -4084,5 +4141,100 @@ test("list_automations, create_automation, update_automation, and delete_automat
   assert.deepEqual(
     await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "delete-again"),
     rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+});
+
+test("create_automation and update_automation take a Sentry trigger once the workspace installed Luke's Sentry integration, with its filters and per-issue cooldown, and refuse one where the deployment configures no Sentry integration or the workspace installed none", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const unconfigured = await peerCaller(
+    hostOf(true),
+    agents.caller,
+    eve.services,
+    modelCatalogOf(CATALOG),
+    NO_WORKSPACE_LINEAR,
+    Layer.succeed(SentryApp, sentryAppService(undefined, ["SENTRY_APP_CLIENT_SECRET"])),
+  );
+  const alerts = {
+    kind: "integration",
+    provider: "sentry",
+    event: "alert-triggered",
+    filters: { project: ["web"], level: ["error", "fatal"] },
+  };
+  const made = {
+    name: "Fix Sentry alerts",
+    prompt: "Fix the error the alert names.",
+    trigger: alerts,
+  };
+  const automationOf = (answer: WireRecord) =>
+    isRecord(answer.automation) ? answer.automation : {};
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+
+  assert.deepEqual(
+    await unconfigured(CODER_TOOL.CREATE_AUTOMATION, made, "unconfigured"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED),
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.CREATE_AUTOMATION, made, "uninstalled"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED),
+  );
+  const weekly = automationOf(
+    await call(
+      CODER_TOOL.CREATE_AUTOMATION,
+      {
+        name: "Weekly audit",
+        prompt: "Audit the errors.",
+        trigger: { kind: "schedule", cron: "0 9 * * 1", timezone: "Europe/London" },
+      },
+      "weekly",
+    ),
+  );
+  assert.ok(isWireString(weekly.id), JSON.stringify(weekly));
+  const toSentry = {
+    automationId: weekly.id,
+    trigger: { kind: "integration", provider: "sentry", event: "issue-created" },
+  };
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-uninstalled"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED),
+  );
+
+  await database.run(
+    linkIntegrationInstallation({
+      provider: "sentry",
+      externalId: "sentry-installation",
+      organizationId: workspaceId,
+      userId: agents.caller.userId,
+      accountLabel: "acme",
+    }),
+  );
+  assert.deepEqual(
+    await unconfigured(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-unconfigured"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED),
+  );
+  const created = await call(
+    CODER_TOOL.CREATE_AUTOMATION,
+    { ...made, guards: { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 6 } },
+    "installed",
+  );
+  assert.equal(created.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(created));
+  assert.deepEqual(
+    [automationOf(created).trigger, automationOf(created).guards],
+    [alerts, { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 6 }],
+  );
+  const switched = await call(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-installed");
+  assert.equal(switched.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(switched));
+  assert.deepEqual(automationOf(switched).trigger, toSentry.trigger);
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.UPDATE_AUTOMATION,
+      {
+        automationId: weekly.id,
+        guards: { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 169 },
+      },
+      "cooldown-too-long",
+    ),
+    rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE),
   );
 });

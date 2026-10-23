@@ -21,6 +21,7 @@ import { MacCommandsSection } from "./mac-commands-section.js";
 import { NotificationsSection } from "./notifications-section.js";
 import { settingsRowsInput } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
+import { SkillsPage } from "./skills-page.js";
 import { UpdatesSection } from "./updates.js";
 import { VoiceSection } from "./voice-page.js";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
@@ -127,6 +128,14 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
         <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
       ) : null}
+
+      {view !== SETTINGS_VIEW.SKILLS ? null : signedIn ? (
+        <SkillsPage control={workspace} readerId={account.id} />
+      ) : (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          Sign in to install skills.
+        </Text>
+      )}
 
       {view === SETTINGS_VIEW.VOICE && panelView ? (
         <VoiceSection

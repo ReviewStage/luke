@@ -15,7 +15,8 @@
  * pressed, which opens a new view. Each frame is handed to the pane to draw and let go:
  * neither a frame, an address, nor a title is kept past the view, traced, or
  * counted (root `AGENTS.md`'s cloud browser line). Input is sent only while
- * the member drives the tab.
+ * the member drives the tab; a step from the tab's bar is sent whoever
+ * drives it, for the relay to take a free tab over first or refuse.
  */
 
 import type { BrowserLiveTarget } from "@luke/features/browser-live-acts";
@@ -27,6 +28,7 @@ import {
   BROWSER_LIVE_SERVER,
   type BrowserLiveClientMessage,
   type BrowserLiveCloseReason,
+  type BrowserLiveHistory,
   type BrowserLiveServerMessage,
   browserLiveServerMessageSchema,
 } from "@luke/features/browser-live-wire";
@@ -112,6 +114,8 @@ export interface CloudBrowserView {
   readonly driver: Omit<ServerOf<typeof BROWSER_LIVE_SERVER.DRIVER>, "type"> | undefined;
   /** Whether the relay refused a takeover as this member's not to take. */
   readonly takeoverRefused: boolean;
+  /** Whether the relay refused a step from the bar because another member holds the tab, until its driver next changes. */
+  readonly stepRefused: boolean;
 }
 
 /** A view before its first socket opens. */
@@ -122,6 +126,7 @@ export const OPENING_VIEW: CloudBrowserView = {
   page: undefined,
   driver: undefined,
   takeoverRefused: false,
+  stepRefused: false,
 };
 
 /** A size in the pane's own pixels. */
@@ -140,6 +145,10 @@ export interface CloudBrowserLive {
   takeOver(): void;
   /** Hands the tab back to its agent. */
   handBack(): void;
+  /** Opens an http or https address in the tab, from its bar, taking a tab nobody drives over first. */
+  navigate(address: string): void;
+  /** Steps the tab back or forward, or reloads it, from its bar, taking a tab nobody drives over first. */
+  step(step: BrowserLiveHistory): void;
   /** Sends a mouse, wheel, key, or text message, only while the member drives the tab. */
   input(message: InputMessage): void;
 }
@@ -251,11 +260,19 @@ export function cloudBrowserLive(input: {
           }
           case BROWSER_LIVE_SERVER.DRIVER: {
             const { type: _type, ...driver } = message;
-            return set((view) => ({ ...view, driver, takeoverRefused: false }));
+            return set((view) => ({
+              ...view,
+              driver,
+              takeoverRefused: false,
+              stepRefused: false,
+            }));
           }
           case BROWSER_LIVE_SERVER.REFUSED:
-            return message.reason === BROWSER_LIVE_REFUSAL.NOT_PERMITTED
-              ? set((view) => ({ ...view, takeoverRefused: true }))
+            if (message.reason === BROWSER_LIVE_REFUSAL.NOT_PERMITTED) {
+              return set((view) => ({ ...view, takeoverRefused: true }));
+            }
+            return message.reason === BROWSER_LIVE_REFUSAL.HELD
+              ? set((view) => ({ ...view, stepRefused: true }))
               : Effect.void;
           case BROWSER_LIVE_SERVER.CLOSED:
             return Effect.void;
@@ -363,6 +380,8 @@ export function cloudBrowserLive(input: {
     resized: sendViewport,
     takeOver: () => send({ type: BROWSER_LIVE_CLIENT.TAKE_OVER }),
     handBack: () => send({ type: BROWSER_LIVE_CLIENT.HAND_BACK }),
+    navigate: (address) => send({ type: BROWSER_LIVE_CLIENT.NAVIGATE, address }),
+    step: (step) => send({ type: BROWSER_LIVE_CLIENT.HISTORY, step }),
     input: (message) => {
       if (MutableRef.get(latest).driver?.yours === true) send(message);
     },

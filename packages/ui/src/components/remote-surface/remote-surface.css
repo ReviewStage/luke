@@ -1,0 +1,10 @@
+/* A remote page's surface (remote-surface.tsx): the page draws its own
+   focus, so the canvas wears no ring, and a driven one is edged. */
+.luke-remote-surface {
+  display: block;
+  outline: none;
+}
+
+.luke-remote-surface[data-driving] {
+  box-shadow: 0 0 0 1px var(--luke-color-border);
+}

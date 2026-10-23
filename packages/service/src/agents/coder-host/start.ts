@@ -1080,8 +1080,6 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
       title,
-      // A continue keeps its source's human name, as the same teammate going on.
-      personaName: continued ? (from.source.personaName ?? undefined) : undefined,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,

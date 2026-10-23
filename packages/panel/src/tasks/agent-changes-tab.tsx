@@ -19,8 +19,15 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  FILL_FLOW,
+  Fill,
+  GAP,
   IconButton,
+  INSET,
+  LAYOUT_ELEMENT,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -404,11 +411,17 @@ function AboveThreads({
   draw: ChangesThreads["draw"] | undefined;
 }): React.JSX.Element {
   return (
-    <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.UNPLACED_THREADS}>
+    <Stack
+      as={LAYOUT_ELEMENT.OL}
+      gap={GAP.ITEM}
+      inset={INSET.BLOCK}
+      className="diff-outdated-threads"
+      aria-label={CHANGES_WORDS.UNPLACED_THREADS}
+    >
       {above.map((each) => (
         <li key={each.key}>{draw?.(each.thread, THREAD_PLACE.ABOVE)}</li>
       ))}
-    </ol>
+    </Stack>
   );
 }
 
@@ -1549,7 +1562,7 @@ function FilesList({
   const landing = useListLanding(reveal, list, entries, minimizedOf, wholeOf, opened.openedOf, box);
   const query = list.query.trim();
   return (
-    <section className="file-tab" aria-label="Diffs of the changed files">
+    <Fill as={FILL_ELEMENT.SECTION} className="file-tab" aria-label="Diffs of the changed files">
       {query === "" || filterShown ? null : (
         <div className="file-tab-notice">
           <p className="m-0">
@@ -1578,7 +1591,7 @@ function FilesList({
           />
         </ThreadLandingProvider>
       )}
-    </section>
+    </Fill>
   );
 }
 
@@ -1788,8 +1801,8 @@ export function AgentChangesTab({
     return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the view hears stage-cli's keys from whatever in it has the focus, the list's own scroller among them.
-    <div
+    // The view hears stage-cli's keys from whatever in it has the focus, the list's own scroller among them.
+    <Fill
       className="file-view ph-no-capture"
       {...room.root}
       onKeyDown={(event) => {
@@ -1821,7 +1834,7 @@ export function AgentChangesTab({
           <p>{CHANGES_WORDS.TRUNCATED}</p>
         </div>
       ) : null}
-      <div className="file-view-body" {...room.body}>
+      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...room.body}>
         <FilesList
           list={list}
           threads={threads}
@@ -1863,8 +1876,8 @@ export function AgentChangesTab({
             peek={room.strip}
           />
         )}
-      </div>
+      </Fill>
       {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
-    </div>
+    </Fill>
   );
 }

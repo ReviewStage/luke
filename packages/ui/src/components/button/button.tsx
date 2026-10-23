@@ -1,4 +1,16 @@
-import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
+import {
+  type ButtonHTMLAttributes,
+  type MouseEvent,
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { CheckIcon } from "../../face/glyphs.js";
+import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
+import { replayMotion } from "../../replay-motion.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
 /**
@@ -40,9 +52,20 @@ import { SpinnerRing } from "../spinner/spinner.js";
  *
  * A button unavailable is out of the tab order, unless it is
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
- * why, and refuses its press instead. A busy button keeps its width, its
+ * why, and refuses its press instead, with a shake. Every press a button
+ * or a link drawn as one takes is answered with a pulse of its face, and a
+ * submit's arrow lifts as it sends. A busy button keeps its width, its
  * words standing hidden under a turning ring, refuses its press, and is
- * named by `busyLabel` ("Saving") for as long as the ring stands. The ring
+ * named by `busyLabel` ("Saving") for as long as the ring stands. A labelled
+ * button whose act has landed may say so, `done`: a check springs in where
+ * its words stood, it refuses another press, and `onDone` hears once the
+ * check has been seen, at once where no motion runs. A busy button told its
+ * press `succeeded` as its ring leaves lands the same way for a moment: the
+ * check stands in the ring's place for `--luke-confirm-delay`, a hold reduced
+ * motion keeps, so the check is still seen there without its spring, and its
+ * words come back after; one that failed just stops, its words back at once.
+ * A button that `turns`, a refresh's or a retry's, turns its glyph once as a
+ * press lands, beside the pulse of its face. The ring
  * holds still on `--luke-loop-motion`, as every endless loop does under reduced
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
@@ -141,12 +164,14 @@ export type ButtonType = (typeof BUTTON_TYPE)[keyof typeof BUTTON_TYPE];
  * names nothing more.
  */
 type BusyProps =
-  | { busy?: false | undefined; busyLabel?: undefined }
+  | { busy?: false | undefined; busyLabel?: undefined; succeeded?: undefined }
   | {
       /** Whether its press is out: it refuses another and shows a ring in place of its words. */
       busy: boolean;
       /** What it is named while busy, the act in progress ("Saving"). */
       busyLabel: string;
+      /** Whether the press the ring stood for landed, read as the ring leaves: a check stands for a moment before its words come back. */
+      succeeded?: boolean | undefined;
     };
 
 /** What an app's hint hands the button it wraps: when to show and go, and the chord it names. */
@@ -171,6 +196,8 @@ type ButtonBase = BusyProps &
     tabbable?: boolean | undefined;
     /** Whether a pointer's press leaves the focus where it is, as on a field beside it that holds the keys. */
     keepFocus?: boolean | undefined;
+    /** Whether its glyph turns once as a press lands, as a refresh's or a retry's arrow does. */
+    turns?: boolean | undefined;
     id?: string | undefined;
     ref?: Ref<HTMLButtonElement> | undefined;
     /** The id of the words that say more of what it does. */
@@ -190,10 +217,31 @@ function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
-/** The attributes and handler a button carries for its state, shared by both kinds. */
-function stateProps(props: ButtonBase, name: string | undefined) {
-  const refusing =
-    props.busy === true || (props.disabled === true && props.focusableWhenDisabled === true);
+/** What a button plays as it answers a press it refused: a shake. */
+const DENIED_ATTRIBUTE = "data-denied";
+
+/** What a button that `turns` plays on its glyph as a press lands: one whole turn. */
+const TURN_ATTRIBUTE = "data-turn";
+
+/** Turns the glyph `button` leads with once, where it has one. */
+function turn(button: HTMLElement): void {
+  const glyph = button.querySelector(":scope > .luke-button-face > svg:first-child");
+  if (glyph !== null) replayMotion(button, TURN_ATTRIBUTE, glyph);
+}
+
+/**
+ * Plays a press's pulse on `pressable`: its face springs back inside its
+ * box, but a row's, a menu's row lit rather than pressed, which gives a
+ * little whole, as every row does.
+ */
+function pulse(pressable: HTMLElement, variant: ButtonVariant | undefined): void {
+  pulsePress(pressable, variant === BUTTON_VARIANT.ROW ? PRESS_PULSE.QUIET : PRESS_PULSE.FACE);
+}
+
+/** The attributes and handler a button carries for its state, shared by both kinds; `done` is a labelled one whose act has landed. */
+function stateProps(props: ButtonBase, name: string | undefined, done = false) {
+  const settled = props.busy === true || done;
+  const refusing = settled || (props.disabled === true && props.focusableWhenDisabled === true);
   const busyName = props.busy === true ? props.busyLabel : undefined;
   return {
     type: props.type ?? BUTTON_TYPE.BUTTON,
@@ -225,11 +273,88 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     onClick: (event: MouseEvent<HTMLButtonElement>) => {
       if (refusing) {
         event.preventDefault();
+        // Note that a busy button's ring, or a done one's check, already says why it takes no press.
+        if (!settled) replayMotion(event.currentTarget, DENIED_ATTRIBUTE);
         return;
       }
+      pulse(event.currentTarget, props.variant);
+      if (props.turns === true) turn(event.currentTarget);
       props.onClick?.(event);
     },
   };
+}
+
+/** The motions an element runs. Note that a DOM with no animation engine, a test's, runs none. */
+function running(element: HTMLElement): Animation[] {
+  return "getAnimations" in element ? element.getAnimations() : [];
+}
+
+/**
+ * The check a done button wears over its hidden words, which tells `onShown`
+ * once its spring has played, or at once where it runs none, as under
+ * reduced motion's zeroed tokens or in a DOM with no animation engine.
+ */
+function DoneMark({
+  onShown,
+  hold = false,
+}: {
+  onShown: (() => void) | undefined;
+  /** Whether it stands its hold before it is shown, as a busy button's landing does. */
+  hold?: boolean;
+}): React.JSX.Element {
+  const mark = useRef<HTMLSpanElement | null>(null);
+  const shown = useRef(onShown);
+  shown.current = onShown;
+  useLayoutEffect(() => {
+    const motions = mark.current === null ? [] : running(mark.current);
+    // Note that a motion cancelled counts as played, since nothing is left to wait for.
+    let left = motions.length;
+    let current = true;
+    const played = () => {
+      left -= 1;
+      if (current && left <= 0) shown.current?.();
+    };
+    if (left === 0) shown.current?.();
+    for (const motion of motions) {
+      motion.addEventListener("finish", played, { once: true });
+      motion.addEventListener("cancel", played, { once: true });
+    }
+    return () => {
+      current = false;
+    };
+  }, []);
+  return (
+    <span ref={mark} className="luke-button-done" data-hold={hold || undefined} aria-hidden="true">
+      <CheckIcon />
+    </span>
+  );
+}
+
+/**
+ * Whether a busy button's press has just landed: from the draw its ring
+ * leaves on, told it `succeeded`, until its check has stood its hold, which
+ * `settle` ends. Note that the ring's leaving is read as the draw sees it
+ * rather than in an effect, so the check is in the first frame without it.
+ */
+function useLanded(props: BusyProps): { landed: boolean; settle: () => void } {
+  const busy = props.busy === true;
+  const [wasBusy, setWasBusy] = useState(busy);
+  const [landed, setLanded] = useState(false);
+  if (busy !== wasBusy) {
+    setWasBusy(busy);
+    setLanded(!busy && props.succeeded === true);
+  }
+  const settle = useCallback(() => setLanded(false), []);
+  return { landed, settle };
+}
+
+/**
+ * The state a landed button stands in: settled as a done one is, and
+ * available while its check stands, so the check is at full strength even
+ * where what landed leaves it unavailable after (a Save with nothing left to save).
+ */
+function landedProps<Props extends ButtonBase>(props: Props, landed: boolean): Props {
+  return landed ? { ...props, disabled: false } : props;
 }
 
 /** A labelled button: its words, after its glyph where it has one. */
@@ -240,6 +365,8 @@ export function Button({
   size,
   pressed,
   readOnly = false,
+  done = false,
+  onDone,
   children,
   ...props
 }: ButtonBase & {
@@ -254,21 +381,32 @@ export function Button({
   pressed?: boolean | undefined;
   /** Whether it records a press rather than offering one: it takes none, at full strength. */
   readOnly?: boolean | undefined;
+  /** Whether its act has landed: a check stands in its words' place and it takes no press. */
+  done?: boolean | undefined;
+  /** Heard once the check has been seen, as a dialog waits on it to close. */
+  onDone?: (() => void) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
+  const { landed, settle } = useLanded(props);
   return (
     <button
       className="luke-button"
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
       data-read-only={readOnly || undefined}
+      data-done={done || landed || undefined}
       aria-pressed={pressed}
-      {...stateProps(readOnly ? { ...props, disabled: true } : props, label)}
+      {...stateProps(
+        readOnly ? { ...props, disabled: true } : landedProps(props, landed),
+        label,
+        done || landed,
+      )}
     >
-      <span className="luke-button-face">
+      <span className="luke-button-face" {...PRESS_FACE}>
         {icon}
         <span className="luke-button-words">{children}</span>
         {trailing === undefined ? null : <span className="luke-button-trailing">{trailing}</span>}
       </span>
+      {done ? <DoneMark onShown={onDone} /> : landed ? <DoneMark hold onShown={settle} /> : null}
     </button>
   );
 }
@@ -294,9 +432,12 @@ export function ButtonLink({
       className="luke-button"
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
-      onClick={onClick}
+      onClick={(event) => {
+        pulse(event.currentTarget, variant);
+        onClick?.(event);
+      }}
     >
-      <span className="luke-button-face">
+      <span className="luke-button-face" {...PRESS_FACE}>
         {icon}
         <span className="luke-button-words">{children}</span>
       </span>
@@ -327,10 +468,13 @@ export function IconButtonLink({
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
       aria-label={label}
+      onClick={(event) => pulse(event.currentTarget, variant)}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >
-      <span className="luke-button-face">{icon}</span>
+      <span className="luke-button-face" {...PRESS_FACE}>
+        {icon}
+      </span>
     </a>
   );
 }
@@ -419,9 +563,11 @@ export function IconButton({
     /** Whether a toggle stands on, which it is drawn and announced as. */
     pressed?: boolean | undefined;
   }): React.JSX.Element {
+  const { landed, settle } = useLanded(props);
   const state = stateProps(
-    submit === undefined ? props : { ...props, shape: BUTTON_SHAPE.ROUND },
+    submit === undefined ? landedProps(props, landed) : { ...props, shape: BUTTON_SHAPE.ROUND },
     label,
+    landed,
   );
   return (
     <button
@@ -429,10 +575,14 @@ export function IconButton({
       data-icon-only="true"
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
       data-submit={submit}
+      data-done={landed || undefined}
       aria-pressed={pressed}
       {...state}
     >
-      <span className="luke-button-face">{submit === undefined ? icon : submitGlyph(submit)}</span>
+      <span className="luke-button-face" {...PRESS_FACE}>
+        {submit === undefined ? icon : submitGlyph(submit)}
+      </span>
+      {landed ? <DoneMark hold onShown={settle} /> : null}
     </button>
   );
 }

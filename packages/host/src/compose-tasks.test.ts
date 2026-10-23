@@ -69,6 +69,7 @@ import {
   type PlanRevisionsAnswer,
   type RepositoryPin,
   TASK_PRIORITY,
+  TASK_SKILL_SOURCE,
   TASK_STATUS,
   type Task,
   type TaskAgentsSummary,
@@ -77,6 +78,7 @@ import {
   type TaskTreeAnswer,
 } from "@luke/features/task-wire";
 import {
+  BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
   PICTURE_KEEP_FAILURE,
   type RepositoryCallFailure,
@@ -933,7 +935,11 @@ function fakeService(tasks: Task[]): FakeService {
         () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
       ),
     readRepositorySkills: (place) =>
-      Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
+      Effect.sync(() =>
+        place.repository === undefined
+          ? undefined
+          : service.places[place.workspaceId]?.[place.repository]?.skills,
+      ),
     readRepositoryPullRequest: (place, number) =>
       Effect.gen(function* () {
         if (service.pullRequestGate !== undefined) yield* Deferred.await(service.pullRequestGate);
@@ -951,6 +957,7 @@ function fakeService(tasks: Task[]): FakeService {
         return service.repositoryIssues[place.workspaceId]?.[place.repository];
       }),
     readBrowserTabs: () => Effect.succeed({ tabs: [] }),
+    openBrowserTab: () => Effect.succeed({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED }),
     readIssueLinks: (taskId) =>
       Effect.sync(() => {
         const issues = service.issueLinks[taskId];
@@ -3015,7 +3022,14 @@ it.effect(
         skills: {
           repository: "acme/relay",
           branch: "main",
-          skills: [{ name, description: "", path: `.agents/skills/${name}/SKILL.md` }],
+          skills: [
+            {
+              name,
+              description: "",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
+              path: `.agents/skills/${name}/SKILL.md`,
+            },
+          ],
         },
       });
       service.places[ACME.id] = {

@@ -7,6 +7,8 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   type ErrorStatePlacement,
+  FILL_ELEMENT,
+  Fill,
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
@@ -320,8 +322,13 @@ export function FileTab({
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the tab only hears the key its lines answer while its focus is in them; the lines and the cards are the controls.
-    <section className="file-tab ph-no-capture" aria-label={file.path} onKeyDown={onKeyDown}>
+    // The tab only hears the key its lines answer while its focus is in them; the lines and the cards are the controls.
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="file-tab ph-no-capture"
+      aria-label={file.path}
+      onKeyDown={onKeyDown}
+    >
       {read.kind === FILE_READ.READY ? (
         <FileTextView file={file} held={read} notes={notes} handleRef={handle} />
       ) : read.kind === FILE_READ.READING ? (
@@ -350,6 +357,6 @@ export function FileTab({
           </ScrollArea>
         </>
       )}
-    </section>
+    </Fill>
   );
 }

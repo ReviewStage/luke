@@ -34,7 +34,8 @@ import type {
   ComposerTrigger,
 } from "../plan-editor/contract.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
-import { SkillCard } from "./skill-ref.js";
+import { opensFile, SkillCard, type SkillWithFile } from "./skill-ref.js";
+import { SkillSourceBadge } from "./skill-source-badge.js";
 
 /**
  * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the task's repository keeps, and the chips the chosen ones are drawn as.
@@ -47,9 +48,10 @@ import { SkillCard } from "./skill-ref.js";
  * list until the caret leaves that word; the caret stays in the box
  * throughout, so the keys the list does not take are the box's own. The
  * skills are read the first time a `/` is typed in the box, from the
- * task's repository as the service finds them, and kept for the task
- * (`repository-skills.ts`), so nothing is read for a message that names
- * none. A repository that keeps none says so, and where one is added.
+ * task's repository as the service finds them, then the member's
+ * installed ones, and kept for the task (`repository-skills.ts`), so
+ * nothing is read for a message that names none. Where there are none it
+ * says so, and where one is installed or added.
  *
  * The box is an editor (`../plan-editor/composer-editor.ts`), which finds
  * the `/` word the caret ends and says where its slash stands in the
@@ -61,7 +63,7 @@ import { SkillCard } from "./skill-ref.js";
  * `SKILL.md` in a File tab, as a sent message's chip does (`skill-chip.tsx`).
  */
 
-/** The skills the task's repository keeps, as the composer reads them: the skills, or why they were not read. */
+/** The skills the composer offers, the repository's and the installed ones, as it reads them: the skills, or why they were not read. */
 export type SkillsRead = { readonly skills: readonly SkillOption[] } | { readonly unread: string };
 
 /** Reads the task's repository's skills; asked the first time a `/` is typed. */
@@ -70,8 +72,8 @@ export type SkillSource = () => Promise<SkillsRead>;
 /** What the list says where it has no row to offer. */
 const SKILL_MENU_NOTE = {
   READING: "Reading skills…",
-  NONE: "No skills in this repository",
-  NONE_HINT: "Add one at .agents/skills/<name>/SKILL.md",
+  NONE: "No skills yet",
+  NONE_HINT: "Install one in Settings › Skills, or add one at .agents/skills/<name>/SKILL.md",
   NO_MATCH: "No matching skills",
 } as const;
 
@@ -165,6 +167,7 @@ function SkillMenu({
     id: skill.name,
     label: skillWord(skill.name),
     detail: skill.description,
+    hint: <SkillSourceBadge source={skill.source} />,
   }));
   return (
     <MenuSurface
@@ -200,20 +203,26 @@ function BoxChip({
 }: {
   name: string;
   skill: SkillOption | undefined;
-  onOpen: ((skill: SkillOption) => void) | undefined;
+  onOpen: ((skill: SkillWithFile) => void) | undefined;
 }): React.JSX.Element {
+  // Note that an installed skill names no file of the repository's, so its pill opens nothing.
+  const file = skill !== undefined && opensFile(skill) ? skill : undefined;
   const chip = (
     <SkillChip
       label={skillWord(name)}
-      onOpen={skill === undefined || onOpen === undefined ? undefined : () => onOpen(skill)}
+      onOpen={file === undefined || onOpen === undefined ? undefined : () => onOpen(file)}
     />
   );
   // A skill the repository holds hangs its card in the box as a sent chip of it does.
   if (skill === undefined) return chip;
   return (
     <Tooltip
-      label={skill.path}
-      card={<SkillCard subject={{ skill, onOpen: () => onOpen?.(skill) }} />}
+      label={skill.path ?? skillWord(skill.name)}
+      card={
+        <SkillCard
+          subject={{ skill, onOpen: () => (file === undefined ? undefined : onOpen?.(file)) }}
+        />
+      }
     >
       {chip}
     </Tooltip>
@@ -237,7 +246,7 @@ export function useSkillPicker({
   /** Where the skills are read from; nothing where the box offers none. */
   source: SkillSource | undefined;
   /** Opens a chosen skill's `SKILL.md`; nothing where the box stands on no task's page. */
-  onOpen: ((skill: SkillOption) => void) | undefined;
+  onOpen: ((skill: SkillWithFile) => void) | undefined;
   /** Which side of the slash's line the list stands: over it, as at the foot of an agent's tab, or under it, as on a new account's welcome. */
   side?: MentionMenuSide;
 }): SkillPicker {

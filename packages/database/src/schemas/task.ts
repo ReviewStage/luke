@@ -125,13 +125,6 @@ export const task = pgTable(
      * it stood leaves this as it stood too (`task-store.ts`).
      */
     completedAt: timestamptz("completed_at"),
-    /**
-     * @deprecated A task is archived no longer, it stands Done or Canceled
-     * instead (the `task_archive_settle` migration settled every archived
-     * one), and nothing writes or reads this. It stands until no running
-     * build reads it, then a later migration drops it.
-     */
-    archivedAt: timestamptz("archived_at"),
     createdAt: createdAt(),
     /** The last save of the document; the start, before any. */
     updatedAt: updatedAt(),

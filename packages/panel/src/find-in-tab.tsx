@@ -2,7 +2,10 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   DisclosureFind,
+  Fill,
   IconButton,
+  MENU_SURFACE_FLOW,
+  MenuSurface,
   SearchField,
   Tooltip,
   useDisclosureFinding,
@@ -274,7 +277,13 @@ function FindBar({
     field.current?.select();
   }, [summons]);
   return (
-    <search className="find-bar" aria-label="Find" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+    <MenuSurface
+      className="find-bar"
+      flow={MENU_SURFACE_FLOW.ROW}
+      role="search"
+      aria-label="Find"
+      {...{ [FIND_SKIP_ATTRIBUTE]: "" }}
+    >
       <div className="find-bar-field">
         <SearchField
           ref={field}
@@ -307,7 +316,7 @@ function FindBar({
         icon={<ChevronDownIcon aria-hidden="true" />}
       />
       <BarButton label="Close find" onPress={onClose} icon={<CloseIcon />} />
-    </search>
+    </MenuSurface>
   );
 }
 
@@ -359,7 +368,7 @@ export function FindScope({
   active: boolean;
   subject: FindSubject;
 }): React.JSX.Element {
-  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  const [root, setRoot] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const [bar, setBar] = useState<OpenBar | undefined>(undefined);
   const back = useRef<HTMLElement | null>(null);
@@ -413,7 +422,7 @@ export function FindScope({
   }));
 
   return (
-    <div
+    <Fill
       ref={setRoot}
       className={className === undefined ? "find-scope" : `${className} find-scope`}
       {...props}
@@ -431,7 +440,7 @@ export function FindScope({
       <FindScopeContext.Provider value={doors}>
         <DisclosureFind finding={open}>{children}</DisclosureFind>
       </FindScopeContext.Provider>
-    </div>
+    </Fill>
   );
 }
 

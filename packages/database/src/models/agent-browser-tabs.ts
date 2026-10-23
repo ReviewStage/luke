@@ -214,10 +214,12 @@ const upsertTab = SqlSchema.findOne({
     title: Schema.String,
     openedBy: Schema.Literals(OPENERS),
     openedByUserId: Schema.NullOr(Schema.String),
+    /** Whether the opener given replaces the one a row already keeps: only for a target this caller just made. */
+    claimOpener: Schema.Boolean,
     now: Schema.Date,
   }),
   Result: BrowserTabSchema,
-  execute: ({ now, ...tab }) =>
+  execute: ({ now, claimOpener, ...tab }) =>
     Database.use((db) =>
       db
         .insert(agentBrowserTab)
@@ -234,6 +236,9 @@ const upsertTab = SqlSchema.findOne({
             address: tab.address,
             title: tab.title,
             lastActedAt: sql`greatest(${agentBrowserTab.lastActedAt}, ${now}::timestamptz)`,
+            ...(claimOpener
+              ? { openedBy: tab.openedBy, openedByUserId: tab.openedByUserId }
+              : undefined),
           },
         })
         .returning(tabColumns),
@@ -310,6 +315,30 @@ const retargetTab = SqlSchema.findAll({
             eq(agentBrowserTab.conversationId, conversationId),
             // Only from the target the caller read, so of two reopening the tab at once one moves it.
             eq(agentBrowserTab.targetId, from),
+          ),
+        )
+        .returning({ id: agentBrowserTab.id }),
+    ),
+});
+
+const notePageTab = SqlSchema.findAll({
+  Request: Schema.Struct({
+    tabId: Schema.String,
+    targetId: Schema.String,
+    address: Schema.String,
+    title: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ tabId, targetId, address, title }) =>
+    Database.use((db) =>
+      db
+        .update(agentBrowserTab)
+        .set({ address, title })
+        .where(
+          and(
+            eq(agentBrowserTab.id, tabId),
+            // Only on the target the caller watches, so a write from a target a reopening moved the tab off never lands.
+            eq(agentBrowserTab.targetId, targetId),
           ),
         )
         .returning({ id: agentBrowserTab.id }),
@@ -445,6 +474,28 @@ export function listAgentBrowserTabs(
  * member's takeover is left as it is, for the agent's side to heed.
  */
 export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<AgentBrowserTabRow> {
+  return writeTab(action, false);
+}
+
+/**
+ * Records a tab a member just opened in an agent's browser, as
+ * `upsertBrowserTab` does, but with the member as its opener even where a
+ * row for the target stands already: one the agent's own `list` wrote in
+ * the moment between the page opening and this write, since the browser
+ * makes a new id for every page, so no agent opened it.
+ */
+export function recordMemberOpenedBrowserTab(
+  tab: Omit<BrowserTabAction, "openedBy"> & { readonly userId: string },
+): BrowserTabEffect<AgentBrowserTabRow> {
+  const { userId, ...page } = tab;
+  return writeTab({ ...page, openedBy: { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId } }, true);
+}
+
+/** A tab's write: upserted with its page as it stands, its opener kept from its first report unless `claimOpener`. */
+function writeTab(
+  action: BrowserTabAction,
+  claimOpener: boolean,
+): BrowserTabEffect<AgentBrowserTabRow> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { openedBy } = action;
@@ -455,6 +506,7 @@ export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<Age
       title: shown(action.title),
       openedBy: openedBy.kind,
       openedByUserId: openedBy.kind === AGENT_BROWSER_TAB_OPENER.MEMBER ? openedBy.userId : null,
+      claimOpener,
       now,
     }).pipe(
       // An upsert that returned no row is the database breaking its own contract, not an outcome.
@@ -478,6 +530,26 @@ export function retargetBrowserTab(
   to: string,
 ): BrowserTabEffect<boolean> {
   return Effect.map(retargetTab({ conversationId, tabId, from, to }), (rows) => rows.length > 0);
+}
+
+/**
+ * Records a tab's page as a member's live view of it saw it move, the
+ * member steering it from its bar or driving it, so a browser that starts
+ * afresh reopens it where it stood (`restore-tabs.ts`): its address and
+ * title, cut where the Browser tab cuts them, and nothing else, its opener,
+ * takeover, and last action as they stood. Answers whether the tab took it:
+ * not where it no longer stands on the target named, as after a reopening
+ * moved it, so a stale view's write never lands.
+ */
+export function noteBrowserTabPage(
+  tabId: string,
+  targetId: string,
+  page: { readonly address: string; readonly title: string },
+): BrowserTabEffect<boolean> {
+  return Effect.map(
+    notePageTab({ tabId, targetId, address: shown(page.address), title: shown(page.title) }),
+    (rows) => rows.length > 0,
+  );
 }
 
 /**

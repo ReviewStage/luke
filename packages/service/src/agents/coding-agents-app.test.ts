@@ -6230,12 +6230,12 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             ["CSV or JSON?", second.id, secondAgent.id, secondAgent.model],
           ].sort(),
         );
-        // Each item names its agent as the agent goes by, the human name it was given.
+        // Each item names its agent as the agent goes by, its title.
         assert.deepEqual(
           all.items.map((item) => [item.title, item.agentTitle]).sort(),
           [
-            [QUESTION.title, agent.personaName ?? null],
-            ["CSV or JSON?", secondAgent.personaName ?? null],
+            [QUESTION.title, agent.title],
+            ["CSV or JSON?", secondAgent.title],
           ].sort(),
         );
 
@@ -7749,14 +7749,13 @@ const memberNaming = (member: ChatMemberRow) =>
     if (member.kind === MEMBER_KIND.AGENT) {
       const [agent] = yield* db
         .select({
-          personaName: codingAgent.personaName,
           title: codingAgent.title,
           model: codingAgent.model,
           taskId: codingAgent.taskId,
         })
         .from(codingAgent)
         .where(eq(codingAgent.id, member.agentId ?? ""));
-      const name = agent?.personaName ?? agent?.title ?? agent?.model ?? "";
+      const name = agent?.title ?? agent?.model ?? "";
       const task = agent?.taskId === null || agent === undefined ? {} : { taskId: agent.taskId };
       const mention = { kind: MENTION_KIND.AGENT, ...task, agentId: member.agentId ?? "" } as const;
       return { name, link: mentionMarkdown(mention, name, place) };
@@ -8506,13 +8505,10 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
             chat.second.member.id,
           ),
         );
-        // The sender goes by the name it is shown by, its human name, which a title stands in for where it has none.
+        // The sender goes by the name it is shown by, its title.
         const titled = (title: string) =>
           Database.use((db) =>
-            db
-              .update(codingAgent)
-              .set({ title, personaName: null })
-              .where(eq(codingAgent.id, chat.first.agent.id)),
+            db.update(codingAgent).set({ title }).where(eq(codingAgent.id, chat.first.agent.id)),
           );
         const fromOf = Effect.gen(function* () {
           const rows = yield* chat.rowsOf(chat.second.target);
@@ -11603,10 +11599,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const answer = yield* chat.read;
         const named = (id: string) => answer.members.find((member) => member.id === id)?.name;
         assert.equal(named(answer.self), "Test User");
-        assert.equal(
-          named(chat.agent.id),
-          chat.codingAgent.personaName ?? chat.codingAgent.title ?? chat.codingAgent.model,
-        );
+        assert.equal(named(chat.agent.id), chat.codingAgent.title ?? chat.codingAgent.model);
 
         const sent = yield* chat.wrote({
           text: "Ship it once the migration lands.",

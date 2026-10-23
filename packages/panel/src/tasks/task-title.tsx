@@ -9,11 +9,13 @@
  * writes the name but the task it is handed.
  */
 
+import { MARKDOWN_CLASS } from "@luke/ui/markdown-class";
+
 /** The title over a plan's text, drawn as a `#` heading. */
 export function TaskTitle({ name }: { name: string }): React.JSX.Element {
   return (
-    <div className="markdown task-title">
-      <p className="markdown-heading" data-level="1">
+    <div className={`${MARKDOWN_CLASS.ROOT} task-title`}>
+      <p className={MARKDOWN_CLASS.HEADING} data-level="1">
         {name}
       </p>
     </div>

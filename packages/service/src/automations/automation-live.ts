@@ -45,7 +45,7 @@ function runAgentSelection(userId: string, latest: ReturnType<typeof latestTurnO
   return liveSelection(
     {
       agentId: codingAgent.id,
-      // The name the agent goes by: Luke for an operator, its human name, else its title.
+      // The name the agent goes by: Luke for an operator, else its title.
       agentTitle: sql<
         string | null
       >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,

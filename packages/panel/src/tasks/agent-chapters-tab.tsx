@@ -12,6 +12,11 @@ import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings
 import {
   BUTTON_VARIANT,
   Button,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_TONE,
@@ -22,10 +27,16 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  FILL_FLOW,
+  Fill,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  INSET,
+  LAYOUT_ELEMENT,
   MarkStrip,
   NAV_CURRENT,
   NavItem,
@@ -34,6 +45,7 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -237,7 +249,7 @@ function Generating({
 }): React.JSX.Element {
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
-    <div className="chapters-generating">
+    <Fill className="chapters-generating">
       <p className="chapters-generating-line">
         <span>
           {words}
@@ -268,7 +280,7 @@ function Generating({
           </div>
         </div>
       </SkeletonRegion>
-    </div>
+    </Fill>
   );
 }
 
@@ -374,7 +386,12 @@ function ChapterRail({
       inert={leaving}
     >
       <ScrollArea>
-        <ol className="chapter-rail-list">
+        <Stack
+          as={LAYOUT_ELEMENT.OL}
+          gap={GAP.NONE}
+          inset={INSET.COLUMN}
+          className="chapter-rail-list"
+        >
           {rows.map((row, index) => {
             const risk = row.chapter.risk === null ? undefined : RISK_WORDS[row.chapter.risk];
             const done = viewed(row.paths);
@@ -404,7 +421,7 @@ function ChapterRail({
               </li>
             );
           })}
-        </ol>
+        </Stack>
       </ScrollArea>
     </nav>
   );
@@ -449,7 +466,13 @@ function KeyChangeItem({
 }): React.JSX.Element {
   const first = firstLineRef(change.lineRefs, paths);
   return (
-    <li className="chapter-key-change">
+    <Card
+      as={CARD_ELEMENT.LI}
+      look={CARD_LOOK.OUTLINE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      className="chapter-key-change"
+    >
       <div className="chapter-key-change-words">
         <TranscriptWords text={change.content} />
       </div>
@@ -460,7 +483,7 @@ function KeyChangeItem({
           {lineRefLabel(first)}
         </TextButton>
       )}
-    </li>
+    </Card>
   );
 }
 
@@ -598,8 +621,8 @@ function ChaptersReading({
   const previous = chapters[at - 1];
   const next = chapters[at + 1];
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the view hears its chapter keys from whatever in it has the focus, past the list's own.
-    <div
+    // The view hears its chapter keys from whatever in it has the focus, past the list's own.
+    <Fill
       ref={root}
       className="chapters-view"
       data-rail-beside={String(slide.drawn)}
@@ -621,7 +644,7 @@ function ChaptersReading({
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
       </p>
-      <div className="chapters-body">
+      <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
         {slide.drawn || over ? (
           <ChapterRail
             rows={rows}
@@ -634,7 +657,7 @@ function ChaptersReading({
           />
         ) : null}
         <ChapterStrip rows={rows} at={at} viewed={viewed} onOpen={toggleRail} />
-        <section className="chapter-reading" aria-labelledby={headingId}>
+        <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-labelledby={headingId}>
           <header className="chapter-head">
             <ScrollArea size={SCROLL_SIZE.CONTENT}>
               <div className="chapter-head-body">
@@ -645,7 +668,12 @@ function ChaptersReading({
                     onBeside={() => setBeside((was) => !was)}
                     onOver={() => setOver((was) => !was)}
                   />
-                  <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION} id={headingId}>
+                  <Text
+                    as={TEXT_ELEMENT.H3}
+                    variant={TEXT_VARIANT.SECTION}
+                    id={headingId}
+                    className="chapter-head-title"
+                  >
                     {at + 1}. {chapter.title}
                   </Text>
                   {chapter.risk === null ? null : (
@@ -697,7 +725,7 @@ function ChaptersReading({
                     <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
                       {CHAPTERS_WORDS.WHAT_TO_REVIEW}
                     </Text>
-                    <ul>
+                    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL}>
                       {chapter.keyChanges.map((change, index) => (
                         <KeyChangeItem
                           // oxlint-disable-next-line react/no-array-index-key -- a chapter's key changes never move.
@@ -721,7 +749,7 @@ function ChaptersReading({
                           }
                         />
                       ))}
-                    </ul>
+                    </Stack>
                   </section>
                 )}
               </div>
@@ -776,9 +804,9 @@ function ChaptersReading({
               </Button>
             </Tooltip>
           </footer>
-        </section>
-      </div>
-    </div>
+        </Fill>
+      </Fill>
+    </Fill>
   );
 }
 

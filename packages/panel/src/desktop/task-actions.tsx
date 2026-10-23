@@ -17,6 +17,7 @@ import {
   LIST_ROW_INK,
   ListRow,
   MarkDoneIcon,
+  OneLine,
   PinIcon,
   ProviderMark,
   RowHint,
@@ -32,7 +33,7 @@ import {
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
-import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
+import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import {
   DOCUMENT_REGION,
@@ -57,7 +58,6 @@ import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { DraftMark } from "../draft-mark.js";
-import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
@@ -550,29 +550,13 @@ export interface RowFaces {
 /** Every face a row may wear, as a list naming nobody draws it. */
 const EVERY_FACE: RowFaces = { creator: true, assignee: true };
 
-/** The face a task's row wears: its assignee's, or, where no one is assigned, the unassigned mark (`assignee` undefined). */
-interface RowFace {
-  readonly assignee: Actor | undefined;
-}
-
-/**
- * Who a task's row names by face: the member it is assigned to where that
- * is someone other than the reader, and the unassigned mark where no one
- * is; a task assigned to the reader wears nothing. Who made it, a teammate,
- * Luke, or an agent, is never its face, since it is not who is on it, and
- * stays on its card and its menu's Created by. Nothing where `faces` keeps
- * the assignee off the row, the list saying it already.
- */
+/** The face a task's row wears (`assigneeFace`), nothing where `faces` keeps the assignee off the row, the list saying it already. */
 function rowFaceOf(
   task: TaskSummary,
   reader: ReturnType<typeof useMemberDirectory>,
   faces: RowFaces,
-): RowFace | undefined {
-  const { assignee } = task;
-  if (!faces.assignee) return undefined;
-  if (assignee === undefined) return { assignee: undefined };
-  if (assignee.userId === reader.readerId) return undefined;
-  return { assignee: personActor(assignee, reader.members, reader.readerId, reader.former) };
+): AssigneeFace | undefined {
+  return faces.assignee ? assigneeFace(task, reader) : undefined;
 }
 
 /**
@@ -677,6 +661,7 @@ export function SidebarTask({
       <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
+          motionKey={task.id}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
@@ -711,7 +696,9 @@ export function SidebarTask({
             rename.editing ? null : (
               <span className="sidebar-task-time">
                 {repository === undefined ? null : (
-                  <FadingWords className="sidebar-task-repository" words={repository} />
+                  <OneLine className="sidebar-task-repository" words={repository}>
+                    {repository}
+                  </OneLine>
                 )}
                 {worn === undefined ? null : worn.assignee === undefined ? (
                   <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />

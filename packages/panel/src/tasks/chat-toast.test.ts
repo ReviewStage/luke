@@ -83,7 +83,7 @@ function mount(shown: ChatShown | null): void {
 
 /** What each toast standing says, leaving out those on their way out. */
 function standing(): string[] {
-  return [...document.querySelectorAll(".toast:not([data-leaving]) .toast-words")].map(
+  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
@@ -149,7 +149,7 @@ test("a message's toast leaves by itself once the news's hold runs out, and its 
     }),
   );
   const view =
-    [...document.querySelectorAll<HTMLButtonElement>(".toast button")].find(
+    [...document.querySelectorAll<HTMLButtonElement>(".luke-toast button")].find(
       (button) => button.textContent === "View",
     ) ?? assert.fail("the toast's View");
   act(() => view.click());

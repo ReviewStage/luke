@@ -3,7 +3,7 @@
 import { act, createElement, createRef, useId, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
-import { DIALOG_ROLE, Dialog } from "./dialog.js";
+import { DIALOG_ROLE, Dialog, type DialogHandle } from "./dialog.js";
 
 /**
  * dialog.test.ts -- a dialog opened from a button takes the keyboard and
@@ -12,7 +12,8 @@ import { DIALOG_ROLE, Dialog } from "./dialog.js";
  * window, or its owner taking it away puts it away and hands focus back to
  * the button; a press dragged out of the card puts nothing away; an input
  * method's keys stay the method's; no key or press inside reaches the window
- * behind; a busy dialog holds focus on its card until it is done; and one
+ * behind; a busy dialog holds focus on its card until it is done, and
+ * nudges its card when asked away meanwhile; and one
  * given a title and actions is named by the title, its answers after what
  * it holds.
  */
@@ -227,6 +228,30 @@ test("a busy dialog holds focus on its card, and Tab from there comes back onto 
   expect(holds(field)).toBe(true);
 });
 
+test("asked away while busy, by the dimmed window or Escape, the card nudges each time and its owner still hears it", () => {
+  let dismissals = 0;
+  draw(
+    createElement(Dialog, {
+      title: "Deleting plan",
+      busy: true,
+      onDismiss: () => {
+        dismissals += 1;
+      },
+      children: createElement("p", null, "Deleting."),
+    }),
+  );
+  const dialog = card() ?? expect.fail("the dialog opens");
+  const backdrop = dialog.parentElement ?? expect.fail("no dimmed window");
+
+  press(backdrop, backdrop);
+  expect(dialog.getAttribute("data-nudge")).toBe("true");
+  act(() => dialog.dispatchEvent(new Event("animationend")));
+  expect(dialog.hasAttribute("data-nudge")).toBe(false);
+  key("Escape");
+  expect(dialog.getAttribute("data-nudge")).toBe("true");
+  expect(dismissals).toBe(2);
+});
+
 test("a question that must be answered is an alert dialog, named by its title and described by what it asks", () => {
   draw(
     createElement(Dialog, {
@@ -273,4 +298,94 @@ test("a dialog given a title and actions is named by its title, and what it hold
   button("Send").focus();
   key("Tab");
   expect(holds(field.current)).toBe(true);
+});
+
+/** A dialog whose act its owner refuses or lets through, at the owner's word. */
+function Refusing({ refused }: { refused: boolean }): React.JSX.Element {
+  return createElement(Dialog, {
+    title: "Delete plan?",
+    refused,
+    onDismiss: () => undefined,
+    children: createElement("button", { type: "button" }, "Delete"),
+  });
+}
+
+test("a refusal shakes the card each time it lands, not when the card opens on one, and a motion inside the card ending leaves the shake playing", () => {
+  draw(createElement(Refusing, { refused: true }));
+  const root = roots.at(-1) ?? expect.fail("no root");
+  const dialog = card() ?? expect.fail("the dialog opens");
+  const onOpening = dialog.hasAttribute("data-refused");
+  act(() => root.render(createElement(Refusing, { refused: false })));
+  act(() => root.render(createElement(Refusing, { refused: true })));
+  const landed = dialog.getAttribute("data-refused");
+  act(() => button("Delete").dispatchEvent(new Event("animationend", { bubbles: true })));
+  const afterInner = dialog.getAttribute("data-refused");
+  act(() => dialog.dispatchEvent(new Event("animationend")));
+  const afterOwn = dialog.hasAttribute("data-refused");
+  act(() => root.render(createElement(Refusing, { refused: false })));
+  act(() => root.render(createElement(Refusing, { refused: true })));
+
+  expect(onOpening).toBe(false);
+  expect(landed).toBe("true");
+  expect(afterInner).toBe("true");
+  expect(afterOwn).toBe(false);
+  expect(dialog.getAttribute("data-refused")).toBe("true");
+});
+
+test("a dialog holding a draft is nudged and kept by the first Escape or press on the dimmed window, says why, and is put away by the next; one holding none goes at once", () => {
+  let dismissals = 0;
+  const drawn = (holding: boolean) =>
+    createElement(Dialog, {
+      title: "Send feedback",
+      holding,
+      onDismiss: () => {
+        dismissals += 1;
+      },
+      children: createElement("textarea", { "aria-label": "Feedback" }),
+    });
+  draw(drawn(true));
+  const root = roots.at(-1) ?? expect.fail("no root");
+  const dialog = card() ?? expect.fail("the dialog opens");
+  const backdrop = dialog.parentElement ?? expect.fail("no dimmed window");
+  press(backdrop, backdrop);
+  const afterFirst = {
+    dismissals,
+    nudge: dialog.getAttribute("data-nudge"),
+    told: dialog.querySelector('[role="status"]')?.textContent,
+  };
+  key("Escape");
+  const afterSecond = dismissals;
+  act(() => root.render(drawn(false)));
+  key("Escape");
+
+  expect(afterFirst).toEqual({
+    dismissals: 0,
+    nudge: "true",
+    told: "Your draft is kept. Press Escape again to close.",
+  });
+  expect(afterSecond).toBe(1);
+  expect(dismissals).toBe(2);
+});
+
+test("an owner asks its dialog away through its handle as Escape would, a draft holding it back the same way", () => {
+  let dismissals = 0;
+  const handle = createRef<DialogHandle>();
+  draw(
+    createElement(Dialog, {
+      ref: handle,
+      title: "New task",
+      holding: true,
+      onDismiss: () => {
+        dismissals += 1;
+      },
+      children: createElement("textarea", { "aria-label": "Words" }),
+    }),
+  );
+  act(() => handle.current?.dismiss());
+  const afterFirst = dismissals;
+  act(() => handle.current?.dismiss());
+
+  expect(afterFirst).toBe(0);
+  expect(card()?.getAttribute("data-nudge")).toBe("true");
+  expect(dismissals).toBe(1);
 });

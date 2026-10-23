@@ -72,7 +72,7 @@ html.call-window #root {
     calc(
       -1 *
       min(
-        max(0px, var(--column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
+        max(0px, var(--luke-column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
         var(--luke-stage-height) -
         var(--floating-card, 0px) -
         2 *
@@ -196,16 +196,6 @@ html.call-window[data-pointer-stale="true"]
   bottom: var(--luke-space-4);
 }
 
-.call-card-task {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.call-card-task[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
-}
-
 /* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
    the top of the call's Call tab, on the card's ground, border, and
    corner, so the tile reads as the call card grown into a picture. It
@@ -299,12 +289,6 @@ html.call-window[data-pointer-stale="true"]
   display: block;
   width: 56px;
   height: 56px;
-}
-
-.call-video-face .luke-face {
-  width: 100%;
-  height: 100%;
-  color: var(--luke-color-text-muted);
 }
 
 /* The wait for the picture (`AvatarWaiting`), over the tile's whole ground

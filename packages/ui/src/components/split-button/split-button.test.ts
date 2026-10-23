@@ -12,7 +12,8 @@ import { SplitButton } from "./split-button.js";
  * the menu, a choice acts and closes it, and Escape closes it with focus back
  * on the chevron. Unavailable, both halves refuse their press yet stay Tab
  * stops; busy, the main part is named by what it is doing and refuses its
- * press while the chevron still opens the menu.
+ * press while the chevron still opens the menu. A main part whose press
+ * succeeded lands on a check as its ring leaves; one that failed does not.
  */
 
 declare global {
@@ -213,4 +214,41 @@ test("every press but the chevron's is heard as it lands, one the busy main part
   press(button("More ways to save"));
 
   expect(done).toEqual(["heard", "chevron"]);
+});
+
+test("a split button's main part whose press succeeded wears a check as its ring leaves, and one that failed does not", () => {
+  // Note that the check's hold is a motion this DOM has no engine for, so one is lent that never ends.
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.classList.contains("luke-button-done") ? [new EventTarget()] : [];
+    },
+  });
+  const draw = (busy: string | undefined, succeeded: boolean) =>
+    createElement(SplitButton, {
+      busy,
+      succeeded,
+      menu: {
+        label: "Choose a model",
+        "aria-haspopup": "menu",
+        "aria-expanded": false,
+        onClick: () => undefined,
+      },
+      children: "Start",
+    });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  act(() => root.render(draw("Starting", false)));
+  act(() => root.render(draw(undefined, false)));
+  const afterFailure = container.querySelector(".luke-button-done");
+  act(() => root.render(draw("Starting", false)));
+  act(() => root.render(draw(undefined, true)));
+  const afterSuccess = container.querySelector(".luke-button-done");
+  Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+
+  expect(afterFailure).toBeNull();
+  expect(afterSuccess).not.toBeNull();
 });

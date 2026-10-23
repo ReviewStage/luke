@@ -1,5 +1,8 @@
 import {
   ArchiveIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
   ComboboxList,
@@ -11,7 +14,11 @@ import {
   GAP,
   IconButton,
   Inline,
+  LIST_VARIANT,
+  List,
+  ListRow,
   MENU_ITEM_MARK,
+  MENU_SURFACE_FLOW,
   MENU_SURFACE_INSET,
   Menu,
   type MenuEntry,
@@ -19,6 +26,7 @@ import {
   MenuItem,
   MenuSurface,
   PencilIcon,
+  SearchField,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -38,8 +46,10 @@ import { CatalogSection } from "../section";
  * pointer; a searchable menu's pinned rows, steered from its field: one
  * opening a list beside it, a switch, and one that does not apply now; and
  * the menu's surface under lists an app hangs and keys itself: an `@` list
- * narrowed under its kind's crumb, edge to edge, and one press inset, as
- * one offered over selected words is.
+ * narrowed under its kind's crumb, edge to edge, one press inset, as
+ * one offered over selected words is, and a find bar's field and buttons
+ * laid side by side on it; and toolbars floated on it, a hair round their
+ * buttons: a message's actions, a picture's worded tools, and one press.
  */
 
 const ignore = () => undefined;
@@ -138,16 +148,22 @@ function AccountMenu(): React.JSX.Element {
   );
 }
 
-/** A row a right-click, or a touch held on it, opens the task's menu on, at the pointer. */
+/**
+ * A row a right-click, or a touch held on it, opens the task's menu on, at
+ * the pointer; its press drops the same menu under it.
+ */
 function RightClickRow(): React.JSX.Element {
   const menu = useMenu(true);
   return (
     <>
-      <button type="button" className="catalog-menu-row" {...menu.contextMenu()}>
-        <Text tone={TEXT_TONE.MUTED}>
-          Right-click anywhere in this row, or hold it on a touch screen.
-        </Text>
-      </button>
+      <List label="Tasks" variant={LIST_VARIANT.CARD}>
+        <ListRow
+          title="Right-click anywhere in this row, or hold it on a touch screen."
+          onPress={menu.trigger(dropBelowStart).onClick}
+          menuOpen={menu.drawn !== undefined}
+          contextMenu={menu.contextMenu()}
+        />
+      </List>
       {menu.drawn && (
         <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />
       )}
@@ -220,6 +236,18 @@ function NarrowedList(): React.JSX.Element {
   );
 }
 
+/** A find bar on the menu's surface: its field, then the buttons that step through what it found. */
+function FindBar(): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  return (
+    <MenuSurface flow={MENU_SURFACE_FLOW.ROW} role="search" aria-label="Find">
+      <SearchField label="Find" placeholder="Find" value={query} onChange={setQuery} />
+      <IconButton label="Previous match" icon={<ArrowUpIcon />} onClick={ignore} />
+      <IconButton label="Next match" icon={<ArrowDownIcon />} onClick={ignore} />
+    </MenuSurface>
+  );
+}
+
 function MenuExample(): React.JSX.Element {
   return (
     <>
@@ -242,6 +270,38 @@ function MenuExample(): React.JSX.Element {
           <MenuSurface>
             <Button icon={<CopyIcon />} onClick={ignore}>
               Copy
+            </Button>
+          </MenuSurface>
+          <FindBar />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="menu-toolbar" title="A toolbar floated over what it acts on">
+        <Inline gap={GAP.CONTROL}>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR}>
+            <IconButton
+              label="Copy"
+              icon={<CopyIcon />}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={ignore}
+            />
+            <IconButton
+              label="Edit"
+              icon={<PencilIcon />}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={ignore}
+            />
+          </MenuSurface>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR} role="toolbar" aria-label="Picture">
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<PencilIcon />} onClick={ignore}>
+              Describe
+            </Button>
+            <Button variant={BUTTON_VARIANT.DANGER} icon={<TrashIcon />} onClick={ignore}>
+              Remove
+            </Button>
+          </MenuSurface>
+          <MenuSurface flow={MENU_SURFACE_FLOW.TOOLBAR}>
+            <Button icon={<DocumentIcon />} onClick={ignore}>
+              Comment
             </Button>
           </MenuSurface>
         </Inline>

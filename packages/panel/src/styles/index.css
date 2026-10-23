@@ -12,17 +12,13 @@
    `data-luke-profile`, `data-luke-theme`, and `data-luke-density`, so every
    sheet below reads them. */
 @import "@luke/ui/tokens.css";
-/* Before base.css: `.settings-input` is equal specificity to the tweaks
-   there, and those tweaks have to win. */
+@import "./search.css";
 @import "./settings.css";
 @import "./base.css";
 /* The shared components' own rules, in the `components` layer: above
    base.css's element resets, which sit in `base`, and under the utilities an
    app's Tailwind entry layers last, so a reset never undoes a shared control. */
 @import "@luke/ui/styles.css";
-/* Before the surfaces that draw messages, so each can restate a measure of
-   its own without out-specifying the block it is styling. */
-@import "./markdown.css";
 /* Before the surfaces that show a chord, so each can size its own without
    out-specifying the chord itself. */
 @import "./shortcut.css";

@@ -165,5 +165,13 @@ export const agentBrowserTabsAnswerSchema = EffectSchema.Struct({
   tabs: EffectSchema.Array(agentBrowserTabSchema),
 });
 
-/** One tab as it stands after a takeover, a renewal, or a hand-back (POST, DELETE). */
+/** A tab a member opens in a coding agent's browser: the agent, and the http or https address it opens at. */
+export const agentBrowserTabOpenRequestSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  address: EffectSchema.String,
+});
+
+export type AgentBrowserTabOpenRequest = typeof agentBrowserTabOpenRequestSchema.Type;
+
+/** One tab as it stands after it opened, a takeover, a renewal, or a hand-back (POST, DELETE). */
 export const agentBrowserTabAnswerSchema = EffectSchema.Struct({ tab: agentBrowserTabSchema });

@@ -228,10 +228,7 @@ test("drawn as a document, pictures written next to each other stand side by sid
   const press = container.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
   assert.ok(press, "a picture is pressed to enlarge it");
   act(() => press.click());
-  assert.equal(
-    document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
-    "After.png",
-  );
+  assert.equal(document.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt, "After.png");
 });
 
 test("a picture of an item opens a viewer the arrow keys walk across the item's pictures in the order they are drawn, one still read or drawn later joining once held and one whose read failed left out, and none of another item's", () => {
@@ -274,7 +271,7 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
       card.querySelector(".attachment-viewer-place")?.textContent ?? "alone",
     ];
   };

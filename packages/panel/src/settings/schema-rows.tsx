@@ -12,7 +12,7 @@ import { SELECT_ALIGN, SELECT_WIDTH, Select, SettingsRow, Switch } from "@luke/u
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
-import { ChangedMark } from "./marks.js";
+import { SettingMarks } from "./marks.js";
 import { Picker } from "./picker-row.js";
 import { PictureChoiceRow } from "./picture-choice-row.js";
 import { SampledChoiceRow } from "./sampled-choice-row.js";
@@ -51,11 +51,11 @@ function SchemaSwitchRow({
   checked: boolean;
   onChange: (enabled: boolean) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, run } = useSettingWrite(onChange);
+  const { busy, rejection, saves, run } = useSettingWrite(onChange);
   return (
     <SettingsRow
       label={label}
-      adornment={changed ? <ChangedMark /> : null}
+      adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       error={rejection}
       labelsControl
@@ -103,7 +103,7 @@ function SchemaChoiceRow({
   search: string | undefined;
   onChange: (token: string) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, run } = useSettingWrite(onChange);
+  const { busy, rejection, saves, run } = useSettingWrite(onChange);
   // A token the set does not hold is not written, so a stale menu writes nothing.
   const pick = (token: string) => {
     if (options.some((option) => option.value === token)) run(token);
@@ -111,7 +111,7 @@ function SchemaChoiceRow({
   return (
     <SettingsRow
       label={label}
-      adornment={changed ? <ChangedMark /> : null}
+      adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       error={rejection}
     >

@@ -101,7 +101,7 @@
       "ignoreDependencies": ["@anthropic-ai/claude-agent-sdk"]
     },
     "tools/anti-slop": {
-      "entry": ["index.ts"],
+      "entry": ["index.ts", "press-guard-check.ts"],
       "project": ["**/*.ts"]
     },
     "packages/brand": {

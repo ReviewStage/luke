@@ -1,13 +1,17 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { INTEGRATION_INSTALLATION_STATUS } from "@luke/database/integration-vocabulary";
 import {
+  AUTOMATION_ACCESS,
   listAutomationRuns,
   listAutomations,
   readAutomation,
 } from "@luke/database/models/automation-store";
+import { workspaceIntegrationInstallations } from "@luke/database/models/integration-installation-store";
 import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
+  AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
@@ -21,9 +25,13 @@ import {
   automationScopeSchema,
   githubTriggerSchema,
   scheduleTriggerSchema,
+  sentryTriggerSchema,
 } from "@luke/features/automation-wire";
 import { disabledServersSchema } from "@luke/features/coding-agent-wire";
+import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
+import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
+import { isRecord } from "@luke/wire";
 import { describeWire } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -31,6 +39,7 @@ import {
   changeAutomationAs,
   createAutomationAs,
   removeAutomationAs,
+  runAutomationNowAs,
   runSummaries,
   summaryOf,
 } from "../automations/automation-writes.js";
@@ -45,6 +54,7 @@ import type { GitHubApp } from "../github/github-app.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
+import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
 import { acceptedAgentChoice } from "./coder-host/start.js";
@@ -72,7 +82,9 @@ import { workspaceAgent } from "./workspace-agents.js";
  * admins'. A run starts as the automation's creator, so an automation an
  * agent makes runs as the member who started that agent. A webhook trigger
  * is never made or set here: its secret is shown once, in the window that
- * minted it (`AGENTS.md`), and no agent's answer may carry it. An automation
+ * minted it (`AGENTS.md`), and no agent's answer may carry it. A Sentry
+ * trigger is refused where this deployment configures no Sentry integration
+ * or the workspace installed none, since nothing would ever fire it. An automation
  * is made under an id drawn from eve's key for the call (`called-id.ts`),
  * so a call eve runs again names the one it made. Every answer is data the
  * model reads, never a credential.
@@ -89,8 +101,10 @@ export const AUTOMATION_TOOL_REFUSAL = {
   UNREADABLE_CREATE:
     `Not made: give a name of at most ${AUTOMATION_BOUNDS.MAX_NAME_CHARS} characters, a prompt ` +
     `of at most ${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS}, and a trigger: a schedule as ` +
-    '{"kind":"schedule","cron":"<five-field cron>","timezone":"<IANA zone>"}, or a GitHub event ' +
-    'as {"kind":"github","event":"<event>"}; and a model with its effort, both or neither.',
+    '{"kind":"schedule","cron":"<five-field cron>","timezone":"<IANA zone>"}, a GitHub event ' +
+    'as {"kind":"github","event":"<event>"}, or a Sentry event as ' +
+    '{"kind":"integration","provider":"sentry","event":"alert-triggered"}; and a model with its ' +
+    "effort, both or neither.",
   UNREADABLE_UPDATE:
     `Not run: name the automation by the id ${AGENT_TOOL.LIST_AUTOMATIONS} answered, and at ` +
     "least one change, a model with its effort, both or neither.",
@@ -115,6 +129,13 @@ export const AUTOMATION_TOOL_REFUSAL = {
   TIMEZONE:
     "Not run: the schedule's time zone is not one the IANA database names, such as Europe/London.",
   TOO_FREQUENT: "Not run: a schedule may fire at most once every fifteen minutes.",
+  SENTRY_UNCONFIGURED:
+    "Not run: this deployment of Luke has no Sentry integration configured, so no automation " +
+    "here may fire on Sentry's events; use a schedule or a GitHub event instead.",
+  SENTRY_NOT_INSTALLED:
+    "Not run: the workspace has not installed Luke's Sentry integration, so no Sentry event " +
+    "would fire it. A workspace owner or admin installs it in Workspace settings › " +
+    "Integrations › Sentry; make it once that is done.",
   NO_AGENT:
     "Not run: no coding agent of your workspace has that agentId to hand each run to; " +
     `${AGENT_TOOL.LIST_AGENTS} names them, or leave agentId out for a new agent each run.`,
@@ -124,6 +145,13 @@ export const AUTOMATION_TOOL_REFUSAL = {
   INVALID:
     "Not run: Luke does not take the automation as asked. Check the trigger, the repositories, " +
     "the scope, and the agentId, and that the guards are whole numbers within their bounds.",
+  UNKNOWN_SERVERS:
+    "Not run: name each connection in disabledServers as your connections are named in your " +
+    "instructions, such as neon, sentry, or notion-2 for a second Notion account; these name none:",
+  NOT_RUNNABLE:
+    "Not run: the developer you work for may read that automation but not run it. A personal " +
+    "automation is its creator's to run, and a workspace's every member's.",
+  NO_SERVICE: "Not run: this deployment cannot reach the coding agents' service.",
   UNAVAILABLE:
     "Not run: the automations could not be written just now. The call may be made again.",
 } as const;
@@ -147,13 +175,20 @@ const PROMPT = describeWire(
 );
 
 const TRIGGER = describeWire(
-  Schema.Union([scheduleTriggerSchema, githubTriggerSchema]),
+  Schema.Union([scheduleTriggerSchema, githubTriggerSchema, sentryTriggerSchema]),
   "What fires it: a schedule, five-field cron read in an IANA time zone, at most once every " +
     'fifteen minutes, such as {"kind":"schedule","cron":"0 9 * * 1","timezone":"Europe/London"}; ' +
-    "or an event of its repositories the Luke GitHub App hears, such as " +
+    "an event of its repositories the Luke GitHub App hears, such as " +
     '{"kind":"github","event":"pull-request-opened"}, narrowed by labels, branches, senders ' +
-    "(people alone where left out), moments, drafts, and forks. A webhook is made only on the " +
-    "automations page, which shows its secret once.",
+    "(people alone where left out), moments, drafts, and forks; or an event of the Sentry " +
+    "organization that installed Luke's Sentry integration on the workspace (Workspace settings " +
+    '› Integrations › Sentry), such as {"kind":"integration","provider":"sentry",' +
+    '"event":"alert-triggered","filters":{"project":["web"],"level":["error","fatal"]}}. ' +
+    "alert-triggered, the one to prefer, fires when a Sentry issue alert rule whose action is " +
+    '"Send a notification via Luke" fires; issue-created fires on every new issue in that ' +
+    "organization. Its filters keep it to the projects (by slug), environments, and levels " +
+    "named: any value within a field matches, every field named must, case aside. A webhook is " +
+    "made only on the automations page, which shows its secret once.",
 );
 
 const REPOSITORIES = describeWire(
@@ -176,9 +211,11 @@ const EFFORT = describeWire(
 
 const SERVERS = describeWire(
   disabledServersSchema,
-  "The connections (MCP servers) each run's agent is not handed, by connection name, the " +
-    "whole list; every connection of the creator's is handed where none are named. A connection " +
-    "the prompt names with an @ is handed even where it is listed here.",
+  "The connections (MCP servers) each run's agent is not handed, the whole list, each by its " +
+    "connection name as your instructions list your connections (neon, sentry, notion-2); every " +
+    "connection of the creator's is handed where none are named, and a name that is no " +
+    "connection's is refused. A connection the prompt names with an @ is handed even where it is " +
+    "listed here.",
 );
 
 const GUARDS = describeWire(
@@ -186,7 +223,9 @@ const GUARDS = describeWire(
   "How far it may go: maxConcurrentRuns, its agents at work at once (1 to " +
     `${AUTOMATION_BOUNDS.MAX_CONCURRENT_RUNS}), past which a firing is skipped, and dailyRunCap, ` +
     `the runs it may start in a day (1 to ${AUTOMATION_BOUNDS.MAX_DAILY_RUNS}); 1 and 10 where ` +
-    "left out.",
+    "left out. A Sentry trigger also takes subjectCooldownHours, the hours before the same " +
+    `Sentry issue may start another run (1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}), ` +
+    `${AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS} where left out.`,
 );
 
 const SCOPE = describeWire(
@@ -268,10 +307,13 @@ const UPDATE_AUTOMATION_INPUT = Schema.Struct({
 
 const DELETE_AUTOMATION_INPUT = Schema.Struct({ automationId: AUTOMATION_ID });
 
+const RUN_AUTOMATION_INPUT = Schema.Struct({ automationId: AUTOMATION_ID });
+
 const readListAsked = Schema.decodeUnknownResult(LIST_AUTOMATIONS_INPUT);
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_AUTOMATION_INPUT);
 const readUpdateAsked = Schema.decodeUnknownResult(UPDATE_AUTOMATION_INPUT);
 const readDeleteAsked = Schema.decodeUnknownResult(DELETE_AUTOMATION_INPUT);
+const readRunAsked = Schema.decodeUnknownResult(RUN_AUTOMATION_INPUT);
 
 /** The tools as every coding agent is offered them: each its name, its words, and its input schema. */
 export const LIST_AUTOMATIONS_TOOL = {
@@ -282,9 +324,9 @@ export const LIST_AUTOMATIONS_TOOL = {
     "model and effort its runs take, its repositories, where its runs land, its guards, scope, " +
     "when it is next due, its newest run, and whether the developer made it. Name an " +
     "automationId to read that one whole, its prompt in full and its newest runs, each with why " +
-    "it was skipped or failed and the agent it started. An automation fires on a schedule or a " +
-    "GitHub event and starts a coding agent on its prompt, as its creator. Answers `accepted` " +
-    "with them, or `rejected` and why.",
+    "it was skipped or failed and the agent it started. An automation fires on a schedule, a " +
+    "GitHub event, a webhook, or a Sentry event, and starts a coding agent on its prompt, as " +
+    "its creator. Answers `accepted` with them, or `rejected` and why.",
   inputSchema: LIST_AUTOMATIONS_INPUT,
 } as const;
 
@@ -295,6 +337,7 @@ export const CREATE_AUTOMATION_TOOL = {
     "page would: each time its trigger fires, Luke starts a coding agent on its prompt, in its " +
     "repositories, on its creator's keys and connections, with no task and no one watching, or " +
     "hands the run to the one agent named. It is on as it is made, and runs as the developer. " +
+    "One fired by Sentry needs Luke's Sentry integration installed on the workspace first. " +
     "Make one when the developer asks for it, never otherwise on your own, and read " +
     `${AGENT_TOOL.LIST_AUTOMATIONS} first so you make none they already have. Answers ` +
     "`accepted` with the automation as it stands, or `rejected` and why.",
@@ -308,8 +351,10 @@ export const UPDATE_AUTOMATION_TOOL = {
     `${AGENT_TOOL.LIST_AUTOMATIONS} answered it, as its editor on the automations page would: ` +
     "pause or resume it, rename it, or give it a new prompt, trigger, repositories, model and " +
     "effort, switched-off connections, the agent its runs land on, guards, scope, or archiving; " +
-    "what you leave out stands. Change one only where the developer asked for it. Answers " +
-    "`accepted` with the automation as it now stands, or `rejected` and why.",
+    "what you leave out stands, and a trigger given replaces the one standing whole, a switch " +
+    "to Sentry needing Luke's Sentry integration installed on the workspace. Change one only " +
+    "where the developer asked for it. Answers `accepted` with the automation as it now " +
+    "stands, or `rejected` and why.",
   inputSchema: UPDATE_AUTOMATION_INPUT,
 } as const;
 
@@ -324,8 +369,26 @@ export const DELETE_AUTOMATION_TOOL = {
   inputSchema: DELETE_AUTOMATION_INPUT,
 } as const;
 
-/** What the automation tools reach: the store, the catalog a model is checked against, and GitHub through the workspace's installation. */
-type AutomationToolServices = DatabaseServices | ModelCatalog | GitHubApp | HttpClient.HttpClient;
+export const RUN_AUTOMATION_TOOL = {
+  name: AGENT_TOOL.RUN_AUTOMATION,
+  description:
+    `Run an automation of your workspace now, by its id as ${AGENT_TOOL.LIST_AUTOMATIONS} ` +
+    "answered it, as its Run now on the automations page would: one run, whatever its trigger, " +
+    "through the same guards a firing takes, starting its coding agent on its prompt as a " +
+    "scheduled run would, or handing it to the one agent it names. Run one when the developer " +
+    "asks for it, such as to try an automation just made, never otherwise on your own. Answers " +
+    "`accepted` with the run, started with its agent or skipped or failed and why, or " +
+    "`rejected` and why.",
+  inputSchema: RUN_AUTOMATION_INPUT,
+} as const;
+
+/** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and Luke's Sentry integration. */
+type AutomationToolServices =
+  | DatabaseServices
+  | ModelCatalog
+  | GitHubApp
+  | HttpClient.HttpClient
+  | SentryApp;
 
 /** A refusal of the shared writes in the model's words. */
 function refusalWords(refusal: HostedRefusal): string {
@@ -345,6 +408,24 @@ function refusalWords(refusal: HostedRefusal): string {
     default:
       return AUTOMATION_TOOL_REFUSAL.UNAVAILABLE;
   }
+}
+
+/** The names a call's disabledServers holds that are no connection's, read off the input as sent, since the wire's own read drops them unsaid. */
+function unknownServers(input: UnparsedWireValue): readonly string[] {
+  const named = isRecord(input) ? input.disabledServers : undefined;
+  if (!Array.isArray(named)) return [];
+  return named.filter(
+    (name): name is string =>
+      typeof name === "string" && integrationConnectionOf(name) === undefined,
+  );
+}
+
+/** A refusal of the servers named that are no connection's, or nothing where every one is. */
+function serversRefused(input: UnparsedWireValue): WireRecord | undefined {
+  const unknown = unknownServers(input);
+  return unknown.length === 0
+    ? undefined
+    : agentToolRejected(`${AUTOMATION_TOOL_REFUSAL.UNKNOWN_SERVERS} ${unknown.join(", ")}.`);
 }
 
 /** An instant as the model reads it. */
@@ -431,6 +512,24 @@ const scheduleRefused = (
         return AUTOMATION_TOOL_REFUSAL.CRON;
     }
   });
+
+/** Sentry's refusal in the model's words, where the trigger is Sentry's and this deployment configures no Sentry integration or the workspace installed none. */
+const sentryRefused = Effect.fn("agents/automationSentryRefused")(function* (
+  workspaceId: string,
+  trigger: { readonly kind: string },
+) {
+  if (trigger.kind !== AUTOMATION_TRIGGER.INTEGRATION) return undefined;
+  const app = yield* SentryApp;
+  const configured = yield* Effect.result(app.settings);
+  if (Result.isFailure(configured)) return AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED;
+  const installations = yield* workspaceIntegrationInstallations(workspaceId);
+  const installed = installations.some(
+    (row) =>
+      row.provider === TRIGGER_PROVIDER.SENTRY &&
+      row.status === INTEGRATION_INSTALLATION_STATUS.ACTIVE,
+  );
+  return installed ? undefined : AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED;
+});
 
 /** The model and effort named, both or neither; undefined for neither, and null where one came without the other. */
 function namedChoice(asked: {
@@ -544,6 +643,8 @@ export function runCreateAutomation(
     return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_CREATE));
   }
   const made = asked.success;
+  const servers = serversRefused(input);
+  if (servers !== undefined) return Effect.succeed(servers);
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
@@ -558,12 +659,14 @@ export function runCreateAutomation(
         return Result.isSuccess(kept)
           ? {
               status: ACTION_RESULT_STATUS.ACCEPTED,
-              automation: automationReading(kept.success, true),
+              automation: automationReading(kept.success, false),
             }
           : agentToolRejected(refusalWords(kept.failure));
       }
       const schedule = yield* scheduleRefused(made.trigger);
       if (schedule !== undefined) return agentToolRejected(schedule);
+      const sentry = yield* sentryRefused(workspace.value, made.trigger);
+      if (sentry !== undefined) return agentToolRejected(sentry);
       const model = yield* choiceRefused(userId, choice, "Not made");
       if (model !== undefined) return agentToolRejected(model);
       const landing = yield* landingNamed(userId, workspace.value, made.agentId);
@@ -616,7 +719,7 @@ export function runCreateAutomation(
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        automation: automationReading(written.success.automation, true),
+        automation: automationReading(written.success.automation, false),
       };
     }),
   );
@@ -641,6 +744,8 @@ export function runUpdateAutomation(
     disabledServers,
     ...rest
   } = asked.success;
+  const servers = serversRefused(input);
+  if (servers !== undefined) return Effect.succeed(servers);
   const changesAction =
     prompt !== undefined || choice !== undefined || disabledServers !== undefined;
   if (!changesAction && agentId === undefined && Object.keys(rest).length === 0) {
@@ -658,6 +763,8 @@ export function runUpdateAutomation(
       if (rest.trigger !== undefined) {
         const schedule = yield* scheduleRefused(rest.trigger);
         if (schedule !== undefined) return agentToolRejected(schedule);
+        const sentry = yield* sentryRefused(workspace.value, rest.trigger);
+        if (sentry !== undefined) return agentToolRejected(sentry);
       }
       const model = yield* choiceRefused(userId, choice, "Not changed");
       if (model !== undefined) return agentToolRejected(model);
@@ -688,7 +795,7 @@ export function runUpdateAutomation(
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        automation: automationReading(written.success.automation, true),
+        automation: automationReading(written.success.automation, false),
       };
     }),
   );
@@ -722,6 +829,48 @@ export function runDeleteAutomation(
       return Result.isSuccess(deleted)
         ? deleted.success
         : agentToolRejected(refusalWords(deleted.failure));
+    }),
+  );
+}
+
+/** One call of `run_automation`: an automation of the caller's workspace run now, once under the call's key, as its member may run it. */
+export function runRunAutomation(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, AutomationToolServices> {
+  const asked = readRunAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_ID));
+  }
+  const { automationId } = asked.success;
+  const { eveAs } = call;
+  if (eveAs === undefined) {
+    return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_SERVICE));
+  }
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const workspace = yield* callerWorkspace(call.caller);
+      if (Option.isNone(workspace))
+        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      const userId = callerUserId(call.caller);
+      const found = yield* workspaceAutomation(userId, workspace.value, automationId);
+      if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
+      const runnable = yield* readAutomation(userId, automationId, AUTOMATION_ACCESS.RUN);
+      if (Option.isNone(runnable)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NOT_RUNNABLE);
+      // Note that the run reaches eve as the deployment acting for the account it starts as, its creator, whoever fired it, as the sweep's runs do.
+      const ran = yield* runAutomationNowAs(
+        userId,
+        runnable.value,
+        calledId(userId, call.clientKey),
+        (account) => Effect.succeed(eveAs(account)),
+      ).pipe(Effect.result);
+      if (Result.isFailure(ran)) return agentToolRejected(refusalWords(ran.failure));
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        automation: { id: runnable.value.id, name: runnable.value.name },
+        run: runReading(ran.success.run),
+        alreadyRan: !ran.success.made,
+      };
     }),
   );
 }

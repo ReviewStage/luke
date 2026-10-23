@@ -1,6 +1,6 @@
 import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
-import { useSecond } from "@luke/ui";
+import { FILL_ELEMENT, Fill, useSecond } from "@luke/ui";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
@@ -195,16 +195,24 @@ export function DraftAgentTab({
 
   if (control.onUnarchive !== undefined) {
     return (
-      <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
+      <Fill
+        as={FILL_ELEMENT.SECTION}
+        className="agent-tab ph-no-capture"
+        aria-label={TAB_WORDS.NEW_AGENT}
+      >
         <footer className="agent-tab-foot">
           <ArchivedComposerNote onUnarchive={control.onUnarchive} />
         </footer>
-      </section>
+      </Fill>
     );
   }
 
   return (
-    <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="agent-tab ph-no-capture"
+      aria-label={TAB_WORDS.NEW_AGENT}
+    >
       {sentAt === undefined || fork === undefined ? null : (
         <ConversationEmptyState>
           <StartingLine
@@ -255,6 +263,6 @@ export function DraftAgentTab({
           }
         />
       </footer>
-    </section>
+    </Fill>
   );
 }

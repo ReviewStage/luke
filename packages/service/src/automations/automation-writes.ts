@@ -5,10 +5,12 @@ import {
   type Automation,
   type AutomationChanges,
   type AutomationRunInHistory,
+  automationRunByKey,
   createAutomationCommitted,
   deleteAutomationCommitted,
   listAutomationRuns,
   readAutomation,
+  recordAutomationRun,
   updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
@@ -17,6 +19,7 @@ import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/wo
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
@@ -48,6 +51,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
+import { type EveForAccount, executeAutomationRun } from "./automation-runs.js";
 
 /**
  * automation-writes.ts -- an automation made, changed, and deleted as an account asks, and read for the wire: one implementation for the automations routes and the agents' automation tools.
@@ -543,4 +547,49 @@ export const removeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   const deleted = yield* hostedStoreOrUnavailable(deleteAutomationCommitted(userId, id));
   if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   return deleted.value.txid;
+});
+
+/** A "Run now" as it answers: the run its key names, whether this call made it, and the transaction it was recorded in where it did. */
+export interface AutomationRanNow {
+  readonly run: AutomationRunSummary;
+  readonly made: boolean;
+  readonly txid: string | undefined;
+}
+
+/**
+ * The automation run now, as the account asks, under the caller's key: a
+ * manual firing recorded once per key and acted on at once, through the
+ * same guards and the same start a scheduled run takes
+ * (`automation-runs.ts`), reaching eve as `eveFor` reaches it; the same key
+ * again answers the run it made. The caller has read the automation as one
+ * the account may run.
+ */
+export const runAutomationNowAs = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  automation: Automation,
+  key: string,
+  eveFor: EveForAccount,
+): Effect.fn.Return<
+  AutomationRanNow,
+  HostedRefusal,
+  DatabaseServices | ModelCatalog | GitHubApp | HttpClient.HttpClient
+> {
+  const firedAt = new Date(yield* Clock.currentTimeMillis);
+  const recorded = yield* hostedStoreOrUnavailable(
+    recordAutomationRun(automation, {
+      dedupeKey: key,
+      firing: { kind: AUTOMATION_FIRING.MANUAL, userId },
+      firedAt,
+    }),
+  );
+  if (Option.isSome(recorded)) yield* executeAutomationRun(eveFor, recorded.value);
+  const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, automation.id, key));
+  if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const [summary] = yield* runSummaries(userId, [run.value]);
+  if (summary === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return {
+    run: summary,
+    made: Option.isSome(recorded),
+    txid: Option.isSome(recorded) ? recorded.value.txid : undefined,
+  };
 });

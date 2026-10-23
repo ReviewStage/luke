@@ -12,7 +12,11 @@ import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
+import {
+  type AgentPictureDoor,
+  AgentPicturesProvider,
+  MessageFileChips,
+} from "./agent-pictures.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 
 /**
@@ -26,7 +30,8 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
  * player of its own, from a `blob:` address let go of as the player goes;
  * and an image a line handed the agent, which its row names by id, is read
  * through the door as a chip, while one a row keeps the bytes of is drawn
- * from them.
+ * from them. A line still on its way draws its files going up, with no
+ * share to read, and each takes its check as the line lands.
  *
  * Synthetic turns and pictures throughout: the door answers a PNG's first
  * bytes for every picture it is asked for.
@@ -530,4 +535,32 @@ test("an image a line's row names by the picture it was kept as is read through 
     ["data:image/png;base64,iVBORw==", "data:image/png;base64,AAAA"],
   );
   assert.deepEqual(read, [kept.id]);
+});
+
+test("a line still on its way draws its files going up with no share, each taking its check as the line lands", () => {
+  const message: CodingAgentMessage = {
+    id: "line-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      { type: "text", text: "Here's the spec" },
+      {
+        type: "file",
+        mediaType: "application/pdf",
+        filename: "spec.pdf",
+        url: "data:application/pdf;base64,JVBERi0=",
+      },
+    ],
+  };
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  const draw = (sending: boolean) =>
+    act(() => root.render(createElement(MessageFileChips, { message, sending })));
+  draw(true);
+  const meter = host.querySelector('[role="progressbar"]') ?? assert.fail("a file going up");
+  assert.equal(meter.getAttribute("aria-label"), "Uploading spec.pdf");
+  assert.equal(meter.hasAttribute("aria-valuenow"), false, "the send says nothing of its share");
+  draw(false);
+  assert.equal(host.querySelector('[role="progressbar"]'), null);
+  assert.notEqual(host.querySelector(".luke-attachment-chip-landed"), null, "its check");
 });

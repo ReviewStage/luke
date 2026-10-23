@@ -538,7 +538,9 @@ export function FileHead({
         {hinted(
           hint,
           <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
-            <PathParts path={path} />
+            <span className="diff-list-path-words">
+              <PathParts path={path} />
+            </span>
           </TextButton>,
         )}
       </span>
@@ -549,7 +551,6 @@ export function FileHead({
       className="diff-list-head"
       data-standing={standing ? "" : undefined}
       data-collapsed={collapsed ? "" : undefined}
-      onPointerDown={onStand}
       onPointerEnter={(event) => {
         if (near || event.pointerType === "touch") return;
         arrived.current = { focused: -1, over: partOf(event.target) };
@@ -562,7 +563,7 @@ export function FileHead({
       }}
     >
       <Disclosure open={!collapsed} onOpenChange={onToggle}>
-        <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW} onPointerDown={onStand}>
           <DisclosureAction>
             {hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
           </DisclosureAction>

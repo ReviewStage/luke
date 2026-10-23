@@ -172,6 +172,7 @@ export function AccountSection({
       />
       <ConfirmDialog
         confirm={deletion}
+        gate={account.email}
         question={{
           title: `Delete the account ${account.email}?`,
           body: "This cannot be undone.",

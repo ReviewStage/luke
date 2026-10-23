@@ -16,24 +16,33 @@ import {
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   LIST_ROW_META,
   ListRow,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PencilIcon,
   PlusIcon,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
+  Stack,
   Time,
   Tooltip,
   UnarchiveIcon,
   useMenu,
   useMinute,
+  useResizeEdge,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -46,7 +55,6 @@ import {
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
-import type { SkillOption } from "@luke/ui/skill-mention";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import {
   AtSignIcon,
@@ -75,6 +83,7 @@ import { InboxListSkeleton, markAllEntries } from "../tasks/inbox-list.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { keptSkills } from "../tasks/repository-skills.js";
 import type { SkillSource } from "../tasks/skill-picker.js";
+import type { SkillWithFile } from "../tasks/skill-ref.js";
 import { agentEndMark, PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
@@ -84,14 +93,12 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
-import { SidebarResizeEdge } from "./desktop-sidebar.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
 import { TaskStatusMark, taskCardOf } from "./task-card.js";
-import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -237,13 +244,13 @@ function useTaskDoors(
   const { tasks: listed } = tasks;
   // Note that each task's skills are read once and kept while its repository and workspace stand, because a source made anew, as a change to any listed task would make it, reads them again and draws its chips as words until it lands.
   const skillSources = useRef(
-    new Map<string, { repository: string; workspaceId: string; source: SkillSource }>(),
+    new Map<string, { repository: string | null; workspaceId: string; source: SkillSource }>(),
   );
   const doors = useMemo(() => {
     const held = new Map<string, ChatTaskDoors>();
     const kept = skillSources.current;
     const reading = new Set<string>();
-    const skillSourceOf = (taskId: string, repository: string, workspaceId: string) => {
+    const skillSourceOf = (taskId: string, repository: string | null, workspaceId: string) => {
       reading.add(taskId);
       const standing = kept.get(taskId);
       if (standing?.repository === repository && standing.workspaceId === workspaceId) {
@@ -271,21 +278,18 @@ function useTaskDoors(
         lines === undefined
           ? showFile({ path }, undefined)
           : showFile({ path, startLine: lines.startLine, endLine: lines.endLine }, lines.commit);
-      // A skill's file opens in its task, as the task's page opens it.
-      const skills =
-        repository === null
-          ? undefined
-          : {
-              source: skillSourceOf(task.id, repository, workspaceId),
-              onOpen: (skill: SkillOption) => showFile({ path: skill.path }, undefined),
-            };
+      // A skill's file opens in its task, as the task's page opens it; a task with no repository offers its member's installed skills alone.
+      const skills = {
+        source: skillSourceOf(task.id, repository, workspaceId),
+        onOpen: (skill: SkillWithFile) => showFile({ path: skill.path }, undefined),
+      };
       held.set(task.id, {
         code,
         mentions: { ...taskless, taskName: task.name, doors: { ...taskless.doors, onOpenFile } },
         skills,
       });
     }
-    // A task no longer listed, or listed with no repository, lets its skills go, so a repository chosen again is read afresh.
+    // A task no longer listed lets its skills go, so a task listed again is read afresh.
     for (const taskId of kept.keys()) if (!reading.has(taskId)) kept.delete(taskId);
     return held;
   }, [listed, act, openTask, workspace, mentions]);
@@ -822,7 +826,11 @@ function RailGroup({
           onClose={menu.close}
         />
       )}
-      {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
+      {drawn.length === 0 ? null : (
+        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">
+          {drawn.map(row)}
+        </Stack>
+      )}
     </div>
   );
 }
@@ -959,8 +967,8 @@ function ChatView({
   // Note that For you is where Chat opens, so its link is Chat's own.
   const copyChat = useCopyLinkItem()({ kind: LINK_PLACE.CHAT });
   const { width, onResize } = useChatListWidth();
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
     width,
     bounds: INBOX_LIST_WIDTH,
     reserve: () => PANE_RESERVE,
@@ -1128,7 +1136,7 @@ function ChatView({
         />
         <ScrollArea fade={SCROLL_FADE.START}>
           <div className="chat-rail-body">
-            <ul className="sidebar-tasks">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">
               <PlaceRow
                 mark={<AtSignIcon />}
                 title="For you"
@@ -1144,13 +1152,13 @@ function ChatView({
                 onRead={undefined}
                 onChoose={() => view.onChoose(FOR_YOU)}
               />
-            </ul>
+            </Stack>
             {groups.lead.map(group)}
             {groups.tasks.map(group)}
             {groups.trail.map(group)}
           </div>
         </ScrollArea>
-        {single ? null : <SidebarResizeEdge edge={edge} />}
+        {single ? null : <ResizeEdge edge={edge} />}
       </nav>
       <ChatPane
         chat={chat}
@@ -1186,7 +1194,13 @@ function RailBar({
   return (
     <header className="desktop-toolbar chat-rail-bar">
       <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
+        <OneLine
+          as={ONE_LINE_ELEMENT.H1}
+          end={ONE_LINE_END.ELLIPSIS}
+          className="desktop-toolbar-title"
+        >
+          {CHAT_LIST}
+        </OneLine>
         <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">

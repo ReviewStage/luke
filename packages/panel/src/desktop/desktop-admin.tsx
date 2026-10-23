@@ -23,13 +23,18 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackIcon,
   commandKeyshortcuts,
+  Fill,
   FoldingButton,
+  GAP,
+  LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
   NavItemLink,
+  ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
   Shortcut,
+  Stack,
 } from "@luke/ui";
 import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
@@ -42,7 +47,7 @@ import { ColumnFoot } from "../call/call-card.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
@@ -119,10 +124,10 @@ export function DesktopAdmin({
           Back
         </NavItem>
         <h1 className="admin-sections-title">{ADMIN_TITLE}</h1>
-        <div className="sidebar-section">
+        <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
-              <ul>
+              <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                 {APP_SECTIONS.map((place) => (
                   <li key={place.tab}>
                     <NavItem
@@ -134,19 +139,19 @@ export function DesktopAdmin({
                     </NavItem>
                   </li>
                 ))}
-              </ul>
+              </Stack>
               <hr className="sidebar-rule" />
-              <ul>
+              <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                 <li>
                   <OpenInBrowserRow />
                 </li>
-              </ul>
+              </Stack>
             </div>
           </ScrollArea>
-        </div>
+        </Fill>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
+        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
       </nav>
       <section className="admin-page" aria-label={ADMIN_TITLE} hidden={hidden.item}>
         {/* The view's own toolbar stands in the title bar's row, as a page's

@@ -10,9 +10,15 @@ import {
   ComposeIcon,
   commandKeyshortcuts,
   DetailPage,
+  DrawerScrim,
   IconButton,
   NavItem,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PAGE_FRAME,
+  PANE_PIN_ELEMENT,
+  PanePin,
   ScrollArea,
   SettingsPage,
   SettingsSectionsSkeleton,
@@ -20,6 +26,7 @@ import {
   SidebarIcon,
   Skeleton,
   Tooltip,
+  useDrawerSwipe,
 } from "@luke/ui";
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -27,6 +34,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
@@ -111,7 +119,13 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Tasks</h1>
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              Tasks
+            </OneLine>
           </div>
         </header>
       }
@@ -143,7 +157,13 @@ function AdminLoading({
           toolbar={
             <header className="desktop-toolbar">
               <div className="desktop-toolbar-heading">
-                <h1 className="desktop-toolbar-title">Overview</h1>
+                <OneLine
+                  as={ONE_LINE_ELEMENT.H1}
+                  end={ONE_LINE_END.ELLIPSIS}
+                  className="desktop-toolbar-title"
+                >
+                  Overview
+                </OneLine>
               </div>
             </header>
           }
@@ -171,9 +191,13 @@ function PersonLoading({
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
               {name ?? <Skeleton width={PERSON_SKELETON_NAME} />}
-            </h1>
+            </OneLine>
           </div>
         </header>
       }
@@ -234,7 +258,13 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Automations</h1>
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              Automations
+            </OneLine>
             <ExperimentTag />
           </div>
         </header>
@@ -566,6 +596,16 @@ export function DesktopShell({
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
   const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
+  // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
+  const coarse = useCoarsePointer();
+  useDrawerSwipe({
+    enabled: room === SHELL_ROOM.NARROW && coarse,
+    open: sidebar.overlay === SIDEBAR_OVERLAY.OPEN,
+    stage: shell,
+    drawer: () => shell.current?.querySelector<HTMLElement>(":scope > .desktop-sidebar") ?? null,
+    onOpen: () => sidebar.onOverlay(SIDEBAR_OVERLAY.OPEN),
+    onClose: () => sidebar.onOverlay(SIDEBAR_OVERLAY.CLOSED),
+  });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
@@ -828,6 +868,7 @@ export function DesktopShell({
         room={room}
         inboxListing={sharedListing}
       />
+      {room === SHELL_ROOM.NARROW ? <DrawerScrim open={drawerOver} /> : null}
       <main className="desktop-main" inert={drawerOver}>
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
@@ -919,11 +960,11 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      <div className="title-bar-controls" onPointerDown={keepOverlay}>
+      <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
         <SidebarToggle sidebar={sidebar} />
         {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
         {sidebar.collapsed ? <OfflineMark /> : null}
-      </div>
+      </PanePin>
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle

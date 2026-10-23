@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { EmptyState, ScrollArea, SpinnerRegion } from "@luke/ui";
+import { EmptyState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -351,10 +351,14 @@ export function WholeFile({
     return <EmptyState>{FILE_LOAD_FAILED}</EmptyState>;
   }
   return (
-    <div className="whole-file">
+    <Fill className="whole-file">
       <ScrollArea ref={host}>{null}</ScrollArea>
-      {module === undefined ? <SpinnerRegion delay label="Loading file" /> : null}
+      {module === undefined ? (
+        <div className="whole-file-wait">
+          <SpinnerRegion delay label="Loading file" />
+        </div>
+      ) : null}
       {notes.map((note) => createPortal(note.content, elementFor(note.key), note.key))}
-    </div>
+    </Fill>
   );
 }

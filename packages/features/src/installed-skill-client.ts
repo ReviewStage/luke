@@ -15,6 +15,10 @@ import type {
   InstalledSkillUpdateCheck,
   installedSkillInstallRequestSchema,
 } from "./installed-skill-route-wire.js";
+import {
+  INSTALLED_SKILL_CALL_FAILURE,
+  type InstalledSkillCallFailure,
+} from "./installed-skill-view.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
 /**
@@ -30,31 +34,6 @@ import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
  * A preview, an install, and an update read GitHub on the service before
  * they answer, so they wait as long as a Start does.
  */
-
-/** Why an installed skills call has no answer. */
-export const INSTALLED_SKILL_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The workspace is none the account is in, or the skill none it sees. */
-  NOT_FOUND: "not-found",
-  /** The account sees the skill or the workspace but may not do this: a workspace skill takes an owner or admin. */
-  NOT_PERMITTED: "not-permitted",
-  /** The request is none the service takes: nothing to install in the paste, a skill named that the source does not hold, a workspace skill in a personal workspace, or an update of a pasted skill. */
-  INVALID: "invalid",
-  /** A skill of that name is already installed in the scope asked. */
-  NAME_TAKEN: "name-taken",
-  /** A skill's files were refused, for the reason the failure carries. */
-  FILES_REFUSED: "files-refused",
-  /** Neither the workspace's GitHub installation, the member's own token, nor an anonymous read reaches the repository. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The branch, tag, or commit the source names is none of the repository's. */
-  REF_NOT_FOUND: "ref-not-found",
-  /** GitHub did not answer, or is rate limiting; the same call later may be answered. */
-  GITHUB_UNANSWERED: "github-unanswered",
-} as const;
-
-export type InstalledSkillCallFailure =
-  (typeof INSTALLED_SKILL_CALL_FAILURE)[keyof typeof INSTALLED_SKILL_CALL_FAILURE];
 
 /** A call's answer, or why there is none: for a skill refused, which, and why its files were. */
 export type InstalledSkillCallResult<Answer> =

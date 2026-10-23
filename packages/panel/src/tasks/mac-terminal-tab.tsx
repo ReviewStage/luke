@@ -4,9 +4,8 @@ import {
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { BUTTON_SIZE, BUTTON_VARIANT, Button } from "@luke/ui";
+import { BUTTON_SIZE, BUTTON_VARIANT, Button, FILL_FLOW, Fill, OneLine } from "@luke/ui";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { PlayIcon, SquareIcon, TerminalIcon } from "lucide-react";
@@ -99,7 +98,6 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   const port = useRef<MessagePort | undefined>(undefined);
   // Note that a Stop press is kept with the run it stopped, so the tab drawn again says Stopped rather than how the stop made it exit.
   const stopAsked = useRef(false);
-  const [repositoryBox, repositoryClipped] = useClipped(repository);
   const tellOnScreen = useRef<(words: string) => void>(() => undefined);
 
   useEffect(() => {
@@ -200,16 +198,10 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   };
 
   return (
-    <div className="terminal-tab file-view ph-no-capture">
+    <Fill className="terminal-tab file-view ph-no-capture">
       <header className="file-view-bar">
         <span className="terminal-tab-title">
-          <span
-            ref={repositoryBox}
-            className="terminal-tab-agent"
-            data-overflow={String(repositoryClipped)}
-          >
-            {repository}
-          </span>
+          <OneLine className="terminal-tab-agent">{repository}</OneLine>
           <span className="terminal-tab-standing">
             {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
           </span>
@@ -247,7 +239,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           )}
         </div>
       </header>
-      <div className="terminal-tab-body">
+      <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body">
         <div className="terminal-tab-host">
           {AsyncResult.isFailure(loaded) ? (
             <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
@@ -255,7 +247,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
             <div ref={setElement} className="terminal-tab-screen" />
           )}
         </div>
-      </div>
-    </div>
+      </Fill>
+    </Fill>
   );
 }

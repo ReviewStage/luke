@@ -470,6 +470,8 @@ export interface CodingAgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
   readonly eve: AgentSessions | undefined;
+  /** eve as the deployment acting for any account, such as the creator an automation's run starts as, whoever fired it; nothing where the deployment names no secret or no origin for eve. */
+  readonly eveAs?: ((account: string) => AgentSessions) | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
@@ -592,8 +594,8 @@ const START_AGENT_INPUT = Schema.Struct({
   title: Schema.optionalKey(
     describeWire(
       START_TITLE,
-      "The agent's title from the start, what it works on, shown beside the human name it is " +
-        "given, such as the pull request it will open; leave it out to have it named from what it is told.",
+      "The agent's title from the start, how the developer sees it named, such as the pull " +
+        "request it will open; leave it out to have it named from what it is told.",
     ),
   ),
   branch: Schema.optionalKey(
@@ -723,7 +725,7 @@ export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
     "List the coding agents of your workspace, on any task or none and started by any member, " +
-    "yourself left out: each with its id, its name (the human name the developer sees it by, where it has one), its title (what it works on), the model " +
+    "yourself left out: each with its id, its title (how the developer sees it named; a member's operator is named Luke instead), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
     "sandbox is on if a turn " +
@@ -1079,7 +1081,7 @@ interface AgentReading {
   /** Whether the agent works on the call's own task. */
   readonly onYourTask: boolean;
   readonly archived: boolean;
-  /** The human name the agent was given, as its tab shows it and its mention names it; none for an agent from before names were given, which goes by its title. */
+  /** The name the agent goes by apart from its title, as its tab shows it and its mention names it: Luke for an operator, none for any other agent. */
   readonly name?: string;
   /** The agent's title, what it works on, which update_agent renames; the model's id where it has none yet. */
   readonly title: string;
@@ -1280,12 +1282,12 @@ export function choiceRefusal(
   return `${lead}: ${refused}. The choices are: ${choices}.`;
 }
 
-/** An agent by the name its tab shows: Luke for an operator, its human name, else its title, or its model's id where it has none yet. */
+/** An agent by the name its tab shows: Luke for an operator, else its title, or its model's id where it has none yet. */
 function agentName(agent: CodingAgent): string {
   return agentGivenName(agent) ?? agent.title ?? agent.model;
 }
 
-/** The name an answer names an agent by, Luke for an operator and its human name for any other, where it goes by one. */
+/** The name an answer names an agent by apart from its title: Luke for an operator, none for any other agent. */
 function givenNameOf(agent: CodingAgent): { name?: string } {
   const name = agentGivenName(agent);
   return name === undefined ? {} : { name };
@@ -1936,11 +1938,18 @@ const sectionAsked = (
     });
   });
 
-/** Whether every change named already stands on the task as its member reads it. */
-function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
+/**
+ * Whether every change named already stands on the task as its member reads
+ * it. Note that a repository confirmed again stands only where it is reached
+ * as the task records it, because the write records the access it was reached
+ * through.
+ */
+function changesStand(stored: StoredTask, changes: TaskChanges): boolean {
+  const { task } = stored;
   return (
     (changes.name === undefined || changes.name === task.name) &&
     (changes.repository === undefined || changes.repository === task.repository) &&
+    (changes.githubAccess === undefined || changes.githubAccess === stored.githubAccess) &&
     (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined)) &&
     (changes.status === undefined || changes.status === task.status) &&
     (changes.priority === undefined || changes.priority === task.priority) &&
@@ -2104,7 +2113,7 @@ export function runUpdateTask(
         return agentToolRejected(relinked.failure);
       }
       const already =
-        changesStand(read.value.task, asWritten) &&
+        changesStand(read.value, asWritten) &&
         (placing?.success.stands ?? true) &&
         (relinked === undefined || issueChangesStand(relinked.success));
       // The task's change and its place in the sidebar are one transaction, so a place refused, its

@@ -297,7 +297,7 @@ interface RowRead {
 function granolaRow(page: HTMLElement): RowRead {
   const row = granolaRowOf(page);
   return {
-    line: row.querySelector(".settings-state")?.textContent ?? undefined,
+    line: row.querySelector(".luke-settings-row-state")?.textContent ?? undefined,
     buttons: [...row.querySelectorAll("button")].flatMap((button) =>
       button.textContent === "" ? [] : [button.textContent ?? ""],
     ),
@@ -521,7 +521,7 @@ test("a connection that works stands quiet, with Reconnect in its ⋯ beside Dis
   listed.set(INTEGRATION_PROVIDER.LINEAR, [{ name: "list_issues", description: "Lists issues." }]);
   const page = await mount();
   const row = rowNamed(page, "Linear");
-  const line = row.querySelector(".settings-state")?.textContent;
+  const line = row.querySelector(".luke-settings-row-state")?.textContent;
   const buttons = rowButtons(row);
   const menu = menuOf(row);
 
@@ -552,9 +552,9 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
   const expired = rowNamed(page, "Notion");
   const refused = rowNamed(page, "Slack");
 
-  assert.equal(expired.querySelector(".settings-state")?.textContent, "Sign-in expired.");
+  assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired.");
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
-  assert.equal(refused.querySelector(".settings-state")?.textContent, "Slack refused the sign-in.");
+  assert.equal(refused.querySelector(".luke-settings-row-state")?.textContent, "Slack refused the sign-in.");
   assert.deepEqual(rowButtons(refused), ["Reconnect"]);
   assert.deepEqual(menuOf(refused), { items: ["Disconnect"], heading: undefined });
 });
@@ -775,7 +775,7 @@ function toolName(tool: Element | null | undefined): string | null | undefined {
 function openRow(page: HTMLElement, name: string): void {
   act(() =>
     (
-      rowNamed(page, name).querySelector<HTMLButtonElement>(".integration-tools-line button") ??
+      rowNamed(page, name).querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
       assert.fail(`${name}'s row opens onto its tools`)
     ).click(),
   );
@@ -854,7 +854,7 @@ test("a query keeps only the rows it found, opening one onto the tools it found,
   assert.deepEqual(sections(page), [["Connected", ["Vercel"]]]);
   assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
   assert.equal(
-    rowNamed(page, "Vercel").querySelector(".integration-tools-line button")?.textContent,
+    rowNamed(page, "Vercel").querySelector(".luke-settings-row-state button")?.textContent,
     "1 of 3 tools match",
   );
   assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
@@ -951,7 +951,7 @@ test("a query that finds an integration by its own name opens nothing by itself,
   assert.deepEqual(shownTools(page), []);
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-line button") ??
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
       assert.fail("Vercel's row opens onto its tools")
     ).click(),
   );
@@ -966,7 +966,7 @@ test("a row closed under one query opens again when that query comes back after 
 
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-line button") ??
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
       assert.fail("Vercel's row closes")
     ).click(),
   );
@@ -1329,7 +1329,7 @@ test("an added account whose first sign-in Connect refused keeps its row with th
     [...page.querySelectorAll(".luke-settings-row")].find(
       (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
-  assert.match(added.querySelector(".settings-state")?.textContent ?? "", /access_denied/u);
+  assert.match(added.querySelector(".luke-settings-row-state")?.textContent ?? "", /access_denied/u);
 
   sent = [];
   act(() =>

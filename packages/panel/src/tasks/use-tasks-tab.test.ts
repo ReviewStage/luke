@@ -98,6 +98,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
+import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
@@ -3318,6 +3319,52 @@ test("New task's agent start refused after its page opened opens the card again 
   assert.equal(tab.control().newTask.open, true, "the card opens again");
   assert.deepEqual(tab.control().newTask.preset?.refused, { card, note: refused });
   assert.equal(tab.control().history.open, true, "the version history stands behind it again");
+});
+
+test("Create with an agent opens New task's card for an automation's agent over the Automations page, and a start refused after it closed opens the same card again, the page behind it", async () => {
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  act(() => tab.control().automationsView.onOpen());
+  act(() => tab.control().onNewAutomationAgent());
+  assert.equal(tab.control().newTask.open, true);
+  assert.deepEqual(tab.control().newTask.preset, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
+  assert.equal(tab.control().automationsView.open, true, "the page stands behind the card");
+
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "# Create an automation",
+    attachments: [],
+    choice: undefined,
+  };
+  const card = {
+    purpose: NEW_TASK_PURPOSE.AUTOMATION,
+    repository: "acme/web",
+    links: [],
+    choice: undefined,
+    press: {
+      key: AGENT_KEY,
+      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+    },
+  };
+  let note: Promise<string | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed, card });
+  });
+  assert.equal(tab.control().newTask.open, false);
+  await act(async () => {
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    await note;
+  });
+  assert.equal(tab.control().newTask.open, true, "the card opens again");
+  assert.equal(
+    tab.control().newTask.preset?.purpose,
+    NEW_TASK_PURPOSE.AUTOMATION,
+    "for an automation's agent",
+  );
+  assert.equal(tab.control().automationsView.open, true, "the page stands behind it again");
 });
 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {

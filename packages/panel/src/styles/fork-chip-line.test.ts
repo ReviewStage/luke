@@ -30,7 +30,10 @@ function forkChip(width = 528) {
   const dock = document.body.appendChild(document.createElement("div"));
   dock.className = "draft-fork-dock";
   const chip = dock.appendChild(document.createElement("div"));
-  chip.className = "draft-fork-chip";
+  chip.className = "luke-card draft-fork-chip";
+  chip.dataset.look = "tint";
+  chip.dataset.corner = "control";
+  chip.dataset.padding = "none";
   const lead = chip.appendChild(document.createElement("span"));
   lead.className = "draft-fork-lead";
   lead.textContent = "Fork of";
@@ -40,7 +43,8 @@ function forkChip(width = 528) {
   source.textContent = "Admin dashboard design audit";
   chip.appendChild(document.createElement("span")).textContent = "at";
   const quote = chip.appendChild(document.createElement("span"));
-  quote.className = "draft-fork-quote";
+  quote.className = "luke-one-line draft-fork-quote";
+  quote.dataset.end = "ellipsis";
   quote.textContent = "“Merged: #4078 (charts and stat cards on app…”";
   chip.appendChild(document.createElement("span")).className = "draft-fork-drop";
   return { chip, lead, source, quote };
@@ -59,9 +63,11 @@ test("a forked draft's chip stands on one line, its source and its quote cut sho
 test("a forked draft's chip is drawn on the docked to-do list's card", () => {
   const { chip } = forkChip();
   const todos = document.body.appendChild(document.createElement("details"));
-  todos.className = "todos-dock";
+  todos.className = "luke-disclosure";
+  todos.dataset.look = "card";
   const head = todos.appendChild(document.createElement("summary"));
-  head.className = "todos-dock-head";
+  head.className = "luke-disclosure-summary";
+  head.dataset.look = "head";
   assert.equal(getComputedStyle(chip).backgroundColor, getComputedStyle(todos).backgroundColor);
   assert.equal(getComputedStyle(chip).minHeight, getComputedStyle(head).height);
 });

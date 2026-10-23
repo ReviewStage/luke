@@ -1,5 +1,9 @@
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
 import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   SCROLL_OVERSCROLL,
@@ -121,7 +125,12 @@ export function MarkdownField({
             onSubmit={onSubmit}
           />
         ) : (
-          <div className="markdown-field-preview">
+          <Card
+            look={CARD_LOOK.OUTLINE}
+            corner={CARD_CORNER.CONTROL}
+            padding={CARD_PADDING.FLUSH}
+            className="markdown-field-preview"
+          >
             <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
               <div className="markdown-field-preview-words pull-request-words">
                 {value.trim() === "" ? (
@@ -131,7 +140,7 @@ export function MarkdownField({
                 )}
               </div>
             </ScrollArea>
-          </div>
+          </Card>
         )}
       </div>
     </div>

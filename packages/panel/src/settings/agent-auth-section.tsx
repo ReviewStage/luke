@@ -19,7 +19,6 @@ import {
   BUTTON_VARIANT,
   Button,
   CHOICE_LOOK,
-  CheckIcon,
   ChoiceList,
   type ChoiceOption,
   ConfirmDialog,
@@ -27,16 +26,28 @@ import {
   Dialog,
   EllipsisIcon,
   ErrorState,
+  GAP,
   IconButton,
+  Inline,
+  JUSTIFY,
+  LAYOUT_ELEMENT,
   PencilIcon,
+  SETTINGS_ROW_STATE,
+  SettingsFacts,
   SettingsLine,
   SettingsRow,
+  SettingsRowMark,
+  SettingsRowStateLine,
   SettingsRowsSkeleton,
+  SettingsSavedMark,
   SettingsSection,
+  Stack,
   TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_FONT,
   TEXT_FIELD_TYPE,
+  TEXT_FONT,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -353,23 +364,18 @@ function markNoticeSeen(): void {
 /** A status in the connected or the attention tint, announced where it needs a hand. */
 function State({ ok, children }: { ok: boolean; children: string }): React.JSX.Element {
   return (
-    <span
-      className="settings-state"
-      data-state={ok ? "connected" : "attention"}
+    <SettingsRowStateLine
+      state={ok ? SETTINGS_ROW_STATE.CONNECTED : SETTINGS_ROW_STATE.ATTENTION}
       role={ok ? undefined : "alert"}
     >
       {children}
-    </span>
+    </SettingsRowStateLine>
   );
 }
 
 /** The green check beside a saved credential's label and a connected row's words. */
 function Saved(): React.JSX.Element {
-  return (
-    <span className="agent-auth-check">
-      <CheckIcon />
-    </span>
-  );
+  return <SettingsSavedMark />;
 }
 
 /**
@@ -462,15 +468,17 @@ function ClaudeTokenPanel({
   return (
     <>
       {plan === undefined ? null : (
-        <div className="agent-auth-line">
-          <span className="agent-auth-facts">
+        <Inline justify={JUSTIFY.BETWEEN}>
+          <SettingsFacts>
             <State ok={ok && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
               {tokenWords(plan)}
             </State>
-            <code className="api-key-hint">{plan.hint}</code>
-          </span>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+              {plan.hint}
+            </Text>
+          </SettingsFacts>
           {editing ? null : (
-            <span className="agent-auth-presses">
+            <Inline wrap={false}>
               {ok ? null : (
                 <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setEditing(true)}>
                   {WORDS.REPLACE_TOKEN}
@@ -483,13 +491,15 @@ function ClaudeTokenPanel({
               >
                 {WORDS.DISCONNECT}
               </Button>
-            </span>
+            </Inline>
           )}
-        </div>
+        </Inline>
       )}
       {editing ? (
-        <form
-          className="api-key-form"
+        <Inline
+          as={LAYOUT_ELEMENT.FORM}
+          justify={JUSTIFY.END}
+          growFirst
           onSubmit={(event) => {
             event.preventDefault();
             save();
@@ -528,7 +538,7 @@ function ClaudeTokenPanel({
           >
             {WORDS.SAVE}
           </Button>
-        </form>
+        </Inline>
       ) : null}
       {rejection === undefined ? null : <State ok={false}>{rejection}</State>}
       <ConfirmDialog
@@ -641,15 +651,15 @@ function ChatGptPanel({
   if (plan === undefined && !continueOffered && !unconfirmed && error === undefined) return null;
   return (
     <>
-      <div className="agent-auth-line">
-        <span className="agent-auth-facts">
+      <Inline justify={JUSTIFY.BETWEEN}>
+        <SettingsFacts>
           {plan === undefined ? null : (
             <State ok={connected && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
               {signInWords(plan)}
             </State>
           )}
-        </span>
-        <span className="agent-auth-presses">
+        </SettingsFacts>
+        <Inline wrap={false}>
           {connected ? (
             <Button variant={BUTTON_VARIANT.OUTLINE} disabled={removal.busy} onClick={removal.ask}>
               {WORDS.DISCONNECT}
@@ -672,8 +682,8 @@ function ChatGptPanel({
               </Button>
             </>
           ) : null}
-        </span>
-      </div>
+        </Inline>
+      </Inline>
       {error === undefined ? null : <State ok={false}>{error}</State>}
       {unconfirmed ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -773,14 +783,16 @@ function ApiKeyPanel({
   return (
     <>
       {open ? (
-        <form
-          className="api-key-form"
+        <Inline
+          as={LAYOUT_ELEMENT.FORM}
+          justify={JUSTIFY.END}
+          growFirst
           onSubmit={(event) => {
             event.preventDefault();
             save();
           }}
         >
-          <span className="agent-auth-field">
+          <Inline grow wrap={false} gap={GAP.TIGHT} growFirst>
             <TextField
               ref={field}
               type={shown ? TEXT_FIELD_TYPE.TEXT : TEXT_FIELD_TYPE.PASSWORD}
@@ -803,7 +815,7 @@ function ApiKeyPanel({
               pressed={shown}
               onClick={() => setShown((now) => !now)}
             />
-          </span>
+          </Inline>
           {stored === undefined ? null : (
             <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
               {WORDS.CANCEL}
@@ -818,10 +830,10 @@ function ApiKeyPanel({
           >
             {WORDS.SAVE}
           </Button>
-        </form>
+        </Inline>
       ) : (
-        <div className="agent-auth-line">
-          <span className="agent-auth-field">
+        <Inline justify={JUSTIFY.BETWEEN}>
+          <Inline grow wrap={false} gap={GAP.TIGHT} growFirst>
             <TextField
               label={`${name} API key`}
               readOnly
@@ -841,8 +853,8 @@ function ApiKeyPanel({
               label={`${name} key actions`}
               {...menu.trigger()}
             />
-          </span>
-        </div>
+          </Inline>
+        </Inline>
       )}
       {status === undefined || stored === undefined ? null : (
         <State ok={keyStanding(stored.status)}>{status}</State>
@@ -980,17 +992,19 @@ function AgentAuthDialog({
         </Button>
       }
     >
-      <div className={`agent-auth-dialog ${NO_CAPTURE}`}>
-        <ChoiceList
-          legend={`${harness.name} credential`}
-          options={cards}
-          value={chosen === undefined ? [] : [chosen]}
-          look={CHOICE_LOOK.CARD}
-          onChange={([next]) => {
-            if (next !== undefined) choose(next);
-          }}
-        />
-        {refused === undefined ? null : <State ok={false}>{refused}</State>}
+      <div className={NO_CAPTURE}>
+        <Stack gap={GAP.CONTROL}>
+          <ChoiceList
+            legend={`${harness.name} credential`}
+            options={cards}
+            value={chosen === undefined ? [] : [chosen]}
+            look={CHOICE_LOOK.CARD}
+            onChange={([next]) => {
+              if (next !== undefined) choose(next);
+            }}
+          />
+          {refused === undefined ? null : <State ok={false}>{refused}</State>}
+        </Stack>
       </div>
     </Dialog>
   );
@@ -1058,9 +1072,9 @@ export function AgentAuthSection({
               <div key={provider} {...searchAnchorProps(HARNESS[provider].anchor)}>
                 <SettingsRow
                   leading={
-                    <span className="settings-row-mark">
+                    <SettingsRowMark>
                       <HarnessMark provider={provider} />
-                    </span>
+                    </SettingsRowMark>
                   }
                   label={HARNESS[provider].name}
                 >
@@ -1071,9 +1085,9 @@ export function AgentAuthSection({
                       onClick={() => setOpen(provider)}
                     >
                       {connection.attention ? (
-                        <span className="settings-state" data-state="attention">
+                        <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
                           {connection.words}
-                        </span>
+                        </SettingsRowStateLine>
                       ) : (
                         connection.words
                       )}

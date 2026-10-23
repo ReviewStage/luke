@@ -1,6 +1,17 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { IconButton, SCROLL_FADE_INSET, Tooltip } from "@luke/ui";
+import {
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  FILL_ELEMENT,
+  Fill,
+  IconButton,
+  SCROLL_FADE_INSET,
+  Tooltip,
+} from "@luke/ui";
 import { callHeading, WORKED_SEPARATOR } from "@luke/ui/time-format";
 import {
   type CodeFeedCall,
@@ -164,7 +175,15 @@ function CodeCardContent({
     agentLabel,
   );
   return (
-    <article className="code-card" data-call-id={showing.callId} aria-label={fileRefText(code.ref)}>
+    <Card
+      as={CARD_ELEMENT.ARTICLE}
+      look={CARD_LOOK.CODE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
+      className="code-card"
+      data-call-id={showing.callId}
+      aria-label={fileRefText(code.ref)}
+    >
       <CodeCardHeader
         codeRef={code.ref}
         note={code.note}
@@ -172,7 +191,7 @@ function CodeCardContent({
         onOpen={onOpenFile === undefined ? undefined : () => onOpenFile(code.ref, code.commit)}
       />
       <CodeSnippet code={code} notes={notes} />
-    </article>
+    </Card>
   );
 }
 
@@ -275,7 +294,7 @@ export function CodePane({
 }): React.JSX.Element {
   const now = Date.now();
   return (
-    <section className="code-pane ph-no-capture" aria-label="Code shown">
+    <Fill as={FILL_ELEMENT.SECTION} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
         <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
           {codeFeedCalls(shown, calls).map((call) => (
@@ -291,6 +310,6 @@ export function CodePane({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-    </section>
+    </Fill>
   );
 }

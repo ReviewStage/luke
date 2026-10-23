@@ -71,6 +71,14 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
+  // Each integration's MCP server is a path of Luke's MCP route, in its function, named by its connection; the dispatcher restores its public path from `route-path`.
+  // Note that a route a segment rule names gets no exact rule of its own, so Luke's own server's path is spelled here beside it.
+  { src: "/api/agents/mcp", route: "agents/mcp", query: `${DISPATCH_QUERY.PATH}=agents/mcp` },
+  {
+    src: "/api/agents/mcp/integrations/([^/]+)",
+    route: "agents/mcp",
+    query: `${DISPATCH_QUERY.PATH}=agents/mcp/integrations/$1`,
+  },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */

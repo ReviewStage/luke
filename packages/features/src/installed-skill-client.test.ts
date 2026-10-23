@@ -3,11 +3,9 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
-import {
-  HostedInstalledSkillClient,
-  INSTALLED_SKILL_CALL_FAILURE,
-} from "./installed-skill-client.js";
+import { HostedInstalledSkillClient } from "./installed-skill-client.js";
 import { INSTALLED_SKILL_FILES_REFUSAL } from "./installed-skill-route-wire.js";
+import { INSTALLED_SKILL_CALL_FAILURE } from "./installed-skill-view.js";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "./installed-skill-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 

@@ -56,6 +56,8 @@ export const GATEWAY_METHOD = {
   TASKS_ISSUE_LINKS: "tasks.issueLinks",
   /** The Browser tabs open in a task's agents' browsers, read from the service and answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
+  TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
   TASKS_ISSUE_LINK: "tasks.issueLink",
   /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
@@ -245,6 +247,20 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_FOLLOW: "automations.follow",
   /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
   AUTOMATIONS_UNFOLLOW: "automations.unfollow",
+  /** The skills the account sees in a workspace, the workspace's then its own, read from the service now; or why there are none. */
+  INSTALLED_SKILLS_LIST: "installedSkills.list",
+  /** What a pasted `skills add` command or skill text would install, read by the service; nothing is written. */
+  INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
+  /** The skills a paste makes, installed for the account or its workspace, all or none; or why none were. */
+  INSTALLED_SKILLS_INSTALL: "installedSkills.install",
+  /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
+  INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
+  /** Whether a GitHub skill's folder moved at its ref since it was installed. */
+  INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
+  /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
+  INSTALLED_SKILLS_UPDATE: "installedSkills.update",
+  /** One installed skill removed with its files; or why it stands. */
+  INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",

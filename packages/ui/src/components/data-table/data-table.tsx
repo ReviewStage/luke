@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
+import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { SORT_DIRECTION, type SortDirection } from "../../sort-direction.js";
 import { CARD_PADDING, Card } from "../card/card.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -102,7 +103,11 @@ function DataTableHeading<Row, Key extends string>({
   }
   return (
     <th className="luke-data-table-cell" data-kind={kind} aria-sort={direction}>
-      <button type="button" className="luke-data-table-sort" onClick={() => onSort(column.key)}>
+      <button
+        type="button"
+        className="luke-data-table-sort"
+        onClick={pulseOnPress(() => onSort(column.key))}
+      >
         <Text
           as={TEXT_ELEMENT.SPAN}
           variant={TEXT_VARIANT.LABEL}
@@ -182,7 +187,9 @@ export function DataTable<Row, Key extends string = string>({
                   onClick={
                     press
                       ? (event) => {
-                          if (!onOwnControl(event)) press(row);
+                          if (onOwnControl(event)) return;
+                          pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
+                          press(row);
                         }
                       : undefined
                   }

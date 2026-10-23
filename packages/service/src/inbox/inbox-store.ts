@@ -1272,7 +1272,7 @@ const findWaitingItems = SqlSchema.findAll({
           id: inboxItem.id,
           taskId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
@@ -1322,7 +1322,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
         .select({
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
@@ -1465,7 +1465,7 @@ export function accountInboxLiveStatements(
           id: inboxItem.id,
           planId: inboxItem.taskId,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
@@ -1489,7 +1489,7 @@ export function accountInboxLiveStatements(
         {
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
@@ -3969,7 +3969,7 @@ const findMemberOpenAsks = SqlSchema.findAll({
           key: inboxItem.key,
           title: inboxItem.title,
           agentId: inboxItem.agentId,
-          // The name the agent goes by: Luke for an operator, its human name, else its title.
+          // The name the agent goes by: Luke for an operator, else its title.
           agentName: sql<
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,

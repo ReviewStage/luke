@@ -1,6 +1,8 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import {
   DisclosureAction,
+  GLYPH_INK,
+  GlyphSlot,
   IconButton,
   Time,
   Tooltip,
@@ -167,9 +169,9 @@ function FileNoteCard({
         open={!folded}
         onOpenChange={(open) => onFold(!open)}
         face={
-          <span className="transcript-luke-mark" aria-hidden="true">
-            <WingFace />
-          </span>
+          <GlyphSlot ink={GLYPH_INK.VOICE}>
+            <WingFace fill inherit />
+          </GlyphSlot>
         }
         name={<span className="file-note-author">{author}</span>}
         time={<Time className="annotation-card-time" at={note.shownAt} now={now} />}
@@ -225,9 +227,9 @@ export function FileNoteAnnotation({
     <MinimizedChip
       label={CHIP_LABEL(author, lineRangeText(note) ?? "", minimized.shown)}
       faces={
-        <span className="transcript-luke-mark" aria-hidden="true">
-          <WingFace />
-        </span>
+        <GlyphSlot ink={GLYPH_INK.VOICE}>
+          <WingFace fill inherit />
+        </GlyphSlot>
       }
       count={1}
       shown={minimized.shown}

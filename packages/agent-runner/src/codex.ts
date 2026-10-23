@@ -56,7 +56,12 @@ import {
   spawnAppServer,
 } from "./app-server.js";
 import type { ThreadStartParams, TurnStatus, UserInput } from "./codex-protocol/v2/index.js";
-import type { LaunchContext, LaunchOutcome, RunnerSelf } from "./launch.js";
+import {
+  installedSkillsPath,
+  type LaunchContext,
+  type LaunchOutcome,
+  type RunnerSelf,
+} from "./launch.js";
 import {
   CODEX_EFFORT,
   CODEX_ERROR_INFO,
@@ -66,6 +71,7 @@ import {
   type ContentBlock,
   codexErrorKind,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   InputLineSchema,
   RUNNER_END,
   RUNNER_ENV,
@@ -107,6 +113,15 @@ const MCP_SERVER = "luke";
 const MCP_TOOL_TIMEOUT_SECONDS = 600;
 
 /**
+ * How long Codex waits on an integration's server to start, in seconds:
+ * past the bound Luke lists a provider's tools within
+ * (`connection-door.ts`'s `LIST_TIMEOUT`, ten seconds), so a slow provider's
+ * server answers no tools rather than being failed by Codex at its default
+ * of ten (https://learn.chatgpt.com/docs/extend/mcp, `startup_timeout_sec`).
+ */
+const INTEGRATION_STARTUP_TIMEOUT_SECONDS = 20;
+
+/**
  * Who the runner tells app-server it is. OpenAI asks that the name match the
  * `agent_name_hint` the sign-in sent, which is `Luke`. The version is the
  * package's, which the bundle's build writes in (`--define`); an unbundled
@@ -122,6 +137,7 @@ const CLIENT_INFO = {
 const METHOD = {
   INITIALIZE: "initialize",
   INITIALIZED: "initialized",
+  SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
   TURN_START: "turn/start",
@@ -230,7 +246,7 @@ function providerAuth(provider: string, command: TokenCommand | undefined) {
 /**
  * App-server's argv: the documented ChatGPT-plan provider, its token from the
  * runner's token command (`providerAuth`), the Luke MCP
- * server with its bearer read from the environment and its tools approved up
+ * server and each integration's beside it with the bearer read from the environment and their tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
  * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and the
  * checkout's `.git` writable, and commands inheriting the core variables
@@ -246,6 +262,19 @@ function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): 
   const named = command === undefined ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
   const provider = `model_providers.${named.ID}`;
   const mcp = `mcp_servers.${MCP_SERVER}`;
+  // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as Luke's are.
+  const integrations = (config.integrations ?? [])
+    .filter((integration) => integration.name !== MCP_SERVER)
+    .flatMap((integration): (readonly [string, string])[] => {
+      const server = `mcp_servers.${integration.name}`;
+      return [
+        [`${server}.url`, toml(integration.url)],
+        [`${server}.bearer_token_env_var`, toml(RUNNER_ENV.BEARER)],
+        [`${server}.default_tools_approval_mode`, toml("approve")],
+        [`${server}.startup_timeout_sec`, INTEGRATION_STARTUP_TIMEOUT_SECONDS.toFixed(1)],
+        [`${server}.tool_timeout_sec`, MCP_TOOL_TIMEOUT_SECONDS.toFixed(1)],
+      ];
+    });
   const overrides: (readonly [string, string])[] = [
     ["model_provider", toml(named.ID)],
     [`${provider}.name`, toml(named.NAME)],
@@ -261,6 +290,7 @@ function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): 
     [`${mcp}.bearer_token_env_var`, toml(RUNNER_ENV.BEARER)],
     [`${mcp}.default_tools_approval_mode`, toml("approve")],
     [`${mcp}.tool_timeout_sec`, MCP_TOOL_TIMEOUT_SECONDS.toFixed(1)],
+    ...integrations,
     ["approval_policy", toml("never")],
     ["sandbox_mode", toml("workspace-write")],
     ["sandbox_workspace_write.network_access", "true"],
@@ -398,6 +428,11 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const opened = Effect.gen(function* () {
     yield* server.request(METHOD.INITIALIZE, { clientInfo: CLIENT_INFO, capabilities: null });
     yield* server.notify(METHOD.INITIALIZED);
+    // The member's installed skills, beside the checkout's `.agents/skills`, before the thread lists them.
+    const skills = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.SKILLS);
+    if (skills !== undefined) {
+      yield* server.request(METHOD.SKILLS_EXTRA_ROOTS_SET, { extraRoots: [skills] });
+    }
     const thread = {
       cwd: config.cwd,
       model: launch.model,

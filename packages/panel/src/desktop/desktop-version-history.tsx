@@ -16,6 +16,8 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   FoldingButton,
   IconButton,
   LIST_ROW_ACTIONS,
@@ -23,6 +25,8 @@ import {
   List,
   ListRow,
   NavItem,
+  OneLine,
+  ResizeEdge,
   RetryRowLabel,
   SCROLL_FADE,
   ScrollArea,
@@ -44,7 +48,6 @@ import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
-import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -75,7 +78,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
-import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
@@ -298,10 +301,10 @@ function SectionsHead({
   onBack: () => void;
 }): React.JSX.Element {
   const name = (
-    <FadingWords className="version-row-author" data-author={author.kind}>
+    <OneLine className="version-row-author">
       {actorName(author)}
       <LeftWords actor={author} />
-    </FadingWords>
+    </OneLine>
   );
   return (
     <>
@@ -568,11 +571,11 @@ function VersionPage({
             <Skeleton width="160px" />
           </div>
         </header>
-        <div className="desktop-document">
+        <Fill className="desktop-document">
           <DocumentScroll>
             <VersionSkeleton />
           </DocumentScroll>
-        </div>
+        </Fill>
       </>
     );
   }
@@ -583,7 +586,7 @@ function VersionPage({
       ) : (
         <header className="desktop-toolbar">{lead}</header>
       )}
-      <div className="desktop-empty-region">
+      <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             The history could not be read.
@@ -591,7 +594,7 @@ function VersionPage({
         ) : (
           <EmptyState>{NO_HISTORY_LINE}</EmptyState>
         )}
-      </div>
+      </Fill>
     </>
   );
 }
@@ -748,7 +751,7 @@ export function DesktopVersionHistory({
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>
-            <div className="sidebar-section">
+            <Fill className="sidebar-section">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 <div className="sidebar-section-body">
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
@@ -798,9 +801,10 @@ export function DesktopVersionHistory({
                   ) : null}
                 </div>
               </ScrollArea>
-            </div>
+            </Fill>
           </div>
-          <section
+          <Fill
+            as={FILL_ELEMENT.SECTION}
             className="sidebar-section version-log-pane"
             aria-label="Sections changed"
             inert={opened === undefined}
@@ -836,11 +840,11 @@ export function DesktopVersionHistory({
                 )}
               </div>
             </ScrollArea>
-          </section>
+          </Fill>
         </div>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
+        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version" hidden={hidden.item}>
         <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>

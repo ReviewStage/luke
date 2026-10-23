@@ -14,13 +14,18 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackIcon,
   commandKeyshortcuts,
+  Fill,
   FoldingButton,
+  GAP,
+  LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
+  ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
   SettingsPage,
   Shortcut,
+  Stack,
   useMenu,
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
@@ -57,7 +62,7 @@ import {
 } from "../settings-search.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ActionMenu } from "./action-menu.js";
-import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
@@ -308,7 +313,7 @@ export function DesktopSettings({
           }}
         />
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
-          <div className="sidebar-section">
+          <Fill className="sidebar-section">
             <ScrollArea fade={SCROLL_FADE.BOTH}>
               <div className="sidebar-section-body">
                 {search ? (
@@ -321,7 +326,7 @@ export function DesktopSettings({
                         listed={listed}
                         capabilities={settings.capabilities}
                       />
-                      <ul>
+                      <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                         {pages.map((view) => (
                           <SettingsPageRow
                             key={view}
@@ -331,17 +336,17 @@ export function DesktopSettings({
                             onOpen={() => open(view)}
                           />
                         ))}
-                      </ul>
+                      </Stack>
                     </section>
                   ))
                 )}
               </div>
             </ScrollArea>
-          </div>
+          </Fill>
         </LinkWorkspaceProvider>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
+        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
         <PlanTemplatePage

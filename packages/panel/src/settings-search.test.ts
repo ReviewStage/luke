@@ -163,7 +163,7 @@ test("an experiment is found by its name, what it brings, and what other apps ca
     assert.deepEqual(experimentalFound(query, true), ["Code review"], query);
   }
   assert.deepEqual(experimentalFound("on a schedule", true), [], "Automations is no experiment");
-  for (const query of ["Browser tab", "localhost"]) {
+  for (const query of ["Browser tab", "cloud browsers"]) {
     assert.deepEqual(experimentalFound(query, true), ["Browser tab"], query);
   }
   for (const query of ["Chat", "direct messages"]) {

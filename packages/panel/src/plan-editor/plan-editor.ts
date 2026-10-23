@@ -1,4 +1,5 @@
 import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
+import { MARKDOWN_CLASS } from "@luke/ui/markdown-class";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
@@ -75,7 +76,7 @@ const SECTION_LEVELS = new Set([1, 2]);
 const DocumentHeading = Heading.extend({
   renderHTML({ node }) {
     const level = Number(node.attrs.level);
-    return [`h${level}`, { class: "markdown-heading", "data-level": String(level) }, 0];
+    return [`h${level}`, { class: MARKDOWN_CLASS.HEADING, "data-level": String(level) }, 0];
   },
 });
 

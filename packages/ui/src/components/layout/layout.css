@@ -16,6 +16,12 @@
     flex-direction: column;
   }
 
+  /* A hidden arrangement stands out of the layout, as the user agent's own
+     rule would have it were the box not laid out by this sheet. */
+  :is(.luke-stack, .luke-inline)[hidden] {
+    display: none;
+  }
+
   .luke-inline[data-wrap="true"] {
     flex-wrap: wrap;
   }
@@ -28,12 +34,28 @@
     overflow-wrap: anywhere;
   }
 
+  .luke-inline[data-grow] {
+    flex: 1 1 var(--luke-select-field-width);
+  }
+
+  .luke-inline[data-grow-first] > :first-child {
+    flex: 1 1 var(--luke-select-field-width);
+  }
+
   [data-gap="none"]:is(.luke-stack, .luke-inline) {
     gap: 0;
   }
 
+  [data-gap="row"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-list-gap);
+  }
+
   [data-gap="tight"]:is(.luke-stack, .luke-inline) {
     gap: var(--luke-space-4);
+  }
+
+  [data-gap="item"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-space-6);
   }
 
   [data-gap="icon"]:is(.luke-stack, .luke-inline) {
@@ -46,6 +68,10 @@
 
   [data-gap="field"]:is(.luke-stack, .luke-inline) {
     gap: var(--luke-field-gap);
+  }
+
+  [data-gap="block"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-space-12);
   }
 
   [data-gap="section"]:is(.luke-stack, .luke-inline) {
@@ -90,5 +116,36 @@
 
   [data-justify="between"]:is(.luke-stack, .luke-inline) {
     justify-content: space-between;
+  }
+
+  [data-inset="ring"]:is(.luke-stack, .luke-inline) {
+    padding: var(--luke-focus-ring-reach);
+  }
+
+  [data-inset="column"]:is(.luke-stack, .luke-inline) {
+    padding: var(--luke-space-12);
+  }
+
+  [data-inset="block"]:is(.luke-stack, .luke-inline) {
+    padding: var(--luke-space-8) var(--luke-space-12);
+  }
+
+  /* A Fill takes the room its column leaves and may give way to nothing in
+     either direction, so what it holds scrolls or clips inside it rather than
+     stretching the column past the window. */
+  .luke-fill {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .luke-fill[data-flow="row"] {
+    flex-direction: row;
+  }
+
+  .luke-fill[data-clip="true"] {
+    overflow: clip;
   }
 }

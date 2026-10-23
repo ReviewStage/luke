@@ -373,8 +373,6 @@ interface HeldAgent {
   title: string | null;
   /** What kind of agent it is: an operator is said as Luke (`agentTabLabel`); none for a coder. */
   kind?: CodingAgentKind | undefined;
-  /** The human name the agent was given, said ahead of its title (`agentTabLabel`); none for one from before names were given. */
-  personaName?: string | undefined;
   /** The automation whose run started it, which an untitled agent goes by (`agentTabLabel`). */
   automationName?: string | undefined;
   status: CodingAgentStatus;
@@ -428,7 +426,6 @@ function noticeText(input: {
   model: string;
   title: string | null;
   kind?: CodingAgentKind | undefined;
-  personaName?: string | undefined;
   automationName?: string | undefined;
   status: CodingAgentStatus;
   models: readonly CatalogModel[] | undefined;
@@ -733,7 +730,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         model: end.agent.model,
         title: end.agent.title,
         kind: end.agent.kind,
-        personaName: end.agent.personaName,
         automationName: end.agent.automationName,
         status: end.agent.status,
         models,
@@ -1059,15 +1055,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function heldOf(
       agent: Pick<
         CodingAgentSummary,
-        | "planId"
-        | "model"
-        | "title"
-        | "kind"
-        | "personaName"
-        | "automationName"
-        | "status"
-        | "turnId"
-        | "quietTurn"
+        "planId" | "model" | "title" | "kind" | "automationName" | "status" | "turnId" | "quietTurn"
       >,
     ): HeldAgent {
       return {
@@ -1075,7 +1063,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         model: agent.model,
         title: agent.title,
         kind: agent.kind,
-        personaName: agent.personaName,
         automationName: agent.automationName,
         status: agent.status,
         turnId: agent.turnId,

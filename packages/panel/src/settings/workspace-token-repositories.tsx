@@ -3,7 +3,14 @@ import {
   type WorkspaceTokenRepository,
 } from "@luke/features/github-repositories-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { Badge, BUTTON_VARIANT, Button, SETTINGS_ROW_INDENT, SettingsRow } from "@luke/ui";
+import {
+  Badge,
+  BUTTON_VARIANT,
+  Button,
+  SETTINGS_ROW_INDENT,
+  SettingsRow,
+  SettingsRowMark,
+} from "@luke/ui";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { PlusIcon } from "lucide-react";
@@ -200,7 +207,7 @@ function TokenRepositoryRow({
     <SettingsRow
       indent={SETTINGS_ROW_INDENT.MARK}
       leading={
-        <span className="settings-row-mark">
+        <SettingsRowMark>
           <WorkspaceTile
             workspace={{
               id: `github:${owner}`,
@@ -209,7 +216,7 @@ function TokenRepositoryRow({
             }}
             size={TILE_SIZE.NESTED}
           />
-        </span>
+        </SettingsRowMark>
       }
       label={repository.fullName}
       adornment={<Badge>{WORDS.TOKEN}</Badge>}

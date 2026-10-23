@@ -22,6 +22,10 @@ import {
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
 import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
 import {
+  type InstalledSkillProceduresDependencies,
+  installedSkillProcedures,
+} from "./installed-skill-procedures.js";
+import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
@@ -50,6 +54,7 @@ export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
+export type { InstalledSkillProceduresDependencies } from "./installed-skill-procedures.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
@@ -102,6 +107,7 @@ export interface ActPortDependencies {
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
   readonly chapters: ChaptersProceduresDependencies;
+  readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
@@ -133,6 +139,7 @@ export function createActPortHandler<Sender>(
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
     ...chaptersProcedures(dependencies.chapters),
+    ...installedSkillProcedures(dependencies.installedSkills),
     ...integrationProcedures(dependencies.integrations),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),

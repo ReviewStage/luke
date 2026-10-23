@@ -3,7 +3,7 @@ import {
   REVIEW_COMMENT_MODE,
   type ReviewCommentMode,
 } from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button } from "@luke/ui";
+import { BUTTON_VARIANT, Button, CARD_CORNER, CARD_PADDING, Card } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { type CommentLines, commentLinesLabel } from "./changes-model.js";
 import { MarkdownField } from "./markdown-field.js";
@@ -128,8 +128,10 @@ export function LineComment({
   }, []);
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Escape anywhere in the comment lets it go, as it does in GitHub's own.
-    <div
+    // Note that Escape anywhere in the comment lets it go, as it does in GitHub's own.
+    <Card
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
       className="line-comment"
       onFocus={onActive}
       onKeyDown={(event) => {
@@ -179,6 +181,6 @@ export function LineComment({
           {holding ? LINE_WORDS.ADD : LINE_WORDS.START}
         </Button>
       </div>
-    </div>
+    </Card>
   );
 }

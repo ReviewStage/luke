@@ -15,7 +15,8 @@ import type { HTMLAttributes, ReactNode } from "react";
  * A face and a truncation are the two things a caller may ask of the words
  * beyond their role: the monospace face for a technical token (a version, a
  * requirement, an identifier) rather than prose, and one line cut with an
- * ellipsis where a row has no room for a second. A truncated element still
+ * ellipsis where a row has no room for a second, or, for a path, cut from its
+ * start so its last part stays. A truncated element still
  * holds every word, so what is read aloud is never cut; it truncates at its
  * own box's edge, so it stands as a block or a flex item.
  */
@@ -50,6 +51,14 @@ export const TEXT_FONT = {
 
 export type TextFont = (typeof TEXT_FONT)[keyof typeof TEXT_FONT];
 
+/** Where a truncated line is cut: at its end, or, for a path whose last part is its name, at its start. */
+export const TEXT_TRUNCATE = {
+  END: "end",
+  START: "start",
+} as const;
+
+export type TextTruncate = (typeof TEXT_TRUNCATE)[keyof typeof TEXT_TRUNCATE];
+
 /** The elements words may stand in, by what they are rather than how they look. */
 export const TEXT_ELEMENT = {
   P: "p",
@@ -81,8 +90,8 @@ export function Text({
   as?: TextElement;
   tone?: TextTone;
   font?: TextFont;
-  /** Hold the words to one line, cut with an ellipsis where the box ends. */
-  truncate?: boolean;
+  /** Hold the words to one line, cut with an ellipsis where the box ends, or at the start of the words (`start`) to keep their end. */
+  truncate?: boolean | TextTruncate;
   /** The id a control or a region names itself by (`aria-labelledby`, `aria-describedby`). */
   id?: string | undefined;
   /** A hook for the caller's own layout (a flex share, a margin), beside the shared class. */
@@ -96,7 +105,9 @@ export function Text({
       data-variant={variant}
       data-tone={tone}
       data-font={font}
-      data-truncate={truncate ? "" : undefined}
+      data-truncate={
+        truncate === TEXT_TRUNCATE.START ? TEXT_TRUNCATE.START : truncate ? "" : undefined
+      }
       id={id}
     >
       {children}

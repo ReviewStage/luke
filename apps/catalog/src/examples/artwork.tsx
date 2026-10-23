@@ -135,6 +135,16 @@ function Artwork(): React.JSX.Element {
           <WingFace />
         </div>
       </CatalogSection>
+      <CatalogSection id="artwork-face-muted" title="Muted face, filling its box">
+        <div className="catalog-face">
+          <WingFace muted fill />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="artwork-face-inherit" title="Face in its holder's ink, filling its box">
+        <div className="catalog-face">
+          <WingFace fill inherit />
+        </div>
+      </CatalogSection>
       <CatalogSection id="artwork-glyphs" title="Glyphs">
         <ul className="catalog-tiles">
           {GLYPHS.map(([name, Glyph]) => (

@@ -44,4 +44,14 @@
   .luke-switch[data-checked="true"] .luke-switch-thumb {
     transform: translateX(14px);
   }
+
+  /* Held down, the thumb gives a little under the finger and springs back as
+     it travels, by its scale alone, so the track never changes size. */
+  .luke-switch:active:not(:disabled) .luke-switch-thumb {
+    transform: scale(0.85);
+  }
+
+  .luke-switch[data-checked="true"]:active:not(:disabled) .luke-switch-thumb {
+    transform: translateX(14px) scale(0.85);
+  }
 }

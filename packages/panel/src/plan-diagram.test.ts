@@ -18,6 +18,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import type { SideBundles } from "./bundle-loader.js";
 import { MarkdownMessage } from "./markdown-message.js";
+import { SHELL_ROOM } from "./shell-room.js";
+import { ShellRoomContext } from "./stage-room.js";
 import { PlanBody } from "./tasks/plan-body.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
 import { VersionView } from "./tasks/version-view.js";
@@ -294,7 +296,7 @@ test("on a finger's device a tap on a diagram opens it over the window at its ow
   const open = viewer() ?? assert.fail("the diagram opens over the window");
   assert.equal(open.dataset.opening, "own-pixels");
   assert.equal(
-    open.querySelector(".attachment-viewer-image")?.getAttribute("src"),
+    open.querySelector(".luke-zoom-image")?.getAttribute("src"),
     pictureOf(code, DIAGRAM_APPEARANCE.LIGHT),
   );
   const close =
@@ -309,8 +311,13 @@ test("in a phone's narrow room a tap on a diagram opens it, and Escape shuts it"
   const room = document.body.appendChild(document.createElement("div"));
   room.className = "desktop-shell";
   room.dataset.room = "narrow";
+  // Note that the shell hands its room down as well as writing it on its element, as `app.tsx` does.
   const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+    createElement(
+      ShellRoomContext.Provider,
+      { value: SHELL_ROOM.NARROW },
+      createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+    ),
   );
   room.append(page);
 

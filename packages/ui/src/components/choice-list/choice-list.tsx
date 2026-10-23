@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
 
@@ -295,7 +296,19 @@ function ChoiceRow({
     "data-tone": option.tone,
     disabled,
     "aria-keyshortcuts": number === undefined ? undefined : String(number),
-    onClick: onPress,
+    onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+      // Note that a row's radio or box is what gives, as a checkbox's box does; a pill gives whole, a picture a little.
+      const control = event.currentTarget.querySelector<HTMLElement>(
+        ":scope > .luke-choice-control",
+      );
+      if (control !== null) pulsePress(control);
+      else
+        pulsePress(
+          event.currentTarget,
+          look === CHOICE_LOOK.PICTURE ? PRESS_PULSE.QUIET : PRESS_PULSE.CONTROL,
+        );
+      onPress();
+    },
   } as const;
   const words = (
     <>

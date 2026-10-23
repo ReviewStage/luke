@@ -1,5 +1,5 @@
 /**
- * toast.tsx -- the window's passing notices: up to three cards stacked in its bottom-right corner, each read once and gone.
+ * toast.tsx -- the window's passing notices, as state: what stands, for how long, and what pushes what out; `@luke/ui`'s `Toast`, `ToastStack`, and `ToastActions` draw them.
  *
  * A toast answers an act whose control is gone by the time it lands: a copy
  * made from a menu that closed with the press, a note sent from a dialog
@@ -24,11 +24,15 @@
  * an agent's unseen dot, a plan's Inbox, the Automations mark. Only one
  * whose action is the one way back to something the developer would
  * otherwise lose, such as words a save left unsaved, persists until it is
- * dismissed. One with an action
+ * dismissed. One whose hold runs down by itself with an action drains a bar
+ * along its foot over that hold, paused with it. One saying work is under
+ * way (`useWorkingToast`) stands until the work settles, then turns in
+ * place into what came of it, done or failed, and stands for that one's
+ * hold, rather than leaving and another arriving. One with an action
  * may always be dismissed before then, since that is how the developer
  * reaches what it stands over: by its action, by the × it shows over its
  * top-left corner under the pointer or focus, as a Mac's own notifications
- * do, by Escape while focus is in it, or by whoever showed it
+ * do, by Escape while focus is in it, by a sideways swipe, or by whoever showed it
  * withdrawing what it is about. One with no action is never pointed at, so
  * clicks pass through it. It arrives on the pair
  * every arriving element rides and leaves first over `--luke-duration-exit`, held
@@ -37,7 +41,7 @@
  * tokens.
  *
  * What each says reaches assistive tech through two regions mounted with
- * the window rather than with the toast, because a live region drawn
+ * the window rather than with the toast (`@luke/ui`'s `ToastStack`), because a live region drawn
  * already holding its words is one a screen reader may never read: a polite
  * one for what was done or is asked, and an alert for what was refused. The words are
  * text like any other, so the session recording masks them with the rest.
@@ -45,39 +49,25 @@
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import {
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
-  IconButton,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-  VisuallyHidden,
-} from "@luke/ui";
+import { TOAST_TONE, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { rendererRuntime } from "./renderer-runtime.js";
 
-/** What a toast reports: the act done, the act refused, or something asked of the developer. */
-export const TOAST_TONE = {
-  DONE: "done",
-  FAILED: "failed",
-  ASK: "ask",
-} as const;
+export { TOAST_TONE };
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
-const POLITE_TONES: ReadonlySet<ToastTone> = new Set([TOAST_TONE.DONE, TOAST_TONE.ASK]);
+const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
+  TOAST_TONE.DONE,
+  TOAST_TONE.ASK,
+  TOAST_TONE.WORKING,
+]);
 
 /** The tone said in the alert region: a refusal. */
 const ALERT_TONES: ReadonlySet<ToastTone> = new Set([TOAST_TONE.FAILED]);
-
-type ToastTone = (typeof TOAST_TONE)[keyof typeof TOAST_TONE];
 
 /**
  * How long a toast stands, by what it reports: a change carried, one
@@ -111,6 +101,8 @@ interface ToastAction {
  * rather than pushing the oldest out, for news that arrives in runs and
  * each piece of which is the developer's to act on. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
+ * One of `TOAST_TONE.WORKING` has no hold and no action: it stands until the
+ * work it says is under way settles it (`useWorkingToast`).
  */
 export type ToastNotice = {
   readonly words: string;
@@ -122,6 +114,12 @@ export type ToastNotice = {
   | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
   | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
   | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
+  | {
+      readonly tone: typeof TOAST_TONE.WORKING;
+      readonly hold?: never;
+      readonly action?: never;
+      readonly persists?: never;
+    }
 );
 
 /** How long a toast carrying an action stands while nobody points at it: long enough to reach for the action. */
@@ -145,12 +143,10 @@ const DISMISS_LABEL = "Dismiss";
 /** What the stack is called, as a landmark among the window's regions. */
 const STACK_LABEL = "Notifications";
 
-/** Less than this, in CSS pixels, is not a move worth playing. */
-const STILL = 0.5;
-
-/** What can happen to the toasts: one shown, one's hold paused, let run again, or the toast sent away, every toast about a subject withdrawn, or the room the window leaves changed. */
+/** What can happen to the toasts: one shown, one working settled in place, one's hold paused, let run again, or the toast sent away, every toast about a subject withdrawn, or the room the window leaves changed. */
 const TOAST_STEP = {
   SHOW: "show",
+  SETTLE: "settle",
   PAUSE: "pause",
   RESUME: "resume",
   DISMISS: "dismiss",
@@ -163,6 +159,11 @@ type ToastStep =
   | {
       readonly kind: typeof TOAST_STEP.PAUSE | typeof TOAST_STEP.RESUME | typeof TOAST_STEP.DISMISS;
       readonly id: number;
+    }
+  | {
+      readonly kind: typeof TOAST_STEP.SETTLE;
+      readonly subject: string;
+      readonly notice: ToastNotice;
     }
   | { readonly kind: typeof TOAST_STEP.WITHDRAW; readonly subject: string }
   | { readonly kind: typeof TOAST_STEP.ROOM; readonly room: number };
@@ -183,36 +184,36 @@ interface ToastShown {
 }
 
 /** The toasts standing, oldest first, those that wait for room, how many have been shown, and how many may stand at once. */
-interface ToastStack {
+interface ToastLine {
   readonly count: number;
   readonly shown: readonly ToastShown[];
   readonly waiting: readonly ToastNotice[];
   readonly room: number;
 }
 
-const EMPTY_STACK: ToastStack = { count: 0, shown: [], waiting: [], room: TOAST_ROOM.TALL };
+const EMPTY_STACK: ToastLine = { count: 0, shown: [], waiting: [], room: TOAST_ROOM.TALL };
 
-const toastStackAtom = Atom.keepAlive(Atom.make<ToastStack>(EMPTY_STACK));
+const toastStackAtom = Atom.keepAlive(Atom.make<ToastLine>(EMPTY_STACK));
 
-/** The hold a notice stands for: its own, its action's, or none where it persists. */
+/** The hold a notice stands for: its own, its action's, or none where it persists or says work is under way. */
 function holdOf(notice: ToastNotice): Duration.Duration | undefined {
-  if (notice.persists === true) return undefined;
+  if (notice.persists === true || notice.tone === TOAST_TONE.WORKING) return undefined;
   return notice.hold ?? ACTION_HOLD;
 }
 
 /** A notice standing from `now`, as the stack's next. */
-function stand(stack: ToastStack, notice: ToastNotice, now: number): ToastStack {
+function stand(stack: ToastLine, notice: ToastNotice, now: number): ToastLine {
   const toast = { id: stack.count + 1, notice, leaving: false, left: holdOf(notice), since: now };
   return { ...stack, count: toast.id, shown: [...stack.shown, toast] };
 }
 
 /** The toasts standing that are not on their way out. */
-function staying(stack: ToastStack): readonly ToastShown[] {
+function staying(stack: ToastLine): readonly ToastShown[] {
   return stack.shown.filter((toast) => !toast.leaving);
 }
 
 /** Sends the toasts `chosen` picks on their way out, from `now`. */
-function leave(stack: ToastStack, chosen: (toast: ToastShown) => boolean, now: number): ToastStack {
+function leave(stack: ToastLine, chosen: (toast: ToastShown) => boolean, now: number): ToastLine {
   const shown = stack.shown.map((toast) =>
     toast.leaving || !chosen(toast) ? toast : { ...toast, leaving: true, since: now },
   );
@@ -227,9 +228,10 @@ function dueAt(toast: ToastShown): number | undefined {
   return toast.since + Duration.toMillis(toast.left);
 }
 
-/** Whether two notices say the same thing, with no action between them whose press would be lost. */
+/** Whether two notices say the same thing, with no action between them whose press would be lost, and neither work under way that will settle on its own. */
 function sameSaying(a: ToastNotice, b: ToastNotice): boolean {
   return (
+    a.tone !== TOAST_TONE.WORKING &&
     a.action === undefined &&
     b.action === undefined &&
     a.words === b.words &&
@@ -243,8 +245,8 @@ function sameSaying(a: ToastNotice, b: ToastNotice): boolean {
  * leaving, at the instant it ran out; an exit done takes its toast away;
  * and each toast that waits stands in turn while there is room.
  */
-function settle(stack: ToastStack, now: number): ToastStack {
-  let next: ToastStack = { ...stack, shown: [] };
+function settle(stack: ToastLine, now: number): ToastLine {
+  let next: ToastLine = { ...stack, shown: [] };
   for (const toast of stack.shown) {
     const due = dueAt(toast);
     if (due === undefined || due > now) next = { ...next, shown: [...next.shown, toast] };
@@ -266,7 +268,7 @@ function settle(stack: ToastStack, now: number): ToastStack {
  * line, because it stands until dismissed, and a notice passing through or
  * a window made shorter is no dismissal.
  */
-function crowd(stack: ToastStack, now: number): ToastStack {
+function crowd(stack: ToastLine, now: number): ToastLine {
   let next = stack;
   const aside: ToastNotice[] = [];
   for (;;) {
@@ -284,7 +286,7 @@ function crowd(stack: ToastStack, now: number): ToastStack {
  * no room, takes the place of a toast already saying it, or stands at the
  * bottom, pushing the oldest out where the stack is full.
  */
-function arrive(stack: ToastStack, notice: ToastNotice, now: number): ToastStack {
+function arrive(stack: ToastLine, notice: ToastNotice, now: number): ToastLine {
   if (notice.waits === true && staying(stack).length >= stack.room) {
     return { ...stack, waiting: [...stack.waiting, notice] };
   }
@@ -293,8 +295,33 @@ function arrive(stack: ToastStack, notice: ToastNotice, now: number): ToastStack
   return crowd(stand(unmatched, notice, now), now);
 }
 
+/**
+ * The working toast about `subject` turned at `now` into `notice`, in place
+ * and for that one's whole hold, or, waiting, turned where it waits; where
+ * none stands or waits, as when it was pushed out, `notice` arrives anew.
+ */
+function settleWork(
+  stack: ToastLine,
+  subject: string,
+  notice: ToastNotice,
+  now: number,
+): ToastLine {
+  const working = (about: ToastNotice) =>
+    about.tone === TOAST_TONE.WORKING && about.subject === subject;
+  const standing = stack.shown.find((toast) => !toast.leaving && working(toast.notice));
+  if (standing !== undefined) {
+    const turned = { ...standing, notice, left: holdOf(notice), since: now };
+    const shown = stack.shown.map((toast) => (toast === standing ? turned : toast));
+    return { ...stack, shown };
+  }
+  if (stack.waiting.some(working)) {
+    return { ...stack, waiting: stack.waiting.map((about) => (working(about) ? notice : about)) };
+  }
+  return arrive(stack, notice, now);
+}
+
 /** A toast's hold paused at `now`, keeping what was left of it. */
-function pause(stack: ToastStack, id: number, now: number): ToastStack {
+function pause(stack: ToastLine, id: number, now: number): ToastLine {
   const shown = stack.shown.map((toast) => {
     if (toast.id !== id || toast.leaving || toast.since === undefined) return toast;
     const left =
@@ -310,7 +337,7 @@ function pause(stack: ToastStack, id: number, now: number): ToastStack {
 }
 
 /** A paused toast's hold let run again from `now`. */
-function resume(stack: ToastStack, id: number, now: number): ToastStack {
+function resume(stack: ToastLine, id: number, now: number): ToastLine {
   const shown = stack.shown.map((toast) =>
     toast.id !== id || toast.leaving || toast.since !== undefined
       ? toast
@@ -320,10 +347,12 @@ function resume(stack: ToastStack, id: number, now: number): ToastStack {
 }
 
 /** The stack once `step` has happened at `now`. */
-function stepped(stack: ToastStack, step: ToastStep, now: number): ToastStack {
+function stepped(stack: ToastLine, step: ToastStep, now: number): ToastLine {
   switch (step.kind) {
     case TOAST_STEP.SHOW:
       return arrive(stack, step.notice, now);
+    case TOAST_STEP.SETTLE:
+      return settleWork(stack, step.subject, step.notice, now);
     case TOAST_STEP.PAUSE:
       return pause(stack, step.id, now);
     case TOAST_STEP.RESUME:
@@ -374,6 +403,26 @@ export function useToast(): (notice: ToastNotice) => void {
   return useCallback((notice: ToastNotice) => step({ kind: TOAST_STEP.SHOW, notice }), [step]);
 }
 
+/**
+ * Shows a toast saying work is under way, with a spinner, and answers how to
+ * settle it: the notice saying what came of the work, which the same card
+ * turns into in place. Note that each call is its own subject, so two pieces
+ * of work under way at once each settle their own card. The same function on
+ * every render.
+ */
+export function useWorkingToast(): (words: string) => (notice: ToastNotice) => void {
+  const step = useAtomSet(toastLifeAtom);
+  return useCallback(
+    (words: string) => {
+      const subject = crypto.randomUUID();
+      step({ kind: TOAST_STEP.SHOW, notice: { words, tone: TOAST_TONE.WORKING, subject } });
+      return (notice: ToastNotice) =>
+        step({ kind: TOAST_STEP.SETTLE, subject, notice: { subject, ...notice } });
+    },
+    [step],
+  );
+}
+
 /** Withdraws every toast standing or waiting about `subject`, now stale; the same function on every render. */
 export function useWithdrawToast(): (subject: string) => void {
   const step = useAtomSet(toastLifeAtom);
@@ -389,42 +438,6 @@ function spoken(notice: ToastNotice): string {
 function newestSaying(shown: readonly ToastShown[], tones: ReadonlySet<ToastTone>): string {
   const newest = shown.findLast((toast) => !toast.leaving && tones.has(toast.notice.tone));
   return newest === undefined ? "" : spoken(newest.notice);
-}
-
-/**
- * Glides each toast a change moved from where it was drawn to where it now
- * stands, on the spring small elements ride, read from the tokens at the
- * stack so reduced motion and a capture run play nothing.
- */
-function useStackGlide(): React.RefObject<HTMLOListElement | null> {
-  const list = useRef<HTMLOListElement>(null);
-  const drawn = useRef(new Map<Element, number>());
-  useLayoutEffect(() => {
-    const root = list.current;
-    if (root === null) return;
-    // Note that an empty stack, as it stands nearly always, reads nothing: reading the tokens or a box lays out the whole window, and the stack is drawn again with everything around it.
-    if (root.children.length === 0) {
-      if (drawn.current.size > 0) drawn.current = new Map();
-      return;
-    }
-    const style = getComputedStyle(root);
-    const duration = Number.parseFloat(style.getPropertyValue("--luke-duration-fast")) || 0;
-    const easing = style.getPropertyValue("--luke-spring-fast").trim();
-    const next = new Map<Element, number>();
-    for (const toast of root.children) {
-      const top = toast.getBoundingClientRect().top;
-      const was = drawn.current.get(toast);
-      next.set(toast, top);
-      // Note that reduced motion leaves 1ms rather than none, which is no motion either.
-      if (was === undefined || Math.abs(was - top) < STILL || duration <= 1) continue;
-      toast.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], {
-        duration,
-        easing,
-      });
-    }
-    drawn.current = next;
-  });
-  return list;
 }
 
 /** How many toasts the window has room for at the height of what can be seen of it now, the keyboard's left out. */
@@ -455,23 +468,7 @@ function useWindowRoom(step: (step: ToastStep) => void): void {
   }, [step]);
 }
 
-/** The glyph a toast leads with: a check for what was done, an alert for what was refused, and the Inbox's tray for an ask. */
-function ToneGlyph({ tone }: { tone: ToastTone }): React.JSX.Element {
-  switch (tone) {
-    case TOAST_TONE.DONE:
-      return <CircleCheckIcon aria-hidden="true" />;
-    case TOAST_TONE.FAILED:
-      return <CircleAlertIcon aria-hidden="true" />;
-    case TOAST_TONE.ASK:
-      return <InboxIcon aria-hidden="true" />;
-  }
-}
-
-/**
- * One toast, drawn anew for each shown. Its hold is paused while the pointer
- * is over it or focus is in it, each of which it keeps apart, so that one
- * ending while the other stands lets nothing run.
- */
+/** One toast, drawn anew for each shown: the ui card, its hold paused while the pointer is over it or focus is in it. */
 function ToastCard({
   shown,
   step,
@@ -479,72 +476,30 @@ function ToastCard({
   shown: ToastShown;
   step: (step: ToastStep) => void;
 }): React.JSX.Element {
-  const held = useRef({ pointer: false, focus: false });
   const { id, notice, leaving } = shown;
   const { action } = notice;
-  const hold = (by: keyof typeof held.current, holding: boolean) => {
-    const was = held.current.pointer || held.current.focus;
-    held.current = { ...held.current, [by]: holding };
-    const now = held.current.pointer || held.current.focus;
-    if (now !== was) step({ kind: now ? TOAST_STEP.PAUSE : TOAST_STEP.RESUME, id });
-  };
+  const hold = holdOf(notice);
+  const dismiss = () => step({ kind: TOAST_STEP.DISMISS, id });
   return (
-    <li
-      className="toast"
-      data-tone={notice.tone}
-      data-action={action === undefined ? undefined : "true"}
-      data-leaving={leaving ? "true" : undefined}
-      {...(action === undefined
-        ? undefined
-        : {
-            onPointerEnter: () => hold("pointer", true),
-            onPointerLeave: () => hold("pointer", false),
-            onFocus: () => hold("focus", true),
-            onBlur: () => hold("focus", false),
-            onKeyDown: (event: React.KeyboardEvent) => {
-              if (event.key !== "Escape") return;
-              event.stopPropagation();
-              step({ kind: TOAST_STEP.DISMISS, id });
-            },
-          })}
-    >
-      <ToneGlyph tone={notice.tone} />
-      <span className="toast-text">
-        <span className="toast-words">
-          <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
-            {notice.words}
-          </Text>
-        </span>
-        {notice.detail === undefined ? null : (
-          <span className="toast-detail">
-            <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              {notice.detail}
-            </Text>
-          </span>
-        )}
-      </span>
-      {action === undefined ? null : (
-        <>
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            onClick={() => {
-              step({ kind: TOAST_STEP.DISMISS, id });
-              action.onPress();
-            }}
-          >
-            {action.label}
-          </Button>
-          <span className="toast-dismiss">
-            <IconButton
-              icon={<XIcon aria-hidden="true" />}
-              label={DISMISS_LABEL}
-              size={BUTTON_SIZE.COMPACT}
-              onClick={() => step({ kind: TOAST_STEP.DISMISS, id })}
-            />
-          </span>
-        </>
-      )}
-    </li>
+    <Toast
+      tone={notice.tone}
+      words={notice.words}
+      detail={notice.detail}
+      leaving={leaving}
+      countdown={action === undefined || hold === undefined ? undefined : Duration.toMillis(hold)}
+      actions={
+        action === undefined ? undefined : (
+          <ToastActions
+            label={action.label}
+            onPress={action.onPress}
+            dismissLabel={DISMISS_LABEL}
+            onDismiss={dismiss}
+          />
+        )
+      }
+      onHold={(holding) => step({ kind: holding ? TOAST_STEP.PAUSE : TOAST_STEP.RESUME, id })}
+      onEscape={dismiss}
+    />
   );
 }
 
@@ -552,24 +507,17 @@ function ToastCard({
 export function ToastHost(): React.JSX.Element {
   const { shown } = useAtomValue(toastStackAtom);
   const step = useAtomSet(toastLifeAtom);
-  const list = useStackGlide();
   useWindowRoom(step);
   return createPortal(
-    <>
-      <section className="toast-stack" aria-label={STACK_LABEL}>
-        <ol ref={list}>
-          {shown.map((toast) => (
-            <ToastCard key={toast.id} shown={toast} step={step} />
-          ))}
-        </ol>
-      </section>
-      <VisuallyHidden as="p" role="status">
-        {newestSaying(shown, POLITE_TONES)}
-      </VisuallyHidden>
-      <VisuallyHidden as="p" role="alert">
-        {newestSaying(shown, ALERT_TONES)}
-      </VisuallyHidden>
-    </>,
+    <ToastStack
+      label={STACK_LABEL}
+      polite={newestSaying(shown, POLITE_TONES)}
+      alert={newestSaying(shown, ALERT_TONES)}
+    >
+      {shown.map((toast) => (
+        <ToastCard key={toast.id} shown={toast} step={step} />
+      ))}
+    </ToastStack>,
     document.body,
   );
 }

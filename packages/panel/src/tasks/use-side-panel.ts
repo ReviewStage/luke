@@ -3,13 +3,11 @@ import { ACT_KIND } from "@luke/host/acts";
 import { BoardIcon, CodeIcon, CommentsIcon, DocumentIcon } from "@luke/ui";
 import {
   type AgentStripTab,
-  type BrowserStripTab,
   type ChangesStripTab,
   type CloudBrowserStripTab,
   type FileStripTab,
   inTaskOrder,
   isAgentTab,
-  isBrowserTab,
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
@@ -107,10 +105,10 @@ plan); an item has not
  * stands once per agent, whose sandbox its shells run in, never once per
  * task: it is held to the task's agents as a Changes tab is, and kept
  * nowhere, since what it shows is a connection the next launch makes
- * afresh. A Browser tab, opened from the "+" while the Browser tab
- * experiment is on, stands many times, each on the plan it was opened on
- * and drawn on no other, and is kept nowhere, since its page is a view main
- * holds for the window's life alone (`browser-pane.tsx`). Opening a file
+ * afresh. A Browser tab, while the Browser tab experiment is on, stands
+ * once per tab the service lists in the task's agents' cloud browsers, and
+ * is kept nowhere here, since the service keeps the tab; one closed in this
+ * window is left out of its strip (`cloud-browser-tabs.ts`). Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
  * is held to the task it was browsed on instead, since any file of the
@@ -217,7 +215,7 @@ const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PA
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes or Terminal, one page's, a Browser tab, or one of an agent's cloud Browser tabs. */
+/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes or Terminal, one page's, or one of an agent's cloud Browser tabs. */
 export type SidePanelTab =
   | FixedSidePanelTab
   | TranscriptStripTab
@@ -227,19 +225,7 @@ export type SidePanelTab =
   | TerminalStripTab
   | PageStripTab
   | MacTerminalStripTab
-  | BrowserStripTab
   | CloudBrowserStripTab;
-
-/**
- * A Browser tab as the panel holds it: the tab, the plan it was opened on,
- * the one plan that draws it, and the address its page was first opened
- * at, none until one is, which a tab drawn again opens its view on.
- */
-export interface OpenBrowser {
-  readonly tab: BrowserStripTab;
-  readonly task: string;
-  readonly address: string | undefined;
-}
 
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
@@ -501,8 +487,6 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly pages: readonly PageStripTab[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
-  /** The open Browser tabs of every task, in the order opened. */
-  readonly browsers: readonly OpenBrowser[];
   /** The agents' cloud Browser tabs closed in this window, by the id the service keeps each under, which the strip no longer draws. */
   readonly closedCloudBrowsers: readonly string[];
   /** The agent whose Terminal tab was shown last on each task, by task. */
@@ -610,8 +594,6 @@ export interface SidePanelControl {
   pullRequestViews: ByPullRequestTab<PullRequestView>;
   /** Chooses what a Pull request tab shows, its tab open or not. */
   onPullRequestView: (tab: ChangesStripTab, view: PullRequestView) => void;
-  /** The open task's Browser tabs in the order opened, after the Terminal tabs. */
-  browsers: readonly OpenBrowser[];
   /** The open task's tabs of every kind as the strip draws them, in its order. */
   strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open task has no tab open. */
@@ -688,12 +670,6 @@ export interface SidePanelControl {
   onFoldNote: (path: string, callId: string, folded: boolean) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
-  /** Opens a Browser tab on the open plan, chosen at the strip's end, on the address given or on none, which its bar asks for. */
-  onOpenBrowser: (address?: string) => void;
-  /** Closes every Browser tab on every plan, their pages with them, as the Browser tab experiment going off does. */
-  onCloseBrowsers: () => void;
-  /** Says the Browser tab's page was opened at the address, which the tab opens its view on when it is drawn again; one opened already keeps its first. */
-  onBrowserOpened: (browserId: string, address: string) => void;
   /** When each of the open task's tabs was last viewed (`use-idle-tabs.ts`). */
   viewedAt: readonly ViewedAt<SidePanelTab>[];
   /** Stamps the tabs viewed at `at` on the task given, and each of `standing` not stamped yet. */
@@ -736,8 +712,10 @@ export interface DrawnTabs {
   files: readonly string[];
   /** The plan's pages, by id, whose open tabs the strip draws. */
   pages: readonly string[];
-  /** The task's agents, by id, whose Changes tabs the strip draws, or nothing while unread. */
+  /** The task's agents, by id, archived ones left out, whose Terminal tabs, and beside the Inbox transcripts, the strip draws, or nothing while unread. */
   taskAgents: readonly string[] | undefined;
+  /** Every agent of the task, by id, an archived one among them, whose Pull request tabs the strip draws, since its pull request stays the task's; `taskAgents` where none is given. */
+  heldAgents?: readonly string[] | undefined;
   /** The task's agents' cloud Browser tabs, by the id the service keeps each under, or nothing while unread. */
   cloudBrowsers?: readonly string[] | undefined;
 }
@@ -1213,8 +1191,12 @@ export function drawsSubagent(
  * opens it either way, or until the agents are read, as a delegated
  * worker's tab stands.
  */
-export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "taskAgents">): boolean {
-  return drawn.taskAgents === undefined || drawn.taskAgents.includes(tab.changes);
+export function drawsChanges(
+  tab: ChangesStripTab,
+  drawn: Pick<DrawnTabs, "taskAgents" | "heldAgents">,
+): boolean {
+  const held = drawn.heldAgents ?? drawn.taskAgents;
+  return held === undefined || held.includes(tab.changes);
 }
 
 /**
@@ -1262,11 +1244,6 @@ function drawnChanges(held: HeldState, drawn: DrawnTabs): readonly ChangesStripT
   );
 }
 
-/** The Browser tabs opened on the task, which it alone draws, in the order opened. */
-function drawnBrowsers(held: HeldState, taskId: string | undefined): readonly OpenBrowser[] {
-  return held.browsers.filter((each) => each.task === taskId);
-}
-
 /** Each cloud Browser tab by its id, the same object every render, so a tab chosen is the tab drawn. */
 const cloudBrowserTabs = new Map<string, CloudBrowserStripTab>();
 
@@ -1305,7 +1282,6 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
     ...held.macTerminals.filter((each) => drawsMacTerminal(each, drawn)),
-    ...drawnBrowsers(held, drawn.task.id).map((each) => each.tab),
     ...drawnCloudBrowsers(held, drawn),
   ];
   return inTaskOrder(kinds, orderOn(held, drawn.task.id), (tab) => tab);
@@ -1330,8 +1306,7 @@ function fallbackTabs(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[
 
 /** The tab the panel shows on the task: the chosen one as `shownTab` holds it to the task. */
 function shownIn(held: HeldState, drawn: DrawnTabs): SidePanelTab | undefined {
-  const browsers = drawnBrowsers(held, drawn.task.id);
-  return shownTab(held.tab, fallbackTabs(held, drawn), drawn, drawnChanges(held, drawn), browsers);
+  return shownTab(held.tab, fallbackTabs(held, drawn), drawn, drawnChanges(held, drawn));
 }
 
 /**
@@ -1374,14 +1349,12 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
               ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
               : isMacTerminalTab(tab)
                 ? { ...held, macTerminals: held.macTerminals.filter((each) => !sameTab(each, tab)) }
-                : isBrowserTab(tab)
-                  ? { ...held, browsers: held.browsers.filter((each) => !sameTab(each.tab, tab)) }
-                  : isCloudBrowserTab(tab)
-                    ? {
-                        ...held,
-                        closedCloudBrowsers: [...held.closedCloudBrowsers, tab.cloudBrowser],
-                      }
-                    : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+                : isCloudBrowserTab(tab)
+                  ? {
+                      ...held,
+                      closedCloudBrowsers: [...held.closedCloudBrowsers, tab.cloudBrowser],
+                    }
+                  : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
@@ -1659,7 +1632,6 @@ function settled(state: SidePanelState): HeldState {
     files: [],
     pages: [],
     terminals: [],
-    browsers: [],
     closedCloudBrowsers: [],
     lastTerminals: {},
     pullRequestViews: new Map(),
@@ -1748,9 +1720,8 @@ function readStored(): HeldState {
 /**
  * The tab the panel shows for the one kept: a fixed tab the open task does
  * not draw, a subagent tab the task does not draw (`drawsSubagent`), a
- * Changes tab not among `changes`, those the task draws (`drawnChanges`), a
- * Browser tab not among `browsers`, those opened on the task, or a
- * file tab of a file not shown on the open task, reads as the first of
+ * Changes tab not among `changes`, those the task draws (`drawnChanges`), or
+ * a file tab of a file not shown on the open task, reads as the first of
  * `tabs` (`fallbackTabs`), or as none where the task draws none. With the
  * task's agents not yet read, a delegated worker's tab stands, so a tab is
  * not swapped for another and back while the list is on its way; a
@@ -1763,7 +1734,6 @@ function shownTab(
   tabs: readonly SidePanelTab[],
   drawn: Omit<DrawnTabs, "plan">,
   changes: readonly ChangesStripTab[],
-  browsers: readonly OpenBrowser[],
 ): SidePanelTab | undefined {
   if (kept === undefined) return tabs[0];
   if (isFixedTab(kept)) return tabs.includes(kept) ? kept : tabs[0];
@@ -1773,7 +1743,6 @@ function shownTab(
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
   if (isMacTerminalTab(kept)) return drawsMacTerminal(kept, drawn) ? kept : tabs[0];
-  if (isBrowserTab(kept)) return browsers.some((each) => sameTab(each.tab, kept)) ? kept : tabs[0];
   // Note that a cloud Browser tab chosen stands while the list is on its way, so it is not swapped for another and back.
   if (isCloudBrowserTab(kept)) {
     return drawn.cloudBrowsers === undefined || drawn.cloudBrowsers.includes(kept.cloudBrowser)
@@ -1844,6 +1813,7 @@ export function useSidePanel(
   taskAgents?: readonly string[] | undefined,
   room: ShellRoom = SHELL_ROOM.WIDE,
   cloudBrowsers?: readonly string[] | undefined,
+  heldAgents?: readonly string[] | undefined,
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -1893,6 +1863,7 @@ export function useSidePanel(
       files: taskFiles,
       pages,
       taskAgents,
+      heldAgents,
       cloudBrowsers,
     });
 
@@ -1926,6 +1897,7 @@ export function useSidePanel(
         files: taskFiles,
         pages,
         taskAgents,
+        heldAgents,
         cloudBrowsers,
       };
       update((held) => withArrived(held, arrivals, was));
@@ -1940,19 +1912,18 @@ export function useSidePanel(
     [tabs, seen],
   );
   const drawn = useMemo(
-    () => ({ task: seen, agents, subagents, files: taskFiles, pages, taskAgents, cloudBrowsers }),
-    [seen, agents, subagents, taskFiles, pages, taskAgents, cloudBrowsers],
+    () => ({
+      task: seen,
+      agents,
+      subagents,
+      files: taskFiles,
+      pages,
+      taskAgents,
+      heldAgents,
+      cloudBrowsers,
+    }),
+    [seen, agents, subagents, taskFiles, pages, taskAgents, heldAgents, cloudBrowsers],
   );
-  // A Browser tab closed, on whatever plan and however, takes its page with
-  // it, since main holds a page for the window's life otherwise.
-  const browserIds = useRef<ReadonlySet<string>>(new Set());
-  useEffect(() => {
-    const standing = new Set(state.browsers.map((each) => each.tab.browser));
-    for (const browserId of browserIds.current) {
-      if (!standing.has(browserId)) tell(ACT_KIND.BROWSER_CLOSE, { browserId });
-    }
-    browserIds.current = standing;
-  }, [state.browsers, tell]);
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {
@@ -2208,54 +2179,11 @@ export function useSidePanel(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
   );
-  // Note that the tab is placed at the strip's end before it is held,
-  // because a tab the strip already draws is only chosen where it stands.
-  const onOpenBrowser = useCallback(
-    (address?: string) => {
-      if (taskId === undefined) return;
-      const tab: BrowserStripTab = { browser: crypto.randomUUID() };
-      setAsked(undefined);
-      update((held) => {
-        const placed = withTabLast(withChosenViewed(held, tab, drawn), tab, drawn);
-        const browsers = [...placed.browsers, { tab, task: taskId, address }];
-        return { ...withTab({ ...placed, browsers }, tab, taskId), open: true };
-      });
-    },
-    [update, drawn, taskId],
-  );
-  // Note that a Browser tab chosen goes too, and the plan shows its first tab in its place.
-  const onCloseBrowsers = useCallback(
-    () =>
-      update((held) =>
-        held.browsers.length === 0
-          ? held
-          : {
-              ...held,
-              browsers: [],
-              tab: held.tab !== undefined && isBrowserTab(held.tab) ? undefined : held.tab,
-            },
-      ),
-    [update],
-  );
-  const onBrowserOpened = useCallback(
-    (browserId: string, address: string) =>
-      update((held) => {
-        const standing = held.browsers.find((each) => each.tab.browser === browserId);
-        if (standing === undefined || standing.address !== undefined) return held;
-        const opened = { ...standing, address };
-        return {
-          ...held,
-          browsers: held.browsers.map((each) => (each === standing ? opened : each)),
-        };
-      }),
-    [update],
-  );
   const onViewedAt = useCallback(
     (on: string, viewed: readonly SidePanelTab[], standing: readonly SidePanelTab[], at: number) =>
       update((held) => withViewedAt(held, on, viewed, standing, at)),
     [update],
   );
-  const browsers = useMemo(() => drawnBrowsers(state, taskId), [state, taskId]);
   return {
     open: shown,
     tabs,
@@ -2271,7 +2199,6 @@ export function useSidePanel(
     lastTerminal: taskId === undefined ? undefined : state.lastTerminals[taskId],
     pullRequestViews: state.pullRequestViews,
     onPullRequestView,
-    browsers,
     files: state.files,
     tab: shownIn(state, drawn),
     preview: previewOf(state, drawn),
@@ -2302,9 +2229,6 @@ export function useSidePanel(
     onFileHistory,
     onFoldNote,
     onResize,
-    onOpenBrowser,
-    onCloseBrowsers,
-    onBrowserOpened,
     viewedAt: taskTabs(state, taskId).viewedAt ?? NO_STAMPS,
     onViewedAt,
   };

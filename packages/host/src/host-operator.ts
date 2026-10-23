@@ -152,6 +152,29 @@ import {
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
+  INSTALLED_SKILL_CALL_FAILURE,
+  type InstalledSkillIdParams,
+  type InstalledSkillInstallParams,
+  type InstalledSkillInstallView,
+  type InstalledSkillListParams,
+  type InstalledSkillListView,
+  type InstalledSkillPreviewParams,
+  type InstalledSkillPreviewView,
+  type InstalledSkillRemovedView,
+  type InstalledSkillToggleParams,
+  type InstalledSkillUpdateCheckView,
+  type InstalledSkillUpdatedView,
+  type InstalledSkillUpdateParams,
+  type InstalledSkillView,
+  installedSkillInstallViewSchema,
+  installedSkillListViewSchema,
+  installedSkillPreviewViewSchema,
+  installedSkillRemovedViewSchema,
+  installedSkillUpdateCheckViewSchema,
+  installedSkillUpdatedViewSchema,
+  installedSkillViewSchema,
+} from "@luke/features/installed-skill-view";
+import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
   type IntegrationConnectView,
@@ -190,6 +213,8 @@ import {
   type TaskPagesFollow,
   type TaskPagesFollowed,
   type TasksBoardSaveParams,
+  type TasksBrowserTabOpenAnswer,
+  type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
   type TasksCommentActParams,
@@ -276,6 +301,7 @@ import {
   taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
+  tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
@@ -504,6 +530,8 @@ export interface HostOperator {
   tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
   /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
   tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
+  /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
+  tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** One more issue linked to a task, read from its provider by the service; or why none was. */
   tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
   /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
@@ -726,6 +754,28 @@ export interface HostOperator {
   chaptersModelRead(): Effect.Effect<ChaptersModelAnswerView>;
   /** The account's chapters model written to the service; the model as kept, or why it is unchanged. */
   chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
+  /** The skills the account sees in a workspace, the workspace's then its own; or why there are none. */
+  installedSkillsList(params: InstalledSkillListParams): Effect.Effect<InstalledSkillListView>;
+  /** What a paste would install, read by the service; or why it did not say. */
+  installedSkillsPreview(
+    params: InstalledSkillPreviewParams,
+  ): Effect.Effect<InstalledSkillPreviewView>;
+  /** The skills a paste makes, installed all or none; or why none were. */
+  installedSkillsInstall(
+    params: InstalledSkillInstallParams,
+  ): Effect.Effect<InstalledSkillInstallView>;
+  /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
+  installedSkillsSetEnabled(params: InstalledSkillToggleParams): Effect.Effect<InstalledSkillView>;
+  /** Whether a GitHub skill's folder moved at its ref; or why that is unknown. */
+  installedSkillsCheckUpdate(
+    params: InstalledSkillUpdateParams,
+  ): Effect.Effect<InstalledSkillUpdateCheckView>;
+  /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
+  installedSkillsUpdate(
+    params: InstalledSkillUpdateParams,
+  ): Effect.Effect<InstalledSkillUpdatedView>;
+  /** One installed skill removed; or why it stands. */
+  installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   codingAgentChanges(
     params: CodingAgentPullRequestReadParams,
@@ -1019,6 +1069,9 @@ const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as cons
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
+/** An installed skills call that reached no answer, as every installed skills method answers one. */
+const INSTALLED_SKILL_UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
+
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -1075,6 +1128,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       (answer.ok
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? AUTOMATION_UNANSWERED;
+
+  /** An installed skills answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const installedSkillAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof INSTALLED_SKILL_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? INSTALLED_SKILL_UNANSWERED;
 
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
@@ -1356,7 +1417,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.TASKS_SKILLS,
           "planId" in params
             ? { planId: params.planId }
-            : { workspaceId: params.workspaceId, repository: params.repository },
+            : {
+                workspaceId: params.workspaceId,
+                ...(params.repository === undefined
+                  ? undefined
+                  : { repository: params.repository }),
+              },
         ),
         (answer): TasksSkillsAnswer =>
           (answer.ok
@@ -1421,6 +1487,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
         taskIssueAnswer(tasksBrowserTabsAnswerSchema),
+      ),
+    tasksBrowserTabOpen: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
+          taskId: params.taskId,
+          agentId: params.agentId,
+          address: params.address,
+        }),
+        taskIssueAnswer(tasksBrowserTabOpenAnswerSchema),
       ),
     tasksIssueLink: (params) =>
       Effect.map(
@@ -2098,6 +2173,41 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
         codingAgentAnswer(chaptersModelAnswerViewSchema),
+      ),
+    installedSkillsList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_LIST, params),
+        installedSkillAnswer(installedSkillListViewSchema),
+      ),
+    installedSkillsPreview: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
+        installedSkillAnswer(installedSkillPreviewViewSchema),
+      ),
+    installedSkillsInstall: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
+        installedSkillAnswer(installedSkillInstallViewSchema),
+      ),
+    installedSkillsSetEnabled: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED, params),
+        installedSkillAnswer(installedSkillViewSchema),
+      ),
+    installedSkillsCheckUpdate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE, params),
+        installedSkillAnswer(installedSkillUpdateCheckViewSchema),
+      ),
+    installedSkillsUpdate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, params),
+        installedSkillAnswer(installedSkillUpdatedViewSchema),
+      ),
+    installedSkillsRemove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, params),
+        installedSkillAnswer(installedSkillRemovedViewSchema),
       ),
     codingAgentChanges: (params) =>
       Effect.map(

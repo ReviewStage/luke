@@ -32,9 +32,9 @@
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
   /* The voice's notice line's ground, opaque because the document scrolls on beneath it. */
   --surface-notice: var(--luke-color-overlay);
-  /* The code on screen, in the ground and inks of GitHub's themes, and the
-     mark beside a line changed in that theme's blue. */
-  --code-ground: light-dark(#fff, #0d1117);
+  /* The code on screen, in the inks of GitHub's themes on its ground
+     (`--luke-color-code-ground`), and the mark beside a line changed in that
+     theme's blue. */
   --code-text: light-dark(#1f2328, #e6edf3);
   --code-pointed-edge: light-dark(#0969da, #388bfd);
   /* A diff's lines on the code's ground, wherever one is drawn: a line
@@ -308,8 +308,9 @@ body,
 
 /* The face's ink, motion wiring, and generated motions are `@luke/ui`'s
    (`face/face.css`); its size where nothing more particular lays it out is
-   the window's. */
-.luke-face {
+   the window's, except where it is asked to fill its box (`fill`), which
+   this unlayered size would otherwise beat. */
+.luke-face:not([data-fill="true"]) {
   width: 18px;
   height: 18px;
 }
@@ -399,13 +400,14 @@ body,
    footprint, so a tab or a row moves nothing as its work starts or ends.
    Failed, the glyph stands as at rest, and the failed mark at its row's end
    says it (`.failed-mark`). In the `base` layer, so a shared component's
-   glyph slot that holds one sizes it as it sizes any glyph of its own. */
+   glyph slot that holds one sizes it as it sizes any glyph of its own, at
+   the size the slot says (`--luke-glyph-size`) where nothing nearer does. */
 @layer base {
   .state-glyph {
     position: relative;
     display: inline-flex;
-    width: var(--state-glyph-size, 16px);
-    height: var(--state-glyph-size, 16px);
+    width: var(--state-glyph-size, var(--luke-glyph-size, 16px));
+    height: var(--state-glyph-size, var(--luke-glyph-size, 16px));
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
@@ -492,6 +494,8 @@ body:has(.app-stage[data-capture="true"]) {
      hold still for exactly the same reason. */
   --loop-motion: paused;
   --luke-loop-motion: paused;
+  /* A toast's countdown says time passing, which a still frame cannot. */
+  --luke-wait-motion: paused;
   --luke-face-motion: paused;
   --luke-scroll-glide: auto;
 }

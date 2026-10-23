@@ -4,10 +4,19 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BreadcrumbBar,
+  FILL_FLOW,
+  Fill,
   IconButton,
   ProviderMark,
+  RESIZE_EDGE_SIDE,
+  type ResizeEdgeHandle,
   SidePanelIcon,
+  TEXT_ELEMENT,
+  TEXT_TRUNCATE,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
+  useResizeEdge,
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import {
@@ -29,11 +38,6 @@ import {
   useHoverPane,
 } from "../desktop/hover-pane.js";
 import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion.js";
-import {
-  EDGE_SIDE,
-  type ResizableEdgeProps,
-  useResizableEdge,
-} from "../desktop/use-resizable-edge.js";
 import type { ReadFolder } from "../file-tree/contract.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileMenu } from "./file-menu.js";
@@ -371,7 +375,7 @@ export function usePaneRoom(shown: {
     },
     pane: {
       floating: pane.floating,
-      onPointerDown: keep,
+      onPressWithin: keep,
       onPointerLeave: pane.onPointerLeave,
       onKeyDown: pane.onKeyDown,
     },
@@ -395,10 +399,10 @@ export interface TreeShown {
  * reset by a double-click; none where the panel keeps no width for it.
  * Note that it is called by the view, which outlives the tree a drag shuts.
  */
-export function useTreeEdge(tree: TreeShown): ResizableEdgeProps | undefined {
+export function useTreeEdge(tree: TreeShown): ResizeEdgeHandle | undefined {
   const width = tree.width;
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.LEFT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.LEFT,
     width: width?.width ?? FILE_TREE_WIDTH.DEFAULT,
     bounds: FILE_TREE_WIDTH,
     reserve: () => TAB_RESERVE,
@@ -463,9 +467,14 @@ function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
   if (browse === undefined) {
     return (
       <Tooltip label={path.path}>
-        <span className="file-view-path">
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate={TEXT_TRUNCATE.START}
+          className="file-view-path"
+        >
           <bdi>{path.path}</bdi>
-        </span>
+        </Text>
       </Tooltip>
     );
   }
@@ -660,7 +669,7 @@ export function FileView({
     onBrowse(path, newTab);
   };
   return (
-    <div className="file-view" {...tree.root}>
+    <Fill className="file-view" {...tree.root}>
       <FileViewBar
         history={history}
         lead={
@@ -690,7 +699,7 @@ export function FileView({
         }
         tree={browsing ? tree.toggles : undefined}
       />
-      <div className="file-view-body" {...tree.body}>
+      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...tree.body}>
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
@@ -717,7 +726,7 @@ export function FileView({
             edge={edge}
           />
         ) : null}
-      </div>
-    </div>
+      </Fill>
+    </Fill>
   );
 }

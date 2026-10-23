@@ -6,13 +6,22 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "./testing/copy-feedback.js";
-import { TOAST_TONE, ToastHost, type ToastNotice, useToast } from "./toast.js";
+import {
+  TOAST_HOLD,
+  TOAST_TONE,
+  ToastHost,
+  type ToastNotice,
+  useToast,
+  useWorkingToast,
+} from "./toast.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
  * window too short for three stands two, setting the oldest aside until
- * there is room again. jsdom lays nothing out, so the window's height is
- * given. Synthetic throughout.
+ * there is room again; one whose hold runs down with an action draws that
+ * hold as its countdown; and work under way settles into its own card in
+ * place. jsdom lays nothing out, so the window's height is given. Synthetic
+ * throughout.
  */
 
 /** The window's heights: its least, and one with room for three toasts. */
@@ -24,6 +33,7 @@ const WINDOW = {
 let root: Root | undefined;
 let registry: AtomRegistry.AtomRegistry | undefined;
 let show: ((notice: ToastNotice) => void) | undefined;
+let work: ((words: string) => (notice: ToastNotice) => void) | undefined;
 
 afterEach(() => {
   act(() => root?.unmount());
@@ -37,6 +47,7 @@ afterEach(() => {
 /** Hands the test the window's way of showing a toast. */
 function Shower(): null {
   show = useToast();
+  work = useWorkingToast();
   return null;
 }
 
@@ -69,7 +80,7 @@ function persisting(words: string): ToastNotice {
 
 /** What each toast standing says, oldest first, leaving out those on their way out. */
 function standing(): string[] {
-  return [...document.querySelectorAll(".toast:not([data-leaving]) .toast-words")].map(
+  return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
@@ -124,9 +135,9 @@ test("a toast with an action carries a Dismiss button the keyboard reaches, and 
   act(() => show?.(persisting("Retry the webhook finished")));
   act(() => show?.(persisting("Nightly upgrade couldn't start")));
   const dismissButtons = () =>
-    [...document.querySelectorAll<HTMLButtonElement>(".toast:not([data-leaving]) button")].filter(
-      (button) => button.getAttribute("aria-label") === "Dismiss",
-    );
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(".luke-toast:not([data-leaving]) button"),
+    ].filter((button) => button.getAttribute("aria-label") === "Dismiss");
 
   const [first, second] = dismissButtons();
   assert.ok(first && second);
@@ -167,4 +178,46 @@ test("a phone's keyboard rising in a tall window leaves room for two toasts, set
     "Nightly upgrade couldn't start",
   ]);
   assert.equal(standing().length, 3);
+});
+
+test("a toast with an action and a hold draws its countdown over that hold, and one that persists or has no action draws none", () => {
+  mount(WINDOW.TALL);
+  act(() =>
+    show?.({
+      words: "Task archived",
+      tone: TOAST_TONE.DONE,
+      action: { label: "Undo", onPress: () => undefined },
+    }),
+  );
+  act(() => show?.(persisting("Retry the webhook finished")));
+  act(() => show?.({ words: "Link copied", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE }));
+
+  const countdowns = [...document.querySelectorAll<HTMLElement>(".luke-toast")].map((toast) =>
+    toast
+      .querySelector<HTMLElement>(".luke-toast-countdown")
+      ?.style.getPropertyValue("--luke-toast-hold"),
+  );
+  assert.deepEqual(countdowns, ["5000ms", undefined, undefined]);
+});
+
+test("two pieces of work under way stand apart, each settles its own card in place, and a refusal is said as an alert", () => {
+  mount(WINDOW.TALL);
+  let first: ((notice: ToastNotice) => void) | undefined;
+  let second: ((notice: ToastNotice) => void) | undefined;
+  act(() => {
+    first = work?.("Saving…");
+    second = work?.("Saving…");
+  });
+  const working = [...document.querySelectorAll(".luke-toast")];
+
+  act(() => second?.({ words: "Couldn't save", tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }));
+  act(() => first?.({ words: "Saved", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE }));
+
+  assert.deepEqual(standing(), ["Saved", "Couldn't save"]);
+  assert.deepEqual([...document.querySelectorAll(".luke-toast")], working, "the same two cards");
+  assert.deepEqual(
+    working.map((toast) => (toast as HTMLElement).dataset.tone),
+    [TOAST_TONE.DONE, TOAST_TONE.FAILED],
+  );
+  assert.equal(document.querySelector('[role="alert"]')?.textContent, "Couldn't save");
 });

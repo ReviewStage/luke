@@ -11,6 +11,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   handBackBrowserTab,
+  noteBrowserTabPage,
   readTaskBrowserTab,
   renewBrowserTabTakeover,
   takeOverBrowserTab,
@@ -65,6 +66,11 @@ export const browserLiveDependencies: Effect.Effect<
     renew: (tabId, userId, heldUntil, now) =>
       run(renewBrowserTabTakeover(tabId, userId, heldUntil, now)),
     handBack: (tabId, userId) => run(handBackBrowserTab(tabId, userId)),
+    notePage: (tabId, targetId, page) =>
+      run(noteBrowserTabPage(tabId, targetId, page)).pipe(
+        Effect.catch(() => Effect.logWarning("a watched tab's page was not kept")),
+        Effect.asVoid,
+      ),
     hold: (conversationId, heldUntil) =>
       run(holdSandbox(conversationId, heldUntil)).pipe(
         Effect.catch(() => Effect.logWarning("a watched browser's lease was not moved on")),

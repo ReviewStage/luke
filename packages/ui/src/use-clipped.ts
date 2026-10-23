@@ -26,6 +26,13 @@ export function useClipped(
     (element: HTMLElement | null) => {
       if (element === null) return undefined;
       box.current = element;
+      // Note that a host with no observer (a server render, a test's DOM)
+      // lays nothing out either, so its line is never cut short.
+      if (typeof ResizeObserver === "undefined") {
+        return () => {
+          box.current = null;
+        };
+      }
       const measure = () => setClipped(element.scrollWidth > element.clientWidth);
       const resized = new ResizeObserver(measure);
       resized.observe(element);

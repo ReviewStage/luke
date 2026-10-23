@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import {
   GITHUB_AUTHOR_ASSOCIATION,
   type GitHubIssuePick,
@@ -23,7 +24,12 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
-import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
+import {
+  TASK_SKILL_SOURCE,
+  TASK_STATUS,
+  TASK_TREE_ENTRY,
+  type TaskStatus,
+} from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -53,6 +59,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
+import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
 
@@ -500,6 +507,7 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
             {
               name: "release",
               description: "Cut a release.",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
               path: ".agents/skills/release/SKILL.md",
             },
           ],
@@ -569,8 +577,20 @@ test("a repository group's + opens the card on its repository rather than the la
 
 test("Escape puts the card away with nothing started, and focus goes back to what opened it", async () => {
   const card = await mount();
+  await card.key("Escape");
+  assert.equal(card.dialog(), null);
+  assert.equal(document.activeElement, card.opener);
+  assert.deepEqual(card.starts, []);
+});
+
+test("a card holding words is nudged rather than put away by the first Escape, and put away by the next", async () => {
+  const card = await mount();
   card.type("Dark mode");
   await card.key("Escape");
+  const nudged = card.dialog()?.getAttribute("data-nudge");
+  await card.key("Escape");
+
+  assert.equal(nudged, "true", "the first Escape nudges the card and keeps it");
   assert.equal(card.dialog(), null);
   assert.equal(document.activeElement, card.opener);
   assert.deepEqual(card.starts, []);
@@ -579,6 +599,7 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
 test("words left in a card put away come back as New task opens again and after a relaunch, and a task started lets them go", async () => {
   const card = await mount();
   card.type("Dark mode");
+  await card.key("Escape");
   await card.key("Escape");
   assert.equal(card.dialog(), null);
 
@@ -606,6 +627,7 @@ test("words typed before the workspaces are read stay in the box as the workspac
   await card.list("workspace-personal");
   assert.equal(card.field().textContent, "Dark mode");
 
+  await card.key("Escape");
   await card.key("Escape");
   await card.reopen();
   assert.equal(card.field().textContent, "Dark mode");
@@ -1472,4 +1494,63 @@ test("a repository whose installation grants Luke no issues says so in the GitHu
   assert.equal(regranted, "Ledger totals drift");
   assert.equal(document.querySelector("[data-issue-chip]"), null);
   assert.deepEqual(card.starts, []);
+});
+
+test("for an automation's agent the card is titled for it, offers no File for later, and Return hands the agent the brief with the words fenced last", async () => {
+  const card = await mount(undefined, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
+  assert.equal(card.dialog()?.querySelector("h2")?.textContent, "Create with an agent");
+  assert.equal(card.placeholder(), "Describe what to automate for a coding agent…");
+  assert.ok(!card.controls().includes("File for later"), "no task is filed for later");
+  card.type("Every Monday, audit our agents' tool sets.");
+  await card.key("Enter");
+
+  assert.deepEqual(card.starts, [["", "acme/web"]]);
+  const prompt = card.agents[0]?.prompt ?? assert.fail("an agent is handed the words");
+  assert.match(prompt, /`create_automation`/u, "the brief names the tool that makes it");
+  assert.match(prompt, /`list_automations`/u, "and the one that reads what stands");
+  assert.ok(
+    prompt.endsWith("\n```text\nEvery Monday, audit our agents' tool sets.\n```"),
+    "the words close the message, fenced as the request",
+  );
+});
+
+test("for an automation's agent an empty box starts no bare task, and words past an agent's first message's bound start nothing and say why", async () => {
+  const card = await mount(undefined, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
+  await card.key("Enter", { metaKey: true });
+  assert.equal(card.starts.length, 0, "no bare task");
+
+  card.type("a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS));
+  await card.key("Enter");
+  assert.equal(card.starts.length, 0, "nothing past the bound is sent");
+  assert.match(card.note() ?? "", /^That request is too long\./u);
+});
+
+test("an automation's words are a draft of their own, so New task opens without them", async () => {
+  const automation = await mount(undefined, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
+  automation.type("Post a weekly digest.");
+  await settle();
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  const task = await mount();
+  assert.equal(task.field().textContent, "", "New task's box is empty");
+});
+
+test("for an automation's agent files alone hold Start, since the words are the request", async () => {
+  const card = await mount(undefined, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
+  const picker =
+    card.dialog()?.querySelector<HTMLInputElement>('input[type="file"]') ??
+    assert.fail("the + has its file picker");
+  const file = new File(["# Notes"], "notes.md", { type: "text/markdown" });
+  Object.defineProperty(picker, "files", { configurable: true, value: [file] });
+  act(() => {
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  for (let read = 0; read < 4; read += 1) await settle();
+  assert.ok(card.dialog()?.textContent?.includes("notes.md"), "the file is attached");
+  assert.equal(card.startButton().disabled, true, "Start is held");
+
+  card.type("Post the notes every Friday.");
+  await settle();
+  assert.equal(card.startButton().disabled, false, "words let it start");
 });

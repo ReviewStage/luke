@@ -64,7 +64,6 @@ import {
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
   isAgentTab,
-  isBrowserTab,
   isChangesTab,
   isCloudBrowserTab,
   isDraftTab,
@@ -164,7 +163,7 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "./closed-tabs.js";
-import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -176,6 +175,7 @@ import {
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import type { NewTaskLink } from "./new-task-links.js";
+import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
@@ -306,7 +306,11 @@ interface InboxViewControl {
   /** The pages of the chosen item's task as they move, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
   /** Tells the agents the Inbox read of the chosen item's task, whose Pull request tabs the panel beside it draws (`use-inbox-task-agents.ts`). */
-  readonly onTaskAgents: (taskId: string, agentIds: readonly string[]) => void;
+  readonly onTaskAgents: (
+    taskId: string,
+    agentIds: readonly string[],
+    heldIds?: readonly string[] | undefined,
+  ) => void;
 }
 
 /**
@@ -552,9 +556,11 @@ function agentRequest(handed: NewTaskAgent) {
   };
 }
 
-/** What the press that opened New task chose: a repository (a repository group's +), or the card a start refused after it closed opens again on. */
+/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
+  /** What the card starts; a task's agent where none is named. */
+  readonly purpose?: NewTaskPurpose;
   /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
   readonly refused?: { readonly card: NewTaskCardKept; readonly note: string };
 }
@@ -566,6 +572,8 @@ export interface NewTaskPreset {
  * made, whose key a Retry asking the same carries again.
  */
 export interface NewTaskCardKept {
+  /** What the card started, which it opens again for; a task's agent where none is named. */
+  readonly purpose?: NewTaskPurpose;
   readonly repository: string | null;
   readonly links: readonly NewTaskLink[];
   readonly choice: ModelChoice | undefined;
@@ -801,6 +809,8 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /** New task's card for the agent that makes an automation: what the Automations page's Create with an agent asks. */
+  onNewAutomationAgent: () => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
   newTask: {
     open: boolean;
@@ -1684,11 +1694,19 @@ export function useTasksTab(input: {
   // The task's agents' cloud Browser tabs, while the Browser tab experiment is on, which the panel draws on its own task alone.
   const cloudTaskId =
     inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
-  const cloudListed = useCloudBrowserTabs(cloudTaskId, useExperiment(EXPERIMENT.BROWSER));
+  const cloudOn = useExperiment(EXPERIMENT.BROWSER);
+  const cloudListed = useCloudBrowserTabs(cloudTaskId, cloudOn);
+  // A draft of a tab in an agent's browser stands in the strip after the tabs the service lists.
+  const cloudDrafts = useCloudBrowserDrafts(cloudTaskId, cloudOn);
   // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
   const cloudBrowsers = useMemo(
-    () => (cloudTaskId === undefined ? NO_IDS : cloudListed?.map((each) => each.id)),
-    [cloudTaskId, cloudListed],
+    () =>
+      cloudTaskId === undefined
+        ? NO_IDS
+        : cloudListed === undefined
+          ? undefined
+          : [...cloudListed.map((each) => each.id), ...cloudDrafts.map((each) => each.id)],
+    [cloudTaskId, cloudListed, cloudDrafts],
   );
   // The task's Chat stands in the side panel once Chat is on and its read holds the task's channel, and
   // opened where it holds none yet, which the tab says; it stands nowhere while Chat is off (`drawnFixed`).
@@ -1723,6 +1741,12 @@ export function useTasksTab(input: {
       : (pageAgents ?? agents.agentIds),
     input.room,
     cloudBrowsers,
+    // Every agent of the task, an archived one among them, whose Pull request tab stands as a live agent's does.
+    inboxView !== undefined
+      ? inboxAgent === undefined
+        ? inboxTaskAgents.heldIds
+        : inboxAgents
+      : (pageAgents ?? agents.heldIds),
   );
   // A task whose column shows no tab stands on its plan: the side panel is
   // shown on its Plan tab, once for each task as it comes to show none, so a
@@ -2866,7 +2890,15 @@ export function useTasksTab(input: {
         setStartingTask(undefined);
         setStandIn((now) => now ?? standingBefore);
         setHistoryFor((now) => now ?? historyBefore);
-        setNewTaskAsk({ preset: card === undefined ? undefined : { refused: { card, note } } });
+        setNewTaskAsk({
+          preset:
+            card === undefined
+              ? undefined
+              : {
+                  ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
+                  refused: { card, note },
+                },
+        });
       }
       return note;
     };
@@ -3287,7 +3319,8 @@ export function useTasksTab(input: {
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, the Inbox while the task holds an
-  // agent, and a subagent's, a Changes or Terminal tab, or a page's on the strip's own
+  // agent, a Changes tab while its agent is the task's, archived or not,
+  // and a subagent's, a Terminal tab, or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   const drawsAgain = (closed: ClosedTab): boolean => {
@@ -3303,12 +3336,10 @@ export function useTasksTab(input: {
     }
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
-    if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agentIds });
+    if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     if (isMacTerminalTab(tab)) return drawsMacTerminal(tab, { taskAgents: agentIds });
-    // A Browser tab's page went with it, so there is nothing to open again.
-    if (isBrowserTab(tab)) return false;
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
@@ -3365,7 +3396,6 @@ export function useTasksTab(input: {
             onIdle: closeSidePanelTab,
             keeps: (tab) =>
               typeof tab === "string" ||
-              isBrowserTab(tab) ||
               isCloudBrowserTab(tab) ||
               isMacTerminalTab(tab) ||
               pinnedHere(tab),
@@ -3831,6 +3861,7 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),
     newTask: {
       open: newTaskAsk !== undefined,
       preset: newTaskAsk?.preset,

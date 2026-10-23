@@ -11,7 +11,6 @@ import {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
-  BROWSER_ACT_KIND,
   INTEGRATION_ACT_KIND,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
@@ -1001,7 +1000,6 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...AGENT_ACT_KIND,
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
-  ...BROWSER_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
@@ -1104,7 +1102,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     act(() => {
       runAppCommand(APP_COMMAND.FIND);
     });
-    found[place] = container.querySelector("search[aria-label='Find']") !== null;
+    found[place] = container.querySelector("[role='search'][aria-label='Find']") !== null;
     act(() => root?.unmount());
     container.remove();
   }
@@ -1360,4 +1358,64 @@ test("the sign-in, which needs the network, says over it when the Mac is offline
 
   assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
   assert.equal(titleBarOffline(container)?.textContent, "Offline");
+});
+
+/** A finger's swipe from `from` to `to` across the screen, at the height of the page's middle. */
+function fingerSwipe(target: HTMLElement, from: number, to: number, pointerType = "touch"): void {
+  const at = (type: string, x: number) =>
+    new PointerEvent(type, {
+      bubbles: true,
+      clientX: x,
+      clientY: 400,
+      pointerId: 3,
+      pointerType,
+      isPrimary: true,
+    });
+  act(() => {
+    target.dispatchEvent(at("pointerdown", from));
+    target.dispatchEvent(at("pointermove", (from + to) / 2));
+    target.dispatchEvent(at("pointermove", to));
+    target.dispatchEvent(at("pointerup", to));
+  });
+}
+
+test("on a phone a finger swiped in from the screen's left edge opens the drawer over a dimmed window, and a mouse's drag does not", async () => {
+  const asked: string[] = [];
+  const onOverlay = (overlay: string) => asked.push(overlay);
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: query === "(pointer: coarse)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const page = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    {
+      onOverlay,
+    },
+  );
+  const work = page.querySelector<HTMLElement>(".desktop-main");
+  assert.ok(work);
+  fingerSwipe(work, 300, 500, "mouse");
+  assert.deepEqual(asked, [], "a mouse's drag opens nothing");
+  fingerSwipe(work, 30, 260);
+  assert.deepEqual(asked, [SIDEBAR_OVERLAY.OPEN]);
+  assert.equal(page.querySelector(".luke-drawer-scrim")?.getAttribute("data-open"), "false");
+});
+
+test("on a phone the drawer opened stands over a dimmed window, and beside the work there is none", async () => {
+  const phone = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    { overlay: SIDEBAR_OVERLAY.OPEN },
+  );
+  assert.equal(phone.querySelector(".luke-drawer-scrim")?.getAttribute("data-open"), "true");
+  act(() => root?.unmount());
+  const wide = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    { overlay: SIDEBAR_OVERLAY.OPEN },
+    SHELL_ROOM.WIDE,
+  );
+  assert.equal(wide.querySelector(".luke-drawer-scrim"), null);
 });

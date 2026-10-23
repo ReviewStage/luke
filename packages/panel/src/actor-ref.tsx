@@ -13,14 +13,17 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
   INLINE_REF_LOOK,
   InlineRef,
+  LAYOUT_ELEMENT,
   SCROLL_SIZE,
   ScrollArea,
+  Stack,
   TEXT_BUTTON_LINES,
   TextButton,
   TIME_LOOK,
@@ -37,6 +40,7 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  type AssigneeFace,
   actorName,
   type GitHubActor,
   LUKE_ACTOR,
@@ -363,21 +367,29 @@ export function UnassignedHeard(): React.JSX.Element {
   return <VisuallyHidden>{`(${UNASSIGNED_WORDS.toLowerCase()})`}</VisuallyHidden>;
 }
 
-/**
- * What a screen reader hears of a teammate's task's creator, whose face the
- * row draws at its time: "(created by Charles Pan)". Note that a row says it
- * outside its time's slot, because the slot steps out while the row is
- * hovered or holds the keyboard.
- */
-export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
-  const left = leftWithFace(actor) ? ", who left" : "";
-  return <VisuallyHidden>{`(created by ${actorName(actor)}${left})`}</VisuallyHidden>;
-}
-
 /** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
 export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
   return <VisuallyHidden>{`(assigned to ${actorName(actor)}${left})`}</VisuallyHidden>;
+}
+
+/**
+ * The face a row wears at its end for who is on its task (`assigneeFace`):
+ * its assignee's, or the dashed unassigned mark, each with the words a
+ * screen reader hears of it.
+ */
+export function AssigneeFaceMark({ face }: { face: AssigneeFace }): React.JSX.Element {
+  return face.assignee === undefined ? (
+    <>
+      <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />
+      <UnassignedHeard />
+    </>
+  ) : (
+    <>
+      <ActorMark actor={face.assignee} size={ACTOR_SIZE.MARK} />
+      <AssigneeHeard actor={face.assignee} />
+    </>
+  );
 }
 
 /** The quiet badge the reader's own account wears beside its name. */
@@ -748,7 +760,7 @@ function MoreFaces({
     <HoverCard data-actor-card="more">
       <div className="actor-more">
         <ScrollArea size={SCROLL_SIZE.CONTENT}>
-          <ul className="actor-more-list">
+          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
             {actors.map((actor, index) => (
               // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
               <li key={index} className="actor-more-row">
@@ -756,7 +768,7 @@ function MoreFaces({
                 <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
               </li>
             ))}
-          </ul>
+          </Stack>
         </ScrollArea>
       </div>
     </HoverCard>

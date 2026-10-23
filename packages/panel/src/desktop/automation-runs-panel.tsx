@@ -19,12 +19,16 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   FoldingButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
   ListRow,
   ProviderMark,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
   SKELETON_SHAPE,
@@ -37,6 +41,7 @@ import {
   Tooltip,
   useMenu,
   useMinute,
+  useResizeEdge,
 } from "@luke/ui";
 import { momentText, sinceText } from "@luke/ui/time-format";
 import { ClockIcon, ExternalLinkIcon, PlayIcon, WebhookIcon } from "lucide-react";
@@ -49,7 +54,6 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
 import type { RunsRead } from "./use-automation-runs.js";
-import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
@@ -318,8 +322,8 @@ export function AutomationRunsPanel({
   /** How wide it stands and whether it stands, kept by the window (`folded-groups.ts`). */
   panel: RunsPanel;
 }): React.JSX.Element | null {
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.LEFT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.LEFT,
     width: panel.width,
     bounds: RUNS_PANEL_WIDTH,
     reserve: () => FORM_RESERVE,
@@ -339,7 +343,7 @@ export function AutomationRunsPanel({
       inert={slide.leaving}
       style={{ width: panel.width }}
     >
-      <div className="side-panel-resize" {...edge} />
+      <ResizeEdge edge={edge} />
       <aside className="automation-runs" aria-label="Runs">
         <RunsBody {...shown} />
       </aside>
@@ -369,13 +373,19 @@ export function AutomationRunsScreen({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <section id={id} className="automation-runs-screen" aria-label="Runs" hidden={hidden}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      id={id}
+      className="automation-runs-screen"
+      aria-label="Runs"
+      hidden={hidden}
+    >
       <header className="desktop-toolbar">
         <div className="automation-runs-back">
           <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
         </div>
       </header>
       <RunsBody {...shown} />
-    </section>
+    </Fill>
   );
 }

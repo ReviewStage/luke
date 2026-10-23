@@ -31,10 +31,14 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import {
   AnchoredPopover,
+  Badge,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
+  GAP,
   IconButton,
+  Inline,
+  LAYOUT_ELEMENT,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
   PopoverPanel,
@@ -185,8 +189,8 @@ function ReactionPill({
     <li>
       <Tooltip label={words}>
         {press === undefined ? (
-          <span className="pull-request-reaction" data-mine={mine} role="img" aria-label={words}>
-            {inner}
+          <span className="pull-request-reaction" role="img" aria-label={words}>
+            <Badge lit={mine}>{inner}</Badge>
           </span>
         ) : (
           <Chip
@@ -364,7 +368,12 @@ export function Reactions({
   };
   return (
     <>
-      <ul className="pull-request-reactions" aria-label="Reactions">
+      <Inline
+        as={LAYOUT_ELEMENT.UL}
+        gap={GAP.TIGHT}
+        className="pull-request-reactions"
+        aria-label="Reactions"
+      >
         {drawn.map((reaction) => (
           <ReactionPill
             key={reaction.content}
@@ -382,7 +391,7 @@ export function Reactions({
           />
         ))}
         {pressable ? <AddReaction mine={mine} waiting={waiting} onPick={send} /> : null}
-      </ul>
+      </Inline>
       <PullRequestWriteNote writes={writes} className="pull-request-reaction-note" />
     </>
   );

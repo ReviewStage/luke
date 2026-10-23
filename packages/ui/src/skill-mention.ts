@@ -13,11 +13,14 @@
  * alone: the editor bundle reads the same words.
  */
 
-/** A skill as the composer offers it: its name, what it is for, and its `SKILL.md`, named from the repository's root. */
+import type { TaskSkillSource } from "@luke/features/task-wire";
+
+/** A skill as the composer offers it: its name, what it is for, where it comes from, and, for one of the repository's, its `SKILL.md`, named from the repository's root. */
 export interface SkillOption {
   readonly name: string;
   readonly description: string;
-  readonly path: string;
+  readonly source: TaskSkillSource;
+  readonly path?: string;
 }
 
 /** A `/` word the caret stands at the end of: where its slash is, and the letters typed after it. */
