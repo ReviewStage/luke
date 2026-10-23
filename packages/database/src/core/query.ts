@@ -4,7 +4,7 @@ import type { EffectPgQueryEffectHKT, EffectPgQueryResultHKT } from "drizzle-orm
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
 import { QueryBuilder } from "drizzle-orm/pg-core";
 import type { PgEffectDatabase } from "drizzle-orm/pg-core/effect";
-import { Context, Layer } from "effect";
+import { Context, Layer, type Schema } from "effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 
@@ -48,3 +48,6 @@ export type DatabaseServices = Database | SqlClient.SqlClient;
  * Drizzle statement with the driver's `EffectDrizzleQueryError` around it.
  */
 export type QueryError = SqlError | EffectDrizzleQueryError;
+
+/** How a store's read or write fails: its statement, or a row its schema does not decode. */
+export type StoreFailure = QueryError | Schema.SchemaError;

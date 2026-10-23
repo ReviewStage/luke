@@ -29,14 +29,12 @@ import { TURN_STATUS } from "@luke/wire";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { sandboxTerminalLease } from "../schemas/sandbox-terminal-lease.js";
 import { conversations, turns } from "../schemas/storage.js";
 import { TURN_ABANDON } from "./abandoned-turns.js";
 
-type LeaseFailure = QueryError | Schema.SchemaError;
-
-type LeaseEffect<A> = Effect.Effect<A, LeaseFailure, DatabaseServices>;
+type LeaseEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /** A lapsed lease as the sweep reads it: whose it is, the session its sandbox is tagged with, and the instant it lapsed at. */
 export interface LapsedSandboxLease {

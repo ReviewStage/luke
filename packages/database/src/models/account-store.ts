@@ -21,7 +21,7 @@ import { WireValueSchema } from "@luke/wire";
 import { eq, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { conversations } from "../schemas/storage.js";
@@ -42,8 +42,6 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * at the web edge and is the only file of the two that reaches the auth
  * session.
  */
-
-type AccountSeamFailure = QueryError | Schema.SchemaError;
 
 /** One account's stored snapshot: the preferences every device shares, the coding agents' default, and when the preferences were last written. */
 export interface AccountPreferencesRow {
@@ -81,7 +79,7 @@ export interface AccountPreferencesWrite {
 }
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
-export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, DatabaseServices>;
+export type AccountSeamEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /**
  * The account's erasure is the one delete, and the row's own foreign keys are
@@ -128,9 +126,7 @@ const findAccountSessions = SqlSchema.findAll({
  * of the account is locked as its session is read, so a session claimed
  * meanwhile waits and finds no row to claim, rather than landing unqueued.
  */
-export function deleteAccount(
-  userId: string,
-): Effect.Effect<void, AccountSeamFailure, DatabaseServices> {
+export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -214,7 +210,7 @@ const findPreference = SqlSchema.findOneOption({
 /** One account's stored snapshot, or nothing for an account that has stored none. */
 export function readAccountPreferences(
   userId: string,
-): Effect.Effect<AccountPreferencesRow | undefined, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<AccountPreferencesRow | undefined, StoreFailure, DatabaseServices> {
   return Effect.map(
     findPreference(userId),
     Option.match({ onNone: () => undefined, onSome: snapshotOf }),
@@ -229,7 +225,7 @@ export function readAccountPreferences(
 export function accountExperimentOn(
   userId: string,
   experiment: Experiment,
-): Effect.Effect<boolean, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
   return Effect.map(
     readAccountPreferences(userId),
     (row) => row !== undefined && experimentOn(row.experiments, experiment),
@@ -244,7 +240,7 @@ export function accountExperimentOn(
  */
 export function chatEnabledFor(
   userId: string,
-): Effect.Effect<boolean, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
   return accountExperimentOn(userId, EXPERIMENT.CHAT);
 }
 
@@ -265,7 +261,7 @@ const findRole = SqlSchema.findOneOption({
  */
 export function readAccountRole(
   userId: string,
-): Effect.Effect<string | undefined, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> {
   return Effect.map(findRole(userId), (row) =>
     Option.match(row, { onNone: () => undefined, onSome: ({ role }) => role ?? undefined }),
   );
@@ -345,7 +341,7 @@ const upsertPreference = SqlSchema.findOne({
 export function writeAccountPreferences(
   userId: string,
   write: AccountPreferencesWrite,
-): Effect.Effect<AccountPreferencesRow, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<AccountPreferencesRow, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const updatedAt = yield* DateTime.nowAsDate;
     const stored: PreferenceWrite = {
@@ -388,7 +384,7 @@ const findPlanTemplate = SqlSchema.findOneOption({
 /** The account's own template, or null where it holds the default: no row, or a reset. */
 export function readPlanTemplate(
   userId: string,
-): Effect.Effect<string | null, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<string | null, StoreFailure, DatabaseServices> {
   return Effect.map(
     findPlanTemplate(userId),
     Option.match({ onNone: () => null, onSome: (row) => row.planTemplate }),
@@ -450,8 +446,8 @@ function underTemplateLock<A>(
   userId: string,
   body: (
     before: string | null,
-  ) => Effect.Effect<A, AccountSeamFailure | Cause.NoSuchElementError, DatabaseServices>,
-): Effect.Effect<A, AccountSeamFailure, DatabaseServices> {
+  ) => Effect.Effect<A, StoreFailure | Cause.NoSuchElementError, DatabaseServices>,
+): Effect.Effect<A, StoreFailure, DatabaseServices> {
   const locked = Effect.gen(function* () {
     yield* openPreferenceRow(userId);
     const { planTemplate: before } = yield* lockPlanTemplate(userId);
@@ -474,7 +470,7 @@ function writtenUnderLock(
   before: string | null,
   template: string | null,
   restoredFrom?: number,
-): Effect.Effect<string | null, AccountSeamFailure | Cause.NoSuchElementError, DatabaseServices> {
+): Effect.Effect<string | null, StoreFailure | Cause.NoSuchElementError, DatabaseServices> {
   return Effect.gen(function* () {
     if (before === template && restoredFrom === undefined) return before;
     const { planTemplate: after } = yield* updatePlanTemplate({ userId, planTemplate: template });
@@ -492,7 +488,7 @@ function writtenUnderLock(
 export function writePlanTemplate(
   userId: string,
   template: string | null,
-): Effect.Effect<string | null, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<string | null, StoreFailure, DatabaseServices> {
   return underTemplateLock(userId, (before) => writtenUnderLock(userId, before, template));
 }
 
@@ -506,7 +502,7 @@ export function writePlanTemplate(
 export function restorePlanTemplate(
   userId: string,
   seq: number,
-): Effect.Effect<Option.Option<string | null>, AccountSeamFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<string | null>, StoreFailure, DatabaseServices> {
   return underTemplateLock(userId, (before) =>
     Effect.flatMap(readTemplateRevisionContent(userId, seq), (content) =>
       Option.match(content, {
