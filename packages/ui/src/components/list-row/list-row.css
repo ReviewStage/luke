@@ -615,10 +615,13 @@
   /* A row swiped right to its one act (`use-row-swipe.ts`): its face slides
      on its `transform` over the act's button in the accent, which a short
      swipe leaves showing and a long one arms, brighter, its label riding
-     the face's edge. The face is drawn on the row's own ground, its fill
-     over it, so it hides the button wherever it stands; it settles on the
-     motion tokens, so reduced motion and a capture run hold it still, and
-     follows the pointer or the wheel with no lag while it moves. */
+     the face's edge. While it is out, the face is drawn on the row's own
+     ground, its fill over it, so it hides the button wherever it stands; at
+     rest it is drawn in its fill alone, so a row on a ground the window
+     frosts through (the Mac's sidebar) is as clear as the rows around it
+     that do not swipe. It settles on the motion tokens, so reduced motion
+     and a capture run hold it still, and follows the pointer or the wheel
+     with no lag while it moves. */
   .luke-list-row[data-swipe] {
     --luke-list-row-fill: transparent;
 
@@ -648,11 +651,20 @@
     align-items: center;
     min-width: 0;
     border-radius: inherit;
-    background:
-      linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill)),
-      var(--luke-list-row-ground, var(--luke-color-ground));
+    background-color: var(--luke-list-row-ground, var(--luke-color-ground));
+    background-image: linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill));
     transform: translateX(var(--luke-list-row-swipe, 0px));
     transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  /* Note that the ground goes only once the face has slid home, as the
+     button under it does, so a face settling back never shows the button
+     through its words. */
+  .luke-list-row[data-swipe="rest"] > .luke-list-row-slide {
+    background-color: transparent;
+    transition:
+      transform var(--luke-duration-fast) var(--luke-spring-fast),
+      background-color 0s linear var(--luke-duration-fast);
   }
 
   .luke-list-row[data-swipe="moving"] > .luke-list-row-slide {
