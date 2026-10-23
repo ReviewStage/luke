@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { INTEGRATION_INSTALLATION_STATUS } from "@luke/database/integration-vocabulary";
 import {
+  AUTOMATION_ACCESS,
   listAutomationRuns,
   listAutomations,
   readAutomation,
@@ -27,8 +28,10 @@ import {
   sentryTriggerSchema,
 } from "@luke/features/automation-wire";
 import { disabledServersSchema } from "@luke/features/coding-agent-wire";
+import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
+import { isRecord } from "@luke/wire";
 import { describeWire } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -36,6 +39,7 @@ import {
   changeAutomationAs,
   createAutomationAs,
   removeAutomationAs,
+  runAutomationNowAs,
   runSummaries,
   summaryOf,
 } from "../automations/automation-writes.js";
@@ -141,6 +145,13 @@ export const AUTOMATION_TOOL_REFUSAL = {
   INVALID:
     "Not run: Luke does not take the automation as asked. Check the trigger, the repositories, " +
     "the scope, and the agentId, and that the guards are whole numbers within their bounds.",
+  UNKNOWN_SERVERS:
+    "Not run: name each connection in disabledServers as your connections are named in your " +
+    "instructions, such as neon, sentry, or notion-2 for a second Notion account; these name none:",
+  NOT_RUNNABLE:
+    "Not run: the developer you work for may read that automation but not run it. A personal " +
+    "automation is its creator's to run, and a workspace's every member's.",
+  NO_SERVICE: "Not run: this deployment cannot reach the coding agents' service.",
   UNAVAILABLE:
     "Not run: the automations could not be written just now. The call may be made again.",
 } as const;
@@ -200,9 +211,11 @@ const EFFORT = describeWire(
 
 const SERVERS = describeWire(
   disabledServersSchema,
-  "The connections (MCP servers) each run's agent is not handed, by connection name, the " +
-    "whole list; every connection of the creator's is handed where none are named. A connection " +
-    "the prompt names with an @ is handed even where it is listed here.",
+  "The connections (MCP servers) each run's agent is not handed, the whole list, each by its " +
+    "connection name as your instructions list your connections (neon, sentry, notion-2); every " +
+    "connection of the creator's is handed where none are named, and a name that is no " +
+    "connection's is refused. A connection the prompt names with an @ is handed even where it is " +
+    "listed here.",
 );
 
 const GUARDS = describeWire(
@@ -294,10 +307,13 @@ const UPDATE_AUTOMATION_INPUT = Schema.Struct({
 
 const DELETE_AUTOMATION_INPUT = Schema.Struct({ automationId: AUTOMATION_ID });
 
+const RUN_AUTOMATION_INPUT = Schema.Struct({ automationId: AUTOMATION_ID });
+
 const readListAsked = Schema.decodeUnknownResult(LIST_AUTOMATIONS_INPUT);
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_AUTOMATION_INPUT);
 const readUpdateAsked = Schema.decodeUnknownResult(UPDATE_AUTOMATION_INPUT);
 const readDeleteAsked = Schema.decodeUnknownResult(DELETE_AUTOMATION_INPUT);
+const readRunAsked = Schema.decodeUnknownResult(RUN_AUTOMATION_INPUT);
 
 /** The tools as every coding agent is offered them: each its name, its words, and its input schema. */
 export const LIST_AUTOMATIONS_TOOL = {
@@ -353,6 +369,19 @@ export const DELETE_AUTOMATION_TOOL = {
   inputSchema: DELETE_AUTOMATION_INPUT,
 } as const;
 
+export const RUN_AUTOMATION_TOOL = {
+  name: AGENT_TOOL.RUN_AUTOMATION,
+  description:
+    `Run an automation of your workspace now, by its id as ${AGENT_TOOL.LIST_AUTOMATIONS} ` +
+    "answered it, as its Run now on the automations page would: one run, whatever its trigger, " +
+    "through the same guards a firing takes, starting its coding agent on its prompt as a " +
+    "scheduled run would, or handing it to the one agent it names. Run one when the developer " +
+    "asks for it, such as to try an automation just made, never otherwise on your own. Answers " +
+    "`accepted` with the run, started with its agent or skipped or failed and why, or " +
+    "`rejected` and why.",
+  inputSchema: RUN_AUTOMATION_INPUT,
+} as const;
+
 /** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and Luke's Sentry integration. */
 type AutomationToolServices =
   | DatabaseServices
@@ -379,6 +408,24 @@ function refusalWords(refusal: HostedRefusal): string {
     default:
       return AUTOMATION_TOOL_REFUSAL.UNAVAILABLE;
   }
+}
+
+/** The names a call's disabledServers holds that are no connection's, read off the input as sent, since the wire's own read drops them unsaid. */
+function unknownServers(input: UnparsedWireValue): readonly string[] {
+  const named = isRecord(input) ? input.disabledServers : undefined;
+  if (!Array.isArray(named)) return [];
+  return named.filter(
+    (name): name is string =>
+      typeof name === "string" && integrationConnectionOf(name) === undefined,
+  );
+}
+
+/** A refusal of the servers named that are no connection's, or nothing where every one is. */
+function serversRefused(input: UnparsedWireValue): WireRecord | undefined {
+  const unknown = unknownServers(input);
+  return unknown.length === 0
+    ? undefined
+    : agentToolRejected(`${AUTOMATION_TOOL_REFUSAL.UNKNOWN_SERVERS} ${unknown.join(", ")}.`);
 }
 
 /** An instant as the model reads it. */
@@ -596,6 +643,8 @@ export function runCreateAutomation(
     return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_CREATE));
   }
   const made = asked.success;
+  const servers = serversRefused(input);
+  if (servers !== undefined) return Effect.succeed(servers);
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
@@ -610,7 +659,7 @@ export function runCreateAutomation(
         return Result.isSuccess(kept)
           ? {
               status: ACTION_RESULT_STATUS.ACCEPTED,
-              automation: automationReading(kept.success, true),
+              automation: automationReading(kept.success, false),
             }
           : agentToolRejected(refusalWords(kept.failure));
       }
@@ -670,7 +719,7 @@ export function runCreateAutomation(
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        automation: automationReading(written.success.automation, true),
+        automation: automationReading(written.success.automation, false),
       };
     }),
   );
@@ -695,6 +744,8 @@ export function runUpdateAutomation(
     disabledServers,
     ...rest
   } = asked.success;
+  const servers = serversRefused(input);
+  if (servers !== undefined) return Effect.succeed(servers);
   const changesAction =
     prompt !== undefined || choice !== undefined || disabledServers !== undefined;
   if (!changesAction && agentId === undefined && Object.keys(rest).length === 0) {
@@ -744,7 +795,7 @@ export function runUpdateAutomation(
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        automation: automationReading(written.success.automation, true),
+        automation: automationReading(written.success.automation, false),
       };
     }),
   );
@@ -778,6 +829,48 @@ export function runDeleteAutomation(
       return Result.isSuccess(deleted)
         ? deleted.success
         : agentToolRejected(refusalWords(deleted.failure));
+    }),
+  );
+}
+
+/** One call of `run_automation`: an automation of the caller's workspace run now, once under the call's key, as its member may run it. */
+export function runRunAutomation(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, AutomationToolServices> {
+  const asked = readRunAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_ID));
+  }
+  const { automationId } = asked.success;
+  const { eveAs } = call;
+  if (eveAs === undefined) {
+    return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_SERVICE));
+  }
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const workspace = yield* callerWorkspace(call.caller);
+      if (Option.isNone(workspace))
+        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      const userId = callerUserId(call.caller);
+      const found = yield* workspaceAutomation(userId, workspace.value, automationId);
+      if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
+      const runnable = yield* readAutomation(userId, automationId, AUTOMATION_ACCESS.RUN);
+      if (Option.isNone(runnable)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NOT_RUNNABLE);
+      // Note that the run reaches eve as the deployment acting for the account it starts as, its creator, whoever fired it, as the sweep's runs do.
+      const ran = yield* runAutomationNowAs(
+        userId,
+        runnable.value,
+        calledId(userId, call.clientKey),
+        (account) => Effect.succeed(eveAs(account)),
+      ).pipe(Effect.result);
+      if (Result.isFailure(ran)) return agentToolRejected(refusalWords(ran.failure));
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        automation: { id: runnable.value.id, name: runnable.value.name },
+        run: runReading(ran.success.run),
+        alreadyRan: !ran.success.made,
+      };
     }),
   );
 }

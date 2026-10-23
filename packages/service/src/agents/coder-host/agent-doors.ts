@@ -50,6 +50,7 @@ import {
   runCreateAutomation,
   runDeleteAutomation,
   runListAutomations,
+  runRunAutomation,
   runUpdateAutomation,
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
@@ -140,6 +141,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.CREATE_AUTOMATION
     | typeof CODER_TOOL.UPDATE_AUTOMATION
     | typeof CODER_TOOL.DELETE_AUTOMATION
+    | typeof CODER_TOOL.RUN_AUTOMATION
     | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -163,6 +165,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.CREATE_AUTOMATION]: runCreateAutomation,
   [CODER_TOOL.UPDATE_AUTOMATION]: runUpdateAutomation,
   [CODER_TOOL.DELETE_AUTOMATION]: runDeleteAutomation,
+  [CODER_TOOL.RUN_AUTOMATION]: runRunAutomation,
   [CODER_TOOL.LIST_MODELS]: runListModels,
   [CODER_TOOL.LIST_OPEN_ASKS]: runListOpenAsks,
 } as const;
@@ -462,21 +465,20 @@ export function runAgentTools(
     const compose = yield* eveSessionsComposer;
     // Each agent the tools reach is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
     const route = yield* sessionsRouter;
-    const eve =
+    const eveAs =
       secret === undefined || origin === undefined
         ? undefined
-        : route(
-            compose({
-              origin,
-              caller: { secret, account: sender.userId },
-              mount: EVE_MOUNT.CODER,
-            }),
-            sender.userId,
-          );
+        : (account: string) =>
+            route(
+              compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER }),
+              account,
+            );
+    const eve = eveAs?.(sender.userId);
     const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
     const toolCall = {
       caller,
       eve,
+      eveAs,
       writer: seams.writer(),
       clientKey: call.callId,
       summaryModel: seams.summaryModel,

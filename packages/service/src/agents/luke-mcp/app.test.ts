@@ -344,6 +344,7 @@ const SERVED_TOOLS = [
   "create_automation",
   "update_automation",
   "delete_automation",
+  "run_automation",
   "post_chat",
   "read_chat",
   "resolve_ask",
@@ -411,6 +412,7 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   create_automation: agentTool("create_automation"),
   update_automation: agentTool("update_automation"),
   delete_automation: agentTool("delete_automation"),
+  run_automation: agentTool("run_automation"),
   post_chat: (admitted, input, seams) =>
     runAgentChat(seams, admitted, {
       tool: CHAT_TOOL.POST,

@@ -3979,7 +3979,7 @@ test("list_automations, create_automation, update_automation, and delete_automat
     [
       automation.name,
       automation.enabled,
-      automation.prompt,
+      automation.promptChars,
       automation.repositories,
       automation.runsLandOn,
       automation.scope,
@@ -3989,13 +3989,18 @@ test("list_automations, create_automation, update_automation, and delete_automat
     [
       "Agent audit",
       true,
-      prompt.trim(),
+      prompt.trim().length,
       [RELAY_FULL_NAME],
       "new-agent",
       "personal",
       true,
       "string",
     ],
+  );
+  // The answer carries the start of the prompt, as the list does, not the whole of it.
+  assert.ok(
+    isWireString(automation.prompt) && automation.prompt.length === 301,
+    JSON.stringify(automation.prompt),
   );
   assert.ok(isWireString(automation.id));
   const id = automation.id;
@@ -4054,6 +4059,29 @@ test("list_automations, create_automation, update_automation, and delete_automat
   const afterRefusals = await call(CODER_TOOL.LIST_AUTOMATIONS, {});
   assert.equal(Array.isArray(afterRefusals.automations) && afterRefusals.automations.length, 1);
 
+  assert.deepEqual(
+    await make({ disabledServers: ["neon", "not-a-server"] }, "unknown-server"),
+    rejected(`${AUTOMATION_TOOL_REFUSAL.UNKNOWN_SERVERS} not-a-server.`),
+  );
+
+  // Run now: one run under the call's key, started as a scheduled run starts, and the same call again names it.
+  const ran = await call(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "call-run");
+  assert.equal(ran.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(ran));
+  assert.ok(isRecord(ran.run) && isRecord(ran.run.agent), JSON.stringify(ran));
+  assert.deepEqual(
+    [ran.run.firedBy, ran.run.status, ran.alreadyRan, automationOf(ran).name],
+    ["manual", "started", false, "Agent audit"],
+  );
+  const again = await call(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "call-run");
+  assert.deepEqual(
+    [isRecord(again.run) ? again.run.id : undefined, again.alreadyRan],
+    [ran.run.id, true],
+  );
+  assert.deepEqual(
+    await stranger(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "stranger-run"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+
   // A change: paused, its next due cleared; a new prompt and model, and every run handed to one agent.
   const update = (asked: WireRecord, by = call, key = "call-change") =>
     by(CODER_TOOL.UPDATE_AUTOMATION, { automationId: id, ...asked } as WireBoundaryInput, key);
@@ -4082,7 +4110,13 @@ test("list_automations, create_automation, update_automation, and delete_automat
   // A teammate reads a personal automation of the starter's not at all, then a workspace's, which it may turn on but not change or delete.
   assert.deepEqual((await teammate(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
   assert.equal(
-    automationOf(await update({ scope: "workspace", agentId: null })).scope,
+    automationOf(
+      await update({
+        scope: "workspace",
+        agentId: null,
+        guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+      }),
+    ).scope,
     "workspace",
   );
   assert.deepEqual(
@@ -4093,6 +4127,23 @@ test("list_automations, create_automation, update_automation, and delete_automat
     automationOf(await update({ enabled: true }, teammate, "teammate-toggle")).enabled,
     true,
   );
+  // A teammate runs a workspace's automation as its creator: the run starts the creator's agent.
+  const teammateRan = await teammate(
+    CODER_TOOL.RUN_AUTOMATION,
+    { automationId: id },
+    "teammate-run",
+  );
+  assert.ok(
+    isRecord(teammateRan.run) && isRecord(teammateRan.run.agent),
+    JSON.stringify(teammateRan),
+  );
+  assert.equal(teammateRan.run.status, "started");
+  const started = await database.run(
+    readCodingAgent(agents.caller.userId, String(teammateRan.run.agent.id)),
+  );
+  assert.ok(Option.isSome(started) && started.value.userId === agents.caller.userId);
+  // eve is reached as the creator the run starts as, not as the teammate who fired it.
+  assert.equal(eve.sent.at(-1)?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), agents.caller.userId);
   assert.deepEqual(
     await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
     rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),

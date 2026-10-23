@@ -1194,15 +1194,20 @@ menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
 task's archive keeps only when it stands from; `list_automations`,
-`create_automation`, `update_automation`, and `delete_automation`
+`create_automation`, `update_automation`, `delete_automation`, and
+`run_automation`
 (`src/agents/automation-tools.ts`), which list the workspace's automations
 the starter may read, or read one whole with its newest runs, and make,
-change, pause, resume, and delete one for the starter through the
+change, pause, resume, delete, and run one now for the starter through the
 automations routes' own writes (`src/automations/automation-writes.ts`),
 under the same checks and access, an automation made under an id drawn from
 eve's key for the call, so a call run again makes one, and never with a
 webhook trigger, whose secret is shown only in the window that minted it;
-an operator is offered no delete; and `list_models`, the models and efforts the agent's starter may
+a write answers the start of the prompt, as the list does, and a
+switched-off connection named by no connection's name is refused; a run now
+records a manual firing under a key drawn from the call's and acts on it
+through the same guards and start a Run now takes, reaching eve as the
+deployment acting for the starter; an operator is offered no delete; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
