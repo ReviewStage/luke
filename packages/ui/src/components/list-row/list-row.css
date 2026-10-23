@@ -421,7 +421,8 @@
   }
 
   /* Metadata on the title's line ends it, the title giving way first, and
-     the description and attachments run the words' and the end's tracks
+     a lead on a line of its own, the description, and attachments run the
+     words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
      rather than the row's middle. The words and the title's line lend their
      parts to the press's tracks, so each lands in its own. */
@@ -441,8 +442,17 @@
     grid-column: text;
   }
 
-  .luke-list-row[data-meta="title"] :is(.luke-list-row-description, .luke-list-row-attachments) {
+  .luke-list-row[data-meta="title"]
+    :is(
+      .luke-list-row-lead[data-at="line"],
+      .luke-list-row-description,
+      .luke-list-row-attachments
+    ) {
     grid-column: text-start / end-end;
+  }
+
+  .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="line"] {
+    margin-block-start: var(--luke-space-2);
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {
