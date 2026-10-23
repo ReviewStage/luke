@@ -15,7 +15,7 @@ const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try aga
 /** Why a call or a dictated clip cannot run: it runs on the account's own OpenAI key, and none is saved. */
 export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI API key in Settings";
 
-const NATIVE_AGENT_CALL_NOTE = "This agent runs in Claude Code or Codex and can't take calls yet.";
+const NATIVE_AGENT_CALL_NOTE = "This agent runs on Claude or Codex and can't take calls yet.";
 
 const CREDENTIAL_MISSING_CALL_NOTE = "Connect an API key in Settings to call this agent.";
 

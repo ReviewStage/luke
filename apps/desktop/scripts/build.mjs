@@ -400,7 +400,7 @@ await Promise.all(
   ),
 );
 
-// The panel's static files, Excalidraw's fonts and the harness marks, copied
+// The panel's static files, Excalidraw's fonts and the voice clips, copied
 // beside the bundle, which is the desktop's asset base
 // (`desktop-platform.ts`), so the panel loads nothing from the network and the
 // bundle carries none of their bytes.

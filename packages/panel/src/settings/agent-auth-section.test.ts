@@ -230,7 +230,7 @@ const forAgentsSent = () =>
 test("each harness's row says how it is connected: nothing, its plan, its key, or a plan needing a hand", async () => {
   const empty = await mount();
   assert.match(empty.textContent ?? "", /Other members connect their own/u);
-  assert.equal(rowButton(empty, "Claude Code").textContent, "Connect");
+  assert.equal(rowButton(empty, "Claude").textContent, "Connect");
   assert.equal(rowButton(empty, "Codex").textContent, "Connect");
   for (const root of roots.splice(0)) act(() => root.unmount());
 
@@ -239,8 +239,8 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
     subscriptions: [CLAUDE_PLAN],
   };
   const connected = await mount();
-  assert.equal(rowButton(connected, "Claude Code").textContent, "Connected via subscription");
-  assert.ok(rowButton(connected, "Claude Code").querySelector(".luke-settings-saved-mark"));
+  assert.equal(rowButton(connected, "Claude").textContent, "Connected via subscription");
+  assert.ok(rowButton(connected, "Claude").querySelector(".luke-settings-saved-mark"));
   assert.equal(rowButton(connected, "Codex").textContent, "Connected via API key");
   for (const root of roots.splice(0)) act(() => root.unmount());
 
@@ -253,7 +253,7 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
     ],
   };
   const attention = await mount();
-  assert.equal(rowButton(attention, "Claude Code").textContent, "Connected via API key");
+  assert.equal(rowButton(attention, "Claude").textContent, "Connected via API key");
   assert.equal(rowButton(attention, "Codex").textContent, "Subscription needs reconnecting");
   assert.equal(rowButton(attention, "Codex").querySelector(".luke-settings-saved-mark"), null);
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -262,13 +262,13 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
     keys: [],
     subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.LIMIT_REACHED }],
   };
-  assert.equal(rowButton(await mount(), "Claude Code").textContent, "Limit reached");
+  assert.equal(rowButton(await mount(), "Claude").textContent, "Limit reached");
 });
 
 test("the dialog's radios pick the plan or the key as the default, sent as the plan's forAgents, and only a saved credential's radio is pressable", async () => {
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
-  let dialog = await open(page, "Claude Code");
+  let dialog = await open(page, "Claude");
   assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "true");
   assert.equal(radio(dialog, "API key").disabled, true, "no key saved, nothing to pick");
   await press(dialog, "Done");
@@ -276,7 +276,7 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
   held = { keys: [ANTHROPIC_KEY], subscriptions: [CLAUDE_PLAN] };
   for (const root of roots.splice(0)) act(() => root.unmount());
   const both = await mount();
-  dialog = await open(both, "Claude Code");
+  dialog = await open(both, "Claude");
   act(() => radio(dialog, "API key").click());
   await settle();
   assert.deepEqual(forAgentsSent(), [
@@ -288,19 +288,19 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
   ]);
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
   assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "false");
-  assert.equal(rowButton(both, "Claude Code").textContent, "Connected via API key");
+  assert.equal(rowButton(both, "Claude").textContent, "Connected via API key");
 
   act(() => radio(dialog, "Subscription").click());
   await settle();
   assert.equal(forAgentsSent().at(-1)?.forAgents, true);
   assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "true");
-  assert.equal(rowButton(both, "Claude Code").textContent, "Connected via subscription");
+  assert.equal(rowButton(both, "Claude").textContent, "Connected via subscription");
 });
 
 test("an API key is pasted into a masked field with an eye, sent once, drawn as its hint with a check, and removed from its ⋯ after asking", async () => {
   const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
   const page = await mount();
-  const dialog = await open(page, "Claude Code");
+  const dialog = await open(page, "Claude");
   const keyCard = card(dialog, "API key");
   const field =
     keyCard.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
@@ -323,7 +323,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   assert.equal(saved.readOnly, true);
   assert.ok(radio(dialog, "API key").querySelector(".luke-settings-saved-mark"));
   assert.equal(radio(dialog, "API key").getAttribute("aria-checked"), "true");
-  assert.equal(rowButton(page, "Claude Code").textContent, "Connected via API key");
+  assert.equal(rowButton(page, "Claude").textContent, "Connected via API key");
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
   for (const spy of logged) {
     assert.ok(spy.mock.calls.every((call) => !JSON.stringify(call).includes(KEY)));
@@ -346,13 +346,13 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
   );
-  assert.equal(rowButton(page, "Claude Code").textContent, "Connect");
+  assert.equal(rowButton(page, "Claude").textContent, "Connect");
 });
 
 test("a Claude setup-token is saved by its kind, refused with why, and disconnected after asking", async () => {
   refusal = PROVIDER_KEY_REJECTION.INVALID;
   const page = await mount();
-  const dialog = await open(page, "Claude Code");
+  const dialog = await open(page, "Claude");
   const field =
     card(dialog, "Subscription").querySelector<HTMLInputElement>(
       'input[aria-label="Claude setup-token"]',
@@ -383,7 +383,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   );
   assert.match(plan.textContent ?? "", /sk-ant-oat01…fake/u);
   assert.ok(radio(dialog, "Subscription").querySelector(".luke-settings-saved-mark"));
-  assert.equal(rowButton(page, "Claude Code").textContent, "Connected via subscription");
+  assert.equal(rowButton(page, "Claude").textContent, "Connected via subscription");
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 
   await press(plan, "Disconnect");
@@ -392,13 +392,13 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN }],
   );
-  assert.equal(rowButton(page, "Claude Code").textContent, "Connect");
+  assert.equal(rowButton(page, "Claude").textContent, "Connect");
 });
 
 test("a Claude token Anthropic rejected says so in its card and offers Replace token, without the setup-token hint", async () => {
   held = { keys: [], subscriptions: [{ ...CLAUDE_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
-  const dialog = await open(page, "Claude Code");
+  const dialog = await open(page, "Claude");
   const plan = card(dialog, "Subscription");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
   await press(plan, "Replace token");

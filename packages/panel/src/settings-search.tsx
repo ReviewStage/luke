@@ -269,11 +269,11 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
-          label: "Claude Code",
+          label: "Claude",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
-            "Claude Code",
-            "anthropic api key byok own key claude plan subscription setup-token max pro billing provider credential",
+            "Claude",
+            "claude code anthropic api key byok own key claude plan subscription setup-token max pro billing provider credential",
           ],
         }
       : undefined,

@@ -1,3 +1,5 @@
+import { harnessNameOf } from "@luke/features/agent-runtime-models";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   AgentPlaceholderIcon,
   ArchiveIcon,
@@ -25,6 +27,7 @@ import {
   FolderIcon,
   ForwardIcon,
   GearIcon,
+  HarnessMark,
   ImageIcon,
   KeyboardIcon,
   LaptopIcon,
@@ -153,6 +156,18 @@ function Artwork(): React.JSX.Element {
                 <Glyph />
               </span>
               <span className="catalog-tile-name">{name}</span>
+            </li>
+          ))}
+        </ul>
+      </CatalogSection>
+      <CatalogSection id="artwork-harness-marks" title="Harness marks">
+        <ul className="catalog-tiles">
+          {Object.values(MODEL_PROVIDER).map((provider) => (
+            <li key={provider} className="catalog-tile">
+              <span className="catalog-glyph">
+                <HarnessMark provider={provider} />
+              </span>
+              <span className="catalog-tile-name">{harnessNameOf(provider)}</span>
             </li>
           ))}
         </ul>
