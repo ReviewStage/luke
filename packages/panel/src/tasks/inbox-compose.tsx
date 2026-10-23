@@ -15,10 +15,7 @@
 
 import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import type {
-  CodingAgentAttachment,
-  CodingAgentPullRequest,
-} from "@luke/features/coding-agent-wire";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -33,22 +30,17 @@ import {
   TextField,
   Tooltip,
 } from "@luke/ui";
-import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { useEffect, useRef, useState } from "react";
-import { ActorMark } from "../actor-ref.js";
 import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
-import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
-import { AgentCard, AgentHoverCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
 import type { MentionAgentsReader, MentionableAgent } from "./mention-picker.js";
-import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-agent-card.js";
-import { TAB_KIND, tabLook } from "./tab-look.js";
 import type { InboxThreadStarter } from "./use-task-inbox.js";
 
 /** The pane's name, as its bar and a reader say it. */
@@ -104,68 +96,25 @@ export interface InboxComposeProps {
   readonly onDiscard: () => void;
 }
 
-/** An agent as its tab, ⌘K, and the column's "+" draw it: its harness's mark wearing where it stands, and its name; its tile where the list read nothing of it. */
-function agentLook(agent: MentionableAgent): {
-  readonly icon: React.ReactNode;
-  readonly label: string;
-} {
-  return agent.summary === undefined
-    ? { icon: <ActorMark actor={agent.actor} />, label: agent.name }
-    : tabLook({ kind: TAB_KIND.AGENT, name: agent.name, agent: agent.summary });
-}
-
-/** The pull requests a To row's card names, none: an agent's own is drawn where its task is open, and the workspace's list carries none. */
-const NO_PULL_REQUESTS = new Map<string, CodingAgentPullRequest>();
-
-/** The line under an agent's card, as a card read for a chip says it: the task the agent works on. */
-function cardFoot(agent: MentionableAgent): string | undefined {
-  if (agent.task === undefined) return "On no task";
-  return agent.task.name === undefined ? undefined : `On ${agent.task.name}`;
+/** The agents To may name: those not archived, since none of them hears a thread. */
+function heard(agents: readonly MentionableAgent[]): readonly MentionableAgent[] {
+  return agents.filter((each) => each.archived !== true);
 }
 
 /**
- * An agent's card as ⌘K hangs it, drawn from the summary the workspace's
- * list already read, so it stands whole the moment it is hung and asks the
- * service nothing; an agent read without one hangs the card read as it is
- * hung, as a chip's is.
+ * The agents To lists: the workspace's newest, as read when the pane
+ * opened, while nothing is typed; once a word is, those the service found
+ * for it, the last answer standing until the next lands, as the `@` menu's
+ * do, so an agent past the newest the workspace reads is found too.
  */
-function agentCard(agent: MentionableAgent, place: MentionedAgentsPlace): React.ReactNode {
-  const { actor, summary } = agent;
-  if (summary === undefined) {
-    return actor.kind === ACTOR_KIND.AGENT ? (
-      <AgentHoverCard actor={{ ...actor, taskId: agent.task?.id }} agentId={agent.id} />
-    ) : undefined;
-  }
-  const agents = {
-    ...place,
-    agents: [summary],
-    archived: undefined,
-    pullRequests: NO_PULL_REQUESTS,
-  };
-  return (
-    <AgentCard
-      subject={agentSubject(agents, agent.id, NOTHING_HELD, false)}
-      models={place.models}
-      foot={cardFoot(agent)}
-    />
-  );
-}
-
-/**
- * To's rows: the workspace's agents as one list, newest first as the
- * workspace reads them, each in its tab's look and hanging its own card,
- * as ⌘K's rows do, and found by its task's name too.
- */
-function toRows(
-  agents: readonly MentionableAgent[],
-  place: MentionedAgentsPlace,
-): readonly MenuRow[] {
-  return agents.map((each) => ({
-    id: each.id,
-    ...agentLook(each),
-    terms: [each.name, ...(each.task?.name === undefined ? [] : [each.task.name])],
-    card: agentCard(each, place),
-  }));
+function listedAgents(
+  read: AgentsRead | undefined,
+  found: readonly MentionableAgent[] | undefined,
+  words: string,
+): readonly MentionableAgent[] {
+  const newest = read !== undefined && "agents" in read ? read.agents : [];
+  if (words === "") return newest;
+  return found ?? newest;
 }
 
 /** The words a send is known by, so the same thread sent again goes under the key it went under. */
@@ -173,13 +122,13 @@ function sendWords(agentId: string, draft: ComposeDraft): string {
   return JSON.stringify([agentId, draft.subject.trim(), draft.note.trim(), draft.attachments]);
 }
 
-/** The agent To names: the one picked, else the one the pane opened on where the workspace still holds it. */
-function namedAgent(
+/** The agent the pane opened on, where the workspace's newest still hold it. */
+function openedOn(
   read: AgentsRead | undefined,
-  picked: string | undefined,
+  to: string | undefined,
 ): MentionableAgent | undefined {
-  if (read === undefined || "failed" in read || picked === undefined) return undefined;
-  return read.agents.find((agent) => agent.id === picked);
+  if (read === undefined || "failed" in read || to === undefined) return undefined;
+  return read.agents.find((agent) => agent.id === to);
 }
 
 /** The pane: To, Subject, and the box, under the bar that names it. */
@@ -194,7 +143,10 @@ export function InboxCompose({
   onDiscard,
 }: InboxComposeProps): React.JSX.Element {
   const [read, setRead] = useState<AgentsRead | undefined>(undefined);
-  const [picked, setPicked] = useState<string | undefined>(to);
+  // The agents the last search found, standing until the next answers.
+  const [found, setFound] = useState<readonly MentionableAgent[] | undefined>(undefined);
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const [draft, setDraft] = useState<ComposeDraft>(EMPTY_DRAFT);
   const [sending, setSending] = useState(false);
   const [reading, setReading] = useState(0);
@@ -203,8 +155,9 @@ export function InboxCompose({
   latest.current = draft;
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const statuses = useIntegrationStatuses();
-  const place = useMentionedPlace();
-  const agent = namedAgent(read, picked);
+  const place = useAgentRowPlace();
+  const agent = picked ?? openedOn(read, to);
+  const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
   const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
   const field = useAnswerField({
     draft: draft.note,
@@ -216,13 +169,13 @@ export function InboxCompose({
     statuses,
     onNote: setRefusal,
   });
-  // The agents are read as the pane opens, the archived ones left out, since none of them hears a thread.
+  // The agents are read as the pane opens.
   useEffect(() => {
     if (readAgents === undefined) return;
     let live = true;
     readAgents(undefined).then(
       (agents) => {
-        if (live) setRead({ agents: agents.filter((each) => each.archived !== true) });
+        if (live) setRead({ agents: heard(agents) });
       },
       () => {
         if (live) setRead({ failed: true });
@@ -232,6 +185,23 @@ export function InboxCompose({
       live = false;
     };
   }, [readAgents]);
+  // Once a word is typed the service finds the agents it names, however many the workspace holds.
+  const asked = query.trim();
+  useEffect(() => {
+    if (readAgents === undefined || asked === "") return;
+    let live = true;
+    readAgents(asked).then(
+      (agents) => {
+        if (live) setFound(heard(agents));
+      },
+      () => {
+        if (live) setFound([]);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [readAgents, asked]);
   const text = draft.note.trim();
   const sendable =
     agent !== undefined &&
@@ -272,7 +242,7 @@ export function InboxCompose({
       })
       .finally(() => setReading((count) => count - 1));
   };
-  const rows = read !== undefined && "agents" in read ? read.agents : [];
+  const listed = listedAgents(read, found, asked);
   const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
@@ -298,13 +268,13 @@ export function InboxCompose({
               align={PICKER_ALIGN.START}
               width={CHIP_WIDTH.AUTO}
               value={agent?.id}
-              valueLabel={agent === undefined ? NO_AGENT : agent.name}
-              valueIcon={agent === undefined ? undefined : agentLook(agent).icon}
-              rows={toRows(rows, place)}
+              valueLabel={chosen === undefined ? NO_AGENT : chosen.label}
+              valueIcon={chosen?.icon}
+              rows={listed.map((each) => agentMenuRow(each, place))}
               placeholder="Search agents"
               noMatch={NO_MATCH}
               note={
-                read === undefined ? (
+                asked !== "" ? undefined : read === undefined ? (
                   <Spinner delay label="Loading agents" />
                 ) : "failed" in read ? (
                   AGENTS_FAILED
@@ -313,9 +283,11 @@ export function InboxCompose({
                 ) : undefined
               }
               disabled={sending}
+              onOpen={() => setQuery("")}
+              onSearch={setQuery}
               onPick={(id) => {
                 setRefusal(undefined);
-                setPicked(id);
+                setPicked(listed.find((each) => each.id === id));
               }}
             />
           </div>

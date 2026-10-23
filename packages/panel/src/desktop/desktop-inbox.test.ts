@@ -8473,8 +8473,15 @@ const STARTED: InboxItem = {
   ],
 };
 
-/** Every thread the pane starts, written down and answered as the service starts it, the task's inbox then holding it; the workspace's agents read as `agents`. */
-function heldStarts(agents: readonly CodingAgentSummary[]): CodingAgentInboxStartParams[] {
+/**
+ * Every thread the pane starts, written down and answered as the service
+ * starts it, the task's inbox then holding it; the workspace's newest agents
+ * read as `agents`, and those a search names as `found` answers its words.
+ */
+function heldStarts(
+  agents: readonly CodingAgentSummary[],
+  found: (words: string) => readonly CodingAgentSummary[] = () => [],
+): CodingAgentInboxStartParams[] {
   const sent: CodingAgentInboxStartParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
@@ -8482,7 +8489,9 @@ function heldStarts(agents: readonly CodingAgentSummary[]): CodingAgentInboxStar
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents } });
+        const { words } = request.payload;
+        const value = { agents: words === undefined ? agents : found(words) };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
       sent.push(request.payload);
@@ -8591,7 +8600,7 @@ function toMenuRows(): string[] {
   });
 }
 
-test("To lists the workspace's agents as one list, newest first, each by its own name alone in its tab's look", async () => {
+test("To lists the workspace's agents as one list, newest first, each in its tab's look and named as its tab is, its task beside it as the @ menu says it, No task for one on none, and nothing where the task only says the agent's name again", async () => {
   listedWorkspace = ACME;
   inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
   const MAYA: CodingAgentSummary = {
@@ -8606,7 +8615,12 @@ test("To lists the workspace's agents as one list, newest first, each by its own
     planId: null,
     title: "Nightly dependency sweep",
   };
-  heldStarts([LONE, MAYA, AGENT]);
+  const NAMESAKE: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b24",
+    title: BILLING.name,
+  };
+  heldStarts([NAMESAKE, LONE, MAYA, AGENT]);
   const { page } = mount();
   await settle();
   act(() =>
@@ -8623,9 +8637,10 @@ test("To lists the workspace's agents as one list, newest first, each by its own
   await settle();
 
   assert.deepEqual(toMenuRows(), [
-    "Nightly dependency sweep",
-    "Move the frontend into shared components",
-    "Alerts",
+    BILLING.name,
+    "Nightly dependency sweep · No task",
+    `Move the frontend into shared components · ${INVITES.name}`,
+    `Alerts · ${BILLING.name}`,
   ]);
 });
 
@@ -8664,5 +8679,110 @@ test("To's rows keep no check's room while no agent is chosen, and each hangs it
     card.textContent ?? "",
     new RegExp(`On ${BILLING.name}`, "u"),
     "the card stands whole as it is hung, its task named, as ⌘K's does, with nothing read",
+  );
+});
+
+/** Opens a New thread from the Inbox's head, then its To menu, and hands back the draft's pane. */
+async function openTo(page: HTMLElement): Promise<HTMLElement> {
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const pane = itemPane(page);
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
+      assert.fail("the draft has To")
+    ).click(),
+  );
+  await settle();
+  return pane;
+}
+
+test("a To row ends in its starter's face where a teammate started the agent and in nothing for the reader's own, then in the failed mark where its turn failed", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const THEIRS: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b25",
+    title: "Seat limits",
+    status: CODING_AGENT_STATUS.FAILED,
+    startedBy: TEAMMATE,
+  };
+  heldStarts([THEIRS, { ...AGENT, startedBy: READER }]);
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+
+  const ends = [
+    ...document.querySelectorAll('[role="dialog"][aria-label="To"] [role="option"]'),
+  ].map((option) => {
+    const end = option.querySelector(".luke-combobox-option-hint");
+    return [
+      option.querySelector(".luke-combobox-option-label")?.textContent,
+      ...[...(end?.children ?? [])].map((mark) =>
+        mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
+      ),
+    ];
+  });
+  assert.deepEqual(ends, [["Seat limits", "face person", "failed-mark"], ["Alerts"]]);
+});
+
+test("a word typed in To asks the service for the agents it names, so one past the workspace's newest is found, picked, and sent to", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const OLDER: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b26",
+    planId: INVITES.id,
+    title: "Seat limits",
+  };
+  const searched: string[] = [];
+  const starts = heldStarts([AGENT], (words) => {
+    searched.push(words);
+    return words === "seat" ? [OLDER] : [];
+  });
+  const { page } = mount();
+  await settle();
+  const pane = await openTo(page);
+
+  const search =
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
+    assert.fail("To's menu has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, "seat");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(searched, ["seat"], "the words reach the service");
+  assert.deepEqual(toMenuRows(), [`Seat limits · ${INVITES.name}`]);
+
+  act(() =>
+    (
+      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
+      assert.fail("To lists the agent found")
+    ).click(),
+  );
+  await settle();
+  assert.equal(
+    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
+    "To: Seat limits",
+  );
+  typeInComposer(pane, "Raise the seat limit.");
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    starts.map(({ agentId }) => agentId),
+    [OLDER.id],
   );
 });

@@ -13,8 +13,9 @@ import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu.js
  * Left open and close a pinned row's submenu, Escape closes the submenu
  * before the menu and never reaches what stands behind it, Enter picks with
  * or without Command, keys an input method is composing with pick and move
- * nothing, a list too short to search reads the same keys itself, and a
- * submenu turns left where it would run past the room its menu keeps to.
+ * nothing, a list too short to search reads the same keys itself, a
+ * submenu turns left where it would run past the room its menu keeps to,
+ * and a row's own end marks stand at its end.
  */
 
 declare global {
@@ -305,4 +306,30 @@ test("a submenu that would run past the room its menu keeps to turns to the left
 test("a submenu with room on neither side takes the side it runs past less, pushed back over the menu inside the room", () => {
   // A 340px menu at x=30 in a 390px side panel: 209px past on the right, 179px on the left.
   assert.deepEqual(submenuIn(390, 30, 370), { side: "left", shift: 179 });
+});
+
+test("a row's own end marks stand at its end, after why it cannot be picked now, and a row with none ends in nothing", () => {
+  mount({
+    placeholder: "Search agents",
+    rows: [
+      { id: "alerts", label: "Alerts", end: createElement("span", { className: "failed-mark" }) },
+      {
+        id: "sweep",
+        label: "Nightly sweep",
+        disabled: "Archived",
+        end: createElement("span", { className: "actor-mark" }),
+      },
+      { id: "plain", label: "Plain" },
+    ],
+  });
+  const ends = [...document.querySelectorAll('[role="option"]')].map((option) => {
+    const end = option.querySelector(".luke-combobox-option-hint");
+    return end === null
+      ? null
+      : [...end.childNodes].map((node) =>
+          node instanceof HTMLElement ? `.${node.className}` : node.textContent,
+        );
+  });
+
+  assert.deepEqual(ends, [[".failed-mark"], ["Archived", ".actor-mark"], null]);
 });
