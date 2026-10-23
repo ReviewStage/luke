@@ -40,7 +40,9 @@ import { SpinnerRing } from "../spinner/spinner.js";
  *
  * A button unavailable is out of the tab order, unless it is
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
- * why, and refuses its press instead. A busy button keeps its width, its
+ * why, and refuses its press instead, with a shake. Every press a button
+ * or a link drawn as one takes is answered with a pulse of its face, and a
+ * submit's arrow lifts as it sends. A busy button keeps its width, its
  * words standing hidden under a turning ring, refuses its press, and is
  * named by `busyLabel` ("Saving") for as long as the ring stands. The ring
  * holds still on `--luke-loop-motion`, as every endless loop does under reduced
@@ -190,6 +192,30 @@ function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
+/**
+ * Plays `attribute`'s animation on `element` again from its start: the
+ * attribute is taken off and set again, so a second press restarts it
+ * rather than landing on one still running, and it leaves as the animation
+ * ends. It is the element's own, which React never draws, so no render
+ * clears it mid-play.
+ */
+function replay(element: HTMLElement, attribute: string): void {
+  element.removeAttribute(attribute);
+  // Note that reading the layout here makes the engine see the attribute
+  // gone before it is set again, which is what starts it anew.
+  void element.offsetWidth;
+  element.setAttribute(attribute, "true");
+  element.addEventListener("animationend", () => element.removeAttribute(attribute), {
+    once: true,
+  });
+}
+
+/** What a button plays as it answers a press: a shake for one it refused, a pulse for one it took. */
+const PRESS_ANSWER = {
+  DENIED: "data-denied",
+  PULSE: "data-pulse",
+} as const;
+
 /** The attributes and handler a button carries for its state, shared by both kinds. */
 function stateProps(props: ButtonBase, name: string | undefined) {
   const refusing =
@@ -225,8 +251,11 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     onClick: (event: MouseEvent<HTMLButtonElement>) => {
       if (refusing) {
         event.preventDefault();
+        // Note that a busy button's ring already says why it takes no press.
+        if (props.busy !== true) replay(event.currentTarget, PRESS_ANSWER.DENIED);
         return;
       }
+      replay(event.currentTarget, PRESS_ANSWER.PULSE);
       props.onClick?.(event);
     },
   };
@@ -294,7 +323,10 @@ export function ButtonLink({
       className="luke-button"
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
-      onClick={onClick}
+      onClick={(event) => {
+        replay(event.currentTarget, PRESS_ANSWER.PULSE);
+        onClick?.(event);
+      }}
     >
       <span className="luke-button-face">
         {icon}
@@ -327,6 +359,7 @@ export function IconButtonLink({
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
       aria-label={label}
+      onClick={(event) => replay(event.currentTarget, PRESS_ANSWER.PULSE)}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >

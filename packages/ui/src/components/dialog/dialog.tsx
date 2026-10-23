@@ -19,7 +19,9 @@ import { useStagedFocus } from "./staged-focus.js";
  * arrows), and what a dismissal costs are the dialog's own.
  *
  * The dialog stands only while it is open, so mounting it is opening and
- * unmounting it is closing, however it came to close. The card is the
+ * unmounting it is closing, however it came to close. Asked away while it
+ * is at work, by Escape or the dimmed window, the card swells for a moment,
+ * so the press is answered even though the owner keeps it open. The card is the
  * profile's dialog card, its inset and its corners, at a question's
  * measure, wider for a note being written, or fitted edge to edge to a file
  * shown; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
@@ -148,6 +150,23 @@ function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
 }
 
 /**
+ * Nudges the card, once per attempt, when it is asked away while at work: a
+ * brief swell that says it heard and will not go yet, rather than a press
+ * that went nowhere. The attribute is taken off and set again so a second
+ * attempt restarts it, and it leaves as the nudge ends; it is the card's own,
+ * which React never draws, so no render clears it mid-nudge.
+ */
+function nudge(card: HTMLDivElement | null): void {
+  if (card === null) return;
+  card.removeAttribute("data-nudge");
+  // Note that reading the layout here makes the engine see the attribute
+  // gone before it is set again, which is what starts the nudge anew.
+  void card.offsetWidth;
+  card.setAttribute("data-nudge", "true");
+  card.addEventListener("animationend", () => card.removeAttribute("data-nudge"), { once: true });
+}
+
+/**
  * Remembers what held focus as the dialog opened and hands focus back to it
  * as the dialog closes, unless it has left the window meanwhile.
  *
@@ -195,6 +214,14 @@ export function Dialog({
   useStagedFocus<HTMLElement>(initialFocus ?? card, !busy);
   useStagedFocus(card, busy);
 
+  // Note that the owner still hears the dismissal and decides what it costs;
+  // the nudge only answers one asked while the dialog is at work, which no
+  // owner takes.
+  const dismiss = () => {
+    if (busy) nudge(card.current);
+    onDismiss();
+  };
+
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // Note that no key pressed in the card goes on to the window. A button's
     // own Enter and Space are its default action, which this leaves alone.
@@ -209,7 +236,7 @@ export function Dialog({
     // the window behind it as it was.
     if (event.key === "Escape") {
       event.preventDefault();
-      onDismiss();
+      dismiss();
       return;
     }
     onKeyDown?.(event);
@@ -227,7 +254,7 @@ export function Dialog({
         // surface that opened it is its parent in React's tree and may take
         // presses of its own.
         event.stopPropagation();
-        if (pressedBackdrop.current && event.target === event.currentTarget) onDismiss();
+        if (pressedBackdrop.current && event.target === event.currentTarget) dismiss();
         pressedBackdrop.current = false;
       }}
       onKeyDown={keyDown}
