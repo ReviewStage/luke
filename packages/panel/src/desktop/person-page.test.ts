@@ -717,6 +717,21 @@ test("while the Inbox and the automations are read, placeholder rows stand for e
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
 
+test("while the Inbox is read, its placeholder stands where the section waiting on them lands, right after Working now", async () => {
+  handState({});
+  inboxHeld = true;
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const order = [...page.querySelectorAll("section.home-section")].map(
+    (section) =>
+      section.getAttribute("aria-label") ??
+      section.querySelector('[role="status"]')?.textContent ??
+      "",
+  );
+  assert.deepEqual(order.slice(0, 3), ["Working now", "Reading your inbox…", "Created"]);
+});
+
 test("a page opened by a member's id alone stands a placeholder head while the members are read, never Someone not in this workspace nor an empty page", async () => {
   membersHeld = true;
   const { page } = mount("user-sam");

@@ -163,6 +163,15 @@ function AvatarStill({
   );
 }
 
+/** The block standing where the avatar's picture will, the whole tile under the wait's words. */
+function AvatarGroundSkeleton(): React.JSX.Element {
+  return (
+    <span className="call-video-ground-skeleton">
+      <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+    </span>
+  );
+}
+
 /**
  * The wait for the avatar's picture, over the tile while it connects and
  * over its video until the first frame: a skeleton block standing where the
@@ -173,9 +182,7 @@ function AvatarStill({
 function AvatarWaiting({ gone = false }: { gone?: boolean }): React.JSX.Element {
   return (
     <div className="call-video-waiting" data-gone={String(gone)} aria-hidden={gone || undefined}>
-      <span className="call-video-waiting-ground">
-        <Skeleton shape={SKELETON_SHAPE.BLOCK} />
-      </span>
+      <AvatarGroundSkeleton />
       <AvatarStill waiting>
         <span className="call-video-note" role={gone ? undefined : "status"}>
           <ThinkingDots />

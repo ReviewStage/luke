@@ -12,8 +12,6 @@ import {
   Fill,
   INLINE_EDIT_LOOK,
   InlineEdit,
-  SKELETON_SHAPE,
-  Skeleton,
   TABS_GROUND,
   VisuallyHidden,
 } from "@luke/ui";
@@ -46,18 +44,17 @@ import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
   AddTabButton,
+  AddTabSkeleton,
   DoorsTab,
   type HeldTranscripts,
   type TabDoors,
   type TabLook,
   type TabPin,
+  TabSkeleton,
   type TabViews,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
-
-/** How wide the block standing in a tab is while the task or its agents are read: a typical tab's width. */
-export const TAB_SKELETON_WIDTH = "120px";
 
 /**
  * main-tabs.tsx -- the task's column's tabs: each agent's, the draft agent's, and its Chat, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
@@ -389,6 +386,26 @@ function addEntries(
   return [...starts, ...agentRows];
 }
 
+/** The row the column's tabs stand in, which heads its toolbar: the strip, what follows it, and the "+" last. */
+function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="desktop-toolbar-heading main-tabs">{children}</div>;
+}
+
+/**
+ * The column's strip while the task is read: one tab's block where the
+ * first tab will stand and the "+"'s after it, in the strip's own row, so
+ * the row holds still, and a narrow room wraps it under the toolbar's
+ * actions, as the strip that replaces it is.
+ */
+export function MainTabStripSkeleton(): React.JSX.Element {
+  return (
+    <MainTabsRow>
+      <TabSkeleton />
+      <AddTabSkeleton />
+    </MainTabsRow>
+  );
+}
+
 /**
  * The column's strip across its toolbar: the agents' and the draft's, then the "+", which stands apart from the strip so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the column
@@ -474,7 +491,7 @@ export function MainTabStrip({
     };
   };
   return (
-    <div className="desktop-toolbar-heading main-tabs">
+    <MainTabsRow>
       <TabStrip
         label="Task"
         ground={TABS_GROUND.GROUND}
@@ -510,9 +527,7 @@ export function MainTabStrip({
       {/* While the agents are read, one tab-shaped block stands where their
           tabs will, as it stood while the task was read, so the row holds
           still until they land. */}
-      {agents.agents === undefined && !agents.listFailed ? (
-        <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
-      ) : null}
+      {agents.agents === undefined && !agents.listFailed ? <TabSkeleton /> : null}
       <AddTabButton
         label="Open a tab"
         placeholder="Search tabs"
@@ -523,7 +538,7 @@ export function MainTabStrip({
         answers={keys}
         onAnswered={main.onNewTabAnswered}
       />
-    </div>
+    </MainTabsRow>
   );
 }
 

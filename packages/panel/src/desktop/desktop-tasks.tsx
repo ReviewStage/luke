@@ -89,12 +89,14 @@ import { useAgentCallDoors, useAgentDraftDoors, useAgentTerminalDoors } from "./
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
-import { AgentPane, MainTabStrip, mainTabLabel, TAB_SKELETON_WIDTH } from "./main-tabs.js";
+import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import {
   COLUMN,
   type ShownTab,
   SIDE_PANEL_HOLDER,
   SidePanel,
+  type SidePanelDrawing,
+  SidePanelSkeleton,
   showPullRequest,
   taskCards,
   useColumnFocus,
@@ -116,10 +118,10 @@ import {
   taskPaneOf,
 } from "./task-pane-switcher.js";
 import {
-  SUMMARY_MODE,
   SummaryButton,
-  type SummaryMode,
+  type SummaryLayout,
   type SummaryPin,
+  SummarySkeleton,
   summaryHolds,
   TaskSummary,
   useSummaryLayout,
@@ -193,77 +195,122 @@ function Toolbar({
   );
 }
 
-/** How wide each of the toolbar's actions stands while the task is read: the repository's chip, Start, and the task's ⋯. */
-const ACTION_SKELETON_WIDTHS = ["112px", "72px", "28px"] as const;
+/** How wide the toolbar's worded actions stand while the task is read: a repository's chip, and Start with its model menu. */
+const ACTION_SKELETON_WIDTHS = { REPOSITORY: "112px", START: "104px" } as const;
+
+/** An icon press's width, the task's ⋯'s and the summary's toggle's, as tall as it is wide. */
+const ICON_PRESS_WIDTH = "var(--luke-control-height)";
 
 /**
- * The task's page while the task is read, in the shape it lands in: the
- * toolbar with a tab where the column's first will stand and its actions at
- * its right, the column standing as an agent's tab does before its
- * transcript lands (`AgentTabSkeleton`), the summary's room where it will
- * stand, and the side panel at its width where it is open. The column's tab
- * draws the very same placeholder until it lands, so a task opens through
- * one placeholder rather than a chain of them, and nothing moves as the
- * page arrives but what fills it.
+ * The task's page as it and its placeholder stand it: the column, its
+ * toolbar over its body, and what stands beside it, the side panel; the
+ * column hidden rather than left out while the panel fills the window.
+ */
+function TaskPage({
+  areaRef,
+  columnRef,
+  panelOpen,
+  fullScreen,
+  column,
+  children,
+}: {
+  areaRef?: ((area: HTMLDivElement | null) => void) | undefined;
+  columnRef: (column: HTMLElement | null) => void;
+  panelOpen: boolean;
+  fullScreen: boolean;
+  column: React.ReactNode;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div ref={areaRef} className="desktop-task" data-panel-open={String(panelOpen)}>
+      <Fill ref={columnRef} className="desktop-task-main" hidden={fullScreen}>
+        {column}
+      </Fill>
+      {children}
+    </div>
+  );
+}
+
+/** The column's body under its toolbar: what the column shows, and the summary beside it. */
+function TaskBody({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="desktop-plan-body">{children}</div>;
+}
+
+/** The task's actions at the toolbar's right while the task is read, as the toolbar lands them: the repository's chip, Start, the ⋯, and the summary's toggle where the summary holds something. */
+function TaskActionsSkeleton({ summary }: { summary: boolean }): React.JSX.Element {
+  return (
+    <>
+      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ACTION_SKELETON_WIDTHS.REPOSITORY} />
+      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ACTION_SKELETON_WIDTHS.START} />
+      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} />
+      {summary ? <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} /> : null}
+    </>
+  );
+}
+
+/**
+ * The task's page while the task is read, in the shape it lands in and
+ * through the frames it lands in: the toolbar with a tab where the
+ * column's first will stand, its "+" after it and its actions at its right,
+ * the column standing as an agent's tab does before its transcript lands
+ * (`AgentTabSkeleton`), the summary's room where it will stand, and the
+ * side panel at its width where it is open. The column's tab draws the very
+ * same placeholder until it lands, so a task opens through one placeholder
+ * rather than a chain of them, and nothing moves as the page arrives but
+ * what fills it.
  */
 function TaskPageSkeleton({
-  panel,
+  drawing,
   summary,
   onColumn,
   starting,
 }: {
   /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
   starting?: SentLine | undefined;
-  /** The side panel as it will be drawn; none where it is shut. */
-  panel: { width: number; fullScreen: boolean } | undefined;
-  /** How the summary will stand, whose room is kept. */
-  summary: SummaryMode;
+  /** The side panel as it will be drawn, its panel none where it is shut. */
+  drawing: SidePanelDrawing;
+  /** How the summary will stand, whose room is kept, and whether it holds anything, which its toggle stands for. */
+  summary: Pick<SummaryLayout, "mode" | "holds">;
   /** Hands over the column, which the summary's room is measured on, as the page's own does. */
   onColumn: (column: HTMLElement | null) => void;
 }): React.JSX.Element {
-  const fullScreen = panel?.fullScreen === true;
+  const { panel, ...frame } = drawing;
   return (
-    <div className="desktop-task" data-panel-open={String(panel !== undefined)}>
-      <Fill ref={onColumn} className="desktop-task-main" hidden={fullScreen}>
-        <Toolbar
-          heading={
-            <div className="desktop-toolbar-heading">
-              <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
-            </div>
-          }
-        >
-          {ACTION_SKELETON_WIDTHS.map((width) => (
-            <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
-          ))}
-        </Toolbar>
-        <div className="desktop-plan-body">
-          <Fill className="desktop-task-column">
-            <Fill as={FILL_ELEMENT.SECTION} className="desktop-agent">
-              {starting === undefined ? (
-                <AgentTabSkeleton label={TASK_LOADING_LABEL} />
-              ) : (
-                <StartingAgentTab line={starting} />
-              )}
+    <TaskPage
+      columnRef={onColumn}
+      panelOpen={panel !== undefined}
+      fullScreen={panel?.fullScreen === true}
+      column={
+        <>
+          <Toolbar heading={<MainTabStripSkeleton />}>
+            <TaskActionsSkeleton summary={summary.holds} />
+          </Toolbar>
+          <TaskBody>
+            <Fill className="desktop-task-column">
+              <AgentColumn>
+                {starting === undefined ? (
+                  <AgentTabSkeleton label={TASK_LOADING_LABEL} />
+                ) : (
+                  <StartingAgentTab line={starting} />
+                )}
+              </AgentColumn>
             </Fill>
-          </Fill>
-          {summary === SUMMARY_MODE.NONE ? null : (
-            <aside className="task-summary" data-mode={summary} aria-hidden="true" />
-          )}
-        </div>
-      </Fill>
-      {panel === undefined ? null : (
-        <aside
-          className="side-panel"
-          data-full-screen={String(panel.fullScreen)}
-          style={panel.fullScreen ? undefined : { width: panel.width }}
-          aria-hidden="true"
-        >
-          <div className="side-panel-bar">
-            <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
-          </div>
-        </aside>
-      )}
-    </div>
+            <SummarySkeleton mode={summary.mode} />
+          </TaskBody>
+        </>
+      }
+    >
+      {panel === undefined ? null : <SidePanelSkeleton drawing={frame} panel={panel} />}
+    </TaskPage>
+  );
+}
+
+/** The column showing an agent's tab before its agent lands: the placeholder or the line it starts on. */
+function AgentColumn({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Fill as={FILL_ELEMENT.SECTION} className="desktop-agent">
+      {children}
+    </Fill>
   );
 }
 
@@ -879,9 +926,7 @@ function PlanDocument({
     agentLookDoor,
   ]);
   if (region.kind === DOCUMENT_REGION.READING) {
-    return (
-      <TaskPageSkeleton panel={drawing.panel} summary={summaryLayout.mode} onColumn={setColumn} />
-    );
+    return <TaskPageSkeleton drawing={drawing} summary={summaryLayout} onColumn={setColumn} />;
   }
   if (
     region.kind !== DOCUMENT_REGION.READY ||
@@ -1071,131 +1116,130 @@ function PlanDocument({
               <TaskMentions value={mentions}>
                 <OpenHereProvider value={openHere}>
                   {head}
-                  <div
-                    ref={setArea}
-                    className="desktop-task"
-                    data-panel-open={String(sidePanel.open)}
-                  >
-                    {/* Note that the column is hidden rather than left out while the
+                  {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
-                    <Fill
-                      ref={setColumn}
-                      className="desktop-task-main"
-                      hidden={sidePanel.fullScreen}
-                    >
-                      <Toolbar
-                        heading={
-                          <MainTabStrip
-                            task={task}
-                            main={mainTabs}
-                            agents={agents}
-                            unread={tasks.unreadTabs}
-                            views={views}
-                            pins={{
-                              pinned: sidePanel.pins,
-                              onPin: sidePanel.onPin,
-                              onUnpin: sidePanel.onUnpin,
-                            }}
-                            keys={tasks.shown && !sideFocused}
-                            shown={tasks.shown}
-                            onOpenTerminal={terminalDoors.onOpenTerminal}
-                            calling={calling}
-                          />
-                        }
-                      >
-                        {rename.refused ? (
-                          <p className="error-message" role="alert">
-                            {RENAME_FAILED_NOTE}
-                          </p>
-                        ) : null}
-                        {repositoryNote !== undefined ? (
-                          <p className="error-message" role="alert">
-                            {repositoryNote}
-                          </p>
-                        ) : null}
-                        <CopyChord copy={tasks.copy} />
-                        {terminalDoors.terminals ? (
-                          <TerminalCommands
-                            here={terminalHere}
-                            agents={agents}
-                            sidePanel={sidePanel}
-                            onShown={showSide}
-                          />
-                        ) : null}
-                        {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
-                        {tasks.history.viewing === undefined ? (
-                          <NewTabChord
-                            onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
-                          />
-                        ) : null}
-                        {/* Keyed once for the chip and the menu alike, so another plan
-              starts both afresh and the same plan keeps them. */}
-                        <Fragment key={task.id}>
-                          <RepositoryChip
-                            place={CHIP_PLACE.TOOLBAR}
-                            value={task.repository}
-                            chooser={tasks.repositories}
-                            onChoose={chooseRepository}
-                            openRequest={menuRequest}
-                          />
-                          <StartAgentButton control={agents} />
-                          {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. A phone's is its header's. */}
-                          {switched ? null : taskMenu}
-                        </Fragment>
-                        <SummaryButton layout={summaryLayout} cardId={summaryCard} />
-                      </Toolbar>
-                      {/* The plan's banner is the whole plan's, so it stands over every
-            tab of the column, and over the panel's while that fills the window. */}
-                      {sidePanel.fullScreen ? null : stranded.banner}
-                      {/* The summary stands beside what the column shows, under the
-            toolbar and over the call bar, which both span the column. */}
-                      <div className="desktop-plan-body">
-                        <FindScope
-                          className="desktop-task-column"
-                          active={tasks.shown && !sideFocused}
-                          subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
+                  <TaskPage
+                    areaRef={setArea}
+                    columnRef={setColumn}
+                    panelOpen={sidePanel.open}
+                    fullScreen={sidePanel.fullScreen}
+                    column={
+                      <>
+                        <Toolbar
+                          heading={
+                            <MainTabStrip
+                              task={task}
+                              main={mainTabs}
+                              agents={agents}
+                              unread={tasks.unreadTabs}
+                              views={views}
+                              pins={{
+                                pinned: sidePanel.pins,
+                                onPin: sidePanel.onPin,
+                                onUnpin: sidePanel.onUnpin,
+                              }}
+                              keys={tasks.shown && !sideFocused}
+                              shown={tasks.shown}
+                              onOpenTerminal={terminalDoors.onOpenTerminal}
+                              calling={calling}
+                            />
+                          }
                         >
-                          {tab === undefined ? (
-                            // While the agents are read, or a draft opens on a task with none, the
-                            // column stands as the tab it will show does before it lands.
-                            columnComing ? (
-                              <Fill as={FILL_ELEMENT.SECTION} className="desktop-agent">
-                                <AgentTabSkeleton />
-                              </Fill>
-                            ) : null
-                          ) : (
-                            <CallNotice.Provider value={notice}>
-                              <AgentPane
-                                call={calls}
-                                label={mainTabLabel(tab, agents)}
-                                tabbed
-                                tab={tab}
-                                agents={agents}
-                                shown={tasks.shown && !sidePanel.fullScreen}
-                                views={views}
-                                onOpenDelegation={openDelegationDoor}
-                                onOpenPullRequest={openPullRequestDoor}
-                                onOpenTarget={openTargetDoor}
-                                cards={cards}
-                                chat={chat}
-                                onFork={forkDoor}
-                                onContinue={continueDoor}
-                              />
-                            </CallNotice.Provider>
-                          )}
-                        </FindScope>
-                        <TaskSummary
-                          tasks={summaryTasks}
-                          layout={summaryLayout}
-                          cardId={summaryCard}
-                          inbox={inbox.board}
-                          held={views.held}
-                          repository={task.repository}
-                          onOpenAgent={(agent) => openColumnTab({ agent })}
-                        />
-                      </div>
-                    </Fill>
+                          {rename.refused ? (
+                            <p className="error-message" role="alert">
+                              {RENAME_FAILED_NOTE}
+                            </p>
+                          ) : null}
+                          {repositoryNote !== undefined ? (
+                            <p className="error-message" role="alert">
+                              {repositoryNote}
+                            </p>
+                          ) : null}
+                          <CopyChord copy={tasks.copy} />
+                          {terminalDoors.terminals ? (
+                            <TerminalCommands
+                              here={terminalHere}
+                              agents={agents}
+                              sidePanel={sidePanel}
+                              onShown={showSide}
+                            />
+                          ) : null}
+                          {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
+                          {tasks.history.viewing === undefined ? (
+                            <NewTabChord
+                              onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
+                            />
+                          ) : null}
+                          {/* Keyed once for the chip and the menu alike, so another plan
+              starts both afresh and the same plan keeps them. */}
+                          <Fragment key={task.id}>
+                            <RepositoryChip
+                              place={CHIP_PLACE.TOOLBAR}
+                              value={task.repository}
+                              chooser={tasks.repositories}
+                              onChoose={chooseRepository}
+                              openRequest={menuRequest}
+                            />
+                            <StartAgentButton control={agents} />
+                            {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. A phone's is its header's. */}
+                            {switched ? null : taskMenu}
+                          </Fragment>
+                          <SummaryButton layout={summaryLayout} cardId={summaryCard} />
+                        </Toolbar>
+                        {/* The plan's banner is the whole plan's, so it stands over every
+            tab of the column, and over the panel's while that fills the window. */}
+                        {sidePanel.fullScreen ? null : stranded.banner}
+                        {/* The summary stands beside what the column shows, under the
+            toolbar and over the call bar, which both span the column. */}
+                        <TaskBody>
+                          <FindScope
+                            className="desktop-task-column"
+                            active={tasks.shown && !sideFocused}
+                            subject={{ task: task.id, tab: tab ?? SIDE_PANEL_TAB.PLAN }}
+                          >
+                            {tab === undefined ? (
+                              // While the agents are read, or a draft opens on a task with none, the
+                              // column stands as the tab it will show does before it lands.
+                              columnComing ? (
+                                <AgentColumn>
+                                  <AgentTabSkeleton />
+                                </AgentColumn>
+                              ) : null
+                            ) : (
+                              <CallNotice.Provider value={notice}>
+                                <AgentPane
+                                  call={calls}
+                                  label={mainTabLabel(tab, agents)}
+                                  tabbed
+                                  tab={tab}
+                                  agents={agents}
+                                  shown={tasks.shown && !sidePanel.fullScreen}
+                                  views={views}
+                                  onOpenDelegation={openDelegationDoor}
+                                  onOpenPullRequest={openPullRequestDoor}
+                                  onOpenTarget={openTargetDoor}
+                                  cards={cards}
+                                  chat={chat}
+                                  onFork={forkDoor}
+                                  onContinue={continueDoor}
+                                />
+                              </CallNotice.Provider>
+                            )}
+                          </FindScope>
+                          <TaskSummary
+                            tasks={summaryTasks}
+                            layout={summaryLayout}
+                            cardId={summaryCard}
+                            inbox={inbox.board}
+                            held={views.held}
+                            repository={task.repository}
+                            onOpenAgent={(agent) => openColumnTab({ agent })}
+                          />
+                        </TaskBody>
+                      </>
+                    }
+                  >
                     {drawing.panel ? (
                       <SidePanel
                         {...drawing}
@@ -1245,7 +1289,7 @@ function PlanDocument({
                       />
                     ) : null}
                     {stranded.dialog}
-                  </div>
+                  </TaskPage>
                 </OpenHereProvider>
               </TaskMentions>
             </AutomationDirectory>
@@ -1278,8 +1322,8 @@ function StartingTaskPage({
   const summaryLayout = useSummaryLayout(summary, column, tasks.sidePanel.fullScreen, true);
   return (
     <TaskPageSkeleton
-      panel={drawing.panel}
-      summary={summaryLayout.mode}
+      drawing={drawing}
+      summary={summaryLayout}
       onColumn={setColumn}
       starting={line}
     />
