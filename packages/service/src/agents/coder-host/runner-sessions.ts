@@ -1289,15 +1289,25 @@ export const runnerSessions = <
             // The installation token lives an hour, so each message sets a fresh one, after the
             // write rather than ahead of it: the model takes seconds to reach its first command, and
             // the agent hears the message a GitHub mint and a policy update sooner. Note that a
-            // renewal that fails is logged and the message stands, since the runner already took it
-            // and a send answered failed would be sent again; the next message renews it.
-            yield* renewCredential(target, agent, running.sandboxSessionId).pipe(
+            // renewal that fails, or outlasts `CODER.CREDENTIAL_RENEWAL`, is logged and the message
+            // stands, since the runner already took it, and a send answered failed, or past the
+            // store's dispatch deadline, would record no line for it; the next message renews it.
+            const renewed = yield* renewCredential(target, agent, running.sandboxSessionId).pipe(
+              Effect.timeoutOption(CODER.CREDENTIAL_RENEWAL),
               Effect.catch((failure) =>
-                Effect.logWarning(
-                  `A ${harness.name} runner's credential was not renewed: ${describeFailure(failure)}`,
+                Effect.as(
+                  Effect.logWarning(
+                    `A ${harness.name} runner's credential was not renewed: ${describeFailure(failure)}`,
+                  ),
+                  Option.some(undefined),
                 ),
               ),
             );
+            if (Option.isNone(renewed)) {
+              yield* Effect.logWarning(
+                `A ${harness.name} runner's credential renewal outlasted its bound and was given up`,
+              );
+            }
             return accepted;
           }
         }

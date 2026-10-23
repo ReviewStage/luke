@@ -2258,4 +2258,31 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.policies.length, policiesBefore + 1);
       }),
   );
+  it.effect(
+    "a renewal Vercel never answers is given up at its bound, well inside the store's dispatch deadline, and the message written ahead of it stands",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        api.holdPolicy.remaining = 1;
+
+        const sending = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Now the emails.")),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 200; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(sending.pollUnsafe(), undefined, "the renewal is still held");
+        yield* TestClock.adjust(CODER.CREDENTIAL_RENEWAL);
+
+        const sent = yield* Fiber.join(sending);
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+      }),
+  );
 });
