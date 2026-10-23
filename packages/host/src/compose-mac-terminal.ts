@@ -1,8 +1,6 @@
 import { macRepositorySchema } from "@luke/features/mac-terminal-wire";
-import { carried, GATEWAY_METHOD, invalid } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Result } from "effect";
+import { carried, GATEWAY_METHOD, readParams } from "@luke/gateway";
+import { Effect } from "effect";
 import type { Composer } from "./composer.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { SettingsStore } from "./settings-store.js";
@@ -30,11 +28,12 @@ export function composeMacTerminal(dependencies: MacTerminalDependencies): Compo
       ),
     [GATEWAY_METHOD.MAC_REPOSITORY_SET]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(macRepositorySchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("a repository names itself and its command or null");
-        }
-        yield* Effect.orDie(store.setMacRepository(read.success));
+        const read = yield* readParams(
+          macRepositorySchema,
+          params,
+          "a repository names itself and its command or null",
+        );
+        yield* Effect.orDie(store.setMacRepository(read));
         return carried({ repositories: yield* Effect.orDie(store.macRepositories()) });
       }),
   };

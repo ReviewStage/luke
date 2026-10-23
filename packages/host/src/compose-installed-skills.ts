@@ -23,10 +23,8 @@ import {
   installedSkillToggleParamsSchema,
   installedSkillUpdateParamsSchema,
 } from "@luke/features/installed-skill-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema, type Scope } from "effect";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@luke/gateway";
+import { Effect, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -107,18 +105,10 @@ function composed(
         )
       : Effect.succeed(UNANSWERED);
 
-  type Params = Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0];
-
-  /** The params read against the method's own schema, or the invalid-params refusal worded. */
-  const read = <Read>(schema: Schema.Codec<Read, unknown>, params: Params, sentence: string) => {
-    const result = readEither(schema)(unparsedWire(params));
-    return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
-  };
-
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.INSTALLED_SKILLS_LIST]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId } = yield* read(
+        const { workspaceId } = yield* readParams(
           installedSkillListParamsSchema,
           params,
           "a list names a workspace",
@@ -128,7 +118,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_READ]: (params) =>
       Effect.gen(function* () {
-        const { skillId } = yield* read(
+        const { skillId } = yield* readParams(
           installedSkillIdParamsSchema,
           params,
           "a read names a skill",
@@ -138,7 +128,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId, text } = yield* read(
+        const { workspaceId, text } = yield* readParams(
           installedSkillPreviewParamsSchema,
           params,
           "a preview names a workspace and a paste",
@@ -148,7 +138,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE]: (params) =>
       Effect.gen(function* () {
-        const candidate = yield* read(
+        const candidate = yield* readParams(
           installedSkillPreviewFileParamsSchema,
           params,
           "a previewed skill names a workspace, a repository, a commit, and a folder",
@@ -158,7 +148,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL]: (params) =>
       Effect.gen(function* () {
-        const install = yield* read(
+        const install = yield* readParams(
           installedSkillInstallParamsSchema,
           params,
           "an install names a workspace, a scope, and a paste",
@@ -168,7 +158,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED]: (params) =>
       Effect.gen(function* () {
-        const { skillId, enabled } = yield* read(
+        const { skillId, enabled } = yield* readParams(
           installedSkillToggleParamsSchema,
           params,
           "a toggle names a skill and whether it is on",
@@ -178,7 +168,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId, skillId } = yield* read(
+        const { workspaceId, skillId } = yield* readParams(
           installedSkillUpdateParamsSchema,
           params,
           "an update check names a workspace and a skill",
@@ -188,7 +178,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId, skillId } = yield* read(
+        const { workspaceId, skillId } = yield* readParams(
           installedSkillUpdateParamsSchema,
           params,
           "an update names a workspace and a skill",
@@ -198,7 +188,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_SHARE]: (params) =>
       Effect.gen(function* () {
-        const { workspaceId, skillId } = yield* read(
+        const { workspaceId, skillId } = yield* readParams(
           installedSkillShareParamsSchema,
           params,
           "a share names a workspace and a skill",
@@ -208,7 +198,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE]: (params) =>
       Effect.gen(function* () {
-        const { skillId } = yield* read(
+        const { skillId } = yield* readParams(
           installedSkillIdParamsSchema,
           params,
           "a removal names a skill",

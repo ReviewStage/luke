@@ -14,10 +14,8 @@ import {
   type MacShellCommand,
   type MacShellResult,
 } from "@luke/features/mac-command-wire";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, invalid } from "@luke/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@luke/gateway";
 import { MAC_COMMAND_MODE, type MacCommandMode } from "@luke/settings";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
 import {
   Clock,
   Config,
@@ -26,9 +24,7 @@ import {
   Effect,
   FiberSet,
   Option,
-  Result,
   Schedule,
-  Schema,
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -38,7 +34,7 @@ import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
-import { LiveBroken, type LiveClient, liveRows, openRealtimeClient } from "./live-follow.js";
+import { decodedLiveRows, type LiveClient, openRealtimeClient } from "./live-follow.js";
 import {
   MAC_COMMAND_DECISION,
   type MacCommandAsk,
@@ -198,8 +194,6 @@ export function composeMacCommands(
     const http = yield* HttpClient.HttpClient;
     const { kernel, account, mode, allowAlways, client } = dependencies;
     const openLive = dependencies.openLive ?? openRealtimeClient;
-    const decode = Schema.decodeUnknownOption(macCommandsLiveRowsSchema);
-    const readAnswer = readEither(macCommandAnswerSchema);
     /** The asks waiting on the developer, by the command's id, the earliest asked first, each with the account it was claimed for. */
     const asks = new Map<
       string,
@@ -382,7 +376,7 @@ export function composeMacCommands(
               yield* FiberSet.run(running, claimed(running, userId, command));
             }
           });
-        const rows = liveRows(
+        const rows = decodedLiveRows(
           {
             openLive,
             reseal: () => seal(userId, false),
@@ -390,13 +384,9 @@ export function composeMacCommands(
             now: kernel.now,
           },
           first,
+          macCommandsLiveRowsSchema,
         );
-        const following = Stream.runForEach(rows, (delivered) =>
-          Option.match(decode(delivered), {
-            onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-            onSome: (read) => claimNew(macCommandsOfLiveRows(read)),
-          }),
-        );
+        const following = Stream.runForEach(rows, (read) => claimNew(macCommandsOfLiveRows(read)));
         return Effect.raceFirst(following, presence(userId)).pipe(
           Effect.catch(() => Effect.sleep(LIVE_RESTART)),
         );
@@ -441,12 +431,14 @@ export function composeMacCommands(
       /** The developer's answer to one ask, by its id; one no longer waiting, answered or timed out, is told so. */
       [GATEWAY_METHOD.MAC_COMMAND_ANSWER]: (params) =>
         Effect.gen(function* () {
-          const read = readAnswer(unparsedWire(params));
-          if (Result.isFailure(read))
-            return yield* invalid("an answer names an ask and a decision");
-          const held = asks.get(read.success.id);
+          const read = yield* readParams(
+            macCommandAnswerSchema,
+            params,
+            "an answer names an ask and a decision",
+          );
+          const held = asks.get(read.id);
           if (held === undefined) return carried({ answered: false });
-          yield* Deferred.succeed(held.decided, read.success.decision);
+          yield* Deferred.succeed(held.decided, read.decision);
           return carried({ answered: true });
         }),
     };
