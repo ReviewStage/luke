@@ -533,8 +533,9 @@ test("an install lights its own rows once and says which skills and how to call 
 
   act(() => button("Add skill").click());
   await paste(COMMAND);
+  act(() => button("Browse them").click());
   act(() => checkboxOf("react-best-practices").click());
-  act(() => button("Install").click());
+  act(() => button("Install 2 skills").click());
   await settle();
 
   const lit = [...document.querySelectorAll(".luke-settings-row[data-landed]")].map(
@@ -604,7 +605,7 @@ test("a command that names a skill is confirmed as its card, with no list, and I
   ]);
   assert.deepEqual(
     installed.map((each) => each.name),
-    ["web-design-guidelines", "react-best-practices"],
+    ["web-design-guidelines"],
   );
 });
 

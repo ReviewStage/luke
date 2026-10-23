@@ -77,6 +77,7 @@ export const SKILLS_LINE = {
     "Paste an npx skills add command, a GitHub link to a repo or skill folder, or a skill's SKILL.md text.",
   READING: "Reading…",
   INSTALLED: "Installed",
+  UPDATE_AVAILABLE: "Update available",
   INSTALL: "Install",
   INSTALL_FOR: "Install for",
   JUST_ME: "Just me",
