@@ -59,6 +59,15 @@ container that takes no focus, and a spread from a ui helper
 would silence the rule and on an `.oxlintrc.json` that weakens it. Where it
 fires, use a `@luke/ui` component, or add the component or variant there.
 
+A loading skeleton draws through the components its loaded state draws with,
+never a copy of their boxes, and takes its counts, order, and sizes from the
+declaration the loaded surface reads, never literals of its own. Lint holds
+the first half (`anti-slop/skeleton-through-components`, under the same
+no-suppression check): `Skeleton` and `SkeletonRegion` are drawn only by a
+component named `*Skeleton`, in which an intrinsic element's class must be a
+literal naming itself a skeleton's (`…-skeleton…`); every other box is a
+component, factored out of the surface where it builds the box by hand.
+
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the

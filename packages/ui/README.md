@@ -154,6 +154,19 @@ What the barrel holds (`src/index.ts`):
 Each component's design comment, at the top of its `.tsx`, says what it owns
 and what it leaves to its caller.
 
+### Skeletons
+
+A skeleton is a component named `*Skeleton` that draws the surface it stands
+for through that surface's own components (`SettingsRow`, `ListRow`, the
+composer's card), with only the words, marks, and controls swapped for
+`Skeleton` blocks, so it lands where the surface does and follows it when the
+surface changes. Its counts, order, and sizes come from what the surface
+reads: its section list, its schema, its width token. A class of the
+skeleton's own, laying its blocks out, names itself one (`…-skeleton…`);
+`anti-slop/skeleton-through-components` refuses any other class on an
+intrinsic element inside a skeleton, and `Skeleton` or `SkeletonRegion` drawn
+outside one.
+
 ### Folding in a narrow container
 
 A container short of room folds the controls in it with one inherited custom
