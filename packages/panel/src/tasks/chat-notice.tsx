@@ -11,6 +11,7 @@ import {
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
+  MESSAGE_ACTIONS_PLACEMENT,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -21,12 +22,7 @@ import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import { MessagesSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
-import {
-  MESSAGE_ACTIONS_PLACEMENT,
-  Message,
-  MessageAction,
-  MessageContent,
-} from "../ai-elements/message.js";
+import { Message, MessageAction, MessageContent } from "../ai-elements/message.js";
 import { previewWords } from "../desktop/chat-preview.js";
 import { useChatActor } from "./chat-actors.js";
 import { ChannelName, channelTitle } from "./chat-channel-name.js";

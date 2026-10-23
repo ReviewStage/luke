@@ -42,6 +42,7 @@ import { LIST_MOTION_EXAMPLE } from "./examples/list-motion";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { LOADING_INDICATORS_EXAMPLE } from "./examples/loading-indicators";
 import { MENU_EXAMPLE } from "./examples/menu";
+import { MESSAGES_EXAMPLE } from "./examples/messages";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
@@ -55,6 +56,7 @@ import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
+import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
@@ -78,6 +80,7 @@ import { TIMES_EXAMPLE } from "./examples/times";
 import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
+import { ZOOM_IMAGES_EXAMPLE } from "./examples/zoom-images";
 
 /**
  * examples.ts -- every example the catalog draws, in the order its index lists them.
@@ -175,4 +178,7 @@ export const EXAMPLES: readonly Example[] = [
   AUTH_PAGE_EXAMPLE,
   GLYPH_SLOTS_EXAMPLE,
   CORNER_COUNTS_EXAMPLE,
+  RESIZE_EDGES_EXAMPLE,
+  ZOOM_IMAGES_EXAMPLE,
+  MESSAGES_EXAMPLE,
 ];

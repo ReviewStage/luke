@@ -1,5 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button, CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card, PictureTile } from "@luke/ui";
+import {
+  Button,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
+  IMAGE_OPENING,
+  PictureTile,
+} from "@luke/ui";
 import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
@@ -22,7 +30,6 @@ import { coarsePointerNow, useCoarsePointer } from "./coarse-pointer.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext } from "./stage-room.js";
 import { AttachmentViewer } from "./tasks/attachment-viewer.js";
-import { IMAGE_OPENING } from "./tasks/use-image-zoom.js";
 
 /**
  * plan-diagram.tsx -- a plan's ```` ```mermaid ```` fence drawn as its diagram: the diagram bundle loaded the first time one is shown, each picture kept by its code and appearance, and the figure the read view and the editor's preview draw it in.

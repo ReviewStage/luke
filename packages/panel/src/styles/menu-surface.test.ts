@@ -120,7 +120,7 @@ test("a find bar lays its field and buttons side by side on the surface, a hair 
 });
 
 test("a toolbar floats on the menu's ground, edge, and shadow, a hair round its buttons, shown by its owner rather than arriving", () => {
-  for (const owner of ["message-actions", "picture-tools", "diff-list-offer"]) {
+  for (const owner of ["luke-message-actions", "picture-tools", "diff-list-offer"]) {
     const says = surface(owner, undefined, undefined, MENU_SURFACE_FLOW.TOOLBAR);
     assert.equal(says("background"), "var(--luke-color-overlay)", owner);
     assert.equal(says("border"), "1px solid var(--luke-color-border-strong)", owner);

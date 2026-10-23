@@ -290,19 +290,22 @@ export function Disclosure({
  * own controls stand in it and which a rule closes under while the fold is
  * open; a chip at the end of its row, on the surface inside a hairline,
  * saying in its glyphs and a count what it folds (a line's review threads);
- * or a card's head, the one line a closed card shows, in its holder's ink,
- * finger-tall on a coarse pointer.
+ * a card's head, the one line a closed card shows, in its holder's ink,
+ * finger-tall on a coarse pointer; or a transcript's line, bare of all of
+ * these, which the skin the fold holding it wears lays out and draws (a
+ * review note's head, a pull request's section heading).
  */
 export const DISCLOSURE_SUMMARY = {
   QUIET: "quiet",
   ROW: "row",
   CHIP: "chip",
   HEAD: "head",
+  TRANSCRIPT: "transcript",
 } as const;
 export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DISCLOSURE_SUMMARY];
 
 type DisclosureSummaryProps = {
-  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. `CHIP` draws none either, its glyphs saying what it folds, and `HEAD` leaves its `DisclosureChevron` to the caller, at either end of its line. */
+  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. `CHIP` draws none either, its glyphs saying what it folds, and `HEAD` and `TRANSCRIPT` leave their `DisclosureChevron` to the caller, wherever its line holds it. */
   look?: DisclosureSummaryLook;
   children: ReactNode;
 } & Omit<ComponentPropsWithoutRef<"summary">, "className" | "style" | "children" | "aria-expanded">;

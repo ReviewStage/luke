@@ -1,9 +1,11 @@
 /**
- * use-image-zoom.ts -- a picture in the attachment viewer zoomed and moved about as Preview's is: a pinch, a press, or a key zooms it, and a drag or a two-finger scroll moves it while it is zoomed.
+ * zoom-image.tsx -- a picture opened over the window, zoomed and moved about as Preview's is: a pinch, a press, or a key zooms it, and a drag or a two-finger scroll moves it while it is zoomed.
  *
- * The view itself, and what each gesture makes of it, is `@luke/ui/image-zoom`'s;
- * this measures the frame and the fitted picture as each gesture lands and
- * hands them in. A pinch on the trackpad reaches the page as a scroll with
+ * The view itself, and what each gesture makes of it, is `../../image-zoom.ts`'s;
+ * `useImageZoom` measures the frame and the fitted picture as each gesture
+ * lands and hands them in. Its owner, which keeps the zoom buttons and keys
+ * beside the picture, holds it, wears `frameRef` on the frame the picture
+ * stands in, and draws the picture as a `ZoomImage`. A pinch on the trackpad reaches the page as a scroll with
  * Control held, which is how Chromium tells one, and a mouse's Control-scroll
  * zooms the same. The view is drawn as a transform on the picture, so the
  * frame's layout never changes under it. A change from a press or a key
@@ -11,6 +13,7 @@
  * because a glide behind a gesture would trail it.
  */
 
+import { useCallback, useRef, useState } from "react";
 import {
   FITTED_VIEW,
   type FramePoint,
@@ -23,8 +26,8 @@ import {
   zoomedByStep,
   zoomedByWheel,
   zoomedTo,
-} from "@luke/ui/image-zoom";
-import { useCallback, useRef, useState } from "react";
+} from "../../image-zoom.js";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
 /** How far a press may wander, in pixels, and still be a press rather than a drag. */
 const PRESS_SLACK_PX = 4;
@@ -83,7 +86,7 @@ interface Shown {
   readonly glide: boolean;
 }
 
-/** What the viewer wears to zoom the picture it draws. */
+/** What the owner of a zoomed picture holds: its frame, its picture, and the steps and keys that zoom it. */
 export interface ImageZoom {
   /** Whether the picture is zoomed past fitted. */
   readonly zoomed: boolean;
@@ -323,7 +326,7 @@ export function useImageZoom(
           y: event.clientY,
           moved: false,
         };
-        event.currentTarget.setPointerCapture(event.pointerId);
+        event.currentTarget.setPointerCapture?.(event.pointerId);
       },
       onPointerMove: (event) => {
         const held = press.current;
@@ -350,7 +353,9 @@ export function useImageZoom(
         const held = press.current;
         press.current = undefined;
         // A drag that ends on the picture moved it, and is no press.
-        if (held?.moved === true || frame.current === null) return;
+        if (held?.moved === true) return;
+        pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
+        if (frame.current === null) return;
         const at = pointIn(frame.current, event.clientX, event.clientY);
         const natural = {
           width: event.currentTarget.naturalWidth,
@@ -362,4 +367,22 @@ export function useImageZoom(
     step,
     keyDown,
   };
+}
+
+/**
+ * The picture `zoom` zooms, drawn as its transform over the size that fits
+ * its frame: a press zooms it in where it is fitted, and zoomed, it is held
+ * and dragged, and a press puts it back (zoom-image.css). A press answers
+ * with the quiet pulse a wide shape gives; a drag is no press.
+ */
+export function ZoomImage({
+  zoom,
+  src,
+  alt,
+}: {
+  zoom: ImageZoom;
+  src: string;
+  alt: string;
+}): React.JSX.Element {
+  return <img className="luke-zoom-image" src={src} alt={alt} {...zoom.imageProps} />;
 }

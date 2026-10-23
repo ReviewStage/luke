@@ -1,0 +1,55 @@
+/* message.css -- a turn's actions (`MessageActions`): hidden, taking no
+   pointer, until the pointer rests on the turn (`MessageFrame`), the
+   keyboard is on one of them, or, on a screen with no hover, the turn is
+   tapped; floated at the turn's top right corner on a small raised card, or
+   set inline in the line under it. The floating card is the toolbar's
+   (`MenuSurface`). */
+
+@layer components {
+  /* The turn holds its floating bar at its corner. */
+  .luke-message {
+    position: relative;
+  }
+
+  .luke-message-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--luke-duration-quick) var(--luke-spring);
+  }
+
+  /* Its card is the toolbar's (`MenuSurface`); this places it. */
+  .luke-message-actions[data-placement="floating"] {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-8));
+    right: 0;
+    z-index: 10;
+  }
+
+  /* An action whose hover card stands keeps the bar up while the pointer
+     crosses onto the card, off the turn (`Tooltip` marks it described while
+     it does). */
+  .luke-message-actions:focus-within,
+  .luke-message-actions:has([aria-describedby]) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    .luke-message:hover .luke-message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* A screen with no hover shows a turn's actions once the turn is tapped,
+     in the line under it or on their floating card, and hides them at rest. */
+  @media (hover: none) {
+    .luke-message[data-actions-shown="true"] .luke-message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+}

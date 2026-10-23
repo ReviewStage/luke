@@ -40,6 +40,8 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
@@ -56,6 +58,7 @@ import {
   useLeaving,
   useMenu,
   useMinute,
+  useResizeEdge,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -100,7 +103,6 @@ import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { SidebarResizeEdge } from "../desktop/desktop-sidebar.js";
 import {
   INBOX_LIST_WIDTH,
   type InboxShowChoice,
@@ -111,7 +113,6 @@ import {
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
-import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
@@ -1811,8 +1812,8 @@ export function InboxList({
     previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
   );
   const media = previews ? mediaReads : undefined;
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
     width,
     bounds: INBOX_LIST_WIDTH,
     reserve: () => PANE_RESERVE,
@@ -1941,7 +1942,7 @@ export function InboxList({
       <ListMotion root={bodyRef} change={view}>
         {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
       </ListMotion>
-      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
+      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );
 }

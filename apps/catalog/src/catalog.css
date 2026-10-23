@@ -992,3 +992,50 @@ body {
 .catalog-glyph-large {
   --luke-glyph-size: var(--luke-space-24);
 }
+
+/* A box holding a pane and the work beside it, the pane's edge
+   (`ResizeEdge`) straddling the border between them. */
+.catalog-edged-box {
+  display: flex;
+  width: 360px;
+  height: 96px;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-edged-pane {
+  position: relative;
+  flex: none;
+  padding: var(--luke-space-8);
+  border-inline: 1px solid var(--luke-color-border);
+}
+
+.catalog-edged-work {
+  flex: 1 1 auto;
+}
+
+/* The frame a zoomed picture (`ZoomImage`) stands in, which clips what
+   stands past it and takes two fingers' pinch rather than the page. */
+.catalog-zoom-frame {
+  display: grid;
+  width: 320px;
+  height: 200px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  touch-action: none;
+}
+
+/* A transcript's fold skins its summary's line itself, as a pull request's
+   section heading does. */
+.catalog-transcript-fold .luke-disclosure-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  color: var(--luke-color-text-muted);
+}
+
+.catalog-transcript-fold .luke-disclosure-summary:hover {
+  color: var(--luke-color-text);
+}

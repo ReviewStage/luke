@@ -911,49 +911,6 @@
     justify-content: flex-start;
   }
 
-  .message-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--luke-space-2);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--luke-duration-quick) var(--luke-spring);
-  }
-
-  .message-actions[data-placement="floating"] {
-    position: absolute;
-    top: calc(-1 * var(--luke-space-8));
-    right: 0;
-    z-index: 10;
-  }
-
-  /* An action whose hover card stands keeps the bar up while the pointer
-     crosses onto the card, off the message (`@luke/ui`'s `Tooltip` marks it
-     described while it does). */
-  .message-actions:focus-within,
-  .message-actions:has([aria-describedby]) {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  @media (hover: hover) {
-    .transcript-message:hover .message-actions {
-      opacity: 1;
-      pointer-events: auto;
-    }
-  }
-
-  /* A screen with no hover shows a message's actions once the message is
-     tapped (`message.tsx`), in the line under its bubble or on their
-     floating card, and hides them at rest, so a transcript is not a column
-     of buttons. */
-  @media (hover: none) {
-    .transcript-message[data-actions-shown="true"] .message-actions {
-      opacity: 1;
-      pointer-events: auto;
-    }
-  }
-
   /* A working line and the line a finished turn or a call ends on: the
      caption type, muted, its words selectable. */
   .status-line {
@@ -1049,7 +1006,7 @@
 
 /* A message's actions, their glyphs the control icon whichever way each is
    drawn, a copy's glyph inside its own swap. */
-.message-actions svg {
+.luke-message-actions svg {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
 }
@@ -1407,7 +1364,7 @@
   display: none;
 }
 
-.file-tree-pane[data-leaving] > .side-panel-resize {
+.file-tree-pane[data-leaving] > .luke-resize-edge {
   display: none;
 }
 
@@ -1457,7 +1414,7 @@
 
 .file-view[data-pane-beside="false"]:is([data-pane-over="peek"], [data-pane-over="open"])
   .file-tree-pane
-  > .side-panel-resize {
+  > .luke-resize-edge {
   display: none;
 }
 
@@ -1487,7 +1444,7 @@
     box-shadow: var(--luke-menu-shadow);
   }
 
-  .file-view .file-tree-pane > .side-panel-resize,
+  .file-view .file-tree-pane > .luke-resize-edge,
   .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
     display: none;
   }
@@ -1531,7 +1488,7 @@
   box-shadow: var(--luke-menu-shadow);
 }
 
-.desktop-shell[data-room="narrow"] .file-view .file-tree-pane > .side-panel-resize,
+.desktop-shell[data-room="narrow"] .file-view .file-tree-pane > .luke-resize-edge,
 .desktop-shell[data-room="narrow"]
   .file-view[data-pane-beside="false"]
   > .file-view-body
@@ -1560,7 +1517,7 @@
    keeps the tree at its share of the panel, with no edge to drag, since
    any width a drag asked for would be drawn no wider (`useTreeEdge`). */
 @container side-panel (max-width: 539px) {
-  .file-view .file-tree-pane > .side-panel-resize {
+  .file-view .file-tree-pane > .luke-resize-edge {
     display: none;
   }
 }
@@ -2893,7 +2850,7 @@
    its own. The whole row presses as a `DisclosureSummary` does: the chevron
    leading at its inset, the row filled under the pointer, and what it holds
    at its end keeping their own presses. */
-.pull-request-section-head,
+.pull-request-section-fold > .luke-disclosure-summary,
 .pull-request-page .pull-request-comment-box > .pull-request-heading {
   position: sticky;
   top: 0;
@@ -2908,7 +2865,7 @@
   margin: 0;
 }
 
-.pull-request-section-head {
+.pull-request-section-fold > .luke-disclosure-summary {
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
@@ -2924,7 +2881,7 @@
    Note that it sits under the row's words, the band being a stacking
    context of its own, and lights only while the pointer is on the row
    rather than on what stands at its end. */
-.pull-request-section-head::before {
+.pull-request-section-fold > .luke-disclosure-summary::before {
   position: absolute;
   z-index: -1;
   inset: calc((var(--luke-scroll-band) - var(--luke-control-height)) / 2) 0;
@@ -2933,18 +2890,20 @@
   transition: background-color var(--luke-duration-hover) ease;
 }
 
-.pull-request-section-head:hover:not(:has(.pull-request-section-end:hover))::before {
+.pull-request-section-fold
+  > .luke-disclosure-summary:hover:not(:has(.pull-request-section-end:hover))::before {
   background: var(--luke-color-fill-strong);
 }
 
-.pull-request-section-head > .pull-request-heading {
+.pull-request-section-fold > .luke-disclosure-summary > .pull-request-heading {
   flex: 1 1 auto;
   margin: 0;
   padding: 0;
   transition: color var(--luke-duration-hover) ease;
 }
 
-.pull-request-section-head:hover:not(:has(.pull-request-section-end:hover))
+.pull-request-section-fold
+  > .luke-disclosure-summary:hover:not(:has(.pull-request-section-end:hover))
   > .pull-request-heading {
   color: var(--luke-color-text);
 }
@@ -3680,7 +3639,7 @@
 
 /* The head: one line that never wraps, the name giving way first, its whole
    row folding the card under the fill a disclosure row wears. */
-.annotation-card-head {
+.annotation-card-fold > .luke-disclosure-summary {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -3695,7 +3654,7 @@
   transition: background-color var(--luke-duration-hover) ease;
 }
 
-.annotation-card-head:hover {
+.annotation-card-fold > .luke-disclosure-summary:hover {
   background: var(--luke-color-fill-hover);
 }
 
@@ -5420,35 +5379,14 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   overflow: hidden;
   place-items: center;
   background: var(--luke-color-surface);
-  /* Two fingers anywhere on the frame pinch the picture (use-image-zoom.ts), never the page. */
+  /* Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page. */
   touch-action: none;
 }
 
-/* The picture is zoomed by a transform over its fitted size
-   (use-image-zoom.ts), so the card keeps its size and the frame clips what
-   stands past it. A press zooms in where it is fitted; zoomed, it is held
-   and dragged, and a press puts it back. A step from a press or a key
-   glides; a pinch or a drag follows the fingers at once. */
-.attachment-viewer-image {
-  display: block;
-  max-width: 100%;
+/* The picture, `@luke/ui`'s ZoomImage, stands no taller fitted than the
+   card leaves it under its header. */
+.attachment-viewer-body > .luke-zoom-image {
   max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
-  object-fit: contain;
-  cursor: zoom-in;
-  touch-action: none;
-  user-select: none;
-}
-
-.attachment-viewer-image[data-zoom="zoomed"] {
-  cursor: grab;
-}
-
-.attachment-viewer-image[data-zoom="zoomed"]:active {
-  cursor: grabbing;
-}
-
-.attachment-viewer-image[data-glide="true"] {
-  transition: transform var(--luke-duration-quick) var(--luke-motion-pane);
 }
 
 /* A text file fills the card under its header and scrolls there, drawn

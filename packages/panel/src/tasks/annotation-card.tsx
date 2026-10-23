@@ -6,7 +6,9 @@ import {
   CARD_ELEMENT,
   CARD_PADDING,
   Card,
+  DISCLOSURE_SUMMARY,
   DisclosureChevron,
+  DisclosureSummary,
   GAP,
   LAYOUT_ELEMENT,
   Stack,
@@ -17,7 +19,7 @@ import {
 } from "@luke/ui";
 import { MessageSquareIcon } from "lucide-react";
 import type { AnimationEvent, ReactNode } from "react";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
 
 /**
  * annotation-card.tsx -- one card for whatever is written on lines of code: a review thread in Files changed and in the Conversation, and an agent's note on lines of a File tab.
@@ -168,7 +170,7 @@ export function AnnotationCard({
     >
       {where === undefined ? null : <div className="annotation-card-where">{where}</div>}
       <Fold className="annotation-card-fold" open={open} onOpenChange={onOpenChange}>
-        <FoldSummary className="annotation-card-head">
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
           <span className="annotation-card-turn">
             <DisclosureChevron />
           </span>
@@ -184,7 +186,7 @@ export function AnnotationCard({
           ))}
           {count === undefined ? null : <FoldedCount count={count} />}
           <span className="annotation-card-end">{menu}</span>
-        </FoldSummary>
+        </DisclosureSummary>
         <FoldBody className="annotation-card-body">
           {lead}
           <div className="annotation-card-content">{children}</div>

@@ -238,14 +238,15 @@ function closes(): ReadonlyMap<string, Element> {
 
 /** The resize edges, each by what the developer calls it. */
 function resizeEdges(): ReadonlyMap<string, Element> {
-  const edge = (className: string) => {
+  const edge = (side: string) => {
     const element = document.body.appendChild(document.createElement("div"));
-    element.className = className;
+    element.className = "luke-resize-edge";
+    element.dataset.side = side;
     return element;
   };
   return new Map([
-    ["the sidebar's resize edge", edge("sidebar-resize")],
-    ["the side panel's resize edge", edge("side-panel-resize")],
+    ["the sidebar's resize edge", edge("right")],
+    ["the side panel's resize edge", edge("left")],
   ]);
 }
 

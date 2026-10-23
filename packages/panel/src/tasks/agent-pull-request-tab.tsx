@@ -56,8 +56,10 @@ import {
   type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
+  DISCLOSURE_SUMMARY,
   DisclosureAction,
   DisclosureChevron,
+  DisclosureSummary,
   EmptyState,
   ErrorState,
   Fill,
@@ -126,7 +128,7 @@ import {
   useState,
 } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
@@ -587,8 +589,8 @@ function Section({
   }
   return (
     <section className="pull-request-section" aria-label={title}>
-      <Fold open={fold.open} onOpenChange={fold.onOpenChange}>
-        <FoldSummary className="pull-request-section-head">
+      <Fold className="pull-request-section-fold" open={fold.open} onOpenChange={fold.onOpenChange}>
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
           <DisclosureChevron />
           {heading}
           {end === undefined ? null : (
@@ -596,7 +598,7 @@ function Section({
               <span className="pull-request-section-end">{end}</span>
             </DisclosureAction>
           )}
-        </FoldSummary>
+        </DisclosureSummary>
         <FoldBody className="pull-request-section-body">{children}</FoldBody>
       </Fold>
     </section>

@@ -77,6 +77,8 @@ const NO_PRESS = [
   // Words a hint hangs from, whose tap shows the hint rather than pressing anything (`hint.tsx`).
   ".luke-one-line",
   "span.luke-inline-ref",
+  // A turn of a conversation, whose tap on a touch screen shows its actions rather than pressing anything (`message.tsx`).
+  ".luke-message",
   // A field's words, which a press places the caret in.
   "input:not([type='checkbox'], [type='radio'])",
   "textarea",

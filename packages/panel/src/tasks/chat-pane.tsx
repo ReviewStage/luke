@@ -21,6 +21,7 @@ import {
   DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
+  MESSAGE_ACTIONS_PLACEMENT,
   ONE_LINE_ELEMENT,
   OneLine,
   TEXT_BUTTON_TONE,
@@ -75,7 +76,6 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
-import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
 import { PictureBlock } from "../picture-block.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { SendingAgent } from "./agent-ref.js";

@@ -26,6 +26,7 @@ import {
   ListRow,
   NavItem,
   OneLine,
+  ResizeEdge,
   RetryRowLabel,
   SCROLL_FADE,
   ScrollArea,
@@ -77,7 +78,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members.js";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
-import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
@@ -843,7 +844,7 @@ export function DesktopVersionHistory({
         </div>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
+        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version" hidden={hidden.item}>
         <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>

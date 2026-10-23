@@ -101,5 +101,8 @@
 @import "./components/auth-page/auth-page.css";
 @import "./components/glyph-slot/glyph-slot.css";
 @import "./components/corner-count/corner-count.css";
+@import "./components/resize-edge/resize-edge.css";
+@import "./components/zoom-image/zoom-image.css";
+@import "./components/message/message.css";
 /* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

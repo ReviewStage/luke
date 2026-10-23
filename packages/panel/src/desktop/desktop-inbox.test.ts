@@ -2099,7 +2099,7 @@ test("an image an item shows is drawn, and a press opens it over the window", as
   assert.ok(press, "the image is pressed to enlarge it");
   act(() => press.click());
   assert.equal(
-    document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+    document.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
     "The pull request tab.png",
   );
 });
@@ -2195,7 +2195,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
       card.querySelector(".attachment-viewer-place")?.textContent,
     ];
   };
@@ -2292,7 +2292,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
       card.querySelector(".attachment-viewer-place")?.textContent,
     ];
   };
