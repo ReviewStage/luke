@@ -3,9 +3,11 @@ import {
   BUTTON_VARIANT,
   Button,
   CARD_CORNER,
+  CARD_DROP_TARGET,
   CARD_ELEMENT,
   CARD_LOOK,
   CARD_PADDING,
+  CARD_SHADOW,
   Card,
   CardHead,
   GAP,
@@ -25,8 +27,9 @@ import { CatalogSection } from "../section";
  * compact one, a band's snug one, and a flush card a list fills to its
  * edge; then long words in a narrow column; then cards set among lines,
  * at a control's corner: tinted, on the code's ground, and outlined; one
- * leaving its room to what it holds; a dashed one for what is missing; and
- * one standing in running words.
+ * leaving its room to what it holds; a dashed one for what is missing; one
+ * standing in running words; a well, and one marked as the drop target a
+ * dragged row is carried over; and one standing over the page as a menu does.
  */
 
 /** A press the catalog has nowhere to take. */
@@ -149,6 +152,43 @@ function Cards(): React.JSX.Element {
               A picture&apos;s frame stands here, in the paragraph.
             </Card>
           </Text>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-well" title="A well, and one a row is carried over">
+        <div className="catalog-column">
+          <Stack gap={GAP.CONTROL}>
+            <Card
+              as={CARD_ELEMENT.SECTION}
+              look={CARD_LOOK.WELL}
+              corner={CARD_CORNER.CONTROL}
+              padding={CARD_PADDING.SNUG}
+              aria-label="Todo"
+            >
+              <Text tone={TEXT_TONE.MUTED}>No tasks</Text>
+            </Card>
+            <Card
+              as={CARD_ELEMENT.SECTION}
+              look={CARD_LOOK.WELL}
+              corner={CARD_CORNER.CONTROL}
+              padding={CARD_PADDING.SNUG}
+              aria-label="Done"
+              {...{ [CARD_DROP_TARGET]: "true" }}
+            >
+              <Text tone={TEXT_TONE.MUTED}>A card carried over lands here</Text>
+            </Card>
+          </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-over-page" title="Over the page, as a menu stands">
+        <div className="catalog-column">
+          <Card
+            look={CARD_LOOK.RAISED}
+            corner={CARD_CORNER.MENU}
+            padding={CARD_PADDING.SNUG}
+            shadow={CARD_SHADOW.MENU}
+          >
+            <Text>Summary: 3 agents, 2 pull requests, 1 page.</Text>
+          </Card>
         </div>
       </CatalogSection>
       <CatalogSection id="card-narrow" title="Narrow column, long words">

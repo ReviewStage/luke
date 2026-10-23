@@ -1,5 +1,10 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  CARD_SHADOW,
+  Card,
   type ContextMenuProps,
   GAP,
   HoverCard,
@@ -689,9 +694,9 @@ function SummaryCard({
   /** Hands the card's element to the hold that draws it through its exit. */
   ref: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
-  const card = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLElement>(null);
   const drawn = useCallback(
-    (node: HTMLDivElement | null) => {
+    (node: HTMLElement | null) => {
       card.current = node;
       hold(node);
     },
@@ -739,7 +744,11 @@ function SummaryCard({
     };
   }, [collapse, onDismiss, leaving]);
   return (
-    <div
+    <Card
+      look={CARD_LOOK.RAISED}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      shadow={CARD_SHADOW.MENU}
       ref={drawn}
       id={id}
       className="task-summary-card"
@@ -763,7 +772,7 @@ function SummaryCard({
           <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
         </div>
       </ScrollArea>
-    </div>
+    </Card>
   );
 }
 

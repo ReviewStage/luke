@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, describe, test } from "vitest";
 import { EXAMPLES } from "./examples.js";
 
 /**
@@ -85,9 +85,14 @@ const NO_PRESS = [
 const roots: Root[] = [];
 
 afterEach(() => {
+  clear();
+});
+
+/** Clears the page of every example drawn on it. */
+function clear(): void {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
-});
+}
 
 /** Draws `Render` into a fresh container on the page. */
 function draw(Render: () => React.JSX.Element): HTMLElement {
@@ -190,20 +195,27 @@ function firstOfEachKind(page: HTMLElement): number[] {
   return [...kinds.values()];
 }
 
-test("every kind of shared pressable the catalog draws pulses when pressed", () => {
-  const silent: string[] = [];
-  let counted = 0;
-  for (const example of EXAMPLES) {
+// Note that each example is a test of its own, so the guard's time grows by
+// one example's per example added rather than against one test's timeout.
+describe.each(EXAMPLES)("$id", (example) => {
+  test("every kind of shared pressable it draws pulses when pressed", () => {
+    const silent: string[] = [];
     for (const at of firstOfEachKind(draw(example.Render))) {
       // Note that each is pressed on a page drawn afresh, so no press before it has opened, closed, or moved it.
-      for (const root of roots.splice(0)) act(() => root.unmount());
-      document.body.replaceChildren();
+      clear();
       const element = pressables(draw(example.Render))[at];
       if (element === undefined) continue;
-      counted += 1;
-      if (!answers(element)) silent.push(`${example.id}: ${named(element)}`);
+      if (!answers(element)) silent.push(named(element));
     }
+    assert.deepEqual(silent, [], "these pressables play no pulse when pressed");
+  });
+});
+
+test("the catalog draws enough kinds of shared pressable to press", () => {
+  let counted = 0;
+  for (const example of EXAMPLES) {
+    counted += firstOfEachKind(draw(example.Render)).length;
+    clear();
   }
   assert.ok(counted > 50, `only ${counted} pressables were pressed`);
-  assert.deepEqual(silent, [], "these pressables play no pulse when pressed");
 });

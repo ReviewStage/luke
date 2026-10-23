@@ -19,9 +19,17 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CARD_CORNER,
+  CARD_HOVER,
+  CARD_LOOK,
+  CARD_PADDING,
   CARD_PRESS_CORNER,
   CARD_PRESS_REACH,
+  CARD_SHADOW,
+  Card,
+  type CardLook,
   CardPress,
+  type CardShadow,
   CommentsIcon,
   ConfirmDialog,
   DIALOG_TONE,
@@ -169,6 +177,15 @@ const MENTION_REF = "[data-mention-ref]";
 
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
+
+/** Where a thread's card stands: in the plan's margin, floating under a folded line's count, or in the Comments tab. */
+const THREAD_PLACE = {
+  MARGIN: "margin",
+  FLOAT: "float",
+  LIST: "list",
+} as const;
+
+type ThreadPlace = (typeof THREAD_PLACE)[keyof typeof THREAD_PLACE];
 
 /** The room a finger's bubble needs under the words, its gap past the handle and its own height, short of which it stands over them after all. */
 const BUBBLE_ROOM_TOUCH = FINGER_SELECTION_GAP + 48;
@@ -880,6 +897,20 @@ function ThreadQuote({
 }
 
 /**
+ * How a thread's card stands where it is: open over the page, raised on a
+ * menu's shadow, as at rest under a count, where it floats with the open
+ * one; at rest in the margin, its edge alone on the column's ground; and in
+ * the Comments tab, where every thread stands whole on the panel's ground,
+ * its edge alone.
+ */
+function threadFrame(place: ThreadPlace, open: boolean): { look: CardLook; shadow: CardShadow } {
+  const raised = place === THREAD_PLACE.FLOAT || (open && place === THREAD_PLACE.MARGIN);
+  return raised
+    ? { look: CARD_LOOK.RAISED, shadow: CARD_SHADOW.MENU }
+    : { look: CARD_LOOK.OUTLINE, shadow: CARD_SHADOW.NONE };
+}
+
+/**
  * One thread as the margin, a count's card, or the Comments tab draws it:
  * open, every entry and the field that answers it; at rest, its first
  * comment and the faces and count of its replies, which opens it.
@@ -887,6 +918,7 @@ function ThreadQuote({
 function ThreadCard({
   thread,
   open,
+  place,
   doors,
   onOpen,
   onClose,
@@ -896,6 +928,7 @@ function ThreadCard({
 }: {
   thread: PlanCommentThread;
   open: boolean;
+  place: ThreadPlace;
   doors: ThreadDoors;
   /** Opens the card at rest; none where it always stands open, as in the Comments tab. */
   onOpen?: (() => void) | undefined;
@@ -926,7 +959,12 @@ function ThreadCard({
       ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
     ];
     return (
-      <div
+      <Card
+        {...threadFrame(place, false)}
+        corner={CARD_CORNER.MENU}
+        padding={CARD_PADDING.NONE}
+        hover={CARD_HOVER.WASH}
+        lit={pointed}
         className="comment-card"
         data-open="false"
         data-pointed={pointed}
@@ -971,11 +1009,18 @@ function ThreadCard({
             </span>
           )}
         </CardPress>
-      </div>
+      </Card>
     );
   }
   return (
-    <div className="comment-card" data-open="true" data-thread={thread.id}>
+    <Card
+      {...threadFrame(place, true)}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      className="comment-card"
+      data-open="true"
+      data-thread={thread.id}
+    >
       {first === undefined ? head : null}
       {thread.entries.map((entry) =>
         entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
@@ -1018,7 +1063,7 @@ function ThreadCard({
           }}
         />
       ) : null}
-    </div>
+    </Card>
   );
 }
 
@@ -1040,7 +1085,14 @@ function PendingCard({
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   return (
-    <div className="comment-card" data-open="true" data-thread={PENDING_THREAD}>
+    <Card
+      {...threadFrame(THREAD_PLACE.MARGIN, true)}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      className="comment-card"
+      data-open="true"
+      data-thread={PENDING_THREAD}
+    >
       {note === undefined ? null : (
         <div className="comment-note" role="alert">
           {note}
@@ -1073,7 +1125,7 @@ function PendingCard({
           return true;
         }}
       />
-    </div>
+    </Card>
   );
 }
 
@@ -1649,6 +1701,7 @@ export function PlanCommentLayer({
               <ThreadCard
                 thread={thread}
                 open={active === thread.id}
+                place={THREAD_PLACE.MARGIN}
                 doors={doors}
                 pointed={pointed === thread.id}
                 onOpen={() => {
@@ -1717,6 +1770,7 @@ export function PlanCommentLayer({
               key={thread.id}
               thread={thread}
               open={thread.id === active}
+              place={THREAD_PLACE.FLOAT}
               doors={doors}
               onOpen={() => onActive(thread.id)}
               onClose={close}
@@ -1929,6 +1983,7 @@ export function PlanCommentsTab({
                   <ThreadCard
                     thread={thread}
                     open
+                    place={THREAD_PLACE.LIST}
                     quote
                     doors={full}
                     onShowWords={

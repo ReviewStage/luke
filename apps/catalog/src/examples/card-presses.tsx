@@ -1,7 +1,13 @@
 import {
   ALIGN,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_HOVER,
+  CARD_LOOK,
+  CARD_PADDING,
   CARD_PRESS_CORNER,
   CARD_PRESS_REACH,
+  CARD_SHADOW,
   Card,
   CardPress,
   type CardPressEvent,
@@ -23,7 +29,10 @@ import { CatalogSection } from "../section";
 /**
  * card-presses.tsx -- a whole card as one press: over the card, its own ⋯
  * standing above the press; through the card, its link its own and its
- * words the card's; and unavailable. The line under them says which press
+ * words the card's; and unavailable. Then how a pressed card answers the
+ * pointer resting on it: a thread at rest washed, on the column's ground and
+ * raised over the page; and a board's cards lifting off their well, one held
+ * lifted as while its menu stands. The line under them says which press
  * landed, and with which modifier.
  */
 
@@ -31,6 +40,9 @@ import { CatalogSection } from "../section";
 function said(card: string, event: CardPressEvent): string {
   return event.metaKey || event.ctrlKey ? `${card}, with ⌘ or Ctrl` : card;
 }
+
+/** A board's cards, the second held lifted as while its menu is open. */
+const LIFTED = ["Draft the launch post", "Its menu open"] as const;
 
 /** A press the catalog has nowhere to take. */
 function stay(): void {}
@@ -83,6 +95,72 @@ function CardPresses(): React.JSX.Element {
             <CardPress disabled onPress={() => setPressed("The deleting card")}>
               <Text tone={TEXT_TONE.MUTED}>Deleting…</Text>
             </CardPress>
+          </Card>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-press-wash" title="Washed under the pointer">
+        <div className="catalog-column">
+          <Stack gap={GAP.CONTROL}>
+            <Card
+              look={CARD_LOOK.OUTLINE}
+              corner={CARD_CORNER.MENU}
+              padding={CARD_PADDING.SNUG}
+              hover={CARD_HOVER.WASH}
+            >
+              <Text>Ada: can we keep the old route for a week?</Text>
+              <CardPress
+                reach={CARD_PRESS_REACH.CARD}
+                corner={CARD_PRESS_CORNER.MENU}
+                onPress={(event) => setPressed(said("The thread at rest", event))}
+              >
+                <Text tone={TEXT_TONE.MUTED}>1 reply</Text>
+              </CardPress>
+            </Card>
+            <Card
+              look={CARD_LOOK.RAISED}
+              corner={CARD_CORNER.MENU}
+              padding={CARD_PADDING.SNUG}
+              shadow={CARD_SHADOW.MENU}
+              hover={CARD_HOVER.WASH}
+              lit
+            >
+              <Text>Grace: the copy reads well now.</Text>
+              <CardPress
+                reach={CARD_PRESS_REACH.CARD}
+                corner={CARD_PRESS_CORNER.MENU}
+                onPress={(event) => setPressed(said("The raised thread", event))}
+              >
+                <Text tone={TEXT_TONE.MUTED}>Its words pointed at elsewhere</Text>
+              </CardPress>
+            </Card>
+          </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-press-lift" title="Lifting off a well">
+        <div className="catalog-column">
+          <Card
+            as={CARD_ELEMENT.SECTION}
+            look={CARD_LOOK.WELL}
+            corner={CARD_CORNER.CONTROL}
+            padding={CARD_PADDING.SNUG}
+            aria-label="In progress"
+          >
+            <Stack gap={GAP.CONTROL}>
+              {LIFTED.map((name) => (
+                <Card
+                  key={name}
+                  corner={CARD_CORNER.CONTROL}
+                  padding={CARD_PADDING.SNUG}
+                  shadow={CARD_SHADOW.SOFT}
+                  hover={CARD_HOVER.LIFT}
+                  lit={name === LIFTED[1]}
+                >
+                  <CardPress onPress={(event) => setPressed(said(name, event))}>
+                    <Text variant={TEXT_VARIANT.LABEL}>{name}</Text>
+                  </CardPress>
+                </Card>
+              ))}
+            </Stack>
           </Card>
         </div>
       </CatalogSection>

@@ -1048,8 +1048,9 @@ ul.actor-stack {
 
 /* The copy itself, lifted: the open row's fill made opaque on the ground it
    was dragged from, ringed so it reads over either pane, and a shadow
-   beneath. The sidebar's rows, its sections, and the board's cards share it. */
-[data-lifted="true"] {
+   beneath. The sidebar's rows and its sections share it; a board's card is
+   a card (`Card`), whose copy keeps the card's own frame. */
+[data-lifted="true"]:not(.luke-card) {
   border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
@@ -1161,8 +1162,9 @@ ul.actor-stack {
 }
 
 /* The section, or Tasks, a row is carried over is washed while it is, and a
-   line stands where the row would land among a section's tasks. */
-[data-row-drop][data-drop-target="true"] {
+   line stands where the row would land among a section's tasks. A board's
+   column is a card (`Card`), which rings and washes itself. */
+[data-row-drop][data-drop-target="true"]:not(.luke-card) {
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
 }
@@ -4883,7 +4885,7 @@ ul.actor-stack {
 /* Expanded where it cannot be pinned, the whole summary stands in a card
    over the rail's own footprint, its top and right edges the rail's, or the
    column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn
-   as a menu is, and its chevron, shown while the pointer is on it, stands
+   as a menu is (`Card`, raised on a menu's corner and shadow), and its chevron, shown while the pointer is on it, stands
    on the very spot of the rail's: as far in from the card's outer edges as
    the rail's padding, less the card's border. Its first line is that
    chevron's height, so the heading on it stands level with it, as the
@@ -4899,10 +4901,6 @@ ul.actor-stack {
   width: var(--summary-width);
   max-height: 100%;
   flex-direction: column;
-  border: var(--card-edge) solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 16px 40px var(--luke-color-shadow);
   outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
   animation:
@@ -6170,9 +6168,9 @@ ul.actor-stack {
   }
 }
 
-/* The issue picked, over the words inside the card: one outlined line,
-   its mark, its key, its title cut short, a Linear issue's state, and the
-   × at its end. */
+/* The issue picked, over the words inside the card: one outlined line
+   (`Card`), its mark, its key, its title cut short, a Linear issue's state,
+   and the × at its end. */
 .new-task-issue {
   display: flex;
   min-width: 0;
@@ -6180,8 +6178,6 @@ ul.actor-stack {
   gap: var(--luke-space-6);
   margin: var(--luke-space-8) var(--luke-space-8) 0;
   padding: 0 0 0 var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -6362,6 +6358,8 @@ ul.actor-stack {
   line-height: normal;
 }
 
+/* A column: a well (`Card`), which rings and washes itself while a card is
+   carried over it (use-row-drag.ts), its head over its cards. */
 .tasks-board-column {
   display: flex;
   width: 320px; /* off-scale: a card's width, as Linear's board stands it */
@@ -6369,21 +6367,6 @@ ul.actor-stack {
   flex: 0 0 auto;
   flex-direction: column;
   padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-6);
-  border: 1px solid transparent;
-  border-radius: var(--luke-radius-10);
-  background: var(--luke-color-well);
-  transition:
-    background-color var(--luke-duration-hover) ease,
-    border-color var(--luke-duration-hover) ease;
-}
-
-/* The column a card is carried over (use-row-drag.ts) is ringed and washed,
-   so it reads as the one the card will land in. */
-.tasks-board-column[data-drop-target="true"] {
-  border-color: var(--luke-color-focus-ring);
-  background:
-    linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover)),
-    var(--luke-color-well);
 }
 
 /* A column's head: its status's mark, its name, and how many it holds, on
@@ -6423,32 +6406,15 @@ ul.actor-stack {
   list-style: none;
 }
 
-/* A card: raised off its column's well on the page's own surface, inside a
-   hairline, with a soft shadow beneath that deepens under the pointer. Its
-   press covers the whole card, its foot's chips standing over it, so the
-   card opens wherever it is pressed but on a chip. Its transform is a
-   drag's (use-row-drag.ts), on the motion tokens as a sidebar row's is. */
+/* A card: raised off its column's well, lifting under the pointer and while
+   its menu is open (`Card`). Its press covers the whole card, its foot's
+   chips standing over it, so the card opens wherever it is pressed but on a
+   chip. Its transform is a drag's (use-row-drag.ts), timed by the card. */
 .tasks-board-card {
-  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-6);
   padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-6) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-surface);
-  box-shadow: 0 1px 2px var(--luke-color-shadow-soft);
-  transition:
-    transform var(--luke-duration-fast) var(--luke-spring-fast),
-    border-color var(--luke-duration-hover) ease,
-    box-shadow var(--luke-duration-hover) ease,
-    opacity var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-.tasks-board-card:hover,
-.tasks-board-card[data-menu-open="true"] {
-  border-color: var(--luke-color-border-strong);
-  box-shadow: 0 2px 6px var(--luke-color-shadow-soft);
 }
 
 /* The card holding the keyboard, or whose menu is open, stands over its
@@ -6467,10 +6433,6 @@ ul.actor-stack {
 
 .tasks-board-cards[data-dragging="true"] {
   cursor: grabbing;
-}
-
-.tasks-board-card[data-lifted="true"] {
-  border-radius: var(--luke-radius-8);
 }
 
 /* What a card's press shows, or its field while it is renamed: its first

@@ -54,6 +54,14 @@
     background: none;
   }
 
+  /* Note that a well's edge is there but unseen, so ringed as a drop target
+     the card keeps its size, the ring fading in as a hover does. */
+  .luke-card[data-look="well"] {
+    border-color: transparent;
+    background: var(--luke-color-well);
+    transition: border-color var(--luke-duration-hover) ease;
+  }
+
   .luke-card[data-dashed="true"] {
     border-style: dashed;
   }
@@ -67,6 +75,50 @@
        hide their rows; what it holds draws no ground of its own to square
        its corners. */
     overflow: visible;
+  }
+
+  /* A menu's corner, raised or not, as a card standing over the page as a
+     menu does wears it. */
+  .luke-card[data-corner="menu"] {
+    border-radius: var(--luke-menu-radius);
+  }
+
+  .luke-card[data-shadow="soft"] {
+    box-shadow: 0 1px 2px var(--luke-color-shadow-soft);
+  }
+
+  .luke-card[data-shadow="menu"] {
+    box-shadow: var(--luke-menu-shadow);
+  }
+
+  /* Note that the wash is laid over the card's own ground as an image, so a
+     card on an opaque ground stays opaque under it and one with none takes
+     the wash alone. */
+  .luke-card[data-hover="wash"]:is(:hover, [data-lit="true"]),
+  .luke-card[data-drop-target="true"] {
+    background-image: linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover));
+  }
+
+  /* Note that a card that lifts is one that moves among others, as a board's
+     cards slide aside under a drag and fade as one is carried, so its slide
+     and its fade ride the motion tokens beside its lift. */
+  .luke-card[data-hover="lift"] {
+    transition:
+      transform var(--luke-duration-fast) var(--luke-spring-fast),
+      border-color var(--luke-duration-hover) ease,
+      box-shadow var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-quick) var(--luke-motion-exit);
+  }
+
+  .luke-card[data-hover="lift"]:is(:hover, [data-lit="true"]) {
+    border-color: var(--luke-color-border-strong);
+    box-shadow: 0 2px 6px var(--luke-color-shadow-soft);
+  }
+
+  /* The card a dragged row is carried over is ringed as well as washed, so it
+     reads as the one the row will land in. */
+  .luke-card[data-drop-target="true"] {
+    border-color: var(--luke-color-focus-ring);
   }
 
   .luke-card-head {
