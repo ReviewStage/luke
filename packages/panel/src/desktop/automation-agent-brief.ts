@@ -15,7 +15,7 @@ const BRIEF = `# Create an automation
 
 A member asked on the Automations page for an automation that does what their request below says. Make it for them:
 
-1. Work out its trigger (a schedule, as a cron and a timezone, or a GitHub event; there is no webhook), the repositories its runs work in, its prompt, its model and effort, and the connections its runs need.
+1. Work out its trigger, as \`create_automation\` describes the triggers it takes (a webhook is made only on the Automations page), the repositories its runs work in, its prompt, its model and effort, and the connections its runs need.
 2. Decide what you can yourself. Ask the member in their inbox only for what you cannot, such as a choice their words leave open.
 3. Read the workspace's automations with \`list_automations\`, so you make none that one already does, and check the automations tools can do what is needed. Where they cannot, say so rather than make something else.
 4. Create it with \`create_automation\`.

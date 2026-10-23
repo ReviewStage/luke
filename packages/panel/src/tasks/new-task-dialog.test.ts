@@ -1535,3 +1535,22 @@ test("an automation's words are a draft of their own, so New task opens without 
   const task = await mount();
   assert.equal(task.field().textContent, "", "New task's box is empty");
 });
+
+test("for an automation's agent files alone hold Start, since the words are the request", async () => {
+  const card = await mount(undefined, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
+  const picker =
+    card.dialog()?.querySelector<HTMLInputElement>('input[type="file"]') ??
+    assert.fail("the + has its file picker");
+  const file = new File(["# Notes"], "notes.md", { type: "text/markdown" });
+  Object.defineProperty(picker, "files", { configurable: true, value: [file] });
+  act(() => {
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  for (let read = 0; read < 4; read += 1) await settle();
+  assert.ok(card.dialog()?.textContent?.includes("notes.md"), "the file is attached");
+  assert.equal(card.startButton().disabled, true, "Start is held");
+
+  card.type("Post the notes every Friday.");
+  await settle();
+  assert.equal(card.startButton().disabled, false, "words let it start");
+});

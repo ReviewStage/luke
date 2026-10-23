@@ -600,7 +600,8 @@ export function NewTaskComposer({
         composer={composer}
         wording={PURPOSE_WORDS[purpose]}
         sendsEmpty={onIssue}
-        sendable={!blocked}
+        // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
+        sendable={!blocked && (!forAutomation || said !== "")}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         readModels={newTask.readModels}
