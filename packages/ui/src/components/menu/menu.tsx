@@ -780,6 +780,17 @@ function Submenu({
     focusInto.current = false;
     itemsOf(popup)[0]?.focus();
   }, [open, popup]);
+  // Note that a press or Right on an item whose submenu the pointer already
+  // opened takes the keyboard in at once, because the submenu stands drawn
+  // and nothing renders again to take it there.
+  const enter = () => {
+    if (open && popup !== null) {
+      itemsOf(popup)[0]?.focus();
+      return;
+    }
+    focusInto.current = true;
+    onOpen(true);
+  };
   const keyDown = (event: BaseUIEvent<React.KeyboardEvent<HTMLDivElement>>) => {
     if (event.key === "Escape" || event.key === "ArrowLeft") {
       event.preventDefault();
@@ -805,16 +816,17 @@ function Submenu({
         onPointerEnter={(event) => {
           if (event.pointerType !== "touch") onOpen(false);
         }}
-        onClick={pulseOnPress(() => {
-          focusInto.current = true;
-          onOpen(true);
+        onClick={pulseOnPress((event: BaseUIEvent<React.MouseEvent<HTMLElement>>) => {
+          // Note that Base UI's own press would take focus back to the item after it went into the submenu.
+          event.preventBaseUIHandler();
+          enter();
         }, PRESS_PULSE.QUIET)}
-        onKeyDown={(event) => {
+        onKeyDown={(event: BaseUIEvent<React.KeyboardEvent<HTMLElement>>) => {
           if (event.key !== "ArrowRight") return;
           event.preventDefault();
           event.stopPropagation();
-          focusInto.current = true;
-          onOpen(true);
+          event.preventBaseUIHandler();
+          enter();
         }}
       >
         <MenuGlyph>{entry.icon}</MenuGlyph>

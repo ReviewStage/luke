@@ -442,6 +442,22 @@ test("resting on one submenu's item after another's opens the second's submenu, 
   expect(openMenu("Order by")).not.toBeNull();
 });
 
+test("a press or Right on an item whose submenu the pointer opened takes the keyboard into it", () => {
+  mount(createElement(Harness, { groups: viewGroups([]) }));
+  press(button("More"));
+  pointerMove(null, button("Group by"));
+  expect(openMenu("Group by")).not.toBeNull();
+  press(button("Group by"));
+  expect(focused()).toBe("Repository");
+
+  key("ArrowLeft");
+  pointerMove(null, button("Order by"));
+  expect(openMenu("Order by")).not.toBeNull();
+  act(() => button("Order by").focus());
+  key("ArrowRight");
+  expect(focused()).toBe("Last updated");
+});
+
 test("a finger's arrival on a submenu's item opens nothing, so iOS spends no tap on it, and the tap opens it with the keyboard in it", () => {
   mount(createElement(Harness, { groups: viewGroups([]) }));
   press(button("More"));
