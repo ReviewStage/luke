@@ -51,7 +51,7 @@ export const agentInboxActsContract = {
     .input(exactInput(codingAgentInboxScopeSchema))
     .output(eventIterator(type<CodingAgentInboxChanged["inbox"]>())),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actProcedure(
-    "Could not answer the inbox item on this system.",
+    "Could not acknowledge the inbox item on this system.",
   )
     .input(exactInput(codingAgentInboxAnswerParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxAnsweredViewSchema)),
