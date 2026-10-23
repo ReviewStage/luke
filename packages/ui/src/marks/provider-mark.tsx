@@ -1,4 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { LINK_SITE } from "@luke/features/link-site";
 import React, { useId } from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
@@ -22,11 +23,12 @@ void React;
  */
 
 /**
- * Every provider with a mark: the integrations and the two sign-in providers,
- * GitHub being both. An app's own account-provider set names the same
- * strings, so the compiler holds it to this one at the call site.
+ * Every provider with a mark: the integrations, the two sign-in providers,
+ * GitHub being both, and the well-known sites a link is drawn as a chip of.
+ * An app's own account-provider set names the same strings, so the compiler
+ * holds it to this one at the call site.
  */
-export const MARK_PROVIDER = { ...INTEGRATION_PROVIDER, GOOGLE: "google" } as const;
+export const MARK_PROVIDER = { ...INTEGRATION_PROVIDER, ...LINK_SITE, GOOGLE: "google" } as const;
 
 export type MarkProvider = (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER];
 
@@ -82,6 +84,39 @@ function GoogleMark({ className }: MarkProps): React.JSX.Element {
       <path
         fill="#EA4335"
         d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Google Maps's pin in its five official colours, verbatim from the product
+ * logo Google serves for Maps
+ * (https://www.gstatic.com/images/branding/productlogos/maps/v7/192px.svg),
+ * in a box cropped to the pin, on either ground.
+ */
+function GoogleMapsMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <path
+        fill="#4285F4"
+        d="M113.89,84.4l25.27-19.25l11.22-24.21c-7.47-14.26-20.37-25.24-35.88-30.11L91.18,26.58L77.95,54.29l0,0 c4.3-5.21,10.75-8.49,18-8.49c13.02,0,23.43,10.53,23.43,23.43C119.37,75,117.29,80.32,113.89,84.4z"
+      />
+      <path
+        fill="#1A73E8"
+        d="M95.94,8c-18.9,0-35.65,8.49-46.97,21.96l10.78,17.66l18.2,6.68c0.11-0.11,36.56-43.46,36.56-43.46 C108.62,9.02,102.39,8,95.94,8z"
+      />
+      <path
+        fill="#FBBC04"
+        d="M113.89,84.4c-4.3,5.09-10.7,8.38-17.95,8.38c-13.02,0-23.43-10.53-23.43-23.43 c0-5.55,2.26-11.09,5.43-15.05L51.09,73.5L40.71,98.66c6.45,14.03,17.09,25.35,28.07,39.5l28.78-22.9L113.89,84.4z"
+      />
+      <path
+        fill="#34A853"
+        d="M157.4,69.35c0-10.3-2.6-19.92-7.02-28.41l-81.61,97.22c3.62,4.64,7.13,9.62,10.64,15.05 C91.87,172.46,88.13,184,96.06,184c8.04,0,4.53-11.54,16.98-30.79C133.52,121.18,157.4,106.58,157.4,69.35z"
+      />
+      <path
+        fill="#EA4335"
+        d="M77.95,54.29L48.97,29.96C40.03,40.6,34.6,54.41,34.6,69.35c0,11.54,2.26,20.94,6.11,29.31L77.95,54.29z"
       />
     </svg>
   );
@@ -567,6 +602,8 @@ export function ProviderMark({
   switch (provider) {
     case MARK_PROVIDER.GOOGLE:
       return <GoogleMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_MAPS:
+      return <GoogleMapsMark className={className} />;
     case MARK_PROVIDER.EXECUTOR:
       return <ExecutorMark className={className} />;
     case MARK_PROVIDER.GITHUB:

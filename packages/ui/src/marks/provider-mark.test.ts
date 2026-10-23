@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { LINK_SITE_LIST } from "@luke/features/link-site";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -98,7 +99,11 @@ function markBounds(svg: Element): Bounds | undefined {
   return bounds;
 }
 
-const MARKED: readonly MarkProvider[] = [...INTEGRATION_PROVIDER_LIST, MARK_PROVIDER.GOOGLE];
+const MARKED: readonly MarkProvider[] = [
+  ...INTEGRATION_PROVIDER_LIST,
+  ...LINK_SITE_LIST,
+  MARK_PROVIDER.GOOGLE,
+];
 
 test("every provider's mark lies inside its own box and fills it", () => {
   for (const provider of MARKED) {
