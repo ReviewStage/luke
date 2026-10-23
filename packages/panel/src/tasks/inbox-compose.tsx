@@ -100,9 +100,6 @@ export interface InboxComposeProps {
   readonly onDiscard: () => void;
 }
 
-/** The heading To lists the agents on no task under. */
-const NO_TASK = "No task";
-
 /** An agent as its tab, ⌘K, and the column's "+" draw it: its harness's mark wearing where it stands, and its name; its tile where the list read nothing of it. */
 function agentLook(agent: MentionableAgent): {
   readonly icon: React.ReactNode;
@@ -114,22 +111,12 @@ function agentLook(agent: MentionableAgent): {
 }
 
 /**
- * To's rows: each agent in its tab's look, its title beside its name where
- * the two differ, as ⌘K tells agents apart, under its task's name, each
- * task's agents standing together, so a search for a task's name finds its
- * agents too, and those on no task last; each hangs the agent's own
- * card, as ⌘K's rows do.
+ * To's rows: the workspace's agents as one list, newest first as the
+ * workspace reads them, each in its tab's look and hanging its own card,
+ * as ⌘K's rows do, and found by its task's name too.
  */
 function toRows(agents: readonly MentionableAgent[]): readonly MenuRow[] {
-  const sectionOf = (agent: MentionableAgent) => agent.task?.name ?? NO_TASK;
-  const ordered = [...agents].sort((first, second) => {
-    const one = first.task === undefined ? 1 : 0;
-    const other = second.task === undefined ? 1 : 0;
-    return one - other || sectionOf(first).localeCompare(sectionOf(second));
-  });
-  return ordered.map((each) => {
-    const title = each.summary?.title ?? undefined;
-    const titled = title !== undefined && title !== each.name;
+  return agents.map((each) => {
     const { actor } = each;
     const card =
       actor.kind === ACTOR_KIND.AGENT ? (
@@ -138,9 +125,7 @@ function toRows(agents: readonly MentionableAgent[]): readonly MenuRow[] {
     return {
       id: each.id,
       ...agentLook(each),
-      ...(titled ? { detail: title } : undefined),
-      section: sectionOf(each),
-      terms: [each.name, ...(titled ? [title] : [])],
+      terms: [each.name, ...(each.task?.name === undefined ? [] : [each.task.name])],
       card,
     };
   });
@@ -275,13 +260,7 @@ export function InboxCompose({
               align={PICKER_ALIGN.START}
               width={CHIP_WIDTH.AUTO}
               value={agent?.id}
-              valueLabel={
-                agent === undefined
-                  ? NO_AGENT
-                  : agent.task?.name === undefined
-                    ? agent.name
-                    : `${agent.name} · ${agent.task.name}`
-              }
+              valueLabel={agent === undefined ? NO_AGENT : agent.name}
               valueIcon={agent === undefined ? undefined : agentLook(agent).icon}
               rows={toRows(rows)}
               placeholder="Search agents"

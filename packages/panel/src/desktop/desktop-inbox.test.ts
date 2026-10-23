@@ -8406,7 +8406,7 @@ test("New thread in the Inbox's head opens a draft in the pane, To naming the ag
   assert.equal(pane.getAttribute("aria-label"), "New thread");
   assert.equal(
     pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    `To: Alerts · ${BILLING.name}`,
+    "To: Alerts",
     "To names the agent of the item that was read",
   );
   const send = () =>
@@ -8488,7 +8488,7 @@ function toMenuRows(): string[] {
   });
 }
 
-test("To lists the workspace's agents as ⌘K does, each in its tab's look by its title under its task's name, and those on no task last", async () => {
+test("To lists the workspace's agents as one list, newest first, each by its own name alone in its tab's look", async () => {
   listedWorkspace = ACME;
   inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
   const MAYA: CodingAgentSummary = {
@@ -8520,12 +8520,9 @@ test("To lists the workspace's agents as ⌘K does, each in its tab's look by it
   await settle();
 
   assert.deepEqual(toMenuRows(), [
-    `# ${BILLING.name}`,
-    "Alerts",
-    `# ${INVITES.name}`,
-    "Move the frontend into shared components",
-    "# No task",
     "Nightly dependency sweep",
+    "Move the frontend into shared components",
+    "Alerts",
   ]);
 });
 
