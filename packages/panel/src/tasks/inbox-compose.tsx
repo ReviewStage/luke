@@ -269,7 +269,7 @@ export function InboxCompose({
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
       {phone && onBack !== undefined ? (
         <PhoneHead
-          place="inbox-compose"
+          place="new-thread"
           start={
             <Tooltip label={BACK_TO_INBOX}>
               <IconButton icon={<BackIcon />} label={BACK_TO_INBOX} onClick={onBack} />

@@ -381,7 +381,7 @@ export function AutomationRunsScreen({
     >
       {/* A narrow room's screen alone, headed as a phone's page is (`phone-head.tsx`): the way back to the setup, Runs centred. */}
       <PhoneHead
-        place="automation-runs"
+        place="automation-runs-page"
         start={
           <Tooltip label={`Back to ${name}`}>
             <IconButton icon={<BackIcon />} label={`Back to ${name}`} onClick={onBack} />

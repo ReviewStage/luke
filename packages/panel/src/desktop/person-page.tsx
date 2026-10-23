@@ -502,6 +502,8 @@ function PersonColumn({
   if (unnamed && members !== undefined && former !== undefined) {
     return (
       <Fill as={FILL_ELEMENT.SECTION} className="automations-view" aria-label={PROFILE}>
+        {/* A phone's page still leads with its way back, the drawer and the places bar out of reach. */}
+        {away === undefined ? null : <PersonToolbar name={PROFILE} phoneBack={away} />}
         <NotFound thing={NOT_FOUND_THING.PERSON} />
       </Fill>
     );

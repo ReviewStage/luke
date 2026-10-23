@@ -590,6 +590,26 @@ test("a place chosen in a narrow Chat takes the focus to its way back, and Back 
   assert.equal(document.activeElement, forYou, "the row chosen");
 });
 
+test("a narrow Chat stepped to another place by its key hands the focus back to that place's row, not the row it was opened from", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const page = await mount(PHONE, createElement(ChatWindow, { opensOn: undefined }));
+  const forYou =
+    [...the(page, CHAT_COLUMNS.rail).querySelectorAll("button")].find((button) =>
+      button.textContent?.startsWith("For you"),
+    ) ?? assert.fail("For you's row stands");
+  act(() => {
+    forYou.focus();
+    forYou.click();
+  });
+  act(() => runAppCommand(APP_COMMAND.NEXT_CHAT_CHANNEL));
+  const shown = the(page, CHAT_COLUMNS.place).getAttribute("aria-label");
+  assert.notEqual(shown, "For you", "the key stepped to another place");
+
+  pressFocused(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
+  assert.notEqual(document.activeElement, forYou);
+  assert.ok(document.activeElement?.closest("[aria-current]"), "the row of the place shown");
+});
+
 test("a wide Settings turned narrow hands the focus from the hidden page list to the page's way back", async () => {
   const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
   pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");

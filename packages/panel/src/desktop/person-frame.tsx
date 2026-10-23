@@ -72,7 +72,7 @@ export function PersonToolbar({
     const back = `Back to ${phoneBack.label}`;
     return (
       <PhoneHead
-        place="person"
+        place="person-page"
         start={
           <Tooltip label={back}>
             <IconButton icon={<BackIcon />} label={back} onClick={phoneBack.onPress} />

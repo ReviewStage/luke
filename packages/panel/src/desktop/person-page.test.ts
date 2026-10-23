@@ -829,7 +829,7 @@ test("on a phone the page is headed by its way back's glyph, their name centred,
     onPress: () => left.push("away"),
   });
   await settle();
-  const head = page.querySelector<HTMLElement>(".person-head");
+  const head = page.querySelector<HTMLElement>(".person-page-head");
   assert.ok(head, "the phone's head stands");
   assert.deepEqual(
     [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
@@ -844,5 +844,21 @@ test("on a phone the page is headed by its way back's glyph, their name centred,
     "the filter is in the ⋯",
   );
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Back to Chat"]')?.click());
+  assert.deepEqual(left, ["away"]);
+});
+
+test("on a phone a page for someone nobody names still leads with its way back", async () => {
+  const left: string[] = [];
+  const { page } = mountWith({}, "user-stranger", undefined, MEMBERS.length, {
+    label: "Chat",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  assert.match(page.textContent ?? "", /Not found/u);
+  const back = page.querySelector<HTMLButtonElement>(
+    '.person-page-head [aria-label="Back to Chat"]',
+  );
+  assert.ok(back, "the way back stands");
+  act(() => back.click());
   assert.deepEqual(left, ["away"]);
 });

@@ -9067,7 +9067,7 @@ test("on a phone New thread is headed by its way back's glyph, its title centred
   );
   act(() => compose?.click());
   await settle();
-  const head = page.querySelector<HTMLElement>(".inbox-compose-head");
+  const head = page.querySelector<HTMLElement>(".new-thread-head");
   assert.ok(head, "the phone's head stands");
   assert.deepEqual(
     [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),

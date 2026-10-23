@@ -7,8 +7,9 @@
  * body with it. This hook hands it on: as the item comes to stand, to the
  * first control in its column, the way back to the list each screen leads
  * it with, or its heading; and as the list comes back, to the row chosen in
- * it, which the list marks `aria-current`, or, where the item was opened
- * from a menu, as a phone's ⋯ opens an automation's runs, to the control the
+ * it, which the list marks `aria-current`, the item shown now though a
+ * key stepped to it from another; or, where the list marks none and the
+ * item was opened from a menu, as a phone's ⋯ opens an automation's runs, to the control the
  * focus left in the list as it hid. Only a focus the swap took away
  * is handed on, never one standing somewhere still shown, such as a field
  * the step to the list was taken for. The same holds as a wide room turns
@@ -145,7 +146,7 @@ export function useNarrowFocus(
         ? left.current
         : undefined;
     const target = listed
-      ? (openerIn(list, item) ?? back ?? firstIn(list, CHOSEN) ?? firstIn(list, FOCUSABLE))
+      ? (openerIn(list, item) ?? firstIn(list, CHOSEN) ?? back ?? firstIn(list, FOCUSABLE))
       : (firstIn(item, FOCUSABLE) ?? headingOf(item));
     if (listed) left.current = undefined;
     target?.focus();
