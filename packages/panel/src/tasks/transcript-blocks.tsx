@@ -26,6 +26,7 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  GLYPH_ARRIVAL,
   GLYPH_INK,
   GlyphSlot,
   INLINE_REF_LOOK,
@@ -1288,7 +1289,9 @@ function TodoItem({
       <GlyphSlot
         key={todo.status}
         line
-        ink={todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS ? GLYPH_INK.TEXT : GLYPH_INK.MUTED}
+        ink={
+          todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS ? GLYPH_INK.TEXT : GLYPH_INK.MUTED
+        }
         label={look.label}
         arrival={arrived ? (done ? GLYPH_ARRIVAL.CHECK : GLYPH_ARRIVAL.STEP) : undefined}
       >
