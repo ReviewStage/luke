@@ -105,6 +105,20 @@ describe("a stylesheet", () => {
     expect(sheetRules(unanswered)).toEqual([STYLE_RULE.DURATION]);
   });
 
+  it("still refuses a transition beside a loop, and a finite animation that answers the loop token", () => {
+    const beside = `.spin {
+      animation: turn 900ms linear infinite;
+      animation-play-state: var(--luke-loop-motion);
+      transition: opacity 200ms ease;
+    }`;
+    expect(sheetRules(beside)).toEqual([STYLE_RULE.DURATION]);
+    const finite = `.pop {
+      animation: pop 300ms both;
+      animation-play-state: var(--luke-loop-motion);
+    }`;
+    expect(sheetRules(finite)).toEqual([STYLE_RULE.DURATION]);
+  });
+
   it("refuses a literal easing in a transition or animation, and passes a token", () => {
     const css = `.a { transition: opacity var(--luke-duration-hover) ease; }
       .b { transition-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
@@ -179,6 +193,11 @@ describe("a module's class strings", () => {
     expect(violations.map((violation) => [violation.rule, violation.line])).toEqual([
       [STYLE_RULE.ELLIPSIS, 4],
     ]);
+  });
+
+  it("reads a class list whose arbitrary value holds a character no class name has", () => {
+    const source = `const a = <nav className="flex rounded-md [&>*+*]:before:content-['·']" />;`;
+    expect(classRules(source)).toEqual([STYLE_RULE.RADIUS]);
   });
 
   it("is not read in a test", () => {

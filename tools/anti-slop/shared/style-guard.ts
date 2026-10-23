@@ -295,12 +295,22 @@ const MOTION_PROPERTY = /^(?:transition|animation)(?:-[a-z-]+)?$/u;
 /** The play-state tokens an endless loop answers (docs/DESIGN.md's vocabulary). */
 const PLAY_STATE_TOKEN = /var\(\s*--(?:luke-)?(?:loop|face)-motion\b/u;
 
-function answersPlayState(block: CssBlock): boolean {
-  return block.declarations.some(
-    (declaration) =>
-      (declaration.property === "animation-play-state" || declaration.property === "animation") &&
-      PLAY_STATE_TOKEN.test(declaration.value),
-  );
+const FACE_MOTION_TOKEN = /var\(\s*--luke-face-motion\b/u;
+
+/**
+ * Whether a declaration is an animation the play-state exception covers:
+ * one in a block whose animation answers a play-state token and either
+ * never ends or follows the face's own gestures (`--luke-face-motion`),
+ * whose finite companions docs/DESIGN.md lets keep a gesture's phase. A
+ * transition beside it is no part of the loop and is checked as any other.
+ */
+function isAnsweredLoop(declaration: CssDeclaration, block: CssBlock): boolean {
+  if (!declaration.property.startsWith("animation")) return false;
+  const animations = block.declarations.filter(({ property }) => property.startsWith("animation"));
+  const answering = animations.filter(({ value }) => PLAY_STATE_TOKEN.test(value));
+  if (answering.length === 0) return false;
+  const face = answering.some(({ value }) => FACE_MOTION_TOKEN.test(value));
+  return face || animations.some(({ value }) => /\binfinite\b/u.test(value));
 }
 
 function literalDuration(declaration: CssDeclaration): boolean {
@@ -344,7 +354,7 @@ function cssRuleOf(declaration: CssDeclaration, block: CssBlock): StyleRule | un
   if (property === "text-overflow" && /\bellipsis\b/u.test(bare)) return STYLE_RULE.ELLIPSIS;
   if (RADIUS_PROPERTY.test(property) && holdsLiteralNumber(value)) return STYLE_RULE.RADIUS;
   if (literalType(property, value)) return STYLE_RULE.TYPE;
-  const loop = answersPlayState(block);
+  const loop = isAnsweredLoop(declaration, block);
   if (!loop && literalDuration(declaration)) return STYLE_RULE.DURATION;
   if (!loop && literalEasing(declaration)) return STYLE_RULE.EASING;
   const mask = /^(?:-webkit-)?mask/u.test(property);
@@ -448,12 +458,18 @@ function classRuleOf(token: string, names: ThemeNames): StyleRule | undefined {
 
 /**
  * A string reads as a class list when every word could be a utility: no
- * capital, no sentence punctuation. Note that we ask this of the whole
+ * capital, no sentence punctuation, past what an arbitrary value's
+ * brackets hold (`content-['·']`). Note that we ask this of the whole
  * string, because a word like `truncate` in a sentence is no class.
  */
 function isClassList(text: string): boolean {
   const words = text.split(/\s+/u).filter((word) => word.length > 0);
-  return words.length > 0 && words.every((word) => /^[!a-z0-9@*&[\]():%#_.,/'=>~+-]+$/u.test(word));
+  return (
+    words.length > 0 &&
+    words.every((word) =>
+      /^[!a-z0-9@*&[\]():%#_.,/'=>~+-]+$/u.test(word.replace(/\[[^\]]*\]/gu, "[]")),
+    )
+  );
 }
 
 function classViolations(
