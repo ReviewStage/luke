@@ -40,6 +40,8 @@ const TEXT = [
   "```",
   "## Approach",
   "Admins can withdraw an invite from [the members page](https://example.com/members).",
+  "- Send the email\n- Record the invite",
+  "> Only admins invite.",
   "",
 ].join("\n\n");
 
@@ -159,6 +161,34 @@ function press(container: HTMLElement, name: string): HTMLButtonElement {
   return button ?? assert.fail(`the toolbar holds ${name}`);
 }
 
+/** The block named `block` chosen from the standing toolbar's Turn into. */
+function turnInto(container: HTMLElement, block: string): void {
+  const toolbar = toolbarIn(container) ?? assert.fail("the toolbar stands");
+  const opener =
+    [...toolbar.querySelectorAll("button")].find((each) =>
+      (each.getAttribute("aria-label") ?? each.textContent ?? "").startsWith("Turn into"),
+    ) ?? assert.fail("the toolbar holds Turn into");
+  act(() => opener.click());
+  const menu =
+    document.querySelector<HTMLElement>('[role="menu"]') ?? assert.fail("the menu opens");
+  const row =
+    [...menu.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
+      (each) => each.querySelector(".luke-menu-item-label")?.textContent === block,
+    ) ?? assert.fail(`the menu offers ${block}`);
+  act(() => row.click());
+}
+
+/** The element the words stand in, by its tag, and whether a list or a quote holds it. */
+function blockOf(element: HTMLElement, words: string): { tag: string; wrapped: boolean } {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+    const block = text.parentElement?.closest("p, h1, h2, h3, pre");
+    if (!(text.textContent ?? "").includes(words) || block == null) continue;
+    return { tag: block.tagName.toLowerCase(), wrapped: block.closest("li, blockquote") !== null };
+  }
+  return assert.fail(`${words} is drawn`);
+}
+
 /** ⌘K pressed in the editor, answering the press. */
 function commandK(element: HTMLElement): KeyboardEvent {
   const event = new KeyboardEvent("keydown", {
@@ -237,6 +267,22 @@ test("Turn into Heading 2 turns the line the words stand in into a heading", asy
   assert.ok(container.querySelector(".ProseMirror"), "the editor stays open");
 });
 
+test("Turn into Text takes a bullet or a quote out of its list or quote, and Turn into Heading 1 a bullet out of its list", async () => {
+  const { container, element, editor } = await opened();
+
+  select(editor, "Send the email");
+  turnInto(container, "Text");
+  assert.deepEqual(blockOf(element, "Send the email"), { tag: "p", wrapped: false });
+
+  select(editor, "Only admins invite");
+  turnInto(container, "Text");
+  assert.deepEqual(blockOf(element, "Only admins invite"), { tag: "p", wrapped: false });
+
+  select(editor, "Record the invite");
+  turnInto(container, "Heading 1");
+  assert.deepEqual(blockOf(element, "Record the invite"), { tag: "h1", wrapped: false });
+});
+
 test("⌘K over words selected opens the link field, whose Enter links them, a web page's scheme added", async () => {
   const { container, element, editor, palette } = await opened();
   select(editor, "a teammate");
@@ -292,6 +338,25 @@ test("⌘K with the caret in a link opens the field holding it, whose Remove unl
 
   assert.equal(element.querySelector("a"), null, "the words are linked no more");
   assert.ok(element.textContent?.includes("the members page"), "and kept");
+});
+
+test("Remove over a few words of a link unlinks those words alone, leaving the rest of the link", async () => {
+  const { container, element, editor } = await opened();
+  select(editor, "members");
+
+  commandK(element);
+  const remove =
+    container.querySelector<HTMLButtonElement>('button[aria-label="Remove link"]') ??
+    assert.fail("Remove stands beside a link");
+  act(() => remove.click());
+
+  assert.deepEqual(
+    [...element.querySelectorAll("a")].map((link) => [link.textContent, link.getAttribute("href")]),
+    [
+      ["the ", "https://example.com/members"],
+      [" page", "https://example.com/members"],
+    ],
+  );
 });
 
 test("Comment on the toolbar starts a thread on the words selected", async () => {

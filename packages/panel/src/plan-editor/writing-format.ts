@@ -141,9 +141,16 @@ function turnInto(editor: Editor, block: WritingBlock): void {
   TURNS[block](between ? chain : chain.clearNodes()).run();
 }
 
-/** The selected words, or the whole link the caret stands in, linked to `href`, or unlinked where it is none. */
+/**
+ * The selected words, or the whole link the caret stands in, linked to
+ * `href`, or unlinked where it is none. Note that only a caret is stretched
+ * over its link, because words selected inside a link are the words asked
+ * about, and the rest of the link keeps its address.
+ */
 function setLink(editor: Editor, href: string | undefined): void {
-  const chain = editor.chain().extendMarkRange(MARK_NAMES[WRITING_MARK.LINK]);
+  const chain = editor.state.selection.empty
+    ? editor.chain().extendMarkRange(MARK_NAMES[WRITING_MARK.LINK])
+    : editor.chain();
   (href === undefined ? chain.unsetLink() : chain.setLink({ href })).run();
 }
 
