@@ -373,8 +373,8 @@ test("a pasted command is previewed with the skills it asked for ticked, one wit
   );
 });
 
-test("only the found skills scroll: the box, its lines, and Install for stay on the card however many a repository holds", async () => {
-  missingNames = ["grill-me"];
+test("only the found skills and the names missing among them scroll: the box, its line, and Install for stay on the card however many either holds", async () => {
+  missingNames = Array.from({ length: 40 }, (_, at) => `absent-${at}`);
   await mountDialog();
   await paste(COMMAND);
 
@@ -386,8 +386,8 @@ test("only the found skills scroll: the box, its lines, and Install for stay on 
   const lines = [...document.querySelectorAll('[role="status"], .settings-state')];
   assert.equal(scrolled(lines.find((each) => each.textContent?.startsWith("Detected:"))), false);
   assert.equal(
-    scrolled(lines.find((each) => each.textContent === "Not in the repository: grill-me")),
-    false,
+    scrolled(lines.find((each) => each.textContent?.startsWith("Not in the repository: absent-0"))),
+    true,
   );
   assert.equal(scrolled(button("Everyone in Stage")), false);
   assert.equal(scrolled(button("Install")), false);

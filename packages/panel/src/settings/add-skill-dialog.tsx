@@ -72,9 +72,9 @@ import {
  * line then says how many skills the repository holds at which commit, and
  * each is listed with a box ticked where the paste asked for it, a skill
  * with problems never tickable; names the paste asked for that no folder
- * holds are said under the line. However many a repository holds, the box
- * and its line stay at the card's head and Install for and the answers at
- * its foot: only the found skills give way and scroll. For text, the name
+ * holds are listed first. However many a repository holds, the box and
+ * its line stay at the card's head and Install for and the answers at its
+ * foot: only the found skills give way and scroll. For text, the name
  * it declares, and a field for a name or a description where it has none.
  * Install for offers Just me,
  * and Everyone in the workspace to any member outside a personal
@@ -140,7 +140,13 @@ function CandidateRow({
   );
 }
 
-/** What a repository holds, each skill with its box, in the part of the card that gives way and scrolls. */
+/**
+ * What a repository holds, each skill with its box, and first the names
+ * asked for that it does not hold: the part of the card that gives way and
+ * scrolls. Note that the missing names scroll with the skills, because a
+ * paste may name any number of them and a line that long would push the
+ * card's foot off the window.
+ */
 function SourcePreview({
   preview,
   ticked,
@@ -152,9 +158,15 @@ function SourcePreview({
   disabled: boolean;
   onTick: (name: string, ticked: boolean) => void;
 }): React.JSX.Element {
+  const missing = missingLine(preview.missing);
   return (
     <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
       <Stack gap={GAP.CONTROL} inset={INSET.RING} aria-label="Skills found">
+        {missing === undefined ? null : (
+          <span className="settings-state" data-state={LINE_STATE[DETECTED_TONE.PROBLEM]}>
+            {missing}
+          </span>
+        )}
         {preview.skills.map((candidate) => (
           <CandidateRow
             key={candidate.path}
@@ -283,8 +295,6 @@ export function AddSkillDialog({
       : "failure" in view
         ? { text: failureLine(view), tone: DETECTED_TONE.PROBLEM }
         : previewLine(view);
-  const missing =
-    preview?.kind === SKILL_PASTE_KIND.SOURCE ? missingLine(preview.missing) : undefined;
   const request = installRequest({
     workspaceId: workspace.id,
     text,
@@ -341,7 +351,7 @@ export function AddSkillDialog({
         </>
       }
     >
-      {/* Note that the card's parts are its own flex items, so the box and its line stay at its head, the found skills give way and scroll, and Install for stays above the answers however many a repository holds. */}
+      {/* Note that the card's parts are its own flex items, so the box and its line stay at its head, the found skills and the names missing among them give way and scroll, and Install for stays above the answers however many a repository holds. */}
       <Stack gap={GAP.FIELD}>
         <FormField label={SKILLS_LINE.PASTE_LABEL} error={refusal}>
           {(field) => (
@@ -366,11 +376,6 @@ export function AddSkillDialog({
           )}
         </FormField>
         {line === undefined ? null : <DetectedText line={line} />}
-        {missing === undefined ? null : (
-          <span className="settings-state" data-state={LINE_STATE[DETECTED_TONE.PROBLEM]}>
-            {missing}
-          </span>
-        )}
       </Stack>
       {preview?.kind === SKILL_PASTE_KIND.SOURCE ? (
         <SourcePreview
