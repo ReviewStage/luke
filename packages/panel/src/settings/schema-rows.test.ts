@@ -117,6 +117,16 @@ test("Zoom is a pop-up naming the stored size, described by its row, and choosin
   assert.deepEqual(written, [["zoom", 125]]);
 });
 
+test("choosing the size a pop-up already names writes nothing", async () => {
+  const page = mount();
+
+  act(() => control(page, "Zoom: 100%").click());
+  act(() => optionNamed("100%").click());
+  await settle();
+
+  assert.deepEqual(written, []);
+});
+
 test("a switch the store refuses says why under its own row, stays as it stood, and can be pressed again", async () => {
   const page = mount();
   answer = { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED };

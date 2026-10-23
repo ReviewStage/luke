@@ -106,8 +106,10 @@ function SchemaChoiceRow({
       changed={changed}
       value={value}
       options={options}
-      // A token the set does not hold is not written, so a stale menu writes nothing.
-      parse={(token) => (options.some((option) => option.value === token) ? token : undefined)}
+      // A token the set does not hold, or the one already stored, is not written, so a stale menu or a repeat pick writes nothing.
+      parse={(token) =>
+        token !== value && options.some((option) => option.value === token) ? token : undefined
+      }
       placeholder={search}
       {...(isAppSettingId(id) ? { anchor: id } : undefined)}
       onChange={onChange}
