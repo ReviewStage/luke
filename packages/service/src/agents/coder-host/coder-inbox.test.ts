@@ -38,9 +38,10 @@ import {
   readInboxAttachment,
   taskInboxItems,
 } from "../../inbox/inbox-store.js";
+import { SANDBOX_RECORDING } from "../browser/sandbox-recorder.js";
 import { CODER } from "./bounds.js";
 import { INBOX_REFUSAL, postToInbox, readOwnInbox, withdrawAsk } from "./inbox.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
+import { BROWSER_RECORDING_REFUSAL, type InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * The coding agent's inbox tools, through their public functions against a
@@ -444,6 +445,21 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           item.blocks.every((block) => block.type !== INBOX_BLOCK.IMAGE),
           "an old desktop would draw a video as a broken picture",
         );
+      }),
+  );
+
+  it.effect(
+    "the cloud browser's own recording is refused, since it stays in the transcript, before its file is read",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const recorded = `/home/vercel-sandbox/${SANDBOX_RECORDING.VIDEO}`;
+        const sandbox = sandboxWith({ [recorded]: webmBytes(1280, 800) });
+
+        const refused = yield* post(agent, { ...QUEUE, body: `![The flow](${recorded})` }, sandbox);
+
+        assert.equal(refusalOf(refused), `${BROWSER_RECORDING_REFUSAL} ${recorded}`);
+        assert.deepEqual(yield* taskInboxItems(agent.userId, agent.taskId), []);
       }),
   );
 

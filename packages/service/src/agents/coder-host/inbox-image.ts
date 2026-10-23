@@ -6,6 +6,7 @@ import { mediaDimensions, sniffMediaType } from "@luke/features/media-signature"
 import { Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../../inbox/inbox-store.js";
+import { SANDBOX_RECORDING } from "../browser/sandbox-recorder.js";
 
 /**
  * inbox-image.ts -- a picture read from the agent's sandbox, an image block's or one `show_image` shows: the file at the path the agent named, bounded, and sniffed for what it is.
@@ -163,6 +164,19 @@ export function readSandboxImage<Type extends string>(
   }).pipe(Effect.catch(() => Effect.succeed(refused<Type>(terms.refusals.UNREADABLE, path))));
 }
 
+/**
+ * Why a post refuses a file of its cloud browser's recorder, followed by the
+ * path: `AGENTS.md` keeps a cloud browser's recording beside the transcript
+ * alone, where `stop_recording` keeps it.
+ */
+export const BROWSER_RECORDING_REFUSAL =
+  "Not posted: a recording of your cloud browser stays in your transcript, where stop_recording kept it; record the flow with Playwright's recordVideo to post it:";
+
+/** Whether a path resolved in the sandbox names a file of the cloud browser's recorder, under any home it stands in. */
+function inBrowserRecording(resolved: string): boolean {
+  return `${resolved}/`.includes(`/${SANDBOX_RECORDING.DIRECTORY}/`);
+}
+
 /** The most bytes a posted file of the type may be: a still's bound, or a recording's. */
 function postedBytesOf(type: ConversationMediaType): number {
   return isVideoType(type) ? INBOX_BOUNDS.MAX_VIDEO_BYTES : INBOX_BOUNDS.MAX_IMAGE_BYTES;
@@ -175,7 +189,9 @@ function postedBytesOf(type: ConversationMediaType): number {
  * size, as `show_image` refuses one (`@luke/features/media-signature`).
  * Note that the stream is read to the larger bound and a still is held to
  * its own once its type is known, because the type is sniffed from bytes
- * the bound has already let in.
+ * the bound has already let in. A file of the cloud browser's recorder is
+ * refused before it is read, because its recording is kept beside the
+ * transcript alone (`BROWSER_RECORDING_REFUSAL`).
  */
 export function readSandboxMedia(
   door: InboxSandboxDoor,
@@ -183,6 +199,9 @@ export function readSandboxMedia(
   path: string,
   refusals: SandboxImageRefusals,
 ): Effect.Effect<Result.Result<InboxImage, string>> {
+  if (inBrowserRecording(posix.resolve(checkout, path))) {
+    return Effect.succeed(refused<ConversationMediaType>(BROWSER_RECORDING_REFUSAL, path));
+  }
   const terms = { maxBytes: INBOX_BOUNDS.MAX_VIDEO_BYTES, refusals, sniff: sniffMediaType };
   return Effect.map(
     readSandboxImage(door, checkout, path, terms),

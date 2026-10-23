@@ -299,6 +299,7 @@ import {
   type EveMessage,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
+import { SANDBOX_RECORDING } from "./browser/sandbox-recorder.js";
 import { chatAttachmentApp } from "./chat-attachment-app.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
@@ -319,7 +320,7 @@ import {
   postChat,
   tellMessage,
 } from "./coder-host/chat-notify.js";
-import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
+import { BROWSER_RECORDING_REFUSAL, type InboxSandboxDoor } from "./coder-host/inbox-image.js";
 import { accountInboxPast } from "./coder-host/inbox-page.js";
 import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
@@ -9458,7 +9459,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "an image block naming a recording in the sandbox keeps it with the message as a WebM, past a picture's bound, and one past a video's is refused naming its path",
+    "an image block naming a recording in the sandbox keeps it with the message as a WebM, past a picture's bound, and one past a video's, or the cloud browser's own, is refused naming its path",
     () =>
       Effect.gen(function* () {
         const chat = yield* openAgents();
@@ -9505,6 +9506,19 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.ok(long.status === ACTION_RESULT_STATUS.REJECTED && "reason" in long);
         assert.ok(long.reason.endsWith("/tmp/video/long.webm"), long.reason);
+
+        // The cloud browser's own recording stays in the transcript, wherever its home stands.
+        const recorded = `/home/vercel-sandbox/${SANDBOX_RECORDING.VIDEO}`;
+        const browser = yield* chat.post(
+          chat.first,
+          {
+            text: "The browser's recording.",
+            blocks: [{ type: CHAT_BLOCK.IMAGE, path: recorded, alt: "The flow." }],
+          },
+          { sandbox: sandboxWith({ [recorded]: webmBytes(1280, 800) }) },
+        );
+        assert.ok(browser.status === ACTION_RESULT_STATUS.REJECTED && "reason" in browser);
+        assert.equal(browser.reason, `${BROWSER_RECORDING_REFUSAL} ${recorded}`);
       }),
   );
 
