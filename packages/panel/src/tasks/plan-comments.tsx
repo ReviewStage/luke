@@ -1233,6 +1233,11 @@ function pendingOf(
     : { ...span, scope, quote: quote.slice(0, PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) };
 }
 
+/** Whether two measures stand every card at the same top. */
+function sameTops(a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>): boolean {
+  return a.size === b.size && [...b].every(([id, top]) => a.get(id) === top);
+}
+
 /** Where an element's top stands in the plan body's own box. */
 function topIn(body: HTMLElement, element: Element): number {
   return element.getBoundingClientRect().top - body.getBoundingClientRect().top;
@@ -1374,9 +1379,40 @@ export function PlanCommentLayer({
     },
     [body, sections, unitClass],
   );
+  // Note that the margin is measured again only when what it stands on
+  // changes, or the plan's words or a card are resized, never on every draw,
+  // because each measure lays the page out, a draw for every word typed among
+  // it. A resize is measured once in the frame after it, however many land.
+  const { threads } = doors.control;
+  const [resized, setResized] = useState(0);
+  // Whether the last measure found no body to measure in, as the first does, the body's ref being its ancestor's and attached after this layer's own effects.
+  const unmeasured = useRef(false);
+  useEffect(() => {
+    const element = body.current;
+    if (element === null) return;
+    if (unmeasured.current) {
+      unmeasured.current = false;
+      setResized((count) => count + 1);
+    }
+    let frame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        setResized((count) => count + 1);
+      });
+    });
+    observer.observe(element);
+    for (const card of cards.current.values()) observer.observe(card);
+    return () => {
+      observer.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
+  }, [body, threads, pending, wide]);
   useLayoutEffect(() => {
+    unmeasured.current = body.current === null;
     const placed = [
-      ...open.map((thread) => ({ id: thread.id, section: thread.section })),
+      ...threads.filter(openThread).map((thread) => ({ id: thread.id, section: thread.section })),
       ...(pending === undefined ? [] : [{ id: PENDING_THREAD, section: "" }]),
     ].flatMap(({ id, section }) => {
       const top = anchorTop(id, section);
@@ -1389,14 +1425,10 @@ export function PlanCommentLayer({
       active ?? (pending === undefined ? undefined : PENDING_THREAD),
       CARD_GAP,
     );
-    const same = next.size === tops.size && [...next].every(([id, top]) => tops.get(id) === top);
-    if (!same) setTops(next);
+    setTops((held) => (sameTops(held, next) ? held : next));
     const nextAnchors = new Map(placed.map((card) => [card.id, card.top]));
-    const sameAnchors =
-      nextAnchors.size === anchors.size &&
-      [...nextAnchors].every(([id, top]) => anchors.get(id) === top);
-    if (!sameAnchors) setAnchors(nextAnchors);
-  });
+    setAnchors((held) => (sameTops(held, nextAnchors) ? held : nextAnchors));
+  }, [threads, pending, active, anchorTop, text, wide, resized]);
 
   // An ask to show a thread scrolls the document's own scroller to its words, once per ask.
   const scrolled = useRef<number | undefined>(undefined);
