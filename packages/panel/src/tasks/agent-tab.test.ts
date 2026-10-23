@@ -521,6 +521,54 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", undefined, true]);
 });
 
+test("in an agent's transcript, a call that folds open in place still hangs its agent's tab's card from the agent's chip", () => {
+  const cards = taskCards({
+    agents: codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] }),
+    held: NOTHING_HELD,
+    chosen: () => false,
+    shownCode: [],
+    pages: undefined,
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const message = assistant([
+    toolPart(
+      "message_coding_agent",
+      { agentId: "agent-7", text: "Rebase on main" },
+      { status: "rejected", reason: "The agent has ended." },
+    ),
+  ]);
+  act(() =>
+    root.render(
+      createElement(AgentMessage, {
+        message,
+        plan: false,
+        lead: AGENT_LEAD,
+        moving: false,
+        delegation: {
+          models: [],
+          onOpen: () => undefined,
+          onOpenTarget: () => undefined,
+          cards: cards.agent("agent-1"),
+        },
+      }),
+    ),
+  );
+  // A call run alone is folded under its own line, which a press opens.
+  act(() => container.querySelector<HTMLElement>("[data-turn-fold] > summary")?.click());
+  const chip = container.querySelector<HTMLElement>(
+    '[data-call-id="call-message_coding_agent"] summary [data-tool-agent-ref]',
+  );
+
+  // Note that the chip is words, not a control, so the pointer is how it is reached.
+  restOn(chip ?? assert.fail("the call's agent chip"));
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
+});
+
 test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that opens the agent on a row that folds what was sent and is no target of its own on a row that opens it", () => {
   const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({

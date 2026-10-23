@@ -22,8 +22,10 @@ import {
  * pressed, says whether it is open on the summary, starts open when asked,
  * follows the element's own toggle (a find's), and draws a closed body,
  * still closed, while a find looks through it; a control in its
- * summary's action slot is pressed without folding it; and a card's head
- * leaves its chevron where the caller puts it, at its line's end.
+ * summary's action slot is pressed without folding it; a card's head
+ * leaves its chevron where the caller puts it, at its line's end; and a
+ * press gives a quiet row whole, while a card's head, whose fill meets the
+ * card's edges, gives only inside its fill until what it holds settles.
  */
 
 declare global {
@@ -258,4 +260,35 @@ test("a card's head draws its chevron where its caller puts it, and its body onl
   act(() => summary.click());
   assert.equal(summary.getAttribute("aria-expanded"), "true");
   assert.equal(card.textContent, "2 of 5 doneWrite the failing test");
+});
+
+test("a press gives a quiet row whole, and a card's head inside its fill until what it holds settles", () => {
+  const container = render(
+    createElement("div", null, [
+      createElement(Disclosure, {
+        key: "quiet",
+        children: createElement(DisclosureSummary, { children: "3 tools called" }),
+      }),
+      createElement(Disclosure, {
+        key: "card",
+        look: DISCLOSURE_LOOK.CARD,
+        children: createElement(DisclosureSummary, {
+          look: DISCLOSURE_SUMMARY.HEAD,
+          children: [
+            createElement(DisclosureChevron, { key: "chevron" }),
+            createElement("span", { key: "words" }, "Plan"),
+          ],
+        }),
+      }),
+    ]),
+  );
+  const [quiet, head] = [...container.querySelectorAll("summary")];
+  act(() => quiet?.click());
+  act(() => head?.click());
+  assert.equal(quiet?.getAttribute("data-pulse"), "quiet");
+  assert.equal(head?.getAttribute("data-pulse"), "flush");
+
+  // Note that the head stands still, so what it holds settling is what ends the pulse.
+  act(() => head?.firstElementChild?.dispatchEvent(new Event("animationend", { bubbles: true })));
+  assert.equal(head?.hasAttribute("data-pulse"), false);
 });

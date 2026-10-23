@@ -127,7 +127,11 @@ export function LineButton({
       data-look={look}
       data-brightens={brightens === true ? true : undefined}
       id={id}
-      onClick={pulseOnPress(onClick, PRESS_PULSE.QUIET)}
+      // Note that a band meets its card's edges, so its press leaves its fill standing.
+      onClick={pulseOnPress(
+        onClick,
+        look === LINE_BUTTON_LOOK.BAND ? PRESS_PULSE.FLUSH : PRESS_PULSE.QUIET,
+      )}
       {...props}
     >
       {children}

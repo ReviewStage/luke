@@ -29,6 +29,25 @@ import { Tooltip } from "../tooltip/hint.js";
  * within; a menu scrolls its own list.
  */
 
+/**
+ * The panel's surface, shadcn/ui's popover content (style `base-nova`) in
+ * Luke's menu surface: its ground, edge, corner, and lift, arriving as a
+ * menu does, holding focus for its controls with no ring of its own, and no
+ * section giving up its height to the bound, since it scrolls rather than
+ * squeezing what it holds. A card stands its sections apart in one column
+ * at the caption's type, never taller than the room its side of the button
+ * leaves and scrolling within it; a menu's content runs edge to edge, its
+ * own rows carrying the inset, and scrolls its own list. Its head stands the
+ * title and the ×, which its own inset pulls out to the edge so its glyph,
+ * not its square, lines up with the card's content.
+ */
+const PANEL = [
+  "luke-popover-panel flex flex-col rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in focus-visible:outline-none *:shrink-0",
+  "data-[look=card]:max-h-popover-room data-[look=card]:gap-3 data-[look=card]:overflow-x-hidden data-[look=card]:overflow-y-auto data-[look=card]:overscroll-contain data-[look=card]:px-4 data-[look=card]:pt-3 data-[look=card]:pb-4 data-[look=card]:text-caption",
+].join(" ");
+const HEAD = "-mr-2 flex items-center justify-between gap-control-gap";
+const TITLE = "m-0 text-section font-semibold";
+
 /** How the panel is drawn: a card with its head, or a menu's surface whose content is edge to edge. */
 export const POPOVER_PANEL_LOOK = {
   CARD: "card",
@@ -129,7 +148,7 @@ export function PopoverPanel({
     <div
       ref={panel}
       id={id}
-      className="luke-popover-panel"
+      className={PANEL}
       data-look={look}
       role="dialog"
       aria-labelledby={titleId}
@@ -142,8 +161,8 @@ export function PopoverPanel({
       }}
     >
       {look === POPOVER_PANEL_LOOK.CARD ? (
-        <div className="luke-popover-panel-head">
-          <h2 id={titleId} className="luke-popover-panel-title">
+        <div className={HEAD}>
+          <h2 id={titleId} className={TITLE}>
             {title}
           </h2>
           {closeLabel === undefined ? null : (

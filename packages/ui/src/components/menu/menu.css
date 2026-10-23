@@ -1,12 +1,9 @@
-/* menu.css -- a drop-down menu hung at a point in the window (`menu.tsx`)
-   and its submenus: one surface over everything, its rows one fixed
-   height, a long menu scrolling down within the window and never sideways.
-   Words wider than the menu, a long email or name, fade out at their
-   row's end (`OneLine`), as every cut line of the app does. The same surface stands under a list an app hangs and
-   keys itself (`menu-surface.tsx`), placed by its owner. Note that the
-   entrance animates a transform, which makes the surface the containing
-   block of every fixed box inside it, so a submenu, a second surface beside
-   the first, is drawn at the body and never inside it. */
+/* menu.css -- what of a menu's look its Tailwind classes cannot say
+   (`menu.tsx`, drawn in `../../shadcn/dropdown-menu.tsx`): the keyframes
+   its entrance and exit run, which the window's other surfaces that open
+   as a menu does run too; the hold a long press opens a menu by; the rows'
+   own way of marking focus; and what a finger is shown that a mouse is
+   not. */
 
 @layer components {
   /* Held, an element a long press opens a menu on shows the menu rather
@@ -25,206 +22,19 @@
     }
   }
 
-  /* The surface: its ground, edge, corner, shadow, and inset, a column of
-     what it holds, and its entrance, a fade and a drop from where it hangs. */
-  .luke-menu,
-  .luke-menu-surface {
-    display: flex;
-    flex-direction: column;
-    padding: var(--luke-menu-inset);
-    border: 1px solid var(--luke-color-border-strong);
-    border-radius: var(--luke-menu-radius);
-    background: var(--luke-color-overlay);
-    box-shadow: var(--luke-menu-shadow);
-    animation:
-      luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
-      luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
-  }
-
-  /* A surface whose content carries its own inset, as a searchable menu's
-     field and lists do, runs it edge to edge. */
-  .luke-menu-surface[data-inset="none"] {
-    padding: 0;
-  }
-
-  /* A bar on the menu's surface, as a find bar floats over what it finds
-     in: its field and its buttons side by side, a hair apart. */
-  .luke-menu-surface:is([data-flow="row"], [data-flow="toolbar"]) {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--luke-space-2);
-  }
-
-  /* A toolbar floated over what it acts on: its buttons a hair from its
-     edge, its corner a menu row's round that hair out, and no entrance of
-     its own, since its owner shows it as the pointer or a selection comes. */
-  .luke-menu-surface[data-flow="toolbar"] {
-    width: max-content;
-    padding: var(--luke-space-2);
-    border-radius: calc(var(--luke-menu-row-radius) + var(--luke-space-2));
-    white-space: nowrap;
-    animation: none;
-  }
-
-  .luke-menu {
-    position: fixed;
-    z-index: var(--luke-z-menu);
-    min-width: 196px;
-    max-width: 280px;
-    /* What can be seen, so a long menu scrolls above a phone's keyboard
-       rather than running on behind it (`tokens/viewport.css`). */
-    max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  /* Hidden for the one layout pass that measures where it fits. */
-  :is(.luke-menu, .luke-menu-surface)[data-placed="false"] {
-    visibility: hidden;
-  }
-
-  /* Closed, it fades out while its owner holds it drawn and inert. Note
-     that the hold waits on every motion the element runs, so the exit is
-     the one motion it has. */
-  :is(.luke-menu, .luke-menu-surface)[data-leaving="true"] {
-    pointer-events: none;
-    animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
-    transition: none;
-  }
-
-  /* One row: its glyph slot, its words, and at its end a muted hint and
-     the end slot. A row is one fixed height and flexes in no column it
-     stands in. */
-  .luke-menu-item {
-    display: flex;
-    flex: none;
-    width: 100%;
-    align-items: center;
-    gap: var(--luke-icon-gap);
-    height: var(--luke-menu-row-height);
-    margin: 0;
-    padding: 0 var(--luke-space-8);
-    border: 0;
-    border-radius: var(--luke-menu-row-radius);
-    background: none;
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-body-size);
-    font-weight: var(--luke-weight-regular);
-    text-align: left;
-    white-space: nowrap;
-    cursor: default;
-  }
-
   /* The row a menu is on is filled, never ringed: focus moves with the
-     pointer and the arrows alike, so both light a row, and a submenu's
-     item stays lit while its submenu stands beside it. */
-  .luke-menu-item:is(:hover, :focus-visible),
-  .luke-menu-item[data-open="true"] {
+     pointer and the arrows alike, so both light a row. */
+  .luke-menu-item:focus-visible,
+  .luke-menu:focus-visible {
     outline: none; /* no ring: the row's fill marks it */
-    background: var(--luke-color-fill-strong);
   }
 
-  /* A pinned row whose keys stay in a field has one highlight, which the
-     arrows and the pointer both move, so the pointer's own hover draws
-     nothing of its own. */
-  .luke-menu-item[data-steered="true"]:hover {
-    background: none;
-  }
-
-  .luke-menu-item[data-steered="true"][data-highlighted="true"] {
-    background: var(--luke-color-fill-strong);
-  }
-
-  .luke-menu-item[data-danger="true"] {
-    color: var(--luke-color-danger-text);
-  }
-
-  .luke-menu-item[data-danger="true"]:is(:hover, :focus-visible) {
-    background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
-  }
-
-  /* A row that cannot be chosen now is dimmed with its mark and lit by
-     nothing. */
-  .luke-menu-item:is(:disabled, [aria-disabled="true"]) {
-    background: none;
-    opacity: 0.4;
-  }
-
-  /* An item with a second line under its label grows to hold both. */
-  .luke-menu-item[data-detail="true"] {
-    height: auto;
-    min-height: var(--luke-menu-row-height);
-    padding-block: var(--luke-space-4);
-  }
-
-  /* The glyph slot: a mark in a glyph's column, muted beside the words, and
-     red with them on an act that cannot be taken back. It is drawn whether
-     or not the item has a mark, so the labels start in one line down the
-     menu. */
-  .luke-menu-item-glyph {
-    display: inline-flex;
-    width: var(--luke-menu-glyph);
-    height: var(--luke-menu-glyph);
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-menu-item[data-danger="true"] .luke-menu-item-glyph {
-    color: inherit;
-  }
-
-  /* A glyph or a picture with no size of its own fills the slot it is in.
-     Note that only a picture standing in the slot itself is sized, because
-     a face's picture fills the face it is drawn in (`Avatar`). */
-  .luke-menu-item-glyph svg,
-  .luke-menu-item-glyph > img,
-  .luke-menu-item-end > svg {
-    width: var(--luke-menu-glyph);
-    height: var(--luke-menu-glyph);
-    flex: 0 0 auto;
-  }
-
-  .luke-menu-item-label {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .luke-menu-item-copy {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: var(--luke-space-2);
-  }
-
-  .luke-menu-item-copy > .luke-menu-item-label {
-    flex: none;
-  }
-
+  /* A detail's words, a step under a caption, muted. They are drawn here
+     rather than in utilities, because a finger's size below must outrank
+     them, which a utility would not let it. */
   .luke-menu-item-detail {
     color: var(--luke-color-text-muted);
     font-size: 11.5px;
-  }
-
-  /* A detail beside its label, as a picker's row says a person's email: on
-     the label's line, giving way to the label where the row runs short,
-     since the label is what tells the items apart. */
-  .luke-menu-item-copy[data-place="beside"] {
-    flex-direction: row;
-    align-items: baseline;
-    gap: var(--luke-space-8);
-  }
-
-  .luke-menu-item-copy[data-place="beside"] > .luke-menu-item-label {
-    flex: 0 1 auto;
-  }
-
-  .luke-menu-item-copy[data-place="beside"] > .luke-menu-item-detail {
-    min-width: 0;
-    flex: 0 1000 auto;
   }
 
   /* Under a finger, on a phone held at arm's length, no smaller than 12px. */
@@ -234,7 +44,8 @@
     }
   }
 
-  /* A row's shortcut at its end, the way a system menu prints a chord. */
+  /* A row's shortcut at its end, the way a system menu prints a chord,
+     drawn here for the same reason as the detail: a finger hides it below. */
   .luke-menu-item-hint {
     display: inline-flex;
     flex: 0 0 auto;
@@ -252,71 +63,6 @@
     .luke-menu-item-hint:has(> kbd:only-child) {
       display: none;
     }
-  }
-
-  /* The end slot is one glyph wide, so a name ends where every other does;
-     the check is the text's own colour, a choice rather than a state, and
-     a chevron is quieter. */
-  .luke-menu-item-end {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: var(--luke-menu-glyph);
-    height: var(--luke-menu-glyph);
-    margin-left: auto;
-    color: var(--luke-color-text-subtle);
-  }
-
-  .luke-menu-item-hint + .luke-menu-item-end {
-    margin-left: 0;
-  }
-
-  /* A setting's switch at the item's end, after its hint. */
-  .luke-menu-item-switch {
-    display: flex;
-    flex: 0 0 auto;
-    margin-left: auto;
-  }
-
-  .luke-menu-item-hint + .luke-menu-item-switch {
-    margin-left: 0;
-  }
-
-  .luke-menu-item[role="menuitemcheckbox"] .luke-menu-item-end {
-    color: var(--luke-color-text);
-  }
-
-  .luke-menu-item-end > svg.settings-chevron {
-    width: 14px;
-    height: 14px;
-  }
-
-  /* Note that the end's glyph wears the end's ink rather than any its own
-     class gives it elsewhere, a connected check's green among them. */
-  .luke-menu-item-end > svg {
-    color: inherit;
-  }
-
-  .luke-menu-rule {
-    height: 1px;
-    margin: var(--luke-menu-inset) var(--luke-space-8);
-    border: 0;
-    background: var(--luke-color-border);
-  }
-
-  /* Whose menu it is over its items, and who made what it is about under
-     them, each pressed by nothing. */
-  .luke-menu-heading,
-  .luke-menu-footer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-space-2);
-    padding: var(--luke-space-4) var(--luke-space-8);
-    font-size: var(--luke-type-caption-size);
-  }
-
-  .luke-menu-footer {
-    color: var(--luke-color-text-subtle);
   }
 
   @keyframes luke-menu-arrive {

@@ -8,8 +8,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_BLOCK,
-  INBOX_RESPONSE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -128,10 +127,16 @@ const ITEM: InboxItem = {
   revision: 1,
   version: INBOX_WIRE_VERSION,
   title: "Ready for a look",
-  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: WORDS }],
-  response: { type: INBOX_RESPONSE.NONE },
   needsReply: false,
   status: INBOX_STATUS.OPEN,
+  thread: [
+    {
+      id: "e1b2c3d4-0000-4000-8000-000000000001",
+      author: INBOX_MESSAGE_AUTHOR.AGENT,
+      text: WORDS,
+      createdAt: 1_000,
+    },
+  ],
   postedAt: 1_000,
   updatedAt: 2_000,
 };
@@ -281,7 +286,9 @@ async function settle(): Promise<void> {
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
   const chip = [
-    ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+    ...container.querySelectorAll<HTMLButtonElement>(
+      "[data-inbox-message-text] [data-mention-ref]",
+    ),
   ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
   assert.ok(chip, `no chip says ${name}`);
   act(() => chip.click());
@@ -342,7 +349,9 @@ test("a link the item names pressed with ⌘ asks to go to its task, opening wha
   try {
     const { container, left } = await inbox();
     const chip = [
-      ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+      ...container.querySelectorAll<HTMLButtonElement>(
+        "[data-inbox-message-text] [data-mention-ref]",
+      ),
     ].find((each) =>
       each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Invite funnel"),
     );
@@ -391,7 +400,7 @@ test("a pull request and a file the item names pressed with ⌘ ask to go to the
     const pressWithCommand = async (name: string) => {
       const chip = [
         ...container.querySelectorAll<HTMLButtonElement>(
-          "[data-inbox-markdown] [data-mention-ref]",
+          "[data-inbox-message-text] [data-mention-ref]",
         ),
       ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
       assert.ok(chip, `no chip says ${name}`);
@@ -430,7 +439,9 @@ test("an agent the item names reads beside the Inbox as the panel's preview, its
   const stop = installPressIntent(window);
   try {
     const chip = [
-      ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+      ...container.querySelectorAll<HTMLButtonElement>(
+        "[data-inbox-message-text] [data-mention-ref]",
+      ),
     ].find((each) =>
       each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Batch the invitations"),
     );

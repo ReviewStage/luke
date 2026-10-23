@@ -571,10 +571,9 @@ const inboxLiveMessageSchema = EffectSchema.Struct({
   createdAt: countedNumber,
 });
 
-/** One file as its row carries it: the item whose answer carried it, or the message that did, and where it stands among them. */
+/** One file as its row carries it: the message that carried it, and where it stands among its files. */
 const inboxLiveFileSchema = EffectSchema.Struct({
   ...inboxAnswerFileSchema.fields,
-  answerOf: EffectSchema.NullOr(EffectSchema.String),
   messageId: EffectSchema.NullOr(EffectSchema.String),
   position: EffectSchema.NullOr(countedNumber),
 });
@@ -587,7 +586,6 @@ const inboxLiveRowSchema = EffectSchema.Struct({
   /** Absent from a service before it, as the item's own `waitsOn` is. */
   waitsOn: EffectSchema.optionalKey(EffectSchema.String),
   waitsOnName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
-  answer: EffectSchema.NullOr(inboxReplySchema),
   answeredBy: EffectSchema.NullOr(EffectSchema.String),
   answeredByName: EffectSchema.NullOr(EffectSchema.String),
   closedReason: EffectSchema.NullOr(EffectSchema.String),
@@ -653,21 +651,20 @@ function inboxMessageOfLiveRow(
 }
 
 /**
- * An item's two threads from its delivered messages, oldest first, as the
- * held read carries them: the latest `MAX_MESSAGES_READ` that neither ask
- * nor answer, and the whole thread, its latest messages with its first and
- * the one whose ask it holds open however many came since.
+ * An item's thread from its delivered messages, oldest first, as the held
+ * read carries it: its latest `MAX_MESSAGES_READ` messages, with its first
+ * and the one whose ask it holds open however many came since.
  */
-function threadsOf(messages: readonly InboxLiveMessage[], openAskMessageId: string | null) {
+function threadOf(
+  messages: readonly InboxLiveMessage[],
+  openAskMessageId: string | null,
+): readonly InboxLiveMessage[] {
   const ordered = messages.toSorted(threadOrder);
-  const bound = INBOX_BOUNDS.MAX_MESSAGES_READ;
-  const plain = ordered.filter((each) => each.ask === null && each.answers === null).slice(-bound);
-  const latest = new Set(ordered.slice(-bound).map((each) => each.id));
+  const latest = new Set(ordered.slice(-INBOX_BOUNDS.MAX_MESSAGES_READ).map((each) => each.id));
   const firstId = ordered[0]?.id;
-  const thread = ordered.filter(
+  return ordered.filter(
     (each) => latest.has(each.id) || each.id === firstId || each.id === openAskMessageId,
   );
-  return { plain, thread };
 }
 
 /** A thread's messages oldest first, as the held read orders them. */
@@ -676,11 +673,10 @@ function threadOrder(one: InboxLiveMessage, other: InboxLiveMessage): number {
   return one.id < other.id ? -1 : one.id > other.id ? 1 : 0;
 }
 
-/** A row as the wire carries its item, its threads and files joined to it, each absent field left out rather than null, as the held read writes it. */
+/** A row as the wire carries its item, its thread and its files joined to it, each absent field left out rather than null, as the held read writes it. */
 function inboxItemOfLiveRow(
   row: InboxLiveRow,
   threads: ReadonlyMap<string, readonly InboxLiveMessage[]>,
-  answerFilesOf: ReadonlyMap<string, readonly InboxLiveFile[]>,
   messageFilesOf: ReadonlyMap<string, readonly InboxLiveFile[]>,
 ): InboxItem {
   const {
@@ -688,7 +684,6 @@ function inboxItemOfLiveRow(
     startedByName,
     waitsOn,
     waitsOnName,
-    answer,
     answeredBy,
     answeredByName,
     closedReason,
@@ -698,12 +693,10 @@ function inboxItemOfLiveRow(
     settledAt,
     ...item
   } = row;
-  const answerFiles = filesInOrder(answerFilesOf.get(row.id));
-  const { plain, thread } = threadsOf(threads.get(row.id) ?? [], openAskMessageId);
+  const thread = threadOf(threads.get(row.id) ?? [], openAskMessageId);
   const message = (each: InboxLiveMessage) =>
     inboxMessageOfLiveRow(each, messageFilesOf, {
       status: row.status,
-      response: row.response,
       openAskMessageId,
       closedReason,
     });
@@ -715,8 +708,6 @@ function inboxItemOfLiveRow(
     ...(waitsOn === undefined || waitsOnName === undefined || waitsOnName === null
       ? undefined
       : { waitsOn: { userId: waitsOn, name: waitsOnName } }),
-    ...(answer === null ? undefined : { answer }),
-    ...(answerFiles.length === 0 ? undefined : { answerFiles }),
     ...(answeredBy === null || answeredByName === null
       ? undefined
       : { answeredBy: { userId: answeredBy, name: answeredByName } }),
@@ -724,7 +715,6 @@ function inboxItemOfLiveRow(
     ...(closedBy === null || closedByName === null
       ? undefined
       : { closedBy: { userId: closedBy, name: closedByName } }),
-    ...(plain.length === 0 ? undefined : { messages: plain.map(message) }),
     ...(thread.length === 0 ? undefined : { thread: thread.map(message) }),
     ...(settledAt === null ? undefined : { settledAt }),
   };
@@ -734,11 +724,8 @@ function inboxItemOfLiveRow(
 export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
   const ordered = latestFirst((item: InboxItem) => item.id);
   const threads = groupedBy(rows.messages, (message) => message.itemId);
-  const answerFilesOf = groupedBy(rows.files, (file) => file.answerOf);
   const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
-  const items = rows.items.map((row) =>
-    inboxItemOfLiveRow(row, threads, answerFilesOf, messageFilesOf),
-  );
+  const items = rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf));
   return [
     ...items.filter((item) => item.status === INBOX_STATUS.OPEN).toSorted(ordered),
     ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
