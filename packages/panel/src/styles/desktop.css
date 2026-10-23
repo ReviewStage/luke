@@ -84,8 +84,8 @@ body,
   background: var(--luke-color-ground);
 }
 
-/* The Mac panel window's page is clear under the shell, whose birch tint and
-   paper sheet paint everything there is, so the window's sidebar material
+/* The Mac panel window's page is clear under the shell, whose frame tint and
+   solid sheet paint everything there is, so the window's sidebar material
    (`panel-manager.ts`) frosts through the frame; the voice and call windows,
    which hold no shell, keep their ground. */
 :root[data-luke-profile="desktop"]:has(.desktop-shell),
