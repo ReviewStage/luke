@@ -31,6 +31,7 @@ import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FACTS_EXAMPLE } from "./examples/facts";
 import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
+import { FILE_TEXT_EXAMPLE } from "./examples/file-text";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
@@ -137,6 +138,7 @@ export const EXAMPLES: readonly Example[] = [
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,
   FILE_PICKERS_EXAMPLE,
+  FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   FORM_SECTION_EXAMPLE,
