@@ -312,6 +312,8 @@ export interface CodingAgentsControl {
   startCall: ((draft: AgentDraft) => Promise<DraftCallStart>) | undefined;
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
+  /** Takes one agent back to just before one of the developer's lines, stopping it first, and takes the agent as the service answers it. */
+  onRewind: (agentId: string, messageId: string) => Promise<CodingAgentAgentAnswer>;
   /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
   onMessage: MessageSender;
   /** Changes one agent's model and effort for its next step, and takes the agent as the service answers it. */
@@ -1162,6 +1164,24 @@ export function useCodingAgents(input: {
     readAgain();
   };
 
+  const onRewind = useCallback(
+    async (agentId: string, messageId: string): Promise<CodingAgentAgentAnswer> => {
+      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_REWIND, {
+        agentId,
+        messageId,
+      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      if (!("failure" in answer)) {
+        setList((was) =>
+          was.agents === undefined
+            ? was
+            : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
+        );
+      }
+      return answer;
+    },
+    [act],
+  );
+
   const onMessage = useCallback<MessageSender>(
     async (agentId, text, clientKey, attachments) => {
       // A message that opens the agent's sandbox anew may wait on its image, and is asked again under its key.
@@ -1591,6 +1611,7 @@ export function useCodingAgents(input: {
     },
     startCall: taskId !== undefined ? startCall : undefined,
     onStop,
+    onRewind,
     onMessage,
     onChoose,
     onSwitchServers,

@@ -467,6 +467,21 @@ export function followTranscript<Key>(
           wake = Effect.void;
           continue;
         }
+        // Note that a page read at another rewind than the window's says messages the window holds were dropped, which a join would keep, so the newest page is read in its place.
+        if (!("failure" in answer) && (answer.rewound ?? 0) !== (window.rewound ?? 0)) {
+          fromHeld = false;
+          const newest = yield* readNewest;
+          if ("failure" in newest) {
+            if (newest.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
+            wake = Effect.sleep(RESEAL);
+            continue;
+          }
+          window = newest;
+          told.clear();
+          heard(newest.messages);
+          wake = Effect.void;
+          continue;
+        }
         fromHeld = false;
         const page = toldPage(answer);
         if (!("failure" in page)) heard(page.messages);
