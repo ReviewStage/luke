@@ -133,7 +133,8 @@ function carriesTarget(container: HTMLElement): boolean {
 const WORDS = [
   "Landed STAG-421, so STAG-422 can go out.",
   "UTF-8 and STAG-9 stay words, `STAG-421` stays code,",
-  "[STAG-422](https://example.com/notes) stays a link, and STAG-7 names two tasks.",
+  "[STAG-422](https://example.com/notes) stays a link, STAG-422/notes and STAG-421.md are paths,",
+  "and STAG-7 names two tasks.",
 ].join(" ");
 
 test("in a transcript a listed task's key is its chip saying the key, which opens the task, and every other key-shaped word stays as written", async () => {
@@ -153,6 +154,7 @@ test("in a transcript a listed task's key is its chip saying the key, which open
     ["STAG-422"],
   );
   assert.match(container.textContent ?? "", /UTF-8 and STAG-9 stay words/);
+  assert.match(container.textContent ?? "", /STAG-422\/notes and STAG-421\.md are paths/);
   assert.match(container.textContent ?? "", /STAG-7 names two tasks/);
   assert.equal(carriesTarget(container), false);
 
@@ -179,7 +181,7 @@ test("a key alone on its line of an Inbox item's document is its chip in the par
 
 test("in a plan's or a comment's words a listed task's key is its chip, and a place that draws no chips leaves it as words", async () => {
   const doors = planPage([]).doors;
-  const words = "See STAG-421, not `STAG-422`.";
+  const words = "See STAG-421, not `STAG-422` nor STAG-422/notes.";
   const chipped = await drawn(
     createElement(MarkdownMessage, { words, link: mentionLinkDrawer(doors) }),
   );
@@ -188,5 +190,5 @@ test("in a plan's or a comment's words a listed task's key is its chip, and a pl
   assert.deepEqual(chips(chipped), [[MENTION_KIND.TASK, "STAG-421"]]);
   assert.equal(chipped.querySelector("code")?.textContent, "STAG-422");
   assert.deepEqual(chips(plain), []);
-  assert.equal(plain.textContent, "See STAG-421, not STAG-422.");
+  assert.equal(plain.textContent, "See STAG-421, not STAG-422 nor STAG-422/notes.");
 });

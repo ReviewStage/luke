@@ -36,13 +36,14 @@ export function taskKey(workspaceName: string, number: number): string {
 /**
  * What may be a task's key among words: up to four capitals or digits, a
  * hyphen, and a number, standing as a word of its own. Note that a key in a
- * path or an address (`docs/STAG-1.md`, `#STAG-1`) or one joined to more
- * words (`STAG-1-fix`) is no key, and that the case is held to, since the
+ * path or an address, before it or after it (`docs/STAG-1`, `STAG-1/notes`,
+ * `STAG-1.md`, `#STAG-1`, `STAG-1#plan`), or one joined to more words
+ * (`STAG-1-fix`) is no key, while a sentence's stop after one is no word, and that the case is held to, since the
  * keys are capitals and words in prose that happen to share their letters
  * are not keys.
  */
 const KEY_IN_WORDS =
-  /(?<![\p{L}\p{N}_\-/.#@])[\p{Lu}\p{N}]{1,4}-\d+(?![\p{L}\p{N}_]|-[\p{L}\p{N}])/gu;
+  /(?<![\p{L}\p{N}_\-/.#@])[\p{Lu}\p{N}]{1,4}-\d+(?![\p{L}\p{N}_/#]|[-.][\p{L}\p{N}])/gu;
 
 /** One key found among words: the key, and where it stands in them. */
 export interface KeySpan<Known> {

@@ -49,7 +49,16 @@ describe("keySpansIn", () => {
     expect(found("STAG-4220 STAG-422x XSTAG-422 STAG-422-fix")).toEqual([]);
   });
 
-  it("leaves a key inside a path, an address, or a handle", () => {
+  it("leaves a key inside a path, an address, or a handle, before it or after it", () => {
     expect(found("docs/STAG-422.md #STAG-422 @STAG-422 v.STAG-422")).toEqual([]);
+    expect(found("STAG-422/notes STAG-422.md STAG-422#plan")).toEqual([]);
+  });
+
+  it("finds a key ending a sentence or a clause", () => {
+    expect(found("Shipped STAG-422. Then STAG-42: done; STAG-422!")).toEqual([
+      ["STAG-422", "task-422"],
+      ["STAG-42", "task-42"],
+      ["STAG-422", "task-422"],
+    ]);
   });
 });
