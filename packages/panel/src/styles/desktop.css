@@ -6733,7 +6733,9 @@ ul.actor-stack {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
-  min-height: var(--luke-control-height);
+  /* Note that a row stands a little taller than a control, so the list
+     breathes between rows rather than reading as a dense table. */
+  min-height: calc(var(--luke-control-height) + var(--luke-space-6));
   align-items: center;
   padding: var(--luke-space-2) var(--row-inset);
   border-radius: var(--luke-control-radius);
