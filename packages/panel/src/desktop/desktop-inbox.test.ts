@@ -3200,12 +3200,7 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
   act(() => viewItem("To do").click());
   rowNamed(page, "Expire after 7 days?").focus();
   inboxes.set(INVITES.id, [
-    {
-      ...EXPIRY,
-      status: INBOX_STATUS.ANSWERED,
-      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
-      updatedAt: 6_000,
-    },
+    { ...answeredBy(EXPIRY, READER, "Retry once", "", 6_000), updatedAt: 6_000 },
   ]);
   act(() =>
     setHolding([
