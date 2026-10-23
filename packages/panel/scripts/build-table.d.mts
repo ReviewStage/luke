@@ -37,7 +37,7 @@ interface WorkerPluginBuild {
   ): void;
   onLoad(
     options: { filter: RegExp; namespace: string },
-    callback: () => { contents: string; loader: "js" },
+    callback: (args: { path: string }) => { contents: string; loader: "js" },
   ): void;
 }
 
@@ -56,8 +56,8 @@ export interface HighlightWorkerBuild {
 }
 
 export const HIGHLIGHT_WORKER_BUILD: HighlightWorkerBuild;
-export function panelDefines(highlightWorkerText: string): {
-  readonly [identifier: string]: string;
-};
+export const HIGHLIGHT_WORKER_SCRIPT: string;
+export function highlightWorkerScriptModule(text: string): string;
+export function panelDefines(): { readonly [identifier: string]: string };
 export const EXCALIDRAW_STYLESHEET: string;
 export function panelStaticDirectories(): readonly PanelStaticDirectory[];

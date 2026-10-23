@@ -56,6 +56,7 @@ import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
 import { type Highlighting, preferredHighlighter, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
+import { laterWorker } from "./later-worker.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
 
@@ -74,13 +75,15 @@ import { wholeOf } from "./whole-diff.js";
  *
  * A list's files are highlighted off the window's thread, in Pierre's own
  * pool of workers (`listHighlighting`): the build bundles Pierre's worker
- * whole as one classic script and hands this bundle its text
- * (`DIFF_HIGHLIGHT_WORKER`), which each worker is started from as a
- * `blob:`, the one place the policy admits a worker from. A file is drawn
- * in plain text until its colours come back, and each file's patch is read
- * under a name of its own (`readPatch`), so the pool's cache hands a file
- * scrolled back into view its colours again rather than highlighting it
- * anew. Where no worker can start, or the build carried none, as under a
+ * as one classic script, handed its grammars and themes by this thread
+ * one language at a time rather than carrying any set of its own, and
+ * answers `./highlight-worker-script.ts` with its text, a chunk this bundle
+ * fetches only once the pool starts, and each worker is started from that
+ * text as a `blob:`, the one place the policy admits a worker from. A file
+ * is drawn in plain text until its colours come back, and each file's patch
+ * is read under a name of its own (`readPatch`), so the pool's cache hands a
+ * file scrolled back into view its colours again rather than highlighting
+ * it anew. Where no worker can start, or the build carried none, as under a
  * test, Pierre highlights on the window's own thread, as one diff alone
  * always does.
  *
@@ -165,13 +168,6 @@ const MAX_LINE_DIFF_LENGTH = 1000;
 
 /** No notes. */
 const NO_NOTES: readonly DiffAnnotation[] = [];
-
-/**
- * The text of the worker a list's files are highlighted in, set by the
- * build (`scripts/build.mjs`); a run that never went through the bundler
- * has none.
- */
-declare const DIFF_HIGHLIGHT_WORKER: string | undefined;
 
 /** The attribute a list's file wears while it is drawn as its notes alone. */
 const LEAD_ATTRIBUTE = "data-lead";
@@ -502,16 +498,13 @@ function sharedOptions(drawn: DiffLook) {
   } as const satisfies FileDiffOptions<string, undefined>;
 }
 
-/** The worker's text the build set; none where nothing built this bundle. */
-function highlightWorkerText(): string | undefined {
-  try {
-    // SAFETY: esbuild replaces this free identifier when it bundles the
-    // renderer; a run that never went through the bundler has no such
-    // global, and reading one throws rather than answering undefined.
-    return DIFF_HIGHLIGHT_WORKER;
-  } catch {
-    return undefined;
-  }
+/**
+ * The worker's script, from the chunk the build answers
+ * `./highlight-worker-script.ts` with, fetched the first time a pool asks
+ * for a worker rather than with this bundle; none where nothing built it.
+ */
+function highlightWorkerScript(): Promise<string | undefined> {
+  return import("./highlight-worker-script.js").then((module) => module.HIGHLIGHT_WORKER_SCRIPT);
 }
 
 let kept: Highlighting | undefined;
@@ -520,7 +513,8 @@ let kept: Highlighting | undefined;
  * How a list's files are highlighted (`@luke/panel/diff-view/highlight-pool`),
  * started the first time a list is drawn and kept for the window's life,
  * since a next list would only load the same grammars and themes again:
- * each worker started from the text the build carried, as a `blob:`.
+ * each worker started, once its script has landed, from that text as a
+ * `blob:`. A window with no workers at all, as under a test, starts none.
  */
 function listHighlighting(drawn: DiffLook): Highlighting {
   if (kept !== undefined) {
@@ -528,13 +522,18 @@ function listHighlighting(drawn: DiffLook): Highlighting {
     void kept.follow(drawn);
     return kept;
   }
-  const text = highlightWorkerText();
-  const address =
-    text === undefined
-      ? undefined
-      : URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+  let address: Promise<string | undefined> | undefined;
   const startWorker =
-    address === undefined ? undefined : () => new Worker(address, { name: "diff-highlight" });
+    typeof Worker === "undefined"
+      ? undefined
+      : () => {
+          address ??= highlightWorkerScript().then((text) =>
+            text === undefined
+              ? undefined
+              : URL.createObjectURL(new Blob([text], { type: "text/javascript" })),
+          );
+          return laterWorker(address, (url) => new Worker(url, { name: "diff-highlight" }));
+        };
   kept = startHighlighting(startWorker, drawn, MAX_LINE_DIFF_LENGTH);
   return kept;
 }
