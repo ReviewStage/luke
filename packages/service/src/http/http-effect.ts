@@ -248,16 +248,23 @@ export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<string, HostedRefusal> {
   const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  if (Option.isNone(account)) return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
   return account.value;
 });
 
-/** An id a path named, or not found where it is no UUID, since it names no row. */
+/**
+ * An id a path named, or not found where it is no UUID, since it names no row.
+ *
+ * Note that each refusal here is failed as a `HostedRefusal` rather than its
+ * own literal: an `Effect` failing with the bare literal, checked this early,
+ * leads `apps/web`'s exact-optional build to infer the refusal unions of
+ * other modules' `Effect.catch` callbacks too narrowly.
+ */
 export const pathUuid = /* @__PURE__ */ Effect.fnUntraced(function* (
   id: string,
 ): Effect.fn.Return<string, HostedRefusal> {
   const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (Result.isFailure(read)) return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });
 
@@ -269,7 +276,7 @@ export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const ids = new URL(request.url).searchParams.getAll(name);
   const [id] = ids;
   if (id === undefined || ids.length !== 1) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   return yield* pathUuid(id);
 });
