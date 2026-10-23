@@ -110,6 +110,11 @@ const ACTOR_PIXELS = {
   [ACTOR_SIZE.PAGE]: 48,
 } as const satisfies Record<ActorSize, number>;
 
+/** How wide an actor of `size` stands, as a length, for a placeholder that stands in its place. */
+export function actorMarkWidth(size: ActorSize): string {
+  return `${ACTOR_PIXELS[size]}px`;
+}
+
 /** How many device pixels a picture is asked for per CSS pixel it is drawn at: a Retina screen's. */
 const PICTURE_DENSITY = 2;
 

@@ -5,7 +5,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
-import { SettingsRowsSkeleton, SettingsSection } from "../settings-section/settings-section.js";
+import {
+  SETTINGS_SKELETON_CONTROL,
+  SettingsRowsSkeleton,
+  SettingsSection,
+} from "../settings-section/settings-section.js";
 import { SettingsPage } from "./settings-page.js";
 
 /**
@@ -16,6 +20,9 @@ import { SettingsPage } from "./settings-page.js";
  */
 
 const roots: Root[] = [];
+
+/** A member's placeholder row: their name alone and a button. */
+const MEMBER_ROW = { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] };
 
 /** A section headed `title` holding one row whose control is a button. */
 function section(title: string): React.JSX.Element {
@@ -115,7 +122,10 @@ function ReadingPage({ read }: { read: boolean }): React.JSX.Element {
               label: "Ada",
               children: () => createElement(Button, { children: "Remove" }),
             })
-          : createElement(SettingsRowsSkeleton, { label: "Loading the members", rows: 2 }),
+          : createElement(SettingsRowsSkeleton, {
+              label: "Loading the members",
+              rows: [MEMBER_ROW, MEMBER_ROW],
+            }),
       }),
     ],
   });

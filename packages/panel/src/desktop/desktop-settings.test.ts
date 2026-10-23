@@ -799,7 +799,7 @@ test("the mouse's Back button from the plan template's version history goes back
   );
 });
 
-test("while the plan template is read its page stands its name over placeholder blocks, and the template lands in their place", async () => {
+test("while the plan template is read its page stands the document's own head, its name and note, over placeholder blocks, and the template lands under the same head", async () => {
   const { promise: read, resolve: land } = Promise.withResolvers<void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -810,10 +810,12 @@ test("while the plan template is read its page stands its name over placeholder 
   });
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
   const placeholder = () => page.querySelector('[role="status"][aria-busy="true"]')?.textContent;
+  const head = () => page.querySelector('section[aria-label="Plan template"] header')?.textContent;
+  const reading = head();
 
   assert.deepEqual(
-    [shownTitle(page), placeholder()],
-    ["Plan template", "Loading your plan template"],
+    [reading?.startsWith("Plan template"), placeholder()],
+    [true, "Loading your plan template"],
   );
   land();
   await act(async () => {
@@ -821,6 +823,7 @@ test("while the plan template is read its page stands its name over placeholder 
   });
   assert.equal(placeholder(), undefined);
   assert.ok(page.querySelector('button[aria-label="Version history"]'), "the template is drawn");
+  assert.equal(head(), reading);
 });
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
