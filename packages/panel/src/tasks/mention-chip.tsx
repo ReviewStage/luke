@@ -735,9 +735,15 @@ function MentionChip({
   const section = mention.kind === MENTION_KIND.SECTION ? mention : undefined;
   const heading = useSectionHeading(section?.taskId, section?.anchor ?? "");
   useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
-  // Note that a plan written as its key (`ACME-42`) says the key, as the words wrote it.
+  // Note that a plan written as its own key (`ACME-42`) says the key, as the words wrote it, and one labelled with another task's key its name.
   const keys = useTaskKeyTargets();
-  const keyed = mention.kind === MENTION_KIND.TASK && keys.has(written);
+  const keyTarget = keys.get(written);
+  const keyNames =
+    keyTarget === undefined ? undefined : decodeMention(keyTarget, doors.place.repository);
+  const keyed =
+    mention.kind === MENTION_KIND.TASK &&
+    keyNames?.kind === MENTION_KIND.TASK &&
+    keyNames.taskId === mention.taskId;
   const name =
     githubName(mention, standing) ??
     (keyed ? written : chipName(mention, written, bare, known, standing, heading));
