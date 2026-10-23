@@ -507,6 +507,7 @@ function fullMenuTemplate(
       submenu: [
         commandItem(APP_COMMAND.ASK_LUKE),
         commandItem(APP_COMMAND.INBOX),
+        commandItem(APP_COMMAND.TASKS),
         commandItem(APP_COMMAND.AUTOMATIONS),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),

@@ -798,6 +798,22 @@ test("the Automations page's sidebar row and its command stand with no experimen
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
 });
 
+test("⇧⌘B opens the Tasks page, bringing the Tasks tab forward from Settings, and the Tasks row names the chord", async () => {
+  handState({});
+  const went: string[] = [];
+  const boardView = { ...tasksControl().boardView, onOpen: () => went.push("tasks page") };
+  mount(false, false, { boardView }, PANEL_TAB.SETTINGS, (tab) => went.push(tab));
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.TASKS), true);
+  assert.deepEqual(went, [PANEL_TAB.TASKS, "tasks page"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const page = mount(false);
+  await settle();
+  assert.equal(placeRow(page, "Tasks")?.getAttribute("aria-keyshortcuts"), "Meta+Shift+B");
+});
+
 test("while the Automations pages are still loading their frame stands the list as quiet rows, and Escape closes Automations as the list does once it stands", async () => {
   const closed: string[] = [];
   const automationsView = {
