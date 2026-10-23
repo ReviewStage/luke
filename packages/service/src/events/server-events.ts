@@ -38,6 +38,7 @@ export const SERVER_EVENT = {
   INTEGRATION_CONNECTION_CREATE: "integration:connection_create",
   INTEGRATION_CONNECTION_DELETE: "integration:connection_delete",
   WORKSPACE_CREATE: "workspace:create",
+  AGENT_HANDOFF: "agent:handoff",
 } as const;
 
 type ServerEventName = (typeof SERVER_EVENT)[keyof typeof SERVER_EVENT];
@@ -53,6 +54,26 @@ export const SERVER_AGENT_START_KIND = {
   FRESH: "fresh",
   FORK: "fork",
   CONTINUE: "continue",
+} as const;
+
+/** Which harness a Claude Code or Codex agent runs, as `conversations.runtime` spells it. */
+export const SERVER_AGENT_HARNESS = {
+  CLAUDE_CODE: "claude_code",
+  CODEX: "codex",
+} as const;
+
+/**
+ * How a message reached a Claude Code or Codex agent's runner: written to
+ * the runner already up (`warm`), the runner launched again in a sandbox
+ * still up (`relaunched`), the sandbox resumed from its snapshot first
+ * (`resumed`), or a fresh sandbox opened where the snapshot was gone
+ * (`fresh`). What the warm window (`CODER.RUNNER_WARM`) is tuned by.
+ */
+export const SERVER_HANDOFF_PATH = {
+  WARM: "warm",
+  RELAUNCHED: "relaunched",
+  RESUMED: "resumed",
+  FRESH: "fresh",
 } as const;
 
 /** Which account a pull request was opened as. */
@@ -104,6 +125,13 @@ interface ServerEventProperties {
   [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: IntegrationProvider };
   [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: IntegrationProvider };
   [SERVER_EVENT.WORKSPACE_CREATE]: Record<string, never>;
+  /** Counts alone: how the message reached the runner, whether a turn was under way, and how long since the agent's last turn ended. */
+  [SERVER_EVENT.AGENT_HANDOFF]: {
+    harness: Values<typeof SERVER_AGENT_HARNESS>;
+    path: Values<typeof SERVER_HANDOFF_PATH>;
+    turn_running: boolean;
+    idle_seconds?: number;
+  };
 }
 
 /** One event as the service records it. */
