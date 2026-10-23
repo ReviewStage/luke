@@ -463,6 +463,44 @@ test("the switch beside the title shows the Board, kept on this Mac", async () =
   assert.ok((await mountPage()).querySelector("[data-task-column]"), "the Board is shown again");
 });
 
+test("on a phone the page is headed by New task and one ⋯, its title centred between them, and the ⋯ chooses the Board and opens the Filter's and View options' own menus, so nothing is lost", async () => {
+  const page = await mountPage(TASKS, SHELL_ROOM.NARROW);
+  assert.deepEqual(
+    [...page.querySelectorAll(".tasks-head button")].map((each) => each.getAttribute("aria-label")),
+    ["New task", "More"],
+  );
+  assert.equal(page.querySelector(".tasks-head h1")?.textContent, "Tasks");
+  assert.equal(page.querySelector('[role="radiogroup"]'), null, "no List | Board bar in the head");
+
+  openOptions(page, "More");
+  choose("Filter");
+  choose("Priority", "High", "Urgent");
+  closeMenus();
+  // Note that a phone's rows draw no key, so the groups are read by name and the filter by its chip.
+  assert.deepEqual(
+    groups(page).map(([name]) => name),
+    ["In progress", "Todo"],
+  );
+  assert.match(page.textContent ?? "", /Priority: Urgent, High/);
+
+  openOptions(page, "More");
+  choose("View options");
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
+    "View options' own menu stands",
+  );
+  closeMenus();
+
+  openOptions(page, "More");
+  choose("Board");
+  assert.ok(page.querySelector("[data-task-column]"), "the Board's columns stand");
+  assert.equal(
+    document.querySelector('[role="menu"]:not([data-leaving])'),
+    null,
+    "a menu closed before is not opened again by the switch",
+  );
+});
+
 test("Escape closes the page from the List as from the Board", async () => {
   await mountPage();
   act(() => {

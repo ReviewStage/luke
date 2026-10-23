@@ -9,7 +9,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import type { PinnedTab } from "../tasks/use-side-panel.js";
+import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -181,6 +181,15 @@ test("a pinned agent's card hung again after its read failed asks again, and sho
   await settled();
   assert.deepEqual(reads, [AGENT, AGENT]);
   assert.match(card()?.textContent ?? "", /Expire invitations/u);
+});
+
+test("a pinned Plan tab hangs its task's own card, an agent's pin its own", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  restOn(drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 }));
+  await settled();
+  const taskCard = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.match(taskCard?.textContent ?? "", /Teammate invitations/u);
+  assert.equal(card(), null, "no pin card stands beside it");
 });
 
 test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the grey icon and pinned label where it holds none", () => {

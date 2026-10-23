@@ -1748,30 +1748,6 @@ export function useTasksTab(input: {
         : inboxAgents
       : (pageAgents ?? agents.heldIds),
   );
-  // A task whose column shows no tab stands on its plan: the side panel is
-  // shown on its Plan tab, once for each task as it comes to show none, so a
-  // tab chosen in the panel since is left where it was. Note that this waits
-  // on the agents' read, because a task opened on an agent's tab shows none
-  // until its agents are read; and a room that draws the panel only over the
-  // whole window leaves it shut.
-  const planShownFor = useRef<string | undefined>(undefined);
-  const noColumnTab =
-    inboxView === undefined &&
-    pageAgents === undefined &&
-    mainTabs.tab === undefined &&
-    agents.agentIds !== undefined &&
-    region.kind === DOCUMENT_REGION.READY;
-  const plannedTask = noColumnTab ? viewed.activeTaskId : undefined;
-  const { onShow: showSidePanelOn, fullScreenOnly: panelOnlyFull } = sidePanel;
-  useEffect(() => {
-    if (plannedTask === undefined) {
-      planShownFor.current = undefined;
-      return;
-    }
-    if (planShownFor.current === plannedTask || panelOnlyFull) return;
-    planShownFor.current = plannedTask;
-    showSidePanelOn(plannedTask, SIDE_PANEL_TAB.PLAN);
-  }, [plannedTask, panelOnlyFull, showSidePanelOn]);
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its
   // pull request was read, or before a rename, catches up while its task is open.
@@ -2839,13 +2815,7 @@ export function useTasksTab(input: {
 
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
-  // it gives way. It opens with the side panel shown, on the plan, the one
-  // tab a new task holds, which Luke writes as the developer talks. Note
-  // that the panel is shown as the start is sent, while the modal dialog
-  // stands over it, because the host turns to the new plan before the start
-  // answers, and a show on the answer would open a panel hidden on the new
-  // plan since; a refusal hides it again where it stood hidden.
-  // It starts in the chosen workspace; with none listed the
+  // it gives way. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens no call, and
   // names no planning, so the task opens on an empty plan rather than the
@@ -2863,8 +2833,6 @@ export function useTasksTab(input: {
     workspaceId: string | undefined,
     from: NewTaskStart = {},
   ): Promise<string | undefined> => {
-    const panelWasOpen = sidePanel.open;
-    sidePanel.onSetOpen(true);
     // An agent's start opens on its task's page at once, its words drawn as
     // the agent's first line, rather than holding the card until the
     // service answers; a refusal opens the card again where it was left.
@@ -2885,7 +2853,6 @@ export function useTasksTab(input: {
       setHistoryFor(undefined);
     }
     const refusedWith = (note: string): string => {
-      if (!panelWasOpen) sidePanel.onSetOpen(false);
       if (handed !== undefined) {
         setStartingTask(undefined);
         setStandIn((now) => now ?? standingBefore);
@@ -3790,9 +3757,8 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
     },
     onShowFile: showFile,
-    // A version's Open lands where its writer wrote it: an agent's tab as a
-    // notification opens it, or the task's Call tab, asked to
-    // bring the call or the turn into view once it draws.
+    // A version's Open lands where its writer wrote it: an agent's tab, as a
+    // notification opens it.
     onShowSource: guard(showSource),
     // The call card's way back lands where the task's call bar is in sight.
     secondCall: {

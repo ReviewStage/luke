@@ -33,6 +33,8 @@ export interface HostSettingSideEffectDependencies {
    * voice for as long as it idled, which reads as the choice not taking.
    */
   readonly endLiveSession: Effect.Effect<void>;
+  /** Product events armed or disarmed, as the usage data switch now stands. */
+  shareUsageData: (on: boolean) => Effect.Effect<void>;
 }
 
 /**
@@ -45,6 +47,10 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.NONE]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
+    // The store answers the switch resolved by the build, so nothing stored
+    // never reads as on here.
+    [SETTING_SIDE_EFFECT.USAGE_DATA]: ({ settings }) =>
+      dependencies.shareUsageData(settings.usageData === true),
     // The stored voice reaches the source first, so the session the peer
     // opens next is created under it; only then is the standing session
     // ended, since its own voice cannot move and the developer is listening

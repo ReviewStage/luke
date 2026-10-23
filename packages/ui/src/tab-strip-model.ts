@@ -103,14 +103,18 @@ export interface PageStripTab {
 }
 
 /**
- * A terminal of this Mac run on an agent's pushed branch, named by the
- * agent, with its repository and when Run was last pressed for it, which
- * has the tab read the agent's branch again.
+ * A terminal of this Mac run on a pushed branch, named by the agent, with
+ * its repository and when Run was last pressed for it, which has the tab
+ * read the branch again. The branch is the agent's own, or, where Run was
+ * pressed on a Pull request tab naming another pull request of the agent's
+ * repository, that pull request's head (`number`). An agent has one such
+ * terminal, so a run of another pull request takes its place.
  */
 export interface MacTerminalStripTab {
   readonly macTerminal: string;
   readonly repository: string;
   readonly asked: number;
+  readonly number?: number;
 }
 
 /** One Browser tab in an agent's cloud browser, named by the id the service keeps it under. */

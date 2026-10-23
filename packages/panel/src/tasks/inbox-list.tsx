@@ -96,7 +96,15 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -111,6 +119,13 @@ import {
   type InboxWhoseChoice,
   useInboxListWidth,
 } from "../desktop/folded-groups.js";
+import {
+  type MenuAsk,
+  PhoneHead,
+  PlaceMore,
+  useAskedMenu,
+  useMenuAsk,
+} from "../desktop/phone-head.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { DraftMark } from "../draft-mark.js";
@@ -845,12 +860,8 @@ export function InboxItemRow({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <>
-              {/* Note that the gutter stands on every row, so the tiles line up whether a row wears the dot or not. */}
-              <span className="inbox-row-gutter">
-                {unread ? <span className="inbox-row-unread" /> : null}
-              </span>
               {/* Note that the tile hangs no card of its own, as a sidebar task's mark hangs none: the row's card names the agent. */}
-              <span className="inbox-row-mark">
+              <InboxRowLeading unread={unread}>
                 <ItemMark
                   holder={holder}
                   agentId={item.agentId}
@@ -858,7 +869,7 @@ export function InboxItemRow({
                   readerId={readerId}
                   plain
                 />
-              </span>
+              </InboxRowLeading>
             </>
           }
           title={title}
@@ -881,7 +892,7 @@ export function InboxItemRow({
             )
           }
           meta={
-            <span className="home-row-meta">
+            <InboxRowMeta>
               {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
               {context === undefined ? null : (
                 <OneLine className="home-row-context" words={context}>
@@ -903,7 +914,7 @@ export function InboxItemRow({
               ) : null}
               <TaskStatusChip holder={holder} />
               <Time at={item.updatedAt} now={now} hint={false} />
-            </span>
+            </InboxRowMeta>
           }
           metaAt={LIST_ROW_META.TITLE}
           actions={
@@ -983,7 +994,7 @@ function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element 
  * automation's clock tile, and the factory glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
-function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
+export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
@@ -1023,10 +1034,17 @@ function HolderHeader({
   );
   const shared = { folded, count, noun: NEEDS_YOU.COUNT, steady: true, onToggle };
   if (holder.kind === INBOX_HOLDER.TASK) {
+    const glyph = <PlanGlyph status={holder.task.status} />;
+    const fallback = (
+      <HoverCard>
+        <HoverCardHead glyph={glyph} name={holder.task.name} />
+      </HoverCard>
+    );
     return (
       <SidebarGroupHeader
-        glyph={<PlanGlyph status={holder.task.status} />}
+        glyph={glyph}
         name={holder.task.name}
+        card={<TaskChipCard taskId={holder.task.id} fallback={fallback} />}
         {...shared}
       />
     );
@@ -1182,6 +1200,7 @@ function ViewOptions({
   choices,
   readerId,
   readAll,
+  asked,
 }: {
   shown: boolean;
   show: InboxShowChoice;
@@ -1189,8 +1208,11 @@ function ViewOptions({
   choices: InboxViewChoices | undefined;
   readerId: string | undefined;
   readAll: InboxReadAll | undefined;
+  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
+  asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  useAskedMenu(menu.show, asked?.ask);
   const reader = useMemberDirectory();
   const scope: MenuEntry[] = INBOX_SCOPES.map((value) => ({
     ...SCOPE_WORDS[value],
@@ -1199,9 +1221,11 @@ function ViewOptions({
   }));
   return (
     <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-      </Tooltip>
+      {asked === undefined ? (
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+        </Tooltip>
+      ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}
@@ -1387,6 +1411,34 @@ export function ShowEmpty({
 }
 
 /**
+ * An item row's leading: the gutter the unread dot stands in, on every row so
+ * the tiles line up whether a row wears the dot or not, and the tile after
+ * it. The list's rows and its placeholder rows both lead with it, so a tile
+ * lands where its block stood.
+ */
+function InboxRowLeading({
+  unread,
+  children,
+}: {
+  unread: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <>
+      <span className="inbox-row-gutter">
+        {unread ? <span className="inbox-row-unread" /> : null}
+      </span>
+      <span className="inbox-row-mark">{children}</span>
+    </>
+  );
+}
+
+/** An item row's meta, its context, marks, and time in one line at the title's right. */
+function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="home-row-meta">{children}</span>;
+}
+
+/**
  * The list while its items are first read: rows in an item's own row, a
  * block where its agent's tile, its title, its time, and the line under
  * them will stand, so the
@@ -1418,20 +1470,18 @@ export function InboxListSkeleton({
           <ListRow
             key={title}
             leading={
-              <>
-                {/* Note that the gutter stands here as on every item's row, so the tiles land where their blocks stood. */}
-                <span className="inbox-row-gutter" />
+              <InboxRowLeading unread={false}>
                 <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
-              </>
+              </InboxRowLeading>
             }
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={
               context ? (
-                <span className="home-row-meta">
+                <InboxRowMeta>
                   <Skeleton width={SKELETON_CONTEXT} />
                   <Skeleton width={SKELETON_TIME} />
-                </span>
+                </InboxRowMeta>
               ) : (
                 <Skeleton width={SKELETON_TIME} />
               )
@@ -1453,13 +1503,16 @@ const SEARCH_INBOX = "Search inbox";
  * caret in it. The field narrows the list as it is typed in, standing open
  * while it holds words; Escape empties and folds it, and so does the focus
  * leaving it empty, the keyboard then handed back to the magnifier where
- * Escape folded it.
+ * Escape folded it, or, on a phone's head, which draws no magnifier, to the
+ * ⋯ the search was opened from.
  */
 function useListSearch(search: InboxSearchHead | undefined) {
   const [asked, setAsked] = useState(false);
   const open = search !== undefined && (asked || search.query !== "");
   const field = useRef<HTMLInputElement | null>(null);
   const magnifier = useRef<HTMLButtonElement | null>(null);
+  // The ⋯ a phone's head opened the search from, which stands in the magnifier's place.
+  const opener = useRef<HTMLElement | null>(null);
   const backToMagnifier = useRef(false);
   useEffect(() => {
     if (open) {
@@ -1468,7 +1521,7 @@ function useListSearch(search: InboxSearchHead | undefined) {
     }
     if (!backToMagnifier.current) return;
     backToMagnifier.current = false;
-    magnifier.current?.focus();
+    (magnifier.current ?? opener.current)?.focus();
   }, [open]);
   const fold = (handBack: boolean) => {
     backToMagnifier.current = handBack;
@@ -1507,7 +1560,17 @@ function useListSearch(search: InboxSearchHead | undefined) {
         />
       </search>
     );
-  return { button, field: fieldDrawn };
+  return {
+    button,
+    field: fieldDrawn,
+    onOpen:
+      search === undefined
+        ? undefined
+        : (from: HTMLElement) => {
+            opener.current = from;
+            setAsked(true);
+          },
+  };
 }
 
 /**
@@ -1534,6 +1597,55 @@ function ListHead({
   const { shown, show, view } = head;
   const title = inboxTitle(show.show);
   const search = useListSearch(head.search);
+  const asked = useMenuAsk();
+  if (head.phone !== undefined && placement === INBOX_LIST_PLACEMENT.PAGE) {
+    const { onOpen } = search;
+    return (
+      <>
+        <PhoneHead
+          place="inbox"
+          start={head.phone.start}
+          title={search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
+          end={
+            <PlaceMore
+              shown={shown}
+              groups={(opener) => [
+                [
+                  ...(head.onCompose === undefined
+                    ? []
+                    : [{ label: NEW_THREAD, icon: <ComposeIcon />, onSelect: head.onCompose }]),
+                  ...(onOpen === undefined
+                    ? []
+                    : [
+                        {
+                          label: SEARCH_INBOX,
+                          icon: <SearchIcon />,
+                          onSelect: () => onOpen(opener),
+                        },
+                      ]),
+                  {
+                    label: VIEW_OPTIONS,
+                    icon: <SlidersHorizontalIcon />,
+                    opens: true,
+                    onSelect: () => asked.onAsk(opener),
+                  },
+                ],
+              ]}
+            />
+          }
+        />
+        <ViewOptions
+          shown={shown}
+          show={show}
+          choices={view?.choices}
+          readerId={readerId}
+          readAll={head.readAll}
+          asked={{ ask: asked.ask }}
+        />
+        {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+      </>
+    );
+  }
   const options = (
     <>
       {head.onCompose === undefined ? null : (
@@ -1684,6 +1796,12 @@ export interface InboxListHead {
   readonly search?: InboxSearchHead | undefined;
   /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
   readonly onCompose?: (() => void) | undefined;
+  /**
+   * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
+   * phone's places: its one start control, New task, the title centred, and
+   * the ⋯ holding New thread, the search, and View options; none elsewhere.
+   */
+  readonly phone?: { readonly start: React.ReactNode } | undefined;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */

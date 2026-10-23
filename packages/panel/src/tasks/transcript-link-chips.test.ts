@@ -23,7 +23,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * transcript-link-chips.test.ts -- a link an agent or Luke writes in its
  * words, labelled as it likes or bare, is drawn as the chip of what it
  * names wherever a transcript's words are drawn: an agent's reply, a
- * subagent's, the Call tab, and an Inbox item's Markdown, which all draw
+ * subagent's, and an Inbox item's Markdown, which all draw
  * through `TranscriptWords`. A link that names nothing stays a link, and
  * code stays code. Synthetic task and repository.
  */

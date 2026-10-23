@@ -129,12 +129,14 @@ import {
   useMinute,
   wholeWordsHint,
 } from "@luke/ui";
+import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { dayAndTimeText, localTimeZone, sinceText, timeZoneNames } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { ChevronRightIcon, HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -304,7 +306,11 @@ const HOURLY_MINUTES = [0, 15, 30, 45] as const;
 const TIME_ZONES = timeZoneNames();
 
 /** What a short menu says where a search matches nothing, which it has no search to say. */
-const NO_MATCH = "Nothing matches.";
+const NO_MATCH = {
+  DAYS: "No days match",
+  TIMES: "No times match",
+  AGENTS: "No agents match",
+} as const;
 
 /** Why a save the service refused did not land, as the line under the name says it. */
 const SAVE_REFUSAL_WORDS = {
@@ -409,7 +415,7 @@ function OwnerRow({
           />
         ),
       }))}
-      noMatch="No owner matches"
+      noMatch="No owners match"
       onPick={(id) => {
         const picked = parse(id);
         if (picked !== undefined) onOwner(picked);
@@ -669,7 +675,7 @@ function ScheduleRows({
                       value={String(schedule.weekday)}
                       valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
                       rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
-                      noMatch={NO_MATCH}
+                      noMatch={NO_MATCH.DAYS}
                       onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
                     />
                   ) : null}
@@ -683,7 +689,7 @@ function ScheduleRows({
                         id: String(minute),
                         label: hourlyLabel(minute),
                       }))}
-                      noMatch={NO_MATCH}
+                      noMatch={NO_MATCH.TIMES}
                       onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
                     />
                   ) : (
@@ -838,6 +844,13 @@ function EditorToolbar({
           <nav className="automation-crumbs" aria-label="Path">
             <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
+            <ActorMark
+              actor={
+                automation === undefined
+                  ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
+                  : automationActor(automation)
+              }
+            />
             <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
           </nav>
           {codeReview ? <ExperimentTag narrow={narrow} /> : null}
@@ -1597,7 +1610,7 @@ function AgentRow({
           "No agents of this workspace work in it yet."
         ) : undefined
       }
-      noMatch={NO_MATCH}
+      noMatch={NO_MATCH.AGENTS}
       error={problem}
       onPick={(agentId) => onDraft({ agentId })}
     />

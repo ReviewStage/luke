@@ -38,9 +38,9 @@ test("an Inbox placeholder row stands its tile after the unread dot's gutter, as
   const marks = [...container.querySelectorAll('.luke-skeleton[data-shape="circle"]')];
   assert.ok(marks.length > 0);
   for (const mark of marks) {
-    const gutter = mark.previousElementSibling;
+    const gutter = mark.parentElement?.previousElementSibling;
     assert.ok(gutter);
-    assert.ok(gutter.classList.contains("inbox-row-gutter"), "the tile follows the gutter");
+    assert.ok(gutter.classList.contains("inbox-row-gutter"), "the tile's box follows the gutter");
     assert.equal(getComputedStyle(gutter).flexShrink, "0");
   }
 });

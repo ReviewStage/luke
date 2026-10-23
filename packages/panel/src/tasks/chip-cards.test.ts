@@ -73,6 +73,17 @@ const SWEEP_PAGE: PageLine = {
   shownBy: { kind: PAGE_SHOWER.AGENT, agentId: SWEEP_AGENT },
 };
 
+/** A plan the window does not hold open, and a page on it, read as its card is hung. */
+const OTHER_TASK = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
+
+const ROLLOUT_PAGE: PageLine = {
+  id: "7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f",
+  title: "Rollout tracker",
+  version: 1,
+  at: AT,
+  shownBy: { kind: PAGE_SHOWER.LUKE },
+};
+
 const SAM = "user-sam";
 
 /** The reader, who is not Sam. */
@@ -255,7 +266,9 @@ async function drawn(text: string): Promise<HTMLElement> {
     },
     // The agent on no task's pages are its own; an agent the reader cannot reach lists none, as the service answers it.
     [ACT_KIND.TASKS_PAGES]: (place) => {
-      if (!("agentId" in place)) return Promise.resolve({ pages: [] });
+      if (!("agentId" in place)) {
+        return Promise.resolve({ pages: place.taskId === OTHER_TASK ? [ROLLOUT_PAGE] : [] });
+      }
       agentPageReads.push(place.agentId);
       return Promise.resolve(
         place.agentId === SWEEP_AGENT ? { pages: [SWEEP_PAGE] } : { pages: [] },
@@ -366,7 +379,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
   assert.equal((await cardOf(version)).focus, "Version 4");
 });
 
-test("a page's chip hangs its title, its version and who showed it, and when it moved; one the window holds nothing of, or one of another plan, keeps the chip's own card", async () => {
+test("a page's chip hangs its title, its version and who showed it, and when it moved, a page of a plan not open read as it is first hung; one neither the window nor the read holds keeps the chip's own card", async () => {
   const container = await drawn(
     [
       mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "", PLACE),
@@ -380,21 +393,23 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
         PLACE,
       ),
       mentionMarkdown(
-        {
-          kind: MENTION_KIND.PAGE,
-          taskId: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
-          pageId: PAGE_ID,
-        },
+        { kind: MENTION_KIND.PAGE, taskId: OTHER_TASK, pageId: PAGE_ID },
         "Another plan's page",
+        PLACE,
+      ),
+      mentionMarkdown(
+        { kind: MENTION_KIND.PAGE, taskId: OTHER_TASK, pageId: ROLLOUT_PAGE.id },
+        "",
         PLACE,
       ),
     ].join(" "),
   );
-  const [held, unheld, elsewhere] = chipsOf(container);
+  const [held, unheld, elsewhere, closed] = chipsOf(container);
 
   const page = await cardOf(held);
   const other = await cardOf(unheld);
   const another = await cardOf(elsewhere);
+  const read = await cardOf(closed);
 
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Unfurl matrix");
@@ -405,6 +420,10 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   // A page id the open plan holds, named on another plan, is not the open plan's page.
   assert.equal(another.card, "data-mention-card");
   assert.equal(another.name, "Another plan's page");
+  // A page of a plan not open hangs its tab's card all the same, as an Inbox item's bar names it.
+  assert.equal(read.card, "data-page-card");
+  assert.equal(read.name, "Rollout tracker");
+  assert.equal(read.sub, "Shown by Luke");
 });
 
 test("a chip of a page an agent on no task showed hangs the same card as a plan's page, read as it is first hung: its title, its version and the agent that showed it, and when it moved, over its preview; one the agent's pages hold not, or of an agent the reader cannot reach, keeps the chip's own card", async () => {

@@ -308,9 +308,13 @@ test("a page that lands draws no message it did not touch again, the task's page
     const views = useTabViews();
     const cards = useMemo(
       () =>
-        taskCards({ agents: control, held: views.held, chosen: () => false, shownCode: [] }).agent(
-          AGENT_ID,
-        ),
+        taskCards({
+          agents: control,
+          held: views.held,
+          chosen: () => false,
+          shownCode: [],
+          pages: undefined,
+        }).agent(AGENT_ID),
       [views.held],
     );
     const counted = useMemo<TranscriptCards>(
@@ -428,7 +432,7 @@ test("the log first draws once the agent's pull request is read, so its dock nev
   );
   assert.equal(drawnRows(container).length, 0, "no line is drawn while the pull request is read");
   assert.ok(
-    container.querySelector(".agent-tab > .agent-log-wait > [aria-busy]"),
+    container.querySelector(".agent-tab > .agent-log-skeleton-wait > [aria-busy]"),
     "the tab stands as loading",
   );
 

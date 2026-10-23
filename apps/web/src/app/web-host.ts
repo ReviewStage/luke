@@ -362,6 +362,7 @@ function portDependencies(
         [SETTING_SIDE_EFFECT.LOGIN_ITEM]: nothing,
         [SETTING_SIDE_EFFECT.VOICE]: nothing,
         [SETTING_SIDE_EFFECT.MEDIA_DUCK]: nothing,
+        [SETTING_SIDE_EFFECT.USAGE_DATA]: nothing,
       },
     },
     // No voice stands in a tab, so an agent's Call press reaches none.

@@ -24,7 +24,6 @@
     "./volume-hint": "./src/volume-hint.js",
     "./settings-controls": "./src/settings-controls.js",
     "./transcript-model": "./src/transcript-model.js",
-    "./call-thread": "./src/call-thread.js",
     "./code-pane-model": "./src/code-pane-model.js"
   },
   "types": "./src/index.ts",

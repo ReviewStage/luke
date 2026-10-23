@@ -2155,9 +2155,6 @@ ul.actor-stack {
 .agent-call-video-frame .call-video-tile {
   width: 100%;
   height: 100%;
-  max-height: none;
-  margin: 0;
-  aspect-ratio: auto;
 }
 
 .agent-call-video .call-video-frame {
@@ -3836,10 +3833,8 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-6);
 }
 
-/* What fires a suggestion, or an automation in the list, on a tile, so a
-   row and a suggestion read as the same kind of thing. */
-.automation-suggestion-glyph,
-.automation-row-glyph {
+/* What fires a suggestion, on a tile. */
+.automation-suggestion-glyph {
   display: grid;
   width: 32px; /* off-scale */
   height: 32px; /* off-scale */
@@ -5534,28 +5529,34 @@ ul.actor-stack {
   margin-left: auto;
 }
 
-/* A phone's task is headed by one row of its own (`task-pane-switcher.tsx`),
-   a phone's standard header: the way back's glyph in its start corner, one ⋯
-   in its end corner, and the title of what is on screen centred between them,
-   truncating. The corners are one control wide each, so the title's centre is
-   the row's. It stands in the title bar's buttons' place, which a phone's
-   task does not draw, so it starts at the column's inset as the way back of a
-   Chat place does. The column's bar under it starts and ends at the column's
-   own inset, and the side panel draws no bar at all, the row standing for
-   it. */
-.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.task-head {
+/* A phone's page header (`phone-head.tsx`), a task's and each place's: one
+   control in its start corner, one ⋯ in its end corner, and the title of
+   what is on screen centred between them, truncating. The corners are one
+   control wide each, so the title's centre is the row's. It stands in the
+   title bar's buttons' place, which a phone's task and places do not draw,
+   so it starts at the column's inset. Under a task's, the column's bar starts
+   and ends at the column's own inset, and the side panel draws no bar at
+   all, the row standing for it. */
+.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.phone-head {
   display: grid;
   grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
   padding-right: var(--column-inset);
   padding-left: var(--column-inset);
 }
 
-.task-head > .desktop-toolbar-heading {
+.phone-head > .desktop-toolbar-heading {
+  display: flex;
   min-width: 0;
-  text-align: center;
+  align-items: center;
+  justify-content: center;
+  gap: var(--luke-space-8);
 }
 
-.task-head > .desktop-toolbar-actions {
+.phone-head > .desktop-toolbar-heading > .desktop-toolbar-title {
+  min-width: 0;
+}
+
+.phone-head > .desktop-toolbar-actions {
   justify-content: flex-end;
 }
 
@@ -6674,7 +6675,7 @@ ul.actor-stack {
 .tasks-list {
   display: grid;
   grid-template-columns: var(--tasks-list-columns);
-  column-gap: var(--luke-space-8);
+  column-gap: var(--luke-space-12);
   row-gap: var(--luke-space-16);
   padding-bottom: var(--luke-space-24);
 }
@@ -6691,9 +6692,13 @@ ul.actor-stack {
   align-content: start;
 }
 
+/* Note that the rows take the list's column gap back, because the Stack
+   they are drawn as sets its gap to none, and a subgrid's own gap draws its
+   cells over the parent's, so a row's columns would touch. */
 .tasks-list-rows {
   margin: 0;
   padding: 0;
+  column-gap: normal;
   list-style: none;
 }
 
@@ -6770,7 +6775,9 @@ ul.actor-stack {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
-  min-height: var(--luke-control-height);
+  /* Note that a row stands a little taller than a control, so the list
+     breathes between rows rather than reading as a dense table. */
+  min-height: calc(var(--luke-control-height) + var(--luke-space-6));
   align-items: center;
   padding: var(--luke-space-2) var(--row-inset);
   border-radius: var(--luke-control-radius);
@@ -6811,7 +6818,7 @@ ul.actor-stack {
 
 .tasks-list-row[data-lifted="true"] {
   display: flex;
-  gap: var(--luke-space-8);
+  gap: var(--luke-space-12);
   background: var(--luke-color-surface);
   box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
 }

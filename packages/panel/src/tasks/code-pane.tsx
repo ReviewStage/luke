@@ -282,7 +282,7 @@ export function CodePane({
   onOpenFile,
 }: {
   shown: readonly TaskCodeShowing[];
-  /** The task's calls as the Call tab draws them, which the code is grouped under. */
+  /** The task's calls as the agents' tabs draw them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** The task the code was shown on, whose work a note's link names; none offers no link. */
   taskId?: string | undefined;

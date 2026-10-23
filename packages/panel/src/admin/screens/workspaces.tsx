@@ -28,12 +28,17 @@ import {
 } from "@luke/ui";
 import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useEffect, useState } from "react";
-import { AccountCell } from "../accounts-table/accounts-table.js";
+import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
-import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card.js";
+import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
-import { AdminViewOptions, Refreshing } from "../chrome/controls.js";
-import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header.js";
+import { AdminViewOptions, PageSections, Refreshing } from "../chrome/controls.js";
+import {
+  AdminCollectionPage,
+  CollectionCountSkeleton,
+  type ViewerAccount,
+} from "../chrome/page-header.js";
+import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
 import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
@@ -201,49 +206,42 @@ function workspaceColumns(
 }
 
 /** The four headline counts, in the stat row's two wrapping pairs. */
-function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Element {
-  const { summary } = list;
-  const activeShare = summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared;
-  return (
-    <div className={STAT_ROW}>
-      <div className={STAT_PAIR}>
-        <div className={STAT_CELL}>
-          <StatCard
-            label="Shared workspaces"
-            value={formatCount(summary.shared)}
-            hint="2+ members · excludes personal"
-          />
-        </div>
-        <div className={STAT_CELL}>
-          <StatCard
-            label="Active this week"
-            value={formatCount(summary.sharedActiveWeek)}
-            hint={`${formatShare(activeShare)} of shared`}
-            title="A task or coding agent started, or a plan revised, in the last 7 UTC days"
-          />
-        </div>
-      </div>
-      <div className={STAT_PAIR}>
-        <div className={STAT_CELL}>
-          <StatCard
-            label="Invites accepted"
-            value={formatShare(summary.invitations.acceptanceRate)}
-            hint={`${formatCount(summary.invitations.pending)} pending · ${formatCount(summary.invitations.expired)} expired`}
-            title={`${formatCount(summary.invitations.accepted)} accepted of ${formatCount(summary.invitations.settled)} no longer open, across every workspace`}
-          />
-        </div>
-        <div className={STAT_CELL}>
-          <StatCard
-            label="With GitHub installed"
-            value={formatShare(summary.github.activeShare)}
-            hint={`${formatCount(summary.github.sharedWithSuspended)} suspended`}
-            title={`${formatCount(summary.github.sharedWithActive)} shared workspaces with an active installation`}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
+const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
+  {
+    key: "shared",
+    label: () => "Shared workspaces",
+    value: ({ summary }) => formatCount(summary.shared),
+    hint: () => "2+ members · excludes personal",
+  },
+  {
+    key: "active",
+    label: () => "Active this week",
+    value: ({ summary }) => formatCount(summary.sharedActiveWeek),
+    hint: ({ summary }) =>
+      `${formatShare(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
+    title: () => "A task or coding agent started, or a plan revised, in the last 7 UTC days",
+  },
+  {
+    key: "invites",
+    label: () => "Invites accepted",
+    value: ({ summary }) => formatShare(summary.invitations.acceptanceRate),
+    hint: ({ summary }) =>
+      `${formatCount(summary.invitations.pending)} pending · ${formatCount(summary.invitations.expired)} expired`,
+    title: ({ summary }) =>
+      `${formatCount(summary.invitations.accepted)} accepted of ${formatCount(summary.invitations.settled)} no longer open, across every workspace`,
+  },
+  {
+    key: "github",
+    label: () => "With GitHub installed",
+    value: ({ summary }) => formatShare(summary.github.activeShare),
+    hint: ({ summary }) => `${formatCount(summary.github.sharedWithSuspended)} suspended`,
+    title: ({ summary }) =>
+      `${formatCount(summary.github.sharedWithActive)} shared workspaces with an active installation`,
+  },
+];
+
+/** How many workspaces the table's skeleton stands a row for, enough to fill a window. */
+const WORKSPACES_SKELETON_ROWS = 10;
 
 /** What the table's figures mean, and where its bound cut it. */
 function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Element {
@@ -256,6 +254,55 @@ function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
         ? ` Only the ${formatCount(list.rows.length)} busiest of ${formatCount(list.total)} are listed. Search reads every workspace.`
         : ""}
     </Text>
+  );
+}
+
+/**
+ * The page's sections under its filters, drawn from `list` once it is read
+ * and as their skeletons until then: the tiles, which stand whatever the
+ * search narrows, over the table of `rows`, the answer's rows the search
+ * keeps.
+ */
+function WorkspacesSections({
+  list,
+  rows,
+  onOpenAccount,
+}: {
+  list: AdminWorkspaceList | undefined;
+  rows: readonly AdminWorkspaceRow[];
+  onOpenAccount: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <StatCards layout={STAT_LAYOUT.PAIRS} stats={WORKSPACE_STATS} data={list} />
+      <AdminSection>
+        {list === undefined ? (
+          <DataTableSkeleton
+            label="Workspaces"
+            columns={workspaceColumns(onOpenAccount)}
+            rows={WORKSPACES_SKELETON_ROWS}
+            minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
+            cells={{ [WORKSPACE_COLUMN.OWNER]: <AccountCellSkeleton /> }}
+          />
+        ) : (
+          <>
+            <DataTable
+              label="Workspaces"
+              columns={workspaceColumns(onOpenAccount)}
+              rows={rows}
+              rowKey={(row) => row.id}
+              empty={WORKSPACES_EMPTY}
+              minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
+              rowPressable={(row) => row.owner !== null}
+              onRowPress={(row) => {
+                if (row.owner !== null) onOpenAccount(row.owner.id);
+              }}
+            />
+            <WorkspacesNote list={list} />
+          </>
+        )}
+      </AdminSection>
+    </>
   );
 }
 
@@ -304,7 +351,7 @@ export function WorkspacesScreen({
   const page = (
     content: Pick<
       React.ComponentProps<typeof AdminCollectionPage>,
-      "filters" | "state" | "empty" | "error" | "children"
+      "filters" | "state" | "skeleton" | "empty" | "error" | "children"
     >,
   ) =>
     frame(
@@ -334,7 +381,20 @@ export function WorkspacesScreen({
 
   switch (state.status) {
     case "loading":
-      return page({ filters: search, state: COLLECTION_STATE.LOADING });
+      return page({
+        filters: (
+          <>
+            {search}
+            <CollectionCountSkeleton />
+          </>
+        ),
+        state: COLLECTION_STATE.LOADING,
+        skeleton: (
+          <PageSections>
+            <WorkspacesSections list={undefined} rows={[]} onOpenAccount={onOpenAccount} />
+          </PageSections>
+        ),
+      });
     case "signed-out":
       return gate.signedOut();
     case "forbidden":
@@ -358,18 +418,6 @@ export function WorkspacesScreen({
       const rows = needle
         ? list.rows.filter((row) => row.name.toLowerCase().includes(needle))
         : list.rows;
-      // Note that the tiles stand whatever the search narrows, so they lead
-      // the table whether or not it holds a row.
-      const body = (table: React.ReactNode) => (
-        <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-          <WorkspaceTiles list={list} />
-          <AdminSection>
-            {table}
-            <WorkspacesNote list={list} />
-          </AdminSection>
-        </Refreshing>
-      );
-
       return page({
         filters: (
           <>
@@ -383,19 +431,10 @@ export function WorkspacesScreen({
         // An empty answer stands where the table stands, in its own frame
         // under the tiles, as the Users roster's does.
         state: COLLECTION_STATE.READY,
-        children: body(
-          <DataTable
-            label="Workspaces"
-            columns={workspaceColumns(onOpenAccount)}
-            rows={rows}
-            rowKey={(row) => row.id}
-            empty={WORKSPACES_EMPTY}
-            minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
-            rowPressable={(row) => row.owner !== null}
-            onRowPress={(row) => {
-              if (row.owner !== null) onOpenAccount(row.owner.id);
-            }}
-          />,
+        children: (
+          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
+            <WorkspacesSections list={list} rows={rows} onOpenAccount={onOpenAccount} />
+          </Refreshing>
         ),
       });
     }

@@ -46,7 +46,7 @@ import type { TranscriptReader } from "./use-agent-transcript.js";
  * transcript-copy.ts -- a coding agent's or a subagent's transcript as the markdown its tab's menu copies: concise, or whole.
  *
  * Both copies are built from the rows the tab draws (`turn-rows.ts`, through
- * `agentRows` and the Call tab's worker session), never from the page, so a
+ * `agentRows` and a worker's session), never from the page, so a
  * tab that is not shown copies as one that is. The concise copy is what a
  * reader skims: the brief the agent was handed, each message the developer
  * sent, and each of the agent's turns as one line per call it made, in its

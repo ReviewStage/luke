@@ -2105,6 +2105,34 @@ test("the pill, the title, and the files' count stand from what Luke holds befor
   ]);
 });
 
+test("each part's placeholder stands in the boxes the part lands in: the line under the title in the people line, the conversation in entry cards, the checks in the checks' own list", async () => {
+  const pullRequest = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
+  const checks = held<{ pullRequest: CodingAgentOverviewChecks }>();
+  const conversation = held<{ pullRequest: CodingAgentOverviewConversation }>();
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: pullRequest.read,
+      checks: checks.read,
+      conversation: conversation.read,
+    }),
+  );
+  const placeholder = (label: string) =>
+    [...tab.querySelectorAll<HTMLElement>('[aria-busy="true"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`${label} stands`);
+
+  assert.ok(placeholder("Reading pull request").querySelector(".pull-request-people .luke-skeleton"));
+  assert.ok(
+    placeholder("Reading conversation").querySelectorAll(".pull-request-entry .luke-skeleton")
+      .length > 0,
+  );
+  await choose(tab, "Checks");
+  const rows = placeholder("Reading checks").querySelectorAll(
+    '[aria-label="Check list"] li .luke-skeleton',
+  );
+  assert.ok(rows.length > 0, "the checks' blocks stand in the checks' own list");
+});
+
 /** A read answering each ask with the next of the answers given, the last again once they run out. */
 function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
   let ask = 0;
@@ -2286,7 +2314,15 @@ function offered(tab: HTMLElement): string[] {
   return labels;
 }
 
-test("a draft's pill offers Ready for review, which is asked of the service for the agent, and the tab reads the pull request again, its pill then saying it is open and offering Convert to draft", async () => {
+/** The labels the pill's menu draws red, opened and closed again. */
+function offeredRed(tab: HTMLElement): string[] {
+  act(() => pill(tab).click());
+  const labels = words(document.body, '[role="menuitem"][data-danger="true"]');
+  act(() => pill(tab).click());
+  return labels;
+}
+
+test("a draft's pill offers Ready for review, and Close pull request in red, which is asked of the service for the agent, and the tab reads the pull request again, its pill then saying it is open and offering Convert to draft", async () => {
   let reads = 0;
   const tab = await draw(
     controlAnswering(
@@ -2306,12 +2342,14 @@ test("a draft's pill offers Ready for review, which is asked of the service for 
   );
   assert.equal(pill(tab).textContent, "Draft");
   assert.deepEqual(offered(tab), ["Ready for review", "Close pull request"]);
+  assert.deepEqual(offeredRed(tab), ["Close pull request"], "closing is drawn red");
 
   await pressAction(tab, "Ready for review");
 
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW }]]);
   assert.equal(pill(tab).textContent, "Open");
   assert.deepEqual(offered(tab), ["Convert to draft", "Close pull request"]);
+  assert.deepEqual(offeredRed(tab), ["Close pull request"], "closing is drawn red");
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
 });
 
@@ -2504,12 +2542,28 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
       { ...none, press: "Remove from queue", look: "outline", chevron: false },
     ],
     [
-      "auto-merge on",
-      merging(MERGE_STATE.BLOCKED, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
+      "auto-merge on, waiting on its checks, which its press says",
+      merging(MERGE_STATE.BLOCKED, {
+        checks: CHECK_SUMMARY.PENDING,
+        autoMerge: { method: MERGE_METHOD.SQUASH },
+      }),
+      { ...none, press: "Disable auto-merge", look: "outline", chevron: false },
+    ],
+    [
+      "auto-merge on, about to merge",
+      merging(MERGE_STATE.CLEAN, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
+      { ...none, press: "Disable auto-merge", look: "outline", chevron: false },
+    ],
+    [
+      "auto-merge on, a review required",
+      merging(MERGE_STATE.BLOCKED, {
+        review: REVIEW_DECISION.REVIEW_REQUIRED,
+        autoMerge: { method: MERGE_METHOD.SQUASH },
+      }),
       {
-        chip: "Auto-merge on",
-        tone: "working",
-        sentence: "Auto-merge is on (squash). Merging is blocked by a required review or check",
+        chip: "Review required",
+        tone: "attention",
+        sentence: "Auto-merge is on (squash). A required review is missing",
         press: "Disable auto-merge",
         look: "outline",
         chevron: false,

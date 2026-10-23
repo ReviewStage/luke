@@ -142,6 +142,7 @@ function drawn(
   reveal?: { readonly thread: string; readonly ask: number },
   mentions?: TaskMentionsValue,
   me?: string,
+  read = true,
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
@@ -150,7 +151,7 @@ function drawn(
   const control: PlanCommentsControl = {
     planId: PLAN.id,
     threads,
-    read: true,
+    read,
     failed: false,
     onRetry: () => undefined,
     notes: new Map(),
@@ -323,6 +324,21 @@ test("the Comments tab lists each open thread whole, its reply field under its c
   );
   assert.ok(
     cards.every((card) => card.querySelector(".comment-field[data-variant='reply']") !== null),
+  );
+});
+
+test("the Comments tab draws a skeleton while its threads are read, then neither it nor an empty state once they are", () => {
+  const reading = drawn("tab", [], undefined, PLAN, undefined, undefined, undefined, false);
+
+  assert.match(
+    reading.container.querySelector('.comments-list [role="status"]')?.textContent ?? "",
+    /Reading the comments/u,
+  );
+  assert.equal(reading.container.querySelector(".comments-list .luke-empty-state"), null);
+  assert.equal(reading.container.querySelector(".comments-list[data-empty]"), null);
+  assert.ok(
+    reading.container.querySelectorAll('[role="status"] .comment-card .luke-skeleton').length > 0,
+    "the placeholder's blocks stand in a thread's own card, where the threads land",
   );
 });
 

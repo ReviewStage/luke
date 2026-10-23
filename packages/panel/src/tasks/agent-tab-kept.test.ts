@@ -215,6 +215,7 @@ function runningTab() {
       held: NOTHING_HELD,
       chosen: () => false,
       shownCode: [],
+      pages: undefined,
       task,
     }).agent(AGENT_ID);
   const draw = (control: ReturnType<typeof controlOf>, cards: TranscriptCards) => {

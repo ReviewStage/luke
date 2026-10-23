@@ -43,7 +43,7 @@ import {
   GitPullRequestIcon,
   PencilIcon,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
@@ -68,7 +68,8 @@ import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js
  * The pill is `@luke/ui`'s pill chip in the tone of where the pull request
  * stands, as stage-cli's status pill is, and opens a menu offering what may
  * be done from there: Ready for review for a draft and Convert to draft for
- * one open, each with Close pull request, neutral as GitHub draws it, and
+ * one open, each with Close pull request, drawn red as every item that
+ * ends what it acts on is, and
  * Reopen pull request for one closed; once merged it is a badge in that
  * tone, with nothing left to press. The title is edited in place, as
  * stage-cli's is: its pencil opens a field over it, Enter or the check keeps
@@ -321,6 +322,7 @@ export function PullRequestStateMenu({
   const items: MenuAction[] = actions.map((action) => ({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],
+    danger: action === PULL_REQUEST_ACTION.CLOSE,
     disabled: writes.pending !== undefined,
     onSelect: () => writes.write({ action }),
   }));
@@ -388,6 +390,21 @@ const TITLE_WORDS = {
   FIELD: "Pull request title",
 } as const;
 
+/** The title's line in the dialog's type, holding its field while it is edited, or the blocks of a title still being read. */
+export function PullRequestTitleLine({
+  field = false,
+  children,
+}: {
+  field?: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <h2 className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}>
+      {children}
+    </h2>
+  );
+}
+
 /**
  * The pull request's title and number, the number wrapping with the
  * title's last word, its pencil opening a field over the
@@ -419,7 +436,7 @@ export function PullRequestTitle({
   };
   if (editing) {
     return (
-      <h2 className="pull-request-title pull-request-title-field">
+      <PullRequestTitleLine field>
         <InlineEdit
           value={title}
           label={TITLE_WORDS.FIELD}
@@ -428,7 +445,7 @@ export function PullRequestTitle({
           look={INLINE_EDIT_LOOK.INPUT}
           onEnd={end}
         />
-      </h2>
+      </PullRequestTitleLine>
     );
   }
   const numberWords = <span className="pull-request-number">{number}</span>;

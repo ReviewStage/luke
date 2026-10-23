@@ -2,10 +2,13 @@ import {
   BUTTON_VARIANT,
   Button,
   ErrorState,
+  SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_SECTION_FRAME,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
   type SettingsRowControl,
+  type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
   SettingsSectionsSkeleton,
@@ -23,8 +26,27 @@ import { CatalogSection } from "../section";
  * under, one with no card around a text area that draws its own frame, and
  * lines in the rows' place: a note before rows, a note alone, and a read
  * that failed with its Retry; and placeholders while a read is out: rows in
- * a card, marked and not, and whole sections.
+ * a card, marked and not, every control a row ends in, and whole sections.
  */
+
+/** A provider's key row while it is read: its mark, its name alone, and its press. */
+const KEY_ROW: SettingsRowSkeletonShape = {
+  described: false,
+  mark: SETTINGS_ROW_MARK_WIDTH,
+  controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+};
+
+/** A member's row while it is read: a face at a card's size, the email under the name, the role and the ⋯. */
+const MEMBER_ROW: SettingsRowSkeletonShape = {
+  described: true,
+  mark: "32px",
+  controls: [SETTINGS_SKELETON_CONTROL.VALUE, SETTINGS_SKELETON_CONTROL.MORE],
+};
+
+/** A described row ending in each control a placeholder stands. */
+const EVERY_CONTROL: readonly SettingsRowSkeletonShape[] = Object.values(
+  SETTINGS_SKELETON_CONTROL,
+).map((control) => ({ described: true, controls: [control] }));
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
 function HeldSwitch({ label, control }: { label: string; control: SettingsRowControl }) {
@@ -131,12 +153,21 @@ function SettingsSections(): React.JSX.Element {
       <CatalogSection id="settings-section-reading" title="Placeholders while a read is out">
         <div className="catalog-settings">
           <SettingsSection title="API keys">
-            <SettingsRowsSkeleton label="Loading your keys" rows={2} />
+            <SettingsRowsSkeleton label="Loading your keys" rows={[KEY_ROW, KEY_ROW]} />
           </SettingsSection>
           <SettingsSection title="Members">
-            <SettingsRowsSkeleton label="Loading the members" rows={3} marked />
+            <SettingsRowsSkeleton label="Loading the members" rows={[MEMBER_ROW, MEMBER_ROW]} />
           </SettingsSection>
-          <SettingsSectionsSkeleton label="Loading the integrations" sections={[2, 3]} marked />
+          <SettingsSection title="Every control a row ends in">
+            <SettingsRowsSkeleton label="Loading the controls" rows={EVERY_CONTROL} />
+          </SettingsSection>
+          <SettingsSectionsSkeleton
+            label="Loading the integrations"
+            sections={[
+              { headed: false, rows: [MEMBER_ROW] },
+              { headed: true, rows: [KEY_ROW, KEY_ROW, KEY_ROW] },
+            ]}
+          />
         </div>
       </CatalogSection>
     </>

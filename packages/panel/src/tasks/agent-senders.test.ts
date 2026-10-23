@@ -40,7 +40,7 @@ import { OpenLinkProvider } from "./use-open-link.js";
 /**
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
  * agent carries their face and name under its bubble, as a teammate's line
- * on the Call tab does, and the reader's own carries none; Luke's carries
+ * on a call does, and the reader's own carries none; Luke's carries
  * his tile, an automation's its own, GitHub's the login it names, another
  * coding agent's its harness's mark by its name, where the service says
  * the model it runs on, and a member's who has left the quiet
