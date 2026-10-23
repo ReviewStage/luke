@@ -9,6 +9,7 @@ import shortcut from "@luke/panel/styles/shortcut.css?raw";
 import tasks from "@luke/panel/styles/tasks.css?raw";
 import ui from "@luke/ui/styles.css?inline";
 import tokens from "@luke/ui/tokens.css?inline";
+import utilities from "./tailwind.css?inline";
 
 /**
  * container-width.ts -- the panel's stylesheets as containers of given widths, on a given kind of device, read them, for jsdom, which lays nothing out and answers no container, media, or layer rule.
@@ -39,7 +40,9 @@ import tokens from "@luke/ui/tokens.css?inline";
  * that jsdom still weighs a selector's specificity across layers, which the
  * cascade does not. Laid into the test's document, they let
  * `getComputedStyle` say what the component draws at that width, which
- * `shown` reads up the element's ancestors.
+ * `shown` reads up the element's ancestors. The utilities an app's Tailwind
+ * entry compiles (`tailwind.css`) are laid after the panel's sheets, as each
+ * app imports them, in the layers the panel's sheets opened under them.
  */
 
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
@@ -56,12 +59,15 @@ const SHEET_BY_IMPORT = {
   "./call.css": call,
 } as const;
 
-/** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in. */
-const SHEETS = [...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier]) => {
-  const sheet = Object.entries(SHEET_BY_IMPORT).find(([named]) => named === specifier)?.[1];
-  if (sheet === undefined) throw new Error(`container-width.ts lays no sheet for ${specifier}`);
-  return sheet;
-});
+/** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in, and the app's utilities after them. */
+const SHEETS = [
+  ...[...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier]) => {
+    const sheet = Object.entries(SHEET_BY_IMPORT).find(([named]) => named === specifier)?.[1];
+    if (sheet === undefined) throw new Error(`container-width.ts lays no sheet for ${specifier}`);
+    return sheet;
+  }),
+  utilities,
+];
 
 /**
  * An at-rule resolved here, through the brace that opens its block: a
