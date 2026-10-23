@@ -13,14 +13,21 @@
 
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { IconButton, OneLine, ReturnIcon, Tooltip } from "@luke/ui";
+import {
+  IconButton,
+  KEEP_FOCUS,
+  KEEP_FOCUS_ELEMENT,
+  KeepFocus,
+  OneLine,
+  ReturnIcon,
+  Tooltip,
+} from "@luke/ui";
 import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import {
   type AnimationEvent,
   createContext,
-  type MouseEvent,
   type ReactNode,
   useContext,
   useRef,
@@ -152,23 +159,21 @@ export function CallCard({
       onClick={controls.onReturn}
     />
   );
-  // In the floating window a press on a button acts without taking focus,
-  // so the next drag never finds a button holding it.
-  const keepFocus = (event: MouseEvent<HTMLElement>) => {
-    if (event.target instanceof Element && event.target.closest("button")) event.preventDefault();
-  };
   const left = (event: AnimationEvent<HTMLElement>) => {
     if (leaving && event.target === event.currentTarget) onLeft?.();
   };
   const tiled = video !== undefined && video.status !== AVATAR_STATUS.OFF;
   return (
-    <section
+    // In the floating window a press on a button acts without taking focus,
+    // so the next drag never finds a button holding it.
+    <KeepFocus
+      as={KEEP_FOCUS_ELEMENT.SECTION}
+      scope={inWindow ? KEEP_FOCUS.CONTROLS : KEEP_FOCUS.NONE}
       className="call-card"
       aria-label="Call"
       data-surface={surface}
       data-leaving={leaving}
       onAnimationEnd={left}
-      onMouseDown={inWindow ? keepFocus : undefined}
     >
       {tiled ? (
         <CallVideoTile video={video.track} status={video.status} onSetVideo={video.onSetVideo} />
@@ -205,7 +210,7 @@ export function CallCard({
           titled={inWindow}
         />
       </div>
-    </section>
+    </KeepFocus>
   );
 }
 

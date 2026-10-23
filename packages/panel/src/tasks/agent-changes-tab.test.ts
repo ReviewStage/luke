@@ -538,7 +538,8 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
 test("with the file stood on filtered out, the tree marks the file the list scrolls to", async () => {
   files = [changed("src/a.ts"), changed("lib/b.ts"), changed("lib/c.ts")];
   await drawTab({ treeOpen: true });
-  act(() => header("src/a.ts").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  const row = header("src/a.ts").querySelector("summary") ?? assert.fail("the header is a row");
+  act(() => row.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
   assert.ok(header("src/a.ts").hasAttribute("data-standing"));
 
   typeSearch("lib");

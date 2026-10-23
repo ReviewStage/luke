@@ -74,6 +74,8 @@ const NO_PRESS = [
   "dialog.luke-dialog",
   // A fold's action stands in its summary only to keep its own press from folding it.
   ".luke-disclosure-action",
+  // A portal's fence only keeps what the controls it holds took from the tree around it (`portal-fence.tsx`).
+  ".luke-portal-fence",
   // Words a hint hangs from, whose tap shows the hint rather than pressing anything (`hint.tsx`).
   ".luke-one-line",
   "span.luke-inline-ref",
