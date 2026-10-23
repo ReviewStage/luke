@@ -1,5 +1,6 @@
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   createContext,
@@ -21,6 +22,7 @@ import type {
   MentionableAgent,
   MentionablePage,
   MentionablePullRequest,
+  MentionOpenFile,
 } from "./mention-picker.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useOpenTask } from "./use-open-link.js";
@@ -70,6 +72,10 @@ export interface TaskMentionsValue {
   readonly readAgents?: MentionAgentsReader | undefined;
   /** The pull requests the task's agents published, which an `@` offers; none off a task. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
+  /** Every code Luke showed on the task, whose newest note on a file an `@` row's card says; none off a task. */
+  readonly shownCode?: readonly TaskCodeShowing[] | undefined;
+  /** The task's open File tabs, whose pinned commit an `@` row's card is read at; none off a task. */
+  readonly openFiles?: readonly MentionOpenFile[] | undefined;
   readonly doors: MentionDoors;
 }
 

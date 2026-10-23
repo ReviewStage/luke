@@ -853,6 +853,8 @@ function PlanDocument({
       }),
       readAgents: readMentionAgents,
       pullRequests: mentionablePullRequests(agents),
+      shownCode,
+      openFiles: sidePanel.files,
       doors: {
         taskId: opened.id,
         place: { workspace, repository: opened.repository },
@@ -868,6 +870,8 @@ function PlanDocument({
     opened,
     workspace,
     pages,
+    shownCode,
+    sidePanel.files,
     agents,
     readMentionAgents,
     openMention,
