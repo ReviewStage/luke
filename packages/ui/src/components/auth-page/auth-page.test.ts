@@ -10,7 +10,8 @@ import { AuthPage } from "./auth-page.js";
  * auth-page.test.ts -- the page is one main landmark holding one card named
  * by its title, its artwork hidden from a reader; what went wrong is
  * announced from an alert region that stood before it arrived; and a page
- * with nothing to say past its title says its title alone.
+ * with nothing to say past its title says its title alone, with no room
+ * kept for choices that are all absent.
  */
 
 const roots: Root[] = [];
@@ -72,4 +73,11 @@ test("a page with nothing to say past its title says its title alone", () => {
   );
   expect(container.querySelector("main")?.textContent).toBe("Continuing to Luke…");
   expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+});
+
+test("a body whose every choice is absent keeps no room on the card", () => {
+  const container = mount(
+    createElement(AuthPage, { title: "Nothing to connect", children: [null, false, undefined] }),
+  );
+  expect(container.querySelector(".luke-auth-body")).toBeNull();
 });

@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from "react";
+import { Children, type ReactNode, useId } from "react";
 
 /**
  * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centred in the window, with nothing else on the page.
@@ -78,7 +78,9 @@ export function AuthPage({
           {title}
         </h1>
         {said(description) ? <p className="luke-auth-description">{description}</p> : null}
-        {said(children) ? <div className="luke-auth-body">{children}</div> : null}
+        {Children.toArray(children).some(said) ? (
+          <div className="luke-auth-body">{children}</div>
+        ) : null}
         <p className="luke-auth-error" role="alert">
           {said(error) ? error : null}
         </p>
