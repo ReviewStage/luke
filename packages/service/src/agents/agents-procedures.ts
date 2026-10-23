@@ -267,12 +267,14 @@ const listedShells = /* @__PURE__ */ Effect.fnUntraced(function* (sessionId: str
 
 /** Whether the agent, read again under its conversation's lock, still stands as a Stop left it, as a task's archive reads each of its own. */
 function agentStandsStopped(agent: CodingAgent) {
-  return standsStopped({
-    id: agent.id,
-    conversationId: agent.conversationId,
-    createdAt: agent.createdAt,
-    blank: startedBlank(agent),
-  });
+  return standsStopped([
+    {
+      id: agent.id,
+      conversationId: agent.conversationId,
+      createdAt: agent.createdAt,
+      blank: startedBlank(agent),
+    },
+  ]);
 }
 
 /** The agents resource: every procedure to a signed-in caller, a body read under its own cap. */

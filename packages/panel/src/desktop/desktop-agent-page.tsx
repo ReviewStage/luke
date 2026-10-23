@@ -39,6 +39,7 @@ import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
@@ -402,22 +403,27 @@ export function DesktopAgentPage({
     [agentRepository, agent?.title],
   );
   // The pane draws the agent as the column's tab would: archived or not, it is the list's one agent.
-  const control = {
+  // Note that what the pane is handed stands while it says the same, because the pane holds while it does (`memo`), and every row of the transcript with it.
+  const control = useSteadyDoors({
     ...agents,
     agents: agent === undefined ? agents.agents : [agent],
     agentIds: agent === undefined ? agents.agentIds : [agent.id],
     models: agents.models ?? tasks.agents.models,
     keywords,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
-  };
-  const tab = { agent: agentId };
+  });
+  const tab = useMemo(() => ({ agent: agentId }), [agentId]);
   // A Fork or a Continue opens the page's draft in the agent's place, through the same doors a task's column opens its own by.
   const draftDoors = useAgentDraftDoors(agents, agent?.archivedAt !== undefined, (draftId) =>
     setDrafting({ agentId, draftId }),
   );
   // The draft stands in the pane while it is the one the page opened, and the agent again once it starts or is let go.
-  const paneTab =
-    draftShown !== undefined && agents.draft?.id === draftShown ? { draft: draftShown } : tab;
+  const draftTab =
+    draftShown !== undefined && agents.draft?.id === draftShown ? draftShown : undefined;
+  const paneTab = useMemo(
+    () => (draftTab === undefined ? tab : { draft: draftTab }),
+    [draftTab, tab],
+  );
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
@@ -425,7 +431,7 @@ export function DesktopAgentPage({
   );
   // Note that an inbox call and a page are the rows of a coding agent's own that open a tab, and a task's archive the one
   // that opens another task, as the sidebar opens it, a worker's opening through its delegation.
-  const openTarget = (target: ToolTarget) => {
+  const openTarget = useSteadyDoor((target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
     if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
@@ -435,44 +441,57 @@ export function DesktopAgentPage({
       sidePanel.onChoose(SIDE_PANEL_TAB.CODE);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
     if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose({ page: target.page });
-  };
+  });
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
-  const openDelegation = (
-    agent: string,
-    callId: string,
-    task: string,
-    status: CodingAgentStatus,
-  ) => {
-    views.onWorkerStatus(callId, status);
-    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
-  };
-  const openPullRequest = (published: string, number?: number) =>
-    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION, number);
+  const openDelegation = useSteadyDoor(
+    (agent: string, callId: string, task: string, status: CodingAgentStatus) => {
+      views.onWorkerStatus(callId, status);
+      sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+    },
+  );
+  const openPullRequest = useSteadyDoor((published: string, number?: number) =>
+    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION, number),
+  );
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task,
   // and one to any other pull request of its repository a Pull request tab by its number.
-  const openHere = openPullRequestsHere(control, openPullRequest, agentRepository);
+  // Note that the three openers handed to the transcript stand while what they read does, because every link and chip in it is drawn again with each new one.
+  const { pullRequests, agentIds, heldIds } = control;
+  const openHere = useMemo(
+    () =>
+      openPullRequestsHere({ pullRequests, agentIds, heldIds }, openPullRequest, agentRepository),
+    [pullRequests, agentIds, heldIds, openPullRequest, agentRepository],
+  );
   // A link to the page's own agent, as a fork's chip opens its source, leaves the page's draft for the agent.
-  const openLinkHere =
-    openLink === undefined
-      ? undefined
-      : (link: ReadLink) => {
-          const { place } = link;
-          const own =
-            (place.kind === LINK_PLACE.AGENT || place.kind === LINK_PLACE.MESSAGE) &&
-            place.agentId === agentId;
-          if (own) setDrafting(undefined);
-          openLink(link);
-        };
+  const openLinkHere = useMemo(
+    () =>
+      openLink === undefined
+        ? undefined
+        : (link: ReadLink) => {
+            const { place } = link;
+            const own =
+              (place.kind === LINK_PLACE.AGENT || place.kind === LINK_PLACE.MESSAGE) &&
+              place.agentId === agentId;
+            if (own) setDrafting(undefined);
+            openLink(link);
+          },
+    [openLink, agentId],
+  );
   const shown = tasks.shown && !sidePanel.fullScreen;
-  const cards = taskCards({
-    agents: control,
-    held: views.held,
-    chosen: (opened) =>
-      sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
-    shownCode: shownCode ?? [],
-    // Note that an agent on a task shows its pages on the task, so its rows read them there.
-    pages: agent?.planId == null ? { agentId } : { taskId: agent.planId },
-  });
+  const sideTab = sidePanel.tab;
+  const planId = agent?.planId ?? null;
+  const cards = useMemo(
+    () =>
+      taskCards({
+        agents: control,
+        held: views.held,
+        chosen: (opened) =>
+          sameTab(opened, tab) || (sideTab !== undefined && sameTab(opened, sideTab)),
+        shownCode: shownCode ?? [],
+        // Note that an agent on a task shows its pages on the task, so its rows read them there.
+        pages: planId === null ? { agentId } : { taskId: planId },
+      }),
+    [control, views.held, tab, sideTab, shownCode, planId, agentId],
+  );
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {
     if (agentRepository === undefined) return;
@@ -481,7 +500,7 @@ export function DesktopAgentPage({
     appPlatform().openGitHub(url);
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
-  const pullRequestCard = (url: string) => {
+  const pullRequestCard = useSteadyDoor((url: string) => {
     const pullRequest = control.pullRequests.get(agentId);
     if (pullRequest === undefined) return undefined;
     const number = repositoryPullRequestOf(url, agentRepository);
@@ -499,21 +518,29 @@ export function DesktopAgentPage({
       onOpenAgent: () => setDrafting(undefined),
     });
     return card ?? undefined;
-  };
+  });
   // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: Luke works in none.
-  const mentions =
-    workspaceId === undefined
-      ? undefined
-      : tasklessMentions(
-          {
-            workspace: listed?.slug ?? workspaceId,
-            workspaceId,
-            repository: agentRepository ?? null,
-          },
-          tasks.onShowMention,
-          readMentionAgents,
-          pullRequestCard,
-        );
+  const mentionWorkspace = listed?.slug ?? workspaceId;
+  const { onShowMention } = tasks;
+  const mentions = useMemo(
+    () =>
+      workspaceId === undefined || mentionWorkspace === undefined
+        ? undefined
+        : tasklessMentions(
+            { workspace: mentionWorkspace, workspaceId, repository: agentRepository ?? null },
+            onShowMention,
+            readMentionAgents,
+            pullRequestCard,
+          ),
+    [
+      workspaceId,
+      mentionWorkspace,
+      agentRepository,
+      onShowMention,
+      readMentionAgents,
+      pullRequestCard,
+    ],
+  );
   // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.
   const phoneHead: AgentPagePhone | undefined =
     away === undefined

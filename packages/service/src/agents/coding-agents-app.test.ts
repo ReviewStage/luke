@@ -215,6 +215,7 @@ import {
   Duration,
   Effect,
   Fiber,
+  Latch,
   Layer,
   Option,
   Queue,
@@ -250,6 +251,7 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
+import { keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
@@ -483,8 +485,11 @@ function fakeEve(
     readonly reachable?: boolean;
     readonly cancels?: boolean;
     readonly sends?: SendAnswer;
+    /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
+    readonly cancelsTogether?: number;
   } = {},
 ) {
+  const together = Latch.makeUnsafe(options.cancelsTogether === undefined);
   const opened: Opened[] = [];
   const sent: Sent[] = [];
   const cancelled: (readonly [string, string])[] = [];
@@ -536,12 +541,16 @@ function fakeEve(
         }
       }),
     cancel: (sessionId, eveTurnId) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         cancelled.push([sessionId, eveTurnId]);
         cancelledAs.push(authorization);
-        return options.cancels === false
-          ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
-          : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+        if (cancelled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
+        return Effect.as(
+          together.await,
+          options.cancels === false
+            ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
+            : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
+        );
       }),
     reset: (sessionId) =>
       Effect.sync(() => {
@@ -4450,11 +4459,21 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     turn: { readonly running: boolean } | undefined,
     sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
   ) =>
-    Effect.gen(function* () {
-      const opened = yield* openTask({
+    Effect.flatMap(
+      openTask({
         eve,
         ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
-      });
+      }),
+      (opened) => agentStartedOn(opened, eve, turn),
+    );
+
+  /** Another agent the owner starts on the task opened, its turn running or ended as `turn` says, as `startedAgent` starts the first. */
+  const agentStartedOn = (
+    opened: Effect.Success<ReturnType<typeof openTask>>,
+    eve: ReturnType<typeof fakeEve>,
+    turn: { readonly running: boolean } | undefined,
+  ) =>
+    Effect.gen(function* () {
       const agent = readAnswer(
         codingAgentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
@@ -4463,7 +4482,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       const stored = yield* readCodingAgent(opened.owner, agent.id);
       assert.ok(Option.isSome(stored));
       const target = { userId: opened.owner, conversationId: stored.value.conversationId };
-      const sessionId = eve.opened[0]?.sessionId ?? "";
+      const sessionId = eve.opened.at(-1)?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const turnId = randomUUID();
@@ -4772,6 +4791,32 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(eve.reset, [sessionId]);
         assert.deepEqual(eve.resetAs, [deploymentFor(owner)]);
         assert.ok(Option.isNone(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "a task's delete stops its running agents at once, eve answering no cancel until both have asked",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve({ cancelsTogether: 2 });
+        const first = yield* startedAgent(eve, { running: true });
+        const second = yield* agentStartedOn(first, eve, { running: true });
+
+        const deleted = yield* first.ask(
+          request(TASK(first.task.id), first.owner, { method: "DELETE" }),
+        );
+
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
+        assert.deepEqual(
+          eve.cancelled.toSorted(([one], [other]) => one.localeCompare(other)),
+          [
+            [first.sessionId, "turn_0"],
+            [second.sessionId, "turn_0"],
+          ].toSorted(([one], [other]) => (one ?? "").localeCompare(other ?? "")),
+        );
       }),
   );
 
@@ -9172,6 +9217,27 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok("told" in mentioned);
         assert.deepEqual([mentioned.told, mentioned.unresolved], [[chat.links.second], ["@Ghost"]]);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a post that mentions an agent is answered before that agent is steered, naming it as being told rather than told, and the steer runs once the answer has left",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const after = keptAfterResponse();
+        const posted = yield* chat
+          .post(chat.first, { text: `${chat.links.second} the invite table is yours.` })
+          .pipe(Effect.provide(after.layer));
+        assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED && "seq" in posted);
+        assert.deepEqual(
+          [posted.told, posted.telling, posted.held, posted.left],
+          [[], [chat.links.second], [], []],
+        );
+        assert.equal(eve.sent.length, 0, "the answer waits on no steer");
+        yield* after.run;
+        assert.equal(eve.sent.length, 1, "the steer runs once the answer has left");
       }),
   );
 

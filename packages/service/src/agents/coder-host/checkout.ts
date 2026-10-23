@@ -474,21 +474,56 @@ export const deepenAgentCheckout = /* @__PURE__ */ Effect.fn("web/deepenAgentChe
   sandbox: RepositorySandbox,
 ): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
   if (yield* checkoutDeepened(sandbox).pipe(Effect.mapError(refusedWith))) return;
+  if (sandbox.setNetworkPolicy === undefined) {
+    return yield* new CheckoutRefused({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
+  }
+  yield* deepenCheckoutWith(sandbox, yield* agentDeepenPlan(target, agent));
+});
+
+/** What a deepen sets of GitHub's: the write token for the firewall, and who the commits are by. */
+export interface AgentDeepenPlan {
+  readonly credential: RepositoryCredential;
+  readonly identity: CheckoutIdentity;
+}
+
+/**
+ * What the deepen reads of GitHub, apart from the sandbox: a write token
+ * minted and the commit identity read, so a launch that opens a sandbox
+ * anyway reads them while its checkout is made (`runner-sessions.ts`).
+ */
+export const agentDeepenPlan = /* @__PURE__ */ Effect.fn("web/agentDeepenPlan")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+): Effect.fn.Return<AgentDeepenPlan, CheckoutRefused | StoreFailure, CheckoutServices> {
+  const minted = yield* agentRepositoryToken(target, agent);
+  const author = yield* agentAuthor(target, agent);
+  const identity = yield* commitIdentity(target, agent, author, minted);
+  return {
+    credential: { token: minted.token, fullName: minted.fullName, access: minted.access },
+    identity,
+  };
+});
+
+/**
+ * The deepen's steps in the sandbox, on a plan already read: the write
+ * token at the firewall, the rest of the history fetched through it, the
+ * identity set, and the record written last (`deepenAgentCheckout`).
+ */
+export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutWith")(function* (
+  sandbox: RepositorySandbox,
+  plan: AgentDeepenPlan,
+): Effect.fn.Return<void, CheckoutRefused> {
   const setNetworkPolicy = sandbox.setNetworkPolicy;
   if (setNetworkPolicy === undefined) {
     return yield* new CheckoutRefused({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
   }
-  const minted = yield* agentRepositoryToken(target, agent);
-  const author = yield* agentAuthor(target, agent);
-  const identity = yield* commitIdentity(target, agent, author, minted);
-  const credential = { token: minted.token, fullName: minted.fullName, access: minted.access };
   // The token is revealed only into the firewall rules set for GitHub.
   yield* Effect.tryPromise({
-    try: () => setNetworkPolicy(credentialPolicy(credential)),
+    try: () => setNetworkPolicy(credentialPolicy(plan.credential)),
     catch: () => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
   });
   yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
-  yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refusedWith));
+  yield* setCheckoutIdentity(sandbox, plan.identity).pipe(Effect.mapError(refusedWith));
   yield* markDeepened(sandbox).pipe(Effect.mapError(refusedWith));
 });
 

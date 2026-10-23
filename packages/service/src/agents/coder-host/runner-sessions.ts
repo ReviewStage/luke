@@ -108,18 +108,7 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { causeKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
-import {
-  Clock,
-  Context,
-  Data,
-  DateTime,
-  Duration,
-  Effect,
-  Option,
-  Result,
-  Schedule,
-  Stream,
-} from "effect";
+import { Clock, Context, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
@@ -139,7 +128,6 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
-import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { REPOSITORY_REFUSAL, type RepositorySandbox } from "../repository-shell.js";
 import {
   buildRepositorySnapshot,
@@ -168,13 +156,14 @@ import {
 import { CODER } from "./bounds.js";
 import {
   type AgentRepositoryRead,
+  agentDeepenPlan,
   agentRepositoryRead,
   agentRepositoryToken,
   CHECKOUT_DEPTH,
   CheckoutRefused,
   type CheckoutServices,
   cloneAgentRepository,
-  deepenAgentCheckout,
+  deepenCheckoutWith,
   openWorkingFolder,
   refreshAgentCheckout,
 } from "./checkout.js";
@@ -348,15 +337,21 @@ const FAILED_STATUS = { UNAVAILABLE: 503, REFUSED: 422 } as const;
 
 /**
  * How an open past its Start's answer waits on an image still being
- * prepared, a template whose snapshot a create found gone among them, on
- * the template's own wait (`NATIVE_TEMPLATE`): an open answers preparing
- * before any sandbox stands, so making it again leaves nothing behind.
+ * prepared, a template whose snapshot a create found gone among them: on the
+ * template's build to its end (`AgentSandboxImage.prepared`), then asked
+ * again at once, and given up where the image is still being prepared after
+ * the template's own wait. An open answers preparing before any sandbox
+ * stands, so making it again leaves nothing behind. `times` only bounds a
+ * template that answers ready yet keeps losing its snapshot.
  */
 const IMAGE_READY = {
-  schedule: Schedule.spaced(NATIVE_TEMPLATE.POLL).pipe(
-    Schedule.upTo({ duration: NATIVE_TEMPLATE.WAIT }),
-  ),
-  while: (failure: { readonly _tag: string }) => failure instanceof ImagePreparing,
+  times: 3,
+  while: (failure: { readonly _tag: string }) =>
+    failure instanceof ImagePreparing
+      ? Effect.flatMap(AgentSandboxImage, (image) =>
+          image.prepared.pipe(Effect.orElseSucceed(() => false)),
+        )
+      : Effect.succeed(false),
 };
 
 /** The image types a message's file may carry to the harness as an image block. */
@@ -728,16 +723,8 @@ export const runnerSessions = <
      * where there are none. A write that fails is logged, and the agent opens
      * without them rather than not at all.
      */
-    const writeInstalledSkills = (
-      target: ConversationTarget,
-      agent: CodingAgent,
-      running: string,
-    ) =>
-      Effect.gen(function* () {
-        const files = nativeSkillFiles(yield* nativeSkills(target, agent, harness.skillRoots));
-        if (files.length === 0) return;
-        yield* api.writeFiles(running, files);
-      }).pipe(
+    const writeInstalledSkills = (running: string, files: readonly SandboxFile[]) =>
+      (files.length === 0 ? Effect.void : api.writeFiles(running, files)).pipe(
         Effect.catch((failure) =>
           Effect.logWarning(
             `The installed skills of a ${harness.name} agent were not written: ${describeFailure(failure)}`,
@@ -747,36 +734,63 @@ export const runnerSessions = <
 
     /**
      * One launch of the runner in the running session: a fresh bearer
-     * recorded, the bundle uploaded, the command started, the runner's
-     * place kept in the sandbox's tags, and its config line and first
-     * message written.
+     * recorded, the bundle uploaded, the launch's tag written, its config
+     * read, and the caller's own steps (`alongside`) run, all at once, since
+     * none waits on another and the command waits on them all; then the
+     * command started, the runner's place kept in the sandbox's tags, and
+     * its config line and first message written.
      */
-    const launch = (
+    const launch = <AE, AR>(
       sessionId: string,
       agent: CodingAgent,
       sandbox: { readonly name: string; readonly running: string },
       first: RunnerMessage,
       resume: string | undefined,
       credential: HarnessLaunch,
+      alongside: Effect.Effect<void, AE, AR>,
     ) =>
       Effect.gen(function* () {
-        yield* filesWritten(sandbox.running, first);
-        const bundle = yield* (yield* RunnerBundle).contents;
-        const digest = createHash("sha256").update(bundle).digest("hex");
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
-        yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
-        yield* api.writeFiles(sandbox.running, [
-          { path: RUNNER_PATH.UPLOAD, contents: bundle, mode: 0o644 },
-        ]);
-        // The launch's tag is written before its command starts, so an END the launch it
-        // replaces posts late is told apart from this one's and stops nothing.
-        const firstSequence = yield* options.nextSequence(agent.conversationId);
-        const launching = {
+        const launching = (firstSequence: number) => ({
           [SESSION_TAG]: sessionId,
           [RUNNER_TAG.AGENT]: agent.id,
           [RUNNER_TAG.LAUNCH]: String(firstSequence),
-        };
-        yield* api.updateTags(sandbox.name, launching);
+        });
+        const [digest, { firstSequence, config, rewind }] = yield* Effect.all(
+          [
+            Effect.gen(function* () {
+              const bundle = yield* (yield* RunnerBundle).contents;
+              yield* api.writeFiles(sandbox.running, [
+                { path: RUNNER_PATH.UPLOAD, contents: bundle, mode: 0o644 },
+              ]);
+              return createHash("sha256").update(bundle).digest("hex");
+            }),
+            Effect.gen(function* () {
+              const firstSequence = yield* options.nextSequence(agent.conversationId);
+              // A rewind's cut is handed to the launch that resumes the harness's session, and let go
+              // once the runner has it; a fresh session never heard the line it names.
+              const read = Effect.gen(function* () {
+                const rewind = Option.getOrUndefined(
+                  yield* readNativeRewind({ userId, conversationId: agent.conversationId }),
+                );
+                const rewindBefore = resume === undefined ? undefined : rewind;
+                const config = yield* harness.config(agent, resume, firstSequence, rewindBefore);
+                return { config, rewind };
+              });
+              // The launch's tag is written before its command starts, so an END the launch it
+              // replaces posts late is told apart from this one's and stops nothing.
+              const [, made] = yield* Effect.all(
+                [api.updateTags(sandbox.name, launching(firstSequence)), read],
+                { concurrency: "unbounded" },
+              );
+              return { firstSequence, ...made };
+            }),
+            filesWritten(sandbox.running, first),
+            recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer)),
+            alongside,
+          ],
+          { concurrency: "unbounded" },
+        );
         const commandId = yield* api.start(sandbox.running, {
           command: "bash",
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
@@ -797,12 +811,6 @@ export const runnerSessions = <
               firstSequence,
             }),
           );
-          // A rewind's cut is handed to the launch that resumes the harness's session, and let go once
-          // the runner has it; a fresh session never heard the line it names.
-          const target = { userId, conversationId: agent.conversationId };
-          const rewind = Option.getOrUndefined(yield* readNativeRewind(target));
-          const rewindBefore = resume === undefined ? undefined : rewind;
-          const config = yield* harness.config(agent, resume, firstSequence, rewindBefore);
           yield* api
             .writeStdin(sandbox.running, commandId, `${line(config)}${line(first.line)}`)
             .pipe(
@@ -819,7 +827,7 @@ export const runnerSessions = <
             Effect.ignore(
               Effect.andThen(
                 api.kill(sandbox.running, commandId),
-                api.updateTags(sandbox.name, launching),
+                api.updateTags(sandbox.name, launching(firstSequence)),
               ),
             ),
           ),
@@ -998,24 +1006,23 @@ export const runnerSessions = <
       );
 
     /**
-     * The agent's sandbox with its repository checked out. The repository is
-     * read first, which confirms its workspace still reaches it before any
-     * sandbox opens on its code. Where its workspace's repository snapshot
-     * is ready, the sandbox opens from it and fetches only what landed
-     * since; otherwise it opens from the image and clones the repository
-     * whole, and the snapshot is built past the answer for the next launch
-     * (`repository-snapshot.ts`). A snapshot Vercel could not be asked about
-     * is passed by, and no build is started on it.
+     * The agent's sandbox with its repository checked out, on the read the
+     * caller made of it, which confirmed its workspace still reaches it
+     * before any sandbox opens on its code. Where its workspace's repository
+     * snapshot is ready, the sandbox opens from it and fetches only what
+     * landed since; otherwise it opens from the image and clones the
+     * repository whole, and the snapshot is built past the answer for the
+     * next launch (`repository-snapshot.ts`). A snapshot Vercel could not be
+     * asked about is passed by, and no build is started on it.
      */
     const checkedOutSandbox = (
       image: AgentSandboxImageService,
-      target: ConversationTarget,
       agent: WithRepository<CodingAgent>,
+      read: AgentRepositoryRead,
       sessionId: string,
       imageSnapshotId: string,
     ) =>
       Effect.gen(function* () {
-        const read = yield* agentRepositoryRead(target, agent);
         const of = repositorySnapshotOf(agent, read, imageSnapshotId);
         if (Option.isSome(of)) {
           const found = yield* readRepositorySnapshot(api, of.value).pipe(Effect.option);
@@ -1043,48 +1050,106 @@ export const runnerSessions = <
       });
 
     /**
+     * The agent's sandbox opened from the image, its repository checked out
+     * in it where it has one (`checkedOutSandbox`). The image's snapshot and
+     * the repository are asked at once, since neither waits on the other and
+     * both are asked before any sandbox opens.
+     */
+    const openedCheckout = (target: ConversationTarget, agent: CodingAgent, sessionId: string) =>
+      Effect.gen(function* () {
+        const image = yield* AgentSandboxImage;
+        const [snapshot, read] = yield* Effect.all(
+          [
+            image.snapshotId,
+            hasRepository(agent) ? agentRepositoryRead(target, agent) : Effect.succeed(undefined),
+          ],
+          { concurrency: "unbounded" },
+        );
+        if (Option.isNone(snapshot)) return yield* new LaunchRefused({ reason: "no snapshot" });
+        return hasRepository(agent) && read !== undefined
+          ? yield* checkedOutSandbox(image, agent, read, sessionId, snapshot.value)
+          : yield* openedFromImage(image, agent, sessionId, snapshot.value);
+      });
+
+    /**
+     * What a new sandbox's launch reads that needs no sandbox: what the
+     * deepen reads of GitHub (`agentDeepenPlan`), and the member's installed
+     * skills. Each
+     * read is kept as it ended, so one that failed fails the launch only once
+     * the sandbox it would delete stands, and never cuts its opening short.
+     */
+    const launchReads = (target: ConversationTarget, agent: CodingAgent) =>
+      Effect.all(
+        [
+          Effect.exit(
+            hasRepository(agent) ? agentDeepenPlan(target, agent) : Effect.succeed(undefined),
+          ),
+          Effect.map(nativeSkills(target, agent, harness.skillRoots), nativeSkillFiles),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+    /**
      * A new sandbox opened under the session given, the agent's repository
-     * checked out in it (`checkedOutSandbox`), then at once what eve's first
+     * checked out in it (`openedCheckout`), then at once what eve's first
      * write does (`deepenAgentCheckout`): the write token at the firewall and
      * the commit identity, since the harness's own shell has no hook for a
-     * first write; and the runner launched on the first line. A sandbox
-     * whose launch failed is deleted again, since no conversation records
-     * the session that would find it.
+     * first write; and the runner launched on the first line. What the launch
+     * reads of GitHub and the store is read beside the sandbox's opening and
+     * its checkout (`launchReads`), and the deepen and the skills' upload run
+     * beside the launch's own uploads. Where the caller waits on an image
+     * still being prepared (`IMAGE_READY`), only the opening is asked again,
+     * so the reads are made once. A sandbox whose launch failed is deleted
+     * again, since no conversation records the session that would find it.
      */
     const openedSandbox = (
       agent: CodingAgent,
       sessionId: string,
       first: RunnerMessage,
       credential: HarnessLaunch,
+      waitOnImage: boolean,
     ) =>
       Effect.gen(function* () {
-        const image = yield* AgentSandboxImage;
-        const snapshot = yield* image.snapshotId;
-        if (Option.isNone(snapshot))
-          return yield* Effect.fail(new LaunchRefused({ reason: "no snapshot" }));
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-        const { name, running } = hasRepository(agent)
-          ? yield* checkedOutSandbox(image, target, agent, sessionId, snapshot.value)
-          : yield* openedFromImage(image, agent, sessionId, snapshot.value);
+        const opening = openedCheckout(target, agent, sessionId);
+        const [{ name, running }, [deepen, skills]] = yield* Effect.all(
+          [waitOnImage ? Effect.retry(opening, IMAGE_READY) : opening, launchReads(target, agent)],
+          { concurrency: "unbounded" },
+        );
         yield* Effect.gen(function* () {
           const repositorySandbox = repositorySandboxOver(api, running, options.run);
-          if (hasRepository(agent)) {
-            yield* deepenAgentCheckout(target, agent, repositorySandbox);
-          } else {
-            yield* openWorkingFolder(repositorySandbox);
-          }
-          yield* writeInstalledSkills(target, agent, running);
-          yield* launch(sessionId, agent, { name, running }, first, undefined, credential);
+          // Note that a sandbox just opened holds no deepen's record, so none is looked for.
+          const checkout = Effect.flatMap(deepen, (plan) =>
+            plan === undefined
+              ? openWorkingFolder(repositorySandbox)
+              : deepenCheckoutWith(repositorySandbox, plan),
+          );
+          yield* launch(
+            sessionId,
+            agent,
+            { name, running },
+            first,
+            undefined,
+            credential,
+            Effect.all([checkout, writeInstalledSkills(running, skills)], {
+              concurrency: "unbounded",
+              discard: true,
+            }),
+          );
         }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
       });
 
     /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
     const sendHolding = (sessionId: string, message: EveMessage<Turn>) =>
       Effect.gen(function* () {
-        const found = yield* sandboxOf(api, sessionId);
+        // The agent is read beside the sandbox, and its read answers only for a sandbox found.
+        const [found, agentRead] = yield* Effect.all(
+          [sandboxOf(api, sessionId), Effect.exit(agentOf(message.conversationId))],
+          { concurrency: "unbounded" },
+        );
         if (Option.isNone(found)) return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+        const agent = yield* agentRead;
         // The session must be the conversation's own agent's, which the account reaches.
-        const agent = yield* agentOf(message.conversationId);
         if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) {
           return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
         }
@@ -1098,13 +1163,18 @@ export const runnerSessions = <
         const live = yield* liveRunner(api, found.value);
         if (live !== undefined) {
           // The installation token lives an hour, so each message sets a fresh one; and the
-          // harness's lines (the agent's model and effort as they stand) go ahead of the message, which a change since the launch takes effect from.
-          yield* renewCredential(target, agent, live.sandboxSessionId);
-          // The choice read above stands until the write: a change of it is handed to the runner
-          // by `retune`, which holds the same lease, so it is written after this line, never
-          // undone by it.
-          const ahead = yield* harness.ahead(agent);
-          yield* filesWritten(live.sandboxSessionId, sent);
+          // harness's lines (the agent's model and effort as they stand) go ahead of the message,
+          // which a change since the launch takes effect from. The choice read here stands until
+          // the write: a change of it is handed to the runner by `retune`, which holds the same
+          // lease, so it is written after this line, never undone by it.
+          const [, ahead] = yield* Effect.all(
+            [
+              renewCredential(target, agent, live.sandboxSessionId),
+              harness.ahead(agent),
+              filesWritten(live.sandboxSessionId, sent),
+            ],
+            { concurrency: "unbounded" },
+          );
           yield* api.writeStdin(
             live.sandboxSessionId,
             live.commandId,
@@ -1126,7 +1196,7 @@ export const runnerSessions = <
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent));
+          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent), false);
           yield* api
             .deleteSandbox(found.value.name)
             .pipe(
@@ -1140,12 +1210,17 @@ export const runnerSessions = <
         }
         const running = resumed.success.currentSessionId;
         if (running === undefined) return yield* new SandboxUnavailable({});
-        yield* renewCredential(target, agent, running);
-        const routing = yield* readCodingAgentRouting(userId, agent.id);
+        const [, routing, credential] = yield* Effect.all(
+          [
+            renewCredential(target, agent, running),
+            readCodingAgentRouting(userId, agent.id),
+            harness.launch(agent),
+          ],
+          { concurrency: "unbounded" },
+        );
         const resume = Option.getOrUndefined(
           Option.flatMapNullishOr(routing, (read) => read.nativeSession),
         );
-        const credential = yield* harness.launch(agent);
         yield* launch(
           sessionId,
           agent,
@@ -1153,6 +1228,7 @@ export const runnerSessions = <
           sent,
           resume,
           credential,
+          Effect.void,
         );
         return accepted;
       });
@@ -1290,9 +1366,7 @@ export const runnerSessions = <
               `A ${harness.name} launch`,
               holdingRunner(
                 agent.id,
-                openedSandbox(agent, sessionId, messageLine(message), credential).pipe(
-                  Effect.retry(IMAGE_READY),
-                ),
+                openedSandbox(agent, sessionId, messageLine(message), credential, true),
               ).pipe(Effect.catch(launchFailed(agent))),
             );
             return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;

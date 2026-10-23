@@ -47,7 +47,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
@@ -96,10 +96,26 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
 /**
- * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
+ * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone. Drawn again over the same agent, the page draws none of its links again.
  *
  * The service is a script at the act boundary; synthetic agents and words throughout.
  */
+
+/** How many times a part opening links was drawn. */
+const linkDraws = vi.hoisted(() => ({ count: 0 }));
+
+// Note that the wrapper opens links as the real opener does and only counts,
+// because what is under test is whether the page draws its links again.
+vi.mock("../tasks/use-open-link.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../tasks/use-open-link.js")>();
+  return {
+    ...actual,
+    useOpenLink: () => {
+      linkDraws.count += 1;
+      return actual.useOpenLink();
+    },
+  };
+});
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -2222,4 +2238,55 @@ test("on a phone the page is headed by its way back's glyph, the agent's name ce
   assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Back to Inbox"]')?.click());
   assert.deepEqual(left, ["away"], "the way back goes where the shell says");
+});
+
+test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "text",
+            text: "Opened [@relay#2911](https://github.com/acme/relay/pull/2911) after reading [the docs](https://vitest.dev/guide/).",
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const tasks = tasksControl({ workspaces: [ACME] });
+  const openLink = (_link: ReadLink) => undefined;
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  // Note that each draw is a new tree over the same tasks, as the window draws the page again on a delivery that moved nothing of it.
+  const draw = () =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(OpenLinkProvider, {
+            value: openLink,
+            children: createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID }),
+          }),
+        ),
+      ),
+    );
+  draw();
+  await settle();
+  assert.ok(
+    container.querySelector(".agent-page [data-mention-ref]"),
+    "the agent's words are drawn, their chip among them",
+  );
+
+  linkDraws.count = 0;
+  draw();
+  await settle();
+
+  assert.equal(linkDraws.count, 0);
 });
