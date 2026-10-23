@@ -54,6 +54,10 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
+// Note that Chat is loaded as the shell loads it, on first use
+// (`experiments-on-demand.ts`), so the module is read here first and its load
+// settles within the test's own ticks.
+import "./desktop-chat.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 

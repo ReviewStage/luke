@@ -144,14 +144,15 @@ export const avatarSessionAtom = bundleAtom(
 );
 
 /**
- * The avatar the panel runs (`call/call-avatar.ts`), the Video calls
- * experiment's alone, so its code is read only once that is on
+ * How the avatar the panel runs is reached (`call/call-avatar.ts`), the Video
+ * calls experiment's alone, so its code is read only once that is on
  * (`call/panel-avatar.tsx`'s `panelAvatarAtom`), as the atom it exports.
  */
-export const callAvatarBundleAtom = bundleAtom(
-  () => import("./call/call-avatar.js").then((entry) => entry.callAvatarAtom),
-  "The video could not be started.",
-);
+export const importCallAvatar = () =>
+  import("./call/call-avatar.js").then((entry) => entry.callAvatarAtom);
+
+/** The avatar the panel runs, imported the first time it is read (`importCallAvatar`). */
+export const callAvatarBundleAtom = bundleAtom(importCallAvatar, "The video could not be started.");
 
 /** The bundles the surfaces under it read. */
 export const SideBundlesContext = createContext<SideBundles>(SIDE_BUNDLES);

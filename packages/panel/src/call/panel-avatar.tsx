@@ -18,36 +18,74 @@ import { useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { agentCallVideoStatus } from "@luke/ui/call-card-model";
-import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
-import { Option } from "effect";
+import { AVATAR_END_REASON, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
+import { Effect, Option, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { Suspense, useMemo } from "react";
-import { useAct } from "../act.js";
-import { callAvatarBundleAtom } from "../bundle-loader.js";
+import { tellAct, useAct } from "../act.js";
+import { type BundleImporter, callAvatarBundleAtom, importCallAvatar } from "../bundle-loader.js";
 import { AGENT_CALL_VIDEO, AVATAR_VOICE } from "../experiments-on-demand.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { experimentAtom, useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
 import { avatarGrantAtom, type CallAvatarTracks, NO_AVATAR_TRACKS } from "./avatar-grant.js";
 import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card.js";
 
+/** What main is told of a grant whose avatar's code could not be read: ended in error, as a session that cannot open is (`call-avatar.ts`). */
+const UNLOADED_REPORT = {
+  status: AVATAR_STATUS.ENDED,
+  endReason: AVATAR_END_REASON.ERROR,
+} as const;
+
 /**
  * The avatar's tracks as published so far, none before a session stands,
  * and none while the Video calls experiment is off: only then is the
- * avatar's code read (`bundle-loader.ts`'s `callAvatarBundleAtom`) and its
- * session run over the grant main hands (`avatar-grant.ts`), which is
- * listened to whatever the experiment, because main hands the standing one
- * only once, as the page first draws. Mounted at the renderer's root before
- * anything is drawn, so the grant is never missed and the avatar runs
- * whatever tab is shown and while the panel is hidden.
+ * avatar's code read (`bundle`, `bundle-loader.ts`'s `callAvatarBundleAtom`)
+ * and its session run over the grant main hands (`avatar-grant.ts`), which
+ * is listened to whatever the experiment, because main hands the standing
+ * one only once, as the page first draws.
+ *
+ * Where the code could not be read, every grant main hands reads it again
+ * (`reread`), and is reported ended in error where it still cannot be, so
+ * main never waits on a session that will not start; once it is read, the
+ * bundle is read afresh and the session starts on the grant standing. Note
+ * that the bundle is read afresh only once its code has landed, because a
+ * read that failed again would put this stand-in down and up again, and it
+ * would read the standing grant again.
  */
-export const panelAvatarAtom: Atom.Atom<CallAvatarTracks> = Atom.make((get) => {
-  get.mount(avatarGrantAtom);
-  if (!get(experimentAtom(EXPERIMENT.VIDEO_CALLS))) return NO_AVATAR_TRACKS;
-  const avatar = AsyncResult.value(get(callAvatarBundleAtom));
-  if (Option.isNone(avatar)) return NO_AVATAR_TRACKS;
-  return Option.getOrElse(AsyncResult.value(get(avatar.value)), () => NO_AVATAR_TRACKS);
-});
+export function panelAvatarOf(
+  bundle: Atom.Atom<
+    AsyncResult.AsyncResult<Atom.Atom<AsyncResult.AsyncResult<CallAvatarTracks, unknown>>, Error>
+  >,
+  reread: BundleImporter<unknown>,
+): Atom.Atom<CallAvatarTracks> {
+  const unloaded = rendererRuntime.atom((get) =>
+    get.streamResult(avatarGrantAtom).pipe(
+      Stream.orDie,
+      Stream.filter((grant) => grant !== undefined),
+      Stream.runForEach(() =>
+        Effect.tryPromise(reread).pipe(
+          Effect.match({
+            onFailure: () => tellAct(ACT_KIND.AVATAR_REPORT, UNLOADED_REPORT),
+            onSuccess: () => get.refresh(bundle),
+          }),
+        ),
+      ),
+    ),
+  );
+  return Atom.make((get) => {
+    get.mount(avatarGrantAtom);
+    if (!get(experimentAtom(EXPERIMENT.VIDEO_CALLS))) return NO_AVATAR_TRACKS;
+    const loaded = get(bundle);
+    if (AsyncResult.isFailure(loaded)) get.mount(unloaded);
+    if (!AsyncResult.isSuccess(loaded)) return NO_AVATAR_TRACKS;
+    return Option.getOrElse(AsyncResult.value(get(loaded.value)), () => NO_AVATAR_TRACKS);
+  });
+}
+
+/** The avatar the renderer's root mounts before anything is drawn, so the grant is never missed and the avatar runs whatever tab is shown and while the panel is hidden. */
+export const panelAvatarAtom = panelAvatarOf(callAvatarBundleAtom, importCallAvatar);
 
 /** The avatar's tracks as published so far, none before a session stands. */
 function useAvatarTracks(): CallAvatarTracks {
