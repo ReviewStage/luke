@@ -389,7 +389,8 @@ interface DelegatedWorker {
  * none, when the row's hint says what it opens.
  */
 export interface TranscriptCards {
-  readonly target: (target: ToolTarget) => ReactNode;
+  /** The card the tab `target` opens hangs, `name` being what the row calls it, which a card not yet read names it by. */
+  readonly target: (target: ToolTarget, name?: string) => ReactNode;
   readonly worker: (worker: DelegatedWorker) => ReactNode;
   /** One of the place's agents as its tab wears it, which a call about the agent names it by (`calledAgentActor`); none where the place does not list it. */
   readonly agent?: ((agentId: string) => Actor | undefined) | undefined;
@@ -760,7 +761,7 @@ function TargetCallView({
     <OpeningCallView
       part={part}
       hint={TARGET_HINT[target.kind]}
-      card={cards?.target(target)}
+      card={cards?.target(target, toolCallView(part).subject)}
       cards={cards}
       onOpen={onOpen}
     />

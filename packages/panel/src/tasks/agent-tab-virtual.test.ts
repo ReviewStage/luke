@@ -308,9 +308,13 @@ test("a page that lands draws no message it did not touch again, the task's page
     const views = useTabViews();
     const cards = useMemo(
       () =>
-        taskCards({ agents: control, held: views.held, chosen: () => false, shownCode: [] }).agent(
-          AGENT_ID,
-        ),
+        taskCards({
+          agents: control,
+          held: views.held,
+          chosen: () => false,
+          shownCode: [],
+          pages: undefined,
+        }).agent(AGENT_ID),
       [views.held],
     );
     const counted = useMemo<TranscriptCards>(

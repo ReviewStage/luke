@@ -641,6 +641,7 @@ function InboxSidePanel({
         ? panel.tab.transcript === opened.agent
         : panel.tab !== undefined && sameTab(opened, panel.tab),
     shownCode: [],
+    pages: taskId === undefined ? undefined : { taskId },
   });
   const transcript = (agentId: string) => {
     const agent = agents.agents?.find((each) => each.id === agentId);

@@ -70,6 +70,7 @@ import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import {
   Fragment,
+  type ReactNode,
   Suspense,
   useCallback,
   useEffect,
@@ -102,7 +103,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
-import { TaskChipCard } from "../tasks/chip-cards.js";
+import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import {
   browserOf,
   CloudBrowserDraftPane,
@@ -127,7 +128,7 @@ import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
-import { PageCard } from "../tasks/page-card.js";
+import { PageCard, PageNameCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
@@ -1477,13 +1478,16 @@ export interface TaskCards {
 /**
  * The cards a transcript's rows hang, each the card of the tab the row
  * opens: a call about an agent the agent's (`agent-ref.tsx`), code shown
- * the file's, with Luke's note on the lines (`file-ref.tsx`), and a
- * subagent's row its worker's, read as its tab reads its own, `chosen`
- * telling whether that tab is the one shown, whose transcript follows the
- * run. A call's own rows name no worker, and hang none for one. An agent's
- * transcript also names the task whose plan it was handed, by `task`, and
- * every transcript names an agent a call is about by its tab's tile and
- * name, by `agent`.
+ * the file's, with Luke's note on the lines (`file-ref.tsx`), a page shown
+ * or read the page's, previewing it, as its tab and its chip hang it
+ * (`page-card.tsx`), and a subagent's row its worker's, read as its tab
+ * reads its own, `chosen` telling whether that tab is the one shown, whose
+ * transcript follows the run. A call's own rows name no worker, and hang
+ * none for one. An agent's transcript also names the task whose plan it was
+ * handed, by `task`, and every transcript names an agent a call is about by
+ * its tab's tile and name, by `agent`. Every kind of target is answered by
+ * name, so a kind added to `TOOL_TARGET` is a choice made here of the card
+ * its row hangs rather than a hint it falls back to unseen.
  */
 export function taskCards(input: {
   agents: CodingAgentsControl;
@@ -1491,19 +1495,39 @@ export function taskCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** Every code Luke showed on the task, whose note on a `show_code` call's lines its row's card says. */
   shownCode: readonly TaskCodeShowing[];
+  /** What the transcript's pages stand on, its task or its agent on no task, which a page's row reads its card from; none where its rows open no page. */
+  pages: PagePlace | undefined;
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
-  const { agents, held, chosen, shownCode, task } = input;
-  const target = (opened: ToolTarget) => {
-    if (opened.kind === TOOL_TARGET.SHOWN_CODE) {
-      const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
-      return <FileCard path={opened.ref.path} note={note} />;
+  const { agents, held, chosen, shownCode, pages, task } = input;
+  const target = (opened: ToolTarget, name?: string): ReactNode => {
+    switch (opened.kind) {
+      case TOOL_TARGET.SHOWN_CODE: {
+        const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
+        return <FileCard path={opened.ref.path} note={note} />;
+      }
+      case TOOL_TARGET.AGENT: {
+        const tab = { agent: opened.agent };
+        const subject = agentSubject(agents, opened.agent, held, chosen(tab));
+        return <AgentCard subject={subject} models={agents.models} />;
+      }
+      case TOOL_TARGET.PAGE:
+        return pages === undefined ? undefined : (
+          <PageChipCard
+            place={pages}
+            pageId={opened.page}
+            fallback={<PageNameCard name={name} />}
+          />
+        );
+      // Note that these tabs hang a pill or a card the row has no read of yet, so the row's hint says what it opens.
+      case TOOL_TARGET.BOARD:
+      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.INBOX:
+      case TOOL_TARGET.CHAT:
+      case TOOL_TARGET.TASK:
+        return undefined;
     }
-    if (opened.kind !== TOOL_TARGET.AGENT) return undefined;
-    const tab = { agent: opened.agent };
-    const subject = agentSubject(agents, opened.agent, held, chosen(tab));
-    return <AgentCard subject={subject} models={agents.models} />;
   };
   // An agent the plan lists is named on a call's row as its tab wears it; one it does not is left to the call's answer.
   const agent = (agentId: string) => {
