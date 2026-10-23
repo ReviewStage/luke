@@ -68,6 +68,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -2284,6 +2285,22 @@ test("update_task renames a task, pins it for the caller's starter alone, sets i
     [RELAY_FULL_NAME, true],
     JSON.stringify(again),
   );
+  // The caller's own task, recorded as reached on its owner's token, is confirmed again through the App.
+  const ownRepository = (key: string) =>
+    call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.invitations, repository: RELAY_FULL_NAME }, key);
+  await database.run(
+    updateTask(agents.caller.userId, tasks.invitations, {
+      repository: RELAY_FULL_NAME,
+      githubAccess: GITHUB_ACCESS.TOKEN,
+    }),
+  );
+  const reached = await ownRepository("call-5c");
+  assert.equal(reached.already, false, JSON.stringify(reached));
+  const recorded = Option.getOrThrow(
+    await database.run(readTask(agents.caller.userId, tasks.invitations)),
+  );
+  assert.equal(recorded.githubAccess, GITHUB_ACCESS.APP);
+  assert.equal((await ownRepository("call-5d")).already, true);
 
   const own = await call(
     CODER_TOOL.UPDATE_TASK,
