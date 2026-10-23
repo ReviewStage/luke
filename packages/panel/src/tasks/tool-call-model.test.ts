@@ -914,6 +914,31 @@ test("a pause names how long it waits, and its answer how long it waited or that
   });
 });
 
+test("the chat calls read as theirs, a post by its words and a read by its channel, each member's mention link by the member's name, a resolve by the ask's key and a channel's edit by the channel, never as a tool this build does not know", () => {
+  const sam = "[@Sam](https://tryluke.dev/acme/person/sam)";
+  const calls = [
+    { tool: "post_chat", input: { text: `${sam} migration's in` } },
+    { tool: "read_chat", input: { channel: sam } },
+    { tool: "read_chat", input: {} },
+    { tool: "resolve_ask", input: { key: "branch-protection", reason: "Settled." } },
+    { tool: "edit_channel", input: { channel: "#launch", archived: true } },
+  ];
+
+  assert.deepEqual(
+    calls.map((call) => {
+      const view = toolCallView({ ...call, output: { status: "accepted" } });
+      return [view.kind, view.subject];
+    }),
+    [
+      [CALL_KIND.CHAT_POST, "Sam migration's in"],
+      [CALL_KIND.CHAT_READ, "Sam"],
+      [CALL_KIND.CHAT_READ, ""],
+      [CALL_KIND.CHAT_RESOLVE, "branch-protection"],
+      [CALL_KIND.CHAT_EDIT_CHANNEL, "#launch"],
+    ],
+  );
+});
+
 test("a post into the plan's own channel opens the plan's Chat tab, and a post elsewhere, a read, or a resolve opens nothing", () => {
   const target = (tool: string, input: Record<string, string | number>) =>
     toolTarget({ tool, callId: "call", input, output: { status: "accepted" } });
