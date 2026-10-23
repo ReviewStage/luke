@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
+import {
+  PICTURE_BOUNDS,
+  PICTURE_MEDIA_TYPE,
+  PICTURE_TYPE,
+  type Picture,
+} from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
-import { Effect, Option } from "effect";
+import { paddedTo, pngBytes, webmBytes } from "@luke/wire/testing";
+import { Effect, Exit, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
@@ -19,7 +25,8 @@ import { createTask, savePlanText } from "../task-store.js";
 /**
  * A plan's pictures over a real dialect: kept by a member, read by every
  * member of the plan's workspace and by nobody else, held to the plan's
- * bound, refused on a plan the account does not reach, and swept a day
+ * bound, a video among them to a video's bound and the plan's count of
+ * videos, refused on a plan the account does not reach, and swept a day
  * after upload only where no save ever named them.
  *
  * Synthetic accounts and pictures throughout.
@@ -30,6 +37,9 @@ const PICTURE: Picture = {
   contentType: PICTURE_TYPE.PNG,
   bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]),
 };
+
+/** A recording an agent made, as small as a WebM that states its size may be. */
+const VIDEO: Picture = { contentType: PICTURE_MEDIA_TYPE.WEBM, bytes: webmBytes(1280, 800) };
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -133,6 +143,52 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
 
         assert.ok(Option.isSome(yield* readPlanAttachment(owner, taskId, named)));
         assert.ok(Option.isNone(yield* readPlanAttachment(owner, taskId, undone)));
+      }),
+  );
+
+  it.effect(
+    "a recording is kept as it was sent up to a video's bound, which a picture is not",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const video: Picture = {
+          contentType: PICTURE_MEDIA_TYPE.WEBM,
+          bytes: paddedTo(webmBytes(1280, 800), PICTURE_BOUNDS.MAX_VIDEO_BYTES),
+        };
+
+        const id = keptId(yield* keepPlanAttachment(owner, taskId, video));
+
+        const read = yield* readPlanAttachment(teammate, taskId, id);
+        assert.ok(Option.isSome(read));
+        assert.equal(read.value.contentType, PICTURE_MEDIA_TYPE.WEBM);
+        assert.equal(read.value.bytes.length, PICTURE_BOUNDS.MAX_VIDEO_BYTES);
+        const tooLong = {
+          ...video,
+          bytes: paddedTo(video.bytes, PICTURE_BOUNDS.MAX_VIDEO_BYTES + 1),
+        };
+        assert.ok(Exit.isFailure(yield* Effect.exit(keepPlanAttachment(owner, taskId, tooLong))));
+        const large: Picture = {
+          contentType: PICTURE_TYPE.PNG,
+          bytes: paddedTo(pngBytes(4000, 3000), PICTURE_BOUNDS.MAX_BYTES + 1),
+        };
+        assert.ok(Exit.isFailure(yield* Effect.exit(keepPlanAttachment(owner, taskId, large))));
+      }),
+  );
+
+  it.effect(
+    "a plan keeps no more videos than its bound of them, and pictures still beside them",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        for (let kept = 0; kept < PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN; kept += 1) {
+          keptId(yield* keepPlanAttachment(owner, taskId, VIDEO));
+        }
+
+        assert.equal(
+          (yield* keepPlanAttachment(owner, taskId, VIDEO)).status,
+          PLAN_ATTACHMENT_KEEP.TOO_MANY_VIDEOS,
+        );
+        keptId(yield* keepPlanAttachment(owner, taskId, PICTURE));
       }),
   );
 });

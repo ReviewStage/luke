@@ -51,9 +51,9 @@ type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest;
 
 /**
  * GET serves one attachment of the plan as its bytes, to the members of the
- * plan's workspace alone: a picture its text names, under the media type the
- * service sniffed it to be as it was kept, or else a file one of its comments
- * carries, under the type it travelled as. An attachment of a plan the
+ * plan's workspace alone: a picture or a video its text names, under the
+ * media type the service sniffed it to be as it was kept, or else a file one
+ * of its comments carries, under the type it travelled as. An attachment of a plan the
  * account does not reach, or of another plan, is not found, as a plan is.
  */
 const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint")(function* (
@@ -68,9 +68,10 @@ const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint
   const attachmentId = yield* uuidOf(request, ATTACHMENT_QUERY);
   const userId = yield* resolvedUserId(seams, request);
   const picture = yield* hostedStoreOrUnavailable(readPlanAttachment(userId, taskId, attachmentId));
-  const found = Option.isSome(picture)
-    ? picture
-    : yield* hostedStoreOrUnavailable(readPlanCommentFile(userId, taskId, attachmentId));
+  const found: Option.Option<{ readonly contentType: string; readonly bytes: Uint8Array }> =
+    Option.isSome(picture)
+      ? picture
+      : yield* hostedStoreOrUnavailable(readPlanCommentFile(userId, taskId, attachmentId));
   if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,

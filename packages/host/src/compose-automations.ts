@@ -22,11 +22,9 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  invalid,
+  readParams,
 } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Data, Effect, FiberMap, Result, type Schema, type Scope } from "effect";
+import { Data, Effect, FiberMap, Result, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import { followAutomations } from "./automation-follow.js";
@@ -190,20 +188,10 @@ function composed(
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
     gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
-  /** The params read against the method's own schema, or the invalid-params refusal worded. */
-  const read = <Params>(
-    schema: Schema.Codec<Params, unknown>,
-    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
-    sentence: string,
-  ) => {
-    const result = readEither(schema)(unparsedWire(params));
-    return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
-  };
-
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.AUTOMATIONS_LIST]: (params) =>
       Effect.gen(function* () {
-        const list = yield* read(
+        const list = yield* readParams(
           automationListParamsSchema,
           params,
           "a list names a task, a workspace, or neither",
@@ -212,7 +200,7 @@ function composed(
       }),
     [GATEWAY_METHOD.AUTOMATIONS_CREATE]: (params) =>
       Effect.gen(function* () {
-        const made = yield* read(
+        const made = yield* readParams(
           automationCreateParamsSchema,
           params,
           "an automation names where it stands, a name, a trigger, and an action",
@@ -228,7 +216,7 @@ function composed(
       }),
     [GATEWAY_METHOD.AUTOMATIONS_CHANGE]: (params) =>
       Effect.gen(function* () {
-        const change = yield* read(
+        const change = yield* readParams(
           automationChangeParamsSchema,
           params,
           "a change names an automation and what changes",
@@ -244,7 +232,11 @@ function composed(
       }),
     [GATEWAY_METHOD.AUTOMATIONS_DELETE]: (params) =>
       Effect.gen(function* () {
-        const named = yield* read(automationIdParamsSchema, params, "a delete names an automation");
+        const named = yield* readParams(
+          automationIdParamsSchema,
+          params,
+          "a delete names an automation",
+        );
         const answer = yield* asked(client.remove(named));
         // A delete takes the automation off its list and its runs out of its history.
         if ("deleted" in answer) {
@@ -254,7 +246,7 @@ function composed(
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUN]: (params) =>
       Effect.gen(function* () {
-        const run = yield* read(
+        const run = yield* readParams(
           automationRunParamsSchema,
           params,
           "a run names an automation and a key",
@@ -268,7 +260,7 @@ function composed(
       }),
     [GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET]: (params) =>
       Effect.gen(function* () {
-        const named = yield* read(
+        const named = yield* readParams(
           automationIdParamsSchema,
           params,
           "a new secret names an automation",
@@ -295,7 +287,11 @@ function composed(
       }),
     [GATEWAY_METHOD.AUTOMATIONS_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const scope = yield* read(automationFollowSchema, params, "a follow names what it follows");
+        const scope = yield* readParams(
+          automationFollowSchema,
+          params,
+          "a follow names what it follows",
+        );
         // The account the follow starts for, which every read names, so one under another's session is refused as signed out and ends.
         // Behind a closed gate every read is told unanswered and asked again; with nobody signed in the follow ends unsaid.
         const userId = dependencies.accountId();
@@ -339,13 +335,21 @@ function composed(
       }),
     [GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const scope = yield* read(automationFollowSchema, params, "a follow names what it follows");
+        const scope = yield* readParams(
+          automationFollowSchema,
+          params,
+          "a follow names what it follows",
+        );
         yield* FiberMap.remove(follows[scope.kind], scope.id);
         return {};
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUNS]: (params) =>
       Effect.gen(function* () {
-        const named = yield* read(automationIdParamsSchema, params, "a read names an automation");
+        const named = yield* readParams(
+          automationIdParamsSchema,
+          params,
+          "a read names an automation",
+        );
         return carried<AutomationRunsView>(yield* asked(client.runs(named)));
       }),
   };

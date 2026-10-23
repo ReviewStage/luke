@@ -37,6 +37,7 @@ import {
   NO_CONTEXT_MENU,
   OneLine,
   PAGE_FRAME,
+  PageToolbar,
   RowHint,
   RowHintOptions,
   Switch,
@@ -534,33 +535,50 @@ function ListPage({
 }
 
 /**
- * The toolbar of an automation's page that stands in for one it cannot
- * show: the way back to the list, the list's clock and name, or on a phone
- * the back's glyph alone, named for the list (`phone-head.tsx`).
+ * One automation's page that has no automation to show: its way back over
+ * `children`, which say why; on a phone the back's glyph alone, named for
+ * the list (`phone-head.tsx`).
  */
-function ExitToolbar({ onBack, phone }: { onBack: () => void; phone: boolean }): React.JSX.Element {
-  if (phone) {
-    return (
-      <PhoneHead
-        place="automation"
-        start={
-          <Tooltip label={BACK_TO_AUTOMATIONS}>
-            <IconButton icon={<BackIcon />} label={BACK_TO_AUTOMATIONS} onClick={onBack} />
-          </Tooltip>
-        }
-        title={null}
-        end={null}
-      />
-    );
-  }
+function AutomationAbsentPage({
+  onBack,
+  phone,
+  children,
+}: {
+  onBack: () => void;
+  /** Whether a phone heads the page, its way back the glyph alone. */
+  phone: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-          {AUTOMATIONS}
-        </Button>
-      </div>
-    </header>
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automation"
+      toolbar={
+        phone ? (
+          <PhoneHead
+            place="automation"
+            start={
+              <Tooltip label={BACK_TO_AUTOMATIONS}>
+                <IconButton icon={<BackIcon />} label={BACK_TO_AUTOMATIONS} onClick={onBack} />
+              </Tooltip>
+            }
+            title={null}
+            end={null}
+          />
+        ) : (
+          <PageToolbar
+            heading={
+              <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
+                {AUTOMATIONS}
+              </Button>
+            }
+          />
+        )
+      }
+    >
+      {children}
+    </DetailPage>
   );
 }
 
@@ -577,31 +595,21 @@ function UnreadPage({
   /** Whether a phone heads the page, its way back the glyph alone. */
   phone: boolean;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automation"
-      toolbar={<ExitToolbar onBack={onBack} phone={phone} />}
-    >
+    <AutomationAbsentPage onBack={onBack} phone={phone}>
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {line}
       </ErrorState>
-    </DetailPage>
+    </AutomationAbsentPage>
   );
 }
 
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack, phone }: { onBack: () => void; phone: boolean }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automation"
-      toolbar={<ExitToolbar onBack={onBack} phone={phone} />}
-    >
+    <AutomationAbsentPage onBack={onBack} phone={phone}>
       <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
-    </DetailPage>
+    </AutomationAbsentPage>
   );
 }
 

@@ -15,13 +15,13 @@ import {
   type AutomationFollowed,
 } from "@luke/features/automation-view";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
-import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
+import { Clock, Duration, Effect, type Schema, Stream } from "effect";
 import {
+  decodedLiveRows,
   LIVE_GONE,
-  LiveBroken,
   type LiveClient,
-  liveRows,
   liveShown,
+  restarting,
   type SealedRead,
   type TxWait,
 } from "./live-follow.js";
@@ -43,9 +43,6 @@ import {
  * session is no longer the account the follow started for ends it unsaid,
  * and the next sign-in's window follows it again.
  */
-
-/** How long after a read went unanswered, or a follow stopped for good, it is asked again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** A live read as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none. */
 type Sealed<Answer> = Answer | { readonly failure: string };
@@ -120,7 +117,6 @@ function followed<Part extends string, Rows, View>(
   dependencies: AutomationFollowDependencies,
   kind: FollowKind<Part, Rows, View>,
 ): Effect.Effect<void> {
-  const decode = Schema.decodeUnknownOption(kind.rows);
   const attempt = Effect.gen(function* () {
     const sealed = yield* kind.live(false);
     if ("failure" in sealed) {
@@ -130,7 +126,6 @@ function followed<Part extends string, Rows, View>(
         return false;
       }
       kind.failed(AUTOMATION_CALL_FAILURE.UNANSWERED);
-      yield* Effect.sleep(LIVE_RESTART);
       return true;
     }
     /**
@@ -150,22 +145,16 @@ function followed<Part extends string, Rows, View>(
       }
       return goneWhereNotFound(read);
     };
-    const rows = liveRows(
+    const rows = decodedLiveRows(
       {
         openLive: dependencies.openLive,
         reseal: () => Effect.map(kind.live(false), noted),
         poll: (after) => Effect.map(kind.live(true, after), noted),
         now: dependencies.now,
-        ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
+        onTxWait: dependencies.onTxWait,
       },
       sealed,
-    ).pipe(
-      Stream.mapEffect((read) =>
-        Option.match(decode(read), {
-          onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-          onSome: Effect.succeed,
-        }),
-      ),
+      kind.rows,
     );
     // A follow the service ended for good, as one whose automation is gone, ends here at once, rather than starting again.
     const gone = yield* Stream.runForEach(
@@ -181,10 +170,9 @@ function followed<Part extends string, Rows, View>(
       }
       return false;
     }
-    yield* Effect.sleep(LIVE_RESTART);
     return true;
   });
-  return Effect.asVoid(Effect.repeat(attempt, { while: (again) => again }));
+  return restarting(attempt);
 }
 
 /** What the window follows, followed until interrupted or signed out, each change published under what it is of. */

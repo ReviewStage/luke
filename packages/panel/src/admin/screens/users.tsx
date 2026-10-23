@@ -21,10 +21,10 @@ import {
   AccountsTableSkeleton,
 } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminReadView } from "../admin-read-view.js";
 import { SignInMethodsChart, SignInMethodsChartSkeleton } from "../charts/signups-chart.js";
 import { AdminSection } from "../charts/stat-card.js";
-import { AdminErrorState } from "../chrome/cards.js";
-import { AdminViewOptions, PageSections, Refreshing, windowWords } from "../chrome/controls.js";
+import { AdminViewOptions, PageSections, windowWords } from "../chrome/controls.js";
 import { RosterNote } from "../chrome/notes.js";
 import {
   AdminCollectionPage,
@@ -32,7 +32,7 @@ import {
   type ViewerAccount,
 } from "../chrome/page-header.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, usersReadQuery } from "../routing.js";
-import { adminReadFailure, useAdminRead, useAdminWrite } from "../use-admin-read.js";
+import { useAdminRead, useAdminWrite } from "../use-admin-read.js";
 
 const USERS_ERROR = "The users endpoint did not answer.";
 
@@ -185,14 +185,12 @@ export function UsersScreen({
         title="Users"
         note={windowWords(windowDays)}
         controls={
-          <>
-            <AdminViewOptions
-              windowDays={windowDays}
-              onWindowDaysChange={onWindowDaysChange}
-              hideAdmins={hideAdmins}
-              onHideAdminsChange={onHideAdminsChange}
-            />
-          </>
+          <AdminViewOptions
+            windowDays={windowDays}
+            onWindowDaysChange={onWindowDaysChange}
+            hideAdmins={hideAdmins}
+            onHideAdminsChange={onHideAdminsChange}
+          />
         }
         loadingLabel="Loading…"
         {...content}
@@ -208,9 +206,14 @@ export function UsersScreen({
     />
   );
 
-  switch (state.status) {
-    case "loading": {
-      return page({
+  return adminReadView({
+    read: { state, refreshing, reload },
+    gate,
+    email: account?.email,
+    onSignOut: signOut,
+    failure: USERS_ERROR,
+    loading: () =>
+      page({
         filters: (
           <>
             {search}
@@ -229,27 +232,9 @@ export function UsersScreen({
             />
           </PageSections>
         ),
-      });
-    }
-    case "signed-out":
-      return gate.signedOut();
-    case "forbidden":
-      return gate.forbidden({ email: account?.email, onSignOut: signOut });
-    case "missing":
-    case "error":
-      return page({
-        filters: search,
-        state: COLLECTION_STATE.ERROR,
-        error: (
-          <AdminErrorState
-            detail={adminReadFailure(state, USERS_ERROR)}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
-        ),
-      });
-    case "ready": {
-      const list = state.value;
+      }),
+    failed: (error) => page({ filters: search, state: COLLECTION_STATE.ERROR, error }),
+    ready: (list, refreshed) => {
       // The service searches the whole roster once the debounce settles; until
       // that answer lands, the same needle filters the rows already loaded, so
       // the box stays instant between refetches.
@@ -273,18 +258,16 @@ export function UsersScreen({
         // frame under the filters, rather than centred in the page apart
         // from them, so the page keeps its line whatever the search finds.
         state: COLLECTION_STATE.READY,
-        children: (
-          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <UsersSections
-              list={list}
-              rows={rows}
-              windowDays={windowDays}
-              onOpenAccount={onOpenAccount}
-              onToggleFavorite={toggleFavorite}
-            />
-          </Refreshing>
+        children: refreshed(
+          <UsersSections
+            list={list}
+            rows={rows}
+            windowDays={windowDays}
+            onOpenAccount={onOpenAccount}
+            onToggleFavorite={toggleFavorite}
+          />,
         ),
       });
-    }
-  }
+    },
+  });
 }

@@ -20,11 +20,13 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  PageToolbar,
   SidePanelIcon,
   SpinnerRegion,
   Tooltip,
   useMenu,
 } from "@luke/ui";
+import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,8 +40,11 @@ import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { CallNotice } from "../tasks/agent-call.js";
+import { agentSubject } from "../tasks/agent-ref.js";
+import { peopleOf } from "../tasks/changes-card.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
+import { TAB_KIND } from "../tasks/tab-look.js";
 import {
   TaskMentions,
   type TaskMentionsValue,
@@ -80,6 +85,7 @@ import {
   useSidePanelDrawing,
 } from "./side-panel.js";
 import { contentActionGroups, useTabViews } from "./strip-tabs.js";
+import { tabCard } from "./tab-card.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
@@ -95,8 +101,9 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`tasklessMentions`); a skill a message names is its chip, which
- * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
+ * them (`tasklessMentions`), and the workspace's agents, Luke's box among
+ * them, though he works in no repository; a skill a message names is its
+ * chip, which opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
  * agent's items stand there and no plan's Inbox tab does. Beside it stands
@@ -232,12 +239,7 @@ function AgentPageHeading({
       <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
     );
   }
-  return (
-    <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">{title}</div>
-      <div className="desktop-toolbar-actions">{more}</div>
-    </header>
-  );
+  return <PageToolbar heading={title} actions={more} />;
 }
 
 /** What a phone's way back out of a draft calls the agent, before the agent is read. */
@@ -478,14 +480,39 @@ export function DesktopAgentPage({
     const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
     appPlatform().openGitHub(url);
   };
-  // What an `@` offers once the read named the agent's workspace and repository, which its files are read through.
+  // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
+  const pullRequestCard = (url: string) => {
+    const pullRequest = control.pullRequests.get(agentId);
+    if (pullRequest === undefined) return undefined;
+    const number = repositoryPullRequestOf(url, agentRepository);
+    const own =
+      pullRequestAgentOf(url, [{ agentId, url: pullRequest.url }]) !== undefined ||
+      (number !== undefined &&
+        repositoryPullRequestOf(pullRequest.url, agentRepository) === number);
+    if (!own) return undefined;
+    const card = tabCard({
+      kind: TAB_KIND.CHANGES,
+      subject: agentSubject(control, agentId, views.held, false),
+      models: control.models,
+      pullRequest,
+      people: peopleOf(control.changesPeople.get(agentId), pullRequest),
+      onOpenAgent: () => setDrafting(undefined),
+    });
+    return card ?? undefined;
+  };
+  // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: Luke works in none.
   const mentions =
-    workspaceId === undefined || agentRepository === undefined
+    workspaceId === undefined
       ? undefined
       : tasklessMentions(
-          { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
+          {
+            workspace: listed?.slug ?? workspaceId,
+            workspaceId,
+            repository: agentRepository ?? null,
+          },
           tasks.onShowMention,
           readMentionAgents,
+          pullRequestCard,
         );
   // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.
   const phoneHead: AgentPagePhone | undefined =
@@ -509,9 +536,7 @@ export function DesktopAgentPage({
   const toolbar =
     agent === undefined ? (
       phoneHead === undefined ? (
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading" />
-        </header>
+        <PageToolbar heading={null} />
       ) : (
         <PhoneHead
           place="agent"

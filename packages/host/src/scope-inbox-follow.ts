@@ -10,20 +10,10 @@ import {
   type ScopeInboxLiveAnswer,
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
-import {
-  Data,
-  Duration,
-  Effect,
-  Option,
-  RcMap,
-  Schema,
-  type Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect";
+import { Data, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import { Hex } from "effect/encoding";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE, type LiveClient, restarting } from "./live-follow.js";
 
 /**
  * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main from a Neon Realtime subscription the host holds while it is followed, and told whole as it changes.
@@ -37,8 +27,6 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /** How long a subscription no follow holds is kept, so a window coming back finds it standing. */
 const IDLE = Duration.seconds(30);
-/** How long after a seal went unanswered, or a subscription stopped, a followed scope is sealed again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** Which inbox: one plan's, or one agent's, by its id. */
 export class InboxScopeKey extends Data.Class<{
@@ -54,8 +42,11 @@ interface LiveInbox {
 
 /** What a scope's read is answered from. */
 type Standing =
-  | { readonly kind: "live"; readonly inbox: SubscriptionRef.SubscriptionRef<LiveState> }
-  | { readonly kind: "refused"; readonly failure: CodingAgentCallFailure };
+  | {
+      readonly kind: typeof LIVE_STATE.LIVE;
+      readonly inbox: SubscriptionRef.SubscriptionRef<LiveState>;
+    }
+  | { readonly kind: typeof LIVE_STATE.REFUSED; readonly failure: CodingAgentCallFailure };
 
 /** Why a scope's read is refused: not found, or unanswered. */
 type CodingAgentCallFailure =
@@ -64,9 +55,9 @@ type CodingAgentCallFailure =
 
 /** A subscription before its first rows, with them, or stopped for good. */
 type LiveState =
-  | { readonly kind: "waiting" }
-  | { readonly kind: "standing"; readonly inbox: LiveInbox }
-  | { readonly kind: "broken" };
+  | { readonly kind: typeof LIVE_STATE.WAITING }
+  | { readonly kind: typeof LIVE_STATE.STANDING; readonly inbox: LiveInbox }
+  | { readonly kind: typeof LIVE_STATE.BROKEN };
 
 /**
  * A digest of every item whole, its thread's messages and its files among
@@ -110,7 +101,6 @@ export type ScopeInboxes = RcMap.RcMap<InboxScopeKey, Standing>;
 export function scopeInboxes(
   dependencies: ScopeInboxDependencies,
 ): Effect.Effect<ScopeInboxes, never, Scope.Scope> {
-  const decode = Schema.decodeUnknownOption(scopeInboxLiveRowsSchema);
   return RcMap.make({
     idleTimeToLive: IDLE,
     lookup: (scope: InboxScopeKey) =>
@@ -127,10 +117,10 @@ export function scopeInboxes(
             first.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
               ? CODING_AGENT_CALL_FAILURE.NOT_FOUND
               : CODING_AGENT_CALL_FAILURE.UNANSWERED;
-          return { kind: "refused", failure } as const;
+          return { kind: LIVE_STATE.REFUSED, failure } as const;
         }
-        const inbox = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
-        const rows = liveRows(
+        const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
+        const rows = decodedLiveRows(
           {
             openLive: dependencies.openLive,
             reseal: () => seal(false),
@@ -139,21 +129,17 @@ export function scopeInboxes(
             onTxWait: dependencies.txWaits.hook(),
           },
           first,
+          scopeInboxLiveRowsSchema,
         );
         yield* Effect.forkScoped(
-          Stream.runForEach(rows, (read) =>
-            Option.match(decode(read), {
-              onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-              onSome: (decoded) => {
-                const items = inboxOfLiveRows(decoded);
-                return Effect.flatMap(cursorOf(items), (cursor) =>
-                  SubscriptionRef.set(inbox, { kind: "standing", inbox: { items, cursor } }),
-                );
-              },
-            }),
-          ).pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: "broken" }))),
+          Stream.runForEach(rows, (decoded) => {
+            const items = inboxOfLiveRows(decoded);
+            return Effect.flatMap(cursorOf(items), (cursor) =>
+              SubscriptionRef.set(inbox, { kind: LIVE_STATE.STANDING, inbox: { items, cursor } }),
+            );
+          }).pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: LIVE_STATE.BROKEN }))),
         );
-        return { kind: "live", inbox } as const;
+        return { kind: LIVE_STATE.LIVE, inbox } as const;
       }),
   });
 }
@@ -177,14 +163,14 @@ export function followInbox(
   const attempt: Effect.Effect<boolean> = Effect.scoped(
     Effect.gen(function* () {
       const standing = yield* RcMap.get(inboxes, scope);
-      if (standing.kind === "refused") {
+      if (standing.kind === LIVE_STATE.REFUSED) {
         yield* tell({ failure: standing.failure });
         return standing.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
       }
       // Note that a delivery that moved nothing is told nobody, since the digest is where every item stands.
       yield* SubscriptionRef.changes(standing.inbox).pipe(
-        Stream.takeWhile((state) => state.kind !== "broken"),
-        Stream.filter((state) => state.kind === "standing"),
+        Stream.takeWhile((state) => state.kind !== LIVE_STATE.BROKEN),
+        Stream.filter((state) => state.kind === LIVE_STATE.STANDING),
         Stream.map((state) => state.inbox),
         Stream.changesWith((one, other) => one.cursor === other.cursor),
         Stream.runForEach((inbox) => tell({ items: inbox.items })),
@@ -192,9 +178,10 @@ export function followInbox(
       return false;
     }),
   );
-  const again = Effect.andThen(RcMap.invalidate(inboxes, scope), Effect.sleep(LIVE_RESTART));
-  const loop: Effect.Effect<void> = Effect.flatMap(attempt, (ended) =>
-    ended ? Effect.void : Effect.andThen(again, loop),
+  // Note that a follow that goes on is let go before the wait, so the next run seals it afresh.
+  return restarting(
+    Effect.flatMap(attempt, (ended) =>
+      ended ? Effect.succeed(false) : Effect.as(RcMap.invalidate(inboxes, scope), true),
+    ),
   );
-  return loop;
 }

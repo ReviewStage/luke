@@ -102,6 +102,7 @@ import {
   ONE_LINE_ELEMENT,
   OneLine,
   PAGE_FRAME,
+  PageToolbar,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -906,19 +907,21 @@ function EditorToolbarFrame({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="desktop-toolbar">
-      <div className="automation-toolbar">
-        <div className="desktop-toolbar-heading">
-          <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
-            <ChevronRightIcon aria-hidden="true" />
-            {crumb}
-          </nav>
-          {tag}
+    <PageToolbar
+      lead={
+        <div className="automation-toolbar">
+          <div className="desktop-toolbar-heading">
+            <nav className="automation-crumbs" aria-label="Path">
+              <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
+              <ChevronRightIcon aria-hidden="true" />
+              {crumb}
+            </nav>
+            {tag}
+          </div>
+          <div className="desktop-toolbar-actions">{children}</div>
         </div>
-        <div className="desktop-toolbar-actions">{children}</div>
-      </div>
-    </header>
+      }
+    />
   );
 }
 

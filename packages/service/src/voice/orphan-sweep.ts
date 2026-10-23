@@ -99,7 +99,7 @@ export interface VoiceOrphanSweepOutcome {
   failed: number;
 }
 
-export const NOTHING_ORPHANED: VoiceOrphanSweepOutcome = {
+const NOTHING_ORPHANED: VoiceOrphanSweepOutcome = {
   closed: 0,
   lost: 0,
   pending: 0,

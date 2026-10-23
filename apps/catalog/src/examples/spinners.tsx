@@ -1,4 +1,5 @@
 import {
+  ALIGN,
   BUTTON_VARIANT,
   BusyLabel,
   Button,
@@ -49,7 +50,7 @@ function Spinners(): React.JSX.Element {
         </div>
       </CatalogSection>
       <CatalogSection id="spinner-busy" title="A control's words giving way">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           {[false, true].map((busy) => (
             <Button key={String(busy)} variant={BUTTON_VARIANT.OUTLINE}>
               <BusyLabel busy={busy} label="Checking for updates">

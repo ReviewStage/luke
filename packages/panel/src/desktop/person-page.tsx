@@ -277,7 +277,7 @@ function PersonActions({
     );
   if (phone) return <>{more}</>;
   return (
-    <div className="desktop-toolbar-actions">
+    <>
       {shared ? (
         <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ListFilterIcon />} onClick={onShowTasks}>
           {showTasks}
@@ -293,7 +293,7 @@ function PersonActions({
           )}
         </>
       )}
-    </div>
+    </>
   );
 }
 

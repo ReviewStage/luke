@@ -30,9 +30,9 @@ import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useEffect, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminReadView } from "../admin-read-view.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
-import { AdminErrorState } from "../chrome/cards.js";
-import { AdminViewOptions, PageSections, Refreshing } from "../chrome/controls.js";
+import { AdminViewOptions, PageSections } from "../chrome/controls.js";
 import {
   AdminCollectionPage,
   CollectionCountSkeleton,
@@ -41,7 +41,7 @@ import {
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
-import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
+import { useAdminRead } from "../use-admin-read.js";
 
 /**
  * workspaces.tsx -- the Workspaces tab: how many teams share a workspace,
@@ -379,9 +379,14 @@ export function WorkspacesScreen({
     />
   );
 
-  switch (state.status) {
-    case "loading":
-      return page({
+  return adminReadView({
+    read: { state, refreshing, reload },
+    gate,
+    email: account?.email,
+    onSignOut: signOut,
+    failure: WORKSPACES_ERROR,
+    loading: () =>
+      page({
         filters: (
           <>
             {search}
@@ -394,26 +399,9 @@ export function WorkspacesScreen({
             <WorkspacesSections list={undefined} rows={[]} onOpenAccount={onOpenAccount} />
           </PageSections>
         ),
-      });
-    case "signed-out":
-      return gate.signedOut();
-    case "forbidden":
-      return gate.forbidden({ email: account?.email, onSignOut: signOut });
-    case "missing":
-    case "error":
-      return page({
-        filters: search,
-        state: COLLECTION_STATE.ERROR,
-        error: (
-          <AdminErrorState
-            detail={adminReadFailure(state, WORKSPACES_ERROR)}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
-        ),
-      });
-    case "ready": {
-      const list = state.value;
+      }),
+    failed: (error) => page({ filters: search, state: COLLECTION_STATE.ERROR, error }),
+    ready: (list, refreshed) => {
       const needle = query.trim().toLowerCase();
       const rows = needle
         ? list.rows.filter((row) => row.name.toLowerCase().includes(needle))
@@ -431,12 +419,10 @@ export function WorkspacesScreen({
         // An empty answer stands where the table stands, in its own frame
         // under the tiles, as the Users roster's does.
         state: COLLECTION_STATE.READY,
-        children: (
-          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <WorkspacesSections list={list} rows={rows} onOpenAccount={onOpenAccount} />
-          </Refreshing>
+        children: refreshed(
+          <WorkspacesSections list={list} rows={rows} onOpenAccount={onOpenAccount} />,
         ),
       });
-    }
-  }
+    },
+  });
 }

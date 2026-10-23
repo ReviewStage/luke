@@ -1,4 +1,5 @@
 import {
+  ALIGN,
   ArchiveIcon,
   BUTTON_SHAPE,
   BUTTON_SIZE,
@@ -222,7 +223,7 @@ function Buttons(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="buttons-narrow" title="Narrow column, long label">
         <div className="catalog-narrow">
-          <Stack gap={GAP.CONTROL} align="start">
+          <Stack gap={GAP.CONTROL} align={ALIGN.START}>
             <Button variant={BUTTON_VARIANT.OUTLINE}>
               Transfer ownership of this workspace to another member
             </Button>

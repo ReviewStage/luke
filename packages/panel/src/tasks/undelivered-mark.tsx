@@ -23,7 +23,7 @@ const UNSENT_WORDS = "Not sent";
 const RETRY = "Retry";
 
 /** The lines of a transcript that did not go, by the id each was drawn under, and the Retry of one refused for now. */
-export interface SentLineMarks {
+interface SentLineMarks {
   /** The lines the agent refused for good. */
   readonly undelivered: ReadonlySet<string>;
   /** The lines refused for now that keep their words, each offering Retry. */

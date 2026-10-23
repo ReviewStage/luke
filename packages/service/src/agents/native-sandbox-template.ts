@@ -47,6 +47,7 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
+  SANDBOX_STATUS,
   SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -268,7 +269,7 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
     const built = tags[TEMPLATE_TAG.BUILT] !== undefined;
     // Any snapshot taken once the build ended well holds the whole image, and a stopped
     // template's current snapshot is the last one taken.
-    if (built && found.status === "stopped" && found.currentSnapshotId !== undefined) {
+    if (built && found.status === SANDBOX_STATUS.STOPPED && found.currentSnapshotId !== undefined) {
       return { state: TEMPLATE_STATE.READY, snapshotId: found.currentSnapshotId } as const;
     }
     const now = yield* Clock.currentTimeMillis;
@@ -280,17 +281,18 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
     }
     const session = tags[TEMPLATE_TAG.SESSION];
     const commandId = tags[TEMPLATE_TAG.BUILD];
-    const running = found.status === "running" && found.currentSessionId === session;
+    const running = found.status === SANDBOX_STATUS.RUNNING && found.currentSessionId === session;
     if (session === undefined || commandId === undefined) {
       // Its builder is still uploading, or never got as far as starting the build.
-      return found.status === "running" &&
+      return found.status === SANDBOX_STATUS.RUNNING &&
         !olderThan(now, found.createdAt, NATIVE_TEMPLATE.START_GRACE)
         ? PREPARING
         : yield* rebuild(api, build, found);
     }
     if (!running) {
       // A snapshot under way stops the session; anything else stopped unready was left behind.
-      return found.status === "snapshotting" || found.status === "stopping"
+      return found.status === SANDBOX_STATUS.SNAPSHOTTING ||
+        found.status === SANDBOX_STATUS.STOPPING
         ? PREPARING
         : yield* rebuild(api, build, found);
     }

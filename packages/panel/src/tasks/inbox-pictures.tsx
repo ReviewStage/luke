@@ -1,6 +1,6 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
-import { ErrorState, isVideoDataUrl, VideoPlayer } from "@luke/ui";
+import { ErrorState } from "@luke/ui";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import {
   createContext,
@@ -32,10 +32,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * they are drawn, which the arrow keys walk, as an agent's pictures' viewer
  * does (`agent-pictures.tsx`): a picture still read joins the walk once its
  * bytes are held, and one whose read failed is left out. A WebM the agent
- * recorded plays where it is drawn, in `@luke/ui`'s `VideoPlayer`, and is
- * left out of the walk, since the viewer draws pictures alone. The bytes are
- * the Inbox's own reads (`use-task-inbox.ts`), asked for as a picture is
- * first drawn, so one inside a card no one opened is never fetched. A
+ * recorded is drawn and walked as a picture is, as its still, and the viewer
+ * plays it. The bytes are the Inbox's own reads (`use-task-inbox.ts`), asked
+ * for as a picture is first drawn, so one inside a card no one opened is
+ * never fetched. A
  * picture a comment carried that its words do not draw, a member's file,
  * is drawn after them by the same `InboxPicture` and walked with the rest. A
  * picture of another item, one copied across, is that item's to read, and
@@ -84,7 +84,7 @@ const InboxPicturesContext = createContext<InboxPicturesDoor | undefined>(undefi
 function viewerFile(alt: string, name: string | undefined, url: string): FileChip {
   const mediaType = url.slice("data:".length, url.indexOf(";"));
   const words = alt === "" ? UNNAMED_PICTURE : alt;
-  const saved = name ?? `${words}.${mediaType.slice("image/".length)}`;
+  const saved = name ?? `${words}.${mediaType.slice(mediaType.indexOf("/") + 1)}`;
   return { name: saved.replace(UNSAVEABLE, "-"), mediaType, url };
 }
 
@@ -141,17 +141,6 @@ export function InboxPicture({
       </span>
     );
   }
-  // A recording the agent posted plays in its place, and no press opens it, since the viewer draws pictures alone.
-  if (isVideoDataUrl(image.url)) {
-    return (
-      <span ref={anchor} className="picture-block ph-no-capture" data-video="">
-        <VideoPlayer dataUrl={image.url} label={caption ?? alt} />
-        {caption === undefined || caption === "" ? null : (
-          <span className="picture-caption">{caption}</span>
-        )}
-      </span>
-    );
-  }
   return (
     <PictureBlock
       ref={anchor}
@@ -202,7 +191,7 @@ function ItemViewer({
 }): React.JSX.Element | null {
   const held = pictures.flatMap(({ key, attachmentId, alt, name }) => {
     const image = images.get(attachmentId);
-    if (image === undefined || "failed" in image || isVideoDataUrl(image.url)) return [];
+    if (image === undefined || "failed" in image) return [];
     return [{ key, file: viewerFile(alt, name, image.url) }];
   });
   const at = held.findIndex((each) => each.key === shownKey);

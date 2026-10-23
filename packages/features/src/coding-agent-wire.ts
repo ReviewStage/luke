@@ -72,8 +72,7 @@ export const CODING_AGENT_BOUNDS = {
   MAX_START_WORDS_CHARS: 64_000,
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
-  /** The most spoken lines one brain turn names as its ask, and the most characters of one line's id, which the voice's ledger mints. */
-  MAX_ASKED_LINES: 20,
+  /** The most characters of a spoken line's id, which the voice's ledger mints. */
   MAX_LINE_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
   MAX_TITLE_CHARS: 80,
@@ -558,8 +557,6 @@ export const codingAgentRewindRequestSchema = EffectSchema.Struct({
   messageId: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
 });
 
-export type CodingAgentRewindRequest = typeof codingAgentRewindRequestSchema.Type;
-
 /**
  * Renaming an agent (PATCH): the title as the tab should show it, trimmed
  * and bounded; empty clears it, so the tab falls back to the model's name.
@@ -840,8 +837,6 @@ export const operatorEnsureAnswerSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
   txid: EffectSchema.optionalKey(codingAgentTxidSchema),
 });
-
-export type OperatorEnsureAnswer = typeof operatorEnsureAnswerSchema.Type;
 
 /** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
 export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({
@@ -1888,33 +1883,6 @@ const codingAgentMessageSchema = EffectSchema.Struct({
    * row, and from a service older than it.
    */
   turnId: EffectSchema.optionalKey(EffectSchema.String),
-  /**
-   * The developer's spoken lines a brain turn took as its ask, by the
-   * ids the voice's ledger minted for them, in the order they were said, on
-   * the turn's journal; absent where none stands, on a coding agent's page,
-   * and from a service older than it.
-   */
-  asked: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_LINE_ID_CHARS)),
-    ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ASKED_LINES)),
-  ),
-  /**
-   * Where on its call each of those lines began: the voice session it was
-   * said on and the milliseconds into it, which a line heard on the call
-   * standing now is matched by; absent where `asked` is, for a line written
-   * before it was recorded, and from a service older than it.
-   */
-  askedAt: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.Struct({
-        voiceSessionId: EffectSchema.String.check(
-          EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_LINE_ID_CHARS),
-        ),
-        fromMs: EffectSchema.Finite,
-      }),
-    ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ASKED_LINES)),
-  ),
   /**
    * What opened a brain turn, as its row recorded it, on the turn's
    * journal: a spoken turn is the voice's, whose words Luke says aloud

@@ -140,12 +140,12 @@ test("on a plan's page a plan's link, a file's lines, and a Linear page are chip
   assert.deepEqual(told, [{ kind: ACT_KIND.WEB_OPEN, payload: { url: ISSUE_URL } }]);
 });
 
-test("off a plan's page, as in the workspace's Inbox, the same links are chips, a file's page GitHub's, since no repository is at hand", () => {
+test("off a plan's page, as in the workspace's Inbox, the same links are chips, a file's page still the file, of the repository its address names, since none is at hand", () => {
   const container = drawn(undefined);
 
   assert.deepEqual(chips(container), [
     [MENTION_KIND.SECTION, "the rollout"],
-    [MENTION_KIND.LINK, "the store"],
+    [MENTION_KIND.FILE, "the store"],
     [MENTION_KIND.LINK, "LUKE-142/fix-the-thing"],
   ]);
   assert.deepEqual(

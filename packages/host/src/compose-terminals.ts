@@ -24,14 +24,7 @@ import {
   TERMINAL_RELAY_FRAME,
   terminalRelayServiceFrameSchema,
 } from "@luke/features/terminal-wire";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  invalid,
-  RefusedRefusal,
-} from "@luke/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, RefusedRefusal, readParams } from "@luke/gateway";
 import { unparsedWire, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
@@ -389,16 +382,6 @@ function composed(
       return carried(answer);
     });
 
-  /** The params read against the method's own schema, or the invalid-params refusal worded. */
-  const read = <Params>(
-    schema: Schema.Codec<Params, unknown>,
-    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
-    sentence: string,
-  ) => {
-    const result = readEither(schema)(unparsedWire(params));
-    return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
-  };
-
   /** The connection a call names, where it stands. */
   const named = (connectionId: string) => connections.get(connectionId);
 
@@ -407,7 +390,7 @@ function composed(
   const methods: ShellMethods = {
     [GATEWAY_METHOD.TERMINALS_LIST]: (params) =>
       Effect.gen(function* () {
-        const { agentId } = yield* read(
+        const { agentId } = yield* readParams(
           terminalAgentParamsSchema,
           params,
           "listing an agent's shells names the agent",
@@ -416,7 +399,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_CREATE]: (params) =>
       Effect.gen(function* () {
-        const { agentId, title } = yield* read(
+        const { agentId, title } = yield* readParams(
           terminalCreateParamsSchema,
           params,
           "starting a shell names the agent, and its name where it has one",
@@ -425,7 +408,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_RENAME]: (params) =>
       Effect.gen(function* () {
-        const { agentId, terminalId, title } = yield* read(
+        const { agentId, terminalId, title } = yield* readParams(
           terminalRenameParamsSchema,
           params,
           "renaming a shell names the agent, the shell, and its name",
@@ -434,7 +417,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_KILL]: (params) =>
       Effect.gen(function* () {
-        const { agentId, terminalId } = yield* read(
+        const { agentId, terminalId } = yield* readParams(
           terminalShellParamsSchema,
           params,
           "ending a shell names the agent and the shell",
@@ -443,7 +426,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_RESUME]: (params) =>
       Effect.gen(function* () {
-        const { agentId } = yield* read(
+        const { agentId } = yield* readParams(
           terminalAgentParamsSchema,
           params,
           "resuming a sandbox names the agent",
@@ -452,7 +435,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_CONNECT]: (params) =>
       Effect.gen(function* () {
-        const ask = yield* read(
+        const ask = yield* readParams(
           terminalConnectParamsSchema,
           params,
           "attaching a shell names the connection, the agent, the shell, and the terminal's size",
@@ -471,7 +454,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_INPUT]: (params) =>
       Effect.gen(function* () {
-        const { connectionId, data } = yield* read(
+        const { connectionId, data } = yield* readParams(
           terminalInputParamsSchema,
           params,
           "typing names the connection and what was typed",
@@ -492,7 +475,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_RESIZE]: (params) =>
       Effect.gen(function* () {
-        const { connectionId, cols, rows } = yield* read(
+        const { connectionId, cols, rows } = yield* readParams(
           terminalResizeParamsSchema,
           params,
           "a resize names the connection and the terminal's size",
@@ -507,7 +490,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_ACK]: (params) =>
       Effect.gen(function* () {
-        const { connectionId, bytes } = yield* read(
+        const { connectionId, bytes } = yield* readParams(
           terminalAckParamsSchema,
           params,
           "an ack names the connection and the bytes written",
@@ -522,7 +505,7 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_DISCONNECT]: (params) =>
       Effect.gen(function* () {
-        const { connectionId } = yield* read(
+        const { connectionId } = yield* readParams(
           terminalConnectionParamsSchema,
           params,
           "detaching names the connection",

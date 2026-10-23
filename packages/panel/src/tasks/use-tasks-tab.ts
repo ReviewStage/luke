@@ -139,7 +139,7 @@ import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
-import { type AdminView, adminViewOfLink } from "../admin/routing.js";
+import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -346,7 +346,7 @@ interface PersonViewControl {
 }
 
 /** The Admin place's first view, and the one it reads as while it does not stand. */
-const ADMIN_OVERVIEW: AdminView = { kind: "dashboard" };
+const ADMIN_OVERVIEW: AdminView = { kind: ADMIN_TAB.DASHBOARD };
 
 /** What may stand in the task's place, the window's own rather than the task's. */
 const STAND_IN = {
@@ -570,7 +570,7 @@ export interface NewTaskPreset {
  * repository, the issues linked, the model on its chip, and the press it
  * made, whose key a Retry asking the same carries again.
  */
-export interface NewTaskCardKept {
+interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   readonly repository: string | null;

@@ -109,11 +109,7 @@ export const STANDING_GLYPH = {
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
 
 /** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
-export function FiringGlyph({
-  of,
-}: {
-  of: AutomationFiring | AutomationTrigger;
-}): React.JSX.Element {
+function FiringGlyph({ of }: { of: AutomationFiring | AutomationTrigger }): React.JSX.Element {
   switch (of.kind) {
     case AUTOMATION_FIRING.GITHUB:
       return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;

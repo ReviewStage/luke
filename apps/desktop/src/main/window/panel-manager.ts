@@ -202,18 +202,10 @@ export class PanelManager {
     else if (held !== wanted) this.#rebind(held, wanted);
   }
 
-  /**
-   * Hands a payload to every living window, optionally skipping the one that
-   * already holds the answer in its reply and must redraw from that rather
-   * than race a broadcast.
-   */
-  broadcast<Name extends PushName>(
-    push: Name,
-    payload: PushPayload<Name>,
-    except?: WebContents,
-  ): void {
+  /** Hands a payload to every living window. */
+  broadcast<Name extends PushName>(push: Name, payload: PushPayload<Name>): void {
     for (const window of this.#windows.values()) {
-      if (window.isDestroyed() || window.webContents === except) continue;
+      if (window.isDestroyed()) continue;
       windowPushes.push(window.webContents, push, payload);
     }
   }

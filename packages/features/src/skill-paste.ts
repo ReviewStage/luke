@@ -47,7 +47,7 @@ export const SKILL_PASTE_KIND = {
 } as const;
 
 /** The hosts a source is read from. */
-export const SKILL_SOURCE_HOST = {
+const SKILL_SOURCE_HOST = {
   GITHUB: "github",
 } as const;
 
@@ -129,7 +129,7 @@ const skillPasteEmptySchema = Schema.Struct({
 });
 
 /** What a paste was read as. */
-export const skillPasteSchema = Schema.Union([
+const skillPasteSchema = Schema.Union([
   skillPasteSourceSchema,
   skillPasteUnsupportedSchema,
   skillPasteTextSchema,
@@ -141,7 +141,7 @@ export type SkillPasteSource = typeof skillPasteSourceSchema.Type;
 export type SkillPasteText = typeof skillPasteTextSchema.Type;
 export type SkillPasteUnsupportedReason =
   (typeof SKILL_PASTE_UNSUPPORTED)[keyof typeof SKILL_PASTE_UNSUPPORTED];
-export type SkillTextProblem = (typeof SKILL_TEXT_PROBLEM)[keyof typeof SKILL_TEXT_PROBLEM];
+type SkillTextProblem = (typeof SKILL_TEXT_PROBLEM)[keyof typeof SKILL_TEXT_PROBLEM];
 
 /* ----- The command ----- */
 

@@ -12,8 +12,10 @@ import {
   Duration,
   Effect,
   Fiber,
+  Option,
   Queue,
   Schedule,
+  Schema,
   Stream,
 } from "effect";
 
@@ -657,3 +659,52 @@ export function liveRows<Part extends string>(
     }),
   );
 }
+
+/**
+ * Every part's rows as `liveRows` delivers them, each decoded under
+ * `schema` at this boundary. It fails where the read is gone or a delivery
+ * does not decode, which the caller answers by sealing it again.
+ */
+export function decodedLiveRows<Part extends string, Rows>(
+  dependencies: Omit<LiveFollowDependencies<Part>, "onTxWait"> & {
+    readonly onTxWait?: LiveFollowDependencies<Part>["onTxWait"] | undefined;
+  },
+  first: SealedRead<Part>,
+  schema: Schema.Decoder<Rows>,
+): Stream.Stream<Rows, LiveBroken> {
+  const decode = Schema.decodeUnknownOption(schema);
+  const { onTxWait, ...rest } = dependencies;
+  return liveRows({ ...rest, ...(onTxWait === undefined ? undefined : { onTxWait }) }, first).pipe(
+    Stream.mapEffect((read) =>
+      Option.match(decode(read), {
+        onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
+        onSome: Effect.succeed,
+      }),
+    ),
+  );
+}
+
+/** How long a follow that stopped, or whose seal the service did not answer, waits before it is sealed again. */
+export const LIVE_RESTART = Duration.seconds(5);
+
+/**
+ * `attempt` run until it answers that the follow ended, each run that
+ * answers it goes on followed by the next `LIVE_RESTART` later. Note that a
+ * run that ends the follow is followed by no wait, since `while` ends the
+ * repeat before the schedule sleeps.
+ */
+export function restarting<E, R>(attempt: Effect.Effect<boolean, E, R>): Effect.Effect<void, E, R> {
+  return Effect.asVoid(
+    Effect.repeat(attempt, { schedule: Schedule.spaced(LIVE_RESTART), while: (again) => again }),
+  );
+}
+
+/** Where a follow held in a map stands: its entry live or refused, and its state waiting, standing, broken, or unsealed. */
+export const LIVE_STATE = {
+  WAITING: "waiting",
+  STANDING: "standing",
+  BROKEN: "broken",
+  LIVE: "live",
+  REFUSED: "refused",
+  UNSEALED: "unsealed",
+} as const;

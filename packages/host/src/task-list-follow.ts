@@ -8,13 +8,14 @@ import {
   taskListOfLiveRows,
 } from "@luke/features/task-list-live";
 import type { TaskListAnswer } from "@luke/features/task-wire";
-import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
+import { Clock, Duration, Effect, Stream } from "effect";
 import {
+  decodedLiveRows,
   LIVE_GONE,
-  LiveBroken,
+  type LiveBroken,
   type LiveClient,
-  liveRows,
   liveShown,
+  restarting,
   type TxWait,
 } from "./live-follow.js";
 
@@ -37,9 +38,6 @@ import {
  * because the session is no longer the account the follow started for ends
  * the follow, which the next sign-in starts again.
  */
-
-/** How long after a seal went unanswered, or a subscription stopped for good, it is asked again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** A seal as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none, `gone` where it never will again. */
 type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: boolean };
@@ -87,23 +85,16 @@ function liveLists(
   dependencies: TaskListFollowDependencies,
   first: TaskListLiveAnswer,
 ): Stream.Stream<LiveTaskList, LiveBroken> {
-  const decode = Schema.decodeUnknownOption(taskListLiveRowsSchema);
-  const rows = liveRows(
+  const rows = decodedLiveRows(
     {
       openLive: dependencies.openLive,
       reseal: () => dependencies.live(false),
       poll: (after) => dependencies.live(true, after),
       now: dependencies.now,
-      ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
+      onTxWait: dependencies.onTxWait,
     },
     first,
-  ).pipe(
-    Stream.mapEffect((read) =>
-      Option.match(decode(read), {
-        onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: Effect.succeed,
-      }),
-    ),
+    taskListLiveRowsSchema,
   );
   return Stream.switchMap(rows, listsOf);
 }
@@ -115,7 +106,6 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
     if ("failure" in sealed) {
       if (sealed.gone === true) return false;
       dependencies.failed();
-      yield* Effect.sleep(LIVE_RESTART);
       return true;
     }
     // A read the service refused for good, as one under another session, ends the follow rather than starting it again.
@@ -125,9 +115,7 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
       Effect.as(false),
       Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
     );
-    if (gone) return false;
-    yield* Effect.sleep(LIVE_RESTART);
-    return true;
+    return !gone;
   });
-  return Effect.asVoid(Effect.repeat(attempt, { while: (again) => again }));
+  return restarting(attempt);
 }

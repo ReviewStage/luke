@@ -3,8 +3,8 @@ import {
   type TaskBoardLiveRows,
   taskBoardLiveRowsSchema,
 } from "@luke/features/live-wire";
-import { Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
+import { type Effect, Stream } from "effect";
+import { decodedLiveRows, type LiveBroken, type LiveClient, type TxWait } from "./live-follow.js";
 
 /**
  * board-follow.ts -- where the open task's whiteboard stands, followed by the host over a Neon Realtime subscription, so the board is read again the moment it moves.
@@ -55,23 +55,15 @@ export function boardMoves(
   dependencies: BoardFollowDependencies,
   first: TaskBoardLiveAnswer,
 ): Stream.Stream<TaskBoardLiveRows, LiveBroken> {
-  const decode = Schema.decodeUnknownOption(taskBoardLiveRowsSchema);
-  return liveRows(
+  return decodedLiveRows(
     {
       openLive: dependencies.openLive,
       reseal: dependencies.seal,
       poll: dependencies.poll,
       now: dependencies.now,
-      ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
+      onTxWait: dependencies.onTxWait,
     },
     first,
-  ).pipe(
-    Stream.mapEffect((read) =>
-      Option.match(decode(read), {
-        onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: Effect.succeed,
-      }),
-    ),
-    Stream.changesWith((before, rows) => markOf(before) === markOf(rows)),
-  );
+    taskBoardLiveRowsSchema,
+  ).pipe(Stream.changesWith((before, rows) => markOf(before) === markOf(rows)));
 }

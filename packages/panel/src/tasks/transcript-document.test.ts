@@ -18,6 +18,7 @@ import {
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { LinkBlock } from "./inbox-pane.js";
 import { InboxPictures } from "./inbox-pictures.js";
 import { LoneLinkCards } from "./lone-link-card.js";
 import { SentWords } from "./skill-chip.js";
@@ -333,4 +334,27 @@ test("words drawn as a transcript, as the transcript and the plan draw them, kee
   assert.equal(container.querySelectorAll(".transcript-pictures").length, 0);
   // Every link, in a sentence or alone, stays a chip in its paragraph.
   assert.equal(chipsInWords(container).length, 5);
+});
+
+test("an Inbox link block draws as the link alone in its words does: a pull request or page as its card, any other link as its chip, and an address that opens nowhere as its label with the address beside it", () => {
+  const pullRequest = drawn(
+    inPane(createElement(LinkBlock, { url: PULL_REQUEST, label: "The fix" })),
+  );
+  assert.deepEqual(cards(pullRequest), [["pull-request", "#42 · The fix"]]);
+
+  const page = drawn(inPane(createElement(LinkBlock, { url: PAGE, label: "The funnel" })));
+  assert.deepEqual(cards(page), [["page", "The funnel"]]);
+
+  // A label with brackets and an address with parentheses are the link's, not the markdown's.
+  const issue = drawn(
+    inPane(createElement(LinkBlock, { url: `${LINEAR}?a=(b)`, label: "[LUKE-142] fails" })),
+  );
+  assert.equal(issue.querySelectorAll(".lone-link-card").length, 0);
+  assert.deepEqual(chipsInWords(issue), ["[LUKE-142] fails"]);
+
+  const inert = drawn(
+    inPane(createElement(LinkBlock, { url: "file:///tmp/notes.txt", label: "Notes" })),
+  );
+  assert.equal(inert.querySelectorAll("[data-mention-ref]").length, 0);
+  assert.match(inert.textContent ?? "", /Notes\s*file:\/\/\/tmp\/notes\.txt/u);
 });

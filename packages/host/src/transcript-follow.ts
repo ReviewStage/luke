@@ -24,12 +24,17 @@ import {
   Option,
   RcMap,
   Schedule,
-  Schema,
   type Scope,
   Stream,
   SubscriptionRef,
 } from "effect";
-import { confirmWrite, LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
+import {
+  confirmWrite,
+  decodedLiveRows,
+  LIVE_STATE,
+  type LiveClient,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
@@ -89,20 +94,20 @@ interface Drawn {
 
 /** What the statements last delivered: what a page beside the messages is read by, as one digest any change to it moves, and the newest messages drawn. */
 type LiveState =
-  | { readonly kind: "waiting" }
-  | { readonly kind: "standing"; readonly digest: string; readonly drawn: Drawn }
-  | { readonly kind: "broken" }
-  | { readonly kind: "unsealed" };
+  | { readonly kind: typeof LIVE_STATE.WAITING }
+  | { readonly kind: typeof LIVE_STATE.STANDING; readonly digest: string; readonly drawn: Drawn }
+  | { readonly kind: typeof LIVE_STATE.BROKEN }
+  | { readonly kind: typeof LIVE_STATE.UNSEALED };
 
 /** What a transcript's read is answered from. */
 type Standing =
   | {
-      readonly kind: "live";
+      readonly kind: typeof LIVE_STATE.LIVE;
       readonly state: SubscriptionRef.SubscriptionRef<LiveState>;
       /** The wait for a write's transaction on the subscription standing now; none while it is polled or not yet live. */
       readonly txWait: () => TxWait | undefined;
     }
-  | { readonly kind: "refused" };
+  | { readonly kind: typeof LIVE_STATE.REFUSED };
 
 /** A failure as the service answered one. */
 interface Failed {
@@ -212,7 +217,6 @@ function sealedOf(
 export function transcriptFollows<Key = TranscriptKey>(
   dependencies: TranscriptFollowDependencies<Key>,
 ): Effect.Effect<TranscriptFollows<Key>, never, Scope.Scope> {
-  const decode = Schema.decodeUnknownOption(agentTranscriptLiveRowsSchema);
   return RcMap.make({
     idleTimeToLive: IDLE,
     lookup: (key: Key) =>
@@ -224,13 +228,13 @@ export function transcriptFollows<Key = TranscriptKey>(
             ? Effect.succeed(LIVE_SIGNED_OUT)
             : dependencies.seal(key, poll, userId, after);
         const first = yield* sealedOf(seal);
-        if (Option.isNone(first)) return { kind: "refused" } as const;
-        const state = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
+        if (Option.isNone(first)) return { kind: LIVE_STATE.REFUSED } as const;
+        const state = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
         let txWait: TxWait | undefined;
         /** One seal followed until its subscription stops, which marks the state broken. */
         const follow = (sealed: AgentTranscriptLiveAnswer) =>
           Stream.runForEach(
-            liveRows(
+            decodedLiveRows(
               {
                 openLive: dependencies.openLive,
                 reseal: () => Effect.map(seal(false), followedAnswer),
@@ -241,18 +245,15 @@ export function transcriptFollows<Key = TranscriptKey>(
                 },
               },
               followedRead(sealed),
+              agentTranscriptLiveRowsSchema,
             ),
-            (read) =>
-              Option.match(decode(read), {
-                onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-                onSome: (decoded) =>
-                  SubscriptionRef.set(state, {
-                    kind: "standing",
-                    digest: digestOf(decoded),
-                    drawn: drawnOf(decoded),
-                  }),
+            (decoded) =>
+              SubscriptionRef.set(state, {
+                kind: LIVE_STATE.STANDING,
+                digest: digestOf(decoded),
+                drawn: drawnOf(decoded),
               }),
-          ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: "broken" })));
+          ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: LIVE_STATE.BROKEN })));
         yield* Effect.forkScoped(
           Effect.gen(function* () {
             let sealed = first.value;
@@ -262,14 +263,14 @@ export function transcriptFollows<Key = TranscriptKey>(
               const again = yield* Effect.result(sealedOf(seal));
               // A seal the service stopped answering is said, so the follow tells the window rather than waiting on a subscription that never opens again.
               if (again._tag === "Failure") {
-                return yield* SubscriptionRef.set(state, { kind: "unsealed" });
+                return yield* SubscriptionRef.set(state, { kind: LIVE_STATE.UNSEALED });
               }
               if (Option.isNone(again.success)) return;
               sealed = again.success.value;
             }
           }),
         );
-        return { kind: "live", state, txWait: () => txWait } as const;
+        return { kind: LIVE_STATE.LIVE, state, txWait: () => txWait } as const;
       }),
   });
 }
@@ -296,7 +297,9 @@ function toldPage(
 function movedFrom(was: LiveState): (state: LiveState) => boolean {
   return (state) =>
     state.kind !== was.kind ||
-    (state.kind === "standing" && was.kind === "standing" && state.digest !== was.digest);
+    (state.kind === LIVE_STATE.STANDING &&
+      was.kind === LIVE_STATE.STANDING &&
+      state.digest !== was.digest);
 }
 
 /** A page the service did not answer, which is read again after `RESEAL`; not found is the service's last word. */
@@ -390,7 +393,7 @@ export function followTranscript<Key>(
       }
       const opening = Option.isSome(held) ? undefined : yield* Effect.forkScoped(readNewest);
       const sealed = yield* Effect.result(RcMap.get(follows, key));
-      if (sealed._tag === "Failure" || sealed.success.kind === "refused") {
+      if (sealed._tag === "Failure" || sealed.success.kind === LIVE_STATE.REFUSED) {
         if (opening !== undefined) yield* Fiber.interrupt(opening);
         if (sealed._tag === "Failure") {
           yield* RcMap.invalidate(follows, key);
@@ -425,7 +428,7 @@ export function followTranscript<Key>(
       /** The rows' messages not yet told, beside what the last page said of the agent; the cursor moves past them where they follow on from it. */
       const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState) =>
         Effect.gen(function* () {
-          if (state.kind !== "standing" || "failure" in page) return;
+          if (state.kind !== LIVE_STATE.STANDING || "failure" in page) return;
           const fresh = heard(state.drawn.messages);
           if (fresh.length === 0) return;
           const { seq, revision } = cursorParts(window.cursor);
@@ -440,13 +443,13 @@ export function followTranscript<Key>(
         });
       // Note that the newest page may have been read before the subscription stood, so the page past it is read once its first rows land.
       let wake: Effect.Effect<unknown> = SubscriptionRef.changes(state).pipe(
-        Stream.filter(movedFrom({ kind: "waiting" })),
+        Stream.filter(movedFrom({ kind: LIVE_STATE.WAITING })),
         Stream.runHead,
       );
       while (true) {
         yield* wake;
         const was = yield* SubscriptionRef.get(state);
-        if (was.kind === "unsealed") {
+        if (was.kind === LIVE_STATE.UNSEALED) {
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }
@@ -525,7 +528,7 @@ export function confirmTranscriptWrite<Key>(
     if (txid === undefined || !(yield* RcMap.has(follows, key))) return;
     yield* Effect.scoped(
       Effect.flatMap(RcMap.get(follows, key), (standing) =>
-        standing.kind === "live" ? confirmWrite(standing.txWait(), txid) : Effect.void,
+        standing.kind === LIVE_STATE.LIVE ? confirmWrite(standing.txWait(), txid) : Effect.void,
       ),
     ).pipe(
       // A follow the service never sealed shows nothing to wait for.
