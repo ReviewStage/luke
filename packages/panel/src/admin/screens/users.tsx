@@ -185,14 +185,12 @@ export function UsersScreen({
         title="Users"
         note={windowWords(windowDays)}
         controls={
-          <>
-            <AdminViewOptions
-              windowDays={windowDays}
-              onWindowDaysChange={onWindowDaysChange}
-              hideAdmins={hideAdmins}
-              onHideAdminsChange={onHideAdminsChange}
-            />
-          </>
+          <AdminViewOptions
+            windowDays={windowDays}
+            onWindowDaysChange={onWindowDaysChange}
+            hideAdmins={hideAdmins}
+            onHideAdminsChange={onHideAdminsChange}
+          />
         }
         loadingLabel="Loading…"
         {...content}

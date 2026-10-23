@@ -21,12 +21,11 @@ import {
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  FoldingButton,
+  IconButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
   ListRow,
-  PageToolbar,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
@@ -54,8 +53,11 @@ import { useOpenLink } from "../tasks/use-open-link.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
+import { PhoneHead } from "./phone-head.js";
 import type { RunsRead } from "./use-automation-runs.js";
 
+/** What the runs' own screen is called on a phone. */
+const RUNS = "Runs";
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
  *
@@ -107,11 +109,7 @@ export const STANDING_GLYPH = {
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
 
 /** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
-function FiringGlyph({
-  of,
-}: {
-  of: AutomationFiring | AutomationTrigger;
-}): React.JSX.Element {
+function FiringGlyph({ of }: { of: AutomationFiring | AutomationTrigger }): React.JSX.Element {
   switch (of.kind) {
     case AUTOMATION_FIRING.GITHUB:
       return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;
@@ -381,12 +379,16 @@ export function AutomationRunsScreen({
       aria-label="Runs"
       hidden={hidden}
     >
-      <PageToolbar
-        lead={
-          <div className="automation-runs-back">
-            <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
-          </div>
+      {/* A narrow room's screen alone, headed as a phone's page is (`phone-head.tsx`): the way back to the setup, Runs centred. */}
+      <PhoneHead
+        place="automation-runs-page"
+        start={
+          <Tooltip label={`Back to ${name}`}>
+            <IconButton icon={<BackIcon />} label={`Back to ${name}`} onClick={onBack} />
+          </Tooltip>
         }
+        title={<h1 className="desktop-toolbar-title">{RUNS}</h1>}
+        end={null}
       />
       <RunsBody {...shown} />
     </Fill>

@@ -1520,3 +1520,37 @@ test("on a phone the drawer opened stands over a dimmed window, and beside the w
   );
   assert.equal(wide.querySelector(".luke-drawer-scrim"), null);
 });
+
+test("on a phone no page draws the title bar's controls over its own head, an agent's page and the Automations list among them, and the panel's chord still answers where its toggle stood", async () => {
+  let toggled = 0;
+  const sidePanel = { ...tasksControl().sidePanel, onToggle: () => (toggled += 1) };
+  const agentPage = await mountNarrow({
+    page: TASKS_PAGE.DOCUMENT,
+    agentView: { ...tasksControl().agentView, agentId: "agent-1" },
+    sidePanel,
+  });
+  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls"), null);
+  act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
+  assert.equal(toggled, 1, "the panel's chord answers on the agent's page");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const automations = await mountNarrow({
+    automationsView: { ...tasksControl().automationsView, open: true },
+  });
+  assert.equal(
+    automations.querySelector(".desktop-shell > .title-bar-controls"),
+    null,
+    "nor over the Automations list",
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const wide = await mountNarrow(
+    { page: TASKS_PAGE.DOCUMENT, agentView: { ...tasksControl().agentView, agentId: "agent-1" } },
+    {},
+    SHELL_ROOM.WIDE,
+  );
+  assert.ok(wide.querySelector(".desktop-shell > .title-bar-controls"), "a wide window keeps them");
+  assert.ok(wide.querySelector('.title-bar-controls[data-edge="end"]'), "and the panel's toggle");
+});

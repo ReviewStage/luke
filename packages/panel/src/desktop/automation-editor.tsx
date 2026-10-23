@@ -80,6 +80,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   AnchoredPopover,
+  BackIcon,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -97,6 +98,8 @@ import {
   Fill,
   FoldingButton,
   IconButton,
+  MENU_ITEM_MARK,
+  ONE_LINE_ELEMENT,
   OneLine,
   PAGE_FRAME,
   PageToolbar,
@@ -139,7 +142,14 @@ import { dayAndTimeText, localTimeZone, timeZoneNames } from "@luke/ui/time-form
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
-import { ChevronRightIcon, HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  HistoryIcon,
+  PlayIcon,
+  SaveIcon,
+  Trash2Icon,
+  ZapIcon,
+} from "lucide-react";
 import {
   type ReactNode,
   type Ref,
@@ -153,7 +163,7 @@ import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
+import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
 import { matchingRows } from "../searchable-menu.js";
@@ -177,6 +187,7 @@ import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-pan
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
+import { PhoneHead } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
@@ -814,12 +825,23 @@ const ACTIONS_LABEL = "Automation actions";
 function AutomationActions({
   automation,
   onDelete,
+  lead = [],
+  heading,
 }: {
-  automation: AutomationSummary;
+  /** The automation, whose link and Delete the menu offers; none on a new automation's page, a phone's alone. */
+  automation: AutomationSummary | undefined;
   onDelete: () => void;
+  /** Groups over the automation's own, as a phone's ⋯ leads with the toolbar's acts (`EditorToolbar`); none elsewhere. */
+  lead?: readonly MenuAction[][];
+  /** Muted over the items: where the draft stands, on a phone. */
+  heading?: ReactNode;
 }): React.JSX.Element {
   const menu = useMenu(true);
-  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  const linkItem = useCopyLinkItem();
+  const copyLink =
+    automation === undefined
+      ? undefined
+      : linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
     icon: <Trash2Icon />,
@@ -835,7 +857,12 @@ function AutomationActions({
         <ActionMenu
           label={ACTIONS_LABEL}
           menu={menu.drawn}
-          groups={copyLink === undefined ? [[remove]] : [[copyLink], [remove]]}
+          heading={heading}
+          groups={[
+            ...lead,
+            ...(copyLink === undefined ? [] : [[copyLink]]),
+            ...(automation === undefined ? [] : [[remove]]),
+          ].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
@@ -915,6 +942,9 @@ interface RunsControl {
   readonly onPress: () => void;
 }
 
+/** What a phone's way back from an automation's page to the list is called. */
+const BACK_TO_AUTOMATIONS = "Back to Automations";
+
 /** What the toolbar's way to a narrow room's runs says. */
 const RUNS_LABEL = "Runs";
 
@@ -953,6 +983,7 @@ function EditorToolbar({
   narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
+  const feedback = useSendFeedbackItem(EXPERIMENT.CODE_REVIEW);
   const status =
     automation === undefined
       ? "Not created yet"
@@ -961,6 +992,63 @@ function EditorToolbar({
         : dirty
           ? "Unsaved changes"
           : "Saved";
+  const name = automation === undefined ? NEW_AUTOMATION : automation.name;
+  if (narrow) {
+    // A phone heads the page as it heads every page (`phone-head.tsx`): the way back to the list, the automation's
+    // name centred, and one ⋯ holding the toolbar's acts over the automation's own, where the draft stands its heading.
+    const lead: MenuAction[][] = [
+      [
+        {
+          label: automation === undefined ? "Create" : "Save",
+          icon: <SaveIcon />,
+          disabled: saving || !(automation === undefined || dirty),
+          onSelect: onSave,
+        },
+        ...(automation === undefined
+          ? []
+          : [{ label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow }]),
+      ],
+      automation === undefined
+        ? []
+        : [
+            {
+              label: automation.enabled ? "On" : "Off",
+              detail: automation.name,
+              checked: automation.enabled,
+              mark: MENU_ITEM_MARK.SWITCH,
+              onSelect: () => onToggle(!automation.enabled),
+            },
+          ],
+      [{ label: RUNS_LABEL, icon: <HistoryIcon />, onSelect: runs.onPress }],
+      codeReview ? [feedback] : [],
+    ];
+    return (
+      <PhoneHead
+        place="automation"
+        start={
+          <Tooltip label={BACK_TO_AUTOMATIONS}>
+            <IconButton icon={<BackIcon />} label={BACK_TO_AUTOMATIONS} onClick={onBack} />
+          </Tooltip>
+        }
+        title={
+          <>
+            <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={name}>
+              {name}
+            </OneLine>
+            {codeReview ? <ExperimentTag narrow /> : null}
+          </>
+        }
+        end={
+          <AutomationActions
+            automation={automation}
+            onDelete={onDelete}
+            lead={lead.filter((group) => group.length > 0)}
+            heading={status}
+          />
+        }
+      />
+    );
+  }
   return (
     <EditorToolbarFrame
       crumb={
@@ -2189,19 +2277,33 @@ export function AutomationPageSkeleton({
   return (
     <AutomationPageFrame
       toolbar={
-        <EditorToolbarFrame
-          crumb={
-            <>
-              <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_CRUMB_MARK} />
-              <Crumb>
-                <Skeleton width={SKELETON_NAME.CRUMB} />
-              </Crumb>
-            </>
-          }
-          onBack={onBack}
-        >
-          <EditorActsSkeleton />
-        </EditorToolbarFrame>
+        room === SHELL_ROOM.NARROW ? (
+          // A phone's page while it is read stands as it will be drawn: the way back, its name still a block, centred.
+          <PhoneHead
+            place="automation"
+            start={
+              <Tooltip label={BACK_TO_AUTOMATIONS}>
+                <IconButton icon={<BackIcon />} label={BACK_TO_AUTOMATIONS} onClick={onBack} />
+              </Tooltip>
+            }
+            title={<Skeleton width={SKELETON_NAME.CRUMB} />}
+            end={null}
+          />
+        ) : (
+          <EditorToolbarFrame
+            crumb={
+              <>
+                <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_CRUMB_MARK} />
+                <Crumb>
+                  <Skeleton width={SKELETON_NAME.CRUMB} />
+                </Crumb>
+              </>
+            }
+            onBack={onBack}
+          >
+            <EditorActsSkeleton />
+          </EditorToolbarFrame>
+        )
       }
       setup={<EditorSkeleton offersOwner={offersOwner} />}
       beside={

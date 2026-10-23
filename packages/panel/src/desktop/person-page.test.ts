@@ -302,6 +302,7 @@ function mountWith(
   userId = DEAN.userId,
   name?: string,
   memberCount = MEMBERS.length,
+  away?: { label: string; onPress: () => void },
 ) {
   const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
   const tasks = tasksControl({
@@ -337,7 +338,7 @@ function mountWith(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { tasks, userId, name }),
+          createElement(PersonPage, { tasks, userId, name, away }),
         ),
       ),
     ),
@@ -838,4 +839,45 @@ test("a link to someone who left whom only the former members read names opens t
 
   assert.deepEqual(head(page), [OLA.name, "Former member"]);
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
+});
+
+test("on a phone the page is headed by its way back's glyph, their name centred, and one ⋯ holding the sidebar's filter beside the page's own actions", async () => {
+  const left: string[] = [];
+  const { page } = mountWith({}, CHARLES.userId, undefined, MEMBERS.length, {
+    label: "Chat",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".person-page-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["Back to Chat", "More"],
+    "one control a corner",
+  );
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="More"]')?.click());
+  assert.ok(
+    [...document.querySelectorAll('[role="menuitem"]')].some(
+      (each) => each.textContent === "Their tasks in sidebar",
+    ),
+    "the filter is in the ⋯",
+  );
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Back to Chat"]')?.click());
+  assert.deepEqual(left, ["away"]);
+});
+
+test("on a phone a page for someone nobody names still leads with its way back", async () => {
+  const left: string[] = [];
+  const { page } = mountWith({}, "user-stranger", undefined, MEMBERS.length, {
+    label: "Chat",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  assert.match(page.textContent ?? "", /Not found/u);
+  const back = page.querySelector<HTMLButtonElement>(
+    '.person-page-head [aria-label="Back to Chat"]',
+  );
+  assert.ok(back, "the way back stands");
+  act(() => back.click());
+  assert.deepEqual(left, ["away"]);
 });

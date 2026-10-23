@@ -426,11 +426,12 @@ afterEach(() => {
 function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
+  away?: { label: string; onPress: () => void },
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID });
+  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID, away });
   act(() =>
     root?.render(
       onRegistry(
@@ -2217,6 +2218,26 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   // No File tab reads a repository no task names, so the card offers no way into one.
   assert.ok(panel.querySelector(".code-card"), "the code's card stands");
   assert.equal(panel.querySelector(".code-card [aria-label^='Open ']"), null);
+});
+
+test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".agent-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["Back to Inbox", "Agent actions"],
+    "one control a corner",
+  );
+  assert.ok(head.querySelector("h1")?.textContent, "the agent's name is the title");
+  assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Back to Inbox"]')?.click());
+  assert.deepEqual(left, ["away"], "the way back goes where the shell says");
 });
 
 test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {
