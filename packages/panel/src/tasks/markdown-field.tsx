@@ -20,8 +20,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  *
  * Write is the app's own text area (`TextArea`), bounded at GitHub's length
  * for a comment, with GitHub's formatting presses beside Write and Preview
- * (`markdown-toolbar.tsx`), and ⌘B, ⌘I and ⌘K answered in the words as
- * GitHub's own box answers them; a comment on lines of the head offers a
+ * (`markdown-toolbar.tsx`), and the writing chords answered in the words
+ * (bold, italic, strikethrough, code, the lists, and ⌘K for a link); a comment on lines of the head offers a
  * suggestion among them. Preview draws what is written as the transcript
  * draws Markdown, which is near enough GitHub's own rendering to read it
  * back before sending, a suggestion block headed as one. The words are the
@@ -79,7 +79,7 @@ export function MarkdownField({
     [BODY_MODE.PREVIEW]: useId(),
   } satisfies Record<BodyMode, string>;
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: ⌘B, ⌘I and ⌘K in the words format them, as in GitHub's own box; the keys arrive here from the field.
+    // biome-ignore lint/a11y/noStaticElementInteractions: the writing chords in the words format them; the keys arrive here from the field.
     <div
       className="markdown-field"
       onKeyDown={(event) => {
