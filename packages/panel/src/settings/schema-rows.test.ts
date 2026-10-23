@@ -85,6 +85,15 @@ function describedAs(element: HTMLElement): string {
     .trim();
 }
 
+/** The picker's menu row naming `words`. */
+function optionNamed(words: string): HTMLElement {
+  return (
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (item) => item.textContent === words,
+    ) ?? assert.fail(`the menu offers ${words}`)
+  );
+}
+
 async function settle(): Promise<void> {
   await act(async () => undefined);
 }
@@ -94,12 +103,15 @@ test("Zoom is a pop-up naming the stored size, described by its row, and choosin
   const zoom = control(page, "Zoom: 100%");
   assert.equal(describedAs(zoom), "⌘+ and ⌘− step through these sizes, and ⌘0 returns to 100%.");
 
+  // The pop-up is the picker's menu, which the settings search lands on through the chip.
+  assert.equal(zoom.getAttribute("data-search-anchor"), "zoom");
+  assert.equal(zoom.getAttribute("aria-haspopup"), "dialog");
+  assert.equal(document.querySelector('[role="menuitemcheckbox"]'), null);
+
   act(() => zoom.click());
-  const larger =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-      (item) => item.textContent === "125%",
-    ) ?? assert.fail("the menu offers 125%");
-  act(() => larger.click());
+  assert.equal(document.querySelector('[role="dialog"] input'), null);
+  assert.equal(optionNamed("100%").getAttribute("aria-selected"), "true");
+  act(() => optionNamed("125%").click());
   await settle();
 
   assert.deepEqual(written, [["zoom", 125]]);
@@ -130,11 +142,7 @@ test("a choice the store refuses says why under its own row and marks its pop-up
   answer = { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED };
   const choose = (words: string) => {
     act(() => control(page, "Zoom: 100%").click());
-    const item =
-      [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-        (each) => each.textContent === words,
-      ) ?? assert.fail(`the menu offers ${words}`);
-    act(() => item.click());
+    act(() => optionNamed(words).click());
   };
 
   choose("125%");
