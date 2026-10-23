@@ -68,14 +68,10 @@
 
   /* A fold's head speaks in the headings' voice and draws no fill, since
      the container around it and its actions draws one. */
-  /* A section's head is an eyebrow: small, spaced, and upper case, so it
-     names the rows under it without competing with them. */
   .luke-nav-item[data-variant="head"] {
     color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-eyebrow-size);
-    font-weight: var(--luke-weight-semibold);
-    letter-spacing: var(--luke-type-eyebrow-tracking);
-    text-transform: uppercase;
+    font-size: var(--luke-type-caption-size);
+    font-weight: var(--luke-weight-medium);
   }
 
   .luke-nav-item[data-variant="head"]:hover:not(:disabled) {

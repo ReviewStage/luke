@@ -396,15 +396,22 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* A section's head is an eyebrow, small, spaced, and upper case, whether it
+   folds or not, so it names the groups under it without competing with
+   them; a group's own head keeps its name as written. */
+.sidebar-section-head > .luke-nav-item[data-variant="head"],
+.sidebar-section-head-name {
+  font-size: var(--luke-type-eyebrow-size);
+  font-weight: var(--luke-weight-semibold);
+  letter-spacing: var(--luke-type-eyebrow-tracking);
+  text-transform: uppercase;
+}
+
 .sidebar-section-head-name {
   min-width: 0;
   flex: 1;
   padding-left: var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-eyebrow-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: var(--luke-type-eyebrow-tracking);
-  text-transform: uppercase;
 }
 
 /* The sidebar's View options and the Tasks page's Filter wear a dot while
