@@ -290,7 +290,6 @@ function Block({
   code: InboxCodeDoors | undefined;
   context: MessageContext;
 }): React.JSX.Element {
-  const { openLink } = context;
   if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
@@ -306,8 +305,8 @@ function Block({
       );
     case CHAT_BLOCK.LINK:
       return (
-        <Text>
-          <LinkBlock url={block.url} label={block.label} openLink={openLink} />
+        <Text as={TEXT_ELEMENT.DIV}>
+          <LinkBlock url={block.url} label={block.label} />
         </Text>
       );
     case CHAT_BLOCK.CODE:

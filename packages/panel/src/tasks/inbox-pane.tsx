@@ -80,7 +80,6 @@ import { useAutomation } from "../automation-directory.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { TextLink } from "../text-link.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   AgentActorRef,
@@ -308,40 +307,44 @@ const BackHint: FoldingButtonHint = ({ children }) => (
   </Tooltip>
 );
 
-/** A link block: a plain link where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
-export function LinkBlock({
-  url,
-  label,
-  openLink,
-}: {
-  url: string;
-  label: string;
-  openLink: (url: string) => void;
-}): React.JSX.Element {
+/** A link's label as the text of a markdown link: its brackets and backslashes escaped, its line breaks folded to spaces. */
+function linkText(label: string): string {
+  return label.replace(/\s+/gu, " ").replace(/[\\[\]]/gu, "\\$&");
+}
+
+/** An address as a markdown link's destination, in angle brackets so a parenthesis or a space in it breaks nothing. */
+function linkDestination(url: string): string {
+  return `<${url.replace(/[<>\s]/gu, encodeURIComponent)}>`;
+}
+
+/**
+ * A link block, drawn as a link alone in its paragraph of the item's own words is: the card of what it names where it earns one (`lone-link-card.tsx`), else its chip. Note that it is handed to the words as a markdown link, because that one path is what gives a link its mark, its live label, its card, and the door it opens; an address that opens nowhere keeps its label with the address beside it to copy.
+ */
+export function LinkBlock({ url, label }: { url: string; label: string }): React.JSX.Element {
   if (opensAsLink(url)) {
     return (
-      <TextLink href={url} words={label} onOpen={openLink}>
-        {label}
-      </TextLink>
+      <div className="inbox-words">
+        <TranscriptWords text={`[${linkText(label)}](${linkDestination(url)})`} asDocument />
+      </div>
     );
   }
   return (
-    <Tooltip label={url}>
-      <span className="text-link-inert">
-        {label} <span className="inbox-link-address">{url}</span>
-      </span>
-    </Tooltip>
+    <div className="inbox-words">
+      <Tooltip label={url}>
+        <span className="text-link-inert">
+          {label} <span className="inbox-link-address">{url}</span>
+        </span>
+      </Tooltip>
+    </div>
   );
 }
 
 /** One block this build knows, drawn as its type is. */
 function KnownBlock({
   block,
-  openLink,
   code,
 }: {
   block: InboxBlock;
-  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
   switch (block.type) {
@@ -353,11 +356,7 @@ function KnownBlock({
         </div>
       );
     case INBOX_BLOCK.LINK:
-      return (
-        <p className="inbox-words">
-          <LinkBlock url={block.url} label={block.label} openLink={openLink} />
-        </p>
-      );
+      return <LinkBlock url={block.url} label={block.label} />;
     case INBOX_BLOCK.CODE:
       return <InboxCodeCard block={block} code={code} />;
     case INBOX_BLOCK.IMAGE:
@@ -372,11 +371,9 @@ function KnownBlock({
 /** The item's context: each block in turn, drawn as its type is, and a line for one this build does not know. */
 function Blocks({
   item,
-  openLink,
   code,
 }: {
   item: InboxItem;
-  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element | null {
   if (item.blocks.length === 0) return null;
@@ -385,7 +382,7 @@ function Blocks({
       {item.blocks.map((block, index) =>
         // Blocks have no key of their own, and are never reordered: a change to an item draws them whole again.
         knownBlock(block) ? (
-          <KnownBlock key={index} block={block} openLink={openLink} code={code} />
+          <KnownBlock key={index} block={block} code={code} />
         ) : (
           <Text key={index} tone={TEXT_TONE.MUTED}>
             {NEWER_LUKE.BLOCK}
@@ -2050,7 +2047,7 @@ export function InboxPane({
                             </>
                           }
                         >
-                          <Blocks item={item} openLink={doors.openLink} code={doors.code} />
+                          <Blocks item={item} code={doors.code} />
                           {!open ? (
                             <SettledResponse item={item} />
                           ) : marked ? (
