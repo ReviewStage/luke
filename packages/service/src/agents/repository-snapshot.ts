@@ -27,8 +27,8 @@
  * A snapshot older than `MAX_AGE` is passed by and built again, which bounds
  * what a launch fetches on top of it, and a build left behind past
  * `BUILD_GRACE` is deleted and built again. The scheduled sweep deletes
- * every repository sandbox past either bound, so a repository no agent
- * starts on any more keeps nothing.
+ * every repository sandbox past either bound, a shard of the names a
+ * minute, so a repository no agent starts on any more keeps nothing.
  *
  * Nothing here ever fails a launch: a lookup Vercel did not answer reads as
  * no snapshot, and a build that failed deletes what it made and is logged.
@@ -56,8 +56,16 @@ export const REPOSITORY_SNAPSHOT = {
   BUILD_GRACE: Duration.minutes(15),
   /** How long a build may take, its sandbox's own timeout included; one cut off is deleted. */
   BUILD_TIMEOUT: Duration.minutes(10),
-  /** How many pages of repository sandboxes one sweep reads. */
+  /**
+   * How many pages of repository sandboxes one sweep reads, of the shard of
+   * names it takes this minute: the digest's first hex digit, one of
+   * `SWEEP_SHARDS`, so every snapshot is read within that many minutes
+   * however many there are, and none hides behind the pages before it.
+   */
   SWEEP_PAGES: 4,
+  SWEEP_SHARDS: 16,
+  /** How often the sweep runs (`MAINTENANCE_SWEEP.CRONTAB`), which moves it on to the next shard. */
+  SWEEP_PERIOD: Duration.minutes(1),
 } as const;
 
 /** The sandbox's tags: its key, and the instant a build that ended well was marked at. */
@@ -167,19 +175,26 @@ export const readRepositorySnapshot = (
     return readOf(found, yield* Clock.currentTimeMillis);
   });
 
+/** Whether two reads of a name are of one sandbox: the same creation and the same session. */
+function sameSandbox(one: ListedSandbox, other: ListedSandbox): boolean {
+  return one.createdAt === other.createdAt && one.currentSessionId === other.currentSessionId;
+}
+
 /**
- * The sandbox standing under the name deleted, where it is still the one
- * read as stale: read again just before, so a build another launch started
- * in its place since is left be.
+ * The sandbox under the name deleted, where it is still the one given: read
+ * again just before, so a sandbox another launch created under the name
+ * since is left be. Whether the name now stands free. Note that Vercel
+ * deletes by name alone, so a sandbox created between the read and the
+ * delete can still go; what that costs is a snapshot not built this time,
+ * never a launch, since every launch that finds none clones for itself and
+ * the next builds it again.
  */
-const clearStale = (api: VercelSandboxApi, stale: ListedSandbox) =>
+const deleteIfStill = (api: VercelSandboxApi, read: ListedSandbox) =>
   Effect.gen(function* () {
-    const now = yield* api.getNamed(stale.name);
+    const now = yield* api.getNamed(read.name);
     if (now === undefined) return true;
-    if (now.createdAt !== stale.createdAt || now.currentSessionId !== stale.currentSessionId) {
-      return false;
-    }
-    yield* api.deleteSandbox(stale.name);
+    if (!sameSandbox(now, read)) return false;
+    yield* api.deleteSandbox(read.name);
     return true;
   });
 
@@ -202,7 +217,7 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
   const name = repositorySnapshotName(of);
   const wanted = readOf(yield* api.getNamed(name), yield* Clock.currentTimeMillis);
   if (wanted.state !== REPOSITORY_SNAPSHOT_STATE.WANTED) return;
-  if (wanted.stale !== undefined && !(yield* clearStale(api, wanted.stale))) return;
+  if (wanted.stale !== undefined && !(yield* deleteIfStill(api, wanted.stale))) return;
   const key = name.slice(REPOSITORY_SNAPSHOT.NAME_PREFIX.length);
   const created = yield* api
     .create({
@@ -251,7 +266,8 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
       duration: REPOSITORY_SNAPSHOT.BUILD_TIMEOUT,
       orElse: () => Effect.fail(new SandboxUnavailable({ detail: "the build timed out" })),
     }),
-    Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))),
+    // Only this build's own sandbox goes, so a build that failed after another launch replaced it leaves that one be.
+    Effect.tapError(() => Effect.ignore(deleteIfStill(api, created.value))),
   );
 });
 
@@ -280,28 +296,37 @@ export interface RepositorySnapshotSweepOutcome {
   readonly deleted: number;
 }
 
+/** The names the sweep reads this minute: the prefix and the one hex digit of the digest its shard begins with. */
+function shardPrefixAt(now: number): string {
+  const minute = Math.floor(now / Duration.toMillis(REPOSITORY_SNAPSHOT.SWEEP_PERIOD));
+  return `${REPOSITORY_SNAPSHOT.NAME_PREFIX}${(minute % REPOSITORY_SNAPSHOT.SWEEP_SHARDS).toString(16)}`;
+}
+
 /**
- * The sweep's turn at the repository snapshots: a few pages of them read,
- * and each built past `MAX_AGE` or left unbuilt past `BUILD_GRACE` deleted
- * with its snapshots, so a repository no agent starts on keeps nothing.
- * A delete Vercel refused is left for the next sweep.
+ * The sweep's turn at the repository snapshots: a few pages of this
+ * minute's shard of them read (`SWEEP_SHARDS`), and each built past
+ * `MAX_AGE` or left unbuilt past `BUILD_GRACE` deleted with its snapshots,
+ * unless a launch replaced it since it was listed, so a repository no agent
+ * starts on keeps nothing. A delete Vercel refused is left for the shard's
+ * next turn.
  */
 export const sweepRepositorySnapshots = (
   api: VercelSandboxApi,
 ): Effect.Effect<RepositorySnapshotSweepOutcome, SandboxUnavailable> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+    const prefix = shardPrefixAt(now);
     let listed = 0;
     let deleted = 0;
     let cursor: string | undefined;
     for (let page = 0; page < REPOSITORY_SNAPSHOT.SWEEP_PAGES; page += 1) {
-      const read = yield* api.listNamedPage(REPOSITORY_SNAPSHOT.NAME_PREFIX, cursor);
+      const read = yield* api.listNamedPage(prefix, cursor);
       for (const sandbox of read.sandboxes) {
-        if (!sandbox.name.startsWith(REPOSITORY_SNAPSHOT.NAME_PREFIX)) continue;
+        if (!sandbox.name.startsWith(prefix)) continue;
         listed += 1;
         if (!expired(sandbox, now)) continue;
-        const gone = yield* Effect.result(api.deleteSandbox(sandbox.name));
-        if (Result.isSuccess(gone)) deleted += 1;
+        const gone = yield* Effect.result(deleteIfStill(api, sandbox));
+        if (Result.isSuccess(gone) && gone.success) deleted += 1;
       }
       if (read.next === undefined) break;
       cursor = read.next;

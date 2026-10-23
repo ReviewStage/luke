@@ -253,7 +253,7 @@ it.effect(
 );
 
 it.effect(
-  "the sweep deletes snapshots past their age and builds left behind past their grace, and keeps the rest",
+  "the sweep reads one shard of the snapshots a minute, every one within its shards' minutes, and deletes those past their age and builds left behind past their grace",
   () =>
     Effect.gen(function* () {
       const { fake, api } = yield* fixture;
@@ -273,9 +273,21 @@ it.effect(
       });
       yield* TestClock.adjust(REPOSITORY_SNAPSHOT.BUILD_GRACE);
 
-      const swept = yield* sweepRepositorySnapshots(api);
+      const sweeps = [];
+      for (let shard = 0; shard < REPOSITORY_SNAPSHOT.SWEEP_SHARDS; shard += 1) {
+        sweeps.push(yield* sweepRepositorySnapshots(api));
+        yield* TestClock.adjust(REPOSITORY_SNAPSHOT.SWEEP_PERIOD);
+      }
 
-      assert.deepEqual(swept, { listed: 3, deleted: 2 });
+      // Each snapshot was read by exactly one minute's sweep.
+      assert.equal(
+        sweeps.reduce((sum, swept) => sum + swept.listed, 0),
+        3,
+      );
+      assert.equal(
+        sweeps.reduce((sum, swept) => sum + swept.deleted, 0),
+        2,
+      );
       assert.deepEqual(
         fake.sandboxes.filter((each) => !each.deleted).map((each) => each.name),
         [repositorySnapshotName(fresh)],
@@ -283,6 +295,37 @@ it.effect(
       assert.equal(
         (yield* readRepositorySnapshot(api, fresh)).state,
         REPOSITORY_SNAPSHOT_STATE.READY,
+      );
+    }),
+);
+
+it.effect(
+  "a build that failed after another launch replaced its sandbox leaves the replacement be",
+  () =>
+    Effect.gen(function* () {
+      const { fake, api } = yield* fixture;
+      // Another launch took the name over while this build cloned, and this build's clone failed.
+      fake.hooks.runExit = (args) => {
+        if (!args.join(" ").includes("git clone")) return 0;
+        const mine = fake.sandboxes.find((each) => !each.deleted);
+        assert.ok(mine !== undefined);
+        mine.deleted = true;
+        fake.sandboxes.push({
+          ...mine,
+          deleted: false,
+          currentSessionId: "sbs_replacement",
+          createdAt: mine.createdAt + 1,
+          resumedWith: [],
+        });
+        return 128;
+      };
+
+      const failed = yield* Effect.result(built(api));
+
+      assert.equal(failed._tag, "Failure");
+      assert.deepEqual(
+        fake.sandboxes.filter((each) => !each.deleted).map((each) => each.currentSessionId),
+        ["sbs_replacement"],
       );
     }),
 );
