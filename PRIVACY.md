@@ -253,7 +253,11 @@ memory is the workspace's shared knowledge: any member's coding agent there
 may read it, and Settings › Memory shows it to every member with your name on
 it. No agent of another workspace reads it. Luke refuses to keep words that
 look like a key, token, or password, and agents are told never to keep a
-remark about one member as a shared memory. In Settings › Memory you can forget a memory
+remark about one member as a shared memory. An agent keeps nothing on a turn an automation
+started, Luke's own heartbeat included, or once that turn has read the web,
+since neither's words are a member's. When Luke, your operator agent, starts
+a fresh session, it is handed your workspace's most recent memories, your
+private ones among them, beside what was said, as it would read them through recall. In Settings › Memory you can forget a memory
 holding your words, and the workspace's owners and admins can forget any;
 forgetting deletes it at once, so no later agent recalls it. Like a
 project's history, a memory outlives the person who said it: leaving a
