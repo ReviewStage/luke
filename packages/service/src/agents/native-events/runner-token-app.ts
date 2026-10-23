@@ -28,6 +28,7 @@ import {
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { HTTP_METHOD } from "@luke/wire";
 import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
@@ -53,8 +54,6 @@ import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
 
 /** The path a runner's token command posts to. */
 export const RUNNER_TOKEN_PATH = "/api/agents/runner-token";
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 /**
  * How often one agent may ask: app-server asks every five minutes, and once

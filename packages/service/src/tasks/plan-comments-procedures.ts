@@ -20,16 +20,15 @@ import {
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
 } from "@luke/features/plan-comment-wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { unparsedWire, wireUuidSchema } from "../core.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
@@ -65,15 +64,6 @@ import {
 export interface PlanCommentsProcedureSeams extends CommentAskSeams {
   resolveUserId: UserIdResolver;
 }
-
-/** The id a path named; one that is not a UUID names no row. */
-const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
 
 /** The plan's threads as they stand, held while its cursor is still the reader's; nothing where the account reaches no such plan. */
 function planCommentsPast(
@@ -249,7 +239,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
   const member = hosted.planComments.use(accountMiddleware(seams.resolveUserId));
   return {
     read: member.read.effect(function* ({ input, context }) {
-      const taskId = yield* idOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const read = yield* hostedStoreOrUnavailable(
         planCommentsPast(context.userId, taskId, input.after ?? PLAN_COMMENTS_CURSOR_START),
       );
@@ -258,7 +248,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
     }),
     start: member.start.effect(function* ({ input, context }) {
       const start = input.body;
-      const taskId = yield* idOf(input.params.id);
+      const taskId = yield* pathUuid(input.params.id);
       const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: context.userId } as const;
       const outcome = yield* hostedStoreOrUnavailable(
         startPlanCommentThread(writer, taskId, start),
@@ -276,8 +266,8 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
     }),
     act: member.act.effect(function* ({ input, context }) {
       const action = input.body;
-      const taskId = yield* idOf(input.params.id);
-      const threadId = yield* idOf(input.params.thread);
+      const taskId = yield* pathUuid(input.params.id);
+      const threadId = yield* pathUuid(input.params.thread);
       const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: context.userId } as const;
       const outcome = yield* hostedStoreOrUnavailable(
         actOnPlanCommentThread(writer, taskId, threadId, action),
