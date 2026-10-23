@@ -1,4 +1,4 @@
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_PAGE_GROUPS,
@@ -11,6 +11,7 @@ import {
   DocumentIcon,
   KeyboardIcon,
   LaptopIcon,
+  MemoryIcon,
   PlugIcon,
   SpeakerIcon,
   TerminalIcon,
@@ -47,6 +48,7 @@ const SETTINGS_PAGE = {
     icon: <BookOpenIcon className="settings-icon" />,
   },
   [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <DocumentIcon /> },
+  [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <MemoryIcon /> },
   [SETTINGS_VIEW.VOICE]: { title: "Voice", icon: <SpeakerIcon /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
   [SETTINGS_VIEW.NOTIFICATIONS]: {
@@ -77,13 +79,14 @@ export function settingsPageOf(view: SettingsView): SettingsPage {
   return SETTINGS_PAGE[view];
 }
 
-/** The Settings sidebar's groups with the pages this platform offers, a group left with none dropped. */
+/** The Settings sidebar's groups with the pages this platform and the account's experiments offer, a group left with none dropped. */
 export function shownSettingsPageGroups(
   capabilities: readonly HostCapability[],
+  experiments: ExperimentChoices,
 ): readonly { readonly group: SettingsPageGroup; readonly pages: readonly SettingsView[] }[] {
   return SETTINGS_PAGE_GROUPS.map(({ group, pages }) => ({
     group,
-    pages: pages.filter((page) => settingsPageShown(page, capabilities)),
+    pages: pages.filter((page) => settingsPageShown(page, capabilities, experiments)),
   })).filter(({ pages }) => pages.length > 0);
 }
 

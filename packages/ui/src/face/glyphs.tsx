@@ -620,6 +620,16 @@ export function AgentPlaceholderIcon(): React.JSX.Element {
   return <Glyph>{null}</Glyph>;
 }
 
+/** A lit bulb: what Luke's agents remember for the workspace. */
+export function MemoryIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 3.6a5.4 5.4 0 0 0-3.2 9.8c.7.5 1.1 1.3 1.1 2.1v1.5h4.2v-1.5c0-.8.4-1.6 1.1-2.1A5.4 5.4 0 0 0 12 3.6Z" />
+      <path d="M9.9 19.6h4.2" />
+    </Glyph>
+  );
+}
+
 /** A page with its corner turned down and lines of text on it: the task's own document. */
 export function DocumentIcon(): React.JSX.Element {
   return (

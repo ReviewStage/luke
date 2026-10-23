@@ -57,6 +57,11 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * a press anywhere on the row does; and the control, as narrow as a word,
  * stays beside the words at any width rather than dropping under them. The
  * control wears the id the row hands it (`controlId`).
+ *
+ * A row that just arrived, a skill just installed, says so (`landed`): it
+ * lights once, a wash over it fading out on the motion tokens, so the eye
+ * finds it among the rest; reduced motion and a capture run, which zero the
+ * tokens, leave it unlit.
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -125,6 +130,7 @@ export function SettingsRow({
   density = SETTINGS_ROW_DENSITY.CARD,
   indent = SETTINGS_ROW_INDENT.NONE,
   labelsControl = false,
+  landed = false,
   children,
   below,
 }: {
@@ -142,6 +148,8 @@ export function SettingsRow({
   indent?: SettingsRowIndent | undefined;
   /** Whether the row's words label its one control, a switch, wearing `controlId`: a press on them sets it, and it stays beside them. */
   labelsControl?: boolean | undefined;
+  /** Whether the row just arrived, which lights it once. */
+  landed?: boolean | undefined;
   /** The row's controls at its end, handed the row's ids to name and describe them by. */
   children?: ((control: SettingsRowControl) => ReactNode) | undefined;
   /** What the row grows under its words and owns alone, handed the same ids; never a page's layout. */
@@ -171,6 +179,7 @@ export function SettingsRow({
       data-density={density}
       data-indent={indent}
       data-labels-control={labelsControl}
+      data-landed={landed ? "" : undefined}
     >
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">

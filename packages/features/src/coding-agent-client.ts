@@ -57,6 +57,9 @@ import {
   type GitHubTokenAnswerView,
   type GitHubTokenSaveParams,
   githubImageTypeSchema,
+  type MemoriesAnswerView,
+  type MemoriesReadParams,
+  type MemoryForgetParams,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -122,6 +125,7 @@ import {
   type TranscriptNowAnswer,
   type WorkspaceChatLiveAnswer,
 } from "./live-wire.js";
+import { MEMORY_QUERY } from "./memory-wire.js";
 import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -214,6 +218,12 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+} satisfies NamedRefusals;
+
+/** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
+const MEMORY_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -505,6 +515,29 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
     return chaptersModelAnswerOf(
       askHosted(this.#hosted.account.writePreferences, { chaptersModel: model }),
+    );
+  }
+
+  /** The memories Luke's agents kept in a workspace the account is a member of, most recently kept first. */
+  readMemories(
+    params: MemoriesReadParams,
+  ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.account.memories, { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId }),
+      MEMORY_REFUSALS,
+    );
+  }
+
+  /** One memory forgotten for good, answering the workspace's memories as they then stand. */
+  forgetMemory(
+    params: MemoryForgetParams,
+  ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
+    // The workspace and the memory ride in the query, since a DELETE carries no body.
+    return hostedAnswer(
+      askHosted(this.#hosted.account.forgetMemory, {
+        query: { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId, [MEMORY_QUERY.ID]: params.id },
+      }),
+      MEMORY_REFUSALS,
     );
   }
 

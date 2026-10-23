@@ -41,6 +41,7 @@ import {
   type TranscriptNowAnswer,
   type WorkspaceChatLiveAnswer,
 } from "@luke/features/live-wire";
+import type { MemorySummary } from "@luke/features/memory-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -202,6 +203,16 @@ const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
 const GITHUB_TOKEN = "synthetic-classic-token-0000000000wxyz";
 
 /** What the service answers of a kept key: never the key. */
+const MEMORY: MemorySummary = {
+  id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+  text: "Deployments go out from the release branch.",
+  keptBy: { userId: "user-1", name: "Dean" },
+  forgettable: true,
+  private: false,
+  createdAt: 1,
+  updatedAt: 2,
+};
+
 const KEPT: ProviderKeySummary = {
   provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
   hint: "sk-ant-…wxyz",
@@ -506,6 +517,16 @@ function fakeService() {
       Effect.sync(() => {
         asked.push("remove-token");
         return { token: null };
+      }),
+    readMemories: (reading) =>
+      Effect.sync(() => {
+        asked.push(`memories:${reading.workspaceId}`);
+        return { memories: [MEMORY] };
+      }),
+    forgetMemory: (forget) =>
+      Effect.sync(() => {
+        asked.push(`forget:${forget.workspaceId}:${forget.id}`);
+        return { memories: [] };
       }),
     readPlanTemplate: () =>
       Effect.sync(() => {
@@ -2581,5 +2602,39 @@ it.effect(
 
       realtime.arrive("742");
       assert.deepEqual(yield* Fiber.join(sending), { agent: AGENT });
+    }),
+);
+
+it.effect(
+  "a workspace's memories are read and one is forgotten, each one ask of the service naming the workspace; a read naming no workspace or a forget naming no memory id is refused before it, and a closed gate answers unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      const signedOut = yield* subject({ signedIn: false });
+
+      const read = yield* call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: WORKSPACE_ID });
+      const forgotten = yield* call(GATEWAY_METHOD.MEMORIES_FORGET, {
+        workspaceId: WORKSPACE_ID,
+        id: MEMORY.id,
+      });
+      const refused = [
+        yield* Effect.flip(
+          call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: "not-a-memory" }),
+        ),
+        yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_READ, {})),
+      ];
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.MEMORIES_READ, {
+        workspaceId: WORKSPACE_ID,
+      });
+
+      assert.deepEqual(read, { memories: [MEMORY] });
+      assert.deepEqual(forgotten, { memories: [] });
+      assert.deepEqual(
+        refused.map((refusal) => refusal._tag),
+        ["InvalidParamsRefusal", "InvalidParamsRefusal"],
+      );
+      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, [`memories:${WORKSPACE_ID}`, `forget:${WORKSPACE_ID}:${MEMORY.id}`]);
+      assert.deepEqual(signedOut.asked, []);
     }),
 );

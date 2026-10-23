@@ -312,6 +312,21 @@ test("the Settings filter lists every Settings page by its name, ahead of the se
   assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
 });
 
+test("the Settings filter lists Memory after Workspace only while the account has the Memory experiment on", async () => {
+  handState(experimentsOn(EXPERIMENT.MEMORY));
+  await paletteUnderState(tasksControl());
+  chooseFilter("Settings");
+
+  assert.deepEqual(rows().slice(0, 3), ["Profile", "Workspace", "Memory"]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  handState({});
+  await paletteUnderState(tasksControl());
+  chooseFilter("Settings");
+  assert.ok(!rows().includes("Memory"), "Memory off lists no Memory page");
+});
+
 test("on a platform without voice or Mac commands, the Settings filter lists neither page, and finds none of their rows", () => {
   const offered = DESKTOP_CAPABILITIES.filter(
     (each) => each !== HOST_CAPABILITY.VOICE && each !== HOST_CAPABILITY.MAC_COMMANDS,
@@ -2051,8 +2066,7 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           planId: null,
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          title: null,
-          personaName: "Orla",
+          title: "Orla",
           createdAt: 1,
           status: CODING_AGENT_STATUS.COMPLETED,
           turnId: null,
@@ -2068,8 +2082,7 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           planId: null,
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          title: null,
-          personaName: "Ines",
+          title: "Ines",
           kind: CODING_AGENT_KIND.OPERATOR,
           createdAt: 0,
           status: CODING_AGENT_STATUS.COMPLETED,

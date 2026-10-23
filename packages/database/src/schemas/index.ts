@@ -23,6 +23,7 @@ export * from "./installed-skill.js";
 export * from "./integration.js";
 export * from "./integration-installation.js";
 export * from "./mac-command.js";
+export * from "./memory.js";
 export * from "./operator-notice.js";
 export * from "./personal-workspace.js";
 export * from "./plan-comment.js";

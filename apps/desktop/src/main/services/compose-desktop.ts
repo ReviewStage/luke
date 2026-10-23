@@ -1,4 +1,3 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { AgentNoticeDoors, type AgentNotices } from "@luke/host/agent-notices";
 import {
   AppStateStore,
@@ -11,7 +10,6 @@ import {
 } from "@luke/host/client";
 import {
   ALL_CLIENT_CAPABILITIES,
-  clearRetiredBrowserPartition,
   type DuplicateGatewayMethod,
   HostAssemblyTag,
   type HostTag,
@@ -25,7 +23,7 @@ import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
-import { net, session } from "electron";
+import { net } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
@@ -43,12 +41,6 @@ import {
 } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
-
-/**
- * The partition the retired local Browser tab kept its pages' cookies,
- * storage, and cache in, which a launch clears once and nothing opens again.
- */
-const RETIRED_BROWSER_PARTITION = "persist:browser";
 
 /**
  * The composition, as the bridge registration reads it. The keychain and the
@@ -119,29 +111,15 @@ export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
  * their own bootstrap. The updater's own scope is not one of these steps —
  * `createUpdateServiceHost` already forked its fibers into the assembly's own
  * scope and registered its stop as that scope's finalizer — only the one
- * `start()` call the version mark's ordering still needs is here. Beside
- * them, forked so nothing waits on it, a live launch clears once what the
- * retired local Browser tab left in its partition.
+ * `start()` call the version mark's ordering still needs is here.
  */
 const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, HostAssemblyTag> => {
   const { config, state, telemetry, native, operator, updates, windows } = services;
   const { report } = config;
   const channels = Layer.effectDiscard(Effect.sync(() => registerDesktopIpc(services)));
-  const retiredBrowser = Layer.effectDiscard(
-    config.runMode.observesProviders
-      ? Effect.forkScoped(
-          clearRetiredBrowserPartition({
-            stateRoot: config.stateRoot,
-            openPartition: () => session.fromPartition(RETIRED_BROWSER_PARTITION),
-            report,
-          }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
-        )
-      : Effect.void,
-  );
   const machine = layersInOrder([
     effectServiceLayer(telemetry, report),
     serviceLayer(native, report),
-    retiredBrowser,
   ]).pipe(Layer.provideMerge(channels));
   // The one place the document becomes a push. Every window reads its state
   // on one channel, so what a window is told and what `app:state-request`

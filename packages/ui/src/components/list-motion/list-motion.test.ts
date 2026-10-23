@@ -10,7 +10,10 @@ import { LIST_MOTION_WAY, ListMotion, motionKey, motionRows, useLeaving } from "
  * a row leaving slides out where it stood and is let go once that has
  * played, a row listed again before it had gone stands again and comes back
  * the same way, a row moved from one list to another glides across rather
- * than leaving and arriving, and nothing plays where no motion is to play.
+ * than leaving and arriving, a change landing while rows still move adds
+ * onto what they play rather than stopping it, a row arriving while the
+ * lists are still read only fades in, and nothing plays where no motion is
+ * to play.
  * jsdom lays nothing out and plays nothing, so each row's place is given
  * and each motion recorded.
  */
@@ -36,12 +39,13 @@ const TOKENS = {
   "--luke-list-travel": "16px",
 } as const;
 
-/** A motion played: the element, its keyframes and timing, and a way to have it finish. */
+/** A motion played: the element, its keyframes and timing, a way to have it finish, and whether it was stopped. */
 interface Played {
   readonly element: Element;
   readonly keyframes: Keyframe[];
   readonly timing: KeyframeAnimationOptions;
   readonly finish: () => void;
+  readonly stopped: () => boolean;
 }
 
 let root: Root | undefined;
@@ -52,8 +56,20 @@ beforeEach(() => {
   Object.defineProperty(Element.prototype, "animate", {
     configurable: true,
     value(this: Element, keyframes: Keyframe[], timing: KeyframeAnimationOptions) {
-      const motion = { onfinish: null as (() => void) | null, cancel: () => undefined };
-      played.push({ element: this, keyframes, timing, finish: () => motion.onfinish?.() });
+      let cancelled = false;
+      const motion = {
+        onfinish: null as (() => void) | null,
+        cancel: () => {
+          cancelled = true;
+        },
+      };
+      played.push({
+        element: this,
+        keyframes,
+        timing,
+        finish: () => motion.onfinish?.(),
+        stopped: () => cancelled,
+      });
       return motion;
     },
   });
@@ -94,13 +110,15 @@ function Rows({ keys }: { keys: readonly string[] }): React.JSX.Element {
   );
 }
 
-/** Lists side by side, each by its rows' keys, under one motion where `moving`. */
+/** Lists side by side, each by its rows' keys, under one motion where `moving`, still being read where `reading`. */
 function Lists({
   lists,
   moving,
+  reading,
 }: {
   lists: readonly (readonly string[])[];
   moving: boolean;
+  reading: boolean;
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
   const drawn = createElement(
@@ -108,14 +126,18 @@ function Lists({
     { ref: box },
     lists.map((keys, at) => createElement(Rows, { key: String(at), keys })),
   );
-  return moving ? createElement(ListMotion, { root: box, children: drawn }) : drawn;
+  return moving ? createElement(ListMotion, { root: box, reading, children: drawn }) : drawn;
 }
 
-/** Draws `lists`, the motion's tokens set where `tokens`, and hands back a way to draw others. */
+/** Draws `lists`, the motion's tokens set where `tokens`, and hands back a way to draw others, still being read where it says. */
 function draw(
   lists: readonly (readonly string[])[],
-  { moving = true, tokens = true }: { moving?: boolean; tokens?: boolean } = {},
-): (next: readonly (readonly string[])[]) => void {
+  {
+    moving = true,
+    tokens = true,
+    reading = false,
+  }: { moving?: boolean; tokens?: boolean; reading?: boolean } = {},
+): (next: readonly (readonly string[])[], stillReading?: boolean) => void {
   if (tokens) {
     for (const [name, value] of Object.entries(TOKENS)) {
       document.documentElement.style.setProperty(name, value);
@@ -123,8 +145,9 @@ function draw(
   }
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(createElement(Lists, { lists, moving })));
-  return (next) => act(() => root?.render(createElement(Lists, { lists: next, moving })));
+  act(() => root?.render(createElement(Lists, { lists, moving, reading })));
+  return (next, stillReading = false) =>
+    act(() => root?.render(createElement(Lists, { lists: next, moving, reading: stillReading })));
 }
 
 /** The rows drawn, each list's keys in its order. */
@@ -176,6 +199,36 @@ test("rows arriving together arrive a stagger apart", () => {
     (key) => played.find((each) => each.element === rowOf(key))?.timing.delay,
   );
   expect(delays).toEqual([0, 32]);
+});
+
+test("a change landing while rows still move stops none of what they play, and adds the glide it asks for onto it", () => {
+  const show = draw([["A", "B"]]);
+  show([["A", "N", "B"]]);
+
+  show([["A", "M", "N", "B"]]);
+
+  expect(played.filter((each) => each.stopped())).toEqual([]);
+  expect(motionsOf(rowOf("B")).at(-1)).toEqual([
+    { transform: `translate(0px, ${-ROW}px)` },
+    { transform: "none" },
+  ]);
+  const travels = played.filter((each) => "transform" in (each.keyframes[0] ?? {}));
+  expect(travels.map((each) => each.timing.composite)).toEqual(travels.map(() => "add"));
+});
+
+test("while the lists are still read, rows arriving fade in where they stand, together, the change that ends the read included", () => {
+  const show = draw([["A"]], { reading: true });
+
+  show([["A", "B", "C"]], true);
+  show([["A", "B", "C", "D"]], false);
+
+  for (const key of ["B", "C", "D"]) {
+    expect(motionsOf(rowOf(key))).toEqual([[{ opacity: 0 }, { opacity: 1 }]]);
+  }
+  const delays = ["B", "C"].map(
+    (key) => played.find((each) => each.element === rowOf(key))?.timing.delay,
+  );
+  expect(delays).toEqual([0, 0]);
 });
 
 test("a row leaving slides out out of reach where it stood, and the rows under it glide up after it has gone first", () => {

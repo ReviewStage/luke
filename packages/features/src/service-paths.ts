@@ -40,6 +40,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PLAN_TEMPLATE: "/api/account/plan-template",
   /**
+   * The memories Luke's agents kept in a workspace the account is a member
+   * of, named in the query: read them (GET), or forget one by its id (DELETE).
+   * `memory-wire.ts` declares both.
+   */
+  ACCOUNT_MEMORIES: "/api/account/memories",
+  /**
    * The template's history: a page of its revisions, newest first, or with a
    * `before` query the page before that revision (GET).
    * `plan-document-template.ts` declares the answer.

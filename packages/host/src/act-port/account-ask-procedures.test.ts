@@ -49,6 +49,8 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Could not sign in with ChatGPT on this system.",
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
     "Could not cancel the ChatGPT sign-in on this system.",
+  [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: "Could not read Luke's memory on this system.",
+  [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: "Could not forget that memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: "Could not read your plan template on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE]: "Could not save your plan template on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS]:
@@ -86,6 +88,16 @@ const ACTS = [
     ask: "providerKeyForAgents",
   },
   { kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN, payload: undefined, ask: "chatGptSignIn" },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_READ,
+    payload: { workspaceId: "workspace-1" },
+    ask: "memoriesRead",
+  },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET,
+    payload: { workspaceId: "workspace-1", id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d" },
+    ask: "memoryForget",
+  },
   { kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ, payload: undefined, ask: "planTemplateRead" },
   {
     kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE,

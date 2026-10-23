@@ -135,6 +135,9 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@luke/features':
+        specifier: workspace:*
+        version: link:../../packages/features
       '@luke/settings':
         specifier: workspace:*
         version: link:../../packages/settings
@@ -447,9 +450,6 @@ importers:
       lucide-react:
         specifier: 1.53.0
         version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
-      marked:
-        specifier: 18.0.9
-        version: 18.0.9
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -490,6 +490,9 @@ importers:
       '@sentry/vite-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
+      '@types/mdast':
+        specifier: 4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -944,18 +947,9 @@ importers:
       lucide-react:
         specifier: 1.53.0
         version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
-      mdast-util-from-markdown:
-        specifier: 2.0.3
-        version: 2.0.3
-      mdast-util-gfm:
-        specifier: 3.1.0
-        version: 3.1.0
       mermaid:
         specifier: 11.17.2
         version: 11.17.2
-      micromark-extension-gfm:
-        specifier: 3.0.0
-        version: 3.0.0
       posthog-js:
         specifier: 1.418.3
         version: 1.418.3(preact-render-to-string@6.6.5)
@@ -965,9 +959,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
-      react-markdown:
-        specifier: 10.1.0
-        version: 10.1.0(@types/react@19.2.18)(react@19.2.8)
       recharts:
         specifier: 3.8.0
         version: 3.8.0(@types/react@19.2.18)(react-dom@19.2.8)(react-is@19.2.8)(react@19.2.8)(redux@5.0.1)
@@ -977,12 +968,6 @@ importers:
       remark-breaks:
         specifier: 4.0.0
         version: 4.0.0
-      remark-gfm:
-        specifier: 4.0.1
-        version: 4.0.1
-      streamdown:
-        specifier: 2.7.0
-        version: 2.7.0(react-dom@19.2.8)(react@19.2.8)
       unicode-emoji-json:
         specifier: 0.9.0
         version: 0.9.0
@@ -996,9 +981,6 @@ importers:
       '@types/hast':
         specifier: 3.0.5
         version: 3.0.5
-      '@types/mdast':
-        specifier: 4.0.4
-        version: 4.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -1014,6 +996,9 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
+      streamdown:
+        specifier: 2.7.0
+        version: 2.7.0(react-dom@19.2.8)(react@19.2.8)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -1221,6 +1206,15 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
+      mdast-util-from-markdown:
+        specifier: 2.0.3
+        version: 2.0.3
+      mdast-util-gfm:
+        specifier: 3.1.0
+        version: 3.1.0
+      micromark-extension-gfm:
+        specifier: 3.0.0
+        version: 3.0.0
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -1230,6 +1224,12 @@ importers:
       recharts:
         specifier: 3.8.0
         version: 3.8.0(@types/react@19.2.18)(react-dom@19.2.8)(react-is@19.2.8)(react@19.2.8)(redux@5.0.1)
+      remark-gfm:
+        specifier: 4.0.1
+        version: 4.0.1
+      streamdown:
+        specifier: 2.7.0
+        version: 2.7.0(react-dom@19.2.8)(react@19.2.8)
       tailwind-merge:
         specifier: 3.7.0
         version: 3.7.0
@@ -1237,6 +1237,12 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
+      '@types/hast':
+        specifier: 3.0.5
+        version: 3.0.5
+      '@types/mdast':
+        specifier: 4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -1330,9 +1336,15 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
+      oxlint:
+        specifier: 1.79.0
+        version: 1.79.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
 
   tools/claude-code-probe:
     dependencies:
@@ -6905,11 +6917,6 @@ packages:
     engines: {node: '>= 20'}
     hasBin: true
 
-  marked@18.0.9:
-    resolution: {integrity: sha512-/Sa4qiiHZxf0/FQdBBowr9q4r10krCwMvpK48FUBdXdUXScDxiQGR9zCPrFgRVR5LU3iySOiIjy09ZQvADir1w==}
-    engines: {node: '>= 20'}
-    hasBin: true
-
   marked@18.1.0:
     resolution: {integrity: sha512-PamYXWWWg2nboG3oX5Ffzpy3EFZROqZJK9hSlMmUnekp7TxPs5DcT95vwd46m73/exfKCRVMtgXoPMI4FEJL6w==}
     engines: {node: '>= 20'}
@@ -7623,12 +7630,6 @@ packages:
 
   react-is@19.2.8:
     resolution: {integrity: sha512-s5un28nYxKJw5gvUHyW5PCC28CvBqLu9r3cWgzHT4Vo/5fqqkFcdRYsGcKf50WMPpjjFZS5d76fn3YCo2njKwQ==}
-
-  react-markdown@10.1.0:
-    resolution: {integrity: sha512-qKxVopLT/TyA6BX3Ue5NwabOsAzm0Q7kAPwq6L+wWDwisYs7R8vZ0nRXqq6rkueboxpkjvLGU9fWifiX/ZZFxQ==}
-    peerDependencies:
-      '@types/react': '>=18'
-      react: '>=18'
 
   react-redux@9.3.0:
     resolution: {integrity: sha512-KQopgqFo/p/fgmAs5qz6p5RWaNAzq40WAu7fJIXnQpYxFPbJYtsJPWvGeF2rOBaY/kEuV77AVsX8TsQzKm+A/g==}
@@ -11864,7 +11865,7 @@ snapshots:
     optionalDependencies:
       drizzle-kit: 1.0.0-rc.4
       drizzle-orm: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4)(@effect/sql-pglite@4.0.4)(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
-      next: 16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)(sass@1.51.0)
+      next: 16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)
       pg: 8.23.0
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -13564,8 +13565,6 @@ snapshots:
 
   marked@17.0.6: {}
 
-  marked@18.0.9: {}
-
   marked@18.1.0: {}
 
   matcher@3.0.0:
@@ -14027,7 +14026,7 @@ snapshots:
     dependencies:
       content-type: 2.1.0
 
-  next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)(sass@1.51.0):
+  next@16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8):
     dependencies:
       '@next/env': 16.3.1
       '@swc/helpers': 0.5.23
@@ -14047,7 +14046,6 @@ snapshots:
       '@next/swc-win32-arm64-msvc': 16.3.1
       '@next/swc-win32-x64-msvc': 16.3.1
       '@opentelemetry/api': 1.9.1
-      sass: 1.51.0
       sharp: 0.35.3(@types/node@26.2.0)
     transitivePeerDependencies:
       - '@babel/core'
@@ -14581,24 +14579,6 @@ snapshots:
       scheduler: 0.27.0
 
   react-is@19.2.8: {}
-
-  react-markdown@10.1.0(@types/react@19.2.18)(react@19.2.8):
-    dependencies:
-      '@types/hast': 3.0.5
-      '@types/mdast': 4.0.4
-      '@types/react': 19.2.18
-      devlop: 1.1.0
-      hast-util-to-jsx-runtime: 2.3.6
-      html-url-attributes: 3.0.1
-      mdast-util-to-hast: 13.2.1
-      react: 19.2.8
-      remark-parse: 11.0.0
-      remark-rehype: 11.1.2
-      unified: 11.0.5
-      unist-util-visit: 5.1.0
-      vfile: 6.0.3
-    transitivePeerDependencies:
-      - supports-color
 
   react-redux@9.3.0(@types/react@19.2.18)(react@19.2.8)(redux@5.0.1):
     dependencies:

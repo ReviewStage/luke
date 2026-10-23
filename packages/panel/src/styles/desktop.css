@@ -2018,32 +2018,32 @@ ul.actor-stack {
   margin-top: var(--luke-space-6);
 }
 
-.desktop-document .markdown-heading {
+.desktop-document .luke-markdown-heading {
   color: var(--luke-color-text);
 }
 
-.desktop-document .markdown-heading[data-level="1"] {
+.desktop-document .luke-markdown-heading[data-level="1"] {
   font-size: 1.9em;
   font-weight: var(--luke-weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 
-.desktop-document .markdown-heading[data-level="2"] {
+.desktop-document .luke-markdown-heading[data-level="2"] {
   margin-top: 0.6em;
   padding-bottom: 0.35em;
   border-bottom: 1px solid var(--luke-color-border);
   font-size: 1.3em;
 }
 
-.desktop-document .markdown-heading[data-level="3"] {
+.desktop-document .luke-markdown-heading[data-level="3"] {
   font-size: 1.05em;
 }
 
 /* In a column under 400px the title steps down to a section's size and a
    half, so it no longer fills the first screen a few words a line. */
 @container plan-document (width < 400px) {
-  .desktop-document .task-title .markdown-heading[data-level="1"] {
+  .desktop-document .task-title .luke-markdown-heading[data-level="1"] {
     font-size: 1.5em;
   }
 }
@@ -2606,11 +2606,11 @@ ul.actor-stack {
   cursor: text;
 }
 
-.integration-tool-description-whole :is(strong, .markdown-heading, code) {
+.integration-tool-description-whole :is(strong, .luke-markdown-heading, code) {
   color: var(--luke-color-text);
 }
 
-.integration-tool-description-whole .markdown-heading {
+.integration-tool-description-whole .luke-markdown-heading {
   margin-top: 0.9em;
   font-size: 1em;
 }
@@ -4613,7 +4613,7 @@ ul.actor-stack {
 
 /* The template's name in the page title role, where a Settings page's
    title stands. */
-.template-document .task-page-head .markdown-heading[data-level="1"] {
+.template-document .task-page-head .luke-markdown-heading[data-level="1"] {
   font-size: var(--luke-type-title-size);
   font-weight: var(--luke-weight-bold);
   letter-spacing: -0.015em;
@@ -5359,7 +5359,7 @@ ul.actor-stack {
 }
 
 /* A pull request's branches on its card stand as inline code does in words
-   (`.markdown code`): mono on a tint, rounded. */
+   (`.luke-markdown code`): mono on a tint, rounded. */
 .card-code {
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
@@ -5720,28 +5720,6 @@ ul.actor-stack {
 
 [data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
   -webkit-app-region: no-drag;
-}
-
-/* The keys' hints along the foot, as ⌘K's foot has them. */
-.tab-switcher-footer {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-16);
-  height: 36px;
-  padding: 0 var(--luke-space-16);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-}
-
-.tab-switcher-footer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
-.tab-switcher-footer {
-  --luke-shortcut-ink: var(--luke-color-text-muted);
 }
 
 /* Start ------------------------------------------------------------------ */

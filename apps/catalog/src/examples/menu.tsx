@@ -14,6 +14,9 @@ import {
   GAP,
   IconButton,
   Inline,
+  LIST_VARIANT,
+  List,
+  ListRow,
   MENU_ITEM_MARK,
   MENU_SURFACE_FLOW,
   MENU_SURFACE_INSET,
@@ -145,16 +148,22 @@ function AccountMenu(): React.JSX.Element {
   );
 }
 
-/** A row a right-click, or a touch held on it, opens the task's menu on, at the pointer. */
+/**
+ * A row a right-click, or a touch held on it, opens the task's menu on, at
+ * the pointer; its press drops the same menu under it.
+ */
 function RightClickRow(): React.JSX.Element {
   const menu = useMenu(true);
   return (
     <>
-      <button type="button" className="catalog-menu-row" {...menu.contextMenu()}>
-        <Text tone={TEXT_TONE.MUTED}>
-          Right-click anywhere in this row, or hold it on a touch screen.
-        </Text>
-      </button>
+      <List label="Tasks" variant={LIST_VARIANT.CARD}>
+        <ListRow
+          title="Right-click anywhere in this row, or hold it on a touch screen."
+          onPress={menu.trigger(dropBelowStart).onClick}
+          menuOpen={menu.drawn !== undefined}
+          contextMenu={menu.contextMenu()}
+        />
+      </List>
       {menu.drawn && (
         <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />
       )}

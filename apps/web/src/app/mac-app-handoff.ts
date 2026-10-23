@@ -21,7 +21,6 @@ import { accountCall, HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   LINK_OPEN,
   LINK_OPEN_LIST,
-  LINK_PLATFORM,
   type LinkPlatform,
   linkOpenTarget,
 } from "@luke/features/link-open";
@@ -50,16 +49,6 @@ export interface MacAppHandoffDoor {
   readonly platform: LinkPlatform;
   /** Hands the link in the desktop's scheme to the browser, which asks the OS for the app. */
   readonly open: (appLink: string) => void;
-}
-
-/**
- * Whether the browser runs on a Mac, where the app can be. An iPad asking
- * for the desktop site names itself a Mac too, and is told apart by its
- * touch screen.
- */
-export function browserLinkPlatform(): LinkPlatform {
-  const mac = /\bMacintosh\b/u.test(navigator.userAgent) && navigator.maxTouchPoints <= 1;
-  return mac ? LINK_PLATFORM.MAC : LINK_PLATFORM.OTHER;
 }
 
 /**

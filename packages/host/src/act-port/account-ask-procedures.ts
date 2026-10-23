@@ -4,6 +4,9 @@ import type {
   DictationTranscribeParams,
   GitHubTokenAnswerView,
   GitHubTokenSaveParams,
+  MemoriesAnswerView,
+  MemoriesReadParams,
+  MemoryForgetParams,
   PlanTemplateAnswerView,
   PlanTemplateRevisionAnswerView,
   PlanTemplateRevisionParams,
@@ -40,6 +43,8 @@ export interface AccountAskProceduresDependencies {
     githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
     githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
     githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
+    memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
+    memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
     planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateRevisions(
@@ -117,6 +122,18 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.githubTokenRemove();
     }),
+    [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_READ].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.memoriesRead(input);
+      },
+    ),
+    [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.memoryForget(input);
+      },
+    ),
     [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: actPort[
       ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ
     ].effect(function* ({ context, errors }) {

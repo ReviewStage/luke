@@ -8,7 +8,7 @@
  * and a transcript's (`planning/transcript-blocks.tsx`), hold each chip with
  * the opening punctuation that ends the text before it and the closing
  * punctuation that starts the text after it, in a box of the
- * `LINK_GLUE.CLASS` (`markdown.css`). Note that a word joiner would not do:
+ * `LINK_GLUE.CLASS` (`prose.css`). Note that a word joiner would not do:
  * Chromium still breaks after an inline box beside one. Only a link drawn
  * as a chip is held, because a plain link's words must still wrap.
  */

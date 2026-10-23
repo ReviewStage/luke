@@ -378,7 +378,7 @@ function agentMemberName(name: string | undefined): string {
 
 /**
  * A member by its id, the way every line names it: an agent as every place
- * of the window names it (`agentTabLabel`), its human name, else its title,
+ * of the window names it (`agentTabLabel`), its title,
  * else its model's name, a person by their account's name, the reader by
  * their own.
  */

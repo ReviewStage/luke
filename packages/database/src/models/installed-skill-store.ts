@@ -20,14 +20,16 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 
 /**
- * installed-skill-store.ts -- the skills members install into Luke: installed, listed, read with their files, replaced, toggled, and removed, each by its own rule.
+ * installed-skill-store.ts -- the skills members install into Luke: installed, listed, read with their files, replaced, toggled, shared with a workspace, and removed, each by its own rule.
  *
  * A personal skill is its installer's alone: only they read, change,
  * toggle, and remove it, in whichever workspace they work, since it names
  * none. A workspace skill is its workspace's: every current member reads
  * it, installs one, and has their agents use it, and its installer while
  * still a member, or its current owners and admins, change, toggle, and
- * remove it, as an automation is changed. A workspace skill outlives its
+ * remove it, as an automation is changed. Its owner may share a personal
+ * skill with a workspace they are a member of, which moves it there rather
+ * than copying it. A workspace skill outlives its
  * installer's account, which is kept for attribution alone. Every statement names the account beside the skill
  * and gates on that rule in SQL, so a member who leaves a workspace reaches
  * none of its skills at once. A skill and its files are written in one
@@ -431,6 +433,62 @@ const removeSkill = SqlSchema.findAll({
     ),
 });
 
+const findOwnPersonalName = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String }),
+  Result: Schema.Struct({ name: Schema.String }),
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ name: installedSkill.name })
+        .from(installedSkill)
+        .where(and(eq(installedSkill.id, id), ownPersonal(userId))),
+    ),
+});
+
+const findWorkspaceName = SqlSchema.findAll({
+  Request: Schema.Struct({ organizationId: Schema.String, name: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ organizationId, name }) =>
+    Database.use((db) =>
+      db
+        .select({ id: installedSkill.id })
+        .from(installedSkill)
+        .where(
+          and(
+            eq(installedSkill.scope, INSTALLED_SKILL_SCOPE.WORKSPACE),
+            eq(installedSkill.organizationId, organizationId),
+            eq(installedSkill.name, name),
+          ),
+        ),
+    ),
+});
+
+const writeShare = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    id: Schema.String,
+    organizationId: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: InstalledSkillRowSchema,
+  execute: ({ userId, id, organizationId, now }) =>
+    Database.use((db) =>
+      db
+        .update(installedSkill)
+        .set({
+          scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
+          organizationId,
+          ownerUserId: null,
+          installedByUserId: userId,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(installedSkill.id, id), ownPersonal(userId), memberOf(userId, organizationId)),
+        )
+        .returning(INSTALLED_SKILL_COLUMNS),
+    ),
+});
+
 /** The skills of rows a file each, in the order read, each with its files. */
 function groupedFiles(
   rows: readonly (typeof SkillFileRowSchema.Type)[],
@@ -572,6 +630,40 @@ export function setInstalledSkillEnabled(
 /** Removes a skill the account may manage, and its files; false for any other id. */
 export function removeInstalledSkill(userId: string, id: string): TaskStoreEffect<boolean> {
   return Effect.map(removeSkill({ userId, id }), (rows) => rows.length > 0);
+}
+
+/**
+ * Moves the account's own personal skill into a workspace it is a current
+ * member of, in one transaction: the skill becomes the workspace's, its
+ * sharer kept as who installed it, its files, source, and toggle standing.
+ * Nothing where the skill is none of the account's personal ones or the
+ * account is no member there, and `InstalledSkillNameTaken` where the
+ * workspace holds a skill of its name already. Note that two shares of one
+ * name racing past the check meet the workspace's unique index, and the
+ * second fails as the store does.
+ */
+export function shareInstalledSkill(
+  userId: string,
+  id: string,
+  organizationId: string,
+): Effect.Effect<
+  Option.Option<InstalledSkill>,
+  TaskStoreFailure | InstalledSkillNameTaken,
+  DatabaseServices
+> {
+  return inTransaction(
+    Effect.gen(function* () {
+      const [own] = yield* findOwnPersonalName({ userId, id });
+      if (own === undefined) return Option.none();
+      const membership = yield* findMembership({ userId, organizationId });
+      if (membership.length === 0) return Option.none();
+      const taken = yield* findWorkspaceName({ organizationId, name: own.name });
+      if (taken.length > 0) return yield* new InstalledSkillNameTaken({ name: own.name });
+      const now = yield* DateTime.nowAsDate;
+      const [row] = yield* writeShare({ userId, id, organizationId, now });
+      return Option.fromUndefinedOr(row);
+    }),
+  );
 }
 
 /**

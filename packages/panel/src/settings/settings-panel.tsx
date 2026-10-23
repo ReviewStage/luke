@@ -18,8 +18,9 @@ import { ExperimentalPage } from "./experimental-page.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
 import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
+import { MemorySection } from "./memory-page.js";
 import { NotificationsSection } from "./notifications-section.js";
-import { settingsRowsInput } from "./settings-rows.js";
+import { settingsRowsInput, shownWorkspace } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 import { SkillsPage } from "./skills-page.js";
 import { UpdatesSection } from "./updates.js";
@@ -121,6 +122,14 @@ export function SettingsPanel({
         </Text>
       ) : workspace ? (
         <WorkspacePage control={workspace} readerId={account.id} />
+      ) : null}
+
+      {view === SETTINGS_VIEW.MEMORY ? (
+        <MemorySection
+          signedIn={signedIn}
+          workspace={workspace ? shownWorkspace(workspace) : undefined}
+          readerId={signedIn ? account.id : undefined}
+        />
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}

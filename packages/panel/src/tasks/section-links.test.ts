@@ -272,7 +272,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
   const afterCopy = container.querySelector(".plan-document-editor");
   act(() =>
     rollout
-      ?.querySelector("p:not(.markdown-heading)")
+      ?.querySelector("p:not(.luke-markdown-heading)")
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
   );
 

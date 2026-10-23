@@ -362,17 +362,7 @@ test("a line names an agent by its title, or by the name the read gave it, with 
   );
 });
 
-test("an agent given a human name is named by it ahead of its title", () => {
-  const line = NAMES.agents.get(AGENT_ID);
-  assert.ok(line);
-  const names: ChatNames = {
-    ...NAMES,
-    agents: new Map([[AGENT_ID, { ...line, personaName: "Maya Chen" }]]),
-  };
-  assert.equal(chatWho(chatOf(0, []), names, AGENT).name, "Maya Chen");
-});
-
-test("an agent with no name or title is named by its model's name, as its tab is, whether the window holds its line or only the id the read gives it", () => {
+test("an agent with no title is named by its model's name, as its tab is, whether the window holds its line or only the id the read gives it", () => {
   const line = NAMES.agents.get(AGENT_ID);
   assert.ok(line);
   const untitled: ChatNames = {

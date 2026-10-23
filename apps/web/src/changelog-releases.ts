@@ -1,5 +1,5 @@
 /**
- * changelog-releases.ts -- CHANGELOG.md read as releases, and the changelog's pages and per-release routes over them.
+ * changelog-releases.ts -- CHANGELOG.md's releases (`site-markdown.tsx` reads them at build time), and the changelog's pages and per-release routes over them.
  *
  * CHANGELOG.md at the repo root is the only place the release notes are
  * written — every release adds its entry there before its tag is pushed, and
@@ -10,9 +10,6 @@
  * file per route and the client reads its route back from the address it was
  * served at, so both render the same view.
  */
-
-import { Marked, type Token, type Tokens } from "marked";
-import { REPOSITORY_URL } from "./SiteChrome";
 
 export const CHANGELOG_PATH = "/changelog";
 /** The changelog's RSS feed, every release an item linking to its own page. */
@@ -27,63 +24,15 @@ export const CHANGELOG_VIEW = {
   RELEASE: "release",
 } as const;
 
-/** The standing sections every release may end on, which name no feature. */
-const STANDING_SECTIONS: ReadonlySet<string> = new Set(["Improvements", "Fixes", "Misc"]);
-
 /** The longest description a share card is given before it is cut at a word. */
 const DESCRIPTION_LIMIT = 200;
 
 const PAGE_DESCRIPTION = "What changed in each Luke release.";
 
-/**
- * The heading shape is CHANGELOG.md's contract with this page: the version
- * becomes the sticky rail and the release's own address. repository-checks.sh
- * refuses a heading that does not parse, so the throw here is the backstop,
- * not the gate.
- */
-const RELEASE_HEADING = /^## (\d+\.\d+\.\d+) — (\d{4}-\d{2}-\d{2})$/;
 const RELEASE_PATH = /^\/changelog\/(\d+\.\d+\.\d+)$/;
 const PAGE_PATH = /^\/changelog\/page\/(\d+)$/;
-const PUBLIC_PREFIX = "apps/web/public";
 
-const escapeAttribute = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
-
-/* Screenshots are written repository-relative in the markdown so GitHub
-   renders them too; here the public prefix comes off, because Vite serves
-   that directory at the root. */
-const servedPath = (href: string) =>
-  href.startsWith(`${PUBLIC_PREFIX}/`) ? href.slice(PUBLIC_PREFIX.length) : href;
-
-/* A link to a file beside CHANGELOG.md (`PRIVACY.md`) reads on GitHub as the
-   repository's file, and anywhere else would resolve under whatever page or
-   feed holds it, so it is written as that file on GitHub. */
-const RELATIVE_LINK = /^(?![a-z][a-z0-9+.-]*:|\/|#)/i;
-const repositoryFile = (href: string) =>
-  RELATIVE_LINK.test(href) ? `${REPOSITORY_URL}/blob/main/${href}` : href;
-
-const changelogMarked = new Marked({
-  walkTokens: (token) => {
-    if (token.type === "image") token.href = servedPath(token.href);
-    if (token.type === "link") token.href = repositoryFile(token.href);
-  },
-  /* A screenshot drawn at the column's measure is a preview of the full
-     capture, so it links out to the file itself, the same way GitHub wraps a
-     rendered markdown image. Lazy, because every release adds images above
-     the ones already here. */
-  renderer: {
-    image({ href, title, text }) {
-      const source = escapeAttribute(href);
-      const titleAttribute = title ? ` title="${escapeAttribute(title)}"` : "";
-      return (
-        `<a href="${source}" target="_blank" rel="noreferrer">` +
-        `<img src="${source}" alt="${escapeAttribute(text)}"${titleAttribute} loading="lazy"></a>`
-      );
-    },
-  },
-});
-
-interface ReleaseImage {
+export interface ReleaseImage {
   /** The image's address on the site, from its root. */
   readonly src: string;
   readonly alt: string;
@@ -133,74 +82,11 @@ export interface ChangelogRoute {
   readonly head: PageHead;
 }
 
-/** The plain words of a run of inline tokens: links, emphasis, and code read as their text. */
-function plainText(tokens: readonly Token[] | undefined): string {
-  if (tokens === undefined) return "";
-  return tokens
-    .map((token) => {
-      if (token.type === "image") return "";
-      if (token.type === "codespan" || token.type === "escape") return token.text;
-      if (token.type === "br") return " ";
-      if ("tokens" in token && Array.isArray(token.tokens)) return plainText(token.tokens);
-      return token.raw;
-    })
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 /** A description cut at a word before the limit, with an ellipsis, or whole when it fits. */
 function shortened(text: string): string {
   if (text.length <= DESCRIPTION_LIMIT) return text;
   const cut = text.slice(0, DESCRIPTION_LIMIT);
   return `${cut.slice(0, cut.lastIndexOf(" "))}…`;
-}
-
-/** The headline, summary, and first screenshot a release's notes open on. */
-function releaseHighlights(body: string): Pick<Release, "headline" | "summary" | "image"> {
-  const tokens = changelogMarked.lexer(body);
-  const heading = tokens.find(
-    (token): token is Tokens.Heading => token.type === "heading" && token.depth === 3,
-  );
-  const headline =
-    heading !== undefined && !STANDING_SECTIONS.has(heading.text) ? heading.text : undefined;
-  const paragraph = tokens.find(
-    (token): token is Tokens.Paragraph =>
-      token.type === "paragraph" &&
-      !(token.tokens ?? []).every((inline) => inline.type === "image"),
-  );
-  const list = tokens.find((token): token is Tokens.List => token.type === "list");
-  const summary = plainText(paragraph?.tokens ?? list?.items[0]?.tokens);
-  let image: ReleaseImage | undefined;
-  changelogMarked.walkTokens(tokens, (token) => {
-    if (image === undefined && token.type === "image") {
-      image = { src: servedPath(token.href), alt: token.text };
-    }
-  });
-  return { headline, summary, image };
-}
-
-/** Every release in CHANGELOG.md, newest first, as the file lists them. */
-export function parseReleases(markdown: string): readonly Release[] {
-  const sections = markdown.split(/^(?=## )/m);
-  return sections.slice(1).map((section) => {
-    const headingEnd = section.indexOf("\n");
-    const heading = headingEnd === -1 ? section : section.slice(0, headingEnd);
-    const match = RELEASE_HEADING.exec(heading.trimEnd());
-    const version = match?.[1];
-    const date = match?.[2];
-    if (!version || !date) {
-      throw new Error(`CHANGELOG.md release heading must be "## <version> — <date>": ${heading}`);
-    }
-    const body = headingEnd === -1 ? "" : section.slice(headingEnd + 1);
-    return {
-      version,
-      date,
-      // SAFETY: `async: false` makes marked.parse synchronous; the return is a string, not a Promise.
-      html: changelogMarked.parse(body, { async: false }) as string,
-      ...releaseHighlights(body),
-    };
-  });
 }
 
 /** How many pages the releases fill, never fewer than one. */

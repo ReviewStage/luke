@@ -43,6 +43,22 @@ entry in `knip.json`, a `runtimeEdges` row in
 `tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
 Review places a module and a component alike under this rule.
 
+Lint holds the UI half of this (`anti-slop/no-raw-press-outside-ui`): outside
+`packages/ui`, every app, test, and the catalog included, an intrinsic
+(lowercase) JSX element is never a control. A raw `button`, `input` (bar
+`type="hidden"`), `select`, `textarea`, or `summary`, a pressable `role`
+(`button`, `tab`, `option`, `menuitem*`, `radio`, `checkbox`, `switch`,
+`slider`, `link` off an `<a>`, or one that is no literal), and a press event (`onClick`, `onDoubleClick`,
+`onAuxClick`, `onContextMenu`, `onMouseDown`/`Up`, `onPointerDown`/`Up`,
+`onTouchStart`/`End`, and their `Capture` forms) are errors, as is
+`onKeyDown`/`onKeyUp` on an element with `tabIndex` or `contentEditable`.
+Hover, drag and drop, focus, wheel, scroll, and clipboard events, keys on a
+container that takes no focus, and a spread from a ui helper
+(`menu.contextMenu()`) stay allowed. There is no escape hatch: `pnpm lint` runs
+`tools/anti-slop/press-guard-check.ts`, which fails on a disable comment that
+would silence the rule and on an `.oxlintrc.json` that weakens it. Where it
+fires, use a `@luke/ui` component, or add the component or variant there.
+
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the

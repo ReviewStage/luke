@@ -14,6 +14,7 @@
 @import "./components/scroll-area/scroll-area.css";
 @import "./components/list-row/list-row.css";
 @import "./components/list-motion/list-motion.css";
+@import "./components/reveal/reveal.css";
 @import "./components/menu/menu.css";
 @import "./components/mark-strip/mark-strip.css";
 @import "./components/nav-item/nav-item.css";
@@ -38,6 +39,7 @@
 @import "./components/card-press/card-press.css";
 @import "./components/composer-frame/composer-frame.css";
 @import "./components/facts/facts.css";
+@import "./components/file-text/file-text.css";
 @import "./chart/chart.css";
 @import "./components/virtual-rows/virtual-rows.css";
 @import "./components/folding-button/folding-button.css";
@@ -81,6 +83,7 @@
 @import "./components/text-field/text-field.css";
 @import "./components/address-field/address-field.css";
 @import "./components/toast/toast.css";
+@import "./components/drawer-swipe/drawer-swipe.css";
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";
 @import "./components/choice-list/choice-list.css";
@@ -107,5 +110,7 @@
 @import "./components/message/message.css";
 @import "./components/remote-surface/remote-surface.css";
 @import "./components/portal-fence/portal-fence.css";
+@import "./components/editable-block/editable-block.css";
+@import "./components/editable-heading/editable-heading.css";
 /* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

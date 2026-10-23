@@ -1,0 +1,24 @@
+/* A block of a document edited in place (`editable-block.tsx`): its words
+   take the text cursor and nothing else marks them, since a press into them
+   edits them, and a block the keyboard selects wears a soft tint of the
+   focus colour a little past its words, as a document editor marks a
+   selected block. */
+.luke-editable-block {
+  position: relative;
+  isolation: isolate;
+  cursor: text;
+}
+
+.luke-editable-block:focus-visible {
+  outline: none; /* no ring: the tint below marks the block */
+}
+
+.luke-editable-block:focus-visible::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  content: "";
+  pointer-events: none;
+}

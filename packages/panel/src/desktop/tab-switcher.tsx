@@ -43,15 +43,8 @@ import { useAtomSet } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
-import {
-  APP_COMMAND,
-  APP_SHORTCUTS,
-  commandForKey,
-  type KeyedCommand,
-  SHORTCUT_KEY,
-  type ShortcutChord,
-} from "@luke/settings/shortcuts";
-import { Shortcut, TabCard, TabCards } from "@luke/ui";
+import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
+import { TabCard, TabCards } from "@luke/ui";
 import {
   isAgentTab,
   isChangesTab,
@@ -142,13 +135,6 @@ const TASK_WORDS = "Task";
 
 /** What a person's page is called where the name is not known. */
 const PERSON_WORDS = "Profile";
-
-/** The keys the cards' foot names, as ⌘K's foot does. */
-const FOOT_HINTS: readonly { readonly chord: ShortcutChord; readonly label: string }[] = [
-  { chord: APP_SHORTCUTS[APP_COMMAND.NEXT_RECENT_TAB].chord, label: "Next" },
-  { chord: APP_SHORTCUTS[APP_COMMAND.PREVIOUS_RECENT_TAB].chord, label: "Back" },
-  { chord: { key: SHORTCUT_KEY.ESCAPE, bare: true }, label: "Cancel" },
-];
 
 /** The hold before the cards show, as an atom whose work is the wait; handed its door inside a record, as a function handed to an atom's setter is called at once. */
 const holdAtom = () =>
@@ -583,14 +569,6 @@ export function TabSwitcher({
             );
           })}
         </TabCards>
-        <div className="tab-switcher-footer" aria-hidden="true">
-          {FOOT_HINTS.map((hint) => (
-            <span key={hint.label} className="tab-switcher-footer-hint">
-              <Shortcut chord={hint.chord} />
-              {hint.label}
-            </span>
-          ))}
-        </div>
       </div>
     </>,
     document.body,

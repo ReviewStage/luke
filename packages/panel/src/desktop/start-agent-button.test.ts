@@ -62,6 +62,7 @@ function startable(started: string[], busy = false): CodingAgentsControl {
       reason: undefined,
       busy,
       note: undefined,
+      succeeded: false,
       onPress: () => started.push("start"),
     },
   });
@@ -120,6 +121,7 @@ test("a press with nothing picked names no choice, and one after a pick starts o
         reason: undefined,
         busy: false,
         note: undefined,
+        succeeded: false,
         onPress: (choice) => started.push(choice),
       },
     }),

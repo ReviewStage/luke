@@ -406,6 +406,7 @@ function TaskInboxTab({
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
+        reading={inbox.reading}
         note={
           inbox.reading ? (
             <InboxListSkeleton />

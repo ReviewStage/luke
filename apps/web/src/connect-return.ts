@@ -1,5 +1,5 @@
 /**
- * connect-return.ts -- the way back to Luke from a connect's landing page: the web app's tab that started it answering and the page closing, the address a same-tab connect left from offered, or the words alone for the Mac.
+ * connect-return.ts -- the way back to Luke from a connect's landing page: the web app's tab that started it answering and the page closing, the address a same-tab connect left from offered, or the Mac app opened.
  *
  * A connect started in the web app opens its provider in a tab the app
  * opened itself and cut from it (`app/connect-tab.ts`), so no provider page
@@ -14,12 +14,19 @@
  * page then closes, where the connect settled, or offers the way back,
  * where it did not and its words say why. A connect started on the Mac
  * lands with no mark, no tab to answer, and no address left, and the page
- * says to return to Luke, as it always has.
+ * offers to open the Mac app, where the browser is on a Mac, and on any
+ * other platform says its words alone. Every way back is offered in the
+ * same words, Open Luke.
  */
 
+import { LANDING_CLOSE_TAB, LANDING_TONE, type LandingWords } from "@luke/features/landing-outcome";
+import type { LinkPlatform } from "@luke/features/link-open";
+import type { AuthAction } from "@luke/ui";
 import { Option, Schema } from "effect";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { PANEL_PATH } from "./app/web-address";
+import { browserLinkPlatform } from "./link-platform";
+import { OPEN_LUKE, openMacApp } from "./open-luke";
 
 /** The broadcast channel a landing page and the app's tabs speak on. */
 export const CONNECT_CHANNEL = "luke:connect";
@@ -45,16 +52,13 @@ export const CONNECT_BOUND_MS = 30 * 60 * 1000;
  */
 const LANDING = crypto.randomUUID();
 
-/** The words every way back is offered in. */
-export const BACK_TO_LUKE = "Back to Luke";
-
 /** How a landing page goes back to Luke. */
 export const CONNECT_RETURN = {
   /** The app's tab that started the connect answered: this tab is its, and goes. */
   APP: "app",
   /** The app's tab came here itself: the address it left from is offered. */
   ADDRESS: "address",
-  /** The Mac, or nothing answered: the words alone. */
+  /** The Mac, or nothing answered: the Mac app opened, on a Mac. */
   ELSEWHERE: "elsewhere",
 } as const;
 
@@ -157,7 +161,7 @@ export function connectReturn(): ConnectReturn {
 }
 
 /**
- * Back to Luke pressed in a tab the app opened: the tab closes, the app's
+ * Open Luke pressed in a tab the app opened: the tab closes, the app's
  * own standing behind it; where the browser keeps it open, the link opens
  * the app here.
  */
@@ -166,10 +170,40 @@ function closeToApp(event: MouseEvent<HTMLAnchorElement>): void {
   if (window.closed) event.preventDefault();
 }
 
-/** The way back as a landing page offers it, and what its press does first. */
+/**
+ * Open Luke as a page offers it on `platform`: closing this tab back to the
+ * app's where that tab answered, the address a same-tab connect left from,
+ * or, where neither, the Mac app at its home, on a Mac; nothing on any other
+ * platform, where there is no app to open and the page's words stand alone.
+ */
+export function openLuke(back: ConnectReturn, platform: LinkPlatform): AuthAction | undefined {
+  switch (back.kind) {
+    case CONNECT_RETURN.APP:
+      return { label: OPEN_LUKE, href: back.href, onClick: closeToApp };
+    case CONNECT_RETURN.ADDRESS:
+      return { label: OPEN_LUKE, href: back.href };
+    case CONNECT_RETURN.ELSEWHERE:
+      return openMacApp(platform);
+  }
+}
+
+/**
+ * What a landing says under its title: the outcome's line, and, where the
+ * outcome settled in a tab of its own, that the tab can go. A same-tab
+ * connect's landing is the app's own tab, which says nothing of closing.
+ */
+export function landingDescription(words: LandingWords, back: ConnectReturn): string | undefined {
+  const closes = words.tone === LANDING_TONE.SETTLED && back.kind !== CONNECT_RETURN.ADDRESS;
+  const said = [words.line, closes ? LANDING_CLOSE_TAB : undefined].filter(
+    (part): part is string => part !== undefined,
+  );
+  return said.length === 0 ? undefined : said.join(" ");
+}
+
+/** The way back as a landing page offers it: where it came from, and Open Luke, where there is one. */
 export interface LandingReturn {
   readonly back: ConnectReturn;
-  readonly onBack: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  readonly open: AuthAction | undefined;
 }
 
 /**
@@ -181,7 +215,7 @@ export interface LandingReturn {
  * with the hand-off its tab was marked as, which only the app's tab that
  * made it answers. That answer makes this tab the app's, which closes where
  * the connect `settled` and otherwise stays to say why, offering the way
- * back.
+ * back. A page that has not landed offers none yet.
  */
 export function useConnectReturn(state: {
   readonly landed: boolean;
@@ -211,7 +245,7 @@ export function useConnectReturn(state: {
   useEffect(() => {
     if (answered && settled) window.close();
   }, [answered, settled]);
-  if (!landed) return { back: { kind: CONNECT_RETURN.ELSEWHERE }, onBack: undefined };
-  if (answered) return { back: { kind: CONNECT_RETURN.APP, href: PANEL_PATH }, onBack: closeToApp };
-  return { back: read, onBack: undefined };
+  if (!landed) return { back: { kind: CONNECT_RETURN.ELSEWHERE }, open: undefined };
+  const back: ConnectReturn = answered ? { kind: CONNECT_RETURN.APP, href: PANEL_PATH } : read;
+  return { back, open: openLuke(back, browserLinkPlatform()) };
 }

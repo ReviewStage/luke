@@ -235,6 +235,41 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
 });
 
+test("the toolbar's Start is told it succeeded only by its own Start landing, never by a draft's send, which holds it busy too", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    { agents: [] },
+    { agents: [STARTED] },
+    { agents: [STARTED] },
+  );
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { agent: STARTED },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  );
+  await tab.mount();
+
+  act(() => tab.control().start.onPress());
+  await settle();
+  const afterOwn = tab.control().start.succeeded;
+  let draft = "";
+  act(() => {
+    draft = tab.control().onNewDraft();
+  });
+  await act(async () => {
+    await tab.control().startPrompt(draft, "Rename the invite email's subject.", undefined, []);
+  });
+
+  assert.equal(afterOwn, true, "its own Start landed");
+  assert.equal(tab.control().start.busy, false);
+  assert.equal(
+    tab.control().start.succeeded,
+    false,
+    "a draft's failed send is no landing of its own",
+  );
+});
+
 test("a draft's words outlast a relaunch, the plan opening on its draft again under the same key, its files and chips left behind, and a draft let go stays gone", async () => {
   const before = mount({ taskId: TASK, repository: "acme/relay" });
   before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });

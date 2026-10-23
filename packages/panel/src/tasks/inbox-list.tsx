@@ -1774,6 +1774,7 @@ export function InboxList({
   readerId,
   columns,
   rows,
+  reading = false,
   placement = INBOX_LIST_PLACEMENT.PAGE,
   onChoose,
   onMark,
@@ -1789,6 +1790,8 @@ export function InboxList({
   head: InboxListHead;
   /** What stands under the rows: the list's empty line, placeholder rows while it is read, or a read that did not answer. */
   note: React.ReactNode;
+  /** Whether the list is still being read, as its reads land one after another while the window opens, so a row arriving fades in where it stands rather than sliding in as a new one does. */
+  reading?: boolean;
   /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;
   /** Where each row's press is kept, by the item it opens. */
@@ -1939,7 +1942,7 @@ export function InboxList({
       style={sidebar ? undefined : { width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} placement={placement} />
-      <ListMotion root={bodyRef} change={view}>
+      <ListMotion root={bodyRef} change={view} reading={reading}>
         {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
       </ListMotion>
       {!sidebar && columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
