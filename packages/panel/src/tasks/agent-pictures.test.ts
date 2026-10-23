@@ -352,6 +352,74 @@ test("a set shown beside reasoning alone, with its words after, stands apart fro
   assert.equal(container.querySelectorAll(".picture-set-tile").length, 2);
 });
 
+test("a set shown between calls stands on its own row, never in a group that folds once the agent moves on", async () => {
+  const { container } = await drawn(
+    {
+      id: "turn",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        toolPart("bash", "call-before", { command: "pnpm build" }, { exitCode: 0 }),
+        shown("call-between", [picture(1200, 720)]),
+        toolPart("bash", "call-after", { command: "pnpm test" }, { exitCode: 0 }),
+        text("Checking the tests next."),
+      ],
+      startedAt: 1_000,
+    },
+    true,
+  );
+
+  const block = container.querySelector(".picture-block");
+  assert.ok(block, "the set is drawn");
+  assert.equal(block.closest("[data-turn-fold]"), null);
+});
+
+test("a recording and a set shown after it stay out of every fold of the finished turn", async () => {
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = () => "blob:recording-2";
+  URL.revokeObjectURL = () => undefined;
+  try {
+    const video = { ...picture(1278, 598), mediaType: CONVERSATION_MEDIA_TYPE.WEBM };
+    const { container } = await drawn(
+      finished([
+        toolPart("bash", "call-serve", { command: "pnpm dev" }, { exitCode: 0 }),
+        toolPart(
+          "browser",
+          "call-stop-shown",
+          { actions: [{ action: "stop_recording", caption: "Opening a preview" }] },
+          {
+            status: "ran",
+            steps: [
+              {
+                action: "stop_recording",
+                status: "done",
+                seconds: 25,
+                caption: "Opening a preview",
+                picture: video,
+              },
+            ],
+            skipped: 0,
+            tabs: [],
+          },
+        ),
+        shown("call-shown-after", [picture(1200, 720)]),
+        text("The preview opens from the header."),
+      ]),
+      false,
+      () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
+    );
+
+    const player = container.querySelector("video");
+    const tile = container.querySelector(".picture-block img");
+    assert.ok(player && tile, "both the recording and the set are drawn");
+    assert.equal(player.closest("[data-turn-fold]"), null);
+    assert.equal(tile.closest("[data-turn-fold]"), null);
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
+});
+
 test("the viewer opened on the first picture to land reaches the rest as their reads land", async () => {
   const pictures = [picture(800, 450), picture(800, 450), picture(800, 450)];
   const [first] = pictures;
