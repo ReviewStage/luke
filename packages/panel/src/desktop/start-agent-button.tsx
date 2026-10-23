@@ -119,6 +119,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           label="Start a coding agent"
           disabled={unavailable}
           busy={start.busy ? "Starting" : undefined}
+          succeeded={start.note === undefined}
           hintLabel={hint}
           onClick={press}
           onMainPress={() => setOpen(false)}

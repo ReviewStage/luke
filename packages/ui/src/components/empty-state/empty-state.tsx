@@ -48,6 +48,8 @@ export interface EmptyStateAction {
   readonly onClick: () => void;
   /** Whether the press is unavailable for now, as the same act elsewhere on the page is. */
   readonly disabled?: boolean | undefined;
+  /** Whether its glyph turns once as a press lands, as a retry's arrow does. */
+  readonly turns?: boolean | undefined;
 }
 
 /**
@@ -95,6 +97,7 @@ export function EmptyState({
               variant={ACTION_BUTTON[way.look ?? EMPTY_STATE_ACTION_LOOK.QUIET]}
               icon={way.icon}
               disabled={way.disabled}
+              turns={way.turns}
               onClick={way.onClick}
             >
               {way.label}
