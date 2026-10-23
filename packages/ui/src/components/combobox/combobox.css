@@ -86,6 +86,16 @@
     opacity: 0.4;
   }
 
+  /* What leads an option before its glyph, a task's key say, stands in a
+     column wide enough for a long one, so the glyphs and names of the
+     options it leads line up down the list, as the Tasks list's columns do. */
+  .luke-combobox-option-lead {
+    display: inline-flex;
+    min-width: 9ch;
+    flex: 0 0 auto;
+    align-items: center;
+  }
+
   .luke-combobox-option-glyph {
     display: inline-flex;
     width: 16px;
