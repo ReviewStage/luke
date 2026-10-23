@@ -64,7 +64,6 @@ import {
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
   isAgentTab,
-  isBrowserTab,
   isChangesTab,
   isCloudBrowserTab,
   isDraftTab,
@@ -3341,8 +3340,6 @@ export function useTasksTab(input: {
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     if (isMacTerminalTab(tab)) return drawsMacTerminal(tab, { taskAgents: agentIds });
-    // A Browser tab's page went with it, so there is nothing to open again.
-    if (isBrowserTab(tab)) return false;
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
@@ -3399,7 +3396,6 @@ export function useTasksTab(input: {
             onIdle: closeSidePanelTab,
             keeps: (tab) =>
               typeof tab === "string" ||
-              isBrowserTab(tab) ||
               isCloudBrowserTab(tab) ||
               isMacTerminalTab(tab) ||
               pinnedHere(tab),

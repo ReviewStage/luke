@@ -170,9 +170,6 @@ export function createInProcessBridge(
       onAvatarSession: neverDelivered,
       onAvatarFeed: neverDelivered,
       onAvatarViewSignal: neverDelivered,
-      onBrowserState: neverDelivered,
-      onBrowserKey: neverDelivered,
-      onBrowserFocus: neverDelivered,
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,

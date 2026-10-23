@@ -90,7 +90,7 @@ function Typography(): React.JSX.Element {
             variant={TEXT_VARIANT.CAPTION}
             truncate={TEXT_TRUNCATE.START}
           >
-            <bdi>packages/panel/src/tasks/browser-pane/address-bar-model.ts</bdi>
+            <bdi>packages/panel/src/tasks/cloud-browser/address-bar-model.ts</bdi>
           </Text>
         </div>
       </CatalogSection>

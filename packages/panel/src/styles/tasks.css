@@ -1615,7 +1615,7 @@
 }
 
 /* A cloud Browser tab (cloud-browser-pane.tsx): the steps and the address
-   as a Browser tab's bar has them; who has it under the bar; then the page
+   as a browser's bar has them; who has it under the bar; then the page
    drawn on a canvas of the page's own shape, centred in the body, with a
    quiet line over it while no page stands to drive, or while a draft waits
    on an address. */
@@ -1827,24 +1827,6 @@
 
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
-/* A Browser tab (browser-pane.tsx): the body main lays the page's view
-   over, which draws a still of the page while something covers it; its
-   bar's address field (`@luke/ui`'s AddressField) fills what the steps
-   leave. */
-.browser-view-body {
-  position: relative;
-}
-
-/* The still stands where the page stood, at the size the page was drawn
-   at (browser-pane.tsx sets it), never at the image's own, which is in the
-   screen's pixels, nor stretched to a body that has since moved. */
-.browser-view-still {
-  position: absolute;
-  top: 0;
-  left: 0;
-  max-width: none;
-}
-
 /* What became of a changed file, lettered quietly beside its path in a
    Changes tab's bar (agent-changes-tab.tsx), coloured as its row in the
    tree is. */
