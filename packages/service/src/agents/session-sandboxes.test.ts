@@ -49,6 +49,7 @@ function vercel(sandboxes: readonly object[], stopStatus = 200) {
       const parsed = new URL(url);
       const contentType = new Headers(init.headers).get("content-type");
       asked.push({ method: init.method ?? "GET", url: parsed, contentType });
+      if (parsed.pathname.endsWith("/network-policy")) return Response.json({});
       return parsed.pathname.endsWith("/stop")
         ? (sandboxStopRefusal(init) ?? new Response("{}", { status: stopStatus }))
         : (sandboxListRefusal(parsed) ?? Response.json({ sandboxes }));
@@ -65,7 +66,7 @@ afterEach(() => {
 });
 
 it.effect(
-  "the session's sandbox that is up has its running session stopped, in the token's project and team, and one already stopped is left",
+  "the session's sandbox that is up has its credential taken off its firewall and then its running session stopped, in the token's project and team, and one already stopped is left",
   () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -77,9 +78,10 @@ it.effect(
       const stopped = yield* stopFor(SESSION).pipe(Effect.provide(api.layer));
 
       assert.equal(stopped, 1);
-      const [list, stop, ...rest] = api.asked;
-      assert.ok(list !== undefined && stop !== undefined);
+      const [list, policy, stop, ...rest] = api.asked;
+      assert.ok(list !== undefined && policy !== undefined && stop !== undefined);
       assert.deepEqual(rest, []);
+      assert.equal(policy.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/network-policy");
       assert.equal(list.url.pathname, "/api/v2/sandboxes");
       assert.equal(list.url.searchParams.get("tags"), `sessionId:${SESSION}`);
       assert.equal(list.url.searchParams.get("project"), PROJECT);
