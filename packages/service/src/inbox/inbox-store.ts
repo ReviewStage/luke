@@ -43,11 +43,8 @@ import type {
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-  type CodingAgentAttachmentType,
-} from "@luke/features/coding-agent-wire";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { type ConversationMediaType, isVideoType } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   type InboxItemPlace,
@@ -61,6 +58,7 @@ import {
   INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_BOUNDS,
+  INBOX_FILE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -70,7 +68,7 @@ import {
   type InboxAsk,
   type InboxAskStanding,
   type InboxBlock,
-  type InboxImageType,
+  type InboxFileType,
   type InboxItem,
   type InboxMessage,
   type InboxPost,
@@ -228,9 +226,9 @@ export interface StoredInboxItem {
   readonly answerKey: string | null;
 }
 
-/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, a still's or a video's, and the bytes. */
 export interface InboxImage {
-  readonly contentType: InboxImageType;
+  readonly contentType: ConversationMediaType;
   readonly bytes: Uint8Array;
 }
 
@@ -244,13 +242,13 @@ interface MessageFile {
   /** The id it is kept under, where the message's words name it by its address; minted by the database where none is given. */
   readonly id?: string;
   readonly name: string;
-  readonly contentType: CodingAgentAttachmentType;
+  readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;
 }
 
 /** A file an item's answer carried as a read answers it: the type it travelled as, and the bytes; a picture of a block's reads the same way. */
 export interface InboxFile {
-  readonly contentType: CodingAgentAttachmentType;
+  readonly contentType: InboxFileType;
   readonly bytes: Uint8Array;
 }
 
@@ -274,8 +272,8 @@ export interface InboxMarked {
  */
 const TXID = sql<string>`pg_current_xact_id()::text`;
 
-/** The types a file of an item's may be served under: a picture's, or any a message's file travels as. */
-const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+/** The types a file of an item's may be served under: a picture's, a video's, or any a message's file travels as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
 /** The item's own id, named by its table, since a statement over the item alone spells its columns bare and a bare id inside the files' subquery would be the file's. */
 const ITEM_ID = sql`${sql.identifier(getTableName(inboxItem))}.${sql.identifier(inboxItem.id.name)}`;
@@ -2266,17 +2264,26 @@ function pictureAddressOf(
 interface PicturesByPath {
   readonly kept: readonly PostPicture[];
   readonly idOf: (path: string) => string | undefined;
+  /** The id of a still alone, which a desktop before version 5 draws as an image block; a video it would draw as a broken picture. */
+  readonly stillOf: (path: string) => string | undefined;
 }
 
 /** The pictures handed in, each under an id minted for it, found by the path the agent's words name it by. */
 function picturesByPath(pictures: readonly InboxBodyPicture[]): PicturesByPath {
   const kept = pictures.map(({ path: _path, ...picture }) => ({ ...picture, id: randomUUID() }));
   const ids = new Map<string, string>();
+  const stills = new Set<string>();
   pictures.forEach((picture, at) => {
     const id = kept[at]?.id;
-    if (id !== undefined && !ids.has(picture.path)) ids.set(picture.path, id);
+    if (id === undefined || ids.has(picture.path)) return;
+    ids.set(picture.path, id);
+    if (!isVideoType(picture.contentType)) stills.add(picture.path);
   });
-  return { kept, idOf: (path) => ids.get(path) };
+  return {
+    kept,
+    idOf: (path) => ids.get(path),
+    stillOf: (path) => (stills.has(path) ? ids.get(path) : undefined),
+  };
 }
 
 /**
@@ -2526,10 +2533,10 @@ export function postInboxThread(
         const room = yield* roomToPost(agent, post.key, post.ask);
         if (Result.isFailure(room)) return Result.fail(room.failure);
         const now = yield* DateTime.nowAsDate;
-        const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
+        const { kept, idOf, stillOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = {
           title,
-          blocks: viewBlocks(post.body, post.ask, idOf),
+          blocks: viewBlocks(post.body, post.ask, stillOf),
           response:
             post.ask === undefined ? { type: INBOX_RESPONSE.NONE } : inboxAskResponse(post.ask),
           needsReply: post.needsReply ?? true,

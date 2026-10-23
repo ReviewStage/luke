@@ -28,6 +28,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  VideoPlayer,
 } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -367,65 +368,6 @@ function setCount(count: number): string {
   return `${String(count)} pictures`;
 }
 
-/** What the player is named for a reader, its caption after it. */
-const VIDEO_LABEL = "Video";
-
-/**
- * The `blob:` address a video's `data:` URL plays from, made from its bytes
- * here and let go of as the player goes: neither window's policy lets media
- * load from a `data:` address, nor fetch one, where both allow `blob:`.
- */
-function useBlobUrl(dataUrl: string): string | undefined {
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    const comma = dataUrl.indexOf(",");
-    const type = dataUrl.slice(dataUrl.indexOf(":") + 1, dataUrl.indexOf(";"));
-    const binary = atob(dataUrl.slice(comma + 1));
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const made = URL.createObjectURL(new Blob([bytes], { type }));
-    setUrl(made);
-    return () => URL.revokeObjectURL(made);
-  }, [dataUrl]);
-  return url;
-}
-
-/** A video's player once its bytes are in: at its own shape up to the column's, with the player's own controls. */
-function VideoPlayer({
-  dataUrl,
-  picture,
-  caption,
-}: {
-  dataUrl: string;
-  picture: KeptPicture;
-  caption: string;
-}): ReactNode {
-  const url = useBlobUrl(dataUrl);
-  return (
-    <Card
-      as={CARD_ELEMENT.SPAN}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.FLUSH}
-      className="picture-frame"
-      style={{ aspectRatio: `${String(picture.width)} / ${String(picture.height)}` }}
-    >
-      {url === undefined ? null : (
-        // biome-ignore lint/a11y/useMediaCaption: an agent's recording of its screen has no sound to caption.
-        <video
-          className="picture-video"
-          src={url}
-          width={picture.width}
-          height={picture.height}
-          aria-label={caption === "" ? VIDEO_LABEL : `${VIDEO_LABEL}: ${caption}`}
-          controls
-          muted
-          playsInline
-          preload="metadata"
-        />
-      )}
-    </Card>
-  );
-}
-
 /** A video the agent showed: its own block, played where its bytes are in, the picture's quiet box while read, its words where gone. */
 function ShownVideo({
   door,
@@ -441,7 +383,7 @@ function ShownVideo({
   }
   return (
     <span className="picture-block ph-no-capture" data-state={state.kind} data-video="">
-      <VideoPlayer dataUrl={state.url} picture={shown.picture} caption={shown.caption} />
+      <VideoPlayer dataUrl={state.url} label={shown.caption} size={shown.picture} />
       {caption === undefined ? null : <span className="picture-caption">{caption}</span>}
     </span>
   );

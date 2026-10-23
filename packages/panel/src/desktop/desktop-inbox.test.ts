@@ -26,6 +26,7 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_FILE_TYPE,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
@@ -2214,6 +2215,85 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The form before.png", "1 of 3"]);
   key("ArrowLeft");
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
+});
+
+test("a recording an agent's words draw plays in its own player, left out of the replay and of the viewer's walk, beside the picture drawn with it", async () => {
+  const [still, video] = [
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c90",
+    "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c91",
+  ];
+  const address = (attachmentId: string) =>
+    inboxAttachmentAddress(
+      { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+      attachmentId,
+      "acme",
+    );
+  const created: string[] = [];
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = (blob: Blob) => {
+    created.push(blob.type);
+    return `blob:video-${String(created.length)}`;
+  };
+  URL.revokeObjectURL = () => undefined;
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value:
+          request.payload.attachmentId === video
+            ? { contentType: INBOX_FILE_TYPE.WEBM, base64: "GkXfow==" }
+            : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      });
+    },
+  });
+  try {
+    const message: InboxMessage = {
+      ...threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000060",
+        "agent",
+        `The invite, and how it is sent.\n\n![The email](${address(still)}) ![Inviting a member](${address(video)} "The invite flow")`,
+        1_000,
+      ),
+      files: [
+        { attachmentId: still, name: "email.png", mediaType: INBOX_IMAGE_TYPE.PNG },
+        { attachmentId: video, name: "flow.webm", mediaType: INBOX_FILE_TYPE.WEBM },
+      ],
+    };
+    const pane = await mountThread(threadItem([message]));
+    await settle();
+
+    const player = pane.querySelector("video");
+    assert.ok(player, "the recording is played, not drawn");
+    assert.equal(player.getAttribute("src"), "blob:video-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: The invite flow");
+    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM]);
+    assert.equal(
+      pane.querySelector('button[aria-label="Enlarge Inviting a member"]'),
+      null,
+      "no press opens a recording as a picture",
+    );
+    const press = pane.querySelector<HTMLButtonElement>('button[aria-label="Enlarge The email"]');
+    assert.ok(press, "the picture beside it still opens");
+    act(() => press.click());
+    assert.equal(
+      document.querySelector('[role="dialog"] .luke-zoom-image')?.getAttribute("alt"),
+      "The email.png",
+      "the viewer opens on the picture",
+    );
+    assert.equal(
+      document.querySelector('[role="dialog"] .attachment-viewer-place'),
+      null,
+      "the viewer walks the picture alone",
+    );
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
 });
 
 test("a thread draws a comment's files over its words: an agent's pictures stand once, where its words draw them, one they do not draw over them, and a member's picture and file over their words, the viewer walking each picture once", async () => {

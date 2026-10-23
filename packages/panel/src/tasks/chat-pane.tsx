@@ -21,6 +21,7 @@ import {
   DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
+  isVideoDataUrl,
   MESSAGE_ACTIONS_PLACEMENT,
   ONE_LINE_ELEMENT,
   OneLine,
@@ -32,6 +33,7 @@ import {
   Time,
   useConfirmDialog,
   useMinute,
+  VideoPlayer,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
@@ -237,7 +239,8 @@ function viewerFile(block: ChatImageBlock, url: string): FileChip {
 /**
  * A picture a message carries: its own block at its own size up to the
  * column's, a quiet box while its bytes are read, its words where it is
- * gone, and pressed to open it larger over the window.
+ * gone, and pressed to open it larger over the window; a recording an agent
+ * posted plays there instead.
  */
 function ChatPicture({
   messageId,
@@ -254,6 +257,16 @@ function ChatPicture({
     [readPicture, messageId],
   );
   const state = usePicture(messageId, block.attachmentId, read);
+  // A recording an agent posted plays in its place, and no press opens it, since the viewer draws pictures alone.
+  if (state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url)) {
+    return (
+      <div className="chat-picture">
+        <span className="picture-block ph-no-capture" data-video="">
+          <VideoPlayer dataUrl={state.url} label={block.alt} />
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="chat-picture">
       <PictureBlock

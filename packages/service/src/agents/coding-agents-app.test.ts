@@ -126,6 +126,7 @@ import {
   chatNoticeAsksLine,
   chatNoticeReplyLine,
   chatNoticeUnattachedLine,
+  chatNoticeVideosLine,
   chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
@@ -156,7 +157,7 @@ import {
   PULL_REQUEST_STATE,
   TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
-import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
+import { CONVERSATION_MEDIA_TYPE, keptPictureIdOf } from "@luke/features/conversation-picture-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   INBOX_ANSWER_LEAD,
@@ -204,7 +205,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { sentLineId } from "@luke/wire/host-ids";
-import { temporaryDirectory } from "@luke/wire/testing";
+import { paddedTo, temporaryDirectory, webmBytes } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq, sql } from "drizzle-orm";
 import {
@@ -7953,6 +7954,50 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
+    "a recording a post carries, past a picture's bound, is kept and never handed to the agent it tells, which reads it named as a video beside the still it is handed",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.person.id, chat.second.member.id),
+        );
+        const [stillId, videoId] = [randomUUID(), randomUUID()];
+        const recording = paddedTo(webmBytes(1280, 800), CHAT_BOUNDS.MAX_IMAGE_BYTES + 1);
+        yield* postChat(
+          chat.telling,
+          {
+            authorMemberId: chat.person.id,
+            to: { channelId: dm.id },
+            blocks: [
+              { type: CHAT_BLOCK.MARKDOWN, text: "The invite, and the flow." },
+              { type: CHAT_BLOCK.IMAGE, attachmentId: stillId, alt: "email.png" },
+              { type: CHAT_BLOCK.IMAGE, attachmentId: videoId, alt: "The invite flow." },
+            ],
+            clientKey: randomUUID(),
+          },
+          [
+            { id: stillId, contentType: CHAT_IMAGE_TYPE.PNG, bytes: PNG },
+            { id: videoId, contentType: CONVERSATION_MEDIA_TYPE.WEBM, bytes: recording },
+          ],
+        ).pipe(Effect.provide(chat.github.layer));
+        assert.deepEqual(steeredFiles(eve), [`${stillId}.png`], "the model is handed no video");
+
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        const [words = ""] = (notice?.message.parts ?? []).flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.ok(words.includes(chatNoticeVideosLine([videoId])));
+        assert.ok(!words.includes("Not attached"), "a video is no picture past what one carries");
+        assert.equal(
+          chatNoticeWords(words),
+          `The invite, and the flow.\n\n[image: email.png (attachment ${stillId})]\n\n[image: The invite flow. (attachment ${videoId})]`,
+          "a person reading the notice sees the message alone",
+        );
+      }),
+  );
+
+  it.effect(
     "an account with Chat off reads nothing waiting in chat, a message addressed to its person among it",
     () =>
       Effect.gen(function* () {
@@ -9409,6 +9454,57 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.ok(missing.status === ACTION_RESULT_STATUS.REJECTED && "reason" in missing);
         assert.ok(missing.reason.endsWith("missing.png"), missing.reason);
+      }),
+  );
+
+  it.effect(
+    "an image block naming a recording in the sandbox keeps it with the message as a WebM, past a picture's bound, and one past a video's is refused naming its path",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const recording = paddedTo(webmBytes(1280, 800), CHAT_BOUNDS.MAX_IMAGE_BYTES + 1);
+        const sandbox = sandboxWith({
+          "/tmp/video/flow.webm": recording,
+          "/tmp/video/long.webm": paddedTo(webmBytes(1280, 800), CHAT_BOUNDS.MAX_VIDEO_BYTES + 1),
+        });
+        const posted = yield* chat.post(
+          chat.first,
+          {
+            text: "The invite flow.",
+            blocks: [{ type: CHAT_BLOCK.IMAGE, path: "/tmp/video/flow.webm", alt: "Inviting." }],
+          },
+          { sandbox },
+        );
+        assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED && "seq" in posted);
+        const poster = yield* chat.memberOf(chat.first);
+        const [message] = Option.getOrThrow(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+        );
+        const video = message?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
+        assert.ok(video !== undefined && "attachmentId" in video);
+        const kept = Option.getOrThrow(
+          yield* readAttachment(
+            chat.owner,
+            chat.task.workspaceId,
+            message?.id ?? "",
+            video.attachmentId,
+          ),
+        );
+        assert.deepEqual(
+          [kept.contentType, kept.bytes.byteLength],
+          [CONVERSATION_MEDIA_TYPE.WEBM, recording.byteLength],
+        );
+
+        const long = yield* chat.post(
+          chat.first,
+          {
+            text: "The whole session.",
+            blocks: [{ type: CHAT_BLOCK.IMAGE, path: "/tmp/video/long.webm", alt: "All of it." }],
+          },
+          { sandbox },
+        );
+        assert.ok(long.status === ACTION_RESULT_STATUS.REJECTED && "reason" in long);
+        assert.ok(long.reason.endsWith("/tmp/video/long.webm"), long.reason);
       }),
   );
 

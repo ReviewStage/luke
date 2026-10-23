@@ -26,6 +26,7 @@
 @import "./components/text-link/text-link.css";
 @import "./components/page-thumb/page-thumb.css";
 @import "./components/picture-tile/picture-tile.css";
+@import "./components/video-player/video-player.css";
 @import "./components/attachment-chip/attachment-chip.css";
 @import "./components/avatar/avatar.css";
 @import "./components/badge/badge.css";

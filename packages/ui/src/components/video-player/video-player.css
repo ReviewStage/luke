@@ -1,0 +1,19 @@
+/* video-player.css -- VideoPlayer: a recording played in a frame that hugs
+   it at its own shape up to the column's, no taller than a picture is
+   drawn, on black while its first frame loads. */
+
+@layer components {
+  .luke-video-player {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .luke-video-player-video {
+    display: block;
+    max-width: 100%;
+    max-height: 520px; /* off-scale: a picture's drawn height */
+    width: auto;
+    height: auto;
+    background: #000; /* off-scale: a video's letterbox */
+  }
+}

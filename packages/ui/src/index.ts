@@ -109,6 +109,7 @@ export * from "./components/toast/toast-actions.js";
 export * from "./components/toast/toast-stack.js";
 export * from "./components/tooltip/hint.js";
 export * from "./components/tooltip/tooltip.js";
+export * from "./components/video-player/video-player.js";
 export * from "./components/visually-hidden/visually-hidden.js";
 export * from "./components/working-mark/working-mark.js";
 export * from "./components/zoom-image/zoom-image.js";
