@@ -100,7 +100,10 @@
    because a menu hung in it may stand past its edge over the next column
    (an AnchoredPopover bounded by the window), and a clip would cut it off;
    what is drawn into a corner rounds that corner itself (the side panel). */
-.desktop-shell:not([data-room="narrow"]) > .desktop-main {
+.desktop-shell:not([data-room="narrow"]) > .desktop-main,
+.desktop-shell:not([data-room="narrow"])
+  > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
+  > :is(.settings-page, .version-page, .admin-page) {
   margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
   border-radius: var(--sheet-radius);
   background: var(--luke-color-ground);

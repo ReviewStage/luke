@@ -470,6 +470,15 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
+/* A group's heading in a column of places is an eyebrow, as the sidebar's
+   sections are; a heading that names a workspace keeps its name as written. */
+.section-heading:not(.settings-nav-workspace) {
+  font-size: var(--luke-type-eyebrow-size);
+  font-weight: var(--luke-weight-semibold);
+  letter-spacing: var(--luke-type-eyebrow-tracking);
+  text-transform: uppercase;
+}
+
 .sidebar-note {
   margin: var(--luke-space-4) var(--row-inset);
   color: var(--luke-color-text-muted);
@@ -4500,17 +4509,18 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
-  border-right: 1px solid var(--luke-color-border);
   background: var(--luke-color-sidebar);
 }
 
-/* The title stands a step under the way back above it. */
+/* The title stands a step under the way back above it, in the serif every
+   page title is set in. */
 .settings-pages-title,
 .version-log-title,
 .admin-sections-title {
   margin: var(--luke-space-12) var(--row-inset);
+  font-family: var(--luke-font-serif);
   font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-medium);
+  font-weight: var(--luke-weight-regular);
   letter-spacing: -0.015em;
 }
 

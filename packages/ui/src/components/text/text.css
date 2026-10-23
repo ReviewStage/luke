@@ -45,7 +45,8 @@
   .luke-text[data-variant="title"] {
     font-size: var(--luke-type-title-size);
     line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-weight-medium);
+    font-family: var(--luke-font-serif);
+    font-weight: var(--luke-weight-regular);
     letter-spacing: -0.01em;
   }
 
