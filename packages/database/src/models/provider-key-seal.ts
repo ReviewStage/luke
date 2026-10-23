@@ -26,6 +26,11 @@ import { Redacted, Result } from "effect";
  * and a version the environment no longer holds are all a key the service
  * must not use.
  *
+ * A workspace's environment values (`workspace-environment-store.ts`) are
+ * sealed the same way under the same ring, with purposes of their own
+ * (`luke/workspace-environment/*`) and the workspace and the variable's
+ * name bound beside them.
+ *
  * A member's GitHub personal access token is sealed the same way under the
  * same ring, with purposes of its own (`luke/github-token/*`) and the
  * account alone bound beside them, so a provider key's seal never opens as
@@ -59,6 +64,10 @@ const SEAL = {
 const SEAL_PURPOSE = {
   PROVIDER_KEY: { DATA_KEY: "luke/provider-key/data-key", SECRET: "luke/provider-key/key" },
   GITHUB_TOKEN: { DATA_KEY: "luke/github-token/data-key", SECRET: "luke/github-token/token" },
+  WORKSPACE_ENVIRONMENT: {
+    DATA_KEY: "luke/workspace-environment/data-key",
+    SECRET: "luke/workspace-environment/value",
+  },
 } as const;
 
 /** One kind of secret's purposes: the data key's wrap, and the secret's own seal. */
@@ -105,6 +114,12 @@ export interface SealOwner {
   readonly userId: string;
   readonly provider: ProviderKeyProvider;
   readonly kind: ProviderKeyKind;
+}
+
+/** Which workspace variable a seal is, which both seals bind. */
+export interface EnvironmentSealOwner {
+  readonly organizationId: string;
+  readonly name: string;
 }
 
 /** A sealed key the service cannot open: it is used for nothing until it is replaced. */
@@ -336,4 +351,39 @@ export function rewrapGitHubToken(
   return wrapped === undefined
     ? Result.fail(PROVIDER_KEY_UNREADABLE)
     : Result.succeed({ ...wrapped, sealedToken: sealed.sealedToken });
+}
+
+/** A workspace's environment value sealed for its variable's row under a fresh data key, wrapped under the ring's current version. */
+export function sealEnvironmentValue(
+  ring: KeyRing,
+  owner: EnvironmentSealOwner,
+  value: Redacted.Redacted<string>,
+): SealedProviderKey {
+  const names = [owner.organizationId, owner.name];
+  const { sealed, ...wrapped } = sealSecret(ring, SEAL_PURPOSE.WORKSPACE_ENVIRONMENT, names, value);
+  return { ...wrapped, sealedKey: sealed };
+}
+
+/** The environment value a row seals, or unreadable where any part of it does not open for this workspace and name. */
+export function openEnvironmentValue(
+  ring: KeyRing,
+  owner: EnvironmentSealOwner,
+  sealed: SealedProviderKey,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const names = [owner.organizationId, owner.name];
+  const value = openSecret(ring, SEAL_PURPOSE.WORKSPACE_ENVIRONMENT, names, sealed, sealed.sealedKey);
+  return value === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(value);
+}
+
+/** The environment row's data key wrapped again under the ring's current version, its value's seal untouched. */
+export function rewrapEnvironmentValue(
+  ring: KeyRing,
+  owner: EnvironmentSealOwner,
+  sealed: SealedProviderKey,
+): Result.Result<SealedProviderKey, ProviderKeyUnreadable> {
+  const names = [owner.organizationId, owner.name];
+  const wrapped = rewrapSecret(ring, SEAL_PURPOSE.WORKSPACE_ENVIRONMENT, names, sealed);
+  return wrapped === undefined
+    ? Result.fail(PROVIDER_KEY_UNREADABLE)
+    : Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
 }

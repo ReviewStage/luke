@@ -6,10 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream } from "node:stream/web";
+import { Redacted } from "effect";
 import type { SandboxSpawnOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
 import { bashStartingIn } from "./shell.js";
+import { MASKED_SECRET, type ShellEnvironment } from "./workspace-environment.js";
 
 /**
  * The coding agent's shell: every command starts in the checkout, in a
@@ -31,6 +33,8 @@ import { bashStartingIn } from "./shell.js";
  * outcome Vercel Sandbox's API lost, as `@vercel/sandbox` and undici throw
  * it after the sandbox took it, answers that it is unknown; a start the sandbox
  * refused, and any other failure, stands as eve threw it.
+ * A workspace's variables and secrets stand in the command's environment as
+ * they were saved, and a secret's value never stands in what it answers.
  */
 
 /** What eve's `bash` answers a command that finished. */
@@ -135,8 +139,12 @@ async function run(
   checkout: string,
   command: string,
   description?: string,
+  environment?: ShellEnvironment,
 ): Promise<Completed> {
-  const shell = bashStartingIn(checkout);
+  const shell = bashStartingIn(
+    checkout,
+    environment === undefined ? undefined : async () => environment,
+  );
   const input = description === undefined ? { command } : { command, description };
   const answer = await shell.execute(input, contextOver(shellSandbox(root)));
   assert.ok(!(Symbol.asyncIterator in answer) && answer.status === "completed");
@@ -232,4 +240,40 @@ test("a command whose start a gone sandbox refused 404 fails as eve failed it", 
 test("a failure Vercel's API did not lose a command to fails as eve failed it", async () => {
   const refused = sandboxApiError(403, "Forbidden.");
   await assert.rejects(call("/workspace/repository", sandboxLosing(refused), "ls"), refused);
+});
+
+/** A workspace's environment as the host reads it: a variable, and a secret to be masked. */
+const WORKSPACE: ShellEnvironment = {
+  values: [
+    ["APP_MODE", Redacted.make(`it's a "dev" $HOME run`)],
+    ["STRIPE_KEY", Redacted.make("sk_test_secret_value")],
+  ],
+  secrets: [Redacted.make("sk_test_secret_value")],
+};
+
+test("a workspace's variables stand in the command's environment exactly as they were saved", async () => {
+  const { root, checkout } = sandboxRoot();
+  const answer = await run(root, checkout, 'printf "%s" "$APP_MODE"', undefined, WORKSPACE);
+  assert.equal(answer.stdout, `it's a "dev" $HOME run`);
+});
+
+test("a secret reaches the command, but its value is masked out of everything the command answers", async () => {
+  const { root, checkout } = sandboxRoot();
+  const answer = await run(
+    root,
+    checkout,
+    'printf "key=%s" "$STRIPE_KEY"; printf "also %s" "$STRIPE_KEY" >&2; [ -n "$STRIPE_KEY" ]',
+    undefined,
+    WORKSPACE,
+  );
+  assert.deepEqual(
+    [answer.exitCode, answer.stdout, answer.stderr],
+    [0, `key=${MASKED_SECRET}`, `also ${MASKED_SECRET}`],
+  );
+});
+
+test("a command run with no environment sees none of a workspace's names", async () => {
+  const { root, checkout } = sandboxRoot();
+  const answer = await run(root, checkout, 'printf "[%s]" "$APP_MODE"');
+  assert.equal(answer.stdout, "[]");
 });

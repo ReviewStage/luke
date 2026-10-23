@@ -11,6 +11,12 @@ import { defineTool, type ToolContext, type ToolDefinition } from "eve/tools";
 import { type BashToolInput, bash } from "eve/tools/bash";
 import { COMMAND_DESCRIPTION } from "../command-description.js";
 import { shellWithoutCapabilities } from "../sandbox-capabilities.js";
+import {
+  exportLines,
+  maskSecrets,
+  NO_SHELL_ENVIRONMENT,
+  type ShellEnvironment,
+} from "./workspace-environment.js";
 
 /**
  * shell.ts -- the coding agent's shell: eve's own `bash`, with every command started in the checkout.
@@ -45,6 +51,11 @@ import { shellWithoutCapabilities } from "../sandbox-capabilities.js";
  * own command is read over the same API. Only a loss after the sandbox took
  * the command is lost so: a start it refused, as a sandbox gone indeed
  * refuses one, ran nothing, and fails in eve's own words.
+ *
+ * Where it is handed the session's environment, the workspace's variables
+ * and secrets are exported ahead of the `cd`, read afresh for each command
+ * (`workspace-environment.ts`), and every secret's value is masked out of
+ * the answer before the model reads it.
  */
 
 /** eve's `bash` input as the model is offered it, with the description beside the command. */
@@ -198,21 +209,32 @@ function lostOrThrown(cause: unknown, ctx: ToolContext, start: CommandStart): Sh
  */
 const BASH_BASE = bash as ToolDefinition<BashToolInput, ShellOutput>;
 
-/** eve's `bash`, told and run so that every command starts in the directory given. */
-export function bashStartingIn(directory: string) {
+/** eve's `bash`, told and run so that every command starts in the directory given, with the session's environment where one is given. */
+export function bashStartingIn(
+  directory: string,
+  environmentOf?: (ctx: ToolContext) => Promise<ShellEnvironment>,
+) {
   return defineTool<typeof SHELL_INPUT.Type, ShellOutput>({
     ...BASH_BASE,
     description: `${bash.description} Every command starts in ${directory}, the repository's checkout, in a fresh shell, so a \`cd\` lasts only for the call it is in.`,
     inputSchema: emitJsonSchema(SHELL_INPUT),
     outputSchema: emitJsonSchema(SHELL_OUTPUT),
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
+      const environment =
+        environmentOf === undefined ? NO_SHELL_ENVIRONMENT : await environmentOf(ctx);
       const start: CommandStart = { accepted: false };
-      const answer = bash.execute(
-        { command: shellWithoutCapabilities(`cd ${quoted(directory)} || exit\n${input.command}`) },
-        watchingStart(ctx, start),
+      const command = shellWithoutCapabilities(
+        `${exportLines(environment)}cd ${quoted(directory)} || exit\n${input.command}`,
       );
-      if (Symbol.asyncIterator in answer) return answer;
-      return Promise.resolve(answer).catch((cause: unknown) => lostOrThrown(cause, ctx, start));
+      try {
+        const answered = await bash.execute({ command }, watchingStart(ctx, start));
+        // Note that eve's own bash answers once, so a stream is a change of eve's to meet here rather than pass on unmasked.
+        if (Symbol.asyncIterator in answered) throw new Error("eve's bash answered as a stream.");
+        return maskSecrets(answered, environment.secrets);
+      } catch (cause) {
+        // A lost outcome's message is the shell's own words, so it holds no secret to mask.
+        return lostOrThrown(cause, ctx, start);
+      }
     },
   });
 }

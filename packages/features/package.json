@@ -111,6 +111,7 @@
     "./workspace-invitation-wire": "./src/workspace-invitation-wire.js",
     "./sidebar-live": "./src/sidebar-live.js",
     "./workspace-live": "./src/workspace-live.js",
+    "./workspace-environment-wire": "./src/workspace-environment-wire.js",
     "./workspace-wire": "./src/workspace-wire.js",
     "./workspace-key": "./src/workspace-key.js",
     "./sign-in-provider": "./src/sign-in-provider.js",

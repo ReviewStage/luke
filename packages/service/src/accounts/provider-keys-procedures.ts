@@ -106,20 +106,20 @@ export interface ProviderKeysProcedureSeams {
 }
 
 /** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
-const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(function* ({
-  next,
-}) {
-  const environment = yield* HostedEnvironment;
-  const configured = environment.providerKeyEncryptionKeys;
-  if (configured === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const ring = parseKeyRing(configured);
-  if (Result.isFailure(ring)) {
-    // The fault names the shape that is wrong and never a value.
-    yield* Effect.logError(`The provider key encryption keys cannot be read: ${ring.failure}`);
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  return yield* next({ context: { ring: ring.success } });
-});
+export const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(
+  function* ({ next }) {
+    const environment = yield* HostedEnvironment;
+    const configured = environment.providerKeyEncryptionKeys;
+    if (configured === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    const ring = parseKeyRing(configured);
+    if (Result.isFailure(ring)) {
+      // The fault names the shape that is wrong and never a value.
+      yield* Effect.logError(`The provider key encryption keys cannot be read: ${ring.failure}`);
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    return yield* next({ context: { ring: ring.success } });
+  },
+);
 
 /** The kinds a subscription credential is, every kind but the API key. */
 const SUBSCRIPTION_KINDS = Object.values(PROVIDER_KEY_KIND).filter(
