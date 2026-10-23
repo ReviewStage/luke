@@ -51,6 +51,7 @@
   --spacing-dialog-action: var(--luke-dialog-action-width);
   --spacing-dialog-room: var(--luke-dialog-room);
   --spacing-card-inset-snug: var(--luke-card-inset-snug);
+  --spacing-dialog-reach: var(--luke-space-12);
   --spacing-menu-inset: var(--luke-menu-inset);
   --spacing-menu-row: var(--luke-menu-row-height);
   --spacing-menu-glyph: var(--luke-menu-glyph);
@@ -66,6 +67,7 @@
   --container-dialog-confirm: min(var(--luke-dialog-confirm-width), 100%);
   --container-dialog-wide: min(var(--luke-dialog-wide-width), 100%);
   --container-dialog-composer: min(var(--luke-dialog-composer-width), 100%);
+  --container-dialog-composer-reach: calc(100% + 2 * var(--luke-space-12));
   --container-dialog-media-min: min(var(--luke-dialog-media-min-width), 100%);
   --container-dialog-media-max: min(var(--luke-dialog-media-max-width), 100%);
   --container-tooltip: var(--luke-tooltip-max-width);

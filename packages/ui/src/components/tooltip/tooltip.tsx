@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type PointerEvent, type ReactNode, useRef } from "react";
 import { HoverCard, HoverCardContent } from "../../shadcn/hover-card.js";
 import { Tooltip, TooltipContent } from "../../shadcn/tooltip.js";
 
@@ -110,6 +110,15 @@ export function TooltipCard({
   onChoice?: () => void;
   children: ReactNode;
 }): React.JSX.Element {
+  // Note that each card stands in a portal node of its own, and React tells
+  // a card hung over another of one pointer crossing once for each portal
+  // node the move bubbles through, so a crossing already told is heard once.
+  const told = useRef<Event | undefined>(undefined);
+  const hover = (over: boolean, event: PointerEvent<HTMLElement>) => {
+    if (event.pointerType === "touch" || event.nativeEvent === told.current) return;
+    told.current = event.nativeEvent;
+    onHover?.(over);
+  };
   return (
     <HoverCard open>
       <HoverCardContent
@@ -118,12 +127,8 @@ export function TooltipCard({
         collisionAvoidance={HINT_COLLISION}
         role="tooltip"
         {...hintMarks(base)}
-        onPointerEnter={(event) => {
-          if (event.pointerType !== "touch") onHover?.(true);
-        }}
-        onPointerLeave={(event) => {
-          if (event.pointerType !== "touch") onHover?.(false);
-        }}
+        onPointerEnter={(event) => hover(true, event)}
+        onPointerLeave={(event) => hover(false, event)}
         onPointerDown={(event) => {
           event.stopPropagation();
           onPress?.();

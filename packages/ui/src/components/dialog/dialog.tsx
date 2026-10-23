@@ -21,6 +21,18 @@ import { useStagedFocus } from "./staged-focus.js";
  * the card says, its own keys (Return in a field, Command-Return, the
  * arrows), and what a dismissal costs are the dialog's own.
  *
+ * It is drawn by shadcn/ui's Base UI dialog (`../../shadcn/dialog.tsx`),
+ * trapping focus, which hears Escape (never while an input method composes)
+ * and a press that begins and ends on the dimmed window, and keeps a dialog
+ * opened over another the one Escape reaches. It stands open for as long as
+ * it is mounted, so what Base UI hears as a dismissal is handed to the
+ * dialog's own `dismiss`, which decides whether the card goes; Tab's own
+ * move among the card's controls, and handing focus back to what opened the
+ * card, stay the dialog's. Its portal stands its card a render after the
+ * dialog mounts, so what the card holds is read from inside it (the voice
+ * picker's row scrolled into view), never from an effect of the dialog's
+ * owner as it opens.
+ *
  * The dialog stands only while it is open, so mounting it is opening and
  * unmounting it is closing, however it came to close. Asked away while it
  * is at work, by Escape or the dimmed window, the card swells for a moment,
@@ -121,7 +133,7 @@ const CARD_LOOK = [
   "luke-dialog focus:outline-none",
   "data-[size=wide]:w-dialog-wide data-[size=wide]:gap-3",
   "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
-  "room-narrow:data-[size=composer]:-mx-3 room-narrow:data-[size=composer]:w-[calc(100%+--spacing(6))] room-narrow:data-[size=composer]:p-card-inset-snug",
+  "room-narrow:data-[size=composer]:-ml-dialog-reach room-narrow:data-[size=composer]:-mr-dialog-reach room-narrow:data-[size=composer]:w-dialog-composer-reach room-narrow:data-[size=composer]:pt-card-inset-snug room-narrow:data-[size=composer]:pr-card-inset-snug room-narrow:data-[size=composer]:pb-card-inset-snug room-narrow:data-[size=composer]:pl-card-inset-snug",
   "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
   "data-[expanding=true]:animate-none",
   "data-[dropping=true]:shadow-dialog-drop",
