@@ -57,8 +57,8 @@ interface RewindDoors {
     words: string,
     attachments: readonly CodingAgentAttachment[],
   ) => void;
-  /** What the line's box is drawn with beside the tab's own box. */
-  readonly editor: Omit<EditComposerDoors, "onCancel" | "onSend">;
+  /** What the line's box is drawn with beside the tab's own box, read as it opens, so the doors stand as they were while the tab's props change. */
+  readonly editor: () => Omit<EditComposerDoors, "onCancel" | "onSend">;
   /** Takes the agent back to just before the line named, sending nothing. */
   readonly onRevert: (lineId: string) => void;
   /** The line a reply's Revert to here drops from, by the reply's id: the developer's next line that opened a turn; none where none follows it. */
@@ -158,7 +158,7 @@ export function useMessageEdit(messageId: string): EditComposerDoors | undefined
   const doors = useContext(RewindContext);
   if (doors === undefined || doors.editing !== messageId) return undefined;
   return {
-    ...doors.editor,
+    ...doors.editor(),
     onCancel: doors.onCancelEdit,
     onSend: (words, attachments) => doors.onSendEdit(messageId, words, attachments),
   };

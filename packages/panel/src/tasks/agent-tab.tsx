@@ -2207,7 +2207,16 @@ function AgentTabView({
   const onSendEdit = useSteady(boxOpen ? composer.sendEdit : undefined);
   const onRevert = useSteady(boxOpen ? composer.revert : undefined);
   const fromStart = !transcript.hasOlder;
-  const points = useMemo(() => rewindPoints(kept, fromStart), [kept, fromStart]);
+  // Note that the rewind doors stand as they were while what they say is unchanged, because every message
+  // reads them, and a page that moved no rewind point must draw no message again.
+  const points = useKept(
+    useMemo(() => rewindPoints(kept, fromStart), [kept, fromStart]),
+    (a, b) => sameSet(a.editable, b.editable) && sameEntries(a.revertsAt, b.revertsAt),
+  );
+  const editorNow = { agentId: agent.id, doors, keywords, skills, dictates: !onCall };
+  const editorProps = useRef(editorNow);
+  editorProps.current = editorNow;
+  const editor = useCallback(() => editorProps.current, []);
   const rewind = useMemo(
     () =>
       onEdit === undefined ||
@@ -2221,22 +2230,10 @@ function AgentTabView({
             onCancelEdit,
             onSendEdit,
             onRevert,
-            editor: { agentId: agent.id, doors, keywords, skills, dictates: !onCall },
+            editor,
             ...points,
           },
-    [
-      composer.editing,
-      onEdit,
-      onCancelEdit,
-      onSendEdit,
-      onRevert,
-      points,
-      agent.id,
-      doors,
-      keywords,
-      skills,
-      onCall,
-    ],
+    [composer.editing, onEdit, onCancelEdit, onSendEdit, onRevert, points, editor],
   );
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
