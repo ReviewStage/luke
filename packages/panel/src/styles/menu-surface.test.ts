@@ -85,8 +85,6 @@ test("a list hung by its owner wears the menu's own ground, edge, corner, and sh
     "searchable-menu skill-menu",
     "task-compose-submenu",
     "file-crumb-tree",
-    "reply-to-selection",
-    "comment-bubble",
     "find-bar",
   ]) {
     const says = surface(owner);
@@ -101,7 +99,7 @@ test("a searchable list runs edge to edge, and a press offered on the surface ke
   for (const owner of ["searchable-menu", "searchable-menu mention-menu", "task-compose-submenu"]) {
     assert.match(surface(owner, MENU_SURFACE_INSET.NONE)("padding") ?? "", /^0(px)?$/, owner);
   }
-  for (const owner of ["reply-to-selection", "comment-bubble", "file-crumb-tree"]) {
+  for (const owner of ["file-crumb-tree"]) {
     assert.equal(surface(owner)("padding"), "var(--luke-menu-inset)", owner);
   }
 });
@@ -120,7 +118,13 @@ test("a find bar lays its field and buttons side by side on the surface, a hair 
 });
 
 test("a toolbar floats on the menu's ground, edge, and shadow, a hair round its buttons, shown by its owner rather than arriving", () => {
-  for (const owner of ["luke-message-actions", "picture-tools", "diff-list-offer"]) {
+  for (const owner of [
+    "luke-message-actions",
+    "picture-tools",
+    "diff-list-offer",
+    "reply-to-selection",
+    "comment-bubble",
+  ]) {
     const says = surface(owner, undefined, undefined, MENU_SURFACE_FLOW.TOOLBAR);
     assert.equal(says("background"), "var(--luke-color-overlay)", owner);
     assert.equal(says("border"), "1px solid var(--luke-color-border-strong)", owner);

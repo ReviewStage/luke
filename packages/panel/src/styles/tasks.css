@@ -5133,8 +5133,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* Reply over words selected in an agent's message: one press on the menus'
    surface, centred over the selection, or under it where the window's top
-   leaves no room. It moves with `translate`, since the surface's own
-   entrance animates its `transform`. */
+   leaves no room. */
 .reply-to-selection {
   position: fixed;
   z-index: var(--luke-z-menu);
