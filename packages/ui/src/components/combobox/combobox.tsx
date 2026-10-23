@@ -11,6 +11,7 @@ import {
   COMBOBOX_ITEM_GLYPH,
   COMBOBOX_ITEM_HINT,
   COMBOBOX_ITEM_LABEL,
+  COMBOBOX_ITEM_LEAD,
   COMBOBOX_LABEL,
   COMBOBOX_LIST,
   COMBOBOX_WELL,
@@ -86,6 +87,8 @@ export interface ComboboxOption {
   /** The caller's own key for the option, stable while it stands. */
   readonly id: string;
   readonly label: ReactNode;
+  /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
+  readonly lead?: ReactNode;
   readonly icon?: ReactNode;
   /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
@@ -119,8 +122,8 @@ export type ComboboxOptionEngineProps = Omit<
 >;
 
 /**
- * One option as every list draws it: its glyph, its name, its detail, its
- * hint, and its end, lit while it is `aria-selected`. It is the row to use
+ * One option as every list draws it: its lead, its glyph, its name, its
+ * detail, its hint, and its end, lit while it is `aria-selected`. It is the row to use
  * where a list engine of the app's (cmdk) owns the item, handed through the
  * engine's `asChild`: the engine's role, names, handlers, and ref pass
  * through, and no class or style does, so the row is drawn only as here.
@@ -146,6 +149,9 @@ export function ComboboxOptionItem({
       className={cn("luke-combobox-option", COMBOBOX_ITEM)}
       style={undefined}
     >
+      {option.lead === undefined ? null : (
+        <span className={cn("luke-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
+      )}
       {option.icon === undefined ? null : (
         <span className={cn("luke-combobox-option-glyph", COMBOBOX_ITEM_GLYPH)}>{option.icon}</span>
       )}
@@ -381,7 +387,9 @@ export function ComboboxList({
         <p className={cn("luke-combobox-empty", COMBOBOX_EMPTY)}>{empty}</p>
       ) : null}
       {note === undefined || note === null ? null : (
-        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-luke-4")}>{note}</div>
+        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-luke-4")}>
+          {note}
+        </div>
       )}
     </div>
   );

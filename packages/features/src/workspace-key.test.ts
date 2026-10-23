@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { namesTaskKey, taskKey } from "./workspace-key.js";
+import { keySpansIn, namesTaskKey, taskKey } from "./workspace-key.js";
 
 describe("taskKey", () => {
   it("names a task by its workspace's prefix and its number", () => {
@@ -24,5 +24,41 @@ describe("namesTaskKey", () => {
     expect(namesTaskKey("STAG-42", "STAG-422")).toBe(false);
     expect(namesTaskKey("STAG-4220", "STAG-422")).toBe(false);
     expect(namesTaskKey("422", "STAG-422")).toBe(false);
+  });
+});
+
+describe("keySpansIn", () => {
+  const known = new Map([
+    ["STAG-422", "task-422"],
+    ["STAG-42", "task-42"],
+    ["3L-7", "task-7"],
+  ]);
+  const found = (words: string) => keySpansIn(words, known).map((span) => [span.key, span.known]);
+
+  it("finds each known key standing as a word, with where it stands", () => {
+    expect(keySpansIn("landed STAG-422, so STAG-42.", known)).toEqual([
+      { key: "STAG-422", start: 7, end: 15, known: "task-422" },
+      { key: "STAG-42", start: 20, end: 27, known: "task-42" },
+    ]);
+    expect(found("(3L-7)")).toEqual([["3L-7", "task-7"]]);
+  });
+
+  it("leaves a word shaped like a key that names no task, a lower-case one, and one joined to more words", () => {
+    expect(found("UTF-8 and ISO-8601 and GPT-5")).toEqual([]);
+    expect(found("stag-422")).toEqual([]);
+    expect(found("STAG-4220 STAG-422x XSTAG-422 STAG-422-fix")).toEqual([]);
+  });
+
+  it("leaves a key inside a path, an address, or a handle, before it or after it", () => {
+    expect(found("docs/STAG-422.md #STAG-422 @STAG-422 v.STAG-422")).toEqual([]);
+    expect(found("STAG-422/notes STAG-422.md STAG-422#plan")).toEqual([]);
+  });
+
+  it("finds a key ending a sentence or a clause", () => {
+    expect(found("Shipped STAG-422. Then STAG-42: done; STAG-422!")).toEqual([
+      ["STAG-422", "task-422"],
+      ["STAG-42", "task-42"],
+      ["STAG-422", "task-422"],
+    ]);
   });
 });

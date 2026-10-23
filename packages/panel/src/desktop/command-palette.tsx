@@ -98,6 +98,7 @@ import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens
 import {
   agentRow,
   orderTaskRows,
+  repositoryLabel,
   TASK_ORDER,
   TASK_ROW,
   type TaskRow,
@@ -355,7 +356,7 @@ interface PaletteRow {
   command?: KeyedCommand | undefined;
   /** The short words the search scores, the name first. */
   terms: readonly string[];
-  /** A task's key, as `ACME-42`, drawn first in its detail, which typed whole finds the task first. */
+  /** A task's key, as `ACME-42`, which leads its row as it leads the Tasks list's, and which typed whole finds the task first. */
   taskKey?: { readonly workspaceName: string; readonly number: number } | undefined;
   /** Longer words the row is found by as the settings search finds it, every word of the query somewhere in them. */
   keywords?: readonly string[] | undefined;
@@ -572,9 +573,13 @@ function PaletteTaskCard({
   return homeTaskCardOf(tasks, task, useMinute());
 }
 
-/** A task's muted words: its repository. */
-function taskDetail(task: TaskSummary): string | undefined {
-  return task.repository ?? undefined;
+/**
+ * A task's muted words: its repository, by its name alone as the Tasks
+ * list's row says it, unless another listed task's repository shares the
+ * name (`repositoryLabel`).
+ */
+function taskDetail(task: TaskSummary, listed: readonly TaskSummary[]): string | undefined {
+  return task.repository === null ? undefined : repositoryLabel(task.repository, listed);
 }
 
 /**
@@ -585,9 +590,10 @@ function taskDetail(task: TaskSummary): string | undefined {
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
- * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`), and
- * is found by its key, its assignee's name, and its creator's, a key typed
- * whole listing its task first. An agent opens on its own page, as its
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`),
+ * leads with its key and says its repository by its name, as the Tasks
+ * list's row does, and is found by its key, its assignee's name, and its
+ * creator's, a key typed whole listing its task first. An agent opens on its own page, as its
  * sidebar row does. An agent's line on a task's card opens the task on its
  * tab through `showAgent`, which leaves the palette as a row does.
  */
@@ -627,7 +633,7 @@ function taskRows(
     // Note that a task Luke or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
-    const detail = taskDetail(task);
+    const detail = taskDetail(task, tasks.tasks);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
       detail:
@@ -1168,28 +1174,18 @@ function PaletteItem({
     found === undefined
       ? row.detail
       : [row.detail, found].filter((words) => words !== undefined).join(" · ");
-  // The workspace a task is in elsewhere, its key, and the detail, each said once and joined by a dot.
-  const parts = [
-    row.workspace === undefined ? null : (
-      <WorkspaceRef
-        key="workspace"
-        workspace={row.workspace}
-        name={<Highlighted text={row.workspace.name} tokens={tokens} />}
-      />
-    ),
-    row.taskKey === undefined ? null : (
-      <TaskKey
-        key="task-key"
-        workspaceName={row.taskKey.workspaceName}
-        number={row.taskKey.number}
-        tokens={tokens}
-      />
-    ),
-    detail === undefined ? null : <Highlighted key="detail" text={detail} tokens={tokens} />,
-  ].filter((part) => part !== null);
   const words =
-    parts.length === 0 ? undefined : (
-      <>{parts.flatMap((part, at) => (at === 0 ? [part] : [" · ", part]))}</>
+    detail === undefined && row.workspace === undefined ? undefined : (
+      <>
+        {row.workspace === undefined ? null : (
+          <WorkspaceRef
+            workspace={row.workspace}
+            name={<Highlighted text={row.workspace.name} tokens={tokens} />}
+          />
+        )}
+        {row.workspace === undefined || detail === undefined ? null : " · "}
+        {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
+      </>
     );
   // Spoken, since a palette row is an option, which carries no
   // `aria-keyshortcuts` to say the chord for it.
@@ -1207,6 +1203,14 @@ function PaletteItem({
       <ComboboxOptionItem
         option={{
           id: value,
+          lead:
+            row.taskKey === undefined ? undefined : (
+              <TaskKey
+                workspaceName={row.taskKey.workspaceName}
+                number={row.taskKey.number}
+                tokens={tokens}
+              />
+            ),
           label: <Highlighted text={row.label} tokens={tokens} />,
           icon: row.icon,
           detail: words,

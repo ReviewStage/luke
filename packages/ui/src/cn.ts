@@ -79,6 +79,7 @@ const merge = extendTailwindMerge({
         "menu-chevron",
         "menu-max",
         "combobox-list",
+        "combobox-lead",
       ],
       radius: [
         "dialog",

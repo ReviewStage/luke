@@ -208,6 +208,8 @@
   --spacing-menu-max: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
   /* A list's cap, an app's placement hook (README's "Placement hooks"). */
   --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
+  /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
+  --spacing-combobox-lead: 9ch;
   --text-label: var(--luke-type-label-size);
   --text-label--line-height: var(--luke-type-label-leading);
   /* A menu's exit, a fade, over `menu.css`'s keyframes; its entrance is the

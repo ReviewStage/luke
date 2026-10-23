@@ -2755,6 +2755,106 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "a member's edit of the description is written on their own token where GitHub's still reads as the one they opened, line endings aside, and refused as changed with nothing written where it moved on GitHub",
+    () =>
+      Effect.gen(function* () {
+        // GitHub holds the description as github.com saves it, with Windows line endings.
+        const onGitHub = "Invitations expire.\r\n\r\n- weekly";
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: (call) => {
+            if (call.query.includes("mutation")) return Response.json({ data: {} });
+            if (call.query.includes("... on PullRequest { body }")) {
+              return Response.json({ data: { node: { body: onGitHub } } });
+            }
+            return Response.json({
+              data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+            });
+          },
+        });
+
+        const edited = yield* ask(
+          actionAs(other, agent.id, "edit-description", {
+            body: "Invitations expire after a week.",
+            expectedBody: "Invitations expire.\n\n- weekly",
+          }),
+        );
+        const stale = yield* ask(
+          actionAs(other, agent.id, "edit-description", {
+            body: "Invitations never expire.",
+            expectedBody: "Invitations expire.",
+          }),
+        );
+
+        assert.deepEqual(edited, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(stale, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words:
+              "The description changed on GitHub since you opened it. Reload it to see the change before saving yours.",
+            reason: "description-changed",
+          },
+        });
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        assert.deepEqual(
+          calls.flatMap((call) => {
+            const mutation = mutationOf(call);
+            return mutation === undefined ? [] : [[mutation, call.variables]];
+          }),
+          [
+            [
+              "updatePullRequest",
+              { id: PULL_REQUEST_NODE_ID, body: "Invitations expire after a week." },
+            ],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "GitHub's refusal of a description edit reaches the member in its words, and a token it will not take asks them to sign in again",
+    () =>
+      Effect.gen(function* () {
+        const description = (call: GraphqlCall) =>
+          call.query.includes("... on PullRequest { body }")
+            ? Response.json({ data: { node: { body: "" } } })
+            : Response.json({
+                data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+              });
+        const refusing = yield* published({
+          otherToken: "ghu_teammate",
+          answer: (call) =>
+            call.query.includes("mutation")
+              ? Response.json({
+                  data: null,
+                  errors: [{ message: "ghu_teammate does not have permission to update" }],
+                })
+              : description(call),
+        });
+        const expired = yield* published({
+          otherToken: "ghu_expired",
+          answer: () => Response.json({ message: "Bad credentials" }, { status: 401 }),
+        });
+        const edit = { body: "Weekly.", expectedBody: "" };
+
+        assert.deepEqual(
+          yield* refusing.ask(
+            actionAs(refusing.other, refusing.agent.id, "edit-description", edit),
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: { outcome: "refused", words: "ghu_teammate does not have permission to update" },
+          },
+        );
+        assert.deepEqual(
+          yield* expired.ask(actionAs(expired.other, expired.agent.id, "edit-description", edit)),
+          { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "sign-in-required" } },
+        );
+      }),
+  );
+
+  it.effect(
     "a Pull request tab naming another pull request of the agent's repository by its number reads and changes that one, and the agent's own where it names none",
     () =>
       Effect.gen(function* () {
@@ -2913,10 +3013,11 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           review: "review-required",
           checks: "pending",
         });
+        // Note that whether the member may edit the description is read on their own token, beside the App's reads.
         assert.ok(
-          calls.every(
-            (call) => call.authorization === `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`,
-          ),
+          calls
+            .filter((call) => !call.query.includes("ViewerCanUpdate"))
+            .every((call) => call.authorization === `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`),
         );
         assert.equal(without?.title, read?.title);
         assert.equal(without?.merging, undefined);
@@ -3772,6 +3873,60 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           ["Bearer ghu_teammate", "Bearer ghu_standing"],
         );
         assert.ok(unsigned.calls.every((call) => !call.query.includes("ViewerPendingReview")));
+      }),
+  );
+
+  it.effect(
+    "the pull request's header says whether the member reading may edit its description, as GitHub answers on their own token, and not where they hold no sign-in or GitHub would not answer",
+    () =>
+      Effect.gen(function* () {
+        const canUpdate = (call: GraphqlCall) => {
+          if (!call.query.includes("ViewerCanUpdate")) return Response.json({ data: null });
+          if (call.authorization === "Bearer ghu_broken") {
+            return Response.json({ message: "Server Error" }, { status: 502 });
+          }
+          const viewerCanUpdate = call.authorization === "Bearer ghu_teammate";
+          return Response.json({ data: { repository: { pullRequest: { viewerCanUpdate } } } });
+        };
+        const header = (
+          opened: { readonly ask: (request: Request) => Effect.Effect<Answer> },
+          bearer: string,
+          agentId: string,
+        ) =>
+          Effect.map(
+            opened.ask(request(AGENT_OVERVIEW_PULL_REQUEST, bearer, { id: agentId })),
+            (answered) =>
+              readAnswer(
+                codingAgentOverviewPullRequestAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).pullRequest,
+          );
+        const two = yield* published({ otherToken: "ghu_teammate", answer: canUpdate });
+        const unsigned = yield* published({ otherToken: null, answer: canUpdate });
+        const broken = yield* published({ otherToken: "ghu_broken", answer: canUpdate });
+
+        const teammate = yield* header(two, two.other, two.agent.id);
+        assert.deepEqual(
+          [teammate?.canEditDescription, teammate?.body],
+          [true, "Invitations expire."],
+        );
+        assert.equal((yield* header(two, two.owner, two.agent.id))?.canEditDescription, false);
+        assert.equal(
+          (yield* header(unsigned, unsigned.other, unsigned.agent.id))?.canEditDescription,
+          false,
+        );
+        assert.equal(
+          (yield* header(broken, broken.other, broken.agent.id))?.canEditDescription,
+          false,
+        );
+        assert.deepEqual(
+          two.calls
+            .filter((call) => call.query.includes("ViewerCanUpdate"))
+            .map((call) => call.authorization),
+          ["Bearer ghu_teammate", "Bearer ghu_standing"],
+        );
+        assert.ok(unsigned.calls.every((call) => !call.query.includes("ViewerCanUpdate")));
       }),
   );
 
