@@ -7,66 +7,30 @@ import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
 import { webFunctions } from "../server/function-layout";
-import { apiRewrites, rewritesDrifted, vercelConfigSource } from "../server/function-rewrites";
+import {
+  apiRewrites,
+  readVercelConfig,
+  rewritesDrifted,
+  type VercelConfig,
+  vercelConfigSource,
+} from "../server/function-rewrites";
 import { changelogRoutes } from "../src/changelog-releases";
 import { parseReleases } from "../src/site-markdown";
 
-interface Route {
-  readonly src: string;
-  readonly dest: string;
-}
-
-interface Transform {
-  readonly type: string;
-  readonly op: string;
-  readonly args: string;
-}
-
-interface ServiceRoute {
-  readonly src: string;
-  readonly transforms?: readonly Transform[];
-}
-
-interface Service {
-  readonly root: string;
-  readonly buildCommand?: string;
-  readonly routes?: readonly (Route | ServiceRoute)[];
-}
-
-interface Rewrite {
-  readonly source: string;
-  readonly destination: { readonly service: string };
-}
-
 const SERVICE = { WEB: "web", DEV: "dev" } as const;
-
-interface Services {
-  readonly [SERVICE.WEB]: Service;
-  readonly [SERVICE.DEV]: Service;
-}
-
-interface Git {
-  readonly deploymentEnabled: Readonly<Record<string, boolean>>;
-}
 
 const VERCEL_JSON = readFileSync(
   fileURLToPath(new URL("../../../vercel.json", import.meta.url)),
   "utf8",
 );
 
-// SAFETY: the file is this repository's own vercel.json, read for its deployment shape.
-const vercel = JSON.parse(VERCEL_JSON) as {
-  git: Git;
-  services: Services;
-  rewrites: readonly Rewrite[];
-};
-
 const WEB = fileURLToPath(new URL("..", import.meta.url));
+
+const vercel = await readVercelConfig(WEB);
 
 test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes, and the committed file carries exactly that generation", async () => {
   const generated = apiRewrites(await webFunctions(WEB));
   const web = vercel.services[SERVICE.WEB];
-  assert.ok(web.routes);
   assert.deepEqual(web.routes.slice(0, generated.length), generated);
   assert.deepEqual(
     web.routes.slice(generated.length).filter((route) => route.src.startsWith("/api/")),
@@ -74,7 +38,7 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   );
   assert.equal(await rewritesDrifted(WEB), false);
   // SAFETY: the generator's own output, read back as the JSON it wrote.
-  const regenerated = JSON.parse(await vercelConfigSource(WEB)) as typeof vercel;
+  const regenerated = JSON.parse(await vercelConfigSource(WEB)) as VercelConfig;
   assert.equal("routes" in regenerated, false);
   assert.deepEqual(regenerated.services[SERVICE.WEB].routes, web.routes);
   // The generator carries every service whole, the coder's mount route included.
@@ -144,7 +108,7 @@ const FIRST_STEP = /^\^?\/([a-z0-9-]+)(?:\/|$)/u;
 
 test("no workspace's slug can be the first step of a page the web app serves under its own name", () => {
   const routed = [
-    ...(vercel.services[SERVICE.WEB].routes ?? []).map((route) => route.src),
+    ...vercel.services[SERVICE.WEB].routes.map((route) => route.src),
     ...vercel.rewrites.map((rewrite) => rewrite.source),
   ];
   const pages = readdirSync(WEB)
@@ -196,8 +160,7 @@ type Served =
   | ({ readonly file: string | undefined } & AnswerHeaders)
   | { readonly status: number; readonly location: string };
 
-// SAFETY: the web service's routes as this repository's vercel.json writes them, which the generator's schema holds to these three shapes.
-const WEB_ROUTES = (vercel.services[SERVICE.WEB].routes ?? []) as readonly WebRoute[];
+const WEB_ROUTES: readonly WebRoute[] = vercel.services[SERVICE.WEB].routes;
 
 /**
  * What the web service answers a path with, read as Vercel reads its routes,

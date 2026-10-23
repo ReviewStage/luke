@@ -39,7 +39,7 @@ import {
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import {
   asks,
   conversations,
@@ -85,9 +85,6 @@ import {
  * named `sql` fragment inside the one rendered statement: the instant a turn
  * last changed and its text form.
  */
-
-/** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-type MessageReadFailure = QueryError | Schema.SchemaError;
 
 /** The vocabularies the text columns hold, as the writer spells them; a row outside one is refused. */
 const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
@@ -316,7 +313,7 @@ export function listRecentMessages(
   conversationId: string,
   tools: ToolSet,
   limit: number,
-): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageListRead, StoreFailure, DatabaseServices> {
   return Effect.flatMap(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
     (selected) => readSelected([...selected].reverse(), tools),
@@ -360,7 +357,7 @@ export function listTurnOpeners(
   conversationId: string,
   tools: ToolSet,
   turnIds: readonly string[],
-): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageListRead, StoreFailure, DatabaseServices> {
   if (turnIds.length === 0) return Effect.succeed({ ok: true, value: [] });
   return Effect.flatMap(findTurnOpeners({ conversationId, userId, turnIds }), (selected) =>
     readSelected(
@@ -409,7 +406,7 @@ export function listMessagesBefore(
   tools: ToolSet,
   before: number,
   limit?: number,
-): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageListRead, StoreFailure, DatabaseServices> {
   return Effect.flatMap(
     findMessagesBefore({
       conversationId,
@@ -457,7 +454,7 @@ export function messageSeqOf(
   conversationId: string,
   messageId: string,
   role: MessageRole,
-): Effect.Effect<Option.Option<number>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<number>, StoreFailure, DatabaseServices> {
   return Effect.map(
     findMessageSeq({ conversationId, userId, messageId, role }),
     Option.map((row) => row.seq),
@@ -538,7 +535,7 @@ export function listMessagesPast(
   tools: ToolSet,
   cursor: MessageCursor,
   limit?: number,
-): Effect.Effect<MessagePagePast, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessagePagePast, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const standing = yield* findJournalRevision({ conversationId, userId });
     if (Option.isNone(standing)) return { read: { ok: true, value: [] }, cursor };
@@ -583,7 +580,7 @@ const findHighestSeq = SqlSchema.findAll({
 export function messageCursorNow(
   userId: string,
   conversationId: string,
-): Effect.Effect<MessageCursor, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageCursor, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const standing = yield* findJournalRevision({ conversationId, userId });
     if (Option.isNone(standing)) return { seq: 0, revision: 0 };
@@ -617,7 +614,7 @@ const findRunningChildTurns = SqlSchema.findAll({
 export function runningChildTurns(
   userId: string,
   parentConversationId: string,
-): Effect.Effect<readonly string[], MessageReadFailure, DatabaseServices> {
+): Effect.Effect<readonly string[], StoreFailure, DatabaseServices> {
   return Effect.map(findRunningChildTurns({ parentConversationId, userId }), (rows) =>
     rows.map((row) => row.id),
   );
@@ -659,7 +656,7 @@ export function listJournals(
   conversationId: string,
   tools: ToolSet,
   limit: number,
-): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageListRead, StoreFailure, DatabaseServices> {
   return Effect.flatMap(
     findNewestJournals({ conversationId, userId, limit: pageLimit({ limit }) }),
     (selected) => readSelected([...selected].reverse(), tools),
@@ -699,7 +696,7 @@ export function readMessageByClientId(
   conversationId: string,
   tools: ToolSet,
   clientId: string,
-): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageListRead, StoreFailure, DatabaseServices> {
   return Effect.flatMap(
     findMessageByClientIdRow({ conversationId, userId, clientId }),
     (selected) => readSelected(selected, tools),
@@ -741,7 +738,7 @@ export function readMessageById(
   conversationId: string,
   tools: ToolSet,
   messageId: string,
-): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageListRead, StoreFailure, DatabaseServices> {
   return Effect.flatMap(findMessageByIdRow({ conversationId, userId, messageId }), (selected) =>
     readSelected(selected, tools),
   );
@@ -872,14 +869,14 @@ const findTurnUsages = SqlSchema.findAll({
 export function turnUsagesOf(
   userId: string,
   conversationId: string,
-): Effect.Effect<readonly TurnUsageRow[], MessageReadFailure, DatabaseServices> {
+): Effect.Effect<readonly TurnUsageRow[], StoreFailure, DatabaseServices> {
   return findTurnUsages({ userId, conversationId });
 }
 
 function latestTurnsRead(
   userId: string | null,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, StoreFailure, DatabaseServices> {
   if (conversationIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findLatestTurns({ userId, conversationIds }),
@@ -891,7 +888,7 @@ function latestTurnsRead(
 export function latestTurnsOf(
   userId: string,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, StoreFailure, DatabaseServices> {
   return latestTurnsRead(userId, conversationIds);
 }
 
@@ -902,7 +899,7 @@ export function latestTurnsOf(
  */
 export function latestTurnsOfReached(
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, StoreFailure, DatabaseServices> {
   return latestTurnsRead(null, conversationIds);
 }
 
@@ -927,7 +924,7 @@ const findTurnStoppedUnder = SqlSchema.findAll({
 export function turnStoppedUnderReached(
   conversationId: string,
   key: string,
-): Effect.Effect<boolean, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
   return Effect.map(findTurnStoppedUnder({ conversationId, key }), (rows) => rows.length > 0);
 }
 
@@ -1081,14 +1078,14 @@ export function sentLineStands(
   userId: string,
   conversationId: string,
   clientId: string,
-): Effect.Effect<boolean, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
   return Effect.map(findSentLine({ userId, conversationId, clientId }), Option.isSome);
 }
 
 function awaitingLinesRead(
   userId: string | null,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, Date>, StoreFailure, DatabaseServices> {
   if (conversationIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     newestAwaitingLines({ userId, conversationIds }),
@@ -1100,14 +1097,14 @@ function awaitingLinesRead(
 export function awaitingLinesOf(
   userId: string,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, Date>, StoreFailure, DatabaseServices> {
   return awaitingLinesRead(userId, conversationIds);
 }
 
 /** The conversations among those named, whoever owns them, in which a developer's line awaits its turn, each with when the newest was written; only for ids a gate already read, as `latestTurnsOfReached`. */
 export function awaitingLinesOfReached(
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, Date>, StoreFailure, DatabaseServices> {
   return awaitingLinesRead(null, conversationIds);
 }
 
@@ -1174,7 +1171,7 @@ const TurnRowsSchema = Schema.Array(TurnRowSchema);
 export function turnsNamed(
   userId: string,
   turnIds: readonly string[],
-): Effect.Effect<readonly StoredTurnRecord[], MessageReadFailure, DatabaseServices> {
+): Effect.Effect<readonly StoredTurnRecord[], StoreFailure, DatabaseServices> {
   if (turnIds.length === 0) return Effect.succeed([]);
   return Effect.flatMap(
     Database.use((db) =>
@@ -1304,11 +1301,7 @@ export function spokenAskRowsOf(
   userId: string,
   conversationId: string,
   turnIds: readonly string[],
-): Effect.Effect<
-  ReadonlyMap<string, readonly SpokenAskRow[]>,
-  MessageReadFailure,
-  DatabaseServices
-> {
+): Effect.Effect<ReadonlyMap<string, readonly SpokenAskRow[]>, StoreFailure, DatabaseServices> {
   if (turnIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(findSpokenAskRows({ userId, conversationId, turnIds }), (rows) => {
     const asked = new Map<string, SpokenAskRow[]>();
@@ -1364,7 +1357,7 @@ export function spokenRowsOn(
   userId: string,
   conversationId: string,
   voiceSessionIds: readonly string[],
-): Effect.Effect<readonly SpokenRow[], MessageReadFailure, DatabaseServices> {
+): Effect.Effect<readonly SpokenRow[], StoreFailure, DatabaseServices> {
   if (voiceSessionIds.length === 0) return Effect.succeed([]);
   return findSpokenRows({ userId, conversationId, voiceSessionIds });
 }
@@ -1439,7 +1432,7 @@ export function turnsBefore(
   conversationId: string,
   limit: number,
   before: string | undefined,
-): Effect.Effect<TurnPage, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<TurnPage, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     let place: { queuedAt: Date; id: string } | undefined;
     if (before !== undefined) {
@@ -1501,7 +1494,7 @@ export function listJournalsCalling(
   conversationId: string,
   tools: ToolSet,
   toolName: string,
-): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<MessageListRead, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const read: StoredMessageRecord[] = [];
     let seq = -1;

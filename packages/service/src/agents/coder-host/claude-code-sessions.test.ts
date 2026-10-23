@@ -86,14 +86,14 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
-import {
-  type ClaudeCodeSessionsOptions,
-  claudeCodeSessions,
-  RUNNER_ENDED,
-  runnerEnded,
-} from "./claude-code-sessions.js";
+import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
-import { RUNNER_TAG } from "./runner-sessions.js";
+import {
+  RUNNER_ENDED,
+  RUNNER_TAG,
+  type RunnerSessionsOptions,
+  runnerEnded,
+} from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { codingAgentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -205,7 +205,7 @@ const openAgent = Effect.tap(openAgentWithoutPlan, ({ userId }) => savePlan(user
 
 /** The sessions for the account, the next event number read from the counter given. */
 function sessionsFor(userId: string, sequence: { next: number }) {
-  const options: ClaudeCodeSessionsOptions = {
+  const options: RunnerSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
     mcpUrl: MCP_URL,

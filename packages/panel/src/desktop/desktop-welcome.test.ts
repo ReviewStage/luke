@@ -75,13 +75,12 @@ afterEach(() => {
   document.head.innerHTML = "";
 });
 
-/** A task the composer started: its name, repository, workspace, the agent it asked for, and the brief it handed on. */
+/** A task the composer started: its name, repository, workspace, and the agent it asked for. */
 interface Started {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
   readonly agent: NewTaskAgent | undefined;
-  readonly brief: string | undefined;
 }
 
 /** The tab's New task control as the welcome's composer meets it, each start written to `started`. */
@@ -98,7 +97,6 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
         repository,
         workspaceId,
         agent: from?.handed,
-        brief: from?.brief,
       });
       return Promise.resolve(undefined);
     },
@@ -227,7 +225,6 @@ test("Return in the welcome's composer starts the task in the listed workspace, 
     name: "",
     repository: "acme/relay",
     workspaceId: LISTED_WORKSPACE,
-    brief: undefined,
   });
   assert.deepEqual(handed, {
     prompt: "Make the sidebar keep its folds.",

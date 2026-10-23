@@ -245,11 +245,11 @@ async function cardOf(chip: Element | null | undefined) {
   await settle();
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
   assert.ok(card, "the chip hangs the server's card");
-  const drawnSwitch = card.querySelector<HTMLElement>(".luke-switch");
+  const drawnSwitch = card.querySelector<HTMLElement>('[data-slot="switch"]');
   const look = {
     name: card.querySelector(".agent-servers-name")?.textContent,
     count: card.querySelector(".agent-servers-count")?.textContent,
-    on: drawnSwitch === null ? undefined : drawnSwitch.dataset.checked,
+    on: drawnSwitch === null ? undefined : String(drawnSwitch.hasAttribute("data-checked")),
     note: card.querySelector(".agent-servers-row + .luke-hover-card-note")?.textContent,
     tools: [...card.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
       tool.querySelector(".integration-tool-title")?.textContent,

@@ -1,9 +1,4 @@
-import {
-  HTTP_METHOD,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "@luke/wire";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -12,6 +7,7 @@ import {
   accountCall,
   type CallCredential,
   callAnswered,
+  jsonOf,
 } from "./account-call.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
@@ -306,11 +302,6 @@ function chaptersAnswer(
         PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
     }),
   );
-}
-
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
 /**

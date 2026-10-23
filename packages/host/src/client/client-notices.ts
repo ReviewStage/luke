@@ -6,10 +6,11 @@ import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-ag
 import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
-  type AgentNoticeDoors,
+  AgentNoticeDoors,
   type AgentNotices,
   type AgentNoticesDependencies,
   createAgentNotices,
+  NOTICE_KIND,
   noticeTaskTitle,
 } from "../agent-notices.js";
 import type { HostOperator } from "../host-operator.js";
@@ -19,7 +20,16 @@ import type { AppStateStore } from "./app-state-store.js";
 type NoticePresenter = Pick<
   AgentNoticesDependencies,
   "open" | "openInbox" | "openTasklessItem" | "openFailedRun" | "openChat"
->;
+> & {
+  /** Brings Luke's window forward, where the prompt for a command stands: a command ask's notification's click. */
+  openMacCommandAsk: () => void;
+};
+
+/** What the notification of a command waiting says: nothing of the command, which the prompt shows. */
+const MAC_COMMAND_ASK_NOTICE = {
+  title: "Run a command on your Mac?",
+  body: "An agent is waiting for you to allow or deny a command.",
+} as const;
 
 /** The host's methods the notices read and refresh through. */
 type NoticeHost = Pick<
@@ -87,7 +97,9 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
   dependencies: ClientNoticesDependencies,
 ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
   const { state, host, presenter, onPanelFocusChanged, report } = dependencies;
+  const doors = yield* AgentNoticeDoors;
   const fork = yield* FiberSet.makeRuntime();
+  let focused = false;
   // Note that a defect is reported here, because nothing joins the set a refresh is forked into.
   const forkReported = (refresh: Effect.Effect<void>, what: string): void => {
     fork(
@@ -162,11 +174,37 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
         ),
     ),
   );
+  // A command asked while the window is behind would otherwise wait unseen
+  // until its timeout denies it, so each new ask is announced once, whatever
+  // the notifications setting says, since Ask every time is the developer's
+  // own ask to be asked; the window in front shows the prompt itself.
+  const told = new Set<string>();
+  yield* Effect.forkScoped(
+    Stream.runForEach(
+      Stream.changes(Stream.map(state.changes, (document) => document.macCommands.asks)),
+      (asks) =>
+        Effect.sync(() => {
+          const waiting = new Set(asks.map((ask) => ask.id));
+          for (const askId of told) if (!waiting.has(askId)) told.delete(askId);
+          for (const ask of asks) {
+            if (told.has(ask.id)) continue;
+            told.add(ask.id);
+            if (focused) continue;
+            doors.post({
+              ...MAC_COMMAND_ASK_NOTICE,
+              subject: { kind: NOTICE_KIND.MAC_COMMAND_ASK, askId: ask.id },
+              onClick: presenter.openMacCommandAsk,
+            });
+          }
+        }),
+    ),
+  );
   // A teammate's change or an installation made on GitHub may have moved the
   // workspaces; the host reads them no oftener than once a minute.
   yield* Effect.acquireRelease(
     Effect.sync(() =>
-      onPanelFocusChanged((focused) => {
+      onPanelFocusChanged((next) => {
+        focused = next;
         if (focused) forkReported(host.workspacesRefresh(), "the workspaces refresh");
       }),
     ),

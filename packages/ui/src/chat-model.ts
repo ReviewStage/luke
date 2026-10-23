@@ -1,3 +1,4 @@
+import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { type ChatMemberMention, chatMentionsIn } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
@@ -71,15 +72,8 @@ export type ChatPlace =
 /** Where the window's Chat opens: For you. */
 export const FOR_YOU: ChatPlace = { kind: CHAT_PLACE.FOR_YOU };
 
-/** Why a message is in For you. */
-export const FOR_YOU_REASON = {
-  /** An ask someone posted, still open. */
-  ASK: "ask",
-  /** A direct message to the reader, not yet read. */
-  DIRECT: "direct",
-  /** A message mentioning the reader, not yet read. */
-  MENTION: "mention",
-} as const;
+/** Why a message is in For you: the account's own reasons a chat message waits on the developer. */
+export const FOR_YOU_REASON = ACCOUNT_CHAT_REASON;
 
 type ForYouReason = (typeof FOR_YOU_REASON)[keyof typeof FOR_YOU_REASON];
 

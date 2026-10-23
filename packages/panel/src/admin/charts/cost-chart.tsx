@@ -72,11 +72,10 @@ export function CostChart({
   daily: readonly AdminCostDay[];
   generatedAt: number;
 }): React.JSX.Element {
-  const title = COST_TITLE;
   const totals = daily.map((day) => SOURCES.reduce((total, source) => total + day[source], 0));
   if (seriesHasNoData(totals)) {
     return (
-      <ChartFrame title={title}>
+      <ChartFrame title={COST_TITLE}>
         <ChartEmpty>No priced usage recorded in this window yet.</ChartEmpty>
       </ChartFrame>
     );
@@ -88,7 +87,7 @@ export function CostChart({
     ...Object.fromEntries(SOURCES.map((source) => [source, day[source]])),
   }));
   return (
-    <ChartFrame title={title} legend={<CostLegend />}>
+    <ChartFrame title={COST_TITLE} legend={<CostLegend />}>
       <ChartContainer
         config={COST_CHART}
         className="aspect-auto w-full"

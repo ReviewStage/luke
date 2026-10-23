@@ -2,6 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { codingAgentMessageRequestSchema } from "./coding-agent-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { TASK_BOUNDS } from "./task-wire.js";
+import { filledText } from "./text-schema.js";
 
 /**
  * plan-comment-wire.ts -- comments on a task's plan on the wire: a thread anchored to words of the plan, its comments and what happened to it, and what a member sends to start, answer, resolve, and reopen one.
@@ -79,13 +80,6 @@ export const PLAN_COMMENT_ENTRY = {
 } as const;
 
 export type PlanCommentEntryKind = (typeof PLAN_COMMENT_ENTRY)[keyof typeof PLAN_COMMENT_ENTRY];
-
-function filledText(maximumChars: number) {
-  return EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(maximumChars),
-  );
-}
 
 /** A comment's words as written: not blank, and held to the bound. */
 export const planCommentWordsSchema = EffectSchema.String.check(

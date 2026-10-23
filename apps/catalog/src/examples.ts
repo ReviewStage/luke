@@ -19,6 +19,7 @@ import { CHOICE_BAR_EXAMPLE } from "./examples/choice-bar";
 import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
+import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
@@ -132,6 +133,7 @@ export const EXAMPLES: readonly Example[] = [
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  COMMAND_ASK_EXAMPLE,
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,

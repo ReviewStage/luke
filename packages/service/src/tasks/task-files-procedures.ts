@@ -47,11 +47,11 @@ import {
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
-import { wireUuidSchema } from "../core.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
@@ -63,15 +63,6 @@ import { readTaskCode } from "./task-work-store.js";
 export interface TaskFilesProcedureSeams {
   resolveUserId: UserIdResolver;
 }
-
-/** The row an id names, where it is a UUID; one that is not names no row, and answers as none. */
-const namedRow = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
 
 /** The answer a read found, or not found where it found none. */
 const found = <A>(read: Option.Option<A>): Effect.Effect<A, HostedRefusal> =>
@@ -131,25 +122,25 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
   const taskFiles = hosted.taskFiles.use(accountMiddleware(seams.resolveUserId));
   return {
     code: taskFiles.code.effect(function* ({ input, context }) {
-      const taskId = yield* namedRow(input.id);
+      const taskId = yield* pathUuid(input.id);
       return yield* found(yield* hostedStoreOrUnavailable(readTaskCode(context.userId, taskId)));
     }),
     file: taskFiles.file.effect(function* ({ input, context }) {
-      const taskId = yield* namedRow(input.id);
+      const taskId = yield* pathUuid(input.id);
       const window = yield* fileWindowOf(input);
       return yield* found(
         yield* hostedStoreOrUnavailable(readTaskFile(context.userId, taskId, window)),
       );
     }),
     tree: taskFiles.tree.effect(function* ({ input, context }) {
-      const taskId = yield* namedRow(input.id);
+      const taskId = yield* pathUuid(input.id);
       const folder = yield* folderOf(input);
       return yield* found(
         yield* hostedStoreOrUnavailable(readTaskTree(context.userId, taskId, folder)),
       );
     }),
     skills: taskFiles.skills.effect(function* ({ input, context }) {
-      const taskId = yield* namedRow(input.id);
+      const taskId = yield* pathUuid(input.id);
       return yield* found(
         yield* hostedStoreOrUnavailable(
           readTaskSkills(context.userId, taskId, input.installed !== undefined),
@@ -157,7 +148,7 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
       );
     }),
     keepPicture: taskFiles.keepPicture.effect(function* ({ input, context }) {
-      const taskId = yield* namedRow(input.params.id);
+      const taskId = yield* pathUuid(input.params.id);
       const picture = pictureOfDataUrl(input.body.picture);
       if (picture === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       const kept = yield* hostedStoreOrUnavailable(
@@ -176,14 +167,14 @@ export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
       }
     }),
     pages: taskFiles.pages.effect(function* ({ input, context }) {
-      const taskId = yield* namedRow(input.id);
+      const taskId = yield* pathUuid(input.id);
       return {
         pages: yield* hostedStoreOrUnavailable(listPages(context.userId, taskPageOwner(taskId))),
       };
     }),
     page: taskFiles.page.effect(function* ({ input, context }) {
-      const taskId = yield* namedRow(input.id);
-      const pageId = yield* namedRow(input.page);
+      const taskId = yield* pathUuid(input.id);
+      const pageId = yield* pathUuid(input.page);
       const version = yield* pageVersionOf(input.version);
       const page = yield* hostedStoreOrUnavailable(
         readPageVersion(context.userId, taskPageOwner(taskId), pageId, version),

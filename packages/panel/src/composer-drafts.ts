@@ -11,7 +11,7 @@ import {
 import { Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { readKept, writeKept } from "./desktop/folded-groups.js";
+import { readKept, writeKept } from "./kept-storage.js";
 
 /**
  * composer-drafts.ts -- what the developer typed in a box and has not sent, kept per destination on this Mac, so switching away and back finds it where it was left.

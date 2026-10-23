@@ -9,11 +9,12 @@ import {
   type Transaction,
 } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import type {
-  ComposerTrigger,
-  HeadingsChange,
-  MentionNode,
-  PlanEditorMentions,
+import {
+  type ComposerTrigger,
+  type HeadingsChange,
+  type MentionNode,
+  type PlanEditorMentions,
+  sameTrigger,
 } from "./contract.js";
 import { MENTION_NODE } from "./mention-node.js";
 
@@ -102,18 +103,6 @@ function triggerAt(view: EditorView): TaskTrigger | undefined {
     from,
     to: selection.from + rest,
   };
-}
-
-/** Whether two reports say the same, so an unchanged word is not reported again. */
-function sameTrigger(a: ComposerTrigger | undefined, b: ComposerTrigger | undefined): boolean {
-  if (a === undefined || b === undefined) return a === b;
-  return (
-    a.start === b.start &&
-    a.query === b.query &&
-    a.rect.left === b.rect.left &&
-    a.rect.top === b.rect.top &&
-    a.rect.bottom === b.rect.bottom
-  );
 }
 
 /** The `@` word found again, and reported where it changed. */

@@ -45,7 +45,7 @@ import {
 import { planMentions } from "./plan-mentions.js";
 import { planSlash } from "./plan-slash.js";
 import { editorFormatting, formatReports } from "./writing-format.js";
-import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
+import { blockRulesOutOfCells, withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
 /**
  * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
@@ -54,7 +54,8 @@ import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
  * TipTap's own: StarterKit, `@tiptap/markdown`, task lists, tables, and
  * pictures (`./picture-node.ts`), each inline in a paragraph even where it
  * stands alone on its line; its chords are the writing vocabulary's
- * (`./writing-keys.ts`), in place of TipTap's;
+ * (`./writing-keys.ts`), in place of TipTap's, and neither a chord nor a
+ * Markdown rule lays a block into a table's cell;
  * underline alone is left out, because Markdown cannot store it and the
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
@@ -128,9 +129,11 @@ const TASK_MARK_LENGTH = "- [ ] ".length;
  * a bullet saying "[ ]", and which loses its trailing space the moment a
  * block's ending is trimmed; so its words are written as `&nbsp;`, which
  * GFM reads as a task, and read back as no words. They are laid in after
- * the mark rather than as a text node, which would escape the `&`.
+ * the mark rather than as a text node, which would escape the `&`. Its
+ * Markdown rule is kept out of a table's cell before it is extended, because
+ * extending it after would hand its own writing to itself as its parent's.
  */
-const DocumentTaskItem = TaskItem.extend({
+const DocumentTaskItem = blockRulesOutOfCells(TaskItem).extend({
   parseMarkdown(token, helpers) {
     const empty = token.text === EMPTY_TASK_WORDS;
     return this.parent?.(empty ? { ...token, text: "", tokens: [] } : token, helpers) ?? [];
@@ -200,9 +203,9 @@ export function markdownExtensions(
     link: { openOnClick: false },
   });
   return [
-    withoutTipTapChords(kit),
+    blockRulesOutOfCells(withoutTipTapChords(kit)),
     withoutTipTapChords(DocumentParagraph),
-    withoutTipTapChords(DocumentHeading),
+    blockRulesOutOfCells(withoutTipTapChords(DocumentHeading)),
     Markdown,
     withoutTipTapChords(TaskList),
     DocumentTaskItem,

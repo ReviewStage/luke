@@ -12,21 +12,38 @@ set -euo pipefail
 # releases/latest at a manifest whose archive is still incomplete.
 
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIRECTORY/../.." && pwd)
-cd "$REPO_ROOT"
+# shellcheck source=scripts/lib/workspace.sh
+source "$SCRIPT_DIRECTORY/../lib/workspace.sh"
+cd "$LUKE_REPO_ROOT"
 
 if [[ "$#" -ne 0 ]]; then
     printf 'usage: %s\n' "$0" >&2
     exit 2
 fi
 
-VERSION=$(node -p "require('./apps/desktop/package.json').version")
+# Every name the release reads from the build's own configuration, in one
+# node call: the version, then each asset's name, then the output directory.
+release_names=$(node --input-type=module -e "
+const { version } = JSON.parse(await (await import('node:fs/promises')).readFile('./apps/desktop/package.json', 'utf8'));
+const config = await import('./apps/desktop/scripts/release-config.mjs');
+process.stdout.write([
+  version,
+  config.releaseDmgFileName(version),
+  config.releaseZipFileName(version),
+  config.RELEASE_LATEST_DMG_FILE_NAME,
+  config.RELEASE_UPDATE_FEED_FILE_NAME,
+  config.builderReleaseArtifactDirectory(process.cwd()),
+].join('\\n') + '\\n');
+")
+{
+    read -r VERSION
+    read -r DMG_ASSET_NAME
+    read -r ZIP_ASSET_NAME
+    read -r LATEST_DMG_ASSET_NAME
+    read -r UPDATE_FEED_ASSET_NAME
+    read -r ARTIFACT_DIRECTORY
+} <<<"$release_names"
 TAG="v$VERSION"
-DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseDmgFileName(process.argv[1])))" "$VERSION")
-ZIP_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseZipFileName(process.argv[1])))" "$VERSION")
-LATEST_DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_LATEST_DMG_FILE_NAME))")
-UPDATE_FEED_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_UPDATE_FEED_FILE_NAME))")
-ARTIFACT_DIRECTORY=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.builderReleaseArtifactDirectory(process.cwd())))")
 DMG_PATH="$ARTIFACT_DIRECTORY/$DMG_ASSET_NAME"
 ZIP_PATH="$ARTIFACT_DIRECTORY/$ZIP_ASSET_NAME"
 LATEST_DMG_PATH="$ARTIFACT_DIRECTORY/$LATEST_DMG_ASSET_NAME"

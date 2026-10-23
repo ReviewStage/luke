@@ -25,6 +25,7 @@ import {
   recommendedInputSchema,
 } from "./inbox-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { boundedText, filledText } from "./text-schema.js";
 
 export {
   /** @public */
@@ -102,17 +103,6 @@ export {
  * `@public` is vocabulary the chat's store, tools, and window read as they
  * land, which keeps knip from reading it as dead meanwhile.
  */
-
-function filledText(maximumChars: number) {
-  return EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(maximumChars),
-  );
-}
-
-function boundedText(maximumChars: number) {
-  return EffectSchema.String.check(EffectSchema.isMaxLength(maximumChars));
-}
 
 /**
  * What an ask asks for, by the response type its wire carries: the Inbox's

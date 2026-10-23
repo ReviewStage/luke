@@ -20,10 +20,10 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { pathUuid } from "./agent-reach.js";
 
 export interface AgentPagesProcedureSeams {
   resolveUserId: UserIdResolver;

@@ -11,8 +11,8 @@ from them, and what those copies are.
 - `src/` holds geometry and the generated face art, motion tokens, and
   provider-mark paths the apps draw from.
 
-Regenerate the generated files (under `src/generated/`, `assets/`, and the
-renderer's `styles/generated/`) from the sources rather than hand-editing;
+Regenerate the generated files (under `src/generated/`, `assets/`, and
+`@luke/ui`'s `src/face/face-motion.css`) from the sources rather than hand-editing;
 `pnpm --filter @luke/brand check` reports drift when run by hand.
 
 This package draws nothing itself. `@luke/ui` is the shared React layer

@@ -2633,10 +2633,16 @@ test("an agent the plans' summaries do not name is read as its chip's mark reads
   const page = mount((chat) => ({ ...chat, agents: [] }));
   // Until its task's agents are read it stands by the name the chat read carries, on the mark of no known harness.
   const before = railRow(page, "Invite emails").closest("li");
-  assert.equal(before?.querySelector(".actor-mark img.harness-mark"), null);
+  assert.equal(
+    before?.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    null,
+  );
   await settle();
   const after = railRow(page, "Nova").closest("li");
-  assert.ok(after?.querySelector(".actor-mark img.harness-mark"), "its row wears Codex's mark");
+  assert.ok(
+    after?.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    "its row wears Codex's mark",
+  );
   assert.equal(after?.querySelector(".failed-mark")?.getAttribute("aria-label"), "Failed");
   // One with no title is named by the automation that started it, as its tab is, and drawn at
   // rest, since a read is not followed and a face never stays working after its agent stopped.
