@@ -121,6 +121,7 @@ export const BUTTON_VARIANT = {
   WORKING_TINT: "working-tint",
   DANGER_TINT: "danger-tint",
   ROW: "row",
+  MEDIA: "media",
 } as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];

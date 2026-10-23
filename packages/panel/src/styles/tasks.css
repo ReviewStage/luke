@@ -5354,6 +5354,19 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   touch-action: none;
 }
 
+/* A video plays on black, centred, as large as the card leaves it under
+   its header at its own shape (`@luke/ui`'s VideoPlayer). */
+.attachment-viewer[data-view="video"] .attachment-viewer-body {
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: #000; /* off-scale: a video's letterbox */
+}
+
+.attachment-viewer-body > .luke-video-player {
+  max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
+}
+
 /* The picture, `@luke/ui`'s ZoomImage, stands no taller fitted than the
    card leaves it under its header. */
 .attachment-viewer-body > .luke-zoom-image {

@@ -660,6 +660,40 @@ export function PlayIcon(): React.JSX.Element {
   );
 }
 
+/** Holds what is playing: the two bars every transport draws for pause, at the triangle's weight. */
+export function PauseIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <rect x="6.4" y="5.6" width="4" height="12.8" rx="1.2" fill="currentColor" stroke="none" />
+      <rect x="13.6" y="5.6" width="4" height="12.8" rx="1.2" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
+/** Four corners turned out: a video grown to fill the screen. */
+export function FullScreenIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.8 9.4V4.8h4.6" />
+      <path d="M14.6 4.8h4.6v4.6" />
+      <path d="M19.2 14.6v4.6h-4.6" />
+      <path d="M9.4 19.2H4.8v-4.6" />
+    </Glyph>
+  );
+}
+
+/** Four corners turned in: a full-screen video brought back to its place. */
+export function ExitFullScreenIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M9.4 4.8v4.6H4.8" />
+      <path d="M14.6 4.8v4.6h4.6" />
+      <path d="M19.2 14.6h-4.6v4.6" />
+      <path d="M4.8 14.6h4.6v4.6" />
+    </Glyph>
+  );
+}
+
 /** Stops what is playing: the square every transport draws for stop, at the triangle's weight. */
 export function StopIcon(): React.JSX.Element {
   return (

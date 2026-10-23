@@ -92,6 +92,7 @@ import { TIMES_EXAMPLE } from "./examples/times";
 import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
+import { VIDEO_PLAYER_EXAMPLE } from "./examples/video-player";
 import { ZOOM_IMAGES_EXAMPLE } from "./examples/zoom-images";
 
 /**
@@ -191,6 +192,7 @@ export const EXAMPLES: readonly Example[] = [
   SKELETONS_EXAMPLE,
   RESIZE_CORNERS_EXAMPLE,
   SLIDER_EXAMPLE,
+  VIDEO_PLAYER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
   GLYPH_SLOTS_EXAMPLE,

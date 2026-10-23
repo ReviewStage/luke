@@ -42,6 +42,7 @@ import { reportRendererErrors } from "../window/renderer-errors";
 import { followResponsiveness } from "../window/renderer-health";
 import { VoiceWindow } from "../window/voice-window";
 import { windowMaterialFor } from "../window/window-material";
+import { grantWindowPermissions } from "../window/window-permissions";
 import { windowPushes } from "../window/window-pushes";
 import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
@@ -389,25 +390,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function configurePermissions(): void {
-    const ownWindow = (webContents: Electron.WebContents) =>
-      panels.owns(webContents) || voiceWindow.owns(webContents);
-    session.defaultSession.setPermissionCheckHandler(
-      (webContents, permission, _origin, details) =>
-        webContents !== null &&
-        ownWindow(webContents) &&
-        permission === "media" &&
-        details.mediaType === "audio",
-    );
-    session.defaultSession.setPermissionRequestHandler(
-      (webContents, permission, callback, details) => {
-        const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
-        callback(
-          ownWindow(webContents) &&
-            permission === "media" &&
-            mediaTypes.length > 0 &&
-            mediaTypes.every((mediaType: string) => mediaType === "audio"),
-        );
-      },
+    grantWindowPermissions(
+      session.defaultSession,
+      (webContents) => panels.owns(webContents) || voiceWindow.owns(webContents),
     );
   }
 
