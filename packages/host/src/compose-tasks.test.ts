@@ -1806,6 +1806,32 @@ it.effect(
 );
 
 it.effect(
+  "a pin answered while a refresh reads a task the list does not hold yet keeps the pin the held document took",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.createAnswer = { ok: true, answer: { task: invites } };
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" });
+
+      // The read takes the task as it stands when asked, and answers only once let go.
+      const answered = yield* Deferred.make<void>();
+      const { open } = service;
+      service.open = (taskId) =>
+        Effect.flatMap(open(taskId), (read) => Effect.as(Deferred.await(answered), read));
+      yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
+      yield* settled;
+      yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true });
+      assert.equal(last()?.document.task?.pinnedAt, MARKED_AT);
+
+      yield* Deferred.succeed(answered, undefined);
+      yield* settled;
+      assert.equal(last()?.document.task?.pinnedAt, MARKED_AT);
+    }),
+);
+
+it.effect(
   "a task's code read as none is held as none, and a task whose code read did not answer holds its code unread",
   () =>
     Effect.gen(function* () {

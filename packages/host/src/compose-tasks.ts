@@ -1126,8 +1126,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * The open task's document as its read `opened` left it, taking the pin
-   * its row of the list carries where a pin was answered after the read
-   * numbered `marksRead` left, since the read's is then the older.
+   * its row of the list carries, or the copy held where the list has no row
+   * of it yet, where a pin was answered after the read numbered `marksRead`
+   * left, since the read's is then the older.
    */
   function openedDocument(
     taskId: string,
@@ -1135,10 +1136,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     marksRead: number,
   ): TasksView["document"] {
     const held = heldTaskOf(taskId);
-    const row = view.tasks.find((each) => each.id === taskId);
+    const marked = view.tasks.find((each) => each.id === taskId) ?? held;
     const pinStands = laidNow(OPENED_PART.MARKS, marksRead);
-    if (!opened.ok || row === undefined || pinStands) return documentAfter(opened, held);
-    return { status: TASKS_READ.READY, task: withMarksOf(opened.answer, row) };
+    if (!opened.ok || marked === undefined || pinStands) return documentAfter(opened, held);
+    return { status: TASKS_READ.READY, task: withMarksOf(opened.answer, marked) };
   }
 
   /** The open's part reads still out, one per part, a newer open's taking the place of the last. */
