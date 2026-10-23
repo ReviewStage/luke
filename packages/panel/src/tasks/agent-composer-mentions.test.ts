@@ -1029,7 +1029,7 @@ function crumb(container: HTMLElement): string | undefined {
 
 /** The keys the list's foot names. */
 function footKeys(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu-foot span")].map(
+  return [...container.querySelectorAll(".mention-menu .luke-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }

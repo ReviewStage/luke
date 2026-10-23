@@ -1,0 +1,30 @@
+/* menu-keys.css -- the keys a list keyed from an editor hears, at the foot
+   of its surface (`menu-keys.tsx`): behind a hairline the surface's whole
+   width, its words in line with the rows' words above it, each key in the
+   muted ink before what it does in the subtle one. */
+
+@layer components {
+  .luke-menu-keys {
+    display: flex;
+    flex: 0 0 auto;
+    gap: var(--luke-space-12);
+    padding: var(--luke-space-6) calc(var(--luke-menu-inset) + var(--luke-space-8));
+    border-top: 1px solid var(--luke-color-border);
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    white-space: nowrap;
+  }
+
+  .luke-menu-keys-key {
+    color: var(--luke-color-text-muted);
+    font: inherit;
+  }
+
+  /* A finger picks a row by pressing it, so the keys say nothing there. */
+  @media (pointer: coarse) {
+    .luke-menu-keys {
+      display: none;
+    }
+  }
+}

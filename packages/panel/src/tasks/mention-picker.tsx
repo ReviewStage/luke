@@ -30,11 +30,12 @@ import {
   KeepFocus,
   MENU_SURFACE_INSET,
   MenuGlyph,
+  type MenuKey,
+  MenuKeys,
   MenuSurface,
   ProviderMark,
   Spinner,
   TEXT_ELEMENT,
-  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   UserIcon,
@@ -286,13 +287,13 @@ const NO_MATCH = "No results match";
 
 /** The keys the list hears, said at its foot as far as it hears them now. */
 const MENU_KEY = {
-  MOVE: "↑↓ Move",
-  MENTION: "↵ Mention",
-  OPEN: "→ Open",
-  WIDEN: "⌫ All kinds",
-  UP: "⌫ Up",
-  CLOSE: "esc Close",
-} as const;
+  MOVE: { keys: "↑↓", does: "Move" },
+  MENTION: { keys: "↵", does: "Mention" },
+  OPEN: { keys: "→", does: "Open" },
+  WIDEN: { keys: "⌫", does: "All kinds" },
+  UP: { keys: "⌫", does: "Up" },
+  CLOSE: { keys: "esc", does: "Close" },
+} as const satisfies Record<string, MenuKey>;
 
 /** What a narrowed list's back arrow is read by: back to every kind, or up out of a folder. */
 const BACK_LABEL = {
@@ -968,7 +969,7 @@ function MentionMenu({
   crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
   at: number;
-  keys: readonly string[];
+  keys: readonly MenuKey[];
   place: MenuPlace;
   /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
   reading: boolean;
@@ -998,18 +999,7 @@ function MentionMenu({
         empty={reading ? undefined : NO_MATCH}
         note={reading ? <Spinner delay label="Reading" /> : undefined}
       />
-      <div className="task-compose-menu-foot mention-menu-foot" aria-hidden="true">
-        {keys.map((key) => (
-          <Text
-            key={key}
-            as={TEXT_ELEMENT.SPAN}
-            variant={TEXT_VARIANT.CAPTION}
-            tone={TEXT_TONE.SUBTLE}
-          >
-            {key}
-          </Text>
-        ))}
-      </div>
+      <MenuKeys keys={keys} />
     </MenuSurface>
   );
 }

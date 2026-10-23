@@ -1,0 +1,15 @@
+/* link-field.css -- the popover a link is written in (`link-field.tsx`):
+   the menu's surface laid in a row, a field as wide as an address reads
+   and Open and Remove beside it. */
+
+@layer components {
+  .luke-link-field {
+    width: 340px;
+    max-width: 100%;
+  }
+
+  .luke-link-field > .luke-text-field {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
