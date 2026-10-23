@@ -176,6 +176,7 @@ import {
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import type { NewTaskLink } from "./new-task-links.js";
+import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
@@ -556,9 +557,11 @@ function agentRequest(handed: NewTaskAgent) {
   };
 }
 
-/** What the press that opened New task chose: a repository (a repository group's +), or the card a start refused after it closed opens again on. */
+/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
+  /** What the card starts; a task's agent where none is named. */
+  readonly purpose?: NewTaskPurpose;
   /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
   readonly refused?: { readonly card: NewTaskCardKept; readonly note: string };
 }
@@ -570,6 +573,8 @@ export interface NewTaskPreset {
  * made, whose key a Retry asking the same carries again.
  */
 export interface NewTaskCardKept {
+  /** What the card started, which it opens again for; a task's agent where none is named. */
+  readonly purpose?: NewTaskPurpose;
   readonly repository: string | null;
   readonly links: readonly NewTaskLink[];
   readonly choice: ModelChoice | undefined;
@@ -805,6 +810,8 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /** New task's card for the agent that makes an automation: what the Automations page's Create with an agent asks. */
+  onNewAutomationAgent: () => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
   newTask: {
     open: boolean;
@@ -2876,7 +2883,15 @@ export function useTasksTab(input: {
         setStartingTask(undefined);
         setStandIn((now) => now ?? standingBefore);
         setHistoryFor((now) => now ?? historyBefore);
-        setNewTaskAsk({ preset: card === undefined ? undefined : { refused: { card, note } } });
+        setNewTaskAsk({
+          preset:
+            card === undefined
+              ? undefined
+              : {
+                  ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
+                  refused: { card, note },
+                },
+        });
       }
       return note;
     };
@@ -3842,6 +3857,7 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),
     newTask: {
       open: newTaskAsk !== undefined,
       preset: newTaskAsk?.preset,

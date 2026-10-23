@@ -3854,6 +3854,24 @@ ul.actor-stack {
   }
 }
 
+/* The Automations list's toolbar: where its two acts' words would crowd the
+   title, Create with an agent folds to its glyph, named by its pill
+   (`folding-button.tsx`), and New automation keeps its words. */
+.automations-toolbar {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  container: automations-toolbar / inline-size;
+}
+
+@container automations-toolbar (max-width: 559px) {
+  .automations-toolbar > * {
+    --luke-fold: folded;
+  }
+}
+
 .automation-editor {
   display: flex;
   flex-direction: column;

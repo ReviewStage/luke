@@ -57,7 +57,7 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { momentText } from "@luke/ui/time-format";
-import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { BotIcon, ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
@@ -95,7 +95,11 @@ import { useAutomations } from "./use-automations.js";
  * and an automation turned off reads "Off" where its next run would.
  * Under the list, or under the line saying there is none yet, stand the
  * suggested automations: a press opens a new automation's page filled in
- * from the suggestion's preset, to look over and Create. Code review, the
+ * from the suggestion's preset, to look over and Create. Beside New
+ * automation, Create with an agent opens New task's own card for the agent
+ * that makes one: what to automate in the member's own words, the
+ * repository and the model, then Start agent, a new task's agent handed the
+ * brief to make it (`new-task-composer.tsx`). Code review, the
  * one suggestion, is still an experiment (`EXPERIMENT.CODE_REVIEW`), so
  * nothing is suggested while the account has it off, and a page filled in
  * from it goes back to the list.
@@ -449,24 +453,34 @@ function ListPage({
       label="Automations"
       toolbar={
         <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <OneLine
-              as={ONE_LINE_ELEMENT.H1}
-              end={ONE_LINE_END.ELLIPSIS}
-              className="desktop-toolbar-title"
-            >
-              Automations
-            </OneLine>
-          </div>
-          <div className="desktop-toolbar-actions">
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<PlusIcon />}
-              disabled={workspace === undefined}
-              onClick={openNew}
-            >
-              New automation
-            </Button>
+          {/* The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title. */}
+          <div className="automations-toolbar">
+            <div className="desktop-toolbar-heading">
+              <OneLine
+                as={ONE_LINE_ELEMENT.H1}
+                end={ONE_LINE_END.ELLIPSIS}
+                className="desktop-toolbar-title"
+              >
+                Automations
+              </OneLine>
+            </div>
+            <div className="desktop-toolbar-actions">
+              <FoldingButton
+                label="Create with an agent"
+                icon={<BotIcon />}
+                variant={BUTTON_VARIANT.OUTLINE}
+                disabled={workspace === undefined}
+                onClick={tasks.onNewAutomationAgent}
+              />
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<PlusIcon />}
+                disabled={workspace === undefined}
+                onClick={openNew}
+              >
+                New automation
+              </Button>
+            </div>
           </div>
         </header>
       }

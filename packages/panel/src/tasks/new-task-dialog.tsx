@@ -2,6 +2,7 @@ import { DIALOG_SIZE, Dialog, type DialogHandle } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer, useNewTaskHolding } from "./new-task-composer.js";
+import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -27,6 +28,10 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * it away. A start under way holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
+ *
+ * The Automations page's Create with an agent opens this same card for the
+ * agent that makes an automation (New task's preset's `purpose`), so it is
+ * asked as New task asks.
  */
 
 /** The composer's words field, the editor's own textbox, which the card hands focus to. */
@@ -42,7 +47,9 @@ const CARD_SELECTOR = '[aria-modal="true"]';
  */
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
   const [starting, setStarting] = useState(false);
-  const holding = useNewTaskHolding(newTask.workspaceId);
+  // The Automations page's Create with an agent opens this card for an automation's agent, and a refusal opens it again for the same.
+  const purpose = newTask.preset?.purpose ?? NEW_TASK_PURPOSE.TASK;
+  const holding = useNewTaskHolding(newTask.workspaceId, purpose);
   const dialog = useRef<DialogHandle>(null);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -82,6 +89,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           onLeave={() => dialog.current?.dismiss()}
           focusedByOwner
           titleId={titleId}
+          purpose={purpose}
           // Note that the dialog's card is not at a page's top, so a list rises over the line as an agent's box's does.
           listSide={MENTION_MENU_SIDE.ABOVE}
         />
