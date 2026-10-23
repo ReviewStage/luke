@@ -32,9 +32,10 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  * mac-command.ts -- a command an agent runs on the developer's own Mac: queued for the account, run by a signed-in Mac that holds the read for it, and its result handed back to the call.
  *
  * Any agent may call it, the brain, a coding agent, and either's
- * workers, and nothing asks the developer first: Dean's call, with the one
- * brake a Settings switch on the Mac (`Let agents run commands on this
- * Mac`), which stops the Mac listening. The call refuses at once where no
+ * workers. Settings › This Mac sets what the Mac does with a command: Ask
+ * every time (the default) asks the developer first and runs it only once
+ * they allow it, Always allow runs it at once, and Never stops the Mac
+ * listening. The call refuses at once where no
  * Mac of the account listened lately, since nothing would take the command.
  * Otherwise it queues the command, looks for its result until the
  * command's own timeout and a grace for the Mac to answer have passed, and
@@ -158,8 +159,8 @@ export const RUN_ON_MAC_TOOL = {
   name: AGENT_TOOL.RUN_ON_MAC,
   description:
     "Run one shell command on the developer's own Mac, in their login shell from their home " +
-    "folder, and read what it printed. It runs at once, without asking the developer, and " +
-    "reaches whatever the developer's account on the Mac reaches: their local checkouts and " +
+    "folder, and read what it printed. The developer's Mac may ask them first, and they may " +
+    "decline, in which case the call answers `not-run`. It reaches whatever the developer's account on the Mac reaches: their local checkouts and " +
     "uncommitted work, installed tools, running servers. Use it for what only the Mac has; " +
     "read the task's repository where you have it. Nothing reads stdin, so a command that asks " +
     `for input fails. It is killed after ${MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS} seconds ` +

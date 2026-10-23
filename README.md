@@ -109,10 +109,10 @@ repository.
   or API key. Your voice streams to OpenAI and does not pass through Luke's
   service.
 - **Commands on your Mac.** Luke and coding agents can run shell commands on
-  your Mac, in your login shell and without asking, and what they print goes
-  to the model. This is how an agent reads a local checkout or a server you
-  have running. It is on by default; turn it off in Settings › This Mac › Let
-  agents run commands on this Mac.
+  your Mac, in your login shell, and what they print goes to the model. This
+  is how an agent reads a local checkout or a server you have running. Luke
+  asks before each command by default; choose Always allow or Never in
+  Settings › This Mac.
 
 [PRIVACY.md](PRIVACY.md) lists everything Luke stores, every provider it sends
 data to, and how long each keeps it.
