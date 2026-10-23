@@ -242,20 +242,6 @@ body {
   gap: var(--luke-space-12);
 }
 
-/* The row the menu example right-clicks, marked out so a reader sees where to press. */
-.catalog-menu-row {
-  display: block;
-  width: 100%;
-  max-width: 560px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  padding: var(--luke-space-24) var(--luke-space-12);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-}
-
 /* A row of attachment chips, with room above for the discs on their corners. */
 .catalog-attachments {
   display: flex;
@@ -335,26 +321,6 @@ body {
 /* A toolbar's room, wider than its presses and short of its whole sentence. */
 .catalog-error-toolbar {
   width: 400px;
-}
-
-/* A list's foot that is itself its press, as an app draws one around
-   `RetryRowLabel`: a row in the caption's type, lit on hover. */
-.catalog-retry-row {
-  width: 100%;
-  padding: var(--luke-space-8);
-  border: 0;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  text-align: left;
-}
-
-.catalog-retry-row:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* A dashed outline that shows the room an arrangement is given. */
@@ -560,19 +526,6 @@ body {
 
 .catalog-inline-edit-well > .luke-inline-edit {
   width: 24ch;
-}
-
-/* A bare text input standing in for a control an example holds. */
-.catalog-input {
-  box-sizing: border-box;
-  width: 100%;
-  height: var(--luke-control-height);
-  padding: 0 var(--luke-space-8);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  color: var(--luke-color-text);
-  font: inherit;
 }
 
 /* A decorative ring at a mark's size. */
