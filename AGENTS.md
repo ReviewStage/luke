@@ -26,9 +26,13 @@ Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
 `apps/web/server/routes/`, the deployment shell beside them, the agents' eve
-apps, `apps/dev`, and build and release scripts. A React component, hook, or
-DOM-free view model lives in `packages/ui` when more than one app can
-mount it, the panel every client mounts, the desktop's panel window and the
+apps, `apps/dev`, and build and release scripts. A React component, control, or
+repeated UI shape must live in `packages/ui` whatever app mounts it, even one
+app alone, with no exceptions, and a duplicate is folded into one; an app or
+`packages/panel` must compose those components and never hand-builds a control
+(a raw `<button>`, input, tab, or card with its own press handling) outside
+`@luke/ui`: the design system is one rigid set that every agent must use. A hook or DOM-free view
+model lives in `packages/ui` when more than one app can mount it, the panel every client mounts, the desktop's panel window and the
 web's tab alike, in `packages/panel`, the hosted service's logic in
 `packages/service`, its contract and clients in `packages/features`, and a
 wire value in `packages/wire`. A
@@ -38,6 +42,22 @@ library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
 entry in `knip.json`, a `runtimeEdges` row in
 `tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
 Review places a module and a component alike under this rule.
+
+Lint holds the UI half of this (`anti-slop/no-raw-press-outside-ui`): outside
+`packages/ui`, every app, test, and the catalog included, an intrinsic
+(lowercase) JSX element is never a control. A raw `button`, `input` (bar
+`type="hidden"`), `select`, `textarea`, or `summary`, a pressable `role`
+(`button`, `tab`, `option`, `menuitem*`, `radio`, `checkbox`, `switch`,
+`slider`, `link` off an `<a>`, or one that is no literal), and a press event (`onClick`, `onDoubleClick`,
+`onAuxClick`, `onContextMenu`, `onMouseDown`/`Up`, `onPointerDown`/`Up`,
+`onTouchStart`/`End`, and their `Capture` forms) are errors, as is
+`onKeyDown`/`onKeyUp` on an element with `tabIndex` or `contentEditable`.
+Hover, drag and drop, focus, wheel, scroll, and clipboard events, keys on a
+container that takes no focus, and a spread from a ui helper
+(`menu.contextMenu()`) stay allowed. There is no escape hatch: `pnpm lint` runs
+`tools/anti-slop/press-guard-check.ts`, which fails on a disable comment that
+would silence the rule and on an `.oxlintrc.json` that weakens it. Where it
+fires, use a `@luke/ui` component, or add the component or variant there.
 
 ## Never
 
@@ -55,20 +75,16 @@ Review places a module and a component alike under this rule.
   Dean on 2026-10-14, a Terminal tab's bytes go only to the tab that opened
   them: through the terminal relay (`apps/web/server/terminal/`) and the host
   to that panel's window, never into a trace, a counted event, a fixture, app
-  state, or the voice window. And, approved by Dean (automations D10), a webhook
-  body an automation's caller sends may reach that run's agent task, transcript
-  and traces. And, approved by Dean on 2026-10-15, an automation webhook secret
+  state, or the voice window. And, approved by Dean (automations D10) and by
+  Charles on 2026-10-19, a webhook body an automation's caller sends, or an
+  integration trigger's event (a Sentry issue or alert as Luke's Sentry
+  integration delivers it), may reach that run's agent task, transcript and
+  traces. And, approved by Dean on 2026-10-15, an automation webhook secret
   may be shown once, in the window that minted it, at creation or rotation;
   never anywhere else. And, approved
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
   the panel window, which runs that session, and never the voice window,
   a Gateway answer or event, app state, a counted event, a trace, or a fixture.
-  And, approved by Dean on 2026-10-16, a Browser tab's page, its address,
-  title, and a still of it go only to the panel that opened the tab, from its
-  view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
-  trace, a counted event, a fixture, app state, the service, or the voice
-  window; the still is left out of the screen recording, and the title and
-  address the tab draws are masked there as every word is.
   And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
   in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
   address, title, screenshots, and text snapshots to that agent and its workers,
@@ -85,6 +101,14 @@ Review places a module and a component alike under this rule.
   trace, a counted event, a fixture, or the voice window, and session replay masks
   the live view and the transcript's screenshots; the cookies a member types into
   it stay in that agent's sandbox, and its snapshots, for the sandbox's life.
+  Amended, approved by Dean on 2026-10-22: an agent may record its browser as a
+  video (`record` and `stop_recording`), whose frames the recorder in its
+  sandbox writes to that sandbox's disk until the next recording clears them,
+  and whose WebM the service keeps beside the transcript the call is written to
+  as it keeps a screenshot (`packages/service/src/agents/browser/browser-tool.ts`),
+  shown and deleted on the same terms; the model is never handed the video, the
+  transcript's player is left out of session replay, and none of it goes into a
+  trace, a counted event, a fixture, or the voice window.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
   roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web
@@ -112,8 +136,8 @@ answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted thirty days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
-agent's turn, whose one turn is its whole run), and ends on Luke's key every
-voice session whose device detached and did not come back within the grace. It
+agent's turn, whose one turn is its whole run), and ends on its owner's own
+OpenAI key every voice session whose device detached and did not come back within the grace. It
 also starts due automation runs, and for coding agents on a member's GitHub
 token it reads their open pull requests' reviews, comments, and checks on that
 token and wakes the agent with them, as the webhook does for the App.

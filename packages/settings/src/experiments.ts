@@ -8,7 +8,7 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
-  /** A Browser tab in the side panel: a web page beside the plan, the Mac's own `localhost` among them. */
+  /** A Browser tab in the side panel: an agent's cloud browser beside the plan, watched and taken over. */
   BROWSER: "browser",
   /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
   CHAT: "chat",
@@ -16,6 +16,8 @@ export const EXPERIMENT = {
   CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
   VIDEO_CALLS: "video-calls",
+  /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
+  MEMORY: "memory",
   /** The sidebar as the Inbox: its threads under their tasks where the task list stood, the tasks left to the Tasks page. */
   INBOX_FIRST: "inbox-first",
   /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
@@ -74,8 +76,8 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.BROWSER,
     name: "Browser tab",
     detail:
-      "Open a web page in a tab beside your plan, your own localhost included. Pages keep " +
-      "their own cookies, apart from Luke's.",
+      "Watch your agents' cloud browsers in a tab beside your plan, and take one over to " +
+      "sign in or steer.",
     owner: "Dean",
     since: "2026-10-16",
   },
@@ -95,6 +97,15 @@ export const EXPERIMENTS = [
       "Keyframe. Your own voice never does.",
     owner: "Charles",
     since: "2026-10-15",
+  },
+  {
+    key: EXPERIMENT.MEMORY,
+    name: "Memory",
+    detail:
+      "Your coding agents keep settled facts about how your team works and recall them in later work, " +
+      "shared across your workspace and reviewed in Settings › Memory.",
+    owner: "Dean",
+    since: "2026-10-23",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

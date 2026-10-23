@@ -791,3 +791,28 @@ it.effect(
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
+
+it.effect(
+  "a dictated clip answers its words, and a clip refused for want of an OpenAI key says so rather than unanswered",
+  () =>
+    Effect.gen(function* () {
+      const clip = { audio: "T2dnUw==", durationMs: 1_500, keywords: ["relay"] };
+      const answering = fakeCloudApi({
+        "POST /api/dictation": { answer: () => ({ text: "Run the tests" }) },
+      });
+      const heard = yield* Effect.provide(client().transcribeDictation(clip), answering.layer);
+      assert.deepEqual(heard, { text: "Run the tests" });
+
+      const refusals = [
+        [HOSTED_API_ERROR.OPENAI_KEY_MISSING, CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING],
+        [HOSTED_API_ERROR.UNAVAILABLE, CODING_AGENT_CALL_FAILURE.UNANSWERED],
+      ] as const;
+      for (const [error, failure] of refusals) {
+        const refusing = fakeCloudApi({
+          "POST /api/dictation": { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
+        });
+        const refused = yield* Effect.provide(client().transcribeDictation(clip), refusing.layer);
+        assert.deepEqual(refused, { failure }, error);
+      }
+    }),
+);

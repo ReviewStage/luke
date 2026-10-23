@@ -1,0 +1,46 @@
+/* visually-hidden.css -- words read by assistive tech and drawn nowhere, as
+   a shared control says its state to a reader beside a glyph or a ring. */
+
+@layer components {
+  .luke-visually-hidden:not([data-under]) {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Words given a step are drawn until their room (a container named
+     `luke-room`) is narrower than it. */
+  @container luke-room (max-width: 520px) {
+    .luke-visually-hidden[data-under="snug"] {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  @container luke-room (max-width: 439px) {
+    .luke-visually-hidden[data-under="tight"] {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+}

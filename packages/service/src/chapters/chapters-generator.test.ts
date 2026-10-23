@@ -3,12 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "@effect/vitest";
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import {
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
   type CodingAgentChangedFile,
   PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -16,21 +18,22 @@ import {
   LINE_REF_SIDE,
 } from "@luke/features/pull-request-chapters";
 import { settleJsonSchemaGolden } from "@luke/wire/testing";
-import { APICallError } from "ai";
+import { APICallError, generateText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import {
   CHAPTERS_BOUNDS,
   type ChaptersInput,
   type ChaptersModel,
   chaptersAnswerSchema,
+  chaptersModelOf,
   generateChapters,
   repairAnswerSchema,
 } from "./chapters-generator.js";
 
 /**
- * chapters-generator.test.ts -- a pull request told as chapters on a scripted model: the answer held to the diff, the hunks it left out repaired once and the rest closed as "Other changes", ignored files kept from the model, and each way a generation fails named by its kind. Synthetic throughout; no provider is reached.
+ * chapters-generator.test.ts -- a pull request told as chapters on a scripted model: the answer held to the diff, the hunks it left out repaired once and the rest closed as "Other changes", ignored files kept from the model, and each way a generation fails named by its kind; and the model chapters are told on, reached on the member's own key at a provider faked at its fetch. Synthetic throughout; no real provider is reached.
  */
 
 /** One answer the scripted model gives, in the order it is asked. */
@@ -519,4 +522,46 @@ const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../fixtures
 it("shows the provider the chapters and repair answers as recorded", async () => {
   await settleJsonSchemaGolden(GOLDEN_ROOT, "chapters-answer", chaptersAnswerSchema);
   await settleJsonSchemaGolden(GOLDEN_ROOT, "chapters-repair-answer", repairAnswerSchema);
+});
+
+it("tells chapters on the member's own key: the Claude model they chose on an Anthropic key, OpenAI's of its tier on an OpenAI key, named by the provider's own id", async () => {
+  const reached: { readonly host: string; readonly key: string | null; readonly model: unknown }[] =
+    [];
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const headers = new Headers(init?.headers);
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    // SAFETY: the SDK sends its request body as JSON text; the test reads back the model it named.
+    const body = JSON.parse(String(init?.body)) as { readonly model?: unknown };
+    reached.push({
+      host: url.host,
+      key: headers.get("x-api-key") ?? headers.get("authorization"),
+      model: body.model,
+    });
+    return new Response(JSON.stringify({ error: { message: "fixture: stop here" } }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const onAnthropic = chaptersModelOf(
+    { provider: MODEL_PROVIDER.ANTHROPIC, key: Redacted.make("sk-ant-member-fixture") },
+    CHAPTERS_MODEL.SONNET,
+    fetch,
+  );
+  const onOpenAi = chaptersModelOf(
+    { provider: MODEL_PROVIDER.OPENAI, key: Redacted.make("sk-proj-member-fixture") },
+    CHAPTERS_MODEL.SONNET,
+    fetch,
+  );
+
+  for (const chapters of [onAnthropic, onOpenAi]) {
+    await generateText({ model: chapters.model, prompt: "Go.", maxRetries: 0 }).catch(
+      () => undefined,
+    );
+  }
+
+  expect([onAnthropic.id, onOpenAi.id]).toEqual([CHAPTERS_MODEL.SONNET, "gpt-6.1-sol"]);
+  expect(reached).toEqual([
+    { host: "api.anthropic.com", key: "sk-ant-member-fixture", model: CHAPTERS_MODEL.SONNET },
+    { host: "api.openai.com", key: "Bearer sk-proj-member-fixture", model: "gpt-6.1-sol" },
+  ]);
 });

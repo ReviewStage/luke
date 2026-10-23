@@ -3,6 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import {
@@ -27,6 +30,7 @@ import {
   type CodexConfig,
   IMAGE_MEDIA_TYPE,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   type InputLine,
   RUNNER_END,
   RUNNER_ENV,
@@ -53,6 +57,53 @@ const EVENTS_URL = "https://luke.test/runner/events";
 const FIRST_SEQUENCE = 11;
 const THREAD = "00000000-0000-4000-8000-000000000002";
 
+it.effect(
+  "on an OpenAI API key, app-server reads it through the provider's env_key, no command inherits it, no event carries it, and a fast version runs on the fast tier",
+  () =>
+    Effect.gen(function* () {
+      const apiKey = "openai-api-key-for-tests";
+      const luke = fakeLuke("sleep 600");
+      // The launch knows no bundle: on its API key it asks no token.
+      const { spawned, write, run } = yield* launch(
+        [STOPPED],
+        luke,
+        { ...ENV, [RUNNER_ENV.OPENAI_API_KEY]: apiKey },
+        {},
+      );
+      yield* write({ ...CONFIG, fast: true });
+      yield* write(message("Run sleep 600.", LINE.FIRST));
+      yield* luke.seen;
+      yield* write({ type: INPUT_LINE.STOP });
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+      const [process] = spawned;
+      const overrides = (process?.args ?? []).filter((_, index, args) => args[index - 1] === "-c");
+      assert.deepEqual(
+        overrides.filter((each) => each.startsWith("model_provider")),
+        [
+          'model_provider="openai_api_key"',
+          'model_providers.openai_api_key.name="OpenAI API key"',
+          'model_providers.openai_api_key.base_url="https://api.openai.com/v1"',
+          'model_providers.openai_api_key.env_key="OPENAI_API_KEY"',
+          'model_providers.openai_api_key.wire_api="responses"',
+          "model_providers.openai_api_key.requires_openai_auth=false",
+          "model_providers.openai_api_key.supports_websockets=false",
+        ],
+      );
+      assert.ok(
+        overrides.includes(
+          'shell_environment_policy.exclude=["LUKE_RUNNER_TOKEN", "OPENAI_API_KEY"]',
+        ),
+      );
+      // A fast version runs on Codex's documented fast tier, turned on for the provider.
+      assert.ok(overrides.includes("features.fast_mode=true"));
+      assert.equal(received(process, "turn/start")[0]?.serviceTier, "fast");
+      assert.equal(process?.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
+      assert.ok(!(process?.args ?? []).join(" ").includes(apiKey));
+      assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
+    }),
+);
+
 const TOKEN_URL = "https://luke.test/api/agents/runner-token";
 const SELF: RunnerSelf = {
   executable: "/usr/local/bin/node",
@@ -75,6 +126,7 @@ const CONFIG: CodexConfig = {
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://luke.test/runner/mcp",
+  integrations: [{ name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" }],
   tokenUrl: TOKEN_URL,
 };
 
@@ -176,6 +228,82 @@ function fakeLuke(watchFor?: string) {
 }
 
 it.effect(
+  "sets the member's installed skills as an extra skills root before the thread opens, and none where Luke wrote none",
+  () =>
+    Effect.gen(function* () {
+      const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
+      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
+      const skills = join(folder, INSTALLED_SKILLS.SKILLS);
+      mkdirSync(join(skills, "pr-style"), { recursive: true });
+      const extraRoots: Exchange = {
+        method: "skills/extraRoots/set",
+        reply: [{ id: 0, result: {} }],
+      };
+      const withRoot: Script = {
+        exchanges: [
+          exchange(FIRST, 0),
+          exchange(FIRST, 1),
+          extraRoots,
+          ...WORKFLOW.exchanges.slice(2),
+        ],
+      };
+
+      const turn = (script: Script, installedSkills: string) =>
+        Effect.gen(function* () {
+          const luke = fakeLuke("ci-watch");
+          const { spawned, write, run } = yield* launch([script], luke);
+          yield* write({ ...CONFIG, installedSkills });
+          yield* write(message("The probe's first turn.", LINE.FIRST));
+          yield* luke.seen;
+          yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
+          assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+          return spawned[0];
+        });
+
+      const withSkills = yield* turn(withRoot, folder);
+      const withNone = yield* turn(WORKFLOW, join(folder, "never-written"));
+
+      assert.deepEqual(withSkills?.unexpected, []);
+      assert.deepEqual(received(withSkills, "skills/extraRoots/set"), [{ extraRoots: [skills] }]);
+      // Set before the thread is opened, so the thread's first turn lists them.
+      assert.deepEqual(withSkills?.received.map((each) => each.method).slice(0, 4), [
+        "initialize",
+        "initialized",
+        "skills/extraRoots/set",
+        "thread/start",
+      ]);
+      assert.deepEqual(withNone?.unexpected, []);
+      assert.deepEqual(received(withNone, "skills/extraRoots/set"), []);
+
+      // The roots are app-server's process-wide, so a relaunch's new app-server is set them again before its thread resumes.
+      const relaunched = yield* launch(
+        [
+          {
+            exchanges: [
+              exchange(RESUMED, 0),
+              exchange(RESUMED, 1),
+              extraRoots,
+              exchange(RESUMED, 2),
+            ],
+          },
+        ],
+        fakeLuke(),
+      );
+      yield* relaunched.write({ ...CONFIG, threadId: THREAD, installedSkills: folder });
+      yield* relaunched.closeStdin;
+      assert.equal(yield* Fiber.join(relaunched.run), RUNNER_END.INPUT_CLOSED);
+      const [resumed] = relaunched.spawned;
+      assert.deepEqual(resumed?.unexpected, []);
+      assert.deepEqual(resumed?.received.map((each) => each.method).slice(0, 4), [
+        "initialize",
+        "initialized",
+        "skills/extraRoots/set",
+        "thread/resume",
+      ]);
+    }),
+);
+
+it.effect(
   "starts app-server with the plan's provider, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
@@ -236,6 +364,12 @@ it.effect(
         'mcp_servers.luke.url="https://luke.test/runner/mcp"',
         'mcp_servers.luke.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
         'mcp_servers.luke.default_tools_approval_mode="approve"',
+        "mcp_servers.luke.tool_timeout_sec=600.0",
+        'mcp_servers.linear.url="https://luke.test/runner/mcp/integrations/linear"',
+        'mcp_servers.linear.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
+        'mcp_servers.linear.default_tools_approval_mode="approve"',
+        "mcp_servers.linear.startup_timeout_sec=20.0",
+        "mcp_servers.linear.tool_timeout_sec=600.0",
         'approval_policy="never"',
         'sandbox_mode="workspace-write"',
         "sandbox_workspace_write.network_access=true",
@@ -266,6 +400,7 @@ it.effect(
       assert.equal(start?.clientUserMessageId, LINE.FIRST);
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
+      assert.equal(start !== undefined && "serviceTier" in start, false);
       assert.deepEqual(start?.input, [
         { type: "text", text: "The probe's first turn.", text_elements: [] },
         { type: "image", url: "data:image/png;base64,iVBORw0K" },

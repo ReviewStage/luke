@@ -1,5 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button, cssCustomProperties, ScrollArea, TooltipPill } from "@luke/ui";
+import {
+  Button,
+  cssCustomProperties,
+  EmptyState,
+  Fill,
+  MENU_SURFACE_FLOW,
+  MenuSurface,
+  ScrollArea,
+  TooltipPill,
+  useHintRest,
+} from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
@@ -31,7 +41,6 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
-import { useHintRest } from "../tooltip.js";
 
 /**
  * diff-list.tsx -- a pull request's files as Files changed draws them: one list, every file under a header of its own, drawn by Pierre's list (`../diff-view/`'s `mountList`), only the files near the view drawn at all.
@@ -436,13 +445,13 @@ export function PierreDiffList({
   }, [offered]);
 
   if (AsyncResult.isFailure(loaded)) {
-    return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
+    return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;
   }
   // Note that the area holds no React of its own, because Pierre draws the
   // list into it as the scroller it virtualizes over and empties it when
   // taken down; the headers and notes reach their slots through portals.
   return (
-    <div
+    <Fill
       ref={holdBox}
       className="diff-view diff-list"
       data-diff-layout={look.layout}
@@ -450,10 +459,13 @@ export function PierreDiffList({
       onPointerLeave={letGoHint}
       onPointerDown={letGoHint}
     >
-      <ScrollArea ref={host}>{null}</ScrollArea>
+      <ScrollArea ref={host} data-diff-list-scroller="">
+        {null}
+      </ScrollArea>
       {offer === undefined || onComment === undefined ? null : (
-        <div
+        <MenuSurface
           ref={offerBox}
+          flow={MENU_SURFACE_FLOW.TOOLBAR}
           className="diff-list-offer"
           data-below={offer.below || undefined}
           style={cssCustomProperties({
@@ -473,7 +485,7 @@ export function PierreDiffList({
           >
             {OFFER_WORDS.COMMENT}
           </Button>
-        </div>
+        </MenuSurface>
       )}
       {hint === undefined ? null : (
         <TooltipPill id={hintId} anchor={hint.anchor} label={hint.label} />
@@ -486,6 +498,6 @@ export function PierreDiffList({
           )}
         </Fragment>
       ))}
-    </div>
+    </Fill>
   );
 }

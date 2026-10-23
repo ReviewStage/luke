@@ -14,7 +14,7 @@ import { visibleViewport } from "../../visible-viewport.js";
  *
  * What is drawn here is the hint alone. When it shows and when it goes, the
  * wait before it, the warm spell after it, and the linger that lets the
- * pointer cross onto a card, are the app's: it mounts the hint once the
+ * pointer cross onto a card, are `Tooltip`'s (`hint.tsx`): it mounts the hint once the
  * wait is over, hands it the control it stands for and how it is on its
  * way out (`leaving`), and is told when the pointer arrives on a card,
  * presses it, or chooses one of its buttons or links.

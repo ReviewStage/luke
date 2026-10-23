@@ -102,11 +102,89 @@
 
   .luke-text-field[aria-invalid="true"] {
     border-color: var(--luke-color-danger);
+    animation: luke-text-field-shake var(--luke-duration-fast) var(--luke-motion-exit);
+  }
+
+  /* A field that turns wrong shakes once as its edge turns red, so the eye
+     finds which field is wrong; the animation runs as the selector starts
+     matching, so it plays each time the field turns wrong and never while it
+     stays so. */
+  @keyframes luke-text-field-shake {
+    20% {
+      transform: translateX(-3px);
+    }
+    40% {
+      transform: translateX(3px);
+    }
+    60% {
+      transform: translateX(-2px);
+    }
+    80% {
+      transform: translateX(2px);
+    }
   }
 
   .luke-text-field:disabled {
     color: var(--luke-color-text-subtle);
     cursor: not-allowed;
     opacity: 0.7;
+  }
+  /* A field among a bar's controls, as a Browser tab's address: a step
+     under a control, on a smaller corner, in the caption's type on the
+     well's ground, its edge lighting while it holds the caret in place of
+     a ring. A finger's field takes 16px words, or iOS zooms into it. */
+  .luke-text-field[data-size="compact"] {
+    height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+    padding: 0 var(--luke-space-6);
+    border-color: var(--luke-color-border);
+    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+    background: var(--luke-color-well);
+    font-size: var(--luke-type-caption-size);
+    text-overflow: ellipsis;
+  }
+
+  .luke-text-field[data-size="compact"]:focus {
+    border-color: var(--luke-color-text-subtle);
+    background: var(--luke-color-well);
+    outline: none;
+  }
+
+  @media (pointer: coarse) {
+    .luke-text-field[data-size="compact"] {
+      font-size: max(16px, var(--luke-type-caption-size));
+    }
+  }
+
+  /* A text area bare in a card that is its well, as a message box's: no
+     edge, no ground and no ring, the caret marking it, at the insets its
+     card sets. Growing, its rows and those insets set its least height, or
+     the card's own least (`--luke-text-area-least`) where that is taller. */
+  textarea.luke-text-field[data-look="bare"],
+  textarea.luke-text-field[data-look="bare"]:focus {
+    padding: var(--luke-text-area-inset-start, 0) var(--luke-text-area-inset-inline, 0)
+      var(--luke-text-area-inset-end, 0);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    outline: none;
+    resize: none;
+  }
+
+  textarea.luke-text-field[data-look="bare"][data-grow="true"] {
+    min-height: max(
+      var(--luke-text-area-least, 0px),
+      calc(
+        var(--luke-text-area-rows) *
+        var(--luke-type-body-leading) +
+        var(--luke-text-area-inset-start, 0px) +
+        var(--luke-text-area-inset-end, 0px)
+      )
+    );
+  }
+
+  /* A growing text area asked to grows with its words however many, as a
+     message box does, and scrolls the page around it rather than itself. */
+  textarea.luke-text-field[data-grow-limit="none"] {
+    max-height: none;
   }
 }

@@ -26,6 +26,7 @@ import {
   EveUnreachable,
 } from "../agents/brain-host/eve-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { githubReaching } from "../testing/github-app-fake.js";
 import { OPERATOR_WAKE_SWEEP, sweepOperatorWakes } from "./operator-wake-sweep.js";
 
@@ -85,6 +86,7 @@ const openMember = Effect.gen(function* () {
   const db = yield* Database;
   const member = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: member, name: "Test User", email: `${member}@luke.test` });
+  yield* connectAgentApiKeys(member);
   const workspace = yield* openWorkspace(member);
   const operator = Option.getOrThrow(
     yield* createCodingAgent(member, {
@@ -105,6 +107,7 @@ const openMember = Effect.gen(function* () {
       organizationId: workspace,
       planSnapshot: null,
       prompt: "Sweep the flaky tests.",
+      title: "Flaky tests",
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -169,7 +172,7 @@ it.layer(getTestDB())("the wake of an operator whose member's agent failed", (it
         yield* sweepAt(T0 + 61_000, eve);
         const woken = sentTo(eve, sessionId);
         assert.equal(woken.length, 1, woken.join("\n"));
-        assert.ok(woken[0]?.includes(`[@${agent.personaName ?? ""}]`), woken.join("\n"));
+        assert.ok(woken[0]?.includes("[@Flaky tests]"), woken.join("\n"));
 
         yield* failedAt(agent, T0 + HOUR_MS / 2);
         yield* sweepAt(T0 + HOUR_MS / 2 + 1_000, eve);

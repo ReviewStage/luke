@@ -15,7 +15,11 @@ import {
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  AVATAR_SIZE,
   BUTTON_SIZE,
+  BUTTON_VARIANT,
+  CARD_PRESS_SELECTOR,
+  CardPress,
   CHIP_LOOK,
   COLLECTION_STATE,
   CollectionPage,
@@ -26,16 +30,29 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FoldChevronIcon,
+  FoldingButton,
+  GAP,
   IconButton,
   InlineEdit,
+  LAYOUT_ELEMENT,
+  ListMotion,
+  motionKey,
+  motionRows,
+  OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
+  Stack,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Time,
+  Tooltip,
+  useLeaving,
+  useMinute,
+  VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -53,10 +70,12 @@ import {
   TASK_PROPERTY,
   TASK_PROPERTY_ORDER,
   TASKS_GROUP,
+  TASKS_GROUPING,
   type TaskProperty,
   type TasksGroup,
   type TasksGroupHead,
   type TasksSection,
+  taskIdOf,
   tasksListGroups,
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
@@ -70,26 +89,28 @@ import {
   UserXIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { FadingWords } from "../fading-words.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
-import { RelativeTime } from "../tasks/relative-time.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
-import { useMinute } from "../tasks/task-time.js";
+import {
+  NO_ASSIGNEE_WORDS,
+  TASK_PRIORITY_WORDS,
+  TASK_STATUS_WORDS,
+  TaskKey,
+} from "../tasks/task-standing.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 import { readKept, writeKept } from "./folded-groups.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { useTaskMenu } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
+  AssigneeChip,
   PriorityChip,
   StatusChip,
   statusOf,
@@ -98,6 +119,8 @@ import {
   WaitingBadge,
 } from "./task-row-parts.js";
 import {
+  assigneeFor,
+  assigneeWords,
   creatorWords,
   NO_CREATOR,
   NO_REPOSITORY,
@@ -116,14 +139,15 @@ import { useRowDrag } from "./use-row-drag.js";
  * one grid, as Linear's list stands its rows: the task's priority, key, and
  * status before its name, and after it how many Inbox threads of it wait on
  * the reader, its repository led by its owner's picture, as the sidebar
- * draws one (`repository-picture.tsx`), its creator's face, what its agents are doing
+ * draws one (`repository-picture.tsx`), its assignee's face, or the dashed
+ * unassigned mark, its creator's face, what its agents are doing
  * and the pull request they opened, when it last moved, and its ⋯, each
  * where the view draws it, so each column lines up down the whole page
  * whatever any one row holds.
  *
  * A row is changed where it stands, as a Board card is
- * (`task-row-parts.tsx`): its priority and status are chips dropping the
- * menu that changes them, and its ⋯, shown while the row is in hand, and a
+ * (`task-row-parts.tsx`): its priority, status, and assignee are chips
+ * dropping the menu that changes them, and its ⋯, shown while the row is in hand, and a
  * right-click drop the task's own menu, whose Rename makes its name its
  * field. A press anywhere else on the row opens the task, and resting on it
  * hangs the task's card beside it, as its sidebar row does (`task-card.tsx`).
@@ -131,12 +155,15 @@ import { useRowDrag } from "./use-row-drag.js";
  * A group's head folds it, kept on this Mac (`LIST_FOLDS_KEY`), its count
  * standing beside its name either way. A row is dragged by its press
  * (`use-row-drag.ts`): within Pinned or a section to a new place there; onto
- * another status's or priority's group, which sends it that status or
- * priority as the Board's columns do; onto Pinned, which pins it; and onto a
- * section, which keeps it there. As in the sidebar, a task stands in one
- * place, so a row dragged out of Pinned is unpinned and one dragged out of
- * a section leaves it. A group of a repository or of a creator takes no
- * drop, since a drag cannot say either. A phone's List has no room for
+ * another status's, priority's, or assignee's group, which sends it that
+ * status or priority, or assigns it to that person, No assignee's assigning
+ * it to no one, as the Board's columns do; onto Pinned, which pins it; and
+ * onto a section, which keeps it there. As in the sidebar, a task stands in
+ * one place, so a row dragged out of Pinned is unpinned and one dragged out
+ * of a section leaves it. A group of a repository or of a creator takes no
+ * drop, since a drag cannot say either. A row under an assignee's group
+ * leaves its own assignee's cell empty, as the group's head says it, but on
+ * a phone, whose rows are changed by their chips alone. A phone's List has no room for
  * most columns beside a name, nor a drag beside its scrolling,
  * so it draws only a row's chips, its name, and its time, its rows changed
  * by their chips and menus, the rest on its card.
@@ -162,7 +189,7 @@ const DRAG_HERE = "Drag tasks here";
 const PINNED = "Pinned";
 
 /** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
-const ROW_HANDLE = ".tasks-list-press";
+const ROW_HANDLE = CARD_PRESS_SELECTOR;
 
 /** Where the folded groups are kept in the renderer's storage. */
 const LIST_FOLDS_KEY = "luke.tasksListFolds";
@@ -176,10 +203,11 @@ const NARROW_LEFT_OUT: readonly TaskProperty[] = [
   TASK_PROPERTY.AGENTS,
 ];
 
-/** The drop zone Pinned is, and the zone of the run of every task; a section's is its id, and a status's or a priority's its value. */
+/** The drop zone Pinned is, the zone of the run of every task, and No assignee's; a section's is its id, a status's or a priority's its value, and an assignee's their account id. */
 const DROP_ZONE = {
   PINNED: "pinned",
   ALL: "all",
+  NO_ASSIGNEE: "no-assignee",
 } as const;
 
 /** How wide each column of the grid stands, by the property it draws: its content's own, the repository's held to a short name's. */
@@ -189,6 +217,7 @@ const COLUMN_WIDTH = {
   [TASK_PROPERTY.STATUS]: "auto",
   [TASK_PROPERTY.WAITING]: "auto",
   [TASK_PROPERTY.REPOSITORY]: "fit-content(22ch)",
+  [TASK_PROPERTY.ASSIGNEE]: "auto",
   [TASK_PROPERTY.CREATOR]: "auto",
   [TASK_PROPERTY.AGENTS]: "auto",
   [TASK_PROPERTY.UPDATED]: "auto",
@@ -209,6 +238,7 @@ const storedFolds = Schema.fromJsonString(
     status: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_STATUS_ORDER))),
     priority: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PRIORITY_ORDER))),
     repository: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
+    assignee: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
     creator: Schema.optionalKey(Schema.Array(Schema.NullOr(Schema.String))),
   }),
 );
@@ -234,6 +264,8 @@ function foldedIn(folds: ListFolds, head: TasksGroupHead): boolean {
       return folds.priority?.includes(head.priority) === true;
     case TASKS_GROUP.REPOSITORY:
       return folds.repository?.includes(head.repository) === true;
+    case TASKS_GROUP.ASSIGNEE:
+      return folds.assignee?.includes(head.assigneeId) === true;
     case TASKS_GROUP.CREATOR:
       return folds.creator?.includes(head.creatorId) === true;
     case TASKS_GROUP.ALL:
@@ -254,6 +286,8 @@ function toggledIn(folds: ListFolds, head: TasksGroupHead): ListFolds {
       return { ...folds, priority: flipped(folds.priority, head.priority) };
     case TASKS_GROUP.REPOSITORY:
       return { ...folds, repository: flipped(folds.repository, head.repository) };
+    case TASKS_GROUP.ASSIGNEE:
+      return { ...folds, assignee: flipped(folds.assignee, head.assigneeId) };
     case TASKS_GROUP.CREATOR:
       return { ...folds, creator: flipped(folds.creator, head.creatorId) };
     case TASKS_GROUP.ALL:
@@ -288,6 +322,8 @@ function zoneOf(head: TasksGroupHead): string | undefined {
       return head.status;
     case TASKS_GROUP.PRIORITY:
       return head.priority;
+    case TASKS_GROUP.ASSIGNEE:
+      return head.assigneeId ?? DROP_ZONE.NO_ASSIGNEE;
     case TASKS_GROUP.ALL:
       return DROP_ZONE.ALL;
     default:
@@ -311,6 +347,8 @@ function groupKey(head: TasksGroupHead): string {
       return head.priority;
     case TASKS_GROUP.REPOSITORY:
       return head.repository ?? NO_REPOSITORY;
+    case TASKS_GROUP.ASSIGNEE:
+      return head.assigneeId ?? NO_ASSIGNEE_WORDS;
     case TASKS_GROUP.CREATOR:
       return head.creatorId ?? NO_CREATOR;
     default:
@@ -341,14 +379,21 @@ interface GroupHead {
   readonly name: string;
 }
 
+/** How the List names and draws the people its groups stand for: by account id, null for no one. */
+interface GroupPeople {
+  readonly creatorName: (creatorId: string | null) => string;
+  readonly creatorMark: (creatorId: string) => ReactNode;
+  readonly assigneeName: (assigneeId: string | null) => string;
+  readonly assigneeMark: (assigneeId: string) => ReactNode;
+}
+
 /** What heads a group: its glyph and its name. */
 function groupHead(
   head: TasksGroupHead,
   tasks: TasksControl,
   /** Every repository a group or a row stands for, which a repository's name tells its own apart from. */
   repositories: readonly { readonly repository: string | null }[],
-  creatorName: (creatorId: string | null) => string,
-  creatorMark: (creatorId: string) => ReactNode,
+  people: GroupPeople,
 ): GroupHead {
   switch (head.kind) {
     case TASKS_GROUP.PINNED:
@@ -379,14 +424,22 @@ function groupHead(
                 repository={head.repository}
                 pictures={tasks.repositories.pictures}
                 fallback={<FolderGitIcon />}
+                size={AVATAR_SIZE.GLYPH}
               />
             ),
             name: repositoryLabel(head.repository, repositories),
           };
+    case TASKS_GROUP.ASSIGNEE:
+      return head.assigneeId === null
+        ? { icon: <UnassignedMark size={ACTOR_SIZE.MARK} decorative />, name: NO_ASSIGNEE_WORDS }
+        : {
+            icon: people.assigneeMark(head.assigneeId),
+            name: people.assigneeName(head.assigneeId),
+          };
     case TASKS_GROUP.CREATOR:
       return head.creatorId === null
         ? { icon: <UserXIcon />, name: NO_CREATOR }
-        : { icon: creatorMark(head.creatorId), name: creatorName(head.creatorId) };
+        : { icon: people.creatorMark(head.creatorId), name: people.creatorName(head.creatorId) };
     case TASKS_GROUP.ALL:
       return { icon: null, name: TASKS };
   }
@@ -497,6 +550,9 @@ function listDrops(
       case TASKS_GROUP.PRIORITY:
         setStanding(task, { priority: onto.priority }, leave);
         return;
+      case TASKS_GROUP.ASSIGNEE:
+        setStanding(task, { assigneeId: onto.assigneeId }, leave);
+        return;
       default:
         leave();
     }
@@ -509,8 +565,9 @@ function listDrops(
  * controls, opens the task, and hangs its card while the pointer rests on
  * it; then, each in its own column where the view draws it, the chips that
  * change its priority and its status, its key, what waits on the reader,
- * its repository, its creator's face, its agents' work, when it last moved,
- * and its ⋯. Renamed from its menu, its name is its field until the edit
+ * its repository, the chip that changes its assignee, empty where its group
+ * already says who, its creator's face, its agents' work, when it last
+ * moved, and its ⋯. Renamed from its menu, its name is its field until the edit
  * ends.
  */
 function TaskListRow({
@@ -521,6 +578,7 @@ function TaskListRow({
   waiting,
   now,
   properties,
+  assigneeHeld,
   onOpen,
   onStanding,
 }: {
@@ -533,6 +591,8 @@ function TaskListRow({
   waiting: number;
   now: number;
   properties: readonly TaskProperty[];
+  /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
+  assigneeHeld: boolean;
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -574,6 +634,7 @@ function TaskListRow({
       ref={item}
       className="tasks-list-row"
       data-task-id={task.id}
+      {...motionKey(task.id)}
       data-menu-open={actions.open ? "true" : undefined}
       data-editing={rename.editing ? "true" : undefined}
     >
@@ -593,25 +654,23 @@ function TaskListRow({
           </span>
         ) : (
           <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardRegion={item}>
-            <button
+            <CardPress
               ref={press}
-              type="button"
-              className="tasks-list-press"
               disabled={actions.deletion.busy}
-              onClick={() => {
+              onPress={() => {
                 actions.close(false);
                 onOpen();
               }}
               onKeyDown={actions.keyMenu}
-              {...actions.contextMenu(press)}
+              contextMenu={actions.contextMenu(press)}
             >
-              <FadingWords className="tasks-list-name" words={task.name} />
-              {spoken === "" ? null : (
-                <span className="visually-hidden" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-                  {spoken}
-                </span>
-              )}
-            </button>
+              <span className="tasks-list-press">
+                <OneLine>{task.name}</OneLine>
+                {spoken === "" ? null : (
+                  <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
+                )}
+              </span>
+            </CardPress>
           </Tooltip>
         )}
         {rename.refused ? (
@@ -648,15 +707,28 @@ function TaskListRow({
               }
             />
           )}
-          <FadingWords className="tasks-list-repository" words={repositoryName} />
+          <OneLine>{repositoryName}</OneLine>
         </>,
+      )}
+      {cell(
+        TASK_PROPERTY.ASSIGNEE,
+        assigneeHeld ? null : (
+          <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+        ),
       )}
       {/* Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does. */}
       {cell(
         TASK_PROPERTY.CREATOR,
         <>
           {maker === undefined ? null : (
-            <span className="tasks-list-maker">{actorName(maker.actor)}</span>
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="tasks-list-maker"
+            >
+              {actorName(maker.actor)}
+            </Text>
           )}
           <ActorMark
             actor={maker?.actor ?? creator}
@@ -665,10 +737,10 @@ function TaskListRow({
           />
         </>,
       )}
-      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} />)}
+      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} steady />)}
       {cell(
         TASK_PROPERTY.UPDATED,
-        <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
+        <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
       )}
       <span className="tasks-list-cell" data-cell="more">
         <Tooltip label="Task actions">
@@ -701,7 +773,7 @@ function TasksListGroup({
   drops,
   draggable,
   onShowOlder,
-  children,
+  row,
 }: {
   group: TasksGroup;
   head: GroupHead;
@@ -712,8 +784,10 @@ function TasksListGroup({
   draggable: boolean;
   /** Shows every settled task, as the group's "+ N older" line asks. */
   onShowOlder: () => void;
-  children: ReactNode;
+  /** Draws a task's row. */
+  row: (task: TaskSummary) => ReactNode;
 }): React.JSX.Element {
+  const drawn = useLeaving(group.tasks, taskIdOf);
   const move = folded ? undefined : drops.move(group);
   const drag = useRowDrag(move, {
     handle: ROW_HANDLE,
@@ -731,42 +805,51 @@ function TasksListGroup({
       {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
       {titled ? (
         <h2 className="tasks-list-head">
-          <button
-            type="button"
-            className="tasks-list-fold"
+          <FoldingButton
+            variant={BUTTON_VARIANT.ROW}
+            label={head.name}
             aria-expanded={!folded}
             onClick={onToggle}
-          >
-            <span className="tasks-list-chevron" aria-hidden="true">
-              <FoldChevronIcon />
-            </span>
-            <span className="tasks-list-glyph" aria-hidden="true">
-              {head.icon}
-            </span>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
-              {head.name}
-            </Text>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {group.tasks.length}
-            </Text>
-          </button>
+            trailing={group.tasks.length}
+            icon={
+              <>
+                <span
+                  className="tasks-list-chevron"
+                  data-open={folded ? undefined : "true"}
+                  aria-hidden="true"
+                >
+                  <FoldChevronIcon />
+                </span>
+                <span className="tasks-list-glyph" aria-hidden="true">
+                  {head.icon}
+                </span>
+              </>
+            }
+          />
         </h2>
       ) : null}
-      {folded ? null : group.tasks.length === 0 ? (
+      {folded ? null : drawn.length === 0 ? (
         group.older === undefined ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          <Text
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.MUTED}
+            className="tasks-list-group-empty"
+          >
             {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
           </Text>
         ) : null
       ) : (
-        <ul
+        <Stack
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.NONE}
+          moves
           className="tasks-list-rows"
           aria-label={head.name}
           data-row-drop-rows={ordered(group.head) ? "" : undefined}
           onPointerDown={draggable ? drag : undefined}
         >
-          {children}
-        </ul>
+          {drawn.map(({ value }) => row(value))}
+        </Stack>
       )}
       {folded ? null : <OlderCompleted older={group.older} onShow={onShowOlder} />}
     </section>
@@ -809,30 +892,39 @@ export function TasksList({
     listed.filter((task) => task.pinnedAt !== undefined),
     pinPlaceOf,
   ).map((task) => task.id);
-  const creatorName = (creatorId: string | null) => creatorWords(creatorId, directory, listed);
+  const people: GroupPeople = {
+    creatorName: (creatorId) => creatorWords(creatorId, directory, listed),
+    creatorMark: (creatorId) => {
+      const named = listed.find((task) => (task.createdBy?.userId ?? task.ownerId) === creatorId);
+      return (
+        <ActorMark
+          actor={creatorActor(named ?? { ownerId: creatorId }, directory, undefined)}
+          size={ACTOR_SIZE.MARK}
+        />
+      );
+    },
+    assigneeName: (assigneeId) => assigneeWords(assigneeId, directory, listed),
+    assigneeMark: (assigneeId) => (
+      <ActorMark actor={assigneeFor(assigneeId, directory, listed)} size={ACTOR_SIZE.MARK} />
+    ),
+  };
   const groups = tasksListGroups(listed, {
     filter,
     display,
     pinned,
     sections: listSections(tasks),
     readerId: tasks.me,
-    creatorName,
+    personName:
+      display.grouping === TASKS_GROUPING.ASSIGNEE ? people.assigneeName : people.creatorName,
+    members: (directory.members ?? []).map((member) => member.userId),
     now,
   });
-  const creatorMark = (creatorId: string) => {
-    const named = listed.find((task) => (task.createdBy?.userId ?? task.ownerId) === creatorId);
-    return (
-      <ActorMark
-        actor={creatorActor(named ?? { ownerId: creatorId }, directory, undefined)}
-        size={ACTOR_SIZE.MARK}
-      />
-    );
-  };
   const repositories = groups.flatMap((group) =>
     group.tasks.map((task) => ({ repository: task.repository })),
   );
   const workspaceName = tasks.workspace?.name ?? "";
   const drops = listDrops(tasks, groups, setStanding);
+  const list = useRef<HTMLDivElement>(null);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -849,49 +941,53 @@ export function TasksList({
         </ErrorState>
       }
     >
-      <div
-        className="tasks-list"
-        data-row-drop-scope=""
-        style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
-      >
-        {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
-        {groups.every((group) => group.tasks.length === 0) ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {NONE_STANDING}
-          </Text>
-        ) : null}
-        {groups.map((group) => (
-          <TasksListGroup
-            key={groupKey(group.head)}
-            group={group}
-            head={groupHead(group.head, tasks, repositories, creatorName, creatorMark)}
-            folded={folds.folded(group.head)}
-            onToggle={() => folds.toggle(group.head)}
-            drops={drops}
-            draggable={!narrow}
-            onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
-          >
-            {group.tasks.map((task) => (
-              <TaskListRow
-                key={task.id}
-                tasks={tasks}
-                task={task}
-                workspaceName={workspaceName}
-                repositoryName={
-                  task.repository === null
-                    ? NO_REPOSITORY
-                    : repositoryLabel(task.repository, repositories)
-                }
-                waiting={waitingOn.get(task.id) ?? 0}
-                now={now}
-                properties={properties}
-                onOpen={() => tasks.onSelect(task.id)}
-                onStanding={(standing) => setStanding(task, standing)}
-              />
-            ))}
-          </TasksListGroup>
-        ))}
-      </div>
+      <ListMotion root={list}>
+        <div
+          ref={list}
+          className="tasks-list"
+          data-row-drop-scope=""
+          {...motionRows()}
+          style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
+        >
+          {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
+          {groups.every((group) => group.tasks.length === 0) ? (
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-list-none">
+              {NONE_STANDING}
+            </Text>
+          ) : null}
+          {groups.map((group) => (
+            <TasksListGroup
+              key={groupKey(group.head)}
+              group={group}
+              head={groupHead(group.head, tasks, repositories, people)}
+              folded={folds.folded(group.head)}
+              onToggle={() => folds.toggle(group.head)}
+              drops={drops}
+              draggable={!narrow}
+              onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
+              row={(task) => (
+                <TaskListRow
+                  key={task.id}
+                  tasks={tasks}
+                  task={task}
+                  workspaceName={workspaceName}
+                  repositoryName={
+                    task.repository === null
+                      ? NO_REPOSITORY
+                      : repositoryLabel(task.repository, repositories)
+                  }
+                  waiting={waitingOn.get(task.id) ?? 0}
+                  now={now}
+                  properties={properties}
+                  assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
+                  onOpen={() => tasks.onSelect(task.id)}
+                  onStanding={(standing) => setStanding(task, standing)}
+                />
+              )}
+            />
+          ))}
+        </div>
+      </ListMotion>
     </CollectionPage>
   );
 }

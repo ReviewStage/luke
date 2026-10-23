@@ -10,7 +10,8 @@ import { Checkbox } from "./checkbox.js";
  * checkbox.test.ts -- a press on the box and a press on its words each hand
  * the caller the value they ask for, a mixed box resolves to checked while
  * still submitting what its caller holds, and an unavailable one changes
- * nothing; nor does a read-only one, which is not unavailable.
+ * nothing; nor does a read-only one, which is not unavailable. A box named
+ * by a label of its own draws no words.
  */
 
 declare global {
@@ -122,4 +123,24 @@ test("a read-only box stands as its caller holds it, checked or not, and hands o
     assert.equal(box(page).checked, start);
     assert.equal(page.querySelector("output")?.textContent, "");
   }
+});
+
+test("a box named by a label of its own draws no words and is pressed as any box is", () => {
+  const heard: boolean[] = [];
+  const page = render(
+    createElement(Checkbox, {
+      label: "Send the invite",
+      checked: false,
+      onChange: (value: boolean) => heard.push(value),
+    }),
+  );
+  assert.equal(box(page).getAttribute("aria-label"), "Send the invite");
+  assert.equal(page.querySelector(".luke-checkbox-words"), null);
+  press(page.querySelector("label"));
+  assert.deepEqual(heard, [true]);
+});
+
+test("a box is named by its words or by a label of its own, and never by neither", () => {
+  // @ts-expect-error A box with neither words nor a label would stand unnamed.
+  createElement(Checkbox, { checked: false, onChange: () => undefined });
 });

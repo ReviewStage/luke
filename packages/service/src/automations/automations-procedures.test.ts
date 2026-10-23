@@ -88,6 +88,7 @@ import {
   type OfferedModel,
 } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -263,7 +264,9 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 /** An owner with a task on the repository of its workspace's installation, another account beside them, and the group. */
 const openAccounts = Effect.gen(function* () {
   const owner = yield* openGithubUser();
+  yield* connectAgentApiKeys(owner);
   const other = yield* openGithubUser();
+  yield* connectAgentApiKeys(other);
   const task = yield* startTask(owner, {
     name: "Issue triage",
     repository: `${RELAY.owner}/${RELAY.name}`,
@@ -981,8 +984,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
         );
         assert.deepEqual(history.runs[0]?.agent, {
           id: agent.id,
-          // The run names its agent as the agent goes by: its human name.
-          title: agent.personaName,
+          // The run names its agent as the agent goes by: its title.
+          title: agent.title,
           status: CODING_AGENT_STATUS.FAILED,
           ownKey: true,
           failureReason: CODING_AGENT_FAILURE.ABANDONED,
@@ -1328,7 +1331,9 @@ it.layer(getTestDB())("the automation routes", (it) => {
       Effect.gen(function* () {
         const { owner, task } = yield* openAccounts;
         const member = yield* openGithubUser();
+        yield* connectAgentApiKeys(member);
         const admin = yield* openGithubUser();
+        yield* connectAgentApiKeys(admin);
         yield* joinWorkspace(task.workspaceId, member, WORKSPACE_ROLE.MEMBER);
         yield* joinWorkspace(task.workspaceId, admin, WORKSPACE_ROLE.MEMBER);
         // The plugin's role text may name several roles; this admin is one only among them.
@@ -1435,6 +1440,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
       Effect.gen(function* () {
         const { owner, task } = yield* openAccounts;
         const member = yield* openGithubUser();
+        yield* connectAgentApiKeys(member);
         yield* joinWorkspace(task.workspaceId, member, WORKSPACE_ROLE.MEMBER);
         const { ask } = yield* standing(
           new Map([

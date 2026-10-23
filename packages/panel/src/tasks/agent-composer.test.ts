@@ -10,6 +10,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -49,9 +50,15 @@ const SKILLS: readonly SkillOption[] = [
   {
     name: "release",
     description: "Use to cut a release.",
+    source: TASK_SKILL_SOURCE.REPOSITORY,
     path: ".agents/skills/release/SKILL.md",
   },
-  { name: "deploy", description: "Use to deploy the web.", path: ".agents/skills/deploy/SKILL.md" },
+  {
+    name: "deploy",
+    description: "Use to deploy the web.",
+    source: TASK_SKILL_SOURCE.REPOSITORY,
+    path: ".agents/skills/deploy/SKILL.md",
+  },
 ];
 
 const reading: SkillSource = () => Promise.resolve({ skills: SKILLS });
@@ -388,7 +395,7 @@ test("a / opens the repository's skills over the caret, the keys move through th
   assert.equal(box.sent.length, 0, "the Enter picked rather than sent");
   assert.equal(box.container.querySelector('[role="listbox"]'), null);
   assert.equal(
-    box.container.querySelector(".agent-composer-input .skill-chip")?.textContent,
+    box.container.querySelector(".agent-composer-input .luke-skill-chip")?.textContent,
     "/deploy",
   );
   typeInComposer(box.container, "now");
@@ -490,6 +497,34 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   assert.deepEqual(box.sent, [], "the Enter finished the dictation rather than sending");
   typeInComposer(box.container, " again");
   assert.equal(box.shown(), "Fix the bug in again this later", "the caret stands after the words");
+});
+
+test("a dictation the service refused for want of an OpenAI key says to add one in Settings, not that the recording failed", async () => {
+  stubMicrophone();
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
+    [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
+    [ACT_KIND.DICTATION_TRANSCRIBE]: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING }),
+  });
+  const box = await mounted();
+  const dictate = box.button("Dictate");
+  assert.ok(dictate, "the microphone is offered");
+  act(() => dictate.click());
+  await settle();
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  const said = box.container.textContent ?? "";
+  assert.match(said, /Add an OpenAI API key in Settings/u);
+  assert.doesNotMatch(said, /couldn't be transcribed/u);
+  assert.equal(box.shown(), "", "nothing was put in the box");
 });
 
 /**

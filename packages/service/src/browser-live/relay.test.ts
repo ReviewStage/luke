@@ -6,6 +6,7 @@ import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
   BROWSER_LIVE_CLOSE_REASON,
+  BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_KEY_ACTION,
   BROWSER_LIVE_MOUSE_ACTION,
   BROWSER_LIVE_MOUSE_BUTTON,
@@ -26,20 +27,17 @@ import {
   fakeCdpPeer,
   fakeSandboxApi,
 } from "../testing/agent-browser-fake.js";
-import {
-  BROWSER_LIVE_BOUNDS,
-  type BrowserLiveDependencies,
-  type BrowserLiveViewer,
-  relayBrowserTab,
-} from "./relay.js";
+import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
+import { type BrowserLiveDependencies, type BrowserLiveViewer, relayBrowserTab } from "./relay.js";
 
 /**
  * One live view of one tab, over a fake Chromium behind the real browser
  * service and a store the scenario keeps, on the test clock: the tab's
  * frames reach the panel and are acknowledged no faster than the cap, its
  * page state follows, input is refused until the member takes the tab
- * over and reaches the page mapped onto it after, a member who does not
- * control the agent cannot take it, a close hands the tab back, and a
+ * over and reaches the page mapped onto it after, any socket of the member
+ * whose takeover stands drives it, a member who does not control the agent
+ * cannot take it, a close hands the tab back, and a
  * coding agent's sandbox is held while its tab is watched and Luke's is
  * not. A tab the browser no longer holds, or the store no longer lists,
  * closes as gone; an agent with no sandbox yet as not opened; and a panel
@@ -134,6 +132,9 @@ function liveBrowser(
         if (command.method === "Target.attachToTarget")
           return { result: { sessionId: TARGET_SESSION } };
         if (command.method === "Target.getTargets") return undefined;
+        if (command.method === "Page.getNavigationHistory") {
+          return { result: { currentIndex: 1, entries: [{ id: 10 }, { id: 11 }, { id: 12 }] } };
+        }
         if (options.mouseHangs === true && command.method === "Input.dispatchMouseEvent") {
           return { silent: true };
         }
@@ -155,6 +156,7 @@ function world(
   const holds: number[] = [];
   const keptAlive: { readonly sessionId: string; readonly at: number }[] = [];
   const handedBack: string[] = [];
+  const notedPages: { readonly targetId: string; readonly address: string }[] = [];
   const setDriver = (driverUserId: string | null, heldUntil: Date | null) => {
     if (row !== undefined) row = { ...row, tab: { ...row.tab, driverUserId, heldUntil } };
   };
@@ -187,6 +189,8 @@ function world(
         setDriver(null, null);
         return true;
       }),
+    notePage: (_tab, targetId, page) =>
+      Effect.sync(() => void notedPages.push({ targetId, address: page.address })),
     hold: (_conversation, heldUntil) => Effect.sync(() => void holds.push(heldUntil.getTime())),
     keepAlive: (sessionId) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
@@ -198,6 +202,7 @@ function world(
     holds,
     keptAlive,
     handedBack,
+    notedPages,
     close: () => {
       row = undefined;
     },
@@ -368,6 +373,40 @@ it.effect("the tab's address, title, and loading state reach the panel as they c
   }),
 );
 
+/** The tab's page moved to the address and title given, as Chromium tells it. */
+const pageMoved = (targetId: string, url: string, title: string) => ({
+  method: "Target.targetInfoChanged",
+  params: { targetInfo: { targetId, url, title, type: "page" } },
+});
+
+it.effect(
+  "each move of the tab's page the view sees is kept on the tab's own target, for a restart to reopen it there, but a blank page and another tab's",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+
+      yield* peer.emit(pageMoved(TARGET, "https://example.test/dashboard", "Dashboard"));
+      yield* peer.emit(pageMoved("page-other", "https://example.test/other", "Other"));
+      yield* peer.emit(pageMoved(TARGET, "about:blank", ""));
+      yield* until(() =>
+        panel.ofType(BROWSER_LIVE_SERVER.PAGE).some((message) => message.address === "about:blank"),
+      );
+
+      assert.deepEqual(store.notedPages, [
+        { targetId: TARGET, address: "https://example.test/dashboard" },
+      ]);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
 const VIEWPORT = { type: BROWSER_LIVE_CLIENT.VIEWPORT, width: 640, height: 400 } as const;
 const CLICK = {
   type: BROWSER_LIVE_CLIENT.MOUSE,
@@ -437,6 +476,93 @@ it.effect(
         params: { text: "pässword" },
         sessionId: TARGET_SESSION,
       });
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+/** The commands that move the tab's page, as a step from its bar sends them. */
+const steering = (commands: readonly FakeCdpCommand[]) =>
+  commands.filter((command) =>
+    ["Page.navigate", "Page.reload", "Page.navigateToHistoryEntry"].includes(command.method),
+  );
+
+it.effect(
+  "a step from the bar takes a tab nobody drives over for the member, then opens the address, steps back and forward, and reloads",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(
+          relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), world(browser).deps),
+        ),
+      );
+
+      yield* panel.push({
+        type: BROWSER_LIVE_CLIENT.NAVIGATE,
+        address: "https://example.test/next",
+      });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.BACK });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.FORWARD });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.RELOAD });
+      yield* until(() => steering(commands).length === 4);
+
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours, true);
+      assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.REFUSED), []);
+      assert.deepEqual(steering(commands), [
+        {
+          method: "Page.navigate",
+          params: { url: "https://example.test/next" },
+          sessionId: TARGET_SESSION,
+        },
+        {
+          method: "Page.navigateToHistoryEntry",
+          params: { entryId: 10 },
+          sessionId: TARGET_SESSION,
+        },
+        {
+          method: "Page.navigateToHistoryEntry",
+          params: { entryId: 12 },
+          sessionId: TARGET_SESSION,
+        },
+        { method: "Page.reload", params: {}, sessionId: TARGET_SESSION },
+      ]);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
+  "a step from the bar is refused while another member holds the tab, and an address no Browser tab loads is passed over",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.NAVIGATE, address: "file:///etc/hosts" });
+      store.driveAs("member-2", AN_HOUR_IN);
+      yield* panel.push({
+        type: BROWSER_LIVE_CLIENT.NAVIGATE,
+        address: "https://example.test/next",
+      });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.RELOAD });
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 2);
+
+      assert.deepEqual(
+        panel.ofType(BROWSER_LIVE_SERVER.REFUSED).map((message) => message.reason),
+        [BROWSER_LIVE_REFUSAL.HELD, BROWSER_LIVE_REFUSAL.HELD],
+      );
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.driver?.userId, "member-2");
+      assert.deepEqual(steering(commands), [], "nothing moved the page another member drives");
       yield* panel.leave;
       yield* Fiber.join(fiber);
     }),
@@ -912,4 +1038,171 @@ it.effect("the tab's screencast is stopped as the view ends", () =>
     assert.equal(stop?.sessionId, TARGET_SESSION);
     assert.ok(commands.some((command) => command.method === "Target.detachFromTarget"));
   }),
+);
+
+const KEY_A = {
+  type: BROWSER_LIVE_CLIENT.KEY,
+  action: BROWSER_LIVE_KEY_ACTION.DOWN,
+  key: "a",
+  code: "KeyA",
+  keyCode: 65,
+  modifiers: 0,
+} as const;
+
+/** The tab as the store reads it while the member given holds a takeover until the instant given. */
+function drivenTab(userId: string, heldUntil: Date, agent?: ReachedBrowserTab["agent"]) {
+  const reached = reachedTab(agent);
+  return { ...reached, tab: { ...reached.tab, driverUserId: userId, heldUntil } };
+}
+
+const AN_HOUR_IN = new Date(Date.UTC(1970, 0, 1, 1));
+
+it.effect(
+  "a reconnecting socket of the takeover's member drives without taking the tab over again, and another member's socket is refused",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const own = yield* scriptedViewer;
+      const other = yield* scriptedViewer;
+      const store = world(browser, { reached: drivenTab(MEMBER, AN_HOUR_IN) });
+      const relay = (panel: Effect.Success<typeof scriptedViewer>, userId: string) =>
+        Effect.scoped(
+          relayBrowserTab(panel.viewer, { ...ASK, userId }, reachedTab(undefined), store.deps),
+        );
+      const mine = yield* started(peer, commands, relay(own, MEMBER));
+      const theirs = yield* Effect.forkChild(relay(other, "member-2"));
+      yield* until(() => other.ofType(BROWSER_LIVE_SERVER.DRIVER).length > 0);
+      assert.equal(own.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours, true);
+      assert.equal(other.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours, false);
+
+      yield* other.push(KEY_A);
+      yield* until(() => other.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 1);
+      assert.deepEqual(inputs(commands), [], "another member's input never reaches the page");
+
+      yield* own.push(KEY_A);
+      yield* until(() => inputs(commands).length === 1);
+      assert.deepEqual(own.ofType(BROWSER_LIVE_SERVER.REFUSED), []);
+      assert.equal(inputs(commands)[0]?.sessionId, TARGET_SESSION);
+
+      yield* own.leave;
+      yield* other.leave;
+      yield* Fiber.join(mine.fiber);
+      yield* Fiber.join(theirs);
+      assert.deepEqual(store.handedBack, [MEMBER], "the socket that moved it on hands it back");
+    }),
+);
+
+it.effect(
+  "a member who holds the takeover but no longer controls the agent is not told it is theirs, and is refused",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const ownToken = { id: "agent-1", userId: "starter-1", githubAccess: GITHUB_ACCESS.TOKEN };
+      const driven = drivenTab(MEMBER, AN_HOUR_IN, ownToken);
+      const store = world(browser, { reached: driven });
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, driven, store.deps)),
+      );
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).length > 0);
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours, false);
+
+      yield* panel.push(KEY_A);
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 1);
+      assert.deepEqual(inputs(commands), []);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
+  "a reconnecting socket is refused once the member's takeover lapsed, and drives again once another of their windows moved it on",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser, { reached: drivenTab(MEMBER, new Date(3000)) });
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).length > 0);
+
+      // The takeover lapses before the tab is read again.
+      yield* TestClock.adjust(Duration.seconds(4));
+      yield* panel.push(KEY_A);
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 1);
+      assert.deepEqual(inputs(commands), [], "a lapsed takeover's input never reaches the page");
+
+      store.driveAs(MEMBER, AN_HOUR_IN);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours === true);
+      yield* panel.push(KEY_A);
+      yield* until(() => inputs(commands).length === 1);
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length, 1);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
+  "closing one of two sockets of the same member keeps the takeover for the other, which drives without taking it over",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const first = yield* scriptedViewer;
+      const second = yield* scriptedViewer;
+      const store = world(browser);
+      const relay = (panel: Effect.Success<typeof scriptedViewer>) =>
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps));
+      const one = yield* started(peer, commands, relay(first));
+      yield* first.push({ type: BROWSER_LIVE_CLIENT.TAKE_OVER });
+      yield* until(() => first.ofType(BROWSER_LIVE_SERVER.DRIVER).some((message) => message.yours));
+
+      yield* TestClock.adjust(Duration.seconds(20));
+      const two = yield* Effect.forkChild(relay(second));
+      yield* until(() => second.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours === true);
+      yield* second.push(KEY_A);
+      yield* until(() => inputs(commands).length === 1);
+
+      yield* first.leave;
+      yield* Fiber.join(one.fiber);
+      assert.deepEqual(store.handedBack, [], "the other socket still drives");
+      yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.RENEW_EVERY);
+      yield* second.push(KEY_A);
+      yield* until(() => inputs(commands).length === 2);
+      assert.deepEqual(second.ofType(BROWSER_LIVE_SERVER.REFUSED), []);
+
+      yield* second.leave;
+      yield* Fiber.join(two);
+      assert.deepEqual(store.handedBack, [MEMBER], "the last socket's close hands the tab back");
+    }),
+);
+
+it.effect(
+  "a reconnecting socket of the takeover's member hands the tab back before it sends any input",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser, { reached: drivenTab(MEMBER, AN_HOUR_IN) });
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours === true);
+
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HAND_BACK });
+      yield* until(() => store.handedBack.length === 1);
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.driver === null);
+      yield* panel.push(KEY_A);
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 1);
+      assert.deepEqual(inputs(commands), [], "input after the hand-back never reaches the page");
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
 );

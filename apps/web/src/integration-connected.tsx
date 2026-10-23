@@ -7,51 +7,31 @@ import {
   integrationLandingStatusFromWire,
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
-import { AuthPage, BUTTON_VARIANT, ButtonLink, PROVIDER_MARK_SIZE, ProviderMark } from "@luke/ui";
+import {
+  INTEGRATION_LANDING_OUTCOME,
+  LANDING_TONE,
+  landingWords,
+} from "@luke/features/landing-outcome";
+import { AuthMark, AuthPage } from "@luke/ui";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
-import { BACK_TO_LUKE, CONNECT_RETURN, useConnectReturn } from "./connect-return";
-import { ConnectionGraphic } from "./connection-graphic";
-import { LukeMark } from "./SiteChrome";
+import { landingDescription, useConnectReturn } from "./connect-return";
 import "./styles.css";
 
 /**
  * Where a developer lands once a sign-in to an integration, started from
  * Luke's settings, settles, by way of the service's callback route, which
  * settled it with Vercel Connect and put the provider and one word of status
- * on this page's address. It dresses like the page a GitHub sign-in leaves
- * the browser on: one card, the provider's mark beside Luke's, one short line
- * and one shorter one under it. Every string is fixed by the build: the
- * address chooses among them, and nothing it carried is drawn. Where the web
- * app's own connect came here (`connect-return.ts`), the shorter line gives
- * way to Back to Luke, which says it.
+ * on this page's address. It is drawn as GitHub's landing is, from the same
+ * words (`@luke/features/landing-outcome`): the address chooses among them,
+ * and nothing it carried is drawn. The way back is Open Luke
+ * (`connect-return.ts`).
  */
 
 interface Landing {
   readonly provider: IntegrationProvider | undefined;
   readonly status: IntegrationLandingStatus;
-}
-
-/** How to go on for a developer who goes back to Luke themselves, the Mac's or a tab of the browser. */
-const RETURN_TO_LUKE = {
-  SETTLED: "Return to Luke. You can close this tab.",
-  RETRY: "Return to Luke to try again.",
-} as const;
-
-/** The card's one line: the provider's name where the address named one. */
-function titleOf({ provider, status }: Landing): string {
-  const name = provider === undefined ? undefined : INTEGRATION_NAME[provider];
-  switch (status) {
-    case INTEGRATION_LANDING_STATUS.CONNECTED:
-      return name === undefined ? "Connected" : `${name} connected`;
-    case INTEGRATION_LANDING_STATUS.NOT_COMPLETED:
-      return name === undefined ? "Not connected" : `${name} not connected`;
-    case INTEGRATION_LANDING_STATUS.EXPIRED:
-      return "This link has expired";
-    case INTEGRATION_LANDING_STATUS.UNAVAILABLE:
-      return name === undefined ? "Could not connect" : `Could not connect ${name}`;
-  }
 }
 
 function landingFromAddress(): Landing {
@@ -65,45 +45,27 @@ function landingFromAddress(): Landing {
 }
 
 /**
- * The page is one AuthPage card that opens on the provider's mark joined to
- * Luke's, or Luke's full mark alone when the address named no provider: the
- * title says how the connection settled, and the description, or the way
- * back, how to go on.
+ * The page opens on the provider's mark, or Luke's where the address named
+ * no provider, badged with how the connection settled: the title says so,
+ * the description how to go on, and Open Luke goes back.
  */
 function IntegrationConnected(): React.JSX.Element {
   const [landing] = useState(landingFromAddress);
-  const { back, onBack } = useConnectReturn({
+  const words = landingWords(
+    INTEGRATION_LANDING_OUTCOME[landing.status],
+    landing.provider === undefined ? undefined : INTEGRATION_NAME[landing.provider],
+  );
+  const { back, open } = useConnectReturn({
     landed: true,
-    settled: landing.status === INTEGRATION_LANDING_STATUS.CONNECTED,
+    settled: words.tone === LANDING_TONE.SETTLED,
   });
   return (
     <AuthPage
-      mark={
-        landing.provider === undefined ? (
-          <span className="inline-flex w-13">
-            <LukeMark className="h-auto w-full" />
-          </span>
-        ) : (
-          <ConnectionGraphic
-            mark={<ProviderMark provider={landing.provider} size={PROVIDER_MARK_SIZE.TILE} />}
-          />
-        )
-      }
-      title={titleOf(landing)}
-      description={
-        back.kind !== CONNECT_RETURN.ELSEWHERE
-          ? undefined
-          : landing.status === INTEGRATION_LANDING_STATUS.CONNECTED
-            ? RETURN_TO_LUKE.SETTLED
-            : RETURN_TO_LUKE.RETRY
-      }
-    >
-      {back.kind === CONNECT_RETURN.ELSEWHERE ? null : (
-        <ButtonLink href={back.href} variant={BUTTON_VARIANT.PRIMARY} onClick={onBack}>
-          {BACK_TO_LUKE}
-        </ButtonLink>
-      )}
-    </AuthPage>
+      mark={<AuthMark provider={landing.provider} tone={words.tone} />}
+      title={words.title}
+      description={landingDescription(words, back)}
+      action={open}
+    />
   );
 }
 

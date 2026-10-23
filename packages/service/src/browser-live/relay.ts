@@ -19,15 +19,24 @@
  * terms (`agent-browser-tabs-procedures.ts`): a member who controls the
  * agent takes the tab for `BROWSER_TAKEOVER_HOLD_MS`, and their input moves
  * the takeover on, written at most every `RENEW_EVERY`, so the takeover
- * always stands well past their last input. Input from a member whose
- * takeover does not stand is refused and goes nowhere. Every point is in
+ * always stands well past their last input. A takeover is the member's
+ * rather than a socket's, so any of their sockets drives while it stands,
+ * one that reconnected or another window among them, and its first input
+ * moves it on in the store before it reaches the page. Input from a member
+ * whose takeover does not stand is refused and goes nowhere. A step from the
+ * tab's bar, an address opened or a step back, forward, or a reload, takes a
+ * tab nobody drives over for the member first, as Take over would, and is
+ * refused where another member holds it. Each move of the tab's page the
+ * view sees is kept on the tab's row too (`notePage`), on the target it
+ * watches alone, so a browser that starts afresh reopens the page the member
+ * moved it to rather than where the agent last left it. Every point is in
  * the panel's own pixels at the viewport it last sent, and is mapped onto
  * the page's CSS pixels. Mouse moves that queue behind a slower browser are
  * folded into the last of each run, so the pointer never lags behind the
  * member's hand. The tab is read again every `TAB_CHECK_EVERY`, so a
  * driver change another window made reaches this one, and a tab that closed
  * or that the member no longer reaches closes the socket; as the socket
- * closes, however it closes, a takeover it took is handed back, unless
+ * closes, however it closes, a takeover it took or moved on is handed back, unless
  * another window of the same member moved it on since, and a hand-back the
  * store did not take is tried again. Input still queued when a takeover
  * ends goes nowhere, a renewal the store could not answer keeps input going
@@ -48,12 +57,13 @@
 
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { browserTabDriver } from "@luke/database/models/agent-browser-tabs";
-import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
+import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@luke/features/browser-acts";
 import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@luke/features/browser-cdp";
 import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
   BROWSER_LIVE_CLOSE_REASON,
+  BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_KEY_ACTION,
   BROWSER_LIVE_MODIFIER,
   BROWSER_LIVE_MOUSE_ACTION,
@@ -86,27 +96,7 @@ import { BROWSER_UNREACHABLE, type BrowserUnreachable } from "../agents/browser/
 import { CODER } from "../agents/coder-host/bounds.js";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 import type { RelaySocket } from "../terminal/relay.js";
-
-export const BROWSER_LIVE_BOUNDS = {
-  /** How long a socket stays open past the panel's last message. */
-  IDLE: Duration.minutes(5),
-  /** How often the panel's messages move the lease on, so a mouse move is not a write. */
-  LEASE_WRITE_EVERY: Duration.minutes(1),
-  /** How often a socket asks whether the panel has gone the idle bound silent. */
-  IDLE_CHECK_EVERY: Duration.seconds(30),
-  /** How often the tab is read again, for its driver and whether it still stands. */
-  TAB_CHECK_EVERY: Duration.seconds(5),
-  /** How often input moves the member's takeover on, well inside its hold. */
-  RENEW_EVERY: Duration.seconds(10),
-  /** The least time between two frames: at most eight a second. */
-  FRAME_EVERY: Duration.millis(125),
-  /** How long the close waits on the browser to stop the cast. */
-  CAST_END_TIMEOUT: Duration.seconds(2),
-  /** The most bytes the panel's socket may still be sending before a frame is skipped. */
-  MAX_BUFFERED_BYTES: 1024 * 1024,
-  /** The screencast: JPEG, no larger than a laptop's screen, at a quality text stays legible at. */
-  SCREENCAST: { format: "jpeg", quality: 60, maxWidth: 1280, maxHeight: 800 },
-} as const;
+import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
 
 /** The panel's socket: a relay side, and how many bytes it has yet to send, which paces the frames. */
 export interface BrowserLiveViewer extends RelaySocket {
@@ -156,6 +146,12 @@ export interface BrowserLiveDependencies {
     now: Date,
   ) => Effect.Effect<boolean, unknown>;
   readonly handBack: (tabId: string, userId: string) => Effect.Effect<boolean, unknown>;
+  /** Keeps the tab's page as the view saw it move, on the target named alone, so a browser that starts afresh reopens it there; a write the store did not take is logged, for the next move to try again. */
+  readonly notePage: (
+    tabId: string,
+    targetId: string,
+    page: { readonly address: string; readonly title: string },
+  ) => Effect.Effect<void>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
   /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
@@ -172,11 +168,10 @@ interface LiveTarget {
   readonly sessionId: string;
 }
 
-/** One input command, and whether it is a bare move, which a later move replaces. */
-interface QueuedInput {
-  readonly command: CdpCommand;
-  readonly move: boolean;
-}
+/** One input command, and whether it is a bare move, which a later move replaces; or a step through the page's history, which reads the history first. */
+type QueuedInput =
+  | { readonly command: CdpCommand; readonly move: boolean }
+  | { readonly step: -1 | 1; readonly move: false };
 
 const MOUSE_EVENT = {
   [BROWSER_LIVE_MOUSE_ACTION.MOVE]: "mouseMoved",
@@ -194,6 +189,10 @@ const CDP_METHOD = {
   MOUSE: "Input.dispatchMouseEvent",
   KEY: "Input.dispatchKeyEvent",
   INSERT_TEXT: "Input.insertText",
+  NAVIGATE: "Page.navigate",
+  RELOAD: "Page.reload",
+  HISTORY: "Page.getNavigationHistory",
+  HISTORY_ENTRY: "Page.navigateToHistoryEntry",
 } as const;
 
 const read = <S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>
@@ -218,6 +217,12 @@ const readTargetInfo = read(
 const readTargetId = read(Schema.Struct({ targetId: Schema.String }));
 const readFrameId = read(Schema.Struct({ frameId: Schema.String }));
 const readSessionId = read(Schema.Struct({ sessionId: Schema.String }));
+const readHistory = read(
+  Schema.Struct({
+    currentIndex: Schema.Number,
+    entries: Schema.Array(Schema.Struct({ id: Schema.Number })),
+  }),
+);
 const readClientMessage = readEither(browserLiveClientMessageSchema);
 
 /** A text frame's JSON, or nothing a reader takes where it is none. */
@@ -241,10 +246,8 @@ function sendMessage(viewer: RelaySocket, message: BrowserLiveServerMessage): Ef
 }
 
 /** Each run of bare moves folded into its last, every other input kept in order. */
-function foldMoves(batch: readonly QueuedInput[]): readonly CdpCommand[] {
-  return batch
-    .filter((input, at) => !(input.move && batch[at + 1]?.move === true))
-    .map((input) => input.command);
+function foldMoves(batch: readonly QueuedInput[]): readonly QueuedInput[] {
+  return batch.filter((input, at) => !(input.move && batch[at + 1]?.move === true));
 }
 
 /** The text a key down types, where it types one: a printable key with no Control or Meta held, and Enter. */
@@ -262,9 +265,31 @@ type InputMessage = Exclude<
     readonly type:
       | typeof BROWSER_LIVE_CLIENT.TAKE_OVER
       | typeof BROWSER_LIVE_CLIENT.HAND_BACK
-      | typeof BROWSER_LIVE_CLIENT.VIEWPORT;
+      | typeof BROWSER_LIVE_CLIENT.VIEWPORT
+      | typeof BROWSER_LIVE_CLIENT.NAVIGATE
+      | typeof BROWSER_LIVE_CLIENT.HISTORY;
   }
 >;
+
+/** A step from the tab's bar: an address opened, or a step through its history. */
+type SteerMessage = Extract<
+  BrowserLiveClientMessage,
+  { readonly type: typeof BROWSER_LIVE_CLIENT.NAVIGATE | typeof BROWSER_LIVE_CLIENT.HISTORY }
+>;
+
+/** What a step from the bar queues for the tab. */
+function steeringOf(message: SteerMessage): QueuedInput {
+  if (message.type === BROWSER_LIVE_CLIENT.NAVIGATE) {
+    return {
+      command: { method: CDP_METHOD.NAVIGATE, params: { url: message.address } },
+      move: false,
+    };
+  }
+  if (message.step === BROWSER_LIVE_HISTORY.RELOAD) {
+    return { command: { method: CDP_METHOD.RELOAD }, move: false };
+  }
+  return { step: message.step === BROWSER_LIVE_HISTORY.BACK ? -1 : 1, move: false };
+}
 
 /** The DevTools command an input message is, its point mapped from the panel's viewport onto the page; none where either size is not known yet. */
 function commandOf(
@@ -343,7 +368,7 @@ interface LiveView {
   readonly deps: BrowserLiveDependencies;
   /** Whether the member may drive the tab: one who controls the coding agent whose browser holds it. */
   readonly drivable: boolean;
-  /** The instant this socket last took or moved on its takeover; none while it holds none. */
+  /** The instant this socket last took or moved on the member's takeover; none while it has written none that stands. */
   readonly driving: Ref.Ref<number | undefined>;
   /** Whether a hand-back the member asked for has yet to reach the store, which the close tries again. */
   readonly releasePending: Ref.Ref<boolean>;
@@ -418,6 +443,11 @@ function openView(
 const send = (view: LiveView, message: BrowserLiveServerMessage) =>
   sendMessage(view.viewer, message);
 
+/** Whether the driver given is this socket's member, who may drive the tab: what the panel is told as `yours`, and what lets a socket drive a takeover it did not write. */
+function isYours(view: LiveView, driver: { readonly userId: string } | null | undefined): boolean {
+  return view.drivable && driver?.userId === view.ask.userId;
+}
+
 /** The driver as the tab now stands, sent where it changed; a takeover that is no longer this member's is no longer this socket's. */
 function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<void> {
   return Effect.gen(function* () {
@@ -435,7 +465,7 @@ function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<vo
     yield* send(view, {
       type: BROWSER_LIVE_SERVER.DRIVER,
       driver,
-      yours: driver?.userId === view.ask.userId,
+      yours: isYours(view, driver),
     });
   });
 }
@@ -506,12 +536,12 @@ function standsAt(view: LiveView, at: number): Effect.Effect<boolean> {
   );
 }
 
-/** The member hands back the takeover this socket holds: input stops at once, and a hand-back the store did not take is tried again as the socket closes. */
-function handBack(view: LiveView): Effect.Effect<void> {
+/** The member hands back the takeover this socket holds or stands on, one it reconnected to among them: input stops at once, and a hand-back the store did not take is tried again as the socket closes. */
+function handBack(view: LiveView, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
-    if ((yield* Ref.get(view.driving)) === undefined && !(yield* Ref.get(view.releasePending))) {
-      return;
-    }
+    const wrote = (yield* Ref.get(view.driving)) !== undefined;
+    const pending = yield* Ref.get(view.releasePending);
+    if (!wrote && !pending && !(yield* adoptable(view, at))) return;
     yield* Ref.set(view.driving, undefined);
     const released = yield* Effect.result(view.deps.handBack(view.reached.tab.id, view.ask.userId));
     yield* Ref.set(view.releasePending, Result.isFailure(released));
@@ -542,19 +572,36 @@ function releaseOnClose(view: LiveView): Effect.Effect<void> {
   });
 }
 
-/** Whether the member's takeover stands, moved on where its last write is `RENEW_EVERY` old. */
+/** Whether the member's takeover stood as the tab was last read, where this socket has no write of its own and no hand-back waits. */
+function adoptable(view: LiveView, at: Date): Effect.Effect<boolean> {
+  return Effect.gen(function* () {
+    if (yield* Ref.get(view.releasePending)) return false;
+    const driver = yield* Ref.get(view.lastDriver);
+    return driver != null && isYours(view, driver) && at.getTime() < driver.heldUntil;
+  });
+}
+
+/**
+ * Whether the member's takeover stands, moved on where this socket's last
+ * write is `RENEW_EVERY` old. A socket with no write of its own, one that
+ * reconnected or another window of the member, drives the takeover the tab
+ * was last read with, once the store moves it on for this socket's first
+ * input, so a hand-back or another member's take since is never driven past.
+ */
 function holding(view: LiveView, at: Date): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const renewedAt = yield* Ref.get(view.driving);
-    if (renewedAt === undefined) return false;
-    if (at.getTime() - renewedAt < Duration.toMillis(BROWSER_LIVE_BOUNDS.RENEW_EVERY)) return true;
+    if (renewedAt === undefined && !(yield* adoptable(view, at))) return false;
+    const fresh = Duration.toMillis(BROWSER_LIVE_BOUNDS.RENEW_EVERY);
+    if (renewedAt !== undefined && at.getTime() - renewedAt < fresh) return true;
     const heldUntil = new Date(at.getTime() + BROWSER_TAKEOVER_HOLD_MS);
     const renewed = yield* Effect.result(
       view.deps.renew(view.reached.tab.id, view.ask.userId, heldUntil, at),
     );
     // Note that a store that could not say leaves the takeover standing only until its last write lapses,
     // since no other member can take the row before then.
-    if (Result.isFailure(renewed)) return at.getTime() < lapsesAt(renewedAt);
+    if (Result.isFailure(renewed))
+      return renewedAt !== undefined && at.getTime() < lapsesAt(renewedAt);
     if (renewed.success) {
       yield* Ref.set(view.driving, at.getTime());
       return true;
@@ -579,6 +626,28 @@ function drive(view: LiveView, message: InputMessage, at: Date): Effect.Effect<v
   });
 }
 
+/**
+ * A step from the tab's bar, queued where the member holds the tab, and
+ * taken over for them first where nobody else does; refused where they may
+ * not drive the tab, or another member holds it.
+ */
+function steer(view: LiveView, message: SteerMessage, at: Date): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    if (!(yield* holding(view, at))) {
+      // Note that a refused takeover says why itself, so nothing more is sent.
+      if (!view.drivable) return yield* takeOver(view, at);
+      yield* takeOver(view, at);
+      if (!(yield* standsAt(view, at.getTime()))) {
+        return yield* send(view, {
+          type: BROWSER_LIVE_SERVER.REFUSED,
+          reason: BROWSER_LIVE_REFUSAL.HELD,
+        });
+      }
+    }
+    yield* Queue.offer(view.inputs, steeringOf(message));
+  });
+}
+
 function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Effect<void> {
   return Effect.gen(function* () {
     const at = yield* now;
@@ -587,9 +656,12 @@ function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Ef
       case BROWSER_LIVE_CLIENT.TAKE_OVER:
         return yield* takeOver(view, at);
       case BROWSER_LIVE_CLIENT.HAND_BACK:
-        return yield* handBack(view);
+        return yield* handBack(view, at);
       case BROWSER_LIVE_CLIENT.VIEWPORT:
         return yield* Ref.set(view.viewport, { width: message.width, height: message.height });
+      case BROWSER_LIVE_CLIENT.NAVIGATE:
+      case BROWSER_LIVE_CLIENT.HISTORY:
+        return yield* steer(view, message, at);
       default:
         return yield* drive(view, message, at);
     }
@@ -618,12 +690,31 @@ function dispatchInput(view: LiveView, target: LiveTarget): Effect.Effect<void, 
   return Effect.forever(
     Effect.gen(function* () {
       const batch = yield* Queue.takeAll(view.inputs);
-      for (const command of foldMoves(batch)) {
+      for (const input of foldMoves(batch)) {
         if (!(yield* standsAt(view, (yield* now).getTime()))) return;
-        yield* Effect.ignore(target.cdp.send({ ...command, sessionId: target.sessionId }));
+        if ("step" in input) yield* stepHistory(target, input.step);
+        else
+          yield* Effect.ignore(target.cdp.send({ ...input.command, sessionId: target.sessionId }));
       }
     }),
   );
+}
+
+/** Steps the tab's page back or forward by one, where its history holds a page there; a page with none there stays. */
+function stepHistory(target: LiveTarget, by: -1 | 1): Effect.Effect<void> {
+  const { cdp, sessionId } = target;
+  return Effect.gen(function* () {
+    const answer = yield* cdp.send({ method: CDP_METHOD.HISTORY, sessionId });
+    const history = readHistory(answer);
+    if (Result.isFailure(history)) return;
+    const entry = history.success.entries[history.success.currentIndex + by];
+    if (entry === undefined) return;
+    yield* cdp.send({
+      method: CDP_METHOD.HISTORY_ENTRY,
+      params: { entryId: entry.id },
+      sessionId,
+    });
+  }).pipe(Effect.ignore);
 }
 
 function publishPage(view: LiveView, next: PageState): Effect.Effect<void> {
@@ -692,6 +783,11 @@ function onEvent(view: LiveView, event: CdpEvent): Effect.Effect<void> {
         if (Result.isFailure(info) || info.success.targetInfo.targetId !== targetId) return;
         const { url, title } = info.success.targetInfo;
         const last = yield* Ref.get(view.pageState);
+        // Note that a page the member moved, from the bar or by driving it, is kept for a restart to
+        // reopen; one no Browser tab loads, a blank or an error page, is not.
+        if ((url !== last.address || title !== last.title) && isBrowserAddress(url)) {
+          yield* view.deps.notePage(view.reached.tab.id, targetId, { address: url, title });
+        }
         return yield* publishPage(view, { ...last, address: shown(url), title: shown(title) });
       }
       case CDP_METHOD.STARTED_LOADING:

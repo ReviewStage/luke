@@ -5,23 +5,19 @@ import { BRAIN_HOST_ENVIRONMENT } from "./agents/brain-host/bounds.js";
 import { GITHUB_APP_ENVIRONMENT } from "./auth/auth-deployment.js";
 import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
-import { HOSTED_ANTHROPIC_ENVIRONMENT } from "./providers/anthropic.js";
-import { HOSTED_OPENAI_ENVIRONMENT } from "./providers/openai.js";
 import { POSTHOG_ENVIRONMENT } from "./providers/posthog.js";
 
 /**
  * What the deployment's environment says about the hosted tier, read once as
  * the services are built rather than at each invocation's `process.env`.
  *
- * A blank value is dropped here rather than at the endpoints: an absent key
- * and a whitespace one both mean the tier is off, which is the kill switch
- * this deployment is configured with, so the endpoints see one absence.
+ * A blank value is dropped here rather than at the endpoints: an absent
+ * value and a whitespace one both mean it is unset, so the endpoints see one
+ * absence. The deployment holds no model provider key of its own: every
+ * model call runs on the account's own key, sealed under
+ * `providerKeyEncryptionKeys`.
  */
 export interface HostedEnvironmentValues {
-  /** Luke's own OpenAI key; absent means the hosted tier is off and every endpoint answers 503. */
-  readonly openAiKey: Redacted.Redacted | undefined;
-  /** Luke's own Anthropic key, which a coding agent on an Anthropic model runs on; absent means those agents cannot run. */
-  readonly anthropicKey: Redacted.Redacted | undefined;
   /** The analytics processor's own deletion key; absent means there is no person to erase. */
   readonly posthogPersonalApiKey: Redacted.Redacted | undefined;
   /** The analytics project the personal key deletes from; absent means there is nothing to erase it with. */
@@ -38,7 +34,7 @@ export interface HostedEnvironmentValues {
   readonly eveDeploymentSecret: Redacted.Redacted | undefined;
   /** The secret GitHub signs the Luke GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
-  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every agent on Luke's keys. */
+  /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every model call unmade, since no key of Luke's stands in. */
   readonly providerKeyEncryptionKeys: Redacted.Redacted | undefined;
 }
 
@@ -124,8 +120,6 @@ export const hostedEnvironment = Layer.effect(
   HostedEnvironment,
   Effect.flatMap(
     Config.all({
-      apiKey: Config.option(Config.Redacted(HOSTED_OPENAI_ENVIRONMENT.API_KEY)),
-      anthropicKey: Config.option(Config.Redacted(HOSTED_ANTHROPIC_ENVIRONMENT.API_KEY)),
       posthogPersonalApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
       posthogProjectId: Config.option(Config.String(POSTHOG_ENVIRONMENT.PROJECT_ID)),
       posthogApiHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.API_HOST)),
@@ -143,8 +137,6 @@ export const hostedEnvironment = Layer.effect(
       const namedEveSecret = presentRedacted(read.eveDeploymentSecret);
       const eveDeploymentSecret = eveSecretApart(namedEveSecret, cronSecret);
       const values: HostedEnvironmentValues = {
-        openAiKey: presentRedacted(read.apiKey),
-        anthropicKey: presentRedacted(read.anthropicKey),
         posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
         posthogProjectId: present(read.posthogProjectId),
         posthogApiHost: present(read.posthogApiHost),

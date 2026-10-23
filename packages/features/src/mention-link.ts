@@ -8,6 +8,7 @@ import {
   integrationProviderSchema,
 } from "./integration-wire.js";
 import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
+import { LINK_SITE_LIST, type LinkSite, linkSiteName, linkSiteOf } from "./link-site.js";
 import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
 
 /**
@@ -92,10 +93,12 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *
  * A page of one of the integrations, a Linear issue or a pull request, is
  * named by its own web address, which a host of the integration's
- * (`INTEGRATION_HOSTS`) says it is the integration's. It is read last, after
- * every form above, so a GitHub page that is a file of the task stays one;
- * a link to any other page is a link, never a mention, whatever its label
- * says.
+ * (`INTEGRATION_HOSTS`) says it is the integration's. A page of one of the
+ * well-known sites no integration stands behind, a place on Google Maps, is
+ * named the same way, by its site (`link-site.ts`) rather than a provider.
+ * They are read last, after every form above, so a GitHub page that is a
+ * file of the task stays one; a link to any other page is a link, never a
+ * mention, whatever its label says.
  */
 
 export const MENTION_KIND = {
@@ -282,6 +285,12 @@ const linesSchema = EffectSchema.Struct({
 /** One end of a date: a day, or a time on one with its offset (`date-mention.ts`). */
 const dateMomentSchema = EffectSchema.String.check(EffectSchema.makeFilter(isDateMoment));
 
+/** A page's web address as a link mention holds it. */
+const linkUrlSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_URL_CHARS),
+);
+
 const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.TASK),
@@ -319,10 +328,13 @@ const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.LINK),
     provider: integrationProviderSchema,
-    url: EffectSchema.String.check(
-      EffectSchema.isNonEmpty(),
-      EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_URL_CHARS),
-    ),
+    url: linkUrlSchema,
+  }),
+  // A page of a well-known site stands on no integration, so it names its site rather than a provider.
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.LINK),
+    site: EffectSchema.Literals(LINK_SITE_LIST),
+    url: linkUrlSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.PAGE),
@@ -377,8 +389,11 @@ export type TaskMention = Extract<
 /** A mention of a person: a member of the workspace, or someone who left it. */
 export type PersonMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.PERSON }>;
 
-/** A mention of an MCP server or one of its tools. */
+/** A mention of an MCP server or one of its tools, or a page of its provider's. */
 export type ServerMention = Extract<Mention, { readonly provider: string }>;
+
+/** A mention of a page of a well-known site no integration stands behind. */
+export type SiteMention = Extract<Mention, { readonly site: LinkSite }>;
 
 /** Whether a tool's name, as an MCP server lists it, is one a mention of the tool can carry. */
 export function isMentionableTool(name: string): boolean {
@@ -606,12 +621,14 @@ function linkAddress(href: string): string {
   return href.replace(/[()]/gu, (special) => (special === "(" ? "%28" : "%29"));
 }
 
-/** The fields a page of an integration's spells, its address kept without credentials; nothing for a page of no integration's. */
+/** The fields a page of an integration's or a well-known site's spells, its address kept without credentials; nothing for a page of neither. */
 function linkFields(url: URL) {
   if (!WEB_PROTOCOLS.has(url.protocol)) return undefined;
+  const address = linkAddress(withoutCredentials(url));
   const provider = integrationOfHost(url.hostname);
-  if (provider === undefined) return undefined;
-  return { kind: MENTION_KIND.LINK, provider, url: linkAddress(withoutCredentials(url)) };
+  if (provider !== undefined) return { kind: MENTION_KIND.LINK, provider, url: address };
+  const site = linkSiteOf(url);
+  return site === undefined ? undefined : { kind: MENTION_KIND.LINK, site, url: address };
 }
 
 /**
@@ -942,7 +959,9 @@ function bareName(mention: Mention): string {
     case MENTION_KIND.TOOL:
       return mention.tool;
     case MENTION_KIND.LINK:
-      return readableLink(mention.url);
+      return "site" in mention
+        ? linkSiteName(mention.site, mention.url)
+        : readableLink(mention.url);
     case MENTION_KIND.PAGE:
       return BARE_NAME.PAGE;
     case MENTION_KIND.AGENT:
@@ -958,7 +977,7 @@ function bareName(mention: Mention): string {
 
 /**
  * Words pasted whole that are one address of Luke's own, a plan's, a
- * section's, a page's, an agent's, or a person's, or one page of an integration's, as
+ * section's, a page's, an agent's, or a person's, or one page of an integration's or a well-known site's, as
  * the mention they become and the name its bare address says of it
  * (`bareName`), which a place holding the thing's own name may better;
  * nothing for any other words, a file of the plan's repository among them,

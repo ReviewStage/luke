@@ -26,8 +26,6 @@ const KEYS = `1:${Buffer.alloc(32, 1).toString("base64")}`;
 /** A deployment holding the cron secret given, its own eve secret beside it, and a ring. */
 function environment(cronSecret: string | undefined): HostedEnvironmentValues {
   return {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,

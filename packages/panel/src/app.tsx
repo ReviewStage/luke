@@ -12,12 +12,7 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import type { ChatShown } from "@luke/host/contract";
-import {
-  APP_SETTING_SCHEMA,
-  EXPERIMENT,
-  type Experiment,
-  type HostCapability,
-} from "@luke/settings";
+import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
@@ -55,13 +50,14 @@ import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
+import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
-import { useStageRoom } from "./stage-room.js";
+import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatOn } from "./tasks/chat-gate.js";
@@ -84,7 +80,7 @@ import {
   useAdminAccess,
   useAdminAccessPending,
   useAppSlice,
-  useExperiment,
+  useExperimentChoices,
   VOICE_AVAILABLE,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
@@ -244,7 +240,17 @@ function ChatToasts({
 export function App(): React.JSX.Element {
   const fixtureMode = useAppSlice(FIXTURE_MODE);
   const landed = useTasksFixtureLanded(fixtureMode);
-  return landed ? <AppWindow /> : <></>;
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  // Note that the account's key is read above the window, because the window's own call press reads it too.
+  return (
+    <OpenAiKeyProvider
+      account={
+        account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined
+      }
+    >
+      {landed ? <AppWindow /> : null}
+    </OpenAiKeyProvider>
+  );
 }
 
 function AppWindow(): React.JSX.Element {
@@ -404,13 +410,6 @@ function AppWindow(): React.JSX.Element {
     leaveGuard,
     room,
   });
-  // A Browser tab left open as its experiment goes off closes, its page with
-  // it, on whatever plan and whatever the window shows, Settings included.
-  const browsing = useExperiment(EXPERIMENT.BROWSER);
-  const { onCloseBrowsers } = tasks.sidePanel;
-  useEffect(() => {
-    if (!browsing) onCloseBrowsers();
-  }, [browsing, onCloseBrowsers]);
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
     listedId: tasks.workspace?.id,
@@ -419,7 +418,12 @@ function AppWindow(): React.JSX.Element {
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const shownView = shownSettingsView(settingsPlace.view, run?.capabilities ?? NO_CAPABILITIES);
+  const experiments = useExperimentChoices();
+  const shownView = shownSettingsView(
+    settingsPlace.view,
+    run?.capabilities ?? NO_CAPABILITIES,
+    experiments,
+  );
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
@@ -807,23 +811,25 @@ function AppWindow(): React.JSX.Element {
                           style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
                         >
                           {/* The window's content. */}
-                          <div className="desktop-stage">
-                            <MessageRevealProvider value={messageReveal}>
-                              <ThreadRevealProvider value={threadReveal}>
-                                <SettingsShell
-                                  gates={gates}
-                                  tab={tab}
-                                  onTabChange={changeTab}
-                                  tasks={shellTasks}
-                                  history={history}
-                                  sidebar={sidebar}
-                                  room={room}
-                                  settingsStep={settingsStep}
-                                  doors={settingsDoors}
-                                />
-                              </ThreadRevealProvider>
-                            </MessageRevealProvider>
-                          </div>
+                          <ShellRoomContext.Provider value={room}>
+                            <div className="desktop-stage">
+                              <MessageRevealProvider value={messageReveal}>
+                                <ThreadRevealProvider value={threadReveal}>
+                                  <SettingsShell
+                                    gates={gates}
+                                    tab={tab}
+                                    onTabChange={changeTab}
+                                    tasks={shellTasks}
+                                    history={history}
+                                    sidebar={sidebar}
+                                    room={room}
+                                    settingsStep={settingsStep}
+                                    doors={settingsDoors}
+                                  />
+                                </ThreadRevealProvider>
+                              </MessageRevealProvider>
+                            </div>
+                          </ShellRoomContext.Provider>
                           {/* A note to the people who make Luke, written in a dialog over the
           window. */}
                           <FeedbackDialog

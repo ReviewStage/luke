@@ -1,4 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { LINK_SITE } from "@luke/features/link-site";
 import React, { useId } from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
@@ -22,11 +23,12 @@ void React;
  */
 
 /**
- * Every provider with a mark: the integrations and the two sign-in providers,
- * GitHub being both. An app's own account-provider set names the same
- * strings, so the compiler holds it to this one at the call site.
+ * Every provider with a mark: the integrations, the two sign-in providers,
+ * GitHub being both, and the well-known sites a link is drawn as a chip of.
+ * An app's own account-provider set names the same strings, so the compiler
+ * holds it to this one at the call site.
  */
-export const MARK_PROVIDER = { ...INTEGRATION_PROVIDER, GOOGLE: "google" } as const;
+export const MARK_PROVIDER = { ...INTEGRATION_PROVIDER, ...LINK_SITE, GOOGLE: "google" } as const;
 
 export type MarkProvider = (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER];
 
@@ -82,6 +84,277 @@ function GoogleMark({ className }: MarkProps): React.JSX.Element {
       <path
         fill="#EA4335"
         d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Google Maps's pin in its five official colours, verbatim from the product
+ * logo Google serves for Maps
+ * (https://www.gstatic.com/images/branding/productlogos/maps/v7/192px.svg),
+ * in a box cropped to the pin, on either ground.
+ */
+function GoogleMapsMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <path
+        fill="#4285F4"
+        d="M113.89,84.4l25.27-19.25l11.22-24.21c-7.47-14.26-20.37-25.24-35.88-30.11L91.18,26.58L77.95,54.29l0,0 c4.3-5.21,10.75-8.49,18-8.49c13.02,0,23.43,10.53,23.43,23.43C119.37,75,117.29,80.32,113.89,84.4z"
+      />
+      <path
+        fill="#1A73E8"
+        d="M95.94,8c-18.9,0-35.65,8.49-46.97,21.96l10.78,17.66l18.2,6.68c0.11-0.11,36.56-43.46,36.56-43.46 C108.62,9.02,102.39,8,95.94,8z"
+      />
+      <path
+        fill="#FBBC04"
+        d="M113.89,84.4c-4.3,5.09-10.7,8.38-17.95,8.38c-13.02,0-23.43-10.53-23.43-23.43 c0-5.55,2.26-11.09,5.43-15.05L51.09,73.5L40.71,98.66c6.45,14.03,17.09,25.35,28.07,39.5l28.78-22.9L113.89,84.4z"
+      />
+      <path
+        fill="#34A853"
+        d="M157.4,69.35c0-10.3-2.6-19.92-7.02-28.41l-81.61,97.22c3.62,4.64,7.13,9.62,10.64,15.05 C91.87,172.46,88.13,184,96.06,184c8.04,0,4.53-11.54,16.98-30.79C133.52,121.18,157.4,106.58,157.4,69.35z"
+      />
+      <path
+        fill="#EA4335"
+        d="M77.95,54.29L48.97,29.96C40.03,40.6,34.6,54.41,34.6,69.35c0,11.54,2.26,20.94,6.11,29.31L77.95,54.29z"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Google Docs's page in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/docs_2020q4/v12/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GoogleDocsMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <rect fill="#FFFFFF" height="14" width="76" x="58" y="98" />
+      <rect fill="#FFFFFF" height="14" width="56" x="58" y="122" />
+      <polygon fill="#1967D2" points="116,52 140.13,56.56 160,52 116,8 109.93,28.86" />
+      <rect fill="#FFFFFF" height="14" width="76" x="58" y="74" />
+      <path
+        d="M116,52V8H44c-6.63,0-12,5.37-12,12v152c0,6.63,5.37,12,12,12h104c6.63,0,12-5.37,12-12V52H116z M112,134 H60v-10h52V134z M132,110H60v-10h72V110z M132,86H60V76h72V86z"
+        fill="#4285F4"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Google Sheets's page in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/sheets_2020q4/v11/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GoogleSheetsMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <polygon fill="#188038" points="116,8 160,52 138,56 116,52 112,30" />
+      <path
+        d="M116,52V8H44c-6.63,0-12,5.37-12,12v152c0,6.63,5.37,12,12,12h104c6.63,0,12-5.37,12-12V52H116z"
+        fill="#34A853"
+      />
+      <path
+        d="M56,76v58h80V76H56z M91,124H66v-14h25V124z M91,100H66V86h25V100z M126,124h-25v-14h25V124z M126,100h-25 V86h25V100z"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Google Slides's page in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/slides_2020q4/v12/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GoogleSlidesMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <polygon fill="#F29900" points="116,8 160,52 138,56 116,52 112,32" />
+      <path
+        d="M116,52V8H44c-6.63,0-12,5.37-12,12v152c0,6.63,5.37,12,12,12h104c6.63,0,12-5.37,12-12V52H116z"
+        fill="#FBBC04"
+      />
+      <path d="M56,76v54h80V76H56z M126,120H66V86h60V120z" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
+/**
+ * Google Forms's page in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/forms_2020q4/v6/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GoogleFormsMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <polygon fill="#56368A" points="116,52 140.13,56.56 160,52 116,8 109.93,28.86" />
+      <path
+        d="M116,52V8H44c-6.63,0-12,5.37-12,12v152c0,6.63,5.37,12,12,12h104c6.63,0,12-5.37,12-12V52H116z"
+        fill="#7248B9"
+      />
+      <path
+        d="M66,135c-3.31,0-6-2.69-6-6s2.69-6,6-6s6,2.69,6,6S69.31,135,66,135z M66,111c-3.31,0-6-2.69-6-6 s2.69-6,6-6s6,2.69,6,6S69.31,111,66,111z M66,87c-3.31,0-6-2.69-6-6s2.69-6,6-6s6,2.69,6,6S69.31,87,66,87z M132,134H82v-10h50 V134z M132,110H82v-10h50V110z M132,86H82V76h50V86z"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Google Drive's triangle in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/drive_2020q4/v10/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GoogleDriveMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <path
+        d="M128.33,122l7.59,26.17l19.89,21.42c0,0,0,0,0,0v0c2.69-1.55,4.98-3.8,6.59-6.59l18.48-32 c1.61-2.78,2.41-5.89,2.41-9l-28.38-5.5L128.33,122z"
+        fill="#EA4335"
+      />
+      <path
+        d="M123.48,18.41c-2.69-1.55-5.78-2.41-9-2.41H77.53c-3.2,0-6.32,0.88-9,2.41l0,0l7.96,26.81l19.44,20.64 L96,66l0,0l19.58-20.89L123.48,18.41C123.48,18.41,123.48,18.41,123.48,18.41C123.48,18.41,123.48,18.41,123.48,18.41z"
+        fill="#188038"
+      />
+      <path
+        d="M63.67,122l-28.33-6.5L8.72,122c0,3.1,0.8,6.2,2.4,8.99L29.6,163c1.61,2.78,3.9,5.03,6.59,6.59 l19.59-20.18L63.67,122L63.67,122z"
+        fill="#1967D2"
+      />
+      <path
+        d="M155.47,69l-25.4-44c-1.61-2.79-3.9-5.04-6.59-6.59L96,66l32.33,56h54.95c0-3.11-0.8-6.21-2.41-9 L155.47,69z"
+        fill="#FBBC04"
+      />
+      <path
+        d="M128.33,122H63.67l-27.48,47.59c2.69,1.55,5.78,2.41,9,2.41h101.61c3.22,0,6.31-0.86,9-2.41L128.33,122z"
+        fill="#4285F4"
+      />
+      <path
+        d="M96,66L68.53,18.41c-2.69,1.55-4.97,3.79-6.58,6.57l-50.83,88.05c-1.6,2.78-2.4,5.88-2.4,8.97h54.95L96,66 z"
+        fill="#34A853"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Google Calendar's 31 in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/calendar_2020q4/v13/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <polygon fill="#FFFFFF" points="136,56 100,52 56,56 52,96 56,136 96,141 136,136 140,95" />
+      <path
+        d="M72.41,118.06c-2.99-2.02-5.06-4.97-6.19-8.87l6.94-2.86c0.63,2.4,1.73,4.26,3.3,5.58 c1.56,1.32,3.46,1.97,5.68,1.97c2.27,0,4.22-0.69,5.85-2.07c1.63-1.38,2.45-3.14,2.45-5.27c0-2.18-0.86-3.96-2.58-5.34 s-3.88-2.07-6.46-2.07h-4.01v-6.87h3.6c2.22,0,4.09-0.6,5.61-1.8c1.52-1.2,2.28-2.84,2.28-4.93c0-1.86-0.68-3.34-2.04-4.45 c-1.36-1.11-3.08-1.67-5.17-1.67c-2.04,0-3.66,0.54-4.86,1.63s-2.07,2.43-2.62,4.01l-6.87-2.86c0.91-2.58,2.58-4.86,5.03-6.83 c2.45-1.97,5.58-2.96,9.38-2.96c2.81,0,5.34,0.54,7.58,1.63c2.24,1.09,4,2.6,5.27,4.52c1.27,1.93,1.9,4.09,1.9,6.49 c0,2.45-0.59,4.52-1.77,6.22c-1.18,1.7-2.63,3-4.35,3.91v0.41c2.27,0.95,4.12,2.4,5.58,4.35c1.45,1.95,2.18,4.28,2.18,7 c0,2.72-0.69,5.15-2.07,7.28c-1.38,2.13-3.29,3.81-5.71,5.03c-2.43,1.22-5.16,1.84-8.19,1.84 C78.64,121.09,75.4,120.08,72.41,118.06z"
+        fill="#1A73E8"
+      />
+      <path d="M115,83.62l-7.58,5.51l-3.81-5.78l13.67-9.86h5.24V120H115V83.62z" fill="#1A73E8" />
+      <polygon fill="#EA4335" points="136,172 172,136 154,128 136,136 128,154" />
+      <polygon fill="#34A853" points="48,154 56,172 136,172 136,136 56,136" />
+      <path d="M32,20c-6.63,0-12,5.37-12,12v104l18,8l18-8V56h80l8-18l-8-18H32z" fill="#4285F4" />
+      <path d="M20,136v24c0,6.63,5.37,12,12,12h24v-36H20z" fill="#188038" />
+      <polygon fill="#FBBC04" points="136,56 136,136 172,136 172,56 154,48" />
+      <path d="M172,56V32c0-6.63-5.37-12-12-12h-24v36H172z" fill="#1967D2" />
+    </svg>
+  );
+}
+
+/**
+ * Google Meet's camera in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/meet_2020q4/v8/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GoogleMeetMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <polygon
+        fill="#188038"
+        points="108,96 125.06,115.5 148,130 152,96.13 148,62.85 124.62,75.73"
+      />
+      <path d="M9,127v29c0,6.63,5.37,12,12,12h29l6-21.92L50,127l-19.9-6L9,127z" fill="#1967D2" />
+      <polygon fill="#EA4335" points="50,24 9,65 30.1,71 50,65 55.9,46.17" />
+      <rect fill="#4285F4" height="62" width="41" x="9" y="65" />
+      <path
+        d="M174.19,41.36L148,62.85V130l26.3,22.37c3.94,3.08,9.7,0.27,9.7-4.73V46 C184,40.93,178.11,38.15,174.19,41.36z"
+        fill="#34A853"
+      />
+      <path d="M108,96v31H50v41h86c6.63,0,12-5.37,12-12v-26L108,96z" fill="#34A853" />
+      <path d="M136,24H50v41h58v31l40-33.15V36C148,29.37,142.63,24,136,24z" fill="#FBBC04" />
+    </svg>
+  );
+}
+
+/**
+ * Gmail's M in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/gmail_2020q4/v11/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function GmailMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <path
+        d="M8,46v16l18.35,17.76L48,92l4-26.93L48,40l-11.2-8.4C24.93,22.7,8,31.17,8,46"
+        fill="#C5221F"
+      />
+      <path
+        d="M144,40l-4,25.4l4,26.6l19.65-9.73L184,62V46c0-14.83-16.93-23.3-28.8-14.4L144,40z"
+        fill="#FBBC04"
+      />
+      <path d="M20,160h28V92L8,62v86C8,154.63,13.37,160,20,160" fill="#4285F4" />
+      <path d="M144,160h28c6.63,0,12-5.37,12-12V62l-40,30V160z" fill="#34A853" />
+      <polygon fill="#EA4335" points="96,76 48,40 48,92 96,128 144,92 144,40" />
+    </svg>
+  );
+}
+
+/**
+ * YouTube's play button in its official colours, verbatim from the product logo
+ * Google serves for it
+ * (https://www.gstatic.com/images/branding/productlogos/youtube/v9/192px.svg),
+ * in the box every Google mark here is cropped to, on either ground.
+ */
+function YouTubeMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
+      <path
+        d="M177.44,55.09c-1.96-7.31-7.72-13.08-15.03-15.03C149.17,36.5,96,36.5,96,36.5s-53.17,0-66.41,3.56 c-7.31,1.96-13.08,7.72-15.03,15.03C11,68.33,11,96,11,96s0,27.67,3.56,40.91c1.96,7.31,7.72,13.08,15.03,15.03 C42.83,155.5,96,155.5,96,155.5s53.17,0,66.41-3.56c7.31-1.96,13.08-7.72,15.03-15.03C181,123.67,181,96,181,96 S181,68.33,177.44,55.09z"
+        fill="#FF0000"
+      />
+      <polygon fill="#FFFFFF" points="79,121.5 123.17,96 79,70.5" />
+    </svg>
+  );
+}
+
+/**
+ * X's logo, verbatim from the icon x.com serves
+ * (https://abs.twimg.com/responsive-web/client-web/icon-svg.ea5ff4aa.svg);
+ * X shows it in one colour, black or white, so it is drawn in
+ * `currentColor` for either ground, in a box cropped to the letter.
+ */
+function XMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="24 24 80 80"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M86.8918 28.25H99.0219L72.5243 58.5334L103.698 99.75H79.285L60.1647 74.7536L38.2929 99.75H26.1627L54.5069 67.3565L24.5938 28.25H49.6199L66.9004 51.0974L86.8918 28.25ZM82.6337 92.4904H89.3555L45.9716 35.1301H38.7584L82.6337 92.4904Z"
       />
     </svg>
   );
@@ -567,6 +840,28 @@ export function ProviderMark({
   switch (provider) {
     case MARK_PROVIDER.GOOGLE:
       return <GoogleMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_MAPS:
+      return <GoogleMapsMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_DOCS:
+      return <GoogleDocsMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_SHEETS:
+      return <GoogleSheetsMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_SLIDES:
+      return <GoogleSlidesMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_FORMS:
+      return <GoogleFormsMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_DRIVE:
+      return <GoogleDriveMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_CALENDAR:
+      return <GoogleCalendarMark className={className} />;
+    case MARK_PROVIDER.GOOGLE_MEET:
+      return <GoogleMeetMark className={className} />;
+    case MARK_PROVIDER.GMAIL:
+      return <GmailMark className={className} />;
+    case MARK_PROVIDER.YOUTUBE:
+      return <YouTubeMark className={className} />;
+    case MARK_PROVIDER.X:
+      return <XMark className={className} />;
     case MARK_PROVIDER.EXECUTOR:
       return <ExecutorMark className={className} />;
     case MARK_PROVIDER.GITHUB:

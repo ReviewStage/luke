@@ -3,7 +3,8 @@
  *
  * `POST /api/dictation` takes one clip (`@luke/features/dictation-wire`),
  * holds it to two minutes and a megabyte, hands it to OpenAI's transcription
- * model on Luke's key with the words the desktop says it is likely to hold
+ * model on the caller's own OpenAI API key (`../accounts/own-api-key.ts`),
+ * never Luke's, with the words the desktop says it is likely to hold
  * (`dictation/transcription.ts`), and answers the text. Nothing of the clip or
  * the text is stored, logged, traced, or counted as an event: the clip lives
  * in this request's memory and goes when it ends.
@@ -12,21 +13,25 @@
  * account's day (`@luke/database/models/quota`), the seconds OpenAI billed where it says
  * and the desktop's own timing otherwise, which the bound above holds to two
  * minutes. A meter the database refused is logged and the text still
- * answered, since the transcription was had and paid for. A deployment
- * without an OpenAI key, and a model that did not answer, answer
- * unavailable, which the desktop shows and the developer may try again; the
- * key is looked for before the clip is read, as the old route did.
+ * answered, since the transcription was had and paid for. An account that
+ * saved no OpenAI API key is refused as missing one, which the desktop
+ * answers by pointing at Settings; a model that did not answer answers
+ * unavailable, which the desktop shows and the developer may try again. The
+ * key is looked for before the clip is read.
  */
 
+import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
 import { spendDictationMeter } from "@luke/database/models/quota";
 import { base64Bytes } from "@luke/features/coding-agent-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { Clock, Effect, type Redacted } from "effect";
+import { ownApiKeyOf } from "../accounts/own-api-key.js";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
+import { accountMiddleware, type HostedCaller, type HostedContext, hosted } from "../orpc/base.js";
 import { transcribeClip } from "./transcription.js";
 
 const MS_PER_SECOND = 1_000;
@@ -35,13 +40,22 @@ export interface DictationProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The deployment's OpenAI key, or unavailable where it holds none. */
+/** The caller's own OpenAI API key, or refused as missing where it saved none; unavailable where the store did not answer or the deployment cannot open the key it saved. */
 const openAiKeyMiddleware = middlewareGen<
-  HostedContext,
+  HostedContext & HostedCaller,
   { readonly openAiKey: Redacted.Redacted<string> }
->(function* ({ next }) {
-  const key = (yield* HostedEnvironment).openAiKey;
-  if (key === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+>(function* ({ context, next }) {
+  const { providerKeyEncryptionKeys } = yield* HostedEnvironment;
+  const key = yield* ownApiKeyOf(
+    context.userId,
+    PROVIDER_KEY_PROVIDER.OPENAI,
+    providerKeyEncryptionKeys,
+  ).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+  if (key === undefined) return yield* Effect.fail(HOSTED_REFUSAL.OPENAI_KEY_MISSING);
+  if (key === PROVIDER_KEY_UNREADABLE) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   return yield* next({ context: { openAiKey: key } });
 });
 

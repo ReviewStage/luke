@@ -275,7 +275,6 @@ function summaryFields(
       : undefined),
     ...(standing.runtime === undefined ? undefined : { runtime: standing.runtime }),
     title: agent.title,
-    ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
     // Note that only an operator says its kind, so a coder's summary is as it was.
     ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
     createdAt: agent.createdAt.getTime(),

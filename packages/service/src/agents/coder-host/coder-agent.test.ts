@@ -6,6 +6,7 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_KIND,
   type CodingAgentBrief,
+  type CodingAgentKind,
 } from "@luke/features/coding-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -254,7 +255,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
     "`glob`",
     "`grep`",
     `\`${CODER_TOOL.SLEEP}\``,
-    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.WEB_SEARCH}\``,
     `\`${CODER_TOOL.READ_WEB_PAGE}\``,
     `\`${CODER_TOOL.LOAD_SKILL}\``,
     "`write_todos`",
@@ -359,7 +360,7 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
     "`glob`",
     "`grep`",
     `\`${CODER_TOOL.SLEEP}\``,
-    `\`${CODER_TOOL.SEARCH_WEB}\``,
+    `\`${CODER_TOOL.WEB_SEARCH}\``,
     `\`${CODER_TOOL.READ_WEB_PAGE}\``,
     `\`${CODER_TOOL.LOAD_SKILL}\``,
     "`write_todos`",
@@ -671,7 +672,7 @@ test("every agent is told that what happens on its pull request after its turn r
   }
 });
 
-test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone", () => {
+test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone, and never to post how the work is going", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const instructions = coderInstructions(
@@ -687,8 +688,15 @@ test("every agent is told to reply to a message on an inbox thread on that threa
         brief,
       );
       assert.ok(instructions.includes("never answer them in your message alone"), brief);
+      // Note that a progress note on a thread is noise the developer must acknowledge, so none is asked for.
+      assert.ok(
+        instructions.includes("Never post on a thread to say how the work is going"),
+        brief,
+      );
+      assert.ok(!instructions.includes("saying what you did with it"), brief);
     }
   }
+  assert.ok(INBOX_TOOLS.POST.description.includes("never how the work is going"));
 });
 
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {
@@ -781,6 +789,59 @@ test("with Chat off the instructions are the golden's, byte for byte, and messag
     assert.ok(!off.onTask.includes("## Your team's chat"), brief);
     assert.ok(!off.onTask.includes("message_agent") && !on.includes("message_agent"), brief);
   }
+});
+
+test("with Memory off the instructions say nothing of the workspace's memory; with it on they add its section before the one on messages, and nothing else", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const off = coderInstructions("Acme/Relay", brief, true, TASK_LINK);
+    const on = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_LINK,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.EVE,
+      CODING_AGENT_KIND.CODER,
+      true,
+    );
+    assert.ok(!off.includes("## The workspace's memory"), brief);
+    assert.ok(!off.includes(`\`${CODER_TOOL.REMEMBER}\``), brief);
+    const start = on.indexOf("## The workspace's memory\n\n");
+    const end = on.indexOf("## What your messages are", start);
+    assert.ok(start > 0 && end > start, brief);
+    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.RECALL}\``), brief);
+    assert.equal(on.slice(0, start) + on.slice(end), off, brief);
+  }
+});
+
+test("with Memory on, the operator is told to keep the developer's own preferences and what they are juggling private, and a coder that it keeps and recalls none", () => {
+  const memorySection = (kind: CodingAgentKind) => {
+    const on = coderInstructions(
+      null,
+      CODING_AGENT_BRIEF.BLANK,
+      false,
+      null,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.EVE,
+      kind,
+      true,
+    );
+    const start = on.indexOf("## The workspace's memory\n\n");
+    return on.slice(start, on.indexOf("## What your messages are", start));
+  };
+  const operator = memorySection(CODING_AGENT_KIND.OPERATOR);
+  const coder = memorySection(CODING_AGENT_KIND.CODER);
+
+  assert.ok(operator.includes("Keep the developer's own preferences and what they are juggling"));
+  assert.ok(operator.includes("as private memories, with private set"));
+  assert.ok(coder.includes("you are never answered one, and you never set private"));
+  assert.ok(!coder.includes("what they are juggling"));
 });
 
 /** The member's operator's instructions, recorded byte for byte: an agent of kind operator, blank, on no task and no repository. */

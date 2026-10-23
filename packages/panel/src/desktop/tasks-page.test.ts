@@ -21,7 +21,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -154,7 +154,10 @@ const WAITING: readonly AppInboxTask[] = [
 ];
 
 /** The Tasks page over Acme's tasks, or `tasks`, read by Dean, once the members have answered. */
-async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLElement> {
+async function mountPage(
+  tasks: readonly TaskSummary[] = TASKS,
+  room: ShellRoom = SHELL_ROOM.WIDE,
+): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -184,7 +187,7 @@ async function mountPage(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLEle
         createElement(
           Fragment,
           null,
-          createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE }),
+          createElement(TasksPage, { tasks: control, room }),
           createElement(ToastHost),
         ),
       ),
@@ -329,6 +332,75 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
   assert.equal(again.querySelector("[data-filtered='true']"), null);
 });
 
+/** The list motion's tokens, as the app's sheets set them, and an engine that records each motion rather than playing it; answers what was played and a way to take both away. */
+function recordMotions() {
+  const tokens = {
+    "--luke-duration-exit": "90ms",
+    "--luke-motion-exit": "ease",
+    "--luke-duration-quick": "140ms",
+    "--luke-duration-shape": "460ms",
+    "--luke-spring": "ease-out",
+    "--luke-row-stagger": "32ms",
+  };
+  for (const [name, value] of Object.entries(tokens)) {
+    document.documentElement.style.setProperty(name, value);
+  }
+  const played: { element: Element; keyframes: Keyframe[]; finish: () => void }[] = [];
+  Object.defineProperty(Element.prototype, "animate", {
+    configurable: true,
+    value(this: Element, keyframes: Keyframe[]) {
+      const motion = { onfinish: null as (() => void) | null, cancel: () => undefined };
+      played.push({ element: this, keyframes, finish: () => motion.onfinish?.() });
+      return motion;
+    },
+  });
+  return {
+    played,
+    scaled: (element: Element | null | undefined) =>
+      played.some(
+        (motion) =>
+          motion.element === element &&
+          motion.keyframes.some((frame) => String(frame.transform).includes("scale")),
+      ),
+    remove: () => {
+      for (const name of Object.keys(tokens)) document.documentElement.style.removeProperty(name);
+      Reflect.deleteProperty(Element.prototype, "animate");
+    },
+  };
+}
+
+test("a field's chip scales in as it is filtered, and lifted, the list widens at once while the chip scales out out of reach", async () => {
+  const motion = recordMotions();
+  try {
+    const page = await mountPage();
+    const line = () => page.querySelector<HTMLElement>(".tasks-filter-line");
+    assert.equal(line()?.hidden, true, "the line stands ready, hidden");
+    openOptions(page, "Filter");
+    choose("Priority", "High");
+    closeMenus();
+    const chip = page.querySelector("[data-motion-key='priority']");
+    assert.ok(motion.scaled(chip), "the first chip scales in");
+
+    const lift = page.querySelector<HTMLButtonElement>(
+      "button[aria-label='Clear the priority filter']",
+    );
+    act(() => (lift ?? assert.fail("a way to lift it")).click());
+    assert.equal(groups(page).length, 4, "the list widens on the press");
+    const leaving = page.querySelector("[data-motion-key='priority']");
+    assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn through its exit");
+    assert.equal(leaving?.hasAttribute("inert"), true);
+    assert.ok(motion.scaled(leaving), "it scales out");
+
+    act(() => {
+      for (const each of motion.played.splice(0)) each.finish();
+    });
+    assert.equal(page.querySelector("[data-motion-key='priority']"), null);
+    assert.equal(line()?.hidden, true);
+  } finally {
+    motion.remove();
+  }
+});
+
 test("a filter chosen here keeps another workspace's filter that another tab kept meanwhile", async () => {
   const page = await mountPage();
   const elsewhere = { "workspace-beta": { priority: [TASK_PRIORITY.LOW] } };
@@ -409,15 +481,15 @@ test("find opened in the List is let go as the Board is chosen", async () => {
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.FIND), "the List offers find");
   });
-  assert.ok(page.querySelector("search[aria-label='Find']"), "the List's find bar stands");
+  assert.ok(page.querySelector("[role='search'][aria-label='Find']"), "the List's find bar stands");
   act(() => buttonNamed(page, "Board").click());
-  assert.equal(page.querySelector("search[aria-label='Find']"), null);
+  assert.equal(page.querySelector("[role='search'][aria-label='Find']"), null);
 });
 
 test("a row's words said to a screen reader alone are left out of find, so a key searched is found once", async () => {
   const page = await mountPage();
   const press = rowOf(page, "ACME-44").querySelector("button");
-  const spoken = press?.querySelector(".visually-hidden");
+  const spoken = press?.querySelector(".luke-visually-hidden");
   assert.ok(spoken, "the key and status are said");
   assert.ok(spoken.hasAttribute("data-find-skip"), "find passes over them");
 });
@@ -513,13 +585,57 @@ test("a row draws the pull requests its agents opened, each its mark and its num
   assert.match(agents?.textContent ?? "", /#4222/);
 });
 
+test("a row whose agents rest keeps the working mark's room before its pull request, so its pull request lines up with a working row's", async () => {
+  const pullRequest = (number: number) => ({
+    number,
+    title: "Rate limit search",
+    state: "open" as const,
+    checks: "passing" as const,
+    additions: 10,
+    deletions: 2,
+  });
+  const resting: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [pullRequest(4222)],
+    },
+  };
+  const working: TaskSummary = {
+    ...task(38, "Billing after downgrade", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 1,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [pullRequest(4223)],
+    },
+  };
+  const page = await mountPage([resting, working, ...TASKS.slice(2)]);
+  const lead = (key: string) =>
+    [...(rowOf(page, key).querySelector("[data-cell='agents'] .task-work-marks")?.children ?? [])]
+      .map((mark) => mark.className)
+      .slice(0, 2);
+
+  assert.deepEqual(lead("ACME-38"), ["state-glyph", "task-work-pull-request"]);
+  assert.deepEqual(lead("ACME-39"), ["state-glyph", "task-work-pull-request"]);
+  assert.equal(
+    rowOf(page, "ACME-39").querySelector("[data-cell='agents'] [data-state='working']"),
+    null,
+    "a resting row draws no working mark",
+  );
+});
+
 test("a group's head folds it, its count still standing, and the fold is kept on this Mac", async () => {
   const page = await mountPage();
   const fold = () => {
     const head = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
       (group) => group.getAttribute("aria-label") === "Todo",
     );
-    const button = head?.querySelector<HTMLButtonElement>(".tasks-list-fold");
+    const button = head?.querySelector<HTMLButtonElement>(".tasks-list-head button");
     assert.ok(button, "Todo's head folds it");
     return button;
   };
@@ -636,6 +752,113 @@ test("a row dragged into a section is kept there, and one dragged out of its sec
   assert.deepEqual(sent, [["t-42", { status: TASK_STATUS.BACKLOG }]]);
 });
 
+/** A task of `TASKS` assigned to Dean, the reader. */
+function deans(key: number): TaskSummary {
+  const held = TASKS.find((each) => each.number === key) ?? assert.fail(`no ACME-${key}`);
+  return { ...held, assignee: { userId: DEAN, name: "Dean Stratakos" } };
+}
+
+/** The properties a row drew before it drew the assignee, every one of them, as an earlier build kept them. */
+const BEFORE_ASSIGNEE = [
+  "priority",
+  "key",
+  "status",
+  "waiting",
+  "repository",
+  "creator",
+  "agents",
+  "updated",
+];
+
+test("a row draws its assignee and not its creator at first, and a List display kept before rows offered the assignee draws it, its creator as kept", async () => {
+  const cells = (page: HTMLElement) =>
+    [...rowOf(page, "ACME-40").querySelectorAll("[data-cell]")].map((cell) =>
+      cell.getAttribute("data-cell"),
+    );
+  const fresh = await mountPage();
+  assert.ok(cells(fresh).includes("assignee"));
+  assert.ok(!cells(fresh).includes("creator"));
+
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  for (const kept of [
+    { properties: BEFORE_ASSIGNEE, offered: BEFORE_ASSIGNEE },
+    { properties: BEFORE_ASSIGNEE },
+  ]) {
+    window.localStorage.setItem("luke.tasksListDisplay", JSON.stringify(kept));
+    const page = await mountPage();
+    assert.ok(cells(page).includes("assignee"), "the assignee is drawn without turning it on");
+    assert.ok(cells(page).includes("creator"), "the creator stays on, as kept");
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+  }
+});
+
+test("a row's Assignee chip sends the member picked, and No assignee assigns it to no one, opening no task", async () => {
+  const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
+
+  act(() => rowChip(page, "ACME-40", "Assignee").click());
+  choose("Dean Stratakos");
+  act(() => rowChip(page, "ACME-39", "Assignee").click());
+  choose("No assignee");
+
+  assert.deepEqual(sent, [
+    ["t-40", { assigneeId: DEAN }],
+    ["t-39", { assigneeId: null }],
+  ]);
+  assert.deepEqual(opened, [], "a pick opens no task");
+});
+
+test("grouped by assignee, the reader's group leads and No assignee's ends, a row there leaves its assignee's cell empty, and a row dragged onto a group is assigned to its person, onto No assignee's to no one", async () => {
+  window.localStorage.setItem(
+    "luke.tasksListDisplay",
+    JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
+  );
+  const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
+  layRowsOut(page);
+
+  assert.deepEqual(
+    groups(page).map(([name]) => name),
+    ["You", "No assignee"],
+  );
+  const cell = rowOf(page, "ACME-39").querySelector("[data-cell='assignee']");
+  assert.ok(cell, "the row keeps its assignee's column");
+  assert.equal(
+    cell.querySelector("button"),
+    null,
+    "the group's head says who, so the cell is empty",
+  );
+  dragRow(page, "ACME-40", "You");
+  dragRow(page, "ACME-39", "No assignee");
+
+  assert.deepEqual(sent, [
+    ["t-40", { assigneeId: DEAN }],
+    ["t-39", { assigneeId: null }],
+  ]);
+});
+
+test("on a phone grouped by assignee, a row keeps its Assignee chip, which moves it without a drag", async () => {
+  window.localStorage.setItem(
+    "luke.tasksListDisplay",
+    JSON.stringify({ grouping: "assignee", pinnedFirst: false }),
+  );
+  const page = await mountPage(
+    [deans(39), ...TASKS.filter((each) => each.number !== 39)],
+    SHELL_ROOM.NARROW,
+  );
+
+  // Note that a phone's row draws no key, so the row is found by its task.
+  const chip = page.querySelector<HTMLButtonElement>(
+    'li[data-task-id="t-39"] button[aria-label^="Assignee:"]',
+  );
+  act(() => (chip ?? assert.fail("the row keeps its Assignee chip")).click());
+  choose("No assignee");
+
+  assert.deepEqual(sent, [["t-39", { assigneeId: null }]]);
+});
+
 test("a Board display kept before its cards offered Agents and Needs you draws them, the rest as kept", async () => {
   window.localStorage.setItem("luke.tasksPageView", JSON.stringify("board"));
   window.localStorage.setItem(
@@ -727,9 +950,27 @@ test("a view that leaves no task standing says so, though an empty section still
 test("a row leads its repository with its owner's picture, one address for every row of that owner, so the window asks GitHub for it once", async () => {
   const page = await mountPage();
   const pictures = [
-    ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.repository-picture"),
+    ...page.querySelectorAll<HTMLImageElement>("[data-cell='repository'] img.luke-avatar-picture"),
   ].map((picture) => picture.getAttribute("src"));
 
   assert.equal(pictures.length, page.querySelectorAll(".tasks-list-row").length);
   assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
+});
+
+test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
+  const page = await mountPage();
+  const offered = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item')]
+      .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
+      .map((item) => item.querySelector("img.luke-avatar-picture")?.getAttribute("src"));
+
+  openOptions(page, "Filter");
+  choose("Repository");
+  assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);
+  closeMenus();
+
+  act(() => buttonNamed(page, "Board").click());
+  openOptions(page, "Filter");
+  choose("Repository");
+  assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);
 });

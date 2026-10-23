@@ -95,6 +95,13 @@ export const CODER = {
    * own default, written down so the two cannot drift apart.
    */
   COMPACTION_THRESHOLD_SHARE: 0.9,
+  /**
+   * The share of the context window past which an operator's next turn is
+   * told its history will soon be summarised, so it keeps what is durable
+   * first (`turn-context.ts`'s `FLUSH_LINE`): below eve's own mark, so the
+   * turn it is told on still runs before eve compacts.
+   */
+  FLUSH_THRESHOLD_SHARE: 0.8,
   /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing. */
@@ -180,7 +187,7 @@ export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no coding agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
-  NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
+  NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
   NO_FAST_VERSION:
     "Not run: Luke cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
   /** No step is refused this way since Fast runs on an account's own key; kept for the turns that were refused so before, which still read as this. */

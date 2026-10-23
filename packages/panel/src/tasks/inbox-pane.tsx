@@ -24,8 +24,14 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BADGE_TONE,
   BackIcon,
+  Badge,
   Breadcrumbs,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  CardHead,
   CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_TONE,
@@ -37,15 +43,20 @@ import {
   DisclosureSummary,
   EllipsisIcon,
   ErrorState,
+  Fill,
   FoldingButton,
   type FoldingButtonHint,
   GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   ONE_LINE_END,
   Stack,
   TEXT_TONE,
   Text,
+  Time,
+  Tooltip,
   useMenu,
+  useMinute,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -69,7 +80,6 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TextLink } from "../text-link.js";
-import { Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   AgentActorRef,
@@ -121,6 +131,7 @@ import {
   inboxCommentFiles,
   inboxFileChips,
   inboxThreadOf,
+  inboxWaitsOn,
   isUnread,
   itemWorkspaceId,
   knownAsk,
@@ -143,13 +154,11 @@ import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from
 import { InboxPicture, InboxPictures } from "./inbox-pictures.js";
 import { InboxStamp } from "./inbox-stamp.js";
 import { LoneLinkCards } from "./lone-link-card.js";
-import { RelativeTime } from "./relative-time.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { markReadItem } from "./task-menu-items.js";
-import { useMinute } from "./task-time.js";
 import { cardTitle } from "./tool-call-model.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -894,7 +903,7 @@ function AnswerValues({
 }): React.JSX.Element | null {
   if (values.length === 0) return null;
   return (
-    <ul className="inbox-values" data-inbox-values="">
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="inbox-values" data-inbox-values="">
       {values.map(({ label, value }) => (
         <li key={label} className="inbox-value">
           <span className="inbox-value-label">{label}</span>
@@ -907,7 +916,7 @@ function AnswerValues({
           </div>
         </li>
       ))}
-    </ul>
+    </Stack>
   );
 }
 
@@ -953,11 +962,7 @@ function Answered({
             <ActorRef actor={answerer} />
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime
-              className={THREAD_TIME_CLASS}
-              at={settledAt(item) ?? item.updatedAt}
-              now={now}
-            />{" "}
+            <Time className={THREAD_TIME_CLASS} at={settledAt(item) ?? item.updatedAt} now={now} />{" "}
             · <Delivered item={item} by={by} />
           </span>
         </>
@@ -1014,11 +1019,7 @@ function Withdrawn({
           </CommentName>
           <span className="inbox-comment-when">
             withdrew this{" "}
-            <RelativeTime
-              className={THREAD_TIME_CLASS}
-              at={settledAt(item) ?? item.updatedAt}
-              now={now}
-            />
+            <Time className={THREAD_TIME_CLASS} at={settledAt(item) ?? item.updatedAt} now={now} />
           </span>
         </>
       }
@@ -1053,11 +1054,7 @@ function Closed({
             <ActorRef actor={closer} />
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime
-              className={THREAD_TIME_CLASS}
-              at={settledAt(item) ?? item.updatedAt}
-              now={now}
-            />{" "}
+            <Time className={THREAD_TIME_CLASS} at={settledAt(item) ?? item.updatedAt} now={now} />{" "}
             · <Delivered item={item} by={by} />
           </span>
         </>
@@ -1108,7 +1105,7 @@ function Message({
             {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
+            <Time className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
           </span>
         </>
       }
@@ -1283,8 +1280,8 @@ function useScrollToOwnMessage(
 const NEWER_LUKE_ASK = "Answer this in a newer Luke.";
 
 /**
- * Who an open ask waits on where that is a teammate: the one who started
- * its agent, in the muted ink, as the list's Waiting on others does,
+ * Who an open ask waits on where that is a teammate (`inboxWaitsOn`): its
+ * task's assignee, else the one who started its agent, in the muted ink, as the list's Waiting on others does,
  * though any member may still answer. Where the item is the reader's
  * (`readersItem`) it draws nothing: the draft reply under the thread,
  * holding the ask's controls, already says the answer is theirs.
@@ -1317,9 +1314,10 @@ const REPLACED = {
  */
 function AnsweredMarker(): React.JSX.Element {
   return (
-    <span className="inbox-ask-settled" data-inbox-settled="answered">
-      <CheckIcon aria-hidden="true" />
-      {ANSWERED}
+    <span data-inbox-settled="answered">
+      <Badge tone={BADGE_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
+        {ANSWERED}
+      </Badge>
     </span>
   );
 }
@@ -1372,8 +1370,8 @@ function ReplacedMarker({
     .slice(at + 1)
     .some((said) => said.author === INBOX_MESSAGE_AUTHOR.AGENT && said.ask !== undefined);
   return (
-    <span className="inbox-ask-settled" data-inbox-settled="replaced">
-      {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
+    <span data-inbox-settled="replaced">
+      <Badge>{asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}</Badge>
     </span>
   );
 }
@@ -1388,8 +1386,10 @@ function WithdrawnMarker({
 }): React.JSX.Element {
   const closer = usePerson(item.closedBy);
   return (
-    <span className="inbox-ask-settled" data-inbox-settled="withdrawn">
-      <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+    <span data-inbox-settled="withdrawn">
+      <Badge>
+        <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+      </Badge>
     </span>
   );
 }
@@ -1437,10 +1437,12 @@ function AskBox({
   if (!knownAsk(ask)) {
     return (
       <div className="inbox-ask" data-inbox-ask="newer">
-        <div className="inbox-ask-head">
-          <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
-          {ask.status === INBOX_ASK_STATUS.OPEN ? <Waiting on={waitingOn} /> : null}
-        </div>
+        <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+          <CardHead>
+            <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
+            {ask.status === INBOX_ASK_STATUS.OPEN ? <Waiting on={waitingOn} /> : null}
+          </CardHead>
+        </Card>
       </div>
     );
   }
@@ -1473,10 +1475,12 @@ function AskBox({
   }
   return (
     <div className="inbox-ask" data-inbox-ask={ask.status}>
-      <div className="inbox-ask-head">
-        <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
-        <span className="inbox-ask-standing">{ANSWERED}</span>
-      </div>
+      <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+        <CardHead>
+          <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
+          <span className="inbox-ask-standing">{ANSWERED}</span>
+        </CardHead>
+      </Card>
     </div>
   );
 }
@@ -1535,7 +1539,7 @@ function ThreadMessage({
             {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
+            <Time className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
           </span>
         </>
       }
@@ -1828,12 +1832,14 @@ function Crumbs({
       hint: name,
       card: <AgentCard subject={by.subject} models={by.models} />,
       onPress: () => by.onOpen(),
+      // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
+      fixed: titleShown,
     },
     { label: title, current: true, shown: titleShown, end: ONE_LINE_END.ELLIPSIS },
   ].filter((crumb) => crumb !== undefined);
   return (
     <div className="inbox-crumbs">
-      <Breadcrumbs label="Path" crumbs={crumbs} hint={Tooltip} />
+      <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
 }
@@ -1894,8 +1900,8 @@ export function InboxPane({
   useScrollToOwnMessage(board, item, readerId);
   const [heading, setHeading] = useState<HTMLElement | null>(null);
   const headingAway = useHeadingAway(board, heading, item.id);
-  // An open ask waits on whoever started its agent, as the list says, though any member may answer it.
-  const waitingOn = readersItem(item, readerId) ? undefined : item.startedBy;
+  // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
+  const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
   const by: ItemAgent = {
     subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
     models: agents.models,
@@ -2000,7 +2006,7 @@ export function InboxPane({
           />
         </div>
       </header>
-      <div className="desktop-inbox">
+      <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation subject={item.id} list={board}>
           <ConversationContent className="inbox-board agent-log-over-composer ph-no-capture">
@@ -2011,7 +2017,12 @@ export function InboxPane({
                   {thread === undefined ? (
                     <>
                       <Subject item={item} heading={setHeading} />
-                      <ol className="inbox-thread" aria-label="Thread">
+                      <Stack
+                        as={LAYOUT_ELEMENT.OL}
+                        gap={GAP.NONE}
+                        className="inbox-thread"
+                        aria-label="Thread"
+                      >
                         <Comment
                           kind={COMMENT.ASKED}
                           head={
@@ -2020,11 +2031,7 @@ export function InboxPane({
                                 <AgentName by={by} />
                               </CommentName>
                               <span className="inbox-comment-when">
-                                <RelativeTime
-                                  className={THREAD_TIME_CLASS}
-                                  at={item.postedAt}
-                                  now={now}
-                                />
+                                <Time className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
                               </span>
                             </>
                           }
@@ -2038,13 +2045,18 @@ export function InboxPane({
                         </Comment>
                         <ThreadAfter item={item} by={by} now={now} control={control} />
                         {draftReply}
-                      </ol>
+                      </Stack>
                     </>
                   ) : (
                     <>
                       <Subject item={item} heading={setHeading} />
                       <AnswerMentions value={mentions}>
-                        <ol className="inbox-thread" aria-label="Thread">
+                        <Stack
+                          as={LAYOUT_ELEMENT.OL}
+                          gap={GAP.NONE}
+                          className="inbox-thread"
+                          aria-label="Thread"
+                        >
                           {thread.map((message, at) => (
                             <Fragment key={message.id}>
                               <ThreadMessage
@@ -2063,7 +2075,7 @@ export function InboxPane({
                             </Fragment>
                           ))}
                           {draftReply}
-                        </ol>
+                        </Stack>
                       </AnswerMentions>
                     </>
                   )}
@@ -2077,7 +2089,7 @@ export function InboxPane({
           <ConversationScrollButton />
         </Conversation>
         {open || next === undefined ? null : <InboxNextUp next={next} />}
-      </div>
+      </Fill>
     </section>
   );
 }

@@ -11,10 +11,9 @@ import {
   mentionName,
 } from "@luke/features/mention-link";
 import { placeChipLook } from "@luke/features/place-chip-model";
-import { LIST_VARIANT, List, ListRow, ProviderMark } from "@luke/ui";
+import { LIST_VARIANT, List, ListRow, ProviderMark, RowHint, RowHintOptions } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
-import { RowHint, RowHintOptions } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
 import { pullRequestStateWord } from "./coding-agent-model.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
@@ -135,7 +134,7 @@ function PullRequestRowCard({
   const known = standing?.pullRequest;
   const number = numberWords(pullRequest, standing, repository);
   const title = standing?.title ?? writtenWords(target, words);
-  const state = known === undefined ? undefined : pullRequestStateWord(known.state);
+  const state = known === undefined ? undefined : pullRequestStateWord(known);
   const named = title === undefined ? number : `${number} · ${title}`;
   return (
     <OneRowCard label={CARD_LABEL.PULL_REQUEST} kind={LONE_LINK.PULL_REQUEST}>

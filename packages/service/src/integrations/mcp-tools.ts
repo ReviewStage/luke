@@ -18,10 +18,10 @@
  * is malformed is kept without them, so one server's slip never costs the
  * developer its whole list.
  *
- * The same session serves a native agent's `connection_execute` and
- * `connection_search` (`connection-door.ts`): `listMcpToolSchemas` reads each
- * tool with the schemas the server declared, untouched, and `callMcpTool`
- * finds one tool by name and calls it, answering the server's own result.
+ * The same session serves a native agent's integration servers
+ * (`connection-door.ts`): `listMcpToolSchemas` reads each tool with the
+ * schemas the server declared, untouched, and `callMcpTool` finds one tool
+ * by name and calls it, answering the server's own result.
  *
  * Every failure is one word. The one thing kept of what the server said is
  * the first line of a JSON-RPC error's message, bounded, and only where it
@@ -188,10 +188,12 @@ interface RpcParams {
   readonly arguments?: WireRecord;
 }
 
-/** One tool as the server listed it, for a model to call: its name, its words, and the schemas it declared, as the server wrote them. */
+/** One tool as the server listed it, for a model to call: its name, its title and words, its hints, and the schemas it declared, as the server wrote them. */
 export interface McpToolSchema {
   readonly name: string;
+  readonly title?: string;
   readonly description?: string;
+  readonly annotations?: WireRecord;
   readonly inputSchema?: WireValue;
   readonly outputSchema?: WireValue;
 }
@@ -422,11 +424,13 @@ function listedTools(send: McpSend): Effect.Effect<readonly ListedTool[], McpToo
   });
 }
 
-/** A listed tool as a model is shown it: its name, its words, and its schemas untouched. */
+/** A listed tool as a model is shown it: its name, its title, words, and hints, and its schemas untouched. */
 function toolSchema(tool: ListedTool): McpToolSchema {
   return {
     name: tool.name,
+    ...(isWireString(tool.title) ? { title: tool.title } : undefined),
     ...(tool.description !== undefined ? { description: tool.description } : undefined),
+    ...(isRecord(tool.annotations) ? { annotations: tool.annotations } : undefined),
     ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : undefined),
     ...(tool.outputSchema !== undefined ? { outputSchema: tool.outputSchema } : undefined),
   };

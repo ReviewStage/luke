@@ -1,8 +1,7 @@
 import type { Experiment } from "@luke/settings";
+import { FoldingButton, Tooltip } from "@luke/ui";
 import { FlaskConicalIcon, MessageSquareIcon } from "lucide-react";
-import { FoldingButton } from "./folding-button.js";
 import { useOpenFeedback } from "./open-feedback.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * experiment-marks.tsx -- what an experiment's page wears in its toolbar: the Experimental tag after its title, and Send feedback among its actions.

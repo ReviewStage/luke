@@ -339,6 +339,29 @@ export function teammateCreator(
   return creatorActor(task, reader, undefined);
 }
 
+/** The face a task's row wears for who is on it: its assignee, or, where no one is assigned, the unassigned mark (`assignee` undefined). */
+export interface AssigneeFace {
+  readonly assignee: Actor | undefined;
+}
+
+/**
+ * Who a task's row names by face: the member it is assigned to where that
+ * is someone other than the reader, read against the members as
+ * `personActor` reads them, and the unassigned mark where no one is; a
+ * task assigned to the reader wears nothing. Who made it, a teammate, Luke,
+ * or an agent, is never its face, since it is not who is on it, and stays
+ * on its card and its menu's Created by.
+ */
+export function assigneeFace(
+  task: { readonly assignee?: { readonly userId: string; readonly name: string } | undefined },
+  reader: EditReader,
+): AssigneeFace | undefined {
+  const { assignee } = task;
+  if (assignee === undefined) return { assignee: undefined };
+  if (assignee.userId === reader.readerId) return undefined;
+  return { assignee: personActor(assignee, reader.members, reader.readerId, reader.former) };
+}
+
 /** The coding agent that made a task, as the window holds it: its name, harness, where it stands, its task, and the automation whose run started it. */
 export interface OriginAgent {
   readonly name: string;

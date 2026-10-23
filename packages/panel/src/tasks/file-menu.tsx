@@ -1,11 +1,10 @@
-import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
+import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, Tooltip, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FolderTreeIcon } from "lucide-react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
 
 /**

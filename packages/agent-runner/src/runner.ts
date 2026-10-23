@@ -50,7 +50,13 @@ import {
 import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
-import { type LaunchContext, type LaunchOutcome, RunnerFailed, type RunnerSelf } from "./launch.js";
+import {
+  installedSkillsPath,
+  type LaunchContext,
+  type LaunchOutcome,
+  RunnerFailed,
+  type RunnerSelf,
+} from "./launch.js";
 import { openMcpRelay } from "./mcp-relay.js";
 import { ProcessTable } from "./processes.js";
 import {
@@ -58,6 +64,7 @@ import {
   EFFORT,
   type Effort,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   type InputLine,
   InputLineSchema,
   RUNNER_END,
@@ -85,7 +92,7 @@ const MCP_SERVER = "luke";
 const DENIED_VARIABLES = [
   RUNNER_ENV.CLAUDE_TOKEN,
   RUNNER_ENV.BEARER,
-  "ANTHROPIC_API_KEY",
+  RUNNER_ENV.API_KEY,
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
 ] as const;
@@ -115,7 +122,7 @@ const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSch
 function queryOptions(
   config: ClaudeCodeConfig,
   env: RunnerInput["env"],
-  luke: McpSdkServerConfigWithInstance,
+  servers: Readonly<Record<string, McpSdkServerConfigWithInstance>>,
   onStop: HookCallback,
 ): Options {
   const options: Options = {
@@ -132,8 +139,8 @@ function queryOptions(
     env: { ...env, [RUNNER_ENV.BEARER]: undefined },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so Luke's is an
-    // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`).
-    mcpServers: { [MCP_SERVER]: luke },
+    // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`), as is each integration's.
+    mcpServers: { ...servers },
     sandbox: {
       enabled: true,
       failIfUnavailable: true,
@@ -153,6 +160,12 @@ function queryOptions(
   // Note that a headless CLI runs fast mode only where its flag settings opt in.
   if (config.fast === true) options.settings = { fastMode: true };
   if (config.resume !== undefined) options.resume = config.resume;
+  // The member's installed skills load as a local plugin, which leaves the checkout and the
+  // settings Claude Code reads (`project` alone) as they stand; Luke holds its MCP servers.
+  const manifest = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.MANIFEST);
+  if (manifest !== undefined && config.installedSkills !== undefined) {
+    options.plugins = [{ type: "local", path: config.installedSkills, skipMcpDiscovery: true }];
+  }
   return options;
 }
 
@@ -413,11 +426,18 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     }
     return { continue: true };
   };
-  const luke = yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer);
+  const servers: Record<string, McpSdkServerConfigWithInstance> = {
+    [MCP_SERVER]: yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer),
+  };
+  // Each integration the agent is handed is a server of its own, its tools named `mcp__<connection>__<tool>`.
+  for (const integration of config.integrations ?? []) {
+    if (integration.name === MCP_SERVER) continue;
+    servers[integration.name] = yield* openMcpRelay(integration.name, integration.url, bearer);
+  }
   const prompts = yield* Queue.unbounded<SDKUserMessage, Cause.Done>();
   const session = claudeCode.query({
     prompt: Stream.toAsyncIterable(Stream.fromQueue(prompts)),
-    options: queryOptions(config, context.env, luke, onStop),
+    options: queryOptions(config, context.env, servers, onStop),
   });
   const launch: Launch = {
     session,
@@ -483,8 +503,13 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     return yield* new RunnerFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });
   }
   const bearer = Redacted.make(bearerValue);
-  const token = input.env[RUNNER_ENV.CLAUDE_TOKEN];
-  const secrets = token === undefined || token === "" ? [bearer] : [bearer, Redacted.make(token)];
+  const tokens = [RUNNER_ENV.CLAUDE_TOKEN, RUNNER_ENV.API_KEY, RUNNER_ENV.OPENAI_API_KEY].flatMap(
+    (name) => {
+      const value = input.env[name];
+      return value === undefined || value === "" ? [] : [Redacted.make(value)];
+    },
+  );
+  const secrets = [bearer, ...tokens];
 
   // Stdin is read in a loop of its own from the first line on, so nothing
   // the session does can hold up a line Luke wrote.

@@ -41,6 +41,26 @@
     -webkit-line-clamp: 2;
   }
 
+  /* Whole, words too short to want cutting (a time): on a coarse pointer
+     the press is a finger's height, and at least as wide, centred on the
+     words, as a Button's is, its clip lifted so it does not clip the press. */
+  @media (pointer: coarse) {
+    .luke-text-button[data-lines="whole"] {
+      position: relative;
+      overflow: visible;
+    }
+
+    .luke-text-button[data-lines="whole"]::before {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--luke-touch-target));
+      height: var(--luke-touch-target);
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
+
   /* A desktop control answers a press the way a Mac's does, without the
      web's pointing hand. */
   [data-luke-profile="desktop"] .luke-text-button {

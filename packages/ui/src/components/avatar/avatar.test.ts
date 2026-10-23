@@ -4,14 +4,15 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { AVATAR_SHAPE, Avatar } from "./avatar.js";
+import { AVATAR_SHAPE, Avatar, UnassignedAvatar } from "./avatar.js";
 
 /**
  * avatar.test.ts -- the letter stands until the picture loads and comes back
  * where it fails; a picture that failed is asked for again once its address
  * is given back; a glyph stands where the letter would, for an app; a
- * picture the browser drew before the page took over is shown; and the disc
- * names its person to a reader once. The page's
+ * picture the browser drew before the page took over is shown; the disc
+ * names its person to a reader once; and no one's outline is named
+ * Unassigned to a reader, once. The page's
  * answer to a picture is the boundary, so a test sends the load or the error
  * the browser would.
  */
@@ -145,4 +146,40 @@ test("a picture the browser had drawn before the page took over is shown without
   const { container } = drawn({ name: "Ada", src: PICTURE });
   assert.equal(container.textContent, "");
   assert.equal(picture(container)?.getAttribute("src"), PICTURE);
+});
+
+test("a blank tile draws nothing until its picture loads, lazily, and says where the picture fails", () => {
+  const failed = vi.fn();
+  const { container } = drawn({
+    name: "",
+    src: PICTURE,
+    shape: AVATAR_SHAPE.TILE,
+    decorative: true,
+    edged: true,
+    blank: true,
+    lazy: true,
+    onFail: failed,
+  });
+  const tile = container.firstElementChild;
+  assert.equal(tile?.getAttribute("data-shape"), "tile");
+  assert.equal(tile?.getAttribute("data-edged"), "true");
+  assert.equal(tile?.hasAttribute("data-hue"), false);
+  assert.equal(container.textContent, "");
+  assert.equal(tile?.querySelector("svg"), null);
+  assert.equal(picture(container)?.getAttribute("loading"), "lazy");
+  answer(container, "error");
+  assert.equal(failed.mock.calls.length, 1);
+});
+
+test("no one's outline is named Unassigned to a reader, and says nothing beside the words", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(UnassignedAvatar)));
+  assert.equal(container.firstElementChild?.getAttribute("role"), "img");
+  assert.equal(container.firstElementChild?.getAttribute("aria-label"), "Unassigned");
+  act(() => root.render(createElement(UnassignedAvatar, { decorative: true })));
+  assert.equal(container.firstElementChild?.getAttribute("aria-hidden"), "true");
+  assert.equal(container.firstElementChild?.getAttribute("aria-label"), null);
 });

@@ -1,0 +1,37 @@
+/* facts.css -- a description list of facts: each a muted name taking the
+   room and its value in figures that line up, and a hairline over a list
+   set under what stands over it. */
+
+@layer components {
+  .luke-facts {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--luke-space-6);
+    margin: 0;
+    padding: 0;
+  }
+
+  .luke-facts[data-ruled="true"] {
+    padding-top: var(--luke-space-12);
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  .luke-fact {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+  }
+
+  .luke-fact-label {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-fact-value {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+}

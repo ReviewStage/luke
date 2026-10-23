@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxField } from "@luke/features/inbox-wire";
-import type { FieldControl } from "@luke/ui";
+import { COMPOSER_LOOK, ComposerFrame, type FieldControl } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef } from "react";
@@ -99,7 +99,11 @@ export function InboxFormText({
     onNote: () => undefined,
   });
   return (
-    <div className="inbox-field-composer" data-disabled={disabled ? "" : undefined}>
+    <ComposerFrame
+      look={COMPOSER_LOOK.INPUT}
+      className="inbox-field-composer"
+      data-disabled={disabled ? "" : undefined}
+    >
       <ComposerField
         module={module}
         editor={editor}
@@ -120,6 +124,6 @@ export function InboxFormText({
         onEnter={doors.onEnter}
         onPasteFiles={() => false}
       />
-    </div>
+    </ComposerFrame>
   );
 }

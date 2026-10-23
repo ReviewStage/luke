@@ -28,7 +28,9 @@ import { rendererRuntime } from "../renderer-runtime.js";
  *
  * The words save a beat after the developer stops typing and again as the
  * editor closes, and the editor waits for that save before it goes
- * (`plan-edit-model.ts` decides every save). Another task opening takes the
+ * (`plan-edit-model.ts` decides every save), and each save the service
+ * answers saved moves `saves`, which the byline's Saved tick confirms.
+ * Another task opening takes the
  * editor with it, and words not yet saved go to the task they were typed in.
  * Unsaved words live in this window's memory alone and are never written to
  * disk. The editor itself is `plan-document-editor.tsx`.
@@ -80,6 +82,8 @@ export interface PlanEditing {
   readonly keepMine: () => void;
   readonly takeLukes: () => void;
   readonly retry: () => void;
+  /** How many of this task's saves the service answered saved, which a Saved tick confirms each of. */
+  readonly saves: number;
 }
 
 /**
@@ -97,6 +101,7 @@ export function usePlanEditing(
   const [placement, setPlacement] = useState<PlanEditorPlacement | undefined>(undefined);
   const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
   const [cursor, setCursor] = useState<EditorHost | undefined>(undefined);
+  const [saves, setSaves] = useState(0);
   // The open editor's words not yet handed over, which a task leaving must save too.
   const heldWords = useRef<(() => void) | undefined>(undefined);
   const [pause, restartPause] = useAtom(savePauseAtom);
@@ -129,7 +134,10 @@ export function usePlanEditing(
     setEditor(latest.current);
     flight.current = door.current(request);
     flight.current.then(
-      (answered) => landed((now) => editorAnswered(now, answered)),
+      (answered) => {
+        landed((now) => editorAnswered(now, answered));
+        if ("saved" in answered && opening.current === sentFrom) setSaves((count) => count + 1);
+      },
       (refused: Error) => landed((now) => editorRefused(now, refused.message)),
     );
   };
@@ -221,5 +229,6 @@ export function usePlanEditing(
       latest.current = editorRetried(latest.current);
       send();
     },
+    saves,
   };
 }

@@ -32,13 +32,15 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
 /**
  * A person's page lists what of theirs the listed workspace holds, and
  * nobody else's: their agents at work, the Inbox items their agents wait
- * on, the tasks they created, and their other agents. It names them as the
+ * on, the tasks assigned to them, the rest of the tasks they created, and
+ * their other agents. It names them as the
  * members read does, the reader as You, and someone who left as a former
  * member. Synthetic accounts.
  */
@@ -116,6 +118,7 @@ function task(
   createdBy: typeof CHARLES,
   ago: number,
   agents: readonly TaskAgentLine[] = [],
+  assignee?: typeof CHARLES,
 ): TaskSummary {
   const summary: TaskSummary = {
     id: `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`,
@@ -126,6 +129,7 @@ function task(
     repository: "acme/relay",
     ownerId: createdBy.userId,
     createdBy,
+    ...(assignee === undefined ? undefined : { assignee }),
   };
   if (agents.length === 0) return summary;
   return {
@@ -408,6 +412,24 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
+test("an agent's row says its failure at its end and hangs the agent's card while rested on, as the sidebar's row does", async () => {
+  const broken = agent(9, "Flaky retry", CHARLES, CODING_AGENT_STATUS.FAILED, 5 * MINUTE);
+  const failing = task(9, "Retry flake hunt", CHARLES, 5 * MINUTE, [broken]);
+  const { page } = mountWith(
+    { tasks: [...TASKS, failing], listed: { tasks: [...TASKS, failing], ...HOLDING } },
+    CHARLES.userId,
+  );
+  await settle();
+
+  const row = button(page, "Flaky retry");
+  assert.ok(row.querySelector(".failed-mark"));
+  assert.equal(button(page, "Jittered backoff").querySelector(".failed-mark"), null);
+
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Flaky retry");
+});
+
 test("a person's tasks wear no face of theirs, since the page's head already says whose they are", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
@@ -460,19 +482,11 @@ function keptViews(): Record<string, { createdBy?: string; assignedTo?: string }
   return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
 }
 
-test("Their tasks in sidebar lists the sidebar's tasks by them", async () => {
-  const { page } = mount(CHARLES.userId);
-  await settle();
-
-  button(page, "Their tasks in sidebar").click();
-  assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
-});
-
-test("Their tasks in sidebar lists every task they created, letting go of a filter by assignee", async () => {
+test("Their tasks in sidebar lists every task assigned to them, letting go of a filter by creator", async () => {
   window.localStorage.setItem(
     "luke.sidebarTaskViews",
     JSON.stringify({
-      [ACME.id]: { grouping: "repository", order: "updated", assignedTo: DEAN.userId },
+      [ACME.id]: { grouping: "repository", order: "updated", createdBy: DEAN.userId },
     }),
   );
   const { page } = mount(CHARLES.userId);
@@ -480,7 +494,34 @@ test("Their tasks in sidebar lists every task they created, letting go of a filt
 
   button(page, "Their tasks in sidebar").click();
   const kept = keptViews()[ACME.id];
-  assert.deepEqual([kept?.createdBy, kept?.assignedTo], [CHARLES.userId, undefined]);
+  assert.deepEqual([kept?.assignedTo, kept?.createdBy], [CHARLES.userId, undefined]);
+});
+
+test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and Show all lists every one assigned in the sidebar", async () => {
+  // Six tasks Dean created for Charles, one more than the page draws, and one Charles made for himself.
+  const handed = [5, 6, 7, 8, 9, 10].map((n) =>
+    task(n, `Handed over ${n}`, DEAN, n * MINUTE, [], CHARLES),
+  );
+  const own = task(11, "Charles's own retries", CHARLES, 60 * MINUTE, [], CHARLES);
+  const listed = [...TASKS, ...handed, own];
+  const { page } = mountWith(
+    { tasks: listed, listed: { tasks: listed, ...HOLDING } },
+    CHARLES.userId,
+  );
+  await settle();
+
+  const drawn = sections(page);
+  assert.deepEqual(Object.keys(drawn).slice(2, 4), ["Assigned", "Created"]);
+  assert.deepEqual(
+    drawn.Assigned,
+    [5, 6, 7, 8, 9].map((n) => `Handed over ${n}`),
+  );
+  assert.deepEqual(drawn.Created, ["Relay retries on 502", "Retry budget dashboard"]);
+  // Each section wears no face, the page's head saying whose they are.
+  assert.equal(page.querySelector('section[aria-label="Assigned"] .actor-mark'), null);
+
+  button(page, "Show all 7 in sidebar").click();
+  assert.equal(keptViews()[ACME.id]?.assignedTo, CHARLES.userId);
 });
 
 test("a workspace of one offers no sidebar filter, since its sidebar filters by nobody", async () => {
@@ -516,15 +557,6 @@ test("More offers their page's link and a member's email to copy and, to an owne
   assert.deepEqual(opened.settings, [
     { page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id, section: SETTINGS_SECTION.MEMBERS },
   ]);
-});
-
-test("Their tasks in sidebar turns the sidebar's list to the tasks they created", async () => {
-  const { page } = mount(CHARLES.userId);
-  await settle();
-
-  button(page, "Their tasks in sidebar").click();
-
-  assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
 });
 
 test("someone who left offers only their page's link in More: no email to copy, and no row in Settings to manage", async () => {

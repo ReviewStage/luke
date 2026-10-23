@@ -1,9 +1,15 @@
 import { TASK_BOUNDS } from "@luke/features/task-wire";
-import { BackIcon, DocumentIcon, IconButton, InlineEdit, type InlineEditEnd } from "@luke/ui";
+import {
+  BackIcon,
+  DocumentIcon,
+  IconButton,
+  InlineEdit,
+  type InlineEditEnd,
+  Tooltip,
+} from "@luke/ui";
 import { BotIcon, ListIcon } from "lucide-react";
 import type { AwayStep } from "../navigation-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
-import { Tooltip } from "../tooltip.js";
 import type { MenuAction } from "./action-menu.js";
 
 /**

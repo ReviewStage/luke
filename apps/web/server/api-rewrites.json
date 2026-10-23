@@ -36,6 +36,14 @@
     "dest": "/api/default.js?route=automations/webhook&id=$1"
   },
   {
+    "src": "/api/agents/mcp",
+    "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp"
+  },
+  {
+    "src": "/api/agents/mcp/integrations/([^/]+)",
+    "dest": "/api/luke-mcp.js?route=agents/mcp&route-path=agents/mcp/integrations/$1"
+  },
+  {
     "src": "/api/account/integrations/connected",
     "dest": "/api/default.js?route=account/integrations/connected"
   },
@@ -72,16 +80,20 @@
     "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
   },
   {
+    "src": "/api/triggers/sentry",
+    "dest": "/api/default.js?route=triggers/sentry"
+  },
+  {
+    "src": "/api/triggers/sentry/installed",
+    "dest": "/api/default.js?route=triggers/sentry/installed"
+  },
+  {
     "src": "/api/workspaces/chat/attachment",
     "dest": "/api/default.js?route=workspaces/chat/attachment"
   },
   {
     "src": "/api/workspaces/linear/connected",
     "dest": "/api/default.js?route=workspaces/linear/connected"
-  },
-  {
-    "src": "/api/agents/mcp",
-    "dest": "/api/luke-mcp.js?route=agents/mcp"
   },
   {
     "src": "/api/maintenance/sweep",

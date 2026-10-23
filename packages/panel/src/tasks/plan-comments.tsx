@@ -19,7 +19,20 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CARD_CORNER,
+  CARD_HOVER,
+  CARD_LOOK,
+  CARD_PADDING,
+  CARD_PRESS_CORNER,
+  CARD_PRESS_REACH,
+  CARD_SHADOW,
+  Card,
+  type CardLook,
+  CardPress,
+  type CardShadow,
+  COMPOSER_LOOK,
   CommentsIcon,
+  ComposerFrame,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
@@ -27,17 +40,31 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  Fill,
   IconButton,
+  LINE_BUTTON_LOOK,
+  LineButton,
+  MENU_SURFACE_FLOW,
+  MenuSurface,
   SCROLL_FADE,
   ScrollArea,
   SUBMIT_STATE,
+  TEXT_AREA_GROW_LIMIT,
+  TEXT_AREA_LOOK,
+  TEXT_AREA_SUBMIT,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextArea,
+  TIME_LOOK,
+  Time,
+  Tooltip,
   TrashIcon,
   useConfirmDialog,
   useMenu,
+  useMinute,
+  VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
@@ -86,7 +113,6 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -97,9 +123,7 @@ import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { CommentFiles, carriesFiles, useCommentAttaching } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
-import { RelativeTime } from "./relative-time.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -151,8 +175,20 @@ const COMMENT_MARK_CLASS = "plan-comment-mark";
 /** How far below the scroller's top a thread asked to be shown lands. */
 const REVEAL_ROOM = 96;
 
+/** What a mention's chip wears, whose press opens the thread at rest it stands in as well as what it names. */
+const MENTION_REF = "[data-mention-ref]";
+
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
+
+/** Where a thread's card stands: in the plan's margin, floating under a folded line's count, or in the Comments tab. */
+const THREAD_PLACE = {
+  MARGIN: "margin",
+  FLOAT: "float",
+  LIST: "list",
+} as const;
+
+type ThreadPlace = (typeof THREAD_PLACE)[keyof typeof THREAD_PLACE];
 
 /** The room a finger's bubble needs under the words, its gap past the handle and its own height, short of which it stands over them after all. */
 const BUBBLE_ROOM_TOUCH = FINGER_SELECTION_GAP + 48;
@@ -279,7 +315,7 @@ function EventLine({
         </span>
         <span className="comment-head-end">
           <span className="comment-time">
-            <RelativeTime at={entry.at} now={now} ago />
+            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
           </span>
         </span>
       </div>
@@ -425,7 +461,7 @@ function CommentEntry({
         <WriterRef writer={entry.writer} agents={doors.agents} />
         <span className="comment-head-end">
           <span className="comment-time">
-            <RelativeTime at={entry.at} now={now} ago />
+            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
             {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
           </span>
           <div className="comment-tools">
@@ -478,7 +514,7 @@ function CommentEntry({
           </WordsDatesContext.Provider>
         </>
       ) : (
-        <div className="comment-field comment-editing">
+        <ComposerFrame look={COMPOSER_LOOK.FIELD} className="comment-field comment-editing">
           <CommentText
             value={editing}
             label={COMMENT_WORDS.EDIT}
@@ -493,7 +529,7 @@ function CommentEntry({
               {COMMENT_WORDS.SAVE}
             </Button>
           </div>
-        </div>
+        </ComposerFrame>
       )}
     </div>
   );
@@ -504,12 +540,7 @@ function CommentWords({ words }: { words: string }): React.JSX.Element {
   const link = useMentionLink();
   const openLink = useOpenLink();
   return (
-    <MarkdownMessage
-      words={words}
-      className="comment-words markdown"
-      link={link}
-      openLink={openLink}
-    />
+    <MarkdownMessage words={words} className="comment-words" link={link} openLink={openLink} />
   );
 }
 
@@ -639,39 +670,26 @@ function PlainCommentText({
   autoFocus = false,
   onPasteFiles,
 }: CommentTextProps): React.JSX.Element {
-  const field = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
-    const element = field.current;
-    if (element === null) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  }, [value]);
   return (
-    <textarea
-      ref={field}
-      className="comment-text"
+    <TextArea
+      look={TEXT_AREA_LOOK.BARE}
+      growLimit={TEXT_AREA_GROW_LIMIT.NONE}
+      grow
       rows={1}
       value={value}
       placeholder={label}
-      aria-label={label}
+      label={label}
       // biome-ignore lint/a11y/noAutofocus: the field is opened by the press that asked for it, as a reply field is.
       autoFocus={autoFocus}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={onChange}
       onPaste={(event) => {
         // Note that only files the field takes stop the paste, so text pastes as it always does.
         const files = Array.from(event.clipboardData.files);
         if (files.length > 0 && onPasteFiles?.(files) === true) event.preventDefault();
       }}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          onSubmit();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          onCancel();
-        }
-      }}
+      submitKey={TEXT_AREA_SUBMIT.ENTER}
+      onSubmit={onSubmit}
+      onEscape={onCancel}
     />
   );
 }
@@ -735,11 +753,11 @@ function ReplyField({
     });
   };
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the field is a drop target alone; the keys it hears come from its own field and buttons.
-    <div
+    <ComposerFrame
+      look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
       className="comment-field"
       data-variant={variant}
-      data-dropping={dropping ? "" : undefined}
+      dropping={dropping}
       // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
       data-held={
         (words === "" ? inFlight : words).trim() !== "" ||
@@ -808,7 +826,7 @@ function ReplyField({
           </>
         )}
       </div>
-    </div>
+    </ComposerFrame>
   );
 }
 
@@ -866,17 +884,28 @@ function ThreadQuote({
     );
   }
   return (
-    <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
-      <button
-        type="button"
-        className="comment-quote comment-quote-link"
-        data-gone={gone}
-        onClick={onShowWords}
-      >
-        {thread.quote}
-      </button>
-    </Tooltip>
+    <blockquote className="comment-quote" data-gone={gone}>
+      <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
+        <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShowWords}>
+          {thread.quote}
+        </LineButton>
+      </Tooltip>
+    </blockquote>
   );
+}
+
+/**
+ * How a thread's card stands where it is: open over the page, raised on a
+ * menu's shadow, as at rest under a count, where it floats with the open
+ * one; at rest in the margin, its edge alone on the column's ground; and in
+ * the Comments tab, where every thread stands whole on the panel's ground,
+ * its edge alone.
+ */
+function threadFrame(place: ThreadPlace, open: boolean): { look: CardLook; shadow: CardShadow } {
+  const raised = place === THREAD_PLACE.FLOAT || (open && place === THREAD_PLACE.MARGIN);
+  return raised
+    ? { look: CARD_LOOK.RAISED, shadow: CARD_SHADOW.MENU }
+    : { look: CARD_LOOK.OUTLINE, shadow: CARD_SHADOW.NONE };
 }
 
 /**
@@ -887,6 +916,7 @@ function ThreadQuote({
 function ThreadCard({
   thread,
   open,
+  place,
   doors,
   onOpen,
   onClose,
@@ -896,6 +926,7 @@ function ThreadCard({
 }: {
   thread: PlanCommentThread;
   open: boolean;
+  place: ThreadPlace;
   doors: ThreadDoors;
   /** Opens the card at rest; none where it always stands open, as in the Comments tab. */
   onOpen?: (() => void) | undefined;
@@ -925,39 +956,24 @@ function ThreadCard({
     const faces = [
       ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
     ];
-    // Note that the whole card at rest is one press that opens it, but for what is a press of its own inside it, a writer's name say; its button is the keyboard's way in.
-    const pressed = (event: React.MouseEvent<HTMLDivElement>) => {
-      const inner =
-        event.target instanceof Element
-          ? event.target.closest("a, button, [role='button'], [role='menuitem']")
-          : null;
-      if (inner === null || inner.classList.contains("comment-open")) onOpen?.();
-    };
     return (
-      // biome-ignore lint/a11y/noStaticElementInteractions: the card's own button takes the keyboard, and this widens its press to the card
-      // biome-ignore lint/a11y/useKeyWithClickEvents: the card's own button takes the keyboard, and this widens its press to the card
-      <div
+      <Card
+        {...threadFrame(place, false)}
+        corner={CARD_CORNER.MENU}
+        padding={CARD_PADDING.NONE}
+        hover={CARD_HOVER.WASH}
+        lit={pointed}
         className="comment-card"
         data-open="false"
         data-pointed={pointed}
         data-thread={thread.id}
-        onClick={pressed}
-        // Note that a mention's chip takes its own press and lets it go no further, so the card hears it first and opens with it.
-        onClickCapture={(event) => {
-          if (
-            event.target instanceof Element &&
-            event.target.closest("[data-mention-ref]") !== null
-          ) {
-            onOpen?.();
-          }
-        }}
       >
         {head}
         {first === undefined ? null : (
           <div className="comment-head">
             <WriterRef writer={first.writer} agents={doors.agents} />
             <span className="comment-time">
-              <RelativeTime at={first.at} now={now} ago />
+              <Time at={first.at} now={now} look={TIME_LOOK.AGO} />
             </span>
           </div>
         )}
@@ -967,10 +983,15 @@ function ThreadCard({
             <CommentWords words={first.words ?? ""} />
           </div>
         )}
-        {/* Note that the card's button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
-        <button type="button" className="comment-open">
+        {/* Note that the whole card at rest is one press that opens it, but for a control of its own inside it, an agent's name say, and a mention's chip opens it as it takes its own press; its button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
+        <CardPress
+          reach={CARD_PRESS_REACH.CARD}
+          alsoPressedBy={MENTION_REF}
+          corner={CARD_PRESS_CORNER.MENU}
+          onPress={() => onOpen?.()}
+        >
           {replies.length === 0 ? (
-            <span className="luke-visually-hidden">{COMMENT_WORDS.OPEN_THREAD}</span>
+            <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
           ) : (
             <span className="comment-replies">
               <span className="comment-faces">
@@ -981,16 +1002,23 @@ function ThreadCard({
               {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
               <span className="comment-time">
                 {" · "}
-                <RelativeTime at={replies.at(-1)?.at ?? thread.updatedAt} now={now} ago />
+                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} look={TIME_LOOK.AGO} />
               </span>
             </span>
           )}
-        </button>
-      </div>
+        </CardPress>
+      </Card>
     );
   }
   return (
-    <div className="comment-card" data-open="true" data-thread={thread.id}>
+    <Card
+      {...threadFrame(place, true)}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      className="comment-card"
+      data-open="true"
+      data-thread={thread.id}
+    >
       {first === undefined ? head : null}
       {thread.entries.map((entry) =>
         entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
@@ -1033,7 +1061,7 @@ function ThreadCard({
           }}
         />
       ) : null}
-    </div>
+    </Card>
   );
 }
 
@@ -1055,7 +1083,14 @@ function PendingCard({
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   return (
-    <div className="comment-card" data-open="true" data-thread={PENDING_THREAD}>
+    <Card
+      {...threadFrame(THREAD_PLACE.MARGIN, true)}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      className="comment-card"
+      data-open="true"
+      data-thread={PENDING_THREAD}
+    >
       {note === undefined ? null : (
         <div className="comment-note" role="alert">
           {note}
@@ -1088,7 +1123,7 @@ function PendingCard({
           return true;
         }}
       />
-    </div>
+    </Card>
   );
 }
 
@@ -1635,8 +1670,9 @@ export function PlanCommentLayer({
     );
   const bubbleDrawn =
     bubble === undefined ? null : (
-      <div
-        className="comment-bubble menu-surface"
+      <MenuSurface
+        flow={MENU_SURFACE_FLOW.TOOLBAR}
+        className="comment-bubble"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
@@ -1645,7 +1681,7 @@ export function PlanCommentLayer({
             {COMMENT_WORDS.COMMENT}
           </Button>
         </Tooltip>
-      </div>
+      </MenuSurface>
     );
   if (wide) {
     return (
@@ -1664,6 +1700,7 @@ export function PlanCommentLayer({
               <ThreadCard
                 thread={thread}
                 open={active === thread.id}
+                place={THREAD_PLACE.MARGIN}
                 doors={doors}
                 pointed={pointed === thread.id}
                 onOpen={() => {
@@ -1732,6 +1769,7 @@ export function PlanCommentLayer({
               key={thread.id}
               thread={thread}
               open={thread.id === active}
+              place={THREAD_PLACE.FLOAT}
               doors={doors}
               onOpen={() => onActive(thread.id)}
               onClose={close}
@@ -1902,7 +1940,7 @@ export function PlanCommentsTab({
   const listed = filter === COMMENTS_FILTER.OPEN ? open : resolved;
   const full = { ...doors, control };
   return (
-    <div className="comments-tab">
+    <Fill className="comments-tab">
       <WordsDatePickerRoom>
         <div className="comments-head">
           <span className="comments-head-title">
@@ -1923,7 +1961,10 @@ export function PlanCommentsTab({
           />
         </div>
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-          <div className="comments-list">
+          <div
+            className="comments-list"
+            data-empty={!control.failed && listed.length === 0 && control.read ? "" : undefined}
+          >
             {control.failed ? (
               <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
                 The comments could not be read.
@@ -1941,6 +1982,7 @@ export function PlanCommentsTab({
                   <ThreadCard
                     thread={thread}
                     open
+                    place={THREAD_PLACE.LIST}
                     quote
                     doors={full}
                     onShowWords={
@@ -1958,6 +2000,6 @@ export function PlanCommentsTab({
           </div>
         </ScrollArea>
       </WordsDatePickerRoom>
-    </div>
+    </Fill>
   );
 }

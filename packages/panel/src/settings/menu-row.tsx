@@ -1,8 +1,14 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { EllipsisIcon, IconButton, SettingsRow, type SettingsRowControl, useMenu } from "@luke/ui";
+import {
+  EllipsisIcon,
+  IconButton,
+  SettingsRow,
+  type SettingsRowControl,
+  Tooltip,
+  useMenu,
+} from "@luke/ui";
 import { type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * menu-row.tsx -- a Settings row with actions of its own: a stored key, a connected service, a changeable shortcut.
@@ -40,6 +46,8 @@ interface MenuRowWords {
   control?: ReactNode;
   /** A control drawn from the row's ids, where the row's words and error must describe it. */
   describedControl?: (control: SettingsRowControl) => ReactNode;
+  /** Whether the row just arrived, which lights it once. */
+  landed?: boolean;
 }
 
 /** What the row draws: its words for the shared row, or its own children in the window's row. */
@@ -109,6 +117,7 @@ export function MenuRow({
             adornment={row.adornment}
             description={row.description}
             error={row.error}
+            landed={row.landed}
             below={row.below === undefined || row.below === null ? undefined : () => row.below}
           >
             {(control) => (

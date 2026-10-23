@@ -17,7 +17,10 @@
     gap: var(--luke-space-4);
     max-width: 100%;
     padding: var(--luke-space-2) var(--luke-space-8);
-    border-radius: var(--luke-radius-full);
+    /* Note that the corners are half a one-line badge's height rather than
+       a full round, so a badge that does wrap stands as a rounded box
+       rather than a bubble, while one on a line is the same capsule. */
+    border-radius: calc(var(--luke-type-caption-leading) / 2 + var(--luke-space-2));
     /* Note that the hairline is drawn inside, because a border would make
        the badge a step taller than the compact chip it stands beside. */
     background: var(--luke-color-chip);
@@ -52,6 +55,30 @@
   .luke-badge-words {
     min-width: 0;
     overflow-wrap: break-word;
+  }
+
+  /* A badge given a step in a header too narrow for its words keeps them for
+     a reader, as `VisuallyHidden`'s `under` does. */
+  @container luke-room (max-width: 520px) {
+    .luke-badge-words[data-under="snug"] {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  @container luke-room (max-width: 439px) {
+    .luke-badge-words[data-under="tight"] {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   }
 
   /* A provider's colour, a GitHub label's, as a dot before the words, in the
@@ -89,5 +116,40 @@
 
   .luke-badge[data-tone="danger"] {
     --luke-badge-ink: var(--luke-color-danger-text);
+  }
+
+  /* Filled with a provider's colour, a GitHub label as GitHub draws one: a
+     solid fill edged a shade darker in the light, a tint edged a little
+     stronger in the dark, its words in the ink the badge worked out for
+     each (`badge.tsx`), on one line. */
+  .luke-badge[data-fill="true"] {
+    background: light-dark(var(--luke-badge-fill-light), var(--luke-badge-fill-dark));
+    box-shadow: inset 0 0 0 1px
+      light-dark(var(--luke-badge-edge-light), var(--luke-badge-edge-dark));
+    color: light-dark(var(--luke-badge-words-light), var(--luke-badge-words-dark));
+    white-space: nowrap;
+  }
+
+  .luke-badge-line {
+    display: block;
+    overflow: hidden;
+  }
+
+  /* A filled badge's words cut short fade out over their last few pixels,
+     at their own end: the left, where they read right to left. */
+  .luke-badge-line[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+  }
+
+  .luke-badge-line[data-overflow="true"]:dir(rtl) {
+    mask-image: linear-gradient(to right, transparent, #000 20px); /* off-scale: a label's fade */
+  }
+
+  /* Lit, the reader's own, it stands in the ink as a pressed filter chip
+     does, its words in the ground's colour. */
+  .luke-badge[data-lit="true"] {
+    background: var(--luke-color-ink);
+    box-shadow: inset 0 0 0 1px var(--luke-color-ink);
+    color: var(--luke-color-ink-inverse);
   }
 }

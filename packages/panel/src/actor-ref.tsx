@@ -13,15 +13,26 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
   INLINE_REF_LOOK,
+  InlineRef,
+  LAYOUT_ELEMENT,
   SCROLL_SIZE,
   ScrollArea,
+  Stack,
   TEXT_BUTTON_LINES,
   TextButton,
+  TIME_LOOK,
+  Time,
+  Tooltip,
+  UNASSIGNED_WORDS,
+  UnassignedAvatar,
+  useMinute,
+  VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import {
@@ -29,6 +40,7 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  type AssigneeFace,
   actorName,
   type GitHubActor,
   LUKE_ACTOR,
@@ -40,13 +52,9 @@ import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "
 import { type ReactNode, useEffect } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
 import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
-import { InlineRef } from "./inline-ref.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
-import { RelativeTime } from "./tasks/relative-time.js";
 import { AgentMark } from "./tasks/tab-look.js";
-import { useMinute } from "./tasks/task-time.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
@@ -281,7 +289,7 @@ const LEFT_WORDS = " (former member)";
 
 /** What a screen reader hears after the name of a member who left, set beside it; nothing for anyone else. */
 export function LeftWords({ actor }: { actor: Actor }): React.JSX.Element | null {
-  return leftWithFace(actor) ? <span className="visually-hidden">{LEFT_WORDS}</span> : null;
+  return leftWithFace(actor) ? <VisuallyHidden>{LEFT_WORDS}</VisuallyHidden> : null;
 }
 
 /** An actor's circle or square alone, at a size. */
@@ -323,20 +331,65 @@ export function ActorMark({
 }
 
 /**
- * What a screen reader hears of a teammate's task's creator, whose face the
- * row draws at its time: "(created by Charles Pan)". Note that a row says it
- * outside its time's slot, because the slot steps out while the row is
- * hovered or holds the keyboard.
+ * No one, where a place says who is on something and nobody is: the shared
+ * dashed outline (`UnassignedAvatar`) at an actor's size, so it stands
+ * level with the faces around it, named Unassigned on hover and to a screen
+ * reader. Where the words stand beside it, or a row says them apart
+ * (`UnassignedHeard`), it is `decorative`: a reader hears it once; and
+ * where the words stand beside it it hangs no hint either (`hint`).
  */
-export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
-  const left = leftWithFace(actor) ? ", who left" : "";
-  return <span className="visually-hidden">{`(created by ${actorName(actor)}${left})`}</span>;
+export function UnassignedMark({
+  size = ACTOR_SIZE.INLINE,
+  decorative = false,
+  hint = !decorative,
+}: {
+  size?: ActorSize;
+  /** Whether a screen reader hears "Unassigned" elsewhere, so the mark is hidden from it. */
+  decorative?: boolean;
+  /** Whether a pointer resting on the mark is told "Unassigned". */
+  hint?: boolean;
+}): React.JSX.Element {
+  const mark = (
+    <span
+      className="actor-mark"
+      data-kind="unassigned"
+      data-size={size}
+      aria-hidden={decorative ? "true" : undefined}
+    >
+      <UnassignedAvatar size={AVATAR_OF_SIZE[size]} decorative={decorative} />
+    </span>
+  );
+  return hint ? <Tooltip label={UNASSIGNED_WORDS}>{mark}</Tooltip> : mark;
+}
+
+/** What a screen reader hears of a row no one is assigned to, whose dashed mark says it on screen. */
+export function UnassignedHeard(): React.JSX.Element {
+  return <VisuallyHidden>{`(${UNASSIGNED_WORDS.toLowerCase()})`}</VisuallyHidden>;
 }
 
 /** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
 export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
-  return <span className="visually-hidden">{`(assigned to ${actorName(actor)}${left})`}</span>;
+  return <VisuallyHidden>{`(assigned to ${actorName(actor)}${left})`}</VisuallyHidden>;
+}
+
+/**
+ * The face a row wears at its end for who is on its task (`assigneeFace`):
+ * its assignee's, or the dashed unassigned mark, each with the words a
+ * screen reader hears of it.
+ */
+export function AssigneeFaceMark({ face }: { face: AssigneeFace }): React.JSX.Element {
+  return face.assignee === undefined ? (
+    <>
+      <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />
+      <UnassignedHeard />
+    </>
+  ) : (
+    <>
+      <ActorMark actor={face.assignee} size={ACTOR_SIZE.MARK} />
+      <AssigneeHeard actor={face.assignee} />
+    </>
+  );
 }
 
 /** The quiet badge the reader's own account wears beside its name. */
@@ -554,7 +607,7 @@ export function AutomationCard({
       {lastRun === null ? null : (
         <HoverCardNote>
           {"Last ran "}
-          <RelativeTime at={lastRun.firedAt} now={now} hint={false} ago />
+          <Time at={lastRun.firedAt} now={now} hint={false} look={TIME_LOOK.AGO} />
           {` · ${automationRunLine(lastRun, automation.mine === true ? undefined : "its creator")}`}
         </HoverCardNote>
       )}
@@ -707,7 +760,7 @@ function MoreFaces({
     <HoverCard data-actor-card="more">
       <div className="actor-more">
         <ScrollArea size={SCROLL_SIZE.CONTENT}>
-          <ul className="actor-more-list">
+          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
             {actors.map((actor, index) => (
               // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
               <li key={index} className="actor-more-row">
@@ -715,7 +768,7 @@ function MoreFaces({
                 <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
               </li>
             ))}
-          </ul>
+          </Stack>
         </ScrollArea>
       </div>
     </HoverCard>

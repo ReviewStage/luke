@@ -15,16 +15,19 @@ import {
   CloseIcon,
   dropBelowStart,
   ExternalIcon,
+  GAP,
+  Inline,
+  LAYOUT_ELEMENT,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   TEXT_BUTTON_TONE,
   TextButton,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
-import { Tooltip } from "../tooltip.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
 import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
@@ -193,7 +196,7 @@ export function TaskIssueLinks({
   const linked = new Set(links.map((link) => link.externalId));
   return (
     <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
-      <ul className="task-issue-links-rows">
+      <Inline as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="task-issue-links-rows">
         {links.map((link) => (
           <LinkChip
             key={link.id}
@@ -208,7 +211,7 @@ export function TaskIssueLinks({
             {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip
               trigger={LINKS_WORDS.LINK}
-              align={PICKER_ALIGN.AUTO}
+              align={PICKER_ALIGN.START}
               linearIn={linearIn}
               githubIn={githubIn}
               workspaceId={workspaceId}
@@ -229,7 +232,7 @@ export function TaskIssueLinks({
             />
           </li>
         ) : null}
-      </ul>
+      </Inline>
       {note === undefined ? null : (
         <p className="task-issue-links-note" role="alert">
           {note}

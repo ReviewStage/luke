@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  AddressField,
   BUTTON_SIZE,
   IconButton,
   INLINE_EDIT_LOOK,
@@ -9,6 +10,8 @@ import {
   MARK_PROVIDER,
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
+  TEXT_AREA_LOOK,
+  TextArea,
 } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -176,8 +179,8 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "a plan's task box",
       markup(
-        '<ul class="markdown"><li class="task-list-item"><label class="task-list-box"><input type="checkbox"></label></li></ul>',
-        ".task-list-box",
+        '<ul class="luke-markdown"><li class="task-list-item"><span class="luke-markdown-task"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
+        ".luke-markdown-task > label",
       ),
     ],
     [
@@ -197,7 +200,7 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "the plan byline's time",
       markup(
-        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button">2h ago</button></span></p>',
+        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button" data-lines="whole">2h ago</button></span></p>',
         ".luke-text-button",
       ),
     ],
@@ -218,13 +221,13 @@ function closes(): ReadonlyMap<string, Element> {
   const compact = (label: string) =>
     createElement(IconButton, { icon: "×", label, size: BUTTON_SIZE.COMPACT });
   const tab = document.body.appendChild(document.createElement("div"));
-  tab.className = "tab";
+  tab.className = "luke-tab";
   tab.dataset.marked = "false";
-  const close = drawn(compact("Close Plan"), "tab-close");
+  const close = drawn(compact("Close Plan"), "luke-tab-close");
   tab.append(close);
   const toast = document.body.appendChild(document.createElement("li"));
-  toast.className = "toast";
-  const dismiss = drawn(compact("Dismiss"), "toast-dismiss");
+  toast.className = "luke-toast";
+  const dismiss = drawn(compact("Dismiss"), "luke-toast-dismiss");
   toast.append(dismiss);
   return new Map([
     ["the tab's ×", buttonIn(close)],
@@ -234,14 +237,15 @@ function closes(): ReadonlyMap<string, Element> {
 
 /** The resize edges, each by what the developer calls it. */
 function resizeEdges(): ReadonlyMap<string, Element> {
-  const edge = (className: string) => {
+  const edge = (side: string) => {
     const element = document.body.appendChild(document.createElement("div"));
-    element.className = className;
+    element.className = "luke-resize-edge";
+    element.dataset.side = side;
     return element;
   };
   return new Map([
-    ["the sidebar's resize edge", edge("sidebar-resize")],
-    ["the side panel's resize edge", edge("side-panel-resize")],
+    ["the sidebar's resize edge", edge("right")],
+    ["the side panel's resize edge", edge("left")],
   ]);
 }
 
@@ -317,8 +321,24 @@ function fields(): ReadonlyMap<string, HTMLInputElement | HTMLTextAreaElement> {
     container.style.fontSize = "14px";
     return container.querySelector("input") ?? assert.fail("the field is drawn");
   };
-  const address = drawn(createElement("input", { type: "url" }), "browser-view-address");
-  const comment = drawn(createElement("textarea", { className: "comment-text" }), "comment-card");
+  const address = drawn(
+    createElement(AddressField, {
+      value: "",
+      onChange: () => undefined,
+      onOpen: () => undefined,
+    }),
+  );
+  const comment = drawn(
+    createElement(TextArea, {
+      label: "Reply",
+      look: TEXT_AREA_LOOK.BARE,
+      grow: true,
+      rows: 1,
+      value: "",
+      onChange: () => undefined,
+    }),
+    "comment-field",
+  );
   return new Map<string, HTMLInputElement | HTMLTextAreaElement>([
     ["a tab's rename", inline(INLINE_EDIT_LOOK.WELL)],
     ["a workspace's or an integration's rename", inline(INLINE_EDIT_LOOK.INPUT)],
@@ -426,9 +446,9 @@ test("with a mouse those presses still wait for the pointer", () => {
 function transcriptRows(): [string, HTMLElement][] {
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = `
-    <div class="tool"><details><summary class="tool-line" data-row="a call's line"></summary></details></div>
-    <details class="todos-dock"><summary class="todos-dock-head" data-row="the to-do list's head"></summary></details>
-    <div class="agent-published-dock"><ul class="luke-list"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
+    <div class="tool"><details><summary class="luke-line-button" data-look="row" data-row="a call's line"></summary></details></div>
+    <details class="luke-disclosure" data-look="card"><summary class="luke-disclosure-summary" data-look="head" data-row="the to-do list's head"></summary></details>
+    <div class="agent-published-dock"><ul class="luke-list" data-finger-tall="true"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
   return [...host.querySelectorAll<HTMLElement>("[data-row]")].map((row) => [
     row.dataset.row ?? "",
     row,

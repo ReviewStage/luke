@@ -21,42 +21,30 @@
  * Left out, beside the harness's own shell, files, todos, waiting,
  * subagents, skills, and web reads: the spoken-turn tools
  * (`queue_question`, `withdraw_question`, `end_call`), which only a spoken
- * turn of eve's offers. The integrations' `connection_search` and
- * `connection_execute` are eve's own built-in tools rather than tool files;
- * here they keep eve's names, words, and schemas, and run through Luke's own
- * door over the same grants (`../../integrations/connection-door.ts`).
+ * turn of eve's offers; and eve's `connection_search` and
+ * `connection_execute`, since each integration the agent is handed is an
+ * MCP server of its own beside this one (`app.ts`).
  *
  * Two things eve's tool files keep in the session's own state have none
  * here, since the server keeps no session: a call's id, which the agent
  * tools key a start or a message on and chat a post, is minted for each
  * call; and the turn's count of plan notes and chat posts, which each call
- * starts from nothing, so those caps hold per call. Nor is the list
- * narrowed per agent as eve narrows its own at each turn: a tool eve would
- * not offer (no plan, no repository) is refused by its door.
+ * starts from nothing, so those caps hold per call. The list is narrowed
+ * per agent as eve narrows its own (`offeredLukeMcpTool`), and a tool left
+ * out is still refused by its door where a harness calls it anyway.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireValue,
-  WireValueSchema,
-} from "@luke/wire";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import {
-  CONNECTION_EXECUTE_TOOL,
-  CONNECTION_SEARCH_TOOL,
-  runConnectionExecute,
-  runConnectionSearch,
-} from "../../integrations/connection-door.js";
 import type {
   IntegrationConnect,
   WorkspaceLinearConnect,
@@ -74,6 +62,14 @@ import {
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
+import {
+  CREATE_AUTOMATION_TOOL,
+  DELETE_AUTOMATION_TOOL,
+  LIST_AUTOMATIONS_TOOL,
+  RUN_AUTOMATION_TOOL,
+  UPDATE_AUTOMATION_TOOL,
+} from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import {
@@ -105,7 +101,7 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { EDIT_PLAN_TOOL } from "../coder-host/plan-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
-import { CODER_TOOL } from "../coder-host/tool-set.js";
+import { CODER_TOOL, kindToolsOf, repositoryToolsOf, taskToolsOf } from "../coder-host/tool-set.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -118,6 +114,7 @@ import {
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
+import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
@@ -134,7 +131,8 @@ export type LukeMcpServices =
   | ModelCatalog
   | WorkspaceLinearConnect
   | IntegrationConnect
-  | HostedEnvironment;
+  | HostedEnvironment
+  | SentryApp;
 
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
 export type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
@@ -254,53 +252,6 @@ function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] 
   return [{ type: "text", text: JSON.stringify(result) }];
 }
 
-/** A connection call that ran, its tool's output kept as eve reads it. */
-const isExecuted = Schema.is(
-  Schema.Struct({ status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED), output: WireValueSchema }),
-);
-
-/** One block of a provider tool's result as the agent is shown it, as eve's model output shows it: a text, a picture, or a sound, and a resource as its words. */
-function remoteBlock(block: WireValue): readonly McpContent[] {
-  if (!isRecord(block)) return [];
-  const { type, text, data, mimeType } = block;
-  if (type === "text" && typeof text === "string") return [{ type, text }];
-  if ((type === "image" || type === "audio") && typeof data === "string") {
-    return typeof mimeType === "string" ? [{ type, data, mimeType }] : [];
-  }
-  if (type === "resource" && isRecord(block.resource)) {
-    const { uri, text: words, blob, mimeType: blobType } = block.resource;
-    const named = typeof uri === "string" ? uri : undefined;
-    if (typeof words === "string") {
-      return [{ type: "text", text: named === undefined ? words : `${named}\n${words}` }];
-    }
-    if (typeof blob !== "string") return [];
-    // Note that a picture or a sound a resource carries is shown as one, and any other bytes are named, so none is dropped unsaid.
-    const kind = typeof blobType === "string" ? blobType : "application/octet-stream";
-    if (kind.startsWith("image/")) return [{ type: "image", data: blob, mimeType: kind }];
-    if (kind.startsWith("audio/")) return [{ type: "audio", data: blob, mimeType: kind }];
-    return [
-      { type: "text", text: `Resource: ${named ?? "resource"} (${kind}, binary, not shown)` },
-    ];
-  }
-  if (type === "resource_link") {
-    const name = typeof block.name === "string" ? block.name : "resource";
-    const uri = typeof block.uri === "string" ? block.uri : "";
-    return [{ type: "text", text: `Resource link: ${name} ${uri}`.trim() }];
-  }
-  return [];
-}
-
-/** What the agent is shown of a connection call: the tool's own content blocks where any is no text, its text, or its JSON; the refusal's JSON otherwise. */
-function executedContent(result: LukeMcpToolResult): readonly McpContent[] {
-  if (!isExecuted(result)) return [{ type: "text", text: JSON.stringify(result) }];
-  const { output } = result;
-  if (Array.isArray(output)) {
-    const blocks = output.flatMap(remoteBlock);
-    if (blocks.some((block) => block.type !== "text")) return blocks;
-  }
-  return [{ type: "text", text: typeof output === "string" ? output : JSON.stringify(output) }];
-}
-
 /**
  * What the agent is shown of a browser call: its JSON with every
  * screenshot's base64 taken out and its kept full-size copy named by id
@@ -399,6 +350,15 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(UPDATE_TASK_TOOL),
   agentTool(CREATE_SECTION_TOOL),
   agentTool(DELETE_SECTION_TOOL),
+  // Automations.
+  agentTool(LIST_AUTOMATIONS_TOOL),
+  agentTool(CREATE_AUTOMATION_TOOL),
+  agentTool(UPDATE_AUTOMATION_TOOL),
+  agentTool(DELETE_AUTOMATION_TOOL),
+  agentTool(RUN_AUTOMATION_TOOL),
+  // The workspace's shared memory.
+  agentTool(REMEMBER_TOOL),
+  agentTool(RECALL_TOOL),
   // Chat.
   entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
     runAgentChat(seams, admitted, {
@@ -427,21 +387,34 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target.userId, input)),
   // The agent's browser.
   entry(BROWSER_TOOL, runAgentBrowser, browserContent),
-  // The integrations.
-  entryOf(
-    CONNECTION_SEARCH_TOOL.name,
-    CONNECTION_SEARCH_TOOL.description,
-    CONNECTION_SEARCH_TOOL.inputSchema,
-    (admitted, input) => runConnectionSearch(admitted, input),
-  ),
-  entryOf(
-    CONNECTION_EXECUTE_TOOL.name,
-    CONNECTION_EXECUTE_TOOL.description,
-    CONNECTION_EXECUTE_TOOL.inputSchema,
-    (admitted, input) => runConnectionExecute(admitted, input),
-    executedContent,
-  ),
 ]);
+
+/** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
+export type LukeMcpOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind">;
+
+/** The tools eve offers some agents and not others: each one some agent's task, repository, or kind withholds. */
+const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
+  ...taskToolsOf({ taskId: "any" }),
+  ...repositoryToolsOf({ repository: "any" }),
+  ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
+  ...kindToolsOf({ kind: CODING_AGENT_KIND.CODER }),
+]);
+
+/**
+ * Whether the server lists a tool to an agent: every tool eve offers every
+ * agent, and each narrowed one where eve offers it to this agent, by its
+ * task, its repository, and its kind, the same rules eve's tool files read
+ * at each turn. Note that a harness reads the list as its launch begins, so
+ * an agent is narrowed launch by launch, as eve's is turn by turn.
+ */
+export function offeredLukeMcpTool(agent: LukeMcpOfferedTo): (name: string) => boolean {
+  const offered: ReadonlySet<string> = new Set<string>([
+    ...taskToolsOf(agent),
+    ...repositoryToolsOf(agent),
+    ...kindToolsOf(agent),
+  ]);
+  return (name) => !NARROWED_TOOLS.has(name) || offered.has(name);
+}
 
 /** The prefix of every status a door answers for a call it did not carry out (`not-run`, `not-looked`, `not-saved`, …). */
 const NOT_DONE_PREFIX = "not-";

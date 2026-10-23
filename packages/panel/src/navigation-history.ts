@@ -92,6 +92,7 @@ import {
 } from "react";
 import type { AdminView } from "./admin/routing.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
+import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
 import { useChatOn } from "./tasks/chat-gate.js";
@@ -105,7 +106,7 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
-import { useAdminAccess, useAdminAccessPending } from "./use-app-state.js";
+import { useAdminAccess, useAdminAccessPending, useExperimentChoices } from "./use-app-state.js";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {
@@ -1078,6 +1079,7 @@ export function useWindowHistory(input: {
       : undefined;
   const chatOpen = tasks.chatView.open;
   const chatOn = useChatOn();
+  const experiments = useExperimentChoices();
   const boardOpen = tasks.boardView.open;
   const adminOpen = tasks.adminView.open;
   const adminView = tasks.adminView.view;
@@ -1203,6 +1205,8 @@ export function useWindowHistory(input: {
     }
     // Chat is the chat of the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.CHAT) return chatOn && to.workspaceId === listedWorkspace;
+    // A Settings page an experiment holds, such as Memory, stands only while the account has it on.
+    if (to.kind === PLACE_KIND.SETTINGS) return settingsPageExperimentStands(to.view, experiments);
     // The Board is a workspace's tasks, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.BOARD) return to.workspaceId === listedWorkspace;
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.

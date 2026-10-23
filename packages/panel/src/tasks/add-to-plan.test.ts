@@ -20,7 +20,8 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
  * add-to-plan.test.ts -- a picture an agent showed, added to its plan from
  * the window's viewer: kept on the plan, its line written at the end of the
  * plan's text as the developer's edit, again on the text as it stands where
- * the plan moved on, said in the toast with Undo, which takes the line back
+ * the plan moved on, said in a toast that stands from the press and turns
+ * into Added with Undo once the line is written, which takes the line back
  * out; and offered only where the transcript stands on a plan's page.
  *
  * Synthetic plans and pictures throughout: the picture is a PNG's first
@@ -144,7 +145,7 @@ async function drawn(page: TaskMentionsValue | undefined) {
 
 /** The viewer opened over the picture, by a press on it. */
 async function opened(container: HTMLElement) {
-  const picture = container.querySelector<HTMLButtonElement>(".picture-frame");
+  const picture = container.querySelector<HTMLButtonElement>(".picture-block button");
   assert.ok(picture, "the picture is drawn, its bytes read");
   await act(async () => picture.click());
 }
@@ -173,11 +174,19 @@ test("Add to plan keeps the picture on the plan and writes its line at the plan'
   assert.ok(add);
 
   await act(async () => add.click());
-  await settled(() => newestToastSays() !== undefined);
+  assert.equal(newestToastSays(), "Adding to the plan…");
+  const card = document.querySelector(".luke-toast");
+  await settled(() => /Added/u.test(newestToastSays() ?? ""));
 
   assert.deepEqual(sent, [ACT_KIND.TASKS_PICTURE_KEEP, ACT_KIND.TASKS_EDIT]);
   assert.equal(held, `${PAGE_TEXT}\n${LINE}\n`);
   assert.equal(newestToastSays(), "Added to the planUndo");
+  assert.equal(
+    document.querySelectorAll(".luke-toast").length,
+    1,
+    "the working toast turned in place",
+  );
+  assert.equal(document.querySelector(".luke-toast"), card);
 
   const undo = newestToastAction();
   assert.ok(undo);

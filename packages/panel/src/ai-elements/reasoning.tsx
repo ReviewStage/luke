@@ -1,7 +1,15 @@
-import { useDisclosureBodyDrawn } from "@luke/ui";
+import {
+  GLYPH_INK,
+  GlyphSlot,
+  LineSummary,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  useDisclosureBodyDrawn,
+} from "@luke/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Fold, FoldBody, type FoldProps, FoldSummary } from "./fold.js";
+import { Fold, FoldBody, type FoldProps } from "./fold.js";
 
 /**
  * reasoning.tsx -- AI Elements' Reasoning: a model's thinking, folded under one quiet line until the reader opens it.
@@ -42,13 +50,20 @@ export interface ReasoningTriggerProps {
 export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): ReactNode {
   const drawn = useDisclosureBodyDrawn();
   return (
-    <FoldSummary className="reasoning-line">
-      <BrainIcon className="reasoning-icon" aria-hidden="true" />
-      <span className="reasoning-preview">
+    <LineSummary brightens>
+      <GlyphSlot ink={GLYPH_INK.INHERIT}>
+        <BrainIcon />
+      </GlyphSlot>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="reasoning-preview"
+      >
         <span className="reasoning-label">{REASONING_LINE}</span>
         {drawn || preview === "" ? null : ` ${preview}`}
-      </span>
-    </FoldSummary>
+      </Text>
+    </LineSummary>
   );
 }
 

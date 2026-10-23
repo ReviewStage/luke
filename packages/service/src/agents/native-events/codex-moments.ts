@@ -3,6 +3,7 @@ import { CODEX_LUKE_MCP_SERVER, CODEX_TOOL } from "@luke/features/agent-tools";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
+import { storedServerCall } from "../../integrations/connection-tools.js";
 import {
   NATIVE_MOMENT,
   type NativeHeld,
@@ -36,9 +37,13 @@ import {
  * token total meters the turn; a compaction stamps the agent; and a new
  * thread is the session a relaunch resumes. Codex sends a subagent's work
  * on a thread of its own, which its subagent call stands for, so anything
- * of a thread other than the session's is passed over. A call to Luke's own
+ * of a thread other than the session's is passed over but the end of its
+ * turn, which settles the spawn that started it: the spawn answers the
+ * moment the thread starts, so it is kept open until then. A call to Luke's own
  * MCP server is named as Luke's tool and its answer read as the JSON that
- * tool answers, a picture in it standing in for its bytes. Each shape is
+ * tool answers, a picture in it standing in for its bytes; a call to an
+ * integration's own server is stored as eve's call of that integration's
+ * tool is, so it draws with the service's mark and the tool's own name. Each shape is
  * read with a schema of the fields this reads alone, so a field Codex adds
  * changes nothing here, and a notification no schema fits is no moment.
  */
@@ -151,19 +156,18 @@ const readCommand = Schema.decodeUnknownOption(
 const readFileChange = Schema.decodeUnknownOption(
   Schema.Struct({ ...ITEM_FIELDS, changes: Schema.Array(WireValueSchema), status: Schema.String }),
 );
-const readMcpToolCall = Schema.decodeUnknownOption(
-  Schema.Struct({
-    ...ITEM_FIELDS,
-    server: Schema.String,
-    tool: Schema.String,
-    status: Schema.String,
-    arguments: Schema.optionalKey(WireValueSchema),
-    result: Schema.optionalKey(
-      Schema.NullOr(Schema.Struct({ content: Schema.Array(WireValueSchema) })),
-    ),
-    error: Schema.optionalKey(Schema.NullOr(Schema.Struct({ message: Schema.String }))),
-  }),
-);
+const McpToolCallSchema = Schema.Struct({
+  ...ITEM_FIELDS,
+  server: Schema.String,
+  tool: Schema.String,
+  status: Schema.String,
+  arguments: Schema.optionalKey(WireValueSchema),
+  result: Schema.optionalKey(
+    Schema.NullOr(Schema.Struct({ content: Schema.Array(WireValueSchema) })),
+  ),
+  error: Schema.optionalKey(Schema.NullOr(Schema.Struct({ message: Schema.String }))),
+});
+const readMcpToolCall = Schema.decodeUnknownOption(McpToolCallSchema);
 const readWebSearch = Schema.decodeUnknownOption(
   Schema.Struct({
     ...ITEM_FIELDS,
@@ -179,6 +183,7 @@ const readSubagent = Schema.decodeUnknownOption(
     status: Schema.String,
     prompt: Schema.optionalKey(Schema.NullOr(Schema.String)),
     model: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    reasoningEffort: Schema.optionalKey(Schema.NullOr(Schema.String)),
     receiverThreadIds: Schema.optionalKey(Schema.Array(Schema.String)),
     agentsStates: Schema.optionalKey(WireValueSchema),
   }),
@@ -200,7 +205,9 @@ const BREAKDOWN = Schema.Struct({
   reasoningOutputTokens: Schema.Number,
 });
 const readTokenUsage = Schema.decodeUnknownOption(
-  Schema.Struct({ tokenUsage: Schema.Struct({ total: BREAKDOWN }) }),
+  Schema.Struct({
+    tokenUsage: Schema.Struct({ total: BREAKDOWN, last: Schema.optionalKey(BREAKDOWN) }),
+  }),
 );
 const readTurnCompleted = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -264,7 +271,26 @@ function mcpAnswerText(content: readonly WireValue[], lukeTool: boolean): string
     .join("\n");
 }
 
-/** A call to an MCP server: Luke's tool by its own name, any other server's as `mcpToolCall`. */
+/**
+ * The name and input a call to an MCP server is stored under: Luke's tool's
+ * own for Luke's server; for an integration's own server, its integration's
+ * fixed name and envelope, as eve's nested call of the tool is stored
+ * (`storedServerCall`); `mcpToolCall` naming the server and tool otherwise.
+ */
+function storedMcpCall(
+  call: typeof McpToolCallSchema.Type,
+  args: WireValue,
+): { readonly name: string; readonly input: UnparsedWireValue } {
+  if (call.server === CODEX_LUKE_MCP_SERVER) return { name: call.tool, input: args };
+  return (
+    storedServerCall(call.server, call.tool, args, call.id) ?? {
+      name: CODEX_TOOL.MCP_TOOL_CALL,
+      input: { server: call.server, tool: call.tool, arguments: args },
+    }
+  );
+}
+
+/** A call to an MCP server, stored as `storedMcpCall` names it. */
 function mcpCall(item: unknown): Option.Option<Answered> {
   return Option.map(readMcpToolCall(item), (call) => {
     const lukeTool = call.server === CODEX_LUKE_MCP_SERVER;
@@ -276,8 +302,7 @@ function mcpCall(item: unknown): Option.Option<Answered> {
         : mcpAnswerText(call.result.content, lukeTool));
     return {
       callId: call.id,
-      name: lukeTool ? call.tool : CODEX_TOOL.MCP_TOOL_CALL,
-      input: lukeTool ? args : { server: call.server, tool: call.tool, arguments: args },
+      ...storedMcpCall(call, args),
       answer: lukeTool ? { lukeTool: true, text } : { lukeTool: false, text, output: text },
       failed:
         call.error !== undefined && call.error !== null ? true : FAILED_STATUSES.has(call.status),
@@ -337,6 +362,7 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
           tool: call.tool,
           prompt: call.prompt ?? null,
           model: call.model ?? null,
+          effort: call.reasoningEffort ?? null,
           receiverThreadIds: call.receiverThreadIds ?? [],
         },
         answer: {
@@ -374,13 +400,77 @@ function settled(call: Answered): readonly NativeMoment[] {
   ];
 }
 
+/** The collab tool that starts a subagent on a thread of its own, as `CollabAgentTool` spells it. */
+const SPAWN_AGENT = "spawnAgent";
+
+/**
+ * The child threads a completed collab call started a subagent on, which
+ * run on after the call answers; none for any other collab call, or one
+ * that did not do its work.
+ */
+function spawnedThreads(type: string, whole: unknown): readonly string[] {
+  if (type !== ITEM.SUBAGENT) return [];
+  return Option.match(readSubagent(whole), {
+    onSome: (call) =>
+      call.tool === SPAWN_AGENT && !FAILED_STATUSES.has(call.status)
+        ? (call.receiverThreadIds ?? [])
+        : [],
+    onNone: () => [],
+  });
+}
+
+/**
+ * A subagent's spawn completed: the call stands, and stays open while its
+ * subagent runs, as a delegation's row does, until its thread's turn
+ * completes (`childTurnMoments`). Note that the spawn answers the moment
+ * the thread starts, so its own answer says nothing of the subagent's work.
+ */
+function spawnMoments(call: Call, threads: readonly string[]): readonly NativeMoment[] {
+  return [started(call), ...running(call, threads), { kind: NATIVE_MOMENT.STEP_CLOSED }];
+}
+
+/** A spawn's subagents running, each by its thread, the call to settle with the input it stood with. */
+function running(call: Call, threads: readonly string[]): readonly NativeMoment[] {
+  const { callId, input } = call;
+  return threads.map(
+    (key): NativeMoment => ({
+      kind: NATIVE_MOMENT.SUBAGENT_RUNNING,
+      callId,
+      key,
+      ...(input === undefined ? undefined : { input }),
+    }),
+  );
+}
+
+/** A subagent's thread finished its turn: the spawn it runs under settles, failed where the turn did not complete. */
+function childTurnMoments(threadId: string, params: unknown): readonly NativeMoment[] {
+  const read = readTurnCompleted(params);
+  if (Option.isNone(read)) return [];
+  const { status, error } = read.value.turn;
+  const text = error?.message ?? status;
+  return [
+    {
+      kind: NATIVE_MOMENT.SUBAGENT_ENDED,
+      key: threadId,
+      settlement: toolAnswerSettlement(
+        { lukeTool: false, text, output: { status } },
+        status !== TURN_COMPLETED,
+      ),
+    },
+  ];
+}
+
 function itemStartedMoments(params: unknown): readonly NativeMoment[] {
   const item = itemOf(params);
   if (Option.isNone(item)) return [];
   const { type, id, whole } = item.value;
   if (type === ITEM.AGENT_MESSAGE) return [{ kind: NATIVE_MOMENT.STEP, key: id }];
+  // Note that a spawn naming its thread as it starts is waited on from then, so a subagent that ends before the spawn completes still settles it.
   return Option.match(callOf(type, whole), {
-    onSome: (call): readonly NativeMoment[] => [started(call)],
+    onSome: (call): readonly NativeMoment[] => [
+      started(call),
+      ...running(call, spawnedThreads(type, whole)),
+    ],
     onNone: () => [],
   });
 }
@@ -415,8 +505,13 @@ function itemCompletedMoments(params: unknown): readonly NativeMoment[] {
       });
     case ITEM.COMPACTION:
       return [{ kind: NATIVE_MOMENT.COMPACTED }];
-    default:
-      return Option.match(callOf(type, whole), { onSome: settled, onNone: () => [] });
+    default: {
+      const threads = spawnedThreads(type, whole);
+      return Option.match(callOf(type, whole), {
+        onSome: (call) => (threads.length === 0 ? settled(call) : spawnMoments(call, threads)),
+        onNone: () => [],
+      });
+    }
   }
 }
 
@@ -438,13 +533,27 @@ function planMoments(params: unknown, sequence: number): readonly NativeMoment[]
 }
 
 /**
- * The thread's running total, as the meter reads one. Note that OpenAI
- * counts the cache's reads within the input and the reasoning within the
- * output, as the record counts them.
+ * The thread's running total, as the meter reads one, and its last request,
+ * as the context ring reads one. Note that OpenAI counts the cache's reads
+ * within the input and the reasoning within the output, as the record
+ * counts them.
  */
 function usageMoments(params: unknown): readonly NativeMoment[] {
   return Option.match(readTokenUsage(params), {
-    onSome: ({ tokenUsage: { total } }): readonly NativeMoment[] => [
+    onSome: ({ tokenUsage: { total, last } }): readonly NativeMoment[] => [
+      ...(last === undefined
+        ? []
+        : [
+            {
+              kind: NATIVE_MOMENT.CONTEXT,
+              usage: {
+                inputTokens: last.inputTokens,
+                outputTokens: last.outputTokens,
+                cachedInputTokens: last.cachedInputTokens,
+                cacheWriteTokens: last.cacheWriteInputTokens ?? 0,
+              },
+            } as const,
+          ]),
       {
         kind: NATIVE_MOMENT.USAGE_TOTAL,
         total: {
@@ -608,7 +717,14 @@ export function codexMoments(message: WireValue, held: NativeHeld): readonly Nat
   if (Option.isNone(envelope)) return [];
   const { method, params } = envelope.value;
   if (method === NOTIFICATION.THREAD_STARTED) return threadStartedMoments(params);
-  if (elsewhere(params, held)) return [];
+  if (elsewhere(params, held)) {
+    // A subagent's thread is passed over but for its turn's end, which settles the spawn it runs under.
+    if (method !== NOTIFICATION.TURN_COMPLETED) return [];
+    return Option.match(readThreadOf(params), {
+      onSome: ({ threadId }) => childTurnMoments(threadId, params),
+      onNone: () => [],
+    });
+  }
   switch (method) {
     case NOTIFICATION.TURN_STARTED:
       return [{ kind: NATIVE_MOMENT.ACTIVE }];

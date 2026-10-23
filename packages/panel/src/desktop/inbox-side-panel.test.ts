@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { BrowserFocus, BrowserKey } from "@luke/features/browser-acts";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -21,8 +20,7 @@ import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
+import { NO_EXPERIMENTS } from "@luke/settings";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -46,6 +44,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -193,47 +192,22 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   }
 }
 
-/** Main's events on a Browser tab's page, as the test hears the window subscribe to them. */
-interface MainBrowserEvents {
-  focus?: (focus: BrowserFocus) => void;
-  key?: (key: BrowserKey) => void;
-}
-
 /** The window's Inbox on the plan's item, its side panel the window's own hook held by the chosen item's plan, and every place it was asked to leave for. */
 async function inbox(
-  {
-    pages,
-    experiments = NO_EXPERIMENTS,
-  }: {
-    pages: readonly PageLine[] | undefined;
-    experiments?: ExperimentChoices;
-  } = {
+  { pages }: { pages: readonly PageLine[] | undefined } = {
     pages: [FUNNEL],
   },
 ) {
   let control: SidePanelControl | undefined;
-  // Main's word on a Browser tab's page: that it took the keyboard, and a chord pressed over it.
-  const main: MainBrowserEvents = {};
   const links: ReadLink[] = [];
   const tasks: string[] = [];
   /** The tabs asked for on a task the window was to go to, as a link pressed with ⌘ asks. */
   const went: string[] = [];
   const left = { links, tasks, went };
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
-  fakeActs({
-    act: answer,
-    onBrowserState: () => () => undefined,
-    onBrowserKey: (listener: (key: BrowserKey) => void) => {
-      main.key = listener;
-      return () => undefined;
-    },
-    onBrowserFocus: (listener: (focus: BrowserFocus) => void) => {
-      main.focus = listener;
-      return () => undefined;
-    },
-  });
+  fakeActs({ act: answer });
   fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
-  handState(experiments);
+  handState(NO_EXPERIMENTS);
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
@@ -249,6 +223,9 @@ async function inbox(
       [],
       [FUNNEL.id],
       taskAgents.agentIds,
+      undefined,
+      undefined,
+      taskAgents.heldIds,
     );
     control = sidePanel;
     // The window's keymap, which hears a chord as the window's root mounts it.
@@ -291,7 +268,7 @@ async function inbox(
     assert.ok(control);
     return control;
   };
-  return { container, left, panel, main };
+  return { container, left, panel };
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -313,7 +290,8 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
 
 /** How many tabs of the panel beside the Inbox stand as its preview. */
 function previewTabs(container: HTMLElement): number {
-  return container.querySelectorAll('aside[aria-label="Panel"] .tab[data-preview="true"]').length;
+  return container.querySelectorAll('aside[aria-label="Panel"] .luke-tab[data-preview="true"]')
+    .length;
 }
 
 /** The panel beside the Inbox as a reader hears it: each tab's label, `▸ ` before the one shown; nothing where no panel stands. */
@@ -388,63 +366,9 @@ test("a page the item names before its plan's pages are read is still the panel'
   assert.equal(left.links.length, 0, "the page is still the panel's to open");
 });
 
-test("a Browser tab chosen on the item's plan stands chosen in the panel beside the Inbox, and draws its page there", async () => {
-  const { container, panel } = await inbox({
-    pages: [FUNNEL],
-    experiments: experimentsOn(EXPERIMENT.BROWSER),
-  });
-  await pressChip(container, "invites.ts");
-  act(() => panel().onOpenBrowser("http://localhost:3000/"));
-  await settle();
-
-  assert.deepEqual(panelTabs(container), ["invites.ts", "▸ Browser"]);
-  const content = container.querySelector('aside[aria-label="Panel"] [role="tabpanel"]');
-  assert.ok(
-    content?.querySelector('section[aria-label="Browser"]'),
-    "the Browser tab's pane is drawn",
-  );
-  assert.equal(content?.textContent?.includes("Loading page"), false);
-});
-
-test("a click into a Browser tab's page beside the Inbox hands the panel the keys, so ⌘W over the page closes that tab", async () => {
-  const { container, panel, main } = await inbox({
-    pages: [FUNNEL],
-    experiments: experimentsOn(EXPERIMENT.BROWSER),
-  });
-  await pressChip(container, "invites.ts");
-  act(() => panel().onOpenBrowser("http://localhost:3000/"));
-  await settle();
-  // The Inbox's own column holds the keys, as a press in its list leaves them.
-  act(() => {
-    container
-      .querySelector(".inbox-view")
-      ?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-  });
-  await settle();
-  const browserId = panel().browsers[0]?.tab.browser;
-  assert.ok(browserId);
-
-  act(() => main.focus?.({ browserId }));
-  await settle();
-  act(() =>
-    main.key?.({
-      browserId,
-      key: "w",
-      code: "KeyW",
-      meta: true,
-      shift: false,
-      alt: false,
-      control: false,
-    }),
-  );
-  await settle();
-
-  assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
-});
-
-test("closing the last tab drawn beside the Inbox shuts the panel, as on a task's page, though the task keeps an archived agent's Pull request tab", async () => {
+test("an archived agent's Pull request tab stands beside the Inbox as any other, and closing the last tab drawn shuts the panel, as on a task's page", async () => {
   const { container, panel } = await inbox();
-  // The archived agent's tab, as one opened on the task's page before the agent was archived, which no strip draws.
+  // The archived agent's tab, as one opened on the task's page before the agent was archived, which still draws its pull request.
   act(() => panel().onChoose({ changes: ARCHIVED.id }));
   await settle();
   await pressChip(container, "relay#42");
@@ -521,4 +445,15 @@ test("an agent the item names reads beside the Inbox as the panel's preview, its
   } finally {
     stop();
   }
+});
+
+test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the task's column does", async () => {
+  const { container } = await inbox();
+  await pressChip(container, "Batch the invitations");
+  const tab = container.querySelector<HTMLElement>('aside[aria-label="Panel"] [role="tab"]');
+  assert.ok(tab, "the agent's tab stands beside the Inbox");
+  restOn(tab);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.ok(card, "the agent's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Batch the invitations");
 });

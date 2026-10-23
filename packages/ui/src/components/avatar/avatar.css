@@ -1,7 +1,7 @@
 /* avatar.css -- a person's disc or an app's square: one box per size, the
    picture filling it once loaded, their letter on one of the six identity
    hues until then, an app's glyph bare or on a quiet tile, or the figure on
-   a quiet tile. */
+   a quiet tile; or no one, on a dashed outline of the same box. */
 
 @layer components {
   .luke-avatar {
@@ -42,6 +42,10 @@
     --luke-avatar-size: 16px;
   }
 
+  .luke-avatar[data-size="glyph"] {
+    --luke-avatar-size: var(--luke-control-icon);
+  }
+
   .luke-avatar[data-size="stack"] {
     --luke-avatar-size: 18px;
   }
@@ -70,6 +74,32 @@
      shape at every size, and rounder than a workspace's tile of its size. */
   .luke-avatar[data-shape="square"] {
     border-radius: 36%;
+  }
+
+  /* A tile, a workspace's or a repository's: its corner a quarter of its
+     edge, squarer than an app's square, with no edge of its own unless it is
+     `edged`. Its letter is a caption's size, a head's a dialog's, rather than
+     a share of the box, so the small tiles keep a readable letter. */
+  .luke-avatar[data-shape="tile"] {
+    border-radius: 25%;
+    font-size: var(--luke-type-caption-size);
+  }
+
+  .luke-avatar[data-shape="tile"][data-size="card"] {
+    font-size: var(--luke-type-dialog-size);
+  }
+
+  .luke-avatar[data-shape="tile"]:not([data-edged="true"])::after {
+    content: none;
+  }
+
+  .luke-avatar[data-shape="tile"][data-edged="true"]::after {
+    box-shadow: inset 0 0 0 1px var(--luke-color-border);
+  }
+
+  /* A blank tile has no ground until its picture has loaded. */
+  .luke-avatar[data-blank="true"]:not([data-hue]) {
+    background: none;
   }
 
   /* An app's glyph stands alone on the ground beneath it, in the ink around
@@ -147,5 +177,42 @@
 
   .luke-avatar[data-hue="6"] {
     background: var(--luke-color-identity-6);
+  }
+
+  /* No one stands on no ground, a small figure in an outline dashed as
+     Linear draws a task with no assignee, so it is never read as a status's
+     ring: the subtle ink on every ground, a hairline at every
+     size, as a disc's edge is, its ten dashes laid evenly round it
+     (`pathLength`). */
+  .luke-avatar[data-unassigned="true"] {
+    background: none;
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-avatar[data-unassigned="true"]::after {
+    content: none;
+  }
+
+  .luke-avatar-unassigned {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    stroke-width: 1.25px;
+    stroke-dasharray: 2.4 1.6;
+  }
+
+  /* Note that the ring is held a hairline on its circle itself, because
+     `vector-effect` is not inherited from the outline around it. */
+  .luke-avatar-unassigned circle {
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* Note that the figure stands smaller than an app's glyph, so it clears
+     the ring around it at the smallest size. */
+  .luke-avatar[data-unassigned="true"] .luke-avatar-glyph > * {
+    width: 54%;
+    height: 54%;
   }
 }

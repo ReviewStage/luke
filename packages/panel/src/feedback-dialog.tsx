@@ -12,7 +12,9 @@
  * Escape and a press on the dimmed window only close the card, keeping the
  * words and screenshots for the next opening of that kind — unless there are
  * no words yet, in which case there is nothing worth keeping and they discard
- * it too.
+ * it too. While there are words, the first of them nudges the card and keeps
+ * it open, so a stray press never takes the card from under a note being
+ * written, and the next closes it. A send refused shakes the card.
  *
  * What a send carries is exactly what the card shows: the words, the
  * screenshots drawn in it, which experiment the note is about where its
@@ -37,6 +39,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
+  ALIGN,
   AttachmentChip,
   BUTTON_VARIANT,
   Button,
@@ -44,18 +47,25 @@ import {
   DIALOG_SIZE,
   Dialog,
   ErrorState,
+  GAP,
   IconButton,
   ImageIcon,
+  Inline,
+  LAYOUT_ELEMENT,
+  Shortcut,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextArea,
+  Tooltip,
+  useFilePicker,
 } from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
-import { Shortcut } from "./shortcut.js";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * Each kind in its own words: the title its dialog carries, the field's
@@ -222,7 +232,6 @@ export function FeedbackDialog({
   const showToast = useToast();
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
-  const picker = useRef<HTMLInputElement | null>(null);
   const signatureId = useId();
   const signature = accountSignature(account);
 
@@ -293,6 +302,12 @@ export function FeedbackDialog({
     if (shownKind.current === of) setRejection(taken.refusal);
   };
 
+  const picker = useFilePicker({
+    accept: "image/*",
+    multiple: true,
+    onFiles: (picked) => void attach(imageFiles(picked)),
+  });
+
   const send = async () => {
     if (kind === undefined) return;
     const current = latestDrafts()[kind];
@@ -330,6 +345,8 @@ export function FeedbackDialog({
       size={DIALOG_SIZE.WIDE}
       title={dialogTitle(kind, about)}
       busy={busy}
+      refused={rejection !== undefined}
+      holding={hasWords(draft)}
       initialFocus={field}
       onDismiss={() => close(false)}
       onKeyDown={sendKey}
@@ -357,22 +374,10 @@ export function FeedbackDialog({
               icon={<ImageIcon />}
               label="Attach screenshot"
               disabled={busy || full}
-              onClick={() => picker.current?.click()}
+              onClick={picker.open}
             />
           </Tooltip>
-          <input
-            ref={picker}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(event) => {
-              const picked = imageFiles(event.currentTarget.files);
-              // Cleared so the same file can be picked again after a removal.
-              event.currentTarget.value = "";
-              void attach(picked);
-            }}
-          />
+          {picker.input}
         </>
       }
       actions={
@@ -415,7 +420,13 @@ export function FeedbackDialog({
           }}
         />
         {draft.images.length > 0 ? (
-          <ul className="feedback-dialog-images" aria-label="Screenshots">
+          <Inline
+            as={LAYOUT_ELEMENT.UL}
+            gap={GAP.CONTROL}
+            align={ALIGN.STRETCH}
+            className="feedback-dialog-images"
+            aria-label="Screenshots"
+          >
             {draft.images.map((image, index) => (
               <AttachmentChip
                 key={`${image.name}-${String(index)}`}
@@ -429,7 +440,7 @@ export function FeedbackDialog({
                 }
               />
             ))}
-          </ul>
+          </Inline>
         ) : null}
         {signature ? (
           <div className="feedback-dialog-signature">
@@ -441,11 +452,17 @@ export function FeedbackDialog({
             >
               Include my name and email
             </Checkbox>
-            <span id={signatureId} className="feedback-dialog-identity">
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              id={signatureId}
+              className="feedback-dialog-identity"
+            >
               {draft.signed
                 ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
                 : null}
-            </span>
+            </Text>
           </div>
         ) : null}
         {rejection === undefined ? null : <ErrorState>{rejection}</ErrorState>}

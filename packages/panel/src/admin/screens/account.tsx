@@ -12,7 +12,8 @@ import {
   Text,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
-import { formatDate, formatDayTick, formatNumber, signInMethodLabel } from "@luke/ui/admin-format";
+import { signInMethodLabel } from "@luke/ui/admin-format";
+import { formatCount, formatDate, formatDayTick, formatInstant } from "@luke/ui/time-format";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { ActivityCalendar } from "../charts/activity-calendar.js";
@@ -31,7 +32,7 @@ import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { accountReadQuery } from "../routing.js";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
 import { useAdminRead } from "../use-admin-read.js";
-import { AccountSupportSections, formatInstant } from "./account-support.js";
+import { AccountSupportSections } from "./account-support.js";
 
 const ACCOUNT_ERROR = "The account endpoint did not answer.";
 
@@ -127,8 +128,8 @@ export function AccountScreen({
       // than posing the truncation as the exact count.
       const streak =
         activity.currentStreakDays >= detail.windowDays
-          ? `${formatNumber(detail.windowDays)}+`
-          : formatNumber(activity.currentStreakDays);
+          ? `${formatCount(detail.windowDays)}+`
+          : formatCount(activity.currentStreakDays);
 
       return frame(
         <AdminPage title={accountLabel(subject)} back={back} note={note} controls={controls}>
@@ -163,8 +164,8 @@ export function AccountScreen({
                   <div className={STAT_CELL}>
                     <StatCard
                       label={`Active days · ${detail.windowDays} days`}
-                      value={formatNumber(activity.activeDaysWindow)}
-                      hint={`of ${formatNumber(detail.windowDays)} window days`}
+                      value={formatCount(activity.activeDaysWindow)}
+                      hint={`of ${formatCount(detail.windowDays)} window days`}
                     />
                   </div>
                   <div className={STAT_CELL}>
@@ -179,8 +180,8 @@ export function AccountScreen({
                   <div className={STAT_CELL}>
                     <StatCard
                       label={`Active days · ${activity.activeDaysTrend.days} days`}
-                      value={formatNumber(activity.activeDaysTrend.recent)}
-                      hint={`${formatNumber(activity.activeDaysTrend.prior)} the week before`}
+                      value={formatCount(activity.activeDaysTrend.recent)}
+                      hint={`${formatCount(activity.activeDaysTrend.prior)} the week before`}
                     />
                   </div>
                   <div className={STAT_CELL}>
@@ -219,14 +220,14 @@ export function AccountScreen({
                 <div className={STAT_CELL}>
                   <StatCard
                     label={`Hosted calls · ${detail.windowDays} days`}
-                    value={formatNumber(activity.callsWindow)}
-                    hint={`${formatNumber(activity.allTime.calls)} all time`}
+                    value={formatCount(activity.callsWindow)}
+                    hint={`${formatCount(activity.allTime.calls)} all time`}
                   />
                 </div>
                 <div className={STAT_CELL}>
                   <StatCard
                     label="Active days · all time"
-                    value={formatNumber(activity.allTime.activeDays)}
+                    value={formatCount(activity.allTime.activeDays)}
                   />
                 </div>
               </div>

@@ -4,13 +4,13 @@
  * than one way.
  */
 
-import { formatNumber } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@luke/ui/chart";
+import { formatCount } from "@luke/ui/time-format";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, SeriesLegend } from "./chart-frame.js";
 
@@ -61,7 +61,7 @@ export function BreakdownChart({
   const data = rows.map((row) => ({
     label: row.label,
     ...row.counts,
-    total: formatNumber(series.reduce((total, key) => total + (row.counts[key] ?? 0), 0)),
+    total: formatCount(series.reduce((total, key) => total + (row.counts[key] ?? 0), 0)),
     // Note that the total rides the row's last part with a count, since a
     // part of nothing draws no bar for a label to stand beside.
     labelAt: series.findLast((key) => (row.counts[key] ?? 0) > 0),

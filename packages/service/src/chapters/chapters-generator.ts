@@ -1,10 +1,12 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   type PullRequestChaptersFailure,
 } from "@luke/database/pull-request-chapters-vocabulary";
-import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
+import { CHAPTERS_MODEL, type ChaptersModelId } from "@luke/features/chapters-model-choice";
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -31,6 +33,7 @@ import {
   Output,
 } from "ai";
 import { Data, Duration, Effect, Redacted, Schema } from "effect";
+import type { OwnKey } from "../agents/coder-host/model.js";
 import {
   CHAPTERS_INSTRUCTIONS,
   chaptersPrompt,
@@ -39,7 +42,7 @@ import {
 } from "./chapters-prompt.js";
 
 /**
- * chapters-generator.ts -- a pull request's changed files and words told as chapters, in one structured model call on Luke's own key, held to the diff in code.
+ * chapters-generator.ts -- a pull request's changed files and words told as chapters, in one structured model call on the presser's own API key, held to the diff in code.
  *
  * The changed files are split into the hunks a model is shown and those it
  * never sees: the files a reader reads past (`ignoredForChapters`) and every
@@ -70,10 +73,12 @@ import {
  * the literal `\n` a model escapes twice is read as the newline it meant.
  *
  * The model is a seam (`ChaptersModel`), as an agent's title model is:
- * production reaches Anthropic with Luke's own key on the Claude model the
- * member who pressed Generate chose in Settings, Haiku unless they changed
- * it (`chaptersModelOf`, `@luke/features/chapters-model-choice`), never
- * through the account's meter, and a test hands in a scripted model. The whole generation is bounded in time
+ * production reaches the provider on the API key the member who pressed
+ * Generate saved, never Luke's: on the Claude model they chose in Settings,
+ * Haiku unless they changed it (`chaptersModelOf`,
+ * `@luke/features/chapters-model-choice`), where they saved an Anthropic
+ * key, and on OpenAI's model of the same tier where they saved only an
+ * OpenAI key; a test hands in a scripted model. The whole generation is bounded in time
  * (`CHAPTERS_BOUNDS.TIMEOUT`), and every way it fails is one of the store's
  * four kinds (`PULL_REQUEST_CHAPTERS_FAILURE`). A failure is logged by its
  * kind alone: neither the diff nor the answer leaves here but to the model
@@ -100,6 +105,13 @@ export const CHAPTERS_BOUNDS = {
   /** How hard the model is asked to think: grouping and judging risk earn more than a title's least. */
   EFFORT: "medium",
 } as const;
+
+/** OpenAI's model of each Claude choice's tier, which an account holding only an OpenAI key tells chapters on. */
+const OPENAI_CHAPTERS_MODEL = {
+  [CHAPTERS_MODEL.HAIKU]: "gpt-6-luna",
+  [CHAPTERS_MODEL.SONNET]: "gpt-6.1-sol",
+  [CHAPTERS_MODEL.OPUS]: "gpt-6-astra",
+} as const satisfies Record<ChaptersModelId, string>;
 
 /** The AI SDK's word for a call the provider stopped on its own policy, as Anthropic's refusal reads. */
 const FINISH_REFUSED = "content-filter";
@@ -250,7 +262,10 @@ function askStructured<A>(
           schema: jsonSchema<unknown>(jsonRoundTrip(emitJsonSchema(ask.schema))),
         }),
         maxOutputTokens: ask.maxOutputTokens,
-        providerOptions: { anthropic: { effort: CHAPTERS_BOUNDS.EFFORT } },
+        providerOptions: {
+          anthropic: { effort: CHAPTERS_BOUNDS.EFFORT },
+          openai: { reasoningEffort: CHAPTERS_BOUNDS.EFFORT },
+        },
         abortSignal,
       });
       if (answer.finishReason === FINISH_REFUSED) return { refused: true } as const;
@@ -388,23 +403,26 @@ function unseen(each: ChapterHunk): boolean {
 }
 
 /**
- * The Claude model chapters are told on, the one the member who pressed
- * Generate chose, on Luke's own Anthropic key and never the account's
- * meter, or nothing where the deployment holds no key, as the hosted route
- * reads it from `HostedEnvironment`'s `anthropicKey`.
+ * The model chapters are told on, on the presser's own API key (`ownKeyOf`):
+ * the Claude model they chose on an Anthropic key, and OpenAI's of the
+ * same tier on an OpenAI key, since Settings offers Claude's alone. Its id
+ * is the provider's own, which the chapters' row names.
  */
 export function chaptersModelOf(
-  anthropicKey: Redacted.Redacted | undefined,
+  own: OwnKey,
   modelId: ChaptersModelId,
   fetch?: typeof globalThis.fetch,
-): ChaptersModel | undefined {
-  if (anthropicKey === undefined) return undefined;
+): ChaptersModel {
   // The key is revealed here alone, into the SDK client that puts it on its requests.
   const settings = {
-    apiKey: Redacted.value(anthropicKey),
+    apiKey: Redacted.value(own.key),
     ...(fetch === undefined ? undefined : { fetch }),
   };
-  return { id: modelId, model: createAnthropic(settings)(modelId) };
+  if (own.provider === MODEL_PROVIDER.ANTHROPIC) {
+    return { id: modelId, model: createAnthropic(settings)(modelId) };
+  }
+  const openAiId = OPENAI_CHAPTERS_MODEL[modelId];
+  return { id: openAiId, model: createOpenAI(settings).responses(openAiId) };
 }
 
 /**

@@ -6,8 +6,8 @@ import {
   DataTable,
   type DataTableColumn,
 } from "@luke/ui";
-import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
+import { formatCount, formatDayHeading } from "@luke/ui/time-format";
 import { AccountCell } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { AdminSection, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card.js";
@@ -44,7 +44,7 @@ function dayAccountColumns(
       key: "calls",
       label: "Calls",
       kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatNumber(row.calls),
+      cell: (row) => formatCount(row.calls),
     },
   ];
 }
@@ -150,14 +150,14 @@ export function DayScreen({
                 <div className={STAT_CELL}>
                   <StatCard
                     label="Active accounts"
-                    value={formatNumber(detail.totals.accounts)}
+                    value={formatCount(detail.totals.accounts)}
                     hint={soFar}
                   />
                 </div>
                 <div className={STAT_CELL}>
                   <StatCard
                     label="Hosted calls"
-                    value={formatNumber(detail.totals.calls)}
+                    value={formatCount(detail.totals.calls)}
                     hint={soFar}
                   />
                 </div>

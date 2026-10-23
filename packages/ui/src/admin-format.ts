@@ -1,8 +1,9 @@
 /**
- * admin-format.ts -- how the admin page draws its counts, days, and trends.
+ * admin-format.ts -- how the admin page draws its counts, shares, dollars, and trends; its days are `time-format.ts`'s.
  */
 
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "@luke/features/sign-in-provider";
+import { formatCount, formatDayTick } from "./time-format.js";
 
 /**
  * The two runs a trend compares. The service's `AdminTrend` carries them, and
@@ -12,12 +13,6 @@ import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "@luke/features/sign-in-p
 interface Trend {
   recent: number;
   prior: number;
-}
-
-const numberFormat = new Intl.NumberFormat("en-US");
-
-export function formatNumber(value: number): string {
-  return numberFormat.format(value);
 }
 
 /**
@@ -67,31 +62,6 @@ export function formatUsd(value: number): string {
     : centsFormat.format(value);
 }
 
-/** An instant drawn as its UTC date alone, e.g. "Aug 3, 2026". */
-export function formatDate(epochMs: number): string {
-  return new Date(epochMs).toLocaleDateString("en-US", {
-    dateStyle: "medium",
-    timeZone: "UTC",
-  });
-}
-
-/** A day key drawn as a short axis tick, e.g. "Aug 21". */
-export function formatDayTick(day: string): string {
-  return new Date(`${day}T00:00:00.000Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-/** A day key drawn as the day page's own masthead, e.g. "August 21, 2026". */
-export function formatDayHeading(day: string): string {
-  return new Date(`${day}T00:00:00.000Z`).toLocaleDateString("en-US", {
-    dateStyle: "long",
-    timeZone: "UTC",
-  });
-}
-
 /**
  * How faded today's bar draws. The series' last day is still filling, so a
  * bar rendered like a complete day's always reads as a dip; the fade and the
@@ -129,7 +99,7 @@ export function formatTrendMove(trend: Trend): string {
   const delta = trend.recent - trend.prior;
   if (delta === 0) return "flat";
   const sign = delta > 0 ? "+" : "−";
-  if (trend.prior === 0) return `${sign}${formatNumber(Math.abs(delta))}`;
+  if (trend.prior === 0) return `${sign}${formatCount(Math.abs(delta))}`;
   return `${sign}${Math.abs(Math.round((delta / trend.prior) * 100))}%`;
 }
 

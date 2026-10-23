@@ -346,12 +346,14 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
  * rather than running for a day; answers how many this call settled. The
  * turn the native projection holds is dropped with them, so the next
  * launch's events open a turn of their own rather than one already ended.
+ * A launch that failed before its runner ran names why in `detail`.
  */
 export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunnerLostTurns")(
   function* (
     writer: Pick<StoreWriter, "consume">,
     conversationId: string,
     now: number,
+    detail: string = RUNNER_LOST_DETAIL,
   ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
     const lost = yield* agentRunningTurns({ conversationId });
     let settled = 0;
@@ -363,7 +365,7 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
           ? {
               status: BRAIN_REQUEST_STATUS.FAILED,
               failure: BRAIN_REQUEST_FAILURE.MODEL,
-              failureDetail: RUNNER_LOST_DETAIL,
+              failureDetail: detail,
             }
           : { status: BRAIN_REQUEST_STATUS.CANCELLED },
         now,

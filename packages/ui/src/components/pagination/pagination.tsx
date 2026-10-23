@@ -1,3 +1,5 @@
+import { pulseOnPress } from "../../press-pulse.js";
+
 /**
  * pagination.tsx -- links to the pages beside this one: a step back, a step on, and between them, where the pages are numbered, each page's number with the current one held.
  *
@@ -75,7 +77,13 @@ function Step({
   if (step.text !== undefined)
     words = rel === "prev" ? `${arrow} ${step.text}` : `${step.text} ${arrow}`;
   return (
-    <a className="luke-pagination-item" href={step.href} rel={rel} aria-label={step.label}>
+    <a
+      className="luke-pagination-item"
+      href={step.href}
+      rel={rel}
+      aria-label={step.label}
+      onClick={pulseOnPress()}
+    >
       {words}
     </a>
   );
@@ -124,7 +132,12 @@ export function Pagination({
               );
             }
             return (
-              <a key={number} className="luke-pagination-item" href={pages.href(number)}>
+              <a
+                key={number}
+                className="luke-pagination-item"
+                href={pages.href(number)}
+                onClick={pulseOnPress()}
+              >
                 {number}
               </a>
             );

@@ -316,12 +316,15 @@ export function linearOrRefused<A, R>(
   read: Effect.Effect<A, LinearReadFailure | QueryError | Schema.SchemaError, R>,
   logLine: string,
 ): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(read, (failure) =>
-    failure instanceof LinearReadFailure
-      ? Effect.andThen(
-          Effect.logWarning(logLine, failure.reason),
-          Effect.fail(HOSTED_REFUSAL.LINEAR_UNAVAILABLE),
-        )
-      : hostedStoreOrUnavailable(Effect.fail(failure)),
+  // Note that the answer is typed, because its two branches' refusals would otherwise be inferred apart, by whichever the checker reads first.
+  return Effect.catch(
+    read,
+    (failure): Effect.Effect<never, HostedRefusal> =>
+      failure instanceof LinearReadFailure
+        ? Effect.andThen(
+            Effect.logWarning(logLine, failure.reason),
+            Effect.fail(HOSTED_REFUSAL.LINEAR_UNAVAILABLE),
+          )
+        : hostedStoreOrUnavailable(Effect.fail(failure)),
   );
 }

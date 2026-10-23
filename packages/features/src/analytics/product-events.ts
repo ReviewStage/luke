@@ -155,6 +155,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   MEMORY: "memory",
   CODING_AGENTS: "coding_agents",
   INTEGRATIONS: "integrations",
+  SKILLS: "skills",
   API_KEYS: "api_keys",
   PLAN_TEMPLATE: "plan_template",
   WORKSPACE: "workspace",
@@ -244,6 +245,7 @@ export const PRODUCT_EXPERIMENT = {
   AUTOMATIONS: "automations",
   CODE_REVIEW: "code-review",
   VIDEO_CALLS: "video-calls",
+  MEMORY: "memory",
   /** Removed with Luke's own issues, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   ISSUES: "issues",
   /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */

@@ -17,6 +17,7 @@ import {
   type ButtonSize,
   type ButtonVariant,
 } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * folding-button.tsx -- a toolbar's labelled button whose words a narrow toolbar folds away, leaving its glyph, named by its hint.
@@ -36,8 +37,9 @@ import {
  * hands the focus back to; one whose name says more than its words, a count
  * its glyph wears, is named by `name`, which holds its words.
  *
- * What is drawn here is the button, and whether its words are folded. The
- * hint, when it shows and goes, is the app's (`hint`): it is handed the
+ * What is drawn here is the button, and whether its words are folded. Its
+ * hint is the window's tooltip (`Tooltip`, `hint.tsx`), or one the caller
+ * hangs in its place (`hint`): it is handed the
  * words while they are folded and nothing while they are drawn, and wraps
  * the button's box, which hands what the hint gives it on to the button.
  */
@@ -105,8 +107,11 @@ function FoldingBox({
   shape,
   size,
   busy,
+  succeeded,
+  turns,
   disabled,
   onClick,
+  trailing,
   doors,
   ...hinted
 }: FoldingHintProps & {
@@ -118,19 +123,29 @@ function FoldingBox({
   shape: ButtonShape | undefined;
   size: ButtonSize | undefined;
   busy: string | undefined;
+  succeeded: boolean | undefined;
+  turns: boolean | undefined;
   disabled: boolean | undefined;
   onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  trailing: ReactNode;
 }): React.JSX.Element {
-  const busyProps = busy === undefined ? {} : { busy: true, busyLabel: busy };
+  // Note that the main part is told how its press landed while it is not busy too, since the ring's leaving is what it reads it at.
+  const busyProps = { busy: busy !== undefined, busyLabel: busy ?? "", succeeded };
   return (
-    <span ref={measured} className="luke-folding-button">
+    <span
+      ref={measured}
+      className="luke-folding-button"
+      data-row={variant === BUTTON_VARIANT.ROW ? "" : undefined}
+    >
       <Button
         ref={doors.ref}
         icon={icon}
+        trailing={trailing}
         variant={variant}
         shape={shape ?? BUTTON_SHAPE.SQUARE}
         size={size}
         disabled={disabled}
+        turns={turns}
         onClick={onClick}
         label={doors.name}
         aria-haspopup={doors["aria-haspopup"]}
@@ -153,9 +168,12 @@ export function FoldingButton({
   shape,
   size,
   busy,
+  succeeded,
+  turns,
   disabled,
   onClick,
-  hint: Hint,
+  trailing,
+  hint: Hint = Tooltip,
   ...doors
 }: FoldingButtonDoors & {
   /** Its words, and so its name, folded or not. */
@@ -168,9 +186,15 @@ export function FoldingButton({
   size?: ButtonSize | undefined;
   /** While its press is out, what it is doing ("Running"): a ring stands over it under that name. */
   busy?: string | undefined;
+  /** Whether the press its ring stood for landed, read as the ring leaves (Button's `succeeded`). */
+  succeeded?: boolean | undefined;
+  /** Whether its glyph turns once as a press lands, as a retry's arrow does (Button's `turns`). */
+  turns?: boolean | undefined;
   disabled?: boolean | undefined;
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
-  /** The app's hint, raising the words while they are folded. */
+  /** A count after its words, inside the button's fill; it stays drawn when the words fold. */
+  trailing?: ReactNode;
+  /** The hint raising the words while they are folded: the window's tooltip, unless the caller hangs one of its own. */
   hint?: FoldingButtonHint | undefined;
 }): React.JSX.Element {
   const [measured, folded] = useFolded();
@@ -183,10 +207,13 @@ export function FoldingButton({
       shape={shape}
       size={size}
       busy={busy}
+      succeeded={succeeded}
+      turns={turns}
       disabled={disabled}
       onClick={onClick}
+      trailing={trailing}
       doors={doors}
     />
   );
-  return Hint === undefined ? box : <Hint label={folded ? label : undefined}>{box}</Hint>;
+  return <Hint label={folded ? label : undefined}>{box}</Hint>;
 }

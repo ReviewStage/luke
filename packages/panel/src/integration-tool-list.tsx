@@ -11,26 +11,33 @@ import {
   toolTitle,
 } from "@luke/features/integration-tool-model";
 import {
+  ALIGN,
   ArrowLeftIcon,
   BADGE_TONE,
   Badge,
   type BadgeTone,
+  FILL_ELEMENT,
+  Fill,
+  GAP,
   IconButton,
+  Inline,
+  LAYOUT_ELEMENT,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
   ListRow,
   type ListRowHint,
+  ONE_LINE_ELEMENT,
+  OneLine,
   ScrollArea,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { cloneElement, createContext, useContext } from "react";
-import { FADING_ELEMENT, FadingWords } from "./fading-words.js";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * integration-tool-list.tsx -- one integration's tools as a list draws them, and one tool's page, in the MCP popover and in Settings › Integrations alike.
@@ -156,17 +163,20 @@ export function IntegrationToolList({
               ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
               title={
                 <span className="integration-tool-name">
-                  <FadingWords
-                    className="integration-tool-title"
-                    data-name={namedApart(tool) ? undefined : "true"}
+                  <OneLine
+                    className={
+                      namedApart(tool)
+                        ? "integration-tool-title"
+                        : "integration-tool-title integration-tool-code"
+                    }
                     words={toolTitle(tool)}
                   >
                     <Highlighted text={toolTitle(tool)} tokens={tokens} />
-                  </FadingWords>
+                  </OneLine>
                   {namedApart(tool) ? (
-                    <FadingWords className="integration-tool-id" words={tool.name}>
+                    <OneLine className="integration-tool-id" words={tool.name}>
                       <Highlighted text={tool.name} tokens={tokens} />
-                    </FadingWords>
+                    </OneLine>
                   ) : null}
                   <ToolBadge tool={tool} />
                 </span>
@@ -293,7 +303,7 @@ export function IntegrationToolDetail({
   const hints = toolHints(tool.annotations);
   const title = toolTitle(tool);
   return (
-    <article className="integration-tool-detail" aria-label={title}>
+    <Fill as={FILL_ELEMENT.ARTICLE} className="integration-tool-detail" aria-label={title}>
       <header className="integration-tool-detail-head">
         {onBack !== undefined && backLabel !== undefined ? (
           <Tooltip label={backLabel}>
@@ -305,25 +315,35 @@ export function IntegrationToolDetail({
             />
           </Tooltip>
         ) : null}
-        <FadingWords
-          as={FADING_ELEMENT.H2}
-          className="integration-tool-detail-title"
-          data-name={namedApart(tool) ? undefined : "true"}
+        <OneLine
+          as={ONE_LINE_ELEMENT.H2}
+          className={
+            namedApart(tool)
+              ? "integration-tool-detail-title"
+              : "integration-tool-detail-title integration-tool-code"
+          }
           words={title}
-        />
+        >
+          {title}
+        </OneLine>
         {namedApart(tool) ? (
-          <FadingWords
-            as={FADING_ELEMENT.CODE}
+          <OneLine
+            as={ONE_LINE_ELEMENT.CODE}
             className="integration-tool-detail-name"
             words={tool.name}
-          />
+          >
+            {tool.name}
+          </OneLine>
         ) : null}
       </header>
       {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
       <ScrollArea ref={bodyRef} tabIndex={-1} onKeyDown={onBodyKeyDown}>
         <div className="integration-tool-detail-body">
           {hints.length > 0 ? (
-            <ul
+            <Inline
+              as={LAYOUT_ELEMENT.UL}
+              gap={GAP.TIGHT}
+              align={ALIGN.STRETCH}
               className="integration-tool-hints"
               aria-label={`What ${server}'s server says of this tool`}
             >
@@ -332,7 +352,7 @@ export function IntegrationToolDetail({
                   <Badge tone={hintTone(hint)}>{toolHintWords(hint, server)}</Badge>
                 </li>
               ))}
-            </ul>
+            </Inline>
           ) : null}
           {tool.description === "" ? (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
@@ -348,6 +368,6 @@ export function IntegrationToolDetail({
           <Parameters tool={tool} />
         </div>
       </ScrollArea>
-    </article>
+    </Fill>
   );
 }

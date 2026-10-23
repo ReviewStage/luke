@@ -13,8 +13,6 @@ import { WORKSPACE_LINEAR_CONNECTOR_VARIABLE } from "../integrations/integration
 import { INTEGRATION, type IntegrationDefinition } from "../integrations/integrations.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import { SENTRY_ENVIRONMENT } from "../observability/sentry.js";
-import { HOSTED_ANTHROPIC_ENVIRONMENT } from "../providers/anthropic.js";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../providers/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../providers/posthog.js";
 import type { AdminViewer } from "./admin-access.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
@@ -113,8 +111,6 @@ export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
   // dashboard reports the pair a GitHub sign-in would run on.
   const socialClients = authSecrets(process.env);
   const integrations = adminIntegrations({
-    hostedTier: configured(HOSTED_OPENAI_ENVIRONMENT.API_KEY),
-    codingAgents: configured(HOSTED_ANTHROPIC_ENVIRONMENT.API_KEY),
     // Every variable `github/github-app.ts` builds the App from, and its webhook secret.
     githubApp: [
       GITHUB_APP_ENVIRONMENT.APP_ID,

@@ -11,7 +11,6 @@ import {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
-  BROWSER_ACT_KIND,
   INTEGRATION_ACT_KIND,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
@@ -693,6 +692,60 @@ test("on a phone the drawer More opened leaves the bar's other places inert, as 
   assert.equal(barItem(page, "More").getAttribute("aria-expanded"), "true");
 });
 
+/** What a reader hears an item named: its words, less what is drawn for the eye alone. */
+function spokenName(item: HTMLElement): string {
+  const heard = item.cloneNode(true) as HTMLElement;
+  for (const unheard of heard.querySelectorAll('[aria-hidden="true"]')) unheard.remove();
+  return heard.textContent ?? "";
+}
+
+test("on a phone the bar's Inbox and Chat wear the counts the drawer's rows show, named in the sidebar's words, and none at zero", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  const listed = {
+    tasks: [DOCUMENT_TASK],
+    inbox: [],
+    inboxTasks: [{ taskId: DOCUMENT_TASK.id, items: 3, toDo: 3, updatedAt: 0 }],
+  };
+  const page = await mountNarrow(
+    {
+      boardView: { ...tasksControl().boardView, open: true },
+      chatView: { ...tasksControl().chatView, available: true, chat },
+      listed,
+    },
+    { overlay: SIDEBAR_OVERLAY.OPEN },
+  );
+  const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
+  const chatItem = barItems(page).find((item) => spokenName(item) === "Chat, 4 need you");
+  assert.ok(inbox, "the bar's Inbox is named with its count");
+  assert.ok(chatItem, "the bar's Chat is named with its count");
+  assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
+  assert.match(chatItem.textContent ?? "", /4/u, "Chat's count is drawn");
+  assert.match(
+    placeRow(page, "Inbox")?.textContent ?? "",
+    /^Inbox3 need you/u,
+    "the drawer counts the same",
+  );
+  assert.equal(chatRow(page)?.textContent, "Chat4 need you", "the drawer counts the same");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const none = await mountNarrow({
+    boardView: { ...tasksControl().boardView, open: true },
+    chatView: { ...tasksControl().chatView, available: true },
+  });
+  assert.deepEqual(
+    barItems(none).map((item) => [spokenName(item), item.textContent]),
+    [
+      ["Inbox", "Inbox"],
+      ["Tasks", "Tasks"],
+      ["Chat", "Chat"],
+      ["More", "More"],
+    ],
+    "nothing waiting, nothing is drawn or said",
+  );
+});
+
 test("the places bar stands only on a phone's lists: an open task, an Inbox item, an automation's editor, and a wide window keep the whole screen", async () => {
   const onTask = await mountNarrow({ page: TASKS_PAGE.DOCUMENT });
   assert.deepEqual(barItems(onTask), [], "an open task keeps the screen");
@@ -951,7 +1004,6 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...AGENT_ACT_KIND,
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
-  ...BROWSER_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
@@ -1054,7 +1106,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     act(() => {
       runAppCommand(APP_COMMAND.FIND);
     });
-    found[place] = container.querySelector("search[aria-label='Find']") !== null;
+    found[place] = container.querySelector("[role='search'][aria-label='Find']") !== null;
     act(() => root?.unmount());
     container.remove();
   }
@@ -1390,4 +1442,64 @@ test("on a phone an open task, which draws no sidebar toggle, still answers the 
   assert.equal(container.querySelector(".desktop-shell > .title-bar-controls"), null);
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
   assert.equal(toggled, 1);
+});
+
+/** A finger's swipe from `from` to `to` across the screen, at the height of the page's middle. */
+function fingerSwipe(target: HTMLElement, from: number, to: number, pointerType = "touch"): void {
+  const at = (type: string, x: number) =>
+    new PointerEvent(type, {
+      bubbles: true,
+      clientX: x,
+      clientY: 400,
+      pointerId: 3,
+      pointerType,
+      isPrimary: true,
+    });
+  act(() => {
+    target.dispatchEvent(at("pointerdown", from));
+    target.dispatchEvent(at("pointermove", (from + to) / 2));
+    target.dispatchEvent(at("pointermove", to));
+    target.dispatchEvent(at("pointerup", to));
+  });
+}
+
+test("on a phone a finger swiped in from the screen's left edge opens the drawer over a dimmed window, and a mouse's drag does not", async () => {
+  const asked: string[] = [];
+  const onOverlay = (overlay: string) => asked.push(overlay);
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: query === "(pointer: coarse)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const page = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    {
+      onOverlay,
+    },
+  );
+  const work = page.querySelector<HTMLElement>(".desktop-main");
+  assert.ok(work);
+  fingerSwipe(work, 300, 500, "mouse");
+  assert.deepEqual(asked, [], "a mouse's drag opens nothing");
+  fingerSwipe(work, 30, 260);
+  assert.deepEqual(asked, [SIDEBAR_OVERLAY.OPEN]);
+  assert.equal(page.querySelector(".luke-drawer-scrim")?.getAttribute("data-open"), "false");
+});
+
+test("on a phone the drawer opened stands over a dimmed window, and beside the work there is none", async () => {
+  const phone = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    { overlay: SIDEBAR_OVERLAY.OPEN },
+  );
+  assert.equal(phone.querySelector(".luke-drawer-scrim")?.getAttribute("data-open"), "true");
+  act(() => root?.unmount());
+  const wide = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    { overlay: SIDEBAR_OVERLAY.OPEN },
+    SHELL_ROOM.WIDE,
+  );
+  assert.equal(wide.querySelector(".luke-drawer-scrim"), null);
 });

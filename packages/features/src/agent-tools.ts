@@ -42,10 +42,19 @@ export const AGENT_TOOL = {
   DELETE_SECTION: "delete_section",
   // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
   UPDATE_TASK: "update_task",
+  // The workspace's automations, listed, made, changed, and deleted for the member an agent acts for.
+  LIST_AUTOMATIONS: "list_automations",
+  CREATE_AUTOMATION: "create_automation",
+  UPDATE_AUTOMATION: "update_automation",
+  DELETE_AUTOMATION: "delete_automation",
+  RUN_AUTOMATION: "run_automation",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
-  // The public reads, every role's.
-  SEARCH_WEB: "search_web",
+  // The workspace's shared memory, which a coding agent keeps and searches.
+  REMEMBER: "remember",
+  RECALL: "recall",
+  // The public reads, every role's: eve's provider-run search on the agent's own model call, and the page read.
+  WEB_SEARCH: "web_search",
   READ_WEB_PAGE: "read_web_page",
   // A command on the developer's own Mac, every role's.
   RUN_ON_MAC: "run_on_mac",
@@ -125,7 +134,8 @@ export const CONNECTION_TOOL = {
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
-  WEB_SEARCH: "web_search",
+  // Luke's own search on Luke's key, replaced by eve's provider-run `web_search` on the agent's own key.
+  SEARCH_WEB: "search_web",
   LIST_CODING_AGENTS: "list_coding_agents",
   READ_CODING_AGENT: "read_coding_agent",
   MESSAGE_CODING_AGENT: "message_coding_agent",

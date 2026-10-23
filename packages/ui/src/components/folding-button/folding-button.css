@@ -14,6 +14,12 @@
     max-width: 100%;
   }
 
+  /* A row-look button is the row's whole width, as the look says. */
+  .luke-folding-button[data-row] {
+    display: flex;
+    width: 100%;
+  }
+
   @container style(--luke-fold: folded) {
     .luke-folding-button > .luke-button {
       width: var(--luke-control-height);

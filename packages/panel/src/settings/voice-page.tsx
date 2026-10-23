@@ -9,9 +9,12 @@ import {
   Button,
   CheckIcon,
   ExternalIcon,
+  GAP,
   IconButton,
+  Inline,
   SettingsRow,
   SettingsSection,
+  Tooltip,
 } from "@luke/ui";
 import {
   MICROPHONE_UNGRANTED_NOTE,
@@ -19,7 +22,6 @@ import {
   VOICE_KEYLESS_NOTE,
 } from "@luke/voice/microphone-access";
 import type { MicrophoneControl } from "@luke/voice/settings-controls";
-import { Tooltip } from "../tooltip.js";
 import { AttentionMark } from "./marks.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
@@ -67,10 +69,10 @@ export function VoiceSection({
         <SettingsSection>
           <SettingsRow
             label={
-              <span className="settings-name">
+              <Inline gap={GAP.ICON} wrap={false}>
                 Voice
                 <AttentionMark note={VOICE_KEYLESS_NOTE} />
-              </span>
+              </Inline>
             }
             description={VOICE_KEYLESS_NOTE}
           >
@@ -97,14 +99,14 @@ export function VoiceSection({
           <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.MICROPHONE)}>
             <SettingsRow
               label={
-                <span className="settings-name">
+                <Inline gap={GAP.ICON} wrap={false}>
                   Microphone
                   {microphoneRow.ready ? (
                     <CheckIcon />
                   ) : (
                     <AttentionMark note={MICROPHONE_UNGRANTED_NOTE} />
                   )}
-                </span>
+                </Inline>
               }
               description={microphoneRow.detail}
             >

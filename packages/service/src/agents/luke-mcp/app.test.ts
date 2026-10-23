@@ -13,7 +13,7 @@ import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
@@ -33,7 +33,6 @@ import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import { runConnectionExecute, runConnectionSearch } from "../../integrations/connection-door.js";
 import type {
   IntegrationConnect,
   WorkspaceLinearConnect,
@@ -42,6 +41,7 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
 } from "../../integrations/integration-store.js";
+import { INTEGRATION } from "../../integrations/integrations.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import {
@@ -60,6 +60,7 @@ import {
   linearServer,
   linearTokenOf,
 } from "../../testing/integration-mcp-fake.js";
+import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
@@ -81,6 +82,7 @@ import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import {
+  LUKE_INTEGRATION_MCP_PATH,
   LUKE_MCP_PATH,
   LUKE_MCP_PROTOCOL_VERSIONS,
   type LukeMcpBrowser,
@@ -114,8 +116,6 @@ const PICTURE: Picture = {
 
 /** A deployment that names nothing of its environment: no eve to reach, no keys. */
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
@@ -143,6 +143,7 @@ const doorServices = Effect.gen(function* () {
     modelCatalogOf([]),
     NO_INTEGRATIONS,
     Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+    Layer.succeed(SentryApp, sentryAppService(undefined, [])),
   );
 });
 
@@ -220,6 +221,30 @@ const agentWithBearer = Effect.gen(function* () {
   return { userId, taskId: task.id, agentId: agent.id, bearer };
 });
 
+/** A Codex agent on no task and in no repository, as an automation's run starts one, with a runner's bearer recorded for its conversation. */
+const agentOnNoTaskWithBearer = Effect.gen(function* () {
+  const db = yield* Database;
+  const userId = `user-${randomUUID()}`;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  const organizationId = yield* openWorkspace(userId);
+  const started = yield* createCodingAgent(userId, {
+    taskId: null,
+    organizationId,
+    planSnapshot: null,
+    prompt: "Chart the funnel",
+    idempotencyKey: randomUUID(),
+    model: "openai/gpt-5.5",
+    effort: "high",
+    repository: null,
+    runtime: CONVERSATION_RUNTIME.CODEX,
+    payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  });
+  const agent = Option.getOrThrow(started).agent;
+  const bearer = randomBytes(32).toString("base64url");
+  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+  return { userId, agentId: agent.id, bearer };
+});
+
 /** What a fake Chromium's page answers beside its targets, as Chrome does for a screenshot of it. */
 const PAGE_ANSWERS: Readonly<Record<string, { readonly result: unknown }>> = {
   "Target.attachToTarget": { result: { sessionId: "session-tab-1" } },
@@ -252,11 +277,11 @@ const agentInSandbox = Effect.gen(function* () {
   return { ...agent, conversationId };
 });
 
-/** An SDK client connected to the server under the bearer. */
-function connected(fetch: typeof globalThis.fetch, bearer: string) {
+/** An SDK client connected under the bearer to the server at the path given, Luke's own unless another is named. */
+function connected(fetch: typeof globalThis.fetch, bearer: string, path: string = LUKE_MCP_PATH) {
   return Effect.promise(async () => {
     const client = new Client({ name: "runner-test", version: "1.0.0" });
-    const transport = new StreamableHTTPClientTransport(new URL(`${ORIGIN}${LUKE_MCP_PATH}`), {
+    const transport = new StreamableHTTPClientTransport(new URL(`${ORIGIN}${path}`), {
       fetch,
       requestInit: { headers: { authorization: `Bearer ${bearer}` } },
     });
@@ -315,6 +340,13 @@ const SERVED_TOOLS = [
   "update_task",
   "create_section",
   "delete_section",
+  "list_automations",
+  "create_automation",
+  "update_automation",
+  "delete_automation",
+  "run_automation",
+  "remember",
+  "recall",
   "post_chat",
   "read_chat",
   "resolve_ask",
@@ -325,8 +357,6 @@ const SERVED_TOOLS = [
   "reopen_thread",
   "run_on_mac",
   "browser",
-  "connection_search",
-  "connection_execute",
 ] as const;
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
@@ -380,6 +410,13 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   update_task: agentTool("update_task"),
   create_section: agentTool("create_section"),
   delete_section: agentTool("delete_section"),
+  list_automations: agentTool("list_automations"),
+  create_automation: agentTool("create_automation"),
+  update_automation: agentTool("update_automation"),
+  delete_automation: agentTool("delete_automation"),
+  run_automation: agentTool("run_automation"),
+  remember: agentTool("remember"),
+  recall: agentTool("recall"),
   post_chat: (admitted, input, seams) =>
     runAgentChat(seams, admitted, {
       tool: CHAT_TOOL.POST,
@@ -398,8 +435,6 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   reply_to_comment: commentTool("reply_to_comment"),
   resolve_thread: commentTool("resolve_thread"),
   reopen_thread: commentTool("reopen_thread"),
-  connection_search: (admitted, input) => runConnectionSearch(admitted, input),
-  connection_execute: (admitted, input) => runConnectionExecute(admitted, input),
 };
 
 /** The eve tools a harness has its own of, which the server never serves. */
@@ -581,7 +616,11 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         yield* Effect.promise(() => client.close());
 
         const names = listed.tools.map((tool) => tool.name);
-        assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
+        // Note that an operator's own read is the one tool eve offers no agent on a task.
+        assert.deepEqual(
+          [...names].sort(),
+          SERVED_TOOLS.filter((name) => name !== "list_open_asks").sort(),
+        );
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
           const served = LUKE_MCP_TOOLS.get(tool.name);
@@ -589,6 +628,37 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           assert.equal(tool.description, served.description);
           assert.deepEqual(tool.inputSchema, served.inputSchema);
         }
+      }),
+  );
+
+  it.effect(
+    "tools/list leaves out what eve offers no agent on no task and in no repository: the plan's, the board's, the comments', and the checkout's",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentOnNoTaskWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
+
+        const listed = yield* Effect.promise(() => client.listTools());
+        yield* Effect.promise(() => client.close());
+
+        const withheld = [
+          "edit_plan",
+          "look_at_picture",
+          "draw_on_board",
+          "look_at_board",
+          "read_comments",
+          "reply_to_comment",
+          "resolve_thread",
+          "reopen_thread",
+          "open_pull_request",
+          "show_code",
+          "list_open_asks",
+        ];
+        assert.deepEqual(
+          listed.tools.map((tool) => tool.name).sort(),
+          SERVED_TOOLS.filter((name) => !withheld.includes(name)).sort(),
+        );
       }),
   );
 
@@ -642,6 +712,22 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         }
         yield* Effect.promise(() => client.close());
       }),
+  );
+
+  it.effect("every tool declares the most of its result Claude Code takes whole", () =>
+    Effect.gen(function* () {
+      const fetch = yield* standing;
+      const agent = yield* agentWithBearer;
+      const client = yield* connected(fetch, agent.bearer);
+
+      const listed = yield* Effect.promise(() => client.listTools());
+      yield* Effect.promise(() => client.close());
+
+      assert.ok(listed.tools.length > 0);
+      for (const tool of listed.tools) {
+        assert.equal(tool._meta?.["anthropic/maxResultSizeChars"], 500_000, tool.name);
+      }
+    }),
   );
 
   it.effect("show_page reads the page the agent names by its path from the agent's sandbox", () =>
@@ -728,7 +814,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
   );
 
   it.effect(
-    "a connection's tools are searched and called over the server on the member's own grant, a picture coming back as image content",
+    "each integration is a server of its own, listing its provider's tools and forwarding a call on the member's own grant, and one not connected refusing as requiring sign-in",
     () =>
       Effect.gen(function* () {
         const agent = yield* agentWithBearer;
@@ -744,52 +830,33 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           NO_SANDBOX,
           Layer.merge(LINEAR_AND_NOTION_CONNECT, linearServer(linearTokenOf(agent.userId), heard)),
         );
-        const client = yield* connected(fetch, agent.bearer);
+        const linear = yield* connected(fetch, agent.bearer, `${LUKE_INTEGRATION_MCP_PATH}/linear`);
+        const notion = yield* connected(fetch, agent.bearer, `${LUKE_INTEGRATION_MCP_PATH}/notion`);
 
-        const searched = yield* Effect.promise(() =>
-          client.callTool({
-            name: "connection_search",
-            arguments: { query: "list issues", connection: "linear", limit: 1 },
-          }),
+        const linearTools = yield* Effect.promise(() => linear.listTools());
+        const drawn = yield* Effect.promise(() => linear.callTool({ name: "draw", arguments: {} }));
+        const failed = yield* Effect.promise(() =>
+          linear.callTool({ name: "fail", arguments: {} }),
         );
-        const drawn = yield* Effect.promise(() =>
-          client.callTool({
-            name: "connection_execute",
-            arguments: { connection: "linear", tool: "draw" },
-          }),
-        );
-        const attached = yield* Effect.promise(() =>
-          client.callTool({
-            name: "connection_execute",
-            arguments: { connection: "linear", tool: "attach" },
-          }),
-        );
+        const notionTools = yield* Effect.promise(() => notion.listTools());
         const unsigned = yield* Effect.promise(() =>
-          client.callTool({
-            name: "connection_execute",
-            arguments: { connection: "notion", tool: "notion-search" },
-          }),
+          notion.callTool({ name: "notion-search", arguments: {} }),
         );
-        yield* Effect.promise(() => client.close());
+        yield* Effect.promise(() => Promise.all([linear.close(), notion.close()]));
 
-        assert.equal(searched.isError, false);
+        assert.equal(linear.getServerVersion()?.name, "linear");
+        assert.equal(linear.getInstructions(), INTEGRATION.linear.DESCRIPTION);
         assert.deepEqual(
-          firstJson(searched).tools.map((tool: { tool: string }) => tool.tool),
-          ["list_issues"],
+          linearTools.tools.map((tool) => tool.name),
+          ["list_issues", "create_issue", "fail", "draw", "attach"],
         );
-        assert.equal(drawn.isError, false);
+        assert.equal(drawn.isError, undefined);
         assert.deepEqual(drawn.content, [
           { type: "text", text: "A chart:" },
           { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
         ]);
-        assert.deepEqual(attached.content, [
-          { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
-          {
-            type: "text",
-            text: "Resource: file:///notes.pdf (application/pdf, binary, not shown)",
-          },
-          { type: "image", data: "R0lGODlh", mimeType: "image/gif" },
-        ]);
+        assert.equal(failed.isError, true);
+        assert.deepEqual(notionTools.tools, []);
         assert.equal(unsigned.isError, true);
         assert.deepEqual(
           [firstJson(unsigned).connection, firstJson(unsigned).requiresSignIn],
@@ -797,6 +864,34 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "an integration server refuses a request without the runner's bearer, and a path that names no integration is not found",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* agentWithBearer;
+        const fetch = yield* standing;
+        const ask = (path: string, bearer: string | undefined) =>
+          Effect.promise(() =>
+            fetch(`${ORIGIN}${path}`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...(bearer === undefined ? {} : { authorization: `Bearer ${bearer}` }),
+              },
+              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+            }),
+          );
+
+        const unbearered = yield* ask(`${LUKE_INTEGRATION_MCP_PATH}/linear`, undefined);
+        const unknown = yield* ask(`${LUKE_INTEGRATION_MCP_PATH}/luke`, agent.bearer);
+
+        assert.equal(unbearered.status, 401);
+        assert.equal(unknown.status, 404);
+      }),
+  );
+
   it.effect(
     "browser drives the Chromium in the agent's sandbox, a screenshot coming back as image content and the tab kept under the agent's conversation",
     () =>

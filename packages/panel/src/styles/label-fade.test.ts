@@ -9,8 +9,8 @@ import { layContainersAt } from "../testing/container-width.js";
 
 /**
  * label-fade.test.ts -- a name, a title, or a place the shell and the
- * sidebar cut to their line fades out over its last `--label-fade` while it
- * is cut short, as a browser's tab ends a long title, rather than ending in
+ * sidebar cut to their line (`@luke/ui`'s OneLine) fades out over its last
+ * few pixels while it is cut short, as a browser's tab ends a long title, rather than ending in
  * an ellipsis; one that fits ends on its last letter, unmasked. jsdom lays
  * nothing out, so a box is stood in for as 50px wide, its words 10px a
  * letter, and the observer reports a box once as a first layout would; the
@@ -23,17 +23,8 @@ declare global {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** What a cut label's mask draws: its words faded out over their last few pixels. */
-const FADE = "linear-gradient(to left, transparent, #000 var(--label-fade))";
-
-/** A sample of the places that fade: a sidebar row's repository, a row's context, a chat byline's place, a tool's title, and a page's toolbar title. */
-const FADING = [
-  "sidebar-task-repository",
-  "home-row-context",
-  "chat-byline-where",
-  "integration-tool-title",
-  "desktop-toolbar-title",
-] as const;
+/** Whether a mask fades words out at their end. */
+const FADES = /^linear-gradient\(to left, transparent/u;
 
 const roots: Root[] = [];
 let laid: HTMLStyleElement | undefined;
@@ -84,18 +75,10 @@ function workspaceName(name: string): HTMLElement {
   return host.querySelector<HTMLElement>(".workspace-ref-name") ?? assert.fail("its name");
 }
 
-/** A box of `className` in the window, marked as `useClipped` measured it, or unmeasured. */
-function label(className: string, overflow: boolean | undefined): CSSStyleDeclaration {
-  const element = document.body.appendChild(document.createElement("span"));
-  element.className = className;
-  if (overflow !== undefined) element.dataset.overflow = String(overflow);
-  return getComputedStyle(element);
-}
-
 test("a workspace's name too long for its box fades out at its end rather than ending in an ellipsis", () => {
   const style = getComputedStyle(workspaceName("Platform infrastructure and reliability"));
-  assert.equal(style.maskImage, FADE);
-  assert.equal(style.textOverflow, "clip");
+  assert.match(style.maskImage, FADES);
+  assert.notEqual(style.textOverflow, "ellipsis");
 });
 
 test("a workspace's name that fits ends on its last letter, unmasked", () => {
@@ -104,33 +87,16 @@ test("a workspace's name that fits ends on its last letter, unmasked", () => {
   assert.notEqual(style.textOverflow, "ellipsis");
 });
 
-for (const className of FADING) {
-  test(`a .${className} measured cut short fades out at its end, with no ellipsis`, () => {
-    const style = label(className, true);
-    assert.equal(style.maskImage, FADE);
-    assert.equal(style.textOverflow, "clip");
-  });
-
-  test(`a .${className} that fits is drawn whole, unmasked`, () => {
-    assert.ok(!label(className, false).maskImage.includes("gradient"));
-  });
-}
-
-test("a toolbar's title nothing measures, a fixed word or a date, keeps its ellipsis", () => {
-  const style = label("desktop-toolbar-title", undefined);
-  assert.equal(style.textOverflow, "ellipsis");
-  assert.ok(!style.maskImage.includes("gradient"));
-});
-
 test("who wrote a revision, pressed to open where it was written, is a box of its own that fades, not an inline line its press cuts with an ellipsis", () => {
   const head = document.body.appendChild(document.createElement("p"));
   head.className = "version-sections-head";
   const press = head.appendChild(document.createElement("button"));
   press.className = "luke-text-button";
   const name = press.appendChild(document.createElement("span"));
-  name.className = "version-row-author";
+  name.className = "luke-one-line version-row-author";
+  name.dataset.end = "fade";
   name.dataset.overflow = "true";
   const style = getComputedStyle(name);
   assert.equal(style.display, "block");
-  assert.equal(style.maskImage, FADE);
+  assert.match(style.maskImage, FADES);
 });

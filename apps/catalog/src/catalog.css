@@ -1,6 +1,10 @@
 /* catalog.css -- the catalog's own page, drawn in the shared tokens it shows,
    so the index and the toolbar change density and palette with the example. */
 
+/* Note that the base layer is named first, as each app's reset names it,
+   so a bare glyph's own rule sits under the component that draws it. */
+@layer base, components;
+
 @import "@luke/ui/tokens.css";
 @import "@luke/ui/styles.css";
 
@@ -242,20 +246,6 @@ body {
   gap: var(--luke-space-12);
 }
 
-/* The row the menu example right-clicks, marked out so a reader sees where to press. */
-.catalog-menu-row {
-  display: block;
-  width: 100%;
-  max-width: 560px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  padding: var(--luke-space-24) var(--luke-space-12);
-  border: 1px dashed var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-}
-
 /* A row of attachment chips, with room above for the discs on their corners. */
 .catalog-attachments {
   display: flex;
@@ -264,12 +254,6 @@ body {
   margin: 0;
   padding: var(--luke-space-12) 0 0;
   list-style: none;
-}
-
-/* The pointer's room over a line held to one line, as wide as the column. */
-.catalog-one-line {
-  display: block;
-  min-width: 0;
 }
 
 /* A column narrower than a phone, where long words have to wrap. */
@@ -343,26 +327,6 @@ body {
   width: 400px;
 }
 
-/* A list's foot that is itself its press, as an app draws one around
-   `RetryRowLabel`: a row in the caption's type, lit on hover. */
-.catalog-retry-row {
-  width: 100%;
-  padding: var(--luke-space-8);
-  border: 0;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  text-align: left;
-}
-
-.catalog-retry-row:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--luke-space-8);
@@ -372,6 +336,26 @@ body {
 
 .catalog-frame-wide {
   width: 160px;
+}
+
+/* A pane a Fill stands in: its head, then the room the Fill takes. */
+.catalog-fill-pane {
+  display: flex;
+  width: 160px;
+  height: 120px;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+/* A transcript's column, as wide as a narrow panel's, which a line spans. */
+.catalog-transcript {
+  width: min(360px, 100%);
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
 }
 
 /* A card in a column narrower than its words. */
@@ -389,9 +373,20 @@ body {
   border-top: 1px solid var(--luke-color-border);
 }
 
+/* A card's own control, standing over the card's press. */
+.catalog-card-press-lift {
+  position: relative;
+  z-index: 1;
+}
+
 /* A form's column at a settings page's measure. */
 .catalog-column {
   max-width: 360px;
+}
+
+/* A sample composer's words and foot, inside its frame. */
+.catalog-composer {
+  padding: var(--luke-space-12);
 }
 
 /* A palette's short card: its search row over a list engine's box that
@@ -474,7 +469,13 @@ body {
   flex: 1 1 var(--luke-select-field-width);
 }
 
-/* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
+/* The tooltips example's row, whose name's card hangs beside the whole row. */
+.catalog-carded-row {
+  display: inline-flex;
+  gap: var(--luke-space-4);
+}
+
+/* The hover card example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
 }
@@ -529,19 +530,6 @@ body {
 
 .catalog-inline-edit-well > .luke-inline-edit {
   width: 24ch;
-}
-
-/* A bare text input standing in for a control an example holds. */
-.catalog-input {
-  box-sizing: border-box;
-  width: 100%;
-  height: var(--luke-control-height);
-  padding: 0 var(--luke-space-8);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  color: var(--luke-color-text);
-  font: inherit;
 }
 
 /* A decorative ring at a mark's size. */
@@ -791,4 +779,274 @@ body {
 .catalog-width-frame {
   outline: 1px dashed var(--luke-color-border);
   outline-offset: var(--luke-space-4);
+}
+
+/* Picture tiles: the frame a place draws a picture in, and a row of tiles
+   that fill the room each is given. */
+.catalog-picture-frame {
+  display: block;
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+}
+
+.catalog-picture-frame > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.catalog-picture-frame-wide > img {
+  width: 100%;
+}
+
+.catalog-picture-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-6);
+  max-width: 480px;
+}
+
+.catalog-picture-slot {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.catalog-picture-caption {
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+  font-size: 0.9em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A picture opened over the window from its tile: its name over it, the
+   picture fitted under. */
+.catalog-picture-viewer-title {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+}
+
+.catalog-picture-viewer-body {
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: var(--luke-color-surface);
+}
+
+/* A message box's card around a bare text area, at a composer's insets. */
+.catalog-message-box {
+  --luke-text-area-inset-start: var(--luke-space-12);
+  --luke-text-area-inset-inline: var(--luke-space-12);
+  --luke-text-area-inset-end: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-ground);
+}
+
+/* A toolbar's row a tab strip stands in, at a pane's width and a narrow
+   one's, so its tabs give way and scroll along. */
+.catalog-tab-row {
+  display: flex;
+  align-items: center;
+  width: 640px;
+  max-width: 100%;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-tab-row-narrow {
+  width: 320px;
+}
+
+/* A failure's mark at a tab's end, as an app draws its own: the alert in
+   the danger colour, a size under the glyph it follows. */
+.catalog-end-mark {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--luke-color-danger);
+}
+
+.catalog-end-mark > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A list an app hangs on the menu's surface (`MenuSurface`), at an `@`
+   list's width, its crumb inset as the rows' words are. */
+.catalog-menu-surface {
+  width: calc(100% - var(--luke-space-48));
+}
+
+.catalog-menu-crumb {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+}
+
+/* A row that has set its own type and ink, for words that inherit them. */
+.catalog-inherited {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The box a hidden rail's strip stands in, as tall as a few rows. */
+.catalog-mark-strip {
+  display: flex;
+  width: var(--luke-space-12);
+  height: 160px;
+  border-right: 1px solid var(--luke-color-border);
+}
+
+/* The room a toast stack stands in: its transform makes it the containing
+   block of the stack's fixed corner, so the stack stands in the box rather
+   than the window. */
+.catalog-toast-stage {
+  position: relative;
+  height: 340px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  transform: translateZ(0);
+}
+
+/* A phone's stage for the drawer swipe (`drawer-swipes.tsx`): the drawer
+   stands on its left edge over the work, slid away until opened, on the
+   pane's beat, and while a finger drags it, at the share open the swipe
+   writes, playing nothing. */
+.catalog-drawer-stage {
+  position: relative;
+  width: min(360px, 100%);
+  height: 480px;
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+}
+
+.catalog-drawer-work {
+  padding: var(--luke-space-48) var(--luke-space-24);
+}
+
+.catalog-drawer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% - var(--luke-space-48));
+  padding: var(--luke-space-16);
+  background: var(--luke-color-ground);
+  box-shadow: var(--luke-menu-shadow);
+  transform: translateX(-100%);
+  transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
+}
+
+.catalog-drawer-stage[data-open="true"] .catalog-drawer {
+  transform: none;
+}
+
+.catalog-drawer-stage[data-luke-drawer-drag] .catalog-drawer {
+  transform: translateX(calc((var(--luke-drawer-progress, 0) - 1) * 100%));
+  transition: none;
+}
+
+/* A box the words inside answer the width of (`under`), as a card or a header does. */
+.catalog-room {
+  container: luke-room / inline-size;
+}
+
+/* A card a band stands across the top of, as a review thread's card names
+   the lines it is on (`LineButton`'s band). */
+.catalog-band-card {
+  display: flex;
+  overflow: clip;
+  width: min(360px, 100%);
+  max-width: 100%;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding-bottom: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-card-radius);
+  background: var(--luke-color-surface);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.catalog-band-body {
+  padding-inline: var(--luke-space-12);
+}
+
+.catalog-band-words {
+  padding: var(--luke-space-4) var(--luke-space-12);
+}
+
+/* A glyph's seat before its line's words (`GlyphSlot`), as a call's line
+   lays one out; one before words that wrap stands at their first line. */
+.catalog-glyph-line {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+}
+
+.catalog-glyph-line-top {
+  align-items: flex-start;
+}
+
+.catalog-glyph-line-accent {
+  color: var(--luke-color-accent-text);
+}
+
+/* A container sizing the glyphs it seats, as a review card does its face. */
+.catalog-glyph-large {
+  --luke-glyph-size: var(--luke-space-24);
+}
+
+/* A box holding a pane and the work beside it, the pane's edge
+   (`ResizeEdge`) straddling the border between them. */
+.catalog-edged-box {
+  display: flex;
+  width: min(360px, 100%);
+  height: 96px;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-edged-pane {
+  position: relative;
+  flex: none;
+  padding: var(--luke-space-8);
+  border-inline: 1px solid var(--luke-color-border);
+}
+
+.catalog-edged-work {
+  flex: 1 1 auto;
+}
+
+/* The frame a zoomed picture (`ZoomImage`) stands in, which clips what
+   stands past it and takes two fingers' pinch rather than the page. */
+.catalog-zoom-frame {
+  display: grid;
+  width: 320px;
+  height: 200px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  touch-action: none;
+}
+
+/* A transcript's fold skins its summary's line itself, as a pull request's
+   section heading does. */
+.catalog-transcript-fold .luke-disclosure-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  color: var(--luke-color-text-muted);
+}
+
+.catalog-transcript-fold .luke-disclosure-summary:hover {
+  color: var(--luke-color-text);
 }

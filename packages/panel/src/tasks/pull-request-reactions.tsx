@@ -31,19 +31,24 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import {
   AnchoredPopover,
+  Badge,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
+  GAP,
   IconButton,
+  Inline,
+  LAYOUT_ELEMENT,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
+  PopoverPanel,
+  Tooltip,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
+import { formatLocaleCount } from "@luke/ui/time-format";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useMemberDirectory } from "../member-directory.js";
-import { PopoverPanel } from "../popover-panel.js";
-import { Tooltip } from "../tooltip.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 
@@ -176,7 +181,7 @@ function ReactionPill({
     <>
       <span aria-hidden="true">{face.emoji}</span>
       <span className="pull-request-reaction-count" aria-hidden="true">
-        {reaction.count.toLocaleString()}
+        {formatLocaleCount(reaction.count)}
       </span>
     </>
   );
@@ -184,8 +189,8 @@ function ReactionPill({
     <li>
       <Tooltip label={words}>
         {press === undefined ? (
-          <span className="pull-request-reaction" data-mine={mine} role="img" aria-label={words}>
-            {inner}
+          <span className="pull-request-reaction" role="img" aria-label={words}>
+            <Badge lit={mine}>{inner}</Badge>
           </span>
         ) : (
           <Chip
@@ -363,7 +368,12 @@ export function Reactions({
   };
   return (
     <>
-      <ul className="pull-request-reactions" aria-label="Reactions">
+      <Inline
+        as={LAYOUT_ELEMENT.UL}
+        gap={GAP.TIGHT}
+        className="pull-request-reactions"
+        aria-label="Reactions"
+      >
         {drawn.map((reaction) => (
           <ReactionPill
             key={reaction.content}
@@ -381,7 +391,7 @@ export function Reactions({
           />
         ))}
         {pressable ? <AddReaction mine={mine} waiting={waiting} onPick={send} /> : null}
-      </ul>
+      </Inline>
       <PullRequestWriteNote writes={writes} className="pull-request-reaction-note" />
     </>
   );

@@ -7,7 +7,16 @@ import {
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { INLINE_EDIT_LOOK, InlineEdit, SKELETON_SHAPE, Skeleton } from "@luke/ui";
+import {
+  FILL_ELEMENT,
+  Fill,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  SKELETON_SHAPE,
+  Skeleton,
+  TABS_GROUND,
+  VisuallyHidden,
+} from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useEffect, useRef } from "react";
@@ -306,10 +315,10 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
     waiting === 0 ? undefined : (
       <span className="inbox-row-count">
         {waiting}
-        <span className="visually-hidden">
+        <VisuallyHidden>
           {" "}
           {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
-        </span>
+        </VisuallyHidden>
       </span>
     );
   return { row, endMark, onPick };
@@ -446,6 +455,7 @@ export function MainTabStrip({
     <div className="desktop-toolbar-heading main-tabs">
       <TabStrip
         label="Task"
+        ground={TABS_GROUND.GROUND}
         onMove={(from, to) => {
           const entry = own[from];
           if (entry !== undefined) main.onMove(entry.tab, to);
@@ -634,13 +644,14 @@ export const AgentPane = memo(function AgentPane({
   tabbed: boolean;
 }): React.JSX.Element {
   return (
-    <section
+    <Fill
+      as={FILL_ELEMENT.SECTION}
       className="desktop-agent"
       role={tabbed ? "tabpanel" : undefined}
       aria-label={label}
       data-popover-room=""
     >
       <MainTabContent {...content} />
-    </section>
+    </Fill>
   );
 });

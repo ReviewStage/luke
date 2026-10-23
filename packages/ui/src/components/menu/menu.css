@@ -2,10 +2,11 @@
    and its submenus: one surface over everything, its rows one fixed
    height, a long menu scrolling down within the window and never sideways.
    Words wider than the menu, a long email or name, end in an ellipsis
-   inside their row. Note that the entrance animates a transform, which
-   makes the surface the containing block of every fixed box inside it, so
-   a submenu, a second surface beside the first, is drawn at the body and
-   never inside it. */
+   inside their row. The same surface stands under a list an app hangs and
+   keys itself (`menu-surface.tsx`), placed by its owner. Note that the
+   entrance animates a transform, which makes the surface the containing
+   block of every fixed box inside it, so a submenu, a second surface beside
+   the first, is drawn at the body and never inside it. */
 
 @layer components {
   /* Held, an element a long press opens a menu on shows the menu rather
@@ -24,18 +25,12 @@
     }
   }
 
-  .luke-menu {
-    position: fixed;
-    z-index: var(--luke-z-menu);
+  /* The surface: its ground, edge, corner, shadow, and inset, a column of
+     what it holds, and its entrance, a fade and a drop from where it hangs. */
+  .luke-menu,
+  .luke-menu-surface {
     display: flex;
     flex-direction: column;
-    min-width: 196px;
-    max-width: 280px;
-    /* What can be seen, so a long menu scrolls above a phone's keyboard
-       rather than running on behind it (`tokens/viewport.css`). */
-    max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
-    overflow-x: hidden;
-    overflow-y: auto;
     padding: var(--luke-menu-inset);
     border: 1px solid var(--luke-color-border-strong);
     border-radius: var(--luke-menu-radius);
@@ -46,15 +41,52 @@
       luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
   }
 
+  /* A surface whose content carries its own inset, as a searchable menu's
+     field and lists do, runs it edge to edge. */
+  .luke-menu-surface[data-inset="none"] {
+    padding: 0;
+  }
+
+  /* A bar on the menu's surface, as a find bar floats over what it finds
+     in: its field and its buttons side by side, a hair apart. */
+  .luke-menu-surface:is([data-flow="row"], [data-flow="toolbar"]) {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--luke-space-2);
+  }
+
+  /* A toolbar floated over what it acts on: its buttons a hair from its
+     edge, its corner a menu row's round that hair out, and no entrance of
+     its own, since its owner shows it as the pointer or a selection comes. */
+  .luke-menu-surface[data-flow="toolbar"] {
+    width: max-content;
+    padding: var(--luke-space-2);
+    border-radius: calc(var(--luke-menu-row-radius) + var(--luke-space-2));
+    white-space: nowrap;
+    animation: none;
+  }
+
+  .luke-menu {
+    position: fixed;
+    z-index: var(--luke-z-menu);
+    min-width: 196px;
+    max-width: 280px;
+    /* What can be seen, so a long menu scrolls above a phone's keyboard
+       rather than running on behind it (`tokens/viewport.css`). */
+    max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
   /* Hidden for the one layout pass that measures where it fits. */
-  .luke-menu[data-placed="false"] {
+  :is(.luke-menu, .luke-menu-surface)[data-placed="false"] {
     visibility: hidden;
   }
 
   /* Closed, it fades out while its owner holds it drawn and inert. Note
      that the hold waits on every motion the element runs, so the exit is
      the one motion it has. */
-  .luke-menu[data-leaving="true"] {
+  :is(.luke-menu, .luke-menu-surface)[data-leaving="true"] {
     pointer-events: none;
     animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
     transition: none;

@@ -7,8 +7,21 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
-import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import {
+  Button,
+  CloseIcon,
+  DIALOG_SIZE,
+  Dialog,
+  IconButton,
+  IMAGE_OPENING,
+  type ImageOpening,
+  type ImageZoom,
+  OneLine,
+  Tooltip,
+  useImageZoom,
+  usePictureExpand,
+  ZoomImage,
+} from "@luke/ui";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -16,16 +29,9 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 import { FileTypeIcon } from "./file-type-icon.js";
-import {
-  IMAGE_OPENING,
-  type ImageOpening,
-  type ImageZoom,
-  useImageZoom,
-} from "./use-image-zoom.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
@@ -35,7 +41,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`./use-image-zoom.ts`).
+ * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage).
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
@@ -45,7 +51,8 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
  * `@luke/ui`'s dialog fitted to the file shown: the window dims, Tab stays inside the card, and
  * Escape, a press on the dimmed window, and the way out all close it and
- * hand focus back to the chip that opened it. The
+ * hand focus back to the chip that opened it. A picture opened from its
+ * tile grows out of the tile and, closed on that picture, shrinks back into it. The
  * file's bytes are the chip's own, so a file in the message box and one
  * read back with the transcript open the same. A message's files are its
  * developer's own, so everything the card holds is left out of the screen
@@ -67,7 +74,7 @@ const VIEWER_LABEL = {
   CLOSE: "Close",
 } as const;
 
-/** The bare keys a picture's zoom buttons name in their hints, which `./use-image-zoom.ts` answers. */
+/** The bare keys a picture's zoom buttons name in their hints, which `@luke/ui`'s `useImageZoom` answers. */
 const ZOOM_CHORD = {
   IN: { key: SHORTCUT_KEY.EQUALS, plain: true },
   OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
@@ -159,12 +166,7 @@ function AttachmentBody({
   if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
     return (
       <div ref={zoom.frameRef} className="attachment-viewer-body">
-        <img
-          className="attachment-viewer-image"
-          src={file.url}
-          alt={file.name}
-          {...zoom.imageProps}
-        />
+        <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
       </div>
     );
   }
@@ -224,7 +226,13 @@ export function AttachmentViewer({
   const titleId = useId();
   const file = files[at];
   const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
-  const [titleBox, titleClipped] = useClipped(file?.name ?? "");
+  // A picture opened from its tile grows from it, and goes back into it
+  // only while the picture it was opened on is the one shown. Note that the
+  // place is asked beside the file's bytes, because two files may hold the
+  // same picture, and a place that moved as others landed closes in place.
+  const [opened] = useState({ at, url: file?.url });
+  const expand = usePictureExpand(at === opened.at && file?.url === opened.url);
+  const close = () => expand.close(onClose);
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -250,7 +258,13 @@ export function AttachmentViewer({
   // does, so no ring stands on a control nobody chose; Tab goes on to the
   // buttons from there.
   return (
-    <Dialog size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose} onKeyDown={walkKey}>
+    <Dialog
+      size={DIALOG_SIZE.MEDIA}
+      labelledBy={titleId}
+      onDismiss={close}
+      onKeyDown={walkKey}
+      expand={expand}
+    >
       <div
         className="attachment-viewer ph-no-capture"
         data-view={attachmentView(file)}
@@ -258,13 +272,8 @@ export function AttachmentViewer({
       >
         <header className="attachment-viewer-header">
           <FileTypeIcon name={file.name} />
-          <h2
-            ref={titleBox}
-            id={titleId}
-            className="attachment-viewer-title"
-            data-overflow={String(titleClipped)}
-          >
-            {file.name}
+          <h2 id={titleId} className="attachment-viewer-title">
+            <OneLine>{file.name}</OneLine>
           </h2>
           <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
           {note === undefined || note === null ? null : (
@@ -315,7 +324,7 @@ export function AttachmentViewer({
             onClick={() => download(file)}
             icon={<DownloadIcon aria-hidden="true" />}
           />
-          <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={onClose} icon={<CloseIcon />} />
+          <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={close} icon={<CloseIcon />} />
         </header>
         <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
       </div>

@@ -48,6 +48,8 @@ export type TextFieldType = (typeof TEXT_FIELD_TYPE)[keyof typeof TEXT_FIELD_TYP
 export const TEXT_FIELD_SIZE = {
   CONTROL: "control",
   TITLE: "title",
+  /** A step under a control in the caption's type, on the well's ground, among a bar's controls, as a Browser tab's address. */
+  COMPACT: "compact",
 } as const;
 
 export type TextFieldSize = (typeof TEXT_FIELD_SIZE)[keyof typeof TEXT_FIELD_SIZE];
@@ -75,6 +77,30 @@ export const TEXT_AREA_SUBMIT = {
 } as const;
 
 export type TextAreaSubmit = (typeof TEXT_AREA_SUBMIT)[keyof typeof TEXT_AREA_SUBMIT];
+
+/** How a text area stands: in a field's well, or bare in a card that is its well, at the insets the card sets (`--luke-text-area-inset-*`). */
+export const TEXT_AREA_LOOK = {
+  WELL: "well",
+  BARE: "bare",
+} as const;
+
+export type TextAreaLook = (typeof TEXT_AREA_LOOK)[keyof typeof TEXT_AREA_LOOK];
+
+/** How far a growing text area grows: to the profile's tallest note before it scrolls, or with its words however many, as a message box does. */
+export const TEXT_AREA_GROW_LIMIT = {
+  NOTE: "note",
+  NONE: "none",
+} as const;
+
+export type TextAreaGrowLimit = (typeof TEXT_AREA_GROW_LIMIT)[keyof typeof TEXT_AREA_GROW_LIMIT];
+
+/** The label an on-screen keyboard draws on its return key: Send where Return sends, a return where it is a new line. */
+export const ENTER_KEY_HINT = {
+  SEND: "send",
+  NEW_LINE: "enter",
+} as const;
+
+export type EnterKeyHint = (typeof ENTER_KEY_HINT)[keyof typeof ENTER_KEY_HINT];
 
 /**
  * How a text entry is named: by its `FormField`'s label, through the field's
@@ -195,6 +221,8 @@ function submitting(event: KeyboardEvent, key: TextAreaSubmit): boolean {
 /** One line of text, answering Enter with `onEnter` where it is given. */
 export function TextField({
   autoComplete,
+  autoCorrect = true,
+  selectOnFocus = false,
   onEnter,
   size = TEXT_FIELD_SIZE.CONTROL,
   ref,
@@ -203,6 +231,10 @@ export function TextField({
   TextFieldValue & {
     /** What the system may fill the field with; the browser's own choice where none is named. */
     autoComplete?: TextFieldAutoComplete | undefined;
+    /** Whether the system may correct and capitalize words as they are typed; off for an address or a name. */
+    autoCorrect?: boolean | undefined;
+    /** Whether the caret arriving selects every word, so typing replaces them, as an address bar does. */
+    selectOnFocus?: boolean | undefined;
     /** What an Enter does, pressed while no input method is composing. */
     onEnter?: (() => void) | undefined;
     /** How large it stands; a control where none is named. */
@@ -215,6 +247,9 @@ export function TextField({
       className="luke-text-field"
       type={props.type ?? TEXT_FIELD_TYPE.TEXT}
       autoComplete={autoComplete}
+      autoCorrect={autoCorrect ? undefined : "off"}
+      autoCapitalize={autoCorrect ? undefined : "off"}
+      onFocus={selectOnFocus ? (event) => event.target.select() : undefined}
       data-size={size}
       {...entryAttributes(props)}
       value={props.value ?? ""}
@@ -242,6 +277,9 @@ export function TextField({
 export function TextArea({
   rows = 4,
   grow = false,
+  look = TEXT_AREA_LOOK.WELL,
+  growLimit = TEXT_AREA_GROW_LIMIT.NOTE,
+  enterKeyHint,
   busy = false,
   onSubmit,
   submitKey = TEXT_AREA_SUBMIT.MOD_ENTER,
@@ -254,6 +292,12 @@ export function TextArea({
   rows?: number;
   /** Whether it grows with its words from `rows` tall, rather than standing at that height. */
   grow?: boolean;
+  /** How it stands; in a field's well where none is named. */
+  look?: TextAreaLook | undefined;
+  /** How far it grows, where it may; to the profile's tallest note where none is named. */
+  growLimit?: TextAreaGrowLimit | undefined;
+  /** The label an on-screen keyboard's return key wears; the keyboard's own where none is named. */
+  enterKeyHint?: EnterKeyHint | undefined;
   /** Whether its words are on their way somewhere, so it takes no typing and answers no key until they arrive. */
   busy?: boolean | undefined;
   /** What the submit key does, pressed while no input method is composing. */
@@ -270,6 +314,9 @@ export function TextArea({
       className="luke-text-field"
       rows={rows}
       data-grow={grow}
+      data-look={look}
+      data-grow-limit={grow ? growLimit : undefined}
+      enterKeyHint={enterKeyHint}
       // Note that a growing note sizes to its words, which the browser does
       // without reading `rows`, so its rows reach its stylesheet as its least height.
       style={grow ? cssCustomProperties({ "--luke-text-area-rows": rows }) : undefined}

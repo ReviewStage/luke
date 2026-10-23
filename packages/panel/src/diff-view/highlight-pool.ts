@@ -1,7 +1,7 @@
 /**
  * highlight-pool.ts -- the pool of workers Files changed highlights a list's files in, or none, where the list highlights on the window's own thread.
  *
- * Shiki colouring a pull request's files is most of what a scroll through
+ * Colouring a pull request's files is most of what a scroll through
  * Files changed costs the window's thread, so the diff bundle hands it to
  * Pierre's own pool of workers (`@pierre/diffs/worker`). The pool is
  * started from a door that starts one worker, which the bundle makes from
@@ -12,8 +12,13 @@
  * thread instead, so a list is never left without its colours. What the
  * pool settles in, its workers or the window's own thread, is said once it
  * has started or failed to.
+ *
+ * Both colour with Pierre's Highlights (`@pierre/highlights`), its lexers
+ * hand-written in one WebAssembly module, where the window may compile
+ * WebAssembly, and with Shiki's JavaScript engine where it may not.
  */
 
+import { canUseWASM, type HighlighterTypes } from "@pierre/diffs";
 import { WorkerPoolManager } from "@pierre/diffs/worker";
 import type { DiffLook } from "./contract.js";
 
@@ -24,6 +29,12 @@ export const HIGHLIGHT_MODE = {
 } as const;
 
 type HighlightMode = (typeof HIGHLIGHT_MODE)[keyof typeof HIGHLIGHT_MODE];
+
+/** What a diff is coloured with: Pierre's Highlights, on WebAssembly, or Shiki on its JavaScript regex engine. */
+export const HIGHLIGHTER = {
+  HIGHLIGHTS: "highlights",
+  SHIKI_JS: "shiki-js",
+} as const satisfies Record<string, HighlighterTypes>;
 
 /**
  * How many workers highlight at once: two, so a file scrolled into view is
@@ -64,9 +75,20 @@ function poolRenderOptions(drawn: DiffLook, maxLineDiffLength: number) {
 }
 
 /**
- * The pool started through `startWorker`, in the look given, on Shiki's
- * JavaScript engine, as the window's own thread highlights; none where
- * there is no door to start a worker through.
+ * The highlighter every diff in this window is coloured with: Highlights
+ * where the window may compile WebAssembly (its policy names
+ * `'wasm-unsafe-eval'`), Shiki's JavaScript engine where it may not. Note
+ * that every caller asks this one door, because Pierre keeps one
+ * highlighter for a window's life and refuses a second of another kind.
+ */
+export function preferredHighlighter(): HighlighterTypes {
+  return canUseWASM() ? HIGHLIGHTER.HIGHLIGHTS : HIGHLIGHTER.SHIKI_JS;
+}
+
+/**
+ * The pool started through `startWorker`, in the look given, on the
+ * highlighter the window's own thread colours with; none where there is
+ * no door to start a worker through.
  */
 export function startHighlighting(
   startWorker: (() => Worker) | undefined,
@@ -88,7 +110,10 @@ export function startHighlighting(
       // Note that a worker failing to start is no error of the window's, since the list then highlights on its own thread.
       onWorkerError: (event) => event.preventDefault(),
     },
-    { ...poolRenderOptions(drawn, maxLineDiffLength), preferredHighlighter: "shiki-js" },
+    {
+      ...poolRenderOptions(drawn, maxLineDiffLength),
+      preferredHighlighter: preferredHighlighter(),
+    },
   );
   const settled = pool.initialize().then(
     () => (pool.isWorkingPool() ? HIGHLIGHT_MODE.POOL : HIGHLIGHT_MODE.MAIN_THREAD),

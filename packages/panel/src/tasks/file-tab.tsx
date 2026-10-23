@@ -3,16 +3,19 @@ import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND, FILES_CHANGED_KEY, filesChangedKeyFor } from "@luke/settings/shortcuts";
 import {
+  EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   type ErrorStatePlacement,
+  FILL_ELEMENT,
+  Fill,
   SCROLL_FADE,
   ScrollArea,
+  SpinnerRegion,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
-import { SpinnerRegion } from "../spinner.js";
 import { typingInto } from "./changes-list.js";
 import { CodeSnippet } from "./code-snippet.js";
 import { FileNoteAnnotation, type FileNotes, type NoteLines, noteLineOf } from "./file-note.js";
@@ -217,9 +220,11 @@ function ReadNotice({
       </ErrorState>
     );
   }
+  const refusal = refusalLine(read.refusal, read.branch, commit);
+  if (place === ERROR_STATE_PLACEMENT.CENTRED) return <EmptyState alert>{refusal}</EmptyState>;
   return (
     <p className="m-0" role="alert">
-      {refusalLine(read.refusal, read.branch, commit)}
+      {refusal}
     </p>
   );
 }
@@ -317,21 +322,24 @@ export function FileTab({
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the tab only hears the key its lines answer while its focus is in them; the lines and the cards are the controls.
-    <section className="file-tab ph-no-capture" aria-label={file.path} onKeyDown={onKeyDown}>
+    // The tab only hears the key its lines answer while its focus is in them; the lines and the cards are the controls.
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="file-tab ph-no-capture"
+      aria-label={file.path}
+      onKeyDown={onKeyDown}
+    >
       {read.kind === FILE_READ.READY ? (
         <FileTextView file={file} held={read} notes={notes} handleRef={handle} />
       ) : read.kind === FILE_READ.READING ? (
-        <SpinnerRegion label="Loading file" />
+        <SpinnerRegion delay label="Loading file" />
       ) : snippet === undefined ? (
-        <div className="side-panel-empty">
-          <ReadNotice
-            read={read}
-            commit={file.commit}
-            onRetry={readWhole}
-            place={ERROR_STATE_PLACEMENT.CENTRED}
-          />
-        </div>
+        <ReadNotice
+          read={read}
+          commit={file.commit}
+          onRetry={readWhole}
+          place={ERROR_STATE_PLACEMENT.CENTRED}
+        />
       ) : (
         <>
           <div className="file-tab-notice">
@@ -349,6 +357,6 @@ export function FileTab({
           </ScrollArea>
         </>
       )}
-    </section>
+    </Fill>
   );
 }

@@ -55,7 +55,8 @@ export interface HoverPane {
 export interface FloatingBox {
   /** Whether the pane floats over the work now, peeked or open. */
   readonly floating: boolean;
-  readonly onPointerDown: () => void;
+  /** A press anywhere in the pane, which is no press outside it (`useFloatDismiss`). */
+  readonly onPressWithin: () => void;
   readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
 }

@@ -15,7 +15,7 @@ import { TASK_ORDER, taskTime } from "./task-list-model.js";
  *
  * The page's view is two halves, as Linear's and Stage's boards hold theirs.
  * The filter says which tasks stand at all: each field, Status, Priority,
- * Creator, and Repository, keeps the values a task must hold one of, and a
+ * Assignee, Creator, Made by, and Repository, keeps the values a task must hold one of, and a
  * field with none filters nothing; the fields are and-ed. It is one for
  * both views, since the List and the Board are two looks at the same
  * tasks. The display says how the tasks that stand are laid out: what
@@ -31,16 +31,23 @@ import { TASK_ORDER, taskTime } from "./task-list-model.js";
  *
  * A task from a service before statuses stands as Todo, where a task
  * starts, and one before priorities as No priority, for every filter and
- * group alike; a creator nobody can be named for, and no repository, are
- * values of their own (`null`) a filter keeps and a group heads. A settled
+ * group alike; no assignee, a creator nobody can be named for, and no
+ * repository, are values of their own (`null`) a filter keeps and a group
+ * heads. A settled
  * task from a service before it kept when a task was finished counts as
  * finished at its last save (`updatedAt`).
  */
+
+/** A task's key in a list of tasks: its id. */
+export function taskIdOf(task: TaskSummary): string {
+  return task.id;
+}
 
 /** The fields a filter narrows the tasks by. */
 export const TASKS_FILTER_FIELD = {
   STATUS: "status",
   PRIORITY: "priority",
+  ASSIGNEE: "assignee",
   CREATOR: "creator",
   MADE_BY: "madeBy",
   REPOSITORY: "repository",
@@ -50,12 +57,14 @@ export type TasksFilterField = (typeof TASKS_FILTER_FIELD)[keyof typeof TASKS_FI
 
 /**
  * Which tasks stand: for each field, the values a task must hold one of; a
- * field absent or empty filters nothing. A creator is an account id, a
- * repository its full name, and `null` the tasks with none named.
+ * field absent or empty filters nothing. An assignee and a creator are an
+ * account id, a repository its full name, and `null` the tasks with none
+ * named.
  */
 export interface TasksFilter {
   readonly status?: readonly TaskStatus[];
   readonly priority?: readonly TaskPriority[];
+  readonly assignee?: readonly (string | null)[];
   readonly creator?: readonly (string | null)[];
   readonly madeBy?: readonly TaskMaker[];
   readonly repository?: readonly (string | null)[];
@@ -81,6 +90,7 @@ export const TASKS_GROUPING = {
   STATUS: "status",
   PRIORITY: "priority",
   REPOSITORY: "repository",
+  ASSIGNEE: "assignee",
   CREATOR: "creator",
   NONE: "none",
 } as const;
@@ -91,6 +101,7 @@ export type TasksGrouping = (typeof TASKS_GROUPING)[keyof typeof TASKS_GROUPING]
 export const BOARD_GROUPINGS: readonly TasksGrouping[] = [
   TASKS_GROUPING.STATUS,
   TASKS_GROUPING.PRIORITY,
+  TASKS_GROUPING.ASSIGNEE,
 ];
 
 /** How a group orders its tasks. */
@@ -110,6 +121,7 @@ export const TASK_PROPERTY = {
   STATUS: "status",
   WAITING: "waiting",
   REPOSITORY: "repository",
+  ASSIGNEE: "assignee",
   CREATOR: "creator",
   AGENTS: "agents",
   UPDATED: "updated",
@@ -122,6 +134,15 @@ export const TASK_PROPERTY_ORDER: readonly TaskProperty[] = Object.values(TASK_P
 
 /** The properties a Board's card has a place for: every one a row has. */
 export const BOARD_PROPERTIES: readonly TaskProperty[] = TASK_PROPERTY_ORDER;
+
+/**
+ * The properties a List's row offered before it offered the assignee, which a
+ * List display kept by a build that did not say what it offered was chosen
+ * among.
+ */
+export const EARLIER_LIST_PROPERTIES: readonly TaskProperty[] = TASK_PROPERTY_ORDER.filter(
+  (property) => property !== TASK_PROPERTY.ASSIGNEE,
+);
 
 /**
  * The properties a Board's card offered before it offered every one, which a
@@ -170,51 +191,15 @@ export interface TasksDisplay {
 
 /**
  * A display as a view keeps it: each choice optional, so one kept by an
- * earlier build reads over the view's own for whatever it lacks, and the Done
+ * earlier build reads over the view's own for whatever it lacks; the Done
  * and Canceled switches an earlier build kept before the completed window
- * replaced them.
+ * replaced them; and the properties the view offered when it was kept,
+ * absent from a build before it said so.
  */
 export type KeptTasksDisplay = Partial<TasksDisplay> & {
   readonly done?: boolean;
   readonly canceled?: boolean;
-};
-
-/**
- * The display a view kept, over its own `initial` for whatever it lacks. A
- * display kept with the earlier switches and no window reads as the past
- * week where it showed either settled status, and as none where it showed
- * neither, so nobody's saved view loses or floods its finished work.
- */
-export function keptTasksDisplay(kept: KeptTasksDisplay, initial: TasksDisplay): TasksDisplay {
-  const { done, canceled, ...rest } = kept;
-  const switched = done !== undefined || canceled !== undefined;
-  const earlier =
-    done === true || canceled === true ? COMPLETED_WINDOW.PAST_WEEK : COMPLETED_WINDOW.NONE;
-  return {
-    ...initial,
-    ...rest,
-    completed: kept.completed ?? (switched ? earlier : initial.completed),
-  };
-}
-
-/** The List until its reader changes it: by status from the work under way, the most pressing first, nothing settled, the pins and sections leading. */
-export const DEFAULT_LIST_DISPLAY: TasksDisplay = {
-  grouping: TASKS_GROUPING.STATUS,
-  order: TASKS_ORDER.PRIORITY,
-  emptyGroups: false,
-  completed: COMPLETED_WINDOW.NONE,
-  pinnedFirst: true,
-  properties: TASK_PROPERTY_ORDER,
-};
-
-/** The Board until its reader changes it: a column for every status, every one standing, the most pressing first, the settled finished in the past week, each card drawing all but when it was last updated. */
-export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
-  grouping: TASKS_GROUPING.STATUS,
-  order: TASKS_ORDER.PRIORITY,
-  emptyGroups: true,
-  completed: COMPLETED_WINDOW.PAST_WEEK,
-  pinnedFirst: false,
-  properties: TASK_PROPERTY_ORDER.filter((property) => property !== TASK_PROPERTY.UPDATED),
+  readonly offered?: readonly TaskProperty[];
 };
 
 /**
@@ -223,7 +208,7 @@ export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
  * it, so a property a card gained is drawn rather than read as one turned
  * off; the rest stand as kept.
  */
-export function withPropertiesOffered(
+function withPropertiesOffered(
   properties: readonly TaskProperty[],
   offered: readonly TaskProperty[],
   initial: readonly TaskProperty[],
@@ -233,6 +218,57 @@ export function withPropertiesOffered(
   );
 }
 
+/**
+ * The display a view kept, over its own `initial` for whatever it lacks. A
+ * display kept with the earlier switches and no window reads as the past
+ * week where it showed either settled status, and as none where it showed
+ * neither, so nobody's saved view loses or floods its finished work. Its
+ * properties were chosen among those it says it was offered, else among
+ * `earlier`, what its view offered before a display said so; one offered
+ * since stands as `initial` draws it (`withPropertiesOffered`).
+ */
+export function keptTasksDisplay(
+  kept: KeptTasksDisplay,
+  initial: TasksDisplay,
+  earlier: readonly TaskProperty[],
+): TasksDisplay {
+  const { done, canceled, offered, properties, ...rest } = kept;
+  const switched = done !== undefined || canceled !== undefined;
+  const switchedWindow =
+    done === true || canceled === true ? COMPLETED_WINDOW.PAST_WEEK : COMPLETED_WINDOW.NONE;
+  return {
+    ...initial,
+    ...rest,
+    completed: kept.completed ?? (switched ? switchedWindow : initial.completed),
+    properties:
+      properties === undefined
+        ? initial.properties
+        : withPropertiesOffered(properties, offered ?? earlier, initial.properties),
+  };
+}
+
+/** The List until its reader changes it: by status from the work under way, the most pressing first, nothing settled, the pins and sections leading, each row drawing all but its creator, its assignee saying who is on it. */
+export const DEFAULT_LIST_DISPLAY: TasksDisplay = {
+  grouping: TASKS_GROUPING.STATUS,
+  order: TASKS_ORDER.PRIORITY,
+  emptyGroups: false,
+  completed: COMPLETED_WINDOW.NONE,
+  pinnedFirst: true,
+  properties: TASK_PROPERTY_ORDER.filter((property) => property !== TASK_PROPERTY.CREATOR),
+};
+
+/** The Board until its reader changes it: a column for every status, every one standing, the most pressing first, the settled finished in the past week, each card drawing all but its creator and when it was last updated. */
+export const DEFAULT_BOARD_DISPLAY: TasksDisplay = {
+  grouping: TASKS_GROUPING.STATUS,
+  order: TASKS_ORDER.PRIORITY,
+  emptyGroups: true,
+  completed: COMPLETED_WINDOW.PAST_WEEK,
+  pinnedFirst: false,
+  properties: TASK_PROPERTY_ORDER.filter(
+    (property) => property !== TASK_PROPERTY.UPDATED && property !== TASK_PROPERTY.CREATOR,
+  ),
+};
+
 /** What heads one group: a pin, a section, or a value of the grouping. */
 export const TASKS_GROUP = {
   PINNED: "pinned",
@@ -240,6 +276,7 @@ export const TASKS_GROUP = {
   STATUS: "status",
   PRIORITY: "priority",
   REPOSITORY: "repository",
+  ASSIGNEE: "assignee",
   CREATOR: "creator",
   ALL: "all",
 } as const;
@@ -251,6 +288,7 @@ export type TasksGroupHead =
   | { readonly kind: typeof TASKS_GROUP.STATUS; readonly status: TaskStatus }
   | { readonly kind: typeof TASKS_GROUP.PRIORITY; readonly priority: TaskPriority }
   | { readonly kind: typeof TASKS_GROUP.REPOSITORY; readonly repository: string | null }
+  | { readonly kind: typeof TASKS_GROUP.ASSIGNEE; readonly assigneeId: string | null }
   | { readonly kind: typeof TASKS_GROUP.CREATOR; readonly creatorId: string | null }
   | { readonly kind: typeof TASKS_GROUP.ALL };
 
@@ -292,6 +330,11 @@ function priorityOf(task: TaskSummary): TaskPriority {
   return task.priority ?? TASK_PRIORITY.NONE;
 }
 
+/** Who a task is assigned to, by account id; null where no one is. */
+function assigneeOf(task: TaskSummary): string | null {
+  return task.assignee?.userId ?? null;
+}
+
 /** Who created a task, by account id: the creator the wire names, else its owner; null where neither is. */
 function creatorOf(task: TaskSummary): string | null {
   return task.createdBy?.userId ?? task.ownerId ?? null;
@@ -316,6 +359,8 @@ function fieldValue(task: TaskSummary, field: TasksFilterField): string | null {
       return statusOf(task);
     case TASKS_FILTER_FIELD.PRIORITY:
       return priorityOf(task);
+    case TASKS_FILTER_FIELD.ASSIGNEE:
+      return assigneeOf(task);
     case TASKS_FILTER_FIELD.CREATOR:
       return creatorOf(task);
     case TASKS_FILTER_FIELD.MADE_BY:
@@ -487,6 +532,21 @@ function finiteValues<T extends string>(
   return order.filter((value) => shown(value) && (kept.length === 0 || kept.includes(value)));
 }
 
+/**
+ * The order of two people's groups, each by account id: the reader's own
+ * first, then each other's by their name, then the tasks with no one, as the
+ * sidebar orders its people's groups.
+ */
+function byPerson(
+  readerId: string | undefined,
+  personName: (userId: string) => string,
+): (a: string | null, b: string | null) => number {
+  const rank = (id: string | null) => (id === null ? 2 : id === readerId ? 0 : 1);
+  return (a, b) =>
+    rank(a) - rank(b) ||
+    (a === null || b === null ? 0 : personName(a).localeCompare(personName(b)));
+}
+
 /** What a grouping groups by, and the head of one value's group. */
 interface GroupingRule {
   readonly keyOf: (task: TaskSummary) => string | null;
@@ -499,7 +559,7 @@ interface GroupingRule {
 
 /** What each grouping groups by, under a filter and a display, and the order its groups run in. */
 function groupingRule(grouping: TasksGrouping, context: GroupingContext): GroupingRule | undefined {
-  const { filter, display, statusOrder, readerId, creatorName } = context;
+  const { filter, display, statusOrder, readerId, personName, members } = context;
   const ranked = (order: readonly (string | null)[]) => (a: string | null, b: string | null) =>
     order.indexOf(a) - order.indexOf(b);
   switch (grouping) {
@@ -548,17 +608,24 @@ function groupingRule(grouping: TasksGrouping, context: GroupingContext): Groupi
             ? Number(a === null) - Number(b === null)
             : repositoryNameOf(a).localeCompare(repositoryNameOf(b)) || a.localeCompare(b),
       };
-    case TASKS_GROUPING.CREATOR: {
-      const rank = (id: string | null) => (id === null ? 2 : id === readerId ? 0 : 1);
+    case TASKS_GROUPING.ASSIGNEE: {
+      const kept = filterValues(filter, TASKS_FILTER_FIELD.ASSIGNEE);
+      const people = new Set([...(readerId === undefined ? [] : [readerId]), ...members]);
+      return {
+        keyOf: assigneeOf,
+        head: (assigneeId) => ({ kind: TASKS_GROUP.ASSIGNEE, assigneeId }),
+        // Note that every member stands, and no one, where empty groups do, so a card has a column to be dropped onto for someone with no task yet.
+        standing: [...people, null].filter((id) => kept.length === 0 || kept.includes(id)),
+        compare: byPerson(readerId, personName),
+      };
+    }
+    case TASKS_GROUPING.CREATOR:
       return {
         keyOf: creatorOf,
         head: (creatorId) => ({ kind: TASKS_GROUP.CREATOR, creatorId }),
         standing: [],
-        compare: (a, b) =>
-          rank(a) - rank(b) ||
-          (a === null || b === null ? 0 : creatorName(a).localeCompare(creatorName(b))),
+        compare: byPerson(readerId, personName),
       };
-    }
     case TASKS_GROUPING.NONE:
       return undefined;
   }
@@ -570,7 +637,8 @@ interface GroupingContext {
   readonly display: TasksDisplay;
   readonly statusOrder: readonly TaskStatus[];
   readonly readerId: string | undefined;
-  readonly creatorName: (userId: string) => string;
+  readonly personName: (userId: string) => string;
+  readonly members: readonly string[];
 }
 
 /** A group from its head and its tasks, with how many older settled tasks it leaves out where it leaves any. */
@@ -635,7 +703,8 @@ export function tasksListGroups(
     pinned,
     sections,
     readerId,
-    creatorName,
+    personName,
+    members,
     now,
   }: {
     filter: TasksFilter;
@@ -644,8 +713,10 @@ export function tasksListGroups(
     pinned: readonly string[];
     sections: readonly TasksSection[];
     readerId: string | undefined;
-    /** A creator's name as the page says it, which the creators' groups are ordered by. */
-    creatorName: (userId: string) => string;
+    /** A person's name as the page says it, which the assignees' and the creators' groups are ordered by. */
+    personName: (userId: string) => string;
+    /** The workspace's members, by account id, each of whom an assignee's group stands for where empty groups do. */
+    members: readonly string[];
     /** Epoch milliseconds now, which the completed window reaches back from. */
     now: number;
   },
@@ -673,26 +744,41 @@ export function tasksListGroups(
     }
   }
   const rest = standing.filter((task) => !placed.has(task.id));
-  const context = { filter, display, statusOrder: TASKS_LIST_STATUS_ORDER, readerId, creatorName };
+  const context = {
+    filter,
+    display,
+    statusOrder: TASKS_LIST_STATUS_ORDER,
+    readerId,
+    personName,
+    members,
+  };
   return [...groups, ...groupedBy({ standing: rest, older }, context)];
 }
 
 /**
- * The Board's columns: a column for each status, or each priority, the
- * display's grouping chooses, as work moves through them, each holding the
- * tasks that stand in it in the order chosen. A grouping the Board does not
- * stand columns by is read as Status. A column with no task stands where
- * the display shows empty groups.
+ * The Board's columns: a column for each status, or each priority, as work
+ * moves through them, or each assignee, the reader first, the display's
+ * grouping chooses, each holding the tasks that stand in it in the order
+ * chosen. A grouping the Board does not stand columns by is read as Status.
+ * A column with no task stands where the display shows empty groups.
  */
 export function tasksBoardColumns(
   tasks: readonly TaskSummary[],
   {
     filter,
     display,
+    readerId,
+    personName,
+    members,
     now,
   }: {
     filter: TasksFilter;
     display: TasksDisplay;
+    readerId: string | undefined;
+    /** A person's name as the page says it, which the assignees' columns are ordered by. */
+    personName: (userId: string) => string;
+    /** The workspace's members, by account id, each of whom an assignee's column stands for where empty groups do. */
+    members: readonly string[];
     /** Epoch milliseconds now, which the completed window reaches back from. */
     now: number;
   },
@@ -702,8 +788,9 @@ export function tasksBoardColumns(
     filter,
     display: { ...display, grouping },
     statusOrder: TASK_STATUS_ORDER,
-    readerId: undefined,
-    creatorName: () => "",
+    readerId,
+    personName,
+    members,
   });
 }
 

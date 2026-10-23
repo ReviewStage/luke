@@ -1,5 +1,6 @@
 import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
+import { FILL_ELEMENT, Fill, useSecond } from "@luke/ui";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
@@ -12,7 +13,7 @@ import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
-import { useWorkingNow, WorkingLine } from "./working-time.js";
+import { WorkingLine } from "./working-time.js";
 
 /**
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
@@ -85,11 +86,11 @@ function StartingLine({
   source: string | undefined;
   sentAt: number;
 }): React.JSX.Element {
-  const now = useWorkingNow();
+  const now = useSecond();
   return (
     <WorkingLine
       startedAt={sentAt}
-      words={startingWords(source ?? UNLISTED_SOURCE, now === undefined ? undefined : now - sentAt)}
+      words={startingWords(source ?? UNLISTED_SOURCE, now - sentAt)}
     />
   );
 }
@@ -194,16 +195,24 @@ export function DraftAgentTab({
 
   if (control.onUnarchive !== undefined) {
     return (
-      <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
+      <Fill
+        as={FILL_ELEMENT.SECTION}
+        className="agent-tab ph-no-capture"
+        aria-label={TAB_WORDS.NEW_AGENT}
+      >
         <footer className="agent-tab-foot">
           <ArchivedComposerNote onUnarchive={control.onUnarchive} />
         </footer>
-      </section>
+      </Fill>
     );
   }
 
   return (
-    <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="agent-tab ph-no-capture"
+      aria-label={TAB_WORDS.NEW_AGENT}
+    >
       {sentAt === undefined || fork === undefined ? null : (
         <ConversationEmptyState>
           <StartingLine
@@ -254,6 +263,6 @@ export function DraftAgentTab({
           }
         />
       </footer>
-    </section>
+    </Fill>
   );
 }

@@ -32,9 +32,9 @@
  * deleted and built again at once.
  *
  * The scheduled sweep reads the template too, so a build finishes and is
- * snapshotted whether or not a launch is waiting on it, and, where some
- * account connected a plan, a new image's template is built before its
- * first launch asks. It also deletes the templates of every other key, once
+ * snapshotted whether or not a launch is waiting on it, and a new image's
+ * template is built within a minute of its deploy rather than on its first
+ * launch. It also deletes the templates of every other key, once
  * they are old enough that a Preview of another image is done with its own.
  */
 
@@ -377,21 +377,24 @@ export const awaitTemplate = (
 export interface TemplateSweepOutcome {
   readonly current: TemplateState["state"] | "unread";
   readonly deleted: number;
+  /** The current image's template, by name, which the launches look for too; none where it was not read. */
+  readonly template?: string;
+  /** How many templates Vercel listed, the current one's among them. */
+  readonly listed?: number;
 }
 
 /**
- * The sweep's turn at the templates: the current one moved on, where native
- * agents are admitted at all, its snapshot checked every `SNAPSHOT_CHECK`,
+ * The sweep's turn at the templates: the current one moved on, built where
+ * it is missing, its snapshot checked every `SNAPSHOT_CHECK`,
  * and every other key's deleted once it is old enough, with the snapshots
  * only it kept.
  */
 export const sweepTemplates = (
   api: VercelSandboxApi,
   build: ImageBuild,
-  advance: boolean,
 ): Effect.Effect<TemplateSweepOutcome, SandboxUnavailable> =>
   Effect.gen(function* () {
-    const current = advance ? (yield* sweepCurrent(api, build)).state : "unread";
+    const current = (yield* sweepCurrent(api, build)).state;
     const now = yield* Clock.currentTimeMillis;
     const listed = yield* api.listNamed(NATIVE_TEMPLATE.NAME_PREFIX);
     let deleted = 0;
@@ -402,7 +405,7 @@ export const sweepTemplates = (
       yield* api.deleteSandbox(sandbox.name);
       deleted += 1;
     }
-    return { current, deleted };
+    return { current, deleted, template: build.name, listed: listed.length };
   });
 
 /**
@@ -410,12 +413,10 @@ export const sweepTemplates = (
  * Vercel that could not be asked is logged by its status alone and left for
  * the next minute's sweep.
  */
-export const sweepNativeTemplates = Effect.fn("web/sweepNativeTemplates")(function* (
-  advance: boolean,
-) {
+export const sweepNativeTemplates = Effect.fn("web/sweepNativeTemplates")(function* () {
   const api = yield* vercelSandboxApi(deploymentOidcToken);
   const build = yield* Effect.orDie(recordImageBuild());
-  return yield* sweepTemplates(api, build, advance).pipe(
+  const swept: TemplateSweepOutcome = yield* sweepTemplates(api, build).pipe(
     Effect.catch((failure) =>
       Effect.as(
         Effect.logWarning(`the native agents' templates were not swept: ${failure.message}`),
@@ -423,4 +424,10 @@ export const sweepNativeTemplates = Effect.fn("web/sweepNativeTemplates")(functi
       ),
     ),
   );
+  // Note that the sweep says which template it moved on, so one a launch looks for under another
+  // name, or older ones never deleted, show in the log rather than only in Vercel's list.
+  yield* Effect.logInfo(
+    `the native agents' template ${build.name} is ${swept.current}; ${swept.deleted} older deleted of ${swept.listed ?? 0} listed`,
+  );
+  return swept;
 });

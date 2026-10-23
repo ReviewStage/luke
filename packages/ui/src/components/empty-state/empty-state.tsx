@@ -48,11 +48,13 @@ export interface EmptyStateAction {
   readonly onClick: () => void;
   /** Whether the press is unavailable for now, as the same act elsewhere on the page is. */
   readonly disabled?: boolean | undefined;
+  /** Whether its glyph turns once as a press lands, as a retry's arrow does. */
+  readonly turns?: boolean | undefined;
 }
 
 /**
- * A place with nothing in it yet: `icon`, the place's own glyph, drawn large
- * and muted over `title` where one is given, over the line `children` says,
+ * A place with nothing in it yet: `icon`, the place's own glyph (left out only
+ * where a place has none to say), drawn large and muted over `title` where one is given, over the line `children` says,
  * over `action` where one is given; one alert where `alert` says a failure
  * left it empty.
  */
@@ -60,21 +62,26 @@ export function EmptyState({
   icon,
   title,
   action,
+  secondary,
   alert = false,
   children,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   title?: string | undefined;
   action?: EmptyStateAction | undefined;
+  /** A second way on, under the first, where the place offers two (Retry, then Close). */
+  secondary?: EmptyStateAction | undefined;
   alert?: boolean | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
     <div className="luke-empty-state">
       <div className="luke-empty-state-body" role={alert ? "alert" : undefined}>
-        <span className="luke-empty-state-icon" aria-hidden="true">
-          {icon}
-        </span>
+        {icon === undefined ? null : (
+          <span className="luke-empty-state-icon" aria-hidden="true">
+            {icon}
+          </span>
+        )}
         <div className="luke-empty-state-words">
           {title === undefined ? null : (
             <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
@@ -83,15 +90,19 @@ export function EmptyState({
           )}
           <Text tone={TEXT_TONE.MUTED}>{children}</Text>
         </div>
-        {action === undefined ? null : (
-          <Button
-            variant={ACTION_BUTTON[action.look ?? EMPTY_STATE_ACTION_LOOK.QUIET]}
-            icon={action.icon}
-            disabled={action.disabled}
-            onClick={action.onClick}
-          >
-            {action.label}
-          </Button>
+        {[action, secondary].map((way) =>
+          way === undefined ? null : (
+            <Button
+              key={way.label}
+              variant={ACTION_BUTTON[way.look ?? EMPTY_STATE_ACTION_LOOK.QUIET]}
+              icon={way.icon}
+              disabled={way.disabled}
+              turns={way.turns}
+              onClick={way.onClick}
+            >
+              {way.label}
+            </Button>
+          ),
         )}
       </div>
     </div>

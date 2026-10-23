@@ -7,7 +7,7 @@
 
 /** The newest toast standing, or none. */
 function newestToast(): HTMLElement | undefined {
-  return [...document.querySelectorAll<HTMLElement>(".toast:not([data-leaving])")].at(-1);
+  return [...document.querySelectorAll<HTMLElement>(".luke-toast:not([data-leaving])")].at(-1);
 }
 
 /** What the newest toast standing says, or nothing while none stands. */

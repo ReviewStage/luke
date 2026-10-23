@@ -45,8 +45,13 @@ import {
   callAnswered,
   sendInSession,
 } from "./account-call.js";
-import { planLimitReachedDataSchema, repositoryNotReachableDataSchema } from "./contract/errors.js";
+import {
+  credentialMissingDataSchema,
+  planLimitReachedDataSchema,
+  repositoryNotReachableDataSchema,
+} from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
+import { installedSkillRefusedDataSchema } from "./installed-skill-route-wire.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -68,6 +73,7 @@ export const HOSTED_DEADLINE = {
   STEER: "steer",
   START: "start",
   CHAPTERS: "chapters",
+  BROWSER_OPEN: "browser-open",
 } as const;
 
 export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLINE];
@@ -81,13 +87,16 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
  * the reads before them, so a send that lands slowly is never read as one
  * that did not answer, a Start's outlasts the copy, and a
  * Generate of a pull request's chapters outlasts the function it runs in
- * (`@luke/service/chapters/chapters-function`'s 240 seconds).
+ * (`@luke/service/chapters/chapters-function`'s 240 seconds), and a Browser
+ * tab opened in an agent's browser outlasts its sandbox's resume (a minute)
+ * and its bridge's bound (twenty seconds, `agent-browser.ts`).
  */
 const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.HELD]: 35_000,
   [HOSTED_DEADLINE.STEER]: 45_000,
   [HOSTED_DEADLINE.START]: 120_000,
   [HOSTED_DEADLINE.CHAPTERS]: 250_000,
+  [HOSTED_DEADLINE.BROWSER_OPEN]: 120_000,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
 
 /** The content type the link names a JSON body with, which the account call writes itself. */
@@ -101,7 +110,9 @@ interface HostedLinkContext {
 
 /** The fields a refusal carries beside its slug, by the declared error that carries them. */
 type HostedRefusalData = typeof repositoryNotReachableDataSchema.Type &
-  typeof planLimitReachedDataSchema.Type;
+  typeof planLimitReachedDataSchema.Type &
+  typeof credentialMissingDataSchema.Type &
+  typeof installedSkillRefusedDataSchema.Type;
 
 /** The service refused the procedure: its slug, and the fields its declared error carries where they read. */
 export class HostedRefused extends Data.TaggedError("HostedRefused")<{
@@ -197,7 +208,12 @@ function refusalOf(payload: UnparsedWireValue): HostedRefused | undefined {
       ? repositoryNotReachableDataSchema
       : refusal === HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED
         ? planLimitReachedDataSchema
-        : undefined;
+        : refusal === HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING
+          ? credentialMissingDataSchema
+        : refusal === HOSTED_API_ERROR.SKILL_NAME_TAKEN ||
+            refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED
+          ? installedSkillRefusedDataSchema
+          : undefined;
   if (schema === undefined) return new HostedRefused({ refusal });
   const data = Result.getOrUndefined(readServiceAnswer(schema)(payload));
   return new HostedRefused({ refusal, ...(data === undefined ? undefined : { data }) });

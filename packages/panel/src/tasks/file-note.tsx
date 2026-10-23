@@ -1,18 +1,24 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import { IconButton, useMenu, WingFace } from "@luke/ui";
+import {
+  DisclosureAction,
+  GLYPH_INK,
+  GlyphSlot,
+  IconButton,
+  Time,
+  Tooltip,
+  useMenu,
+  useMinute,
+  WingFace,
+} from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
-import type { MouseEvent } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
-import { Tooltip } from "../tooltip.js";
 import { AnnotationCard, AnnotationComment, AnnotationComments } from "./annotation-card.js";
 import type { FileNote } from "./file-tab-model.js";
 import { chipPress, MinimizedChip } from "./minimized-threads.js";
-import { RelativeTime } from "./relative-time.js";
 import { useMentionLink } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { useOpenLink, useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -69,12 +75,6 @@ export interface FileNotes {
   readonly onLight?: ((lines: NoteLines | undefined) => void) | undefined;
 }
 
-/** A press in a card's head that keeps it for itself, rather than folding the card. */
-function keptInHead(event: MouseEvent<HTMLElement>): void {
-  event.preventDefault();
-  event.stopPropagation();
-}
-
 /** A note's ⋯: View in conversation, the agent's turn that showed its lines, and Copy link, that turn's link; nothing where neither stands. */
 function NoteMenu({ place }: { place: LinkPlace | undefined }): React.JSX.Element | null {
   const menu = useMenu(true);
@@ -95,21 +95,21 @@ function NoteMenu({ place }: { place: LinkPlace | undefined }): React.JSX.Elemen
   ];
   if (actions.length === 0) return null;
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the ⋯'s press from folding the card whose head it stands in; the button inside is the control.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: a key on the button inside reaches it as a click, which the wrapper keeps the same way.
-    <span className="file-note-menu" onClick={keptInHead}>
-      <Tooltip label={NOTE_WORDS.MENU}>
-        <IconButton icon={<EllipsisIcon />} label={NOTE_WORDS.MENU} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={NOTE_WORDS.MENU}
-          menu={menu.drawn}
-          groups={[actions]}
-          onClose={menu.close}
-        />
-      )}
-    </span>
+    <DisclosureAction>
+      <span className="file-note-menu">
+        <Tooltip label={NOTE_WORDS.MENU}>
+          <IconButton icon={<EllipsisIcon />} label={NOTE_WORDS.MENU} {...menu.trigger()} />
+        </Tooltip>
+        {menu.drawn === undefined ? null : (
+          <ActionMenu
+            label={NOTE_WORDS.MENU}
+            menu={menu.drawn}
+            groups={[actions]}
+            onClose={menu.close}
+          />
+        )}
+      </span>
+    </DisclosureAction>
   );
 }
 
@@ -169,12 +169,12 @@ function FileNoteCard({
         open={!folded}
         onOpenChange={(open) => onFold(!open)}
         face={
-          <span className="transcript-luke-mark" aria-hidden="true">
-            <WingFace />
-          </span>
+          <GlyphSlot ink={GLYPH_INK.VOICE}>
+            <WingFace fill inherit />
+          </GlyphSlot>
         }
         name={<span className="file-note-author">{author}</span>}
-        time={<RelativeTime className="annotation-card-time" at={note.shownAt} now={now} />}
+        time={<Time className="annotation-card-time" at={note.shownAt} now={now} />}
         menu={<NoteMenu place={place} />}
       >
         <AnnotationComments>
@@ -227,9 +227,9 @@ export function FileNoteAnnotation({
     <MinimizedChip
       label={CHIP_LABEL(author, lineRangeText(note) ?? "", minimized.shown)}
       faces={
-        <span className="transcript-luke-mark" aria-hidden="true">
-          <WingFace />
-        </span>
+        <GlyphSlot ink={GLYPH_INK.VOICE}>
+          <WingFace fill inherit />
+        </GlyphSlot>
       }
       count={1}
       shown={minimized.shown}

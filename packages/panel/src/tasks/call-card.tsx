@@ -1,15 +1,22 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
-import { WaveformIcon } from "@luke/ui";
+import {
+  BADGE_TONE,
+  Badge,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Tooltip,
+  useMinute,
+  WaveformIcon,
+} from "@luke/ui";
+import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/ui/time-format";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { PhoneOffIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { usePerson } from "../member-directory.js";
-import { Tooltip } from "../tooltip.js";
-import { callHeading, useMinute } from "./task-time.js";
 import { RUN_CARD, RunCard } from "./turn-card.js";
-import { WORKED_SEPARATOR, workingTime } from "./working-time.js";
 
 /**
  * call-card.tsx -- a call's span in a task's logs, an agent's transcript and the Code tab's feed alike: the labelled rule it begins at, and the one it closes with once it has ended, hanging its card.
@@ -171,19 +178,38 @@ export function CallStartMarker({
   return (
     <CallMarker end={CALL_MARKER_END.START} live={live}>
       <span className="call-marker-pill">
-        <span className="call-marker-icon" data-live={live ? "" : undefined} aria-hidden="true">
-          <WaveformIcon />
-        </span>
-        <span className="call-marker-text">
-          <span className="call-marker-words">
-            {caller === undefined ? CALL_MARKER_WORDS.STARTED : <CallerStarted caller={caller} />}
+        <Badge
+          tone={live ? BADGE_TONE.COMPLETE : BADGE_TONE.NEUTRAL}
+          icon={
+            <span className="call-marker-icon" aria-hidden="true">
+              <WaveformIcon />
+            </span>
+          }
+        >
+          <span className="call-marker-line">
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="call-marker-text"
+            >
+              <span className="call-marker-words">
+                {caller === undefined ? (
+                  CALL_MARKER_WORDS.STARTED
+                ) : (
+                  <CallerStarted caller={caller} />
+                )}
+              </span>
+              <span className="call-marker-detail">
+                {WORKED_SEPARATOR}
+                <time dateTime={new Date(startedAt).toISOString()}>
+                  {callHeading(startedAt, now)}
+                </time>
+              </span>
+            </Text>
+            {live ? <span className="call-marker-live">{CALL_MARKER_WORDS.LIVE}</span> : null}
           </span>
-          <span className="call-marker-detail">
-            {WORKED_SEPARATOR}
-            <time dateTime={new Date(startedAt).toISOString()}>{callHeading(startedAt, now)}</time>
-          </span>
-        </span>
-        {live ? <span className="call-marker-live">{CALL_MARKER_WORDS.LIVE}</span> : null}
+        </Badge>
       </span>
     </CallMarker>
   );
@@ -217,10 +243,18 @@ export function CallEndMarker({
     return (
       <CallMarker end={CALL_MARKER_END.END}>
         <p className="call-marker-pill" data-call-ended="">
-          {icon}
-          <span className="call-marker-text">
-            <span className="call-marker-words">{line}</span>
-          </span>
+          <Badge icon={icon}>
+            <span className="call-marker-line">
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="call-marker-text"
+              >
+                <span className="call-marker-words">{line}</span>
+              </Text>
+            </span>
+          </Badge>
         </p>
       </CallMarker>
     );
@@ -234,20 +268,28 @@ export function CallEndMarker({
         card={<CallCard startedAt={startedAt} endedAt={endedAt} record={record} />}
       >
         <p className="call-marker-pill" data-call-ended="">
-          {icon}
-          <span className="call-marker-text">
-            <span className="call-marker-words" data-call-length="">
-              {line}
-              <span className="call-marker-detail">
-                {WORKED_SEPARATOR}
-                {length}
-              </span>
+          <Badge icon={icon}>
+            <span className="call-marker-line">
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="call-marker-text"
+              >
+                <span className="call-marker-words" data-call-length="">
+                  {line}
+                  <span className="call-marker-detail">
+                    {WORKED_SEPARATOR}
+                    {length}
+                  </span>
+                </span>
+                <span className="call-marker-detail">
+                  {WORKED_SEPARATOR}
+                  <time dateTime={new Date(endedAt).toISOString()}>{ended}</time>
+                </span>
+              </Text>
             </span>
-            <span className="call-marker-detail">
-              {WORKED_SEPARATOR}
-              <time dateTime={new Date(endedAt).toISOString()}>{ended}</time>
-            </span>
-          </span>
+          </Badge>
         </p>
       </Tooltip>
     </CallMarker>

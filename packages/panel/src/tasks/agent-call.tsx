@@ -1,4 +1,3 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -10,6 +9,7 @@ import {
   MicrophoneOffIcon,
   SpeakerIcon,
   SpeakerOffIcon,
+  Tooltip,
   VideoIcon,
   VideoOffIcon,
   WaveformIcon,
@@ -27,7 +27,7 @@ import { createContext, type ReactNode, useContext } from "react";
 import { useAct } from "../act.js";
 import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
 import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
-import { Tooltip } from "../tooltip.js";
+import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";
 import { useStandingVoiceView } from "../use-voice-view.js";
 import { CALL_CONTROL_LABEL } from "./tasks-parts.js";
@@ -50,9 +50,9 @@ import { CALL_CONTROL_LABEL } from "./tasks-parts.js";
  * with no voice, the web's, hands the tab no doors, and the tab draws
  * neither. The tab around them is left out of the screen recording
  * (`agent-tab.tsx`). An agent on a provider's own harness, Claude Code or
- * Codex, takes no call, since calls run on eve alone and the service
- * refuses one into it (`NATIVE_AGENT_NOT_HERE`), so its tab draws neither
- * (`takesCalls`).
+ * Codex, takes a call as an eve one does: the call's asks reach its runner.
+ * A call runs on the account's own OpenAI key, so with none saved Call says
+ * to add one and its press opens Settings › Agents (`../openai-key.tsx`).
  */
 
 /** What an agent's tab is handed to take calls; none where the platform has no voice. */
@@ -85,11 +85,6 @@ export interface AgentCallPress {
   readonly onPress: (agentId: string, place: AgentCallPlace) => void;
 }
 
-/** Whether a call may go into the agent: one on eve, whose summary names no native runtime, and never one on Claude Code or Codex. */
-export function takesCalls(agent: Pick<CodingAgentSummary, "runtime">): boolean {
-  return agent.runtime === undefined;
-}
-
 /** The voice's notice line, which rides the foot of the tab of the agent the call speaks into; none where the window draws it elsewhere. */
 export const CallNotice = createContext<ReactNode>(undefined);
 
@@ -115,6 +110,7 @@ export function useAgentOnCall(agentId: string): boolean {
 function useCallButton(agentId: string) {
   const view = useStandingVoiceView();
   const voiceAvailable = useAppSlice(VOICE_AVAILABLE);
+  const openAiKeyMissing = useOpenAiKeyMissing();
   const microphoneStatus =
     useAppSlice(APP_SLICE.AUDIO)?.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED;
   return {
@@ -126,6 +122,7 @@ function useCallButton(agentId: string) {
       listening: view.listening,
       call: view.call,
       voiceStatus: view.voiceStatus,
+      openAiKeyMissing,
     }),
   };
 }
@@ -182,7 +179,8 @@ function CallVideoButton({ agentId }: { agentId: string }): React.JSX.Element | 
  * Call at rest, the waveform: for the agent `subject` names, or a draft's
  * key, which no call speaks into, so its look is Call's or the
  * microphone's ask. Unavailable where the voice or the microphone cannot
- * take a call, or while `busy`.
+ * take a call, or while `busy`. With no OpenAI key saved its press opens
+ * Settings › Agents in place of `onPress`, wherever it is drawn.
  */
 export function CallButton({
   subject,
@@ -194,6 +192,7 @@ export function CallButton({
   onPress: () => void;
 }): React.JSX.Element {
   const { button } = useCallButton(subject);
+  const openApiKeys = useOpenApiKeys();
   return (
     <span className="agent-call-button">
       <Tooltip label={button.label}>
@@ -201,7 +200,7 @@ export function CallButton({
           icon={<WaveformIcon />}
           label={button.label}
           disabled={busy || button.press === MICROPHONE_PRESS.NONE}
-          onClick={onPress}
+          onClick={button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY ? openApiKeys : onPress}
         />
       </Tooltip>
     </span>

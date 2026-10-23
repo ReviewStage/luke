@@ -7,6 +7,7 @@ import {
   type IntegrationProvider,
   integrationLandingPath,
 } from "@luke/features/integration-wire";
+import { APP_HOME_LINK } from "@luke/features/link-home";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { rememberReturn } from "../src/connect-return";
@@ -14,9 +15,10 @@ import { appTab, closeAppTabs } from "./support/connect-app-tab";
 
 /**
  * integration-connected.test.ts -- an integration's landing says how its
- * sign-in settled and how to go on: a connection sends the developer back to
- * Luke, every other ending sends them back to try again, and the provider's
- * name is said only where the address named one. A sign-in the web app's tab
+ * sign-in settled and how to go on: a connection says the tab can go, every
+ * other ending says how to try again, and the provider's name is said only
+ * where the address named one. A landing nothing answered offers Open Luke
+ * for the Mac app on a Mac, and nothing elsewhere. A sign-in the web app's tab
  * handed off is answered by that tab, and by no other, and the page closes
  * where it connected and stays to say why where it did not, unless the
  * sign-in was abandoned; a same-tab sign-in is offered the address it left
@@ -62,17 +64,27 @@ function wayBack(page: HTMLElement): { readonly words: string; readonly href: st
   }));
 }
 
+/** The browser saying it runs on a Mac, until `vi.unstubAllGlobals()`. */
+function onMac(): void {
+  vi.stubGlobal("navigator", {
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+    maxTouchPoints: 0,
+  });
+}
+
 afterEach(() => {
   closeAppTabs();
   document.body.replaceChildren();
   sessionStorage.clear();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test("a connection names the provider and sends the developer back to Luke", async () => {
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
 
-  expect(said(page)).toEqual(["Linear connected", "Return to Luke. You can close this tab."]);
+  expect(said(page)).toEqual(["Linear is connected", "You can close this tab."]);
 });
 
 test("every other ending sends the developer back to try again", async () => {
@@ -80,31 +92,34 @@ test("every other ending sends the developer back to try again", async () => {
     INTEGRATION_PROVIDER.NOTION,
     INTEGRATION_LANDING_STATUS.NOT_COMPLETED,
   );
-  expect(said(notCompleted)).toEqual(["Notion not connected", "Return to Luke to try again."]);
+  expect(said(notCompleted)).toEqual(["Notion was not connected", "Connect Notion again from Luke."]);
 
   const unavailable = await landing(
     INTEGRATION_PROVIDER.NOTION,
     INTEGRATION_LANDING_STATUS.UNAVAILABLE,
   );
-  expect(said(unavailable)).toEqual(["Could not connect Notion", "Return to Luke to try again."]);
+  expect(said(unavailable)).toEqual(["Luke could not reach Notion", "Try again in a moment."]);
 
   const expired = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.EXPIRED);
-  expect(said(expired)).toEqual(["This link has expired", "Return to Luke to try again."]);
+  expect(said(expired)).toEqual([
+    "This link to connect Notion has expired",
+    "Connect Notion again from Luke.",
+  ]);
 });
 
 test("an address that names no provider says no name", async () => {
   const connected = await landing(undefined, INTEGRATION_LANDING_STATUS.CONNECTED);
-  expect(said(connected)).toEqual(["Connected", "Return to Luke. You can close this tab."]);
+  expect(said(connected)).toEqual(["Connected to Luke", "You can close this tab."]);
 
   const unavailable = await landing(undefined, INTEGRATION_LANDING_STATUS.UNAVAILABLE);
-  expect(said(unavailable)).toEqual(["Could not connect", "Return to Luke to try again."]);
+  expect(said(unavailable)).toEqual(["Luke could not finish connecting", "Try again in a moment."]);
 });
 
 test("an address with no status it knows reads as an expired link", async () => {
   for (const search of ["", "?status=mystery"]) {
     const page = await openPage(`${INTEGRATION_LANDING.PATH}${search}`);
 
-    expect(said(page)).toEqual(["This link has expired", "Return to Luke to try again."]);
+    expect(said(page)).toEqual(["This connection link has expired", "Connect it again from Luke."]);
   }
 });
 
@@ -112,7 +127,7 @@ test("an address with no status it knows reads as an expired link", async () => 
 async function answered(page: HTMLElement): Promise<void> {
   await vi.waitFor(async () => {
     await act(() => new Promise((resolve) => setImmediate(resolve)));
-    expect(wayBack(page)).toEqual([{ words: "Back to Luke", href: "/app" }]);
+    expect(wayBack(page)).toEqual([{ words: "Open Luke", href: "/app" }]);
   });
 }
 
@@ -131,7 +146,6 @@ test("a sign-in the app's tab handed off is answered by that tab, and its landin
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
 
   await answered(page);
-  expect(said(page)).toEqual(["Linear connected"]);
   expect(closed).toHaveBeenCalled();
 });
 
@@ -143,19 +157,42 @@ test("a sign-in that did not connect stays to say so, offering the way back", as
   const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
 
   await answered(page);
-  expect(said(page)).toEqual(["Notion not connected"]);
+  expect(said(page)).toEqual(["Notion was not connected", "Connect Notion again from Luke."]);
   expect(closed).not.toHaveBeenCalled();
 });
 
-test("a landing no app tab handed off, as the Mac's, says to return to Luke, though an app tab waits on a sign-in of its own", async () => {
+test("a landing no app tab handed off offers nothing to press off a Mac, though an app tab waits on a sign-in of its own", async () => {
   await appTab(1);
 
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
   // The channel is given turns to answer, which no tab takes.
   await channelTurns();
 
-  expect(said(page)).toEqual(["Linear connected", "Return to Luke. You can close this tab."]);
+  expect(said(page)).toEqual(["Linear is connected", "You can close this tab."]);
   expect(wayBack(page)).toEqual([]);
+});
+
+test("a landing no app tab handed off, as the Mac's, opens the Mac app on a Mac", async () => {
+  onMac();
+  await appTab(1);
+
+  const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.UNAVAILABLE);
+  await channelTurns();
+
+  expect(wayBack(page)).toEqual([{ words: "Open Luke", href: APP_HOME_LINK }]);
+});
+
+test("a landing the app's tab answered closes back to it on a Mac too, rather than opening the Mac app", async () => {
+  onMac();
+  const closed = vi.spyOn(window, "close").mockImplementation(() => undefined);
+  const app = await appTab(1);
+  app.landIn(0);
+
+  const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
+  await answered(page);
+
+  act(() => page.querySelector("a")?.click());
+  expect(closed).toHaveBeenCalled();
 });
 
 test("of two app tabs, only the one that handed a sign-in off answers its landing, and the other still answers its own", async () => {
@@ -199,7 +236,7 @@ test("a sign-in whose landing comes back half an hour after it was handed off an
   const page = await landing(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_LANDING_STATUS.CONNECTED);
   await channelTurns();
 
-  expect(said(page)).toEqual(["Linear connected", "Return to Luke. You can close this tab."]);
+  expect(said(page)).toEqual(["Linear is connected", "You can close this tab."]);
   expect(wayBack(page)).toEqual([]);
 });
 
@@ -208,8 +245,17 @@ test("a sign-in that left this tab offers the way back to where it stood", async
 
   const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
 
-  expect(said(page)).toEqual(["Notion not connected"]);
-  expect(wayBack(page)).toEqual([{ words: "Back to Luke", href: "/plan/4f0b6a0e?tab=agents" }]);
+  expect(said(page)).toEqual(["Notion was not connected", "Connect Notion again from Luke."]);
+  expect(wayBack(page)).toEqual([{ words: "Open Luke", href: "/plan/4f0b6a0e?tab=agents" }]);
+});
+
+test("a connection that left this tab says nothing of closing it, since the tab is the app's own", async () => {
+  rememberReturn("/plan/4f0b6a0e");
+
+  const page = await landing(INTEGRATION_PROVIDER.NOTION, INTEGRATION_LANDING_STATUS.CONNECTED);
+
+  expect(said(page)).toEqual(["Notion is connected"]);
+  expect(wayBack(page)).toEqual([{ words: "Open Luke", href: "/plan/4f0b6a0e" }]);
 });
 
 test("an address left that is not this origin's is not offered", async () => {

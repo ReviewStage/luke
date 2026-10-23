@@ -33,7 +33,16 @@ import {
   FILES_CHANGED_SHORTCUTS,
   shownShortcutGroups,
 } from "@luke/settings/shortcuts";
-import { NAV_CURRENT, NavItem, SearchField } from "@luke/ui";
+import {
+  commandKeyshortcuts,
+  GAP,
+  LAYOUT_ELEMENT,
+  NAV_CURRENT,
+  NavItem,
+  SearchField,
+  Shortcut,
+  Stack,
+} from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -44,8 +53,6 @@ import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
 import { settingsPageOf } from "./settings/pages.js";
 import { settingsPageShown } from "./settings/settings-rows.js";
-import { Shortcut } from "./shortcut.js";
-import { commandKeyshortcuts } from "./tooltip.js";
 
 /**
  * Searching the Settings tab.
@@ -212,6 +219,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    // What the workspace's agents remember, which is the workspace's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MEMORY,
+          label: "Memory",
+          page: SETTINGS_VIEW.MEMORY,
+          haystack: ["Memory", "remember recall forget facts conventions shared memory"],
+        }
+      : undefined,
     // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
@@ -369,7 +385,9 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     ];
   });
   const fixed = fixedEntries(input);
-  const pages = SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, input.capabilities));
+  const pages = SETTINGS_PAGE_LIST.filter((page) =>
+    settingsPageShown(page, input.capabilities, input.settings.experiments),
+  );
   return pages
     .flatMap((page) => [
       ...described.filter((entry) => entry.page === page),
@@ -422,7 +440,7 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
 /**
  * What a landed row wears for the stylesheet to ring it once, so the eye finds
  * the row the view just moved to. The ring is a one-shot animation in
- * `settings.css`; the attribute stays until the row is landed on again.
+ * `search.css`; the attribute stays until the row is landed on again.
  */
 const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
 
@@ -608,7 +626,7 @@ export function SettingsSearchResults({
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
           <h2 className="section-heading">{resultPageWord(group.page)}</h2>
-          <ul>
+          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
             {group.items.map((entry) => (
               <li key={entry.id}>
                 <NavItem
@@ -619,7 +637,7 @@ export function SettingsSearchResults({
                 </NavItem>
               </li>
             ))}
-          </ul>
+          </Stack>
         </section>
       ))}
     </div>

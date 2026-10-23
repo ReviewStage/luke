@@ -32,6 +32,7 @@ import {
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
+  BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollowed,
@@ -103,6 +104,8 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: "Could not read that pull request on this system.",
   [TASKS_ACT_KIND.TASKS_ISSUE]: "Could not read that issue on this system.",
   [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: "Could not read the task's Browser tabs.",
+  [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]:
+    "Could not open a tab in that agent's browser on this system.",
   [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: "Could not colour that code on this system.",
   [TASKS_ACT_KIND.TASKS_REVISIONS]: "Could not read that plan's history on this system.",
   [TASKS_ACT_KIND.TASKS_REVISION]: "Could not read that version on this system.",
@@ -183,6 +186,13 @@ const BROWSER_TAB = {
   lastActedAt: 2_000,
 } as const;
 
+/** A tab a member opens in a coding agent's browser on the task. */
+const BROWSER_TAB_OPEN = {
+  taskId: TASK_ID,
+  agentId: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
+  address: "https://example.com/sign-in",
+};
+
 /** One admin read, of the roster at a week, admins counted. */
 const ADMIN_READ_PARAMS = {
   procedure: ADMIN_READ.USERS,
@@ -232,6 +242,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_PULL_REQUEST, payload: { ...PLACE, number: PULL_REQUEST.number } },
   { kind: TASKS_ACT_KIND.TASKS_ISSUE, payload: { ...PLACE, number: ISSUE.number } },
   { kind: TASKS_ACT_KIND.TASKS_BROWSER_TABS, payload: TASK },
+  { kind: TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN, payload: BROWSER_TAB_OPEN },
   { kind: TASKS_ACT_KIND.TASKS_COLOUR_CODE, payload: { language: "ts", code: "const a = 1;" } },
   { kind: TASKS_ACT_KIND.TASKS_REVISIONS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_REVISION, payload: { ...TASK, seq: 3 } },
@@ -385,6 +396,20 @@ function windowPort(
         params.taskId === TASK_UNANSWERED
           ? ({ failure: TASK_CALL_FAILURE.UNANSWERED } as const)
           : { tabs: [BROWSER_TAB] },
+      ),
+    tasksBrowserTabOpen: (params) =>
+      ask(`browserTabOpen:${params.taskId}:${params.agentId}`, () =>
+        params.taskId === TASK_UNANSWERED
+          ? ({ failure: BROWSER_TAB_OPEN_FAILURE.UNREACHABLE } as const)
+          : {
+              tab: {
+                ...BROWSER_TAB,
+                agentId: params.agentId,
+                address: params.address,
+                openedBy: { kind: "member", userId: "user-ada" },
+                driver: { userId: "user-ada", heldUntil: 62_000 },
+              } as const,
+            },
       ),
     tasksRevisions: (params) =>
       ask(`revisions:${params.taskId}:${params.before}`, () => ({ revisions: [] })),
@@ -938,6 +963,30 @@ it("a task's Browser tabs are answered to a panel as the host read them, and a s
     refused: REFUSAL[TASKS_ACT_KIND.TASKS_BROWSER_TABS],
   });
   assert.deepEqual(asked, [`browserTabs:${TASK_ID}`, `browserTabs:${TASK_UNANSWERED}`]);
+});
+
+it("a tab opened in an agent's browser is answered to a panel as the host read it, why none opened among it, for the panel's words", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const open = (taskId: string) =>
+    settled(client, TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN, { ...BROWSER_TAB_OPEN, taskId });
+
+  assert.deepEqual(await open(TASK_ID), {
+    answer: {
+      tab: {
+        ...BROWSER_TAB,
+        agentId: BROWSER_TAB_OPEN.agentId,
+        openedBy: { kind: "member", userId: "user-ada" },
+        driver: { userId: "user-ada", heldUntil: 62_000 },
+      },
+    },
+  });
+  assert.deepEqual(await open(TASK_UNANSWERED), {
+    answer: { failure: BROWSER_TAB_OPEN_FAILURE.UNREACHABLE },
+  });
+  assert.deepEqual(asked, [
+    `browserTabOpen:${TASK_ID}:${BROWSER_TAB_OPEN.agentId}`,
+    `browserTabOpen:${TASK_UNANSWERED}:${BROWSER_TAB_OPEN.agentId}`,
+  ]);
 });
 
 it("a content act's payload carrying a key its schema does not name, or past its bound, is refused in the kind's own words, and the host is not asked", async () => {

@@ -10,7 +10,7 @@
 
 import type { AdminOverview } from "@luke/features/admin-answer-wire";
 import { ACTIVITY_FEATURE, type ActivityFeature } from "@luke/features/admin-overview-vocabulary";
-import { formatDayTick, formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
+import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
@@ -18,6 +18,7 @@ import {
   ChartTooltipContent,
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
+import { formatDayTick } from "@luke/ui/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartTrend, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";

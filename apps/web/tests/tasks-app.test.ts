@@ -715,7 +715,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* patch(other, { status: TASK_STATUS.CANCELED }),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
-        // A plan is archived no longer: an older build's archive keeps a settled status and stamps nothing, and the plan still takes a change after it.
+        // A plan is archived no longer: an older build's archive keeps a settled status, answers no archive, and the plan still takes a change after it.
         const settled = readAnswer(
           taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,

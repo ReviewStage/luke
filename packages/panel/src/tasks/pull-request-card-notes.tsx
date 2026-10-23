@@ -1,12 +1,21 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
-import { Badge, HoverCardNote } from "@luke/ui";
+import {
+  ALIGN,
+  Badge,
+  GAP,
+  HoverCardNote,
+  Inline,
+  LAYOUT_ELEMENT,
+  TIME_LOOK,
+  Time,
+  useMinute,
+  VisuallyHidden,
+} from "@luke/ui";
 import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { LinesChanged } from "./agent-published.js";
-import { RelativeTime } from "./relative-time.js";
-import { useMinute } from "./task-time.js";
 import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
@@ -96,7 +105,8 @@ export function OpenedNote({
   const { members, readerId, former } = useMemberDirectory();
   if (opener === undefined && when === undefined) return null;
   const words = when === undefined ? undefined : MOMENT_WORDS[when.moment];
-  const ago = when === undefined ? null : <RelativeTime at={when.at} now={now} hint={false} ago />;
+  const ago =
+    when === undefined ? null : <Time at={when.at} now={now} hint={false} look={TIME_LOOK.AGO} />;
   if (opener === undefined) {
     return (
       <HoverCardNote>
@@ -139,14 +149,14 @@ function CountsNote({
           <span className="card-count">
             <MessageSquareIcon aria-hidden="true" />
             {comments}
-            <span className="visually-hidden">{comments === 1 ? " comment" : " comments"}</span>
+            <VisuallyHidden>{comments === 1 ? " comment" : " comments"}</VisuallyHidden>
           </span>
         )}
         {commits === undefined ? null : (
           <span className="card-count">
             <GitCommitHorizontalIcon aria-hidden="true" />
             {commits}
-            <span className="visually-hidden">{commits === 1 ? " commit" : " commits"}</span>
+            <VisuallyHidden>{commits === 1 ? " commit" : " commits"}</VisuallyHidden>
           </span>
         )}
       </span>
@@ -179,7 +189,13 @@ export function PullRequestCardNotes({
         </HoverCardNote>
       )}
       {labels.length === 0 ? null : (
-        <ul className="card-labels" aria-label="Labels">
+        <Inline
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.TIGHT}
+          align={ALIGN.STRETCH}
+          className="card-labels"
+          aria-label="Labels"
+        >
           {labels.slice(0, MAX_LABELS).map((label) => (
             <li key={label.name}>
               <Badge swatch={label.color}>{label.name}</Badge>
@@ -190,7 +206,7 @@ export function PullRequestCardNotes({
               <Badge>{`+${labels.length - MAX_LABELS}`}</Badge>
             </li>
           ) : null}
-        </ul>
+        </Inline>
       )}
       <CountsNote comments={comments} commits={commits} />
     </>

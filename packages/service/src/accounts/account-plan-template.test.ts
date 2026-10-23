@@ -61,8 +61,6 @@ const ORIGIN = "https://luke.test";
 const PLAN_TEMPLATE_PATH = "/api/account/plan-template";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

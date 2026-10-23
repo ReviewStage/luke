@@ -236,7 +236,7 @@ test("⌘F finds in the view standing, its bar under the view's toolbar, and cou
     assert.ok(runAppCommand(APP_COMMAND.FIND), "⌘F is offered on the Admin place");
   });
   const field = page.querySelector<HTMLInputElement>(
-    '.admin-page .page-find > search.find-bar input[aria-label="Find"]',
+    '.admin-page .page-find > .find-bar input[aria-label="Find"]',
   );
   assert.ok(field, "the find bar stands in the view's column");
   act(() => {
@@ -248,7 +248,7 @@ test("⌘F finds in the view standing, its bar under the view's toolbar, and cou
   });
 
   assert.equal(
-    page.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent,
+    page.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent,
     "1 of 1",
   );
 });
@@ -259,5 +259,5 @@ test("on a narrow stage with the section list standing, ⌘F is offered nothing,
   act(() => {
     assert.equal(runAppCommand(APP_COMMAND.FIND), false);
   });
-  assert.equal(document.querySelector('search[aria-label="Find"]'), null);
+  assert.equal(document.querySelector('[role="search"][aria-label="Find"]'), null);
 });

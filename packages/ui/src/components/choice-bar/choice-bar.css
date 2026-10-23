@@ -67,12 +67,26 @@
     display: inline-flex;
   }
 
+  /* The glyph slot says its size (`--luke-glyph-size`), which a glyph the
+     app seats in it, a `GlyphSlot`, reads. */
+  .luke-choice-bar-icon {
+    --luke-glyph-size: var(--luke-control-icon);
+  }
+
   .luke-choice-bar-icon > svg {
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
   }
 
+  /* Note that the count lays its parts out as a row centred on the option,
+     rather than as words on a line, because a part is an inline box whose
+     baseline is its glyph's bottom edge, which set it a pixel or two above
+     the option's name; the gap stands for the space between parts, which a
+     row drops. */
   .luke-choice-bar-count {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-space-4);
     color: var(--luke-color-text-subtle);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
@@ -198,9 +212,7 @@
      is chosen, because a clearable bar with none chosen would otherwise
      name none of its options. */
   @container luke-choice-bar (width < 520px) {
-    .luke-choice-bar:not([data-fold="together"]):has(
-        > :is([aria-selected="true"], [aria-checked="true"])
-      )
+    .luke-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
       .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
       .luke-choice-bar-icon
       + .luke-choice-bar-label {
@@ -213,17 +225,19 @@
     }
   }
 
-  /* A bar folding together takes its options' room in where its toolbar
-     says `--luke-fold: tight`, and once their names no longer fit
-     (`data-folded`, measured by `choice-bar.tsx`) shows every option by its
-     glyph alone, the chosen one too, so no option is named while its
-     neighbours are not; a reader still has every name. */
+  /* A bar folding together, or named in words alone, takes its options'
+     room in where its toolbar says `--luke-fold: tight`. One folding
+     together, once their names no longer fit (`data-folded`, measured by
+     `choice-bar.tsx`), shows every option by its glyph alone, the chosen
+     one too, so no option is named while its neighbours are not; a reader
+     still has every name. */
   @container style(--luke-fold: tight) {
-    .luke-choice-bar[data-look="fill"][data-fold="together"] {
+    .luke-choice-bar[data-look="fill"]:is([data-fold="together"], [data-fold="words"]) {
       gap: 0;
     }
 
-    .luke-choice-bar[data-look="fill"][data-fold="together"] .luke-choice-bar-option {
+    .luke-choice-bar[data-look="fill"]:is([data-fold="together"], [data-fold="words"])
+      .luke-choice-bar-option {
       gap: var(--luke-space-4);
       padding-inline: var(--luke-space-6);
     }
@@ -251,6 +265,18 @@
     padding: var(--luke-space-2);
     border-radius: var(--luke-control-radius);
     background: var(--luke-color-fill-hover);
+  }
+
+  /* Stretched, it fills its row on one line, its options sharing it alike. */
+  .luke-choice-bar[data-look="segmented"][data-stretch="true"] {
+    width: auto;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+  }
+
+  .luke-choice-bar[data-look="segmented"][data-stretch="true"] .luke-choice-bar-option {
+    flex: 1 1 0;
+    justify-content: center;
   }
 
   .luke-choice-bar[data-look="segmented"] .luke-choice-bar-option {

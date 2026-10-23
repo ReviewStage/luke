@@ -7,7 +7,9 @@
  * its events to the events route and calls Luke's tools at the MCP server,
  * both under the deployment's own origin; numbers its events from one past
  * the last the store applied of its conversation (`readNativeSequence`);
- * asks the token route for the plan's token, on Codex;
+ * asks the token route for the plan's token, on Codex; is handed each
+ * integration its starter's conversation is handed, as an MCP server of its
+ * own beside Luke's (`../luke-mcp/app.ts`);
  * and runs under Luke's coder instructions, worded for the harness, which
  * names the tools it owns by its own names (`instructions.ts`): Claude
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
@@ -22,8 +24,13 @@ import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { Effect, Layer, Option } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
+import {
+  type ConnectionDoorServices,
+  nativeAgentConnections,
+} from "../../integrations/connection-door.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
-import { LUKE_MCP_PATH } from "../luke-mcp/app.js";
+import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
+import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { workspaceStepOf } from "../written-mentions.js";
@@ -61,6 +68,7 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed(() => false),
     );
+    const memoryOn = yield* memoryOnFor(userId);
     const taskLink =
       agent.taskId === null
         ? null
@@ -79,17 +87,30 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       agent.githubAccess === GITHUB_ACCESS.TOKEN,
       harness,
       agent.kind,
+      memoryOn,
     );
   });
+
+/** The integrations an agent is handed as its launch starts, each an MCP server of its own at Luke, read as its starter's conversation reads them. */
+const nativeIntegrations = (userId: string, agent: CodingAgent, origin: string) =>
+  Effect.map(
+    nativeAgentConnections({
+      caller: userId,
+      target: { userId, conversationId: agent.conversationId },
+      runtimeSessionId: undefined,
+      timeZone: undefined,
+    }),
+    (names) => names.map((name) => ({ name, url: lukeIntegrationMcpUrl(origin, name) })),
+  );
 
 /** The native harnesses over the function's services, as above. */
 export function nativeAgentSessionsLayer(
   options: NativeAgentSessionsOptions,
-): Layer.Layer<NativeAgentSessions, never, RunnerServices> {
+): Layer.Layer<NativeAgentSessions, never, RunnerServices | ConnectionDoorServices> {
   return Layer.effect(
     NativeAgentSessions,
     Effect.gen(function* () {
-      const context = yield* Effect.context<RunnerServices>();
+      const context = yield* Effect.context<RunnerServices | ConnectionDoorServices>();
       const originOf = options.origin ?? deploymentEveOrigin;
       /** What every harness's sessions are handed, for the account given and worded for the harness. */
       const optionsFor = (
@@ -100,6 +121,8 @@ export function nativeAgentSessionsLayer(
         userId: account,
         eventsUrl: new URL(RUNNER_EVENTS_PATH, origin).href,
         mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
+        integrations: (agent) =>
+          nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),
         instructions: (agent) =>
           nativeCoderInstructions(account, agent, harness).pipe(Effect.provideContext(context)),
         // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.

@@ -9,19 +9,26 @@ import {
   AUTOMATION_FIRING,
   type AutomationFiring,
   type AutomationRunSummary,
+  type AutomationTrigger,
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import {
   BackIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
+  FoldingButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
   ListRow,
   ProviderMark,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
   SKELETON_SHAPE,
@@ -31,40 +38,40 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   useMenu,
+  useMinute,
+  useResizeEdge,
 } from "@luke/ui";
-import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
+import { momentText, sinceText } from "@luke/ui/time-format";
+import { ClockIcon, ExternalLinkIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { FoldingButton } from "../folding-button.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
-import { momentText, sinceText, useMinute } from "../tasks/task-time.js";
-import { Tooltip } from "../tooltip.js";
-import { ActionMenu } from "./action-menu.js";
+import { useOpenLink } from "../tasks/use-open-link.js";
+import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
 import type { RunsRead } from "./use-automation-runs.js";
-import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
  *
  * Per Editor round 2, an automation's runs stand beside its setup rather
  * than under it, in the window's own run rows: the glyph of what fired it,
- * a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play,
- * wearing where the run stands, its
- * agent's title or what fired it, a line saying where its agent stands or
- * why it did not start, and when it fired. A run that started an agent
- * opens that agent's page; one that started none is no press. A new
+ * a schedule's clock, GitHub's or an integration's mark, a webhook's hook,
+ * or Run now's play, wearing where the run stands, its agent's title, what
+ * it is about (a Sentry issue's title), or what fired it, a line saying
+ * where its agent stands or why it did not start, and when it fired. A run
+ * that started an agent opens that agent's page; one that started none opens
+ * the subject it is about where it names one, in its provider, which its
+ * right-click offers too, and is no press otherwise. A new
  * automation has no runs yet, and the panel, empty, says how to have one.
  * A narrow room, a phone's, has no room beside the setup, so there the
  * runs are a screen of their own the whole width (`AutomationRunsScreen`),
  * under a way back to the setup.
  */
-
-/** What may fire a run: its automation's trigger, or Run now. */
-type AutomationFiringKind = AutomationFiring["kind"];
 
 /** Whose key a run ran on where the automation is another's, as its line names it. */
 const CREATOR = "its creator";
@@ -98,9 +105,13 @@ export const STANDING_GLYPH = {
   [AUTOMATION_RUN_STANDING.REST]: GLYPH_STATE.REST,
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
 
-/** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play. */
-export function FiringGlyph({ kind }: { kind: AutomationFiringKind }): React.JSX.Element {
-  switch (kind) {
+/** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
+export function FiringGlyph({
+  of,
+}: {
+  of: AutomationFiring | AutomationTrigger;
+}): React.JSX.Element {
+  switch (of.kind) {
     case AUTOMATION_FIRING.GITHUB:
       return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;
     case AUTOMATION_FIRING.WEBHOOK:
@@ -109,10 +120,21 @@ export function FiringGlyph({ kind }: { kind: AutomationFiringKind }): React.JSX
       return <PlayIcon />;
     case AUTOMATION_FIRING.SCHEDULE:
       return <ClockIcon />;
+    case AUTOMATION_FIRING.INTEGRATION:
+      return <ProviderMark provider={of.provider} />;
   }
 }
 
-/** One run's row, a press opening its agent where it started one, and its right-click there offering its Copy link; a run that started none is words alone. */
+/** The subject an integration's run is about, as its provider's page and the words that open it; none for any other run, or one whose subject has no page. */
+function subjectLink(run: AutomationRunSummary): { url: string; label: string } | undefined {
+  const { firing } = run;
+  if (firing.kind !== AUTOMATION_FIRING.INTEGRATION || firing.subject.url === undefined) {
+    return undefined;
+  }
+  return { url: firing.subject.url, label: `Open in ${TRIGGER_CATALOG[firing.provider].name}` };
+}
+
+/** One run's row, a press opening its agent where it started one, or else its subject where it names one, and its right-click offering its Copy link and its subject; a run with neither is words alone. */
 function RunRow({
   run,
   keyHolder,
@@ -133,11 +155,18 @@ function RunRow({
   const line = automationRunLine(run, keyHolder);
   const menu = useMenu(true);
   const linkItem = useCopyLinkItem();
+  const openLink = useOpenLink();
   const { agent } = run;
   const copyLink =
     automationId === undefined || agent === null
       ? undefined
       : linkItem({ kind: LINK_PLACE.AUTOMATION_RUN, automationId, runId: run.id });
+  const subject = subjectLink(run);
+  const openSubject: MenuAction | undefined =
+    subject === undefined
+      ? undefined
+      : { label: subject.label, icon: <ExternalLinkIcon />, onSelect: () => openLink(subject.url) };
+  const items = [copyLink, openSubject].filter((item) => item !== undefined);
   // A run a link named is brought into the middle of the box that scrolls it, once, as it is drawn.
   const row = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -151,7 +180,7 @@ function RunRow({
         ref={(node) => {
           row.current = node;
         }}
-        leading={<StateGlyph glyph={<FiringGlyph kind={run.firing.kind} />} state={state} />}
+        leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
         title={automationRunTitle(run)}
         description={
           <Tooltip label={line}>
@@ -167,16 +196,17 @@ function RunRow({
           </span>
         }
         current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
-        onPress={agent === null ? undefined : () => onOpenAgent(agent.id)}
-        contextMenu={copyLink === undefined ? undefined : menu.contextMenu(row)}
+        onPress={
+          agent !== null
+            ? () => onOpenAgent(agent.id)
+            : subject === undefined
+              ? undefined
+              : () => openLink(subject.url)
+        }
+        contextMenu={items.length === 0 ? undefined : menu.contextMenu(row)}
       />
-      {menu.drawn === undefined || copyLink === undefined ? null : (
-        <ActionMenu
-          label={RUN_ACTIONS}
-          menu={menu.drawn}
-          groups={[[copyLink]]}
-          onClose={menu.close}
-        />
+      {menu.drawn === undefined || items.length === 0 ? null : (
+        <ActionMenu label={RUN_ACTIONS} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
     </>
   );
@@ -292,8 +322,8 @@ export function AutomationRunsPanel({
   /** How wide it stands and whether it stands, kept by the window (`folded-groups.ts`). */
   panel: RunsPanel;
 }): React.JSX.Element | null {
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.LEFT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.LEFT,
     width: panel.width,
     bounds: RUNS_PANEL_WIDTH,
     reserve: () => FORM_RESERVE,
@@ -313,7 +343,7 @@ export function AutomationRunsPanel({
       inert={slide.leaving}
       style={{ width: panel.width }}
     >
-      <div className="side-panel-resize" {...edge} />
+      <ResizeEdge edge={edge} />
       <aside className="automation-runs" aria-label="Runs">
         <RunsBody {...shown} />
       </aside>
@@ -343,13 +373,19 @@ export function AutomationRunsScreen({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <section id={id} className="automation-runs-screen" aria-label="Runs" hidden={hidden}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      id={id}
+      className="automation-runs-screen"
+      aria-label="Runs"
+      hidden={hidden}
+    >
       <header className="desktop-toolbar">
         <div className="automation-runs-back">
           <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
         </div>
       </header>
       <RunsBody {...shown} />
-    </section>
+    </Fill>
   );
 }

@@ -27,10 +27,8 @@ import {
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
-import { createBrowserViews } from "../window/browser-views";
 import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
-import { browserProcedures } from "./browser-acts";
 import { browserLiveProcedures } from "./browser-live-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { whenPageGone } from "./page-gone";
@@ -118,19 +116,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const browserExperimentOn = () =>
     experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER);
 
-  // A Browser tab's page is told to the panel that opened it alone, and goes with that panel's page.
-  const browserViews = createBrowserViews({
-    tellPage: (sender, page) => windowPushes.push(sender, PUSH.BROWSER_STATE, page),
-    tellKey: (sender, key) => windowPushes.push(sender, PUSH.BROWSER_KEY, key),
-    tellFocus: (sender, focus) => windowPushes.push(sender, PUSH.BROWSER_FOCUS, focus),
-    whenGone: whenPageGone,
-  });
-
   // The acts main answers itself on the act port: its windows', ports', and
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
     ...avatarProcedures({ avatar }),
-    ...browserProcedures({ views: browserViews, experimentOn: browserExperimentOn }),
     ...browserLiveProcedures({
       host: operator.host,
       ports: {
@@ -275,6 +264,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
         chapters: { host: operator.host },
+        installedSkills: { host: operator.host },
         integrations: { host: operator.host },
         pushes: windowPushes,
         settings: {

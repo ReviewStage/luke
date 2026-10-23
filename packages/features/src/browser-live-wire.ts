@@ -14,7 +14,10 @@
  * state as they change; who drives the tab as that changes; and, last, why
  * it closed. The panel sends the size it draws the frames at, and while its
  * member holds the takeover, the mouse, wheel, and keys at that size, which
- * the service maps onto the page. Taking over and handing back go over the
+ * the service maps onto the page. From the tab's bar it sends an address to
+ * open, or a step back, forward, or a reload, which take a tab nobody
+ * drives over for the member first, and are refused where another member
+ * holds it. Taking over and handing back go over the
  * same socket: a takeover lapses `BROWSER_TAKEOVER_HOLD_MS` past the
  * member's last input, as the tabs contract's does, and a socket that
  * closes hands the tab back. Every message the panel sends counts as
@@ -29,7 +32,7 @@
  */
 
 import { Schema as EffectSchema } from "effect";
-import { BROWSER_SHOWN_MAX_CHARS } from "./browser-acts.js";
+import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "./browser-acts.js";
 import { countedNumber } from "./service-wire.js";
 
 /** The socket's path, and the query naming the task and the tab. */
@@ -67,6 +70,8 @@ export const BROWSER_LIVE_REFUSAL = {
   NOT_PERMITTED: "not-permitted",
   /** Input arrived while the member does not hold the takeover. */
   NOT_DRIVING: "not-driving",
+  /** A step from the tab's bar arrived while another member holds the takeover. */
+  HELD: "held",
 } as const;
 
 /** The messages the service sends, by type. */
@@ -87,7 +92,18 @@ export const BROWSER_LIVE_CLIENT = {
   WHEEL: "wheel",
   KEY: "key",
   TEXT: "text",
+  NAVIGATE: "navigate",
+  HISTORY: "history",
 } as const;
+
+/** A step a tab's bar takes through its page's history. */
+export const BROWSER_LIVE_HISTORY = {
+  BACK: "back",
+  FORWARD: "forward",
+  RELOAD: "reload",
+} as const;
+
+export type BrowserLiveHistory = (typeof BROWSER_LIVE_HISTORY)[keyof typeof BROWSER_LIVE_HISTORY];
 
 /** What a mouse message does. */
 export const BROWSER_LIVE_MOUSE_ACTION = { MOVE: "move", DOWN: "down", UP: "up" } as const;
@@ -169,7 +185,7 @@ const browserLivePageSchema = EffectSchema.Struct({
   loading: EffectSchema.Boolean,
 });
 
-/** Who drives the tab now: null while its agent has it; `yours` where it is this socket's member. */
+/** Who drives the tab now: null while its agent has it; `yours` where it is this socket's member and they may drive it, whichever of their sockets took it, so its input is taken. */
 const browserLiveDriverChangeSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(BROWSER_LIVE_SERVER.DRIVER),
   driver: EffectSchema.NullOr(browserLiveDriverSchema),
@@ -263,6 +279,18 @@ const browserLiveTextSchema = EffectSchema.Struct({
   ),
 });
 
+/** The tab's bar opens an address in it: an http or https one a Browser tab loads. */
+const browserLiveNavigateSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(BROWSER_LIVE_CLIENT.NAVIGATE),
+  address: EffectSchema.String.check(EffectSchema.makeFilter(isBrowserAddress)),
+});
+
+/** The tab's bar steps its page back, forward, or reloads it. */
+const browserLiveHistorySchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(BROWSER_LIVE_CLIENT.HISTORY),
+  step: EffectSchema.Literals(Object.values(BROWSER_LIVE_HISTORY)),
+});
+
 /** Every message the panel sends. */
 export const browserLiveClientMessageSchema = EffectSchema.Union([
   browserLiveTakeOverSchema,
@@ -272,6 +300,8 @@ export const browserLiveClientMessageSchema = EffectSchema.Union([
   browserLiveWheelSchema,
   browserLiveKeySchema,
   browserLiveTextSchema,
+  browserLiveNavigateSchema,
+  browserLiveHistorySchema,
 ]);
 
 export type BrowserLiveClientMessage = typeof browserLiveClientMessageSchema.Type;

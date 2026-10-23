@@ -13,9 +13,23 @@ import {
   type PlanSectionEdit,
   type Task,
 } from "@luke/features/task-wire";
-import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
+import {
+  Button,
+  EDITABLE_BLOCK_CLASS,
+  EllipsisIcon,
+  IconButton,
+  SavedTick,
+  TEXT_BUTTON_LINES,
+  TextButton,
+  Tooltip,
+  useMenu,
+  useMinute,
+  VisuallyHidden,
+} from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
+import type { MarkdownTaskToggler } from "@luke/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
+import { agoText, momentText, sinceText } from "@luke/ui/time-format";
 import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
@@ -28,12 +42,10 @@ import {
   MARKDOWN_MARK,
   type MarkdownEdit,
   MarkdownMessage,
-  type TaskToggler,
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { Tooltip } from "../tooltip.js";
 import { prefersReducedMotion } from "../use-reduced-motion.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
@@ -47,7 +59,6 @@ import {
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import { PlanCommentLayer, useCommentFocus } from "./plan-comments.js";
 import {
-  DOCUMENT_BLOCK_CLASS,
   DocumentBlock,
   EditableTitle,
   PlanDocumentEditor,
@@ -73,7 +84,6 @@ import {
   type UnitView,
 } from "./task-reveal.js";
 import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
-import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
@@ -229,12 +239,15 @@ function EditTime({
   label,
   onShow,
   short = false,
+  whole = false,
 }: {
   at: number;
   /** What the press is called, from how long ago the edit was, "2 hours ago". */
   label: (ago: string) => string;
   onShow: (() => void) | undefined;
   short?: boolean;
+  /** Whether its press is drawn whole, a finger's press on a coarse pointer, as the byline's is. */
+  whole?: boolean;
 }): React.JSX.Element {
   // Note that the time reads the minute itself, so the minute draws it again and not the section it stands in.
   const now = useMinute();
@@ -244,6 +257,7 @@ function EditTime({
       <span>{words}</span>
     ) : (
       <TextButton
+        lines={whole ? TEXT_BUTTON_LINES.WHOLE : TEXT_BUTTON_LINES.ONE}
         aria-label={label(agoText(at, now))}
         // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
         onPointerEnter={VERSION_HISTORY.prefetch}
@@ -308,11 +322,14 @@ function PlanByline({
   task,
   edit,
   place,
+  saves,
   onShowHistory,
 }: {
   task: Task;
   edit: PlanLastEdit | undefined;
   place: EditPlace;
+  /** How many of the reader's saves of this plan landed, which its Saved tick confirms. */
+  saves: number;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
@@ -335,10 +352,12 @@ function PlanByline({
               at={edit.at}
               label={editedLabel}
               onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+              whole
             />
           </>
         )
       }
+      saved={<SavedTick saves={saves} />}
     />
   );
 }
@@ -372,9 +391,9 @@ function ChangedLine({
         {editors.length === 0 ? null : (
           <>
             <ActorStack actors={editors} />
-            <span className="visually-hidden">
+            <VisuallyHidden>
               {editors.map((actor) => actorName(actor, { sentence: true })).join(", ")}
-            </span>
+            </VisuallyHidden>
           </>
         )}
       </span>
@@ -802,7 +821,7 @@ interface DocumentUnitProps {
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
   /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
-  onTask?: TaskToggler | undefined;
+  onTask?: MarkdownTaskToggler | undefined;
   /** The plan's text as saved, which a thread being started is laid over; none while no thread is being started. */
   planText: string | undefined;
 }
@@ -1077,7 +1096,7 @@ export const PlanBody = memo(function PlanBody({
       const element = scroller.current;
       if (element === null || document.activeElement !== document.body) return;
       const shown = element.getBoundingClientRect();
-      const blocks = [...element.querySelectorAll<HTMLElement>(`.${DOCUMENT_BLOCK_CLASS}`)].filter(
+      const blocks = [...element.querySelectorAll<HTMLElement>(`.${EDITABLE_BLOCK_CLASS}`)].filter(
         (block) => {
           const at = block.getBoundingClientRect();
           return at.bottom > shown.top && at.top < shown.bottom;
@@ -1202,15 +1221,15 @@ export const PlanBody = memo(function PlanBody({
     [editable],
   );
   // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
-  const togglers = useRef(new Map<number, TaskToggler>());
-  const taskToggler = (section: number): TaskToggler | undefined => {
+  const togglers = useRef(new Map<number, MarkdownTaskToggler>());
+  const taskToggler = (section: number): MarkdownTaskToggler | undefined => {
     // Note that a unit with no box has none, so the chase starting and stopping leaves it as drawn.
     if (!tickable(section) || !TASK_ITEM_ANYWHERE.test(views[section]?.words ?? "")) {
       return undefined;
     }
     const held = togglers.current.get(section);
     if (held !== undefined) return held;
-    const toggler: TaskToggler = (at) => latestTick.current(section, at);
+    const toggler: MarkdownTaskToggler = (at) => latestTick.current(section, at);
     togglers.current.set(section, toggler);
     return toggler;
   };
@@ -1328,7 +1347,13 @@ export const PlanBody = memo(function PlanBody({
                   <TaskStandingChips task={task} onSet={taskStanding.onSet} />
                 )}
                 {underTitle}
-                <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+                <PlanByline
+                  task={task}
+                  edit={edited}
+                  place={place}
+                  saves={editing.saves}
+                  onShowHistory={onShowHistory}
+                />
                 <ChangedLine looks={looks} marks={marks} />
               </>
             ) : null}

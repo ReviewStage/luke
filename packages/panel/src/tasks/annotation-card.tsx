@@ -1,8 +1,25 @@
-import { DisclosureChevron, useDisclosureState } from "@luke/ui";
+import {
+  BADGE_TONE,
+  Badge,
+  type BadgeTone,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
+  DISCLOSURE_SUMMARY,
+  DisclosureChevron,
+  DisclosureSummary,
+  GAP,
+  LAYOUT_ELEMENT,
+  Stack,
+  Tooltip,
+  useDisclosureState,
+  VISUALLY_HIDDEN_UNDER,
+  VisuallyHidden,
+} from "@luke/ui";
 import { MessageSquareIcon } from "lucide-react";
-import type { AnimationEvent, MouseEvent, ReactNode } from "react";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
-import { Tooltip } from "../tooltip.js";
+import type { AnimationEvent, ReactNode } from "react";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
 
 /**
  * annotation-card.tsx -- one card for whatever is written on lines of code: a review thread in Files changed and in the Conversation, and an agent's note on lines of a File tab.
@@ -27,7 +44,8 @@ import { Tooltip } from "../tooltip.js";
  * part is nudged into line with another.
  *
  * In a narrow place (`@container annotation`, under 440 pixels) the age
- * steps out, a state is a dot whose word is its hint and its name, the
+ * is said to a reader alone, a state is its badge's dot whose word is its
+ * hint and its name, the
  * count drops its word, the card moves to the pane's inset, and the presses
  * at its foot draw closer.
  */
@@ -39,10 +57,10 @@ const COUNT_WORDS = {
 
 /** A state a card is in, by its word and the tone it is drawn in. */
 export const ANNOTATION_TONE = {
-  NEUTRAL: "neutral",
-  ATTENTION: "attention",
-  COMPLETE: "complete",
-} as const;
+  NEUTRAL: BADGE_TONE.NEUTRAL,
+  ATTENTION: BADGE_TONE.ATTENTION,
+  COMPLETE: BADGE_TONE.COMPLETE,
+} as const satisfies Record<string, BadgeTone>;
 
 type AnnotationTone = (typeof ANNOTATION_TONE)[keyof typeof ANNOTATION_TONE];
 
@@ -52,12 +70,18 @@ export interface AnnotationState {
   readonly tone: AnnotationTone;
 }
 
-/** A state's chip: its word in a capsule, or, narrow, a dot whose word is its hint and stays its name. */
+/** A state's badge: its word after its tone's dot, or, narrow, the dot alone, whose word is its hint and stays its name. */
 function StateChip({ state }: { state: AnnotationState }): React.JSX.Element {
   return (
     <Tooltip label={state.word}>
-      <span className="annotation-card-chip" data-tone={state.tone}>
-        <span className="annotation-card-chip-word">{state.word}</span>
+      <span className="annotation-card-state">
+        <Badge
+          tone={state.tone}
+          dot={state.tone === ANNOTATION_TONE.NEUTRAL}
+          hideWordsUnder={VISUALLY_HIDDEN_UNDER.TIGHT}
+        >
+          {state.word}
+        </Badge>
       </span>
     </Tooltip>
   );
@@ -71,16 +95,12 @@ function FoldedCount({ count }: { count: number }): React.JSX.Element | null {
     <span className="annotation-card-count">
       <MessageSquareIcon aria-hidden="true" />
       {count}
-      <span className="annotation-card-count-word"> {COUNT_WORDS.word(count)}</span>
+      <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
+        {" "}
+        {COUNT_WORDS.word(count)}
+      </VisuallyHidden>
     </span>
   );
-}
-
-/** A press on a control in the head's name, a writer's page, kept for that control rather than folding the card. */
-function keptOnControl(event: MouseEvent<HTMLElement>): void {
-  if (!(event.target instanceof Element) || event.target.closest("button, a") === null) return;
-  event.preventDefault();
-  event.stopPropagation();
 }
 
 /** Where a card was landed on, by a link or a jump: its element, and its ring while the landing stands. */
@@ -118,6 +138,7 @@ export function AnnotationCard({
   onOpenChange: (open: boolean) => void;
   /** The first writer's face, 20 pixels across. */
   face: ReactNode;
+  /** Who wrote it; a control in it, such as a link to the writer's page, sits in a `DisclosureAction`, so pressing it leaves the card folded as it stood. */
   name: ReactNode;
   time?: ReactNode;
   states?: readonly AnnotationState[];
@@ -137,7 +158,10 @@ export function AnnotationCard({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <article
+    <Card
+      as={CARD_ELEMENT.ARTICLE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
       ref={landing?.ref}
       className={className === undefined ? "annotation-card" : `annotation-card ${className}`}
       aria-label={label}
@@ -146,34 +170,40 @@ export function AnnotationCard({
     >
       {where === undefined ? null : <div className="annotation-card-where">{where}</div>}
       <Fold className="annotation-card-fold" open={open} onOpenChange={onOpenChange}>
-        <FoldSummary className="annotation-card-head">
-          <DisclosureChevron />
-          <span className="annotation-card-face">{face}</span>
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: the name only keeps a press on its own control, a writer's page, from folding the card; the control inside is what is pressed. */}
-          {/* biome-ignore lint/a11y/useKeyWithClickEvents: a key on the control inside reaches it as a click, which is kept the same way. */}
-          <span className="annotation-card-name" onClick={keptOnControl}>
-            {name}
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
+          <span className="annotation-card-turn">
+            <DisclosureChevron />
           </span>
-          {time === undefined ? null : <span className="annotation-card-time">{time}</span>}
+          <span className="annotation-card-face">{face}</span>
+          <span className="annotation-card-name">{name}</span>
+          {time === undefined ? null : (
+            <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
+              <span className="annotation-card-time">{time}</span>
+            </VisuallyHidden>
+          )}
           {states.map((state) => (
             <StateChip key={state.word} state={state} />
           ))}
           {count === undefined ? null : <FoldedCount count={count} />}
           <span className="annotation-card-end">{menu}</span>
-        </FoldSummary>
+        </DisclosureSummary>
         <FoldBody className="annotation-card-body">
           {lead}
           <div className="annotation-card-content">{children}</div>
           {footer}
         </FoldBody>
       </Fold>
-    </article>
+    </Card>
   );
 }
 
 /** A card's comments, in order. */
 export function AnnotationComments({ children }: { children: ReactNode }): React.JSX.Element {
-  return <ol className="annotation-comments">{children}</ol>;
+  return (
+    <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.BLOCK} className="annotation-comments">
+      {children}
+    </Stack>
+  );
 }
 
 /**

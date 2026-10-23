@@ -82,6 +82,12 @@ export const HOSTED_API_ERROR = {
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /**
+   * What was asked runs on OpenAI (a voice call, a dictated clip) and the
+   * account saved no OpenAI API key of its own, which Luke spends none of its
+   * own in place of; nothing was sent or charged. The key is added in Settings.
+   */
+  OPENAI_KEY_MISSING: "openai-key-missing",
+  /**
    * The agent runs on its starter's plan (a ChatGPT plan, on Codex), and the
    * starter's sign-in cannot launch it: none is kept, the provider signed it
    * out, or the service cannot open it. The starter signs in again in
@@ -107,6 +113,14 @@ export const HOSTED_API_ERROR = {
    */
   AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
   /**
+   * The account keeps no credential that pays for a coding agent on the
+   * model's provider: neither that provider's subscription (a Claude
+   * setup-token, a ChatGPT sign-in) nor its API key. Luke's own key pays for
+   * no coding agent, so nothing was written; the refusal names the provider,
+   * which the account connects in Settings › Agents.
+   */
+  AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
+  /**
    * The task is archived: it is read, and takes nothing — no edit, no call,
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.
@@ -128,6 +142,10 @@ export const HOSTED_API_ERROR = {
    * Nothing was written.
    */
   LINEAR_UNAVAILABLE: "linear-unavailable",
+  /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
+  SKILL_NAME_TAKEN: "skill-name-taken",
+  /** A skill's files were refused: past a skill's bounds, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
+  SKILL_FILES_REFUSED: "skill-files-refused",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

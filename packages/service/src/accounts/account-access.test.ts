@@ -46,8 +46,6 @@ const ORIGIN = "https://luke.test";
 const ACCESS_PATH = "/api/account/access";
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

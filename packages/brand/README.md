@@ -25,6 +25,9 @@ for m in light dark; do
   rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-transparent-$m.svg -o mark/luke-mark-square-transparent-$m-1024.png
 done
 rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-black.svg -o mark/luke-mark-square-black-1024.png
+for s in 256 1024; do
+  rsvg-convert -w $s -h $s mark/luke-mark-square-monochrome.svg -o mark/luke-mark-square-monochrome-$s.png
+done
 for m in light dark black; do
   for s in 400 1024; do
     rsvg-convert -w $s -h $s avatar/luke-avatar-$m.svg -o avatar/luke-avatar-$m-$s.png
@@ -102,6 +105,7 @@ Under `assets/`:
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
 | `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at its own tight crop on a square canvas, per mode: over the icon's gradient with square corners (for surfaces that only round the corners of a square, GitHub's organization avatar among them; a profile photo cut to a circle takes `avatar/` instead), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead, so pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
+| `mark/luke-mark-square-monochrome.svg` + `-{256,1024}.png` | The same crop in pure black (`#000000`) on transparency: one ink, with the face carried by the alpha channel alone. This is the monochrome glyph a partner surface tints for its own theme, such as an integration's small icon on Sentry, which refuses any colour but black, or a template image a host recolours. Unlike `-transparent-light`, whose ink is near-black `#1d1d1f`, nothing in it is grey |
 | `avatar/luke-avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The profile photo: the face with room around it, on the icon's gradient per mode or on flat black. The square marks are cropped to the face, so the circle GitHub, X, Slack, and LinkedIn cut from a profile photo takes the eyes and the smile's end; here the face's bounding box diagonal spans 80% of the canvas, so the whole face sits inside that circle. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
 | `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide, because a lockup goes into headers and docs, not a 1024 avatar tile |
 | `icon/luke-favicon.svg` | The site's favicon: the dark tile with no Dock margin or shadow and the face a little larger, so it reads at 16 pixels in a tab. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico`, for readers that ask for `/favicon.ico` by name. The site's 180-pixel `apple-touch-icon.png` is cut from `avatar/luke-avatar-dark.svg`, whose face keeps clear of the corners iOS rounds. The web app's manifest (`apps/web/public/manifest.webmanifest`) takes the same avatar at 192 and 512 as `app-icon-{192,512}.png`, for Android's home screen, both as is and as maskable: the tile is full bleed and the face sits inside the centre circle of 80% a mask keeps |

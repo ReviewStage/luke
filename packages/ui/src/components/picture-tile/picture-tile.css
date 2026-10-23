@@ -1,0 +1,52 @@
+/* picture-tile.css -- PictureTile: a press with no box of its own around a
+   picture its place frames, which sinks a little under the press. The
+   keyboard's ring is the app's reset's, drawn around the face. */
+
+@layer components {
+  .luke-picture-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: zoom-in;
+  }
+
+  .luke-picture-tile[data-fill="true"] {
+    width: 100%;
+  }
+
+  /* The face is the picture's shape, so the ring rounds as its frame does. */
+  .luke-picture-tile-face {
+    position: relative;
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    border-radius: var(--luke-control-radius);
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  /* Note that a picture sinks less than a button's words do, because a
+     whole picture shrinking by a button's share reads as a jump. */
+  .luke-picture-tile:active .luke-picture-tile-face {
+    transform: scale(0.98);
+  }
+
+  /* A place whose pointer's press opens nothing: the plain pointer, and no sink. */
+  .luke-picture-tile[data-pointer-opens="false"] {
+    cursor: auto;
+  }
+
+  .luke-picture-tile[data-pointer-opens="false"]:active .luke-picture-tile-face {
+    transform: none;
+  }
+}

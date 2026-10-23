@@ -12,23 +12,29 @@ import {
   GITHUB_CONNECT_PAGE,
   type GitHubConnectClaim,
 } from "@luke/features/github-connection-wire";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import {
+  LANDING_OUTCOME,
+  LANDING_TONE,
+  type LandingOutcome,
+  type LandingWords,
+  landingWords,
+} from "@luke/features/landing-outcome";
 import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
 import {
+  AuthMark,
   AuthPage,
-  BUTTON_VARIANT,
-  ButtonLink,
   MARK_PROVIDER,
-  PROVIDER_MARK_SIZE,
-  ProviderMark,
+  SIGN_IN_FAILURE,
+  SocialSignInChoices,
   TEXT_LINK_LOOK,
   TextLink,
 } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BACK_TO_LUKE, CONNECT_RETURN, useConnectReturn } from "./connect-return";
-import { ConnectionGraphic } from "./connection-graphic";
-import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
+import { landingDescription, useConnectReturn } from "./connect-return";
+import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 /**
@@ -42,29 +48,27 @@ import "./styles.css";
  * `error=1`. Disconnecting is the Mac's own, under its Better Auth session
  * (`POST /api/github/disconnect`), so no page acts on whichever account a
  * browser happens to be signed in to. A browser with no session signs in and
- * comes back to the same address. Nothing of the address is drawn: an error is drawn by our
- * words for its code, or by Better Auth's own. A connect the web app started
- * offers the way back to it (`connect-return.ts`) once the page says how it
- * ended, and closes where that is `done=1`; never while the page is still
- * on its way to GitHub.
+ * comes back to the same address. Nothing of the address is drawn: how the
+ * connect ended is said in every landing's words
+ * (`@luke/features/landing-outcome`), and an error by our words for its code,
+ * or by Better Auth's own. Once the page says how it ended it offers Open
+ * Luke (`connect-return.ts`), and a connect the web app started closes where
+ * that is `done=1`; never while the page is still on its way to GitHub.
  */
 
 const authClient = createAuthClient();
 
-/** What the card shows: the work under way, a sign-in to choose, or how the work settled. */
+/** What the page shows: the work under way, a sign-in to choose, or how the work settled. */
 const VIEW = { WORKING: "working", SIGN_IN: "sign-in", SAID: "said" } as const;
 
 type View =
   | { readonly kind: typeof VIEW.WORKING }
-  | {
-      readonly kind: typeof VIEW.SIGN_IN | typeof VIEW.SAID;
-      readonly title: string;
-      readonly body: string;
-    };
+  | { readonly kind: typeof VIEW.SIGN_IN; readonly title: string; readonly body: string }
+  | { readonly kind: typeof VIEW.SAID; readonly words: LandingWords };
 
 const WORKING: View = { kind: VIEW.WORKING };
-const RETURN = "Return to Luke. You can close this tab.";
-const RETRY_CONNECT = "Reload this page to try again, or return to Luke and choose Connect GitHub.";
+const GITHUB = INTEGRATION_NAME[INTEGRATION_PROVIDER.GITHUB];
+const RELOAD = "Reload this page to try again.";
 const SIGN_IN_BODY = "Sign in to the Luke account you use on your Mac.";
 
 /** A claim that did not settle: the browser has no session, or the service gave no answer. */
@@ -77,8 +81,10 @@ function asSentence(words: string): string {
   return words.endsWith(".") ? words : `${words}.`;
 }
 
-function said(title: string, body: string): View {
-  return { kind: VIEW.SAID, title, body };
+/** How the connect ended, in every landing's words, its line given in place of the outcome's where `line` is. */
+function said(outcome: LandingOutcome, line?: string): View {
+  const words = landingWords(outcome, GITHUB);
+  return { kind: VIEW.SAID, words: line === undefined ? words : { ...words, line } };
 }
 
 function signIn(title: string, body: string): View {
@@ -107,12 +113,8 @@ async function connect(intent: string): Promise<View> {
       "This browser is signed in to a different Luke account than the one that asked to connect GitHub.",
     );
   }
-  if (claim === GITHUB_CONNECT_CLAIM.EXPIRED) {
-    return said("This link has expired", "Return to Luke and choose Connect GitHub again.");
-  }
-  if (claim === CLAIM_UNSETTLED.UNANSWERED) {
-    return said("Luke could not be reached", "Reload this page to try again.");
-  }
+  if (claim === GITHUB_CONNECT_CLAIM.EXPIRED) return said(LANDING_OUTCOME.EXPIRED);
+  if (claim === CLAIM_UNSETTLED.UNANSWERED) return said(LANDING_OUTCOME.LUKE_UNREACHABLE);
   const linked = await authClient.linkSocial({
     provider: SOCIAL_PROVIDER.GITHUB,
     callbackURL: `${GITHUB_CONNECT_PAGE.PATH}?${GITHUB_CONNECT_PAGE.DONE_PARAM}=${GITHUB_CONNECT_PAGE.FLAG}`,
@@ -120,8 +122,8 @@ async function connect(intent: string): Promise<View> {
   });
   if (linked.error) {
     return said(
-      "GitHub was not connected",
-      `${asSentence(linkErrorWords(LINK_FAILED.CONNECT, linked.error.code, linked.error.message))} ${RETRY_CONNECT}`,
+      LANDING_OUTCOME.NOT_COMPLETED,
+      `${asSentence(linkErrorWords(LINK_FAILED.CONNECT, linked.error.code, linked.error.message))} ${RELOAD}`,
     );
   }
   // Better Auth's client is sending the browser on to GitHub.
@@ -130,23 +132,21 @@ async function connect(intent: string): Promise<View> {
 
 /** What the page shows before it knows whether the browser is signed in, or with no work to do. */
 function settledView(step: ConnectStep): View | undefined {
-  if (step.kind === CONNECT_STEP.DONE) return said("GitHub connected", RETURN);
+  if (step.kind === CONNECT_STEP.DONE) return said(LANDING_OUTCOME.CONNECTED);
   if (step.kind === CONNECT_STEP.FAILED) {
-    return said("GitHub was not connected", linkErrorWords(LINK_FAILED.CONNECT, step.code));
+    return said(LANDING_OUTCOME.NOT_COMPLETED, linkErrorWords(LINK_FAILED.CONNECT, step.code));
   }
-  if (step.kind === CONNECT_STEP.NOTHING) {
-    return said("Nothing to connect", "Return to Luke and choose Connect GitHub.");
-  }
+  if (step.kind === CONNECT_STEP.NOTHING) return said(LANDING_OUTCOME.NOTHING_TO_CONNECT);
   return undefined;
 }
 
 /**
- * The page is one AuthPage card that opens on GitHub's mark joined to
- * Luke's: the title says where the connect stands, the description what to
- * do about it, with a link that offers a refused connect again, and the
- * body holds the providers when a sign-in comes first. A sign-in that
- * cannot start is said in the card's alert region rather than under the
- * choices.
+ * The page opens on GitHub's mark, badged once the connect has ended: the
+ * title says where the connect stands, the description what to do about it,
+ * with a link that offers a refused connect again, the body holds the
+ * providers when a sign-in comes first, and Open Luke goes back once it
+ * ended. A sign-in that cannot start is said in the page's alert region
+ * rather than under the choices.
  */
 function ConnectGitHub(): React.JSX.Element {
   const [step] = useState(() => connectStepFromSearch(window.location.search));
@@ -154,10 +154,11 @@ function ConnectGitHub(): React.JSX.Element {
   const session = authClient.useSession();
   const started = useRef(false);
   const signInChoices = useSocialSignIn(authClient);
-  const done = step.kind === CONNECT_STEP.DONE;
-  const { back, onBack } = useConnectReturn({ landed: view.kind === VIEW.SAID, settled: done });
-  // A connect the way back is offered for says nothing more where it settled: the title is the news.
-  const backed = done && back.kind !== CONNECT_RETURN.ELSEWHERE;
+  const ended = view.kind === VIEW.SAID ? view.words : undefined;
+  const { back, open } = useConnectReturn({
+    landed: ended !== undefined,
+    settled: ended?.tone === LANDING_TONE.SETTLED,
+  });
 
   useEffect(() => {
     if (step.kind !== CONNECT_STEP.CONNECT || session.isPending || started.current) return;
@@ -171,18 +172,26 @@ function ConnectGitHub(): React.JSX.Element {
   }, [step, session.isPending, session.data]);
 
   const retry = step.kind === CONNECT_STEP.FAILED ? step.retry : undefined;
+  const body =
+    view.kind === VIEW.SIGN_IN
+      ? view.body
+      : ended === undefined
+        ? undefined
+        : landingDescription(ended, back);
   return (
     <AuthPage
-      mark={
-        <ConnectionGraphic
-          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.TILE} />}
-        />
+      mark={<AuthMark provider={MARK_PROVIDER.GITHUB} tone={ended?.tone} />}
+      title={
+        view.kind === VIEW.WORKING
+          ? "Connecting GitHub…"
+          : view.kind === VIEW.SIGN_IN
+            ? view.title
+            : view.words.title
       }
-      title={view.kind === VIEW.WORKING ? "Connecting GitHub…" : view.title}
       description={
-        view.kind === VIEW.WORKING || backed ? undefined : (
+        body === undefined ? undefined : (
           <>
-            {view.body}
+            {body}
             {retry === undefined ? null : (
               <>
                 {" "}
@@ -195,15 +204,11 @@ function ConnectGitHub(): React.JSX.Element {
         )
       }
       error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
+      action={open}
     >
       {view.kind === VIEW.SIGN_IN ? (
-        <ProviderChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
+        <SocialSignInChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
       ) : null}
-      {back.kind === CONNECT_RETURN.ELSEWHERE ? null : (
-        <ButtonLink href={back.href} variant={BUTTON_VARIANT.PRIMARY} onClick={onBack}>
-          {BACK_TO_LUKE}
-        </ButtonLink>
-      )}
     </AuthPage>
   );
 }

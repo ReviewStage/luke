@@ -2,7 +2,7 @@ import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SettingsRow, type SettingsRowDensity, Switch } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { ChangedMark } from "./marks.js";
+import { SettingMarks } from "./marks.js";
 
 /**
  * A settings switch: `@luke/ui`'s `SettingsRow` holding its `Switch`, the
@@ -38,11 +38,11 @@ export function SwitchRow({
   // biome-ignore lint/suspicious/noConfusingVoidType: a draft's switch cannot be refused, so its change answers void
   onChange: (enabled: boolean) => void | Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, run } = useSettingWrite(onChange);
+  const { busy, rejection, saves, run } = useSettingWrite(onChange);
   return (
     <SettingsRow
       label={label}
-      adornment={changed ? <ChangedMark /> : null}
+      adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       error={rejection}
       density={density}

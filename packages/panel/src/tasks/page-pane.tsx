@@ -8,8 +8,17 @@ import {
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import {
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  FILL_ELEMENT,
+  Fill,
+  IconButton,
+  OneLine,
+  SpinnerRegion,
+  Tooltip,
+  wholeWordsHint,
+} from "@luke/ui";
 import { Option, Schema } from "effect";
 import {
   ChevronLeftIcon,
@@ -29,8 +38,6 @@ import {
   useFindPress,
   useFindSource,
 } from "../find-in-tab.js";
-import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import { BarMenu } from "./file-menu.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
@@ -296,7 +303,7 @@ function PageSource({
     () => (read.kind === SOURCE_READ.READY ? sourceText(read.lines) : ""),
     [read],
   );
-  if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
+  if (read.kind === SOURCE_READ.READING) return <SpinnerRegion delay label="Loading source" />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -305,7 +312,7 @@ function PageSource({
     );
   }
   return (
-    <section className="file-tab" aria-label={`${title} source`}>
+    <Fill as={FILL_ELEMENT.SECTION} className="file-tab" aria-label={`${title} source`}>
       <WholeFile
         name={PAGE_SOURCE_NAME}
         text={text}
@@ -314,7 +321,7 @@ function PageSource({
         notes={NO_NOTES}
         findFrom={1}
       />
-    </section>
+    </Fill>
   );
 }
 
@@ -375,20 +382,17 @@ export function PagePane({
     if (showingSource && source === undefined) ask(version);
   }, [showingSource, source, version, ask]);
   const toggleLabel = showingSource ? "View page" : "View source";
-  const [titleBox, titleClipped] = useClipped(page.title);
   return (
     <FindScope
       className="page-view-find"
       active={findActive}
       subject={{ task: pagePlaceId(place), tab: { page: page.id } }}
     >
-      <div className="page-view file-view ph-no-capture">
+      <Fill className="page-view file-view ph-no-capture">
         <header className="file-view-bar">
-          <Tooltip label={titleClipped ? page.title : undefined}>
-            <span ref={titleBox} className="page-view-title" data-overflow={String(titleClipped)}>
-              {page.title}
-            </span>
-          </Tooltip>
+          <OneLine className="page-view-title" hint={wholeWordsHint(page.title)}>
+            {page.title}
+          </OneLine>
           <div className="file-view-actions">
             {page.version > 1 ? (
               <div className="page-view-versions">
@@ -426,6 +430,7 @@ export function PagePane({
               <IconButton
                 icon={<RotateCwIcon aria-hidden="true" />}
                 label="Reload page"
+                turns
                 onClick={() => {
                   setReloads((was) => was + 1);
                   sources.forget();
@@ -454,7 +459,7 @@ export function PagePane({
             src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version })}
           />
         )}
-      </div>
+      </Fill>
     </FindScope>
   );
 }

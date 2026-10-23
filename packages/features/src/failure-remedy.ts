@@ -21,6 +21,8 @@ export const FAILURE_REASON = {
   GITHUB_TOKEN: "github-token",
   /** The member's own token is not authorized for an organization's SAML SSO: GitHub's own page authorizes it. */
   AUTHORIZE_TOKEN: "authorize-token",
+  /** No subscription or API key of the member's pays for the model's provider: Settings › Agents connects one. */
+  CONNECT_AGENTS: "connect-agents",
   OTHER: "other",
 } as const;
 
@@ -69,6 +71,7 @@ export type Failure =
   | {
       readonly reason:
         | typeof FAILURE_REASON.API_KEY
+        | typeof FAILURE_REASON.CONNECT_AGENTS
         | typeof FAILURE_REASON.GITHUB_TOKEN
         | typeof FAILURE_REASON.OTHER;
       readonly text: string;
@@ -95,6 +98,8 @@ export function remedyLabel(failure: Failure): string | undefined {
       return "Update GitHub token";
     case FAILURE_REASON.AUTHORIZE_TOKEN:
       return `Authorize token for ${failure.organization}`;
+    case FAILURE_REASON.CONNECT_AGENTS:
+      return "Open Settings";
     case FAILURE_REASON.OTHER:
       return undefined;
   }
@@ -111,6 +116,7 @@ export function retriesBesideRemedy(failure: Failure): boolean {
     failure.reason === FAILURE_REASON.RECONNECT_GITHUB ||
     failure.reason === FAILURE_REASON.ADD_REPOSITORY ||
     failure.reason === FAILURE_REASON.GITHUB_TOKEN ||
-    failure.reason === FAILURE_REASON.AUTHORIZE_TOKEN
+    failure.reason === FAILURE_REASON.AUTHORIZE_TOKEN ||
+    failure.reason === FAILURE_REASON.CONNECT_AGENTS
   );
 }

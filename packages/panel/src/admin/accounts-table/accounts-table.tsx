@@ -11,6 +11,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
+  TextLink,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import {
@@ -22,7 +24,7 @@ import {
   nextSort,
   sortAccountsRows,
 } from "@luke/ui/accounts-sort";
-import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
+import { formatCount, formatDayTick } from "@luke/ui/time-format";
 import { useState } from "react";
 import { useAdminDoorsIfAny } from "../admin-doors.js";
 import { AccountAvatar } from "../chrome/page-header.js";
@@ -103,7 +105,7 @@ export function AccountCell({
 }): React.JSX.Element {
   const href = useAdminDoorsIfAny()?.address.accountHref(account.id);
   const content = (
-    <>
+    <div className="flex items-center gap-(--luke-space-12)">
       <span className="flex shrink-0">
         <AccountAvatar
           account={{ name: account.name, email: account.email, image: account.image ?? undefined }}
@@ -122,25 +124,16 @@ export function AccountCell({
           </Text>
         )}
       </div>
-    </>
+    </div>
   );
   // Where the mount keeps no address, the account opens on a press alone,
   // so nothing poses as a link a modified click could open elsewhere.
   if (href === undefined) {
-    return (
-      <button
-        type="button"
-        className="flex cursor-pointer items-center gap-(--luke-space-12) border-0 bg-transparent p-0 text-start text-inherit outline-offset-2"
-        onClick={() => onOpen(account.id)}
-      >
-        {content}
-      </button>
-    );
+    return <TextButton onClick={() => onOpen(account.id)}>{content}</TextButton>;
   }
   return (
-    <a
+    <TextLink
       href={href}
-      className="flex items-center gap-(--luke-space-12) outline-offset-2"
       onClick={(event) => {
         if (!plainLeftClick(event)) return;
         event.preventDefault();
@@ -148,7 +141,7 @@ export function AccountCell({
       }}
     >
       {content}
-    </a>
+    </TextLink>
   );
 }
 
@@ -219,7 +212,7 @@ export function AccountsTable<Row extends AccountsTableRow>({
       label: "Calls",
       kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
       sortable,
-      cell: (row) => (row.calls === undefined ? "—" : formatNumber(row.calls)),
+      cell: (row) => (row.calls === undefined ? "—" : formatCount(row.calls)),
     },
   ];
   const columns: DataTableColumn<Row, AccountsColumnKey>[] = [
@@ -238,10 +231,10 @@ export function AccountsTable<Row extends AccountsTableRow>({
       sortable,
       cell: (row) => (
         <>
-          {formatNumber(row.activeDays)}
+          {formatCount(row.activeDays)}
           <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
             {" "}
-            of {formatNumber(windowDays)}
+            of {formatCount(windowDays)}
           </Text>
         </>
       ),

@@ -26,8 +26,11 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  ONE_LINE_END,
+  OneLine,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
+  PopoverPanel,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   SCROLL_SIZE,
@@ -40,6 +43,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
+  wholeWordsHint,
 } from "@luke/ui";
 import {
   namedServers,
@@ -56,7 +61,6 @@ import {
 } from "@luke/ui/agent-servers-model";
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { useClipped } from "@luke/ui/use-clipped";
 import {
   cloneElement,
   createContext,
@@ -68,7 +72,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { FadingWords } from "../fading-words.js";
 import { useIntegrationGrant } from "../integration-grant.js";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import {
@@ -77,9 +80,7 @@ import {
   keepInView,
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
-import { PopoverPanel } from "../popover-panel.js";
 import { Highlighted } from "../search-field.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
@@ -193,22 +194,12 @@ function ServerSwitch({
 
 /** A server's name in its row, faded where the row cuts it short. */
 function ServerName({ name }: { name: string }): React.JSX.Element {
-  const [box, clipped] = useClipped(name);
-  return (
-    <span ref={box} className="agent-servers-name" data-overflow={String(clipped)}>
-      {name}
-    </span>
-  );
+  return <OneLine className="agent-servers-name">{name}</OneLine>;
 }
 
 /** A server's name heading its own page, faded where the head cuts it short. */
 function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
-  const [box, clipped] = useClipped(name);
-  return (
-    <span ref={box} className="agent-servers-page-title" data-overflow={String(clipped)}>
-      {name}
-    </span>
-  );
+  return <OneLine className="agent-servers-page-title">{name}</OneLine>;
 }
 
 /**
@@ -233,16 +224,22 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <Tooltip label={row.problem}>
-          <span className="agent-servers-problem">{row.problem}</span>
-        </Tooltip>
+        <OneLine
+          end={ONE_LINE_END.ELLIPSIS}
+          hint={wholeWordsHint(row.problem)}
+          className="agent-servers-problem"
+        >
+          {row.problem}
+        </OneLine>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
-        <Tooltip label={row.note}>
-          <span className="agent-servers-problem" data-tone="quiet">
-            {row.note}
-          </span>
-        </Tooltip>
+        <OneLine
+          end={ONE_LINE_END.ELLIPSIS}
+          hint={wholeWordsHint(row.note)}
+          className="agent-servers-problem agent-servers-problem-quiet"
+        >
+          {row.note}
+        </OneLine>
       ) : null}
     </span>
   );
@@ -670,9 +667,9 @@ function ServersPopover({
       index: pickIndex(row, tool),
       row,
       title: (
-        <FadingWords className="integration-tool-id" words={tool.name}>
+        <OneLine className="integration-tool-id" words={tool.name}>
           <Highlighted text={tool.name} tokens={searchTokens(query)} />
-        </FadingWords>
+        </OneLine>
       ),
       meta: row.name,
       onPress: () => open(row, query),

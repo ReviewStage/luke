@@ -42,6 +42,8 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
     GIT_EMAIL: "LUKE_GIT_EMAIL",
     /** Which step of deepening a shallow checkout the run is (`DEEPEN_STEP`); its presence is what makes a run one. */
     DEEPEN: "LUKE_DEEPEN",
+    /** Set on the run that brings a checkout a repository snapshot holds up to its branch; its presence is what makes a run the refresh. */
+    REFRESH: "LUKE_REFRESH",
   },
 } as const;
 

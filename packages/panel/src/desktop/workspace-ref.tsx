@@ -1,8 +1,6 @@
 import type { Workspace } from "@luke/features/workspace-wire";
-import { HoverCard, HoverCardHead } from "@luke/ui";
+import { HoverCard, HoverCardHead, OneLine, Tooltip } from "@luke/ui";
 import type { ReactNode } from "react";
-import { FadingWords } from "../fading-words.js";
-import { Tooltip } from "../tooltip.js";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
 /**
@@ -91,9 +89,11 @@ export function WorkspaceRef({
 }): React.JSX.Element {
   const named =
     name === undefined ? (
-      <FadingWords className="workspace-ref-name" words={workspace.name} />
+      <OneLine className="workspace-ref-name" words={workspace.name}>
+        {workspace.name}
+      </OneLine>
     ) : (
-      <FadingWords className="workspace-ref-name">{name}</FadingWords>
+      <OneLine className="workspace-ref-name">{name}</OneLine>
     );
   const ref = (
     <span className="workspace-ref" data-size={size}>

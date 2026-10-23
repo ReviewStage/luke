@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from "react";
+import { LengthCounter } from "../length-counter/length-counter.js";
 
 /**
  * form-field.tsx -- a control with the words around it: its label over it, what it is for under it, and what is wrong with it under that.
@@ -8,7 +9,9 @@ import { type ReactNode, useId } from "react";
  * names the control, the description and the error describe it, and an
  * error marks it invalid. The error stands in a polite live region from the
  * first render, empty until it says something, because a reader announces a
- * region filling more surely than one arriving. The field owns the room
+ * region filling more surely than one arriving. A field whose control takes
+ * so many characters at most (`count`) says how many it holds of them at the
+ * end of its label's line once they near the limit (`LengthCounter`). The field owns the room
  * between its parts; the room around it is its container's.
  */
 
@@ -32,12 +35,15 @@ export function FormField({
   label,
   description,
   error,
+  count,
   children,
 }: {
   label: ReactNode;
   description?: ReactNode;
   /** What is wrong with the value, or nothing while it is fine. */
   error?: ReactNode;
+  /** How many characters the control holds of the most it takes, where it takes a limited number. */
+  count?: { readonly length: number; readonly limit: number } | undefined;
   children: (control: FieldControl) => ReactNode;
 }): React.JSX.Element {
   const id = useId();
@@ -52,9 +58,18 @@ export function FormField({
     .join(" ");
   return (
     <div className="luke-field" data-invalid={failed}>
-      <label className="luke-field-label" id={labelId} htmlFor={controlId}>
-        {label}
-      </label>
+      {count === undefined ? (
+        <label className="luke-field-label" id={labelId} htmlFor={controlId}>
+          {label}
+        </label>
+      ) : (
+        <div className="luke-field-head">
+          <label className="luke-field-label" id={labelId} htmlFor={controlId}>
+            {label}
+          </label>
+          <LengthCounter length={count.length} limit={count.limit} />
+        </div>
+      )}
       {children({
         id: controlId,
         labelId,

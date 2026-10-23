@@ -42,6 +42,7 @@ import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import type { WebServices } from "@luke/service/runtime";
 import { planCommentsProcedures } from "@luke/service/tasks/plan-comments-procedures";
 import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
+import { connectAgentApiKeys } from "@luke/service/testing/agent-credentials";
 import { announcingClock, driven } from "@luke/service/testing/clock-driven";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import {
@@ -233,6 +234,8 @@ function threadIn(answered: Answered): PlanCommentThread {
 /** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
+  // Luke's key pays for no coding agent, so the owner's agent takes the thread on the owner's own keys.
+  yield* connectAgentApiKeys(owner);
   const teammate = yield* openAccount("Charles Pan");
   const outsider = yield* openAccount("Someone Else");
   const workspace = yield* openWorkspace(owner);

@@ -141,6 +141,19 @@
   overflow-y: clip;
 }
 
+/* A finger swiping the drawer in or out (`@luke/ui`'s `use-drawer-swipe.ts`)
+   holds it at the share open the swipe writes on the shell, standing over
+   the dimmed window as it does open, with its transition off, so it stays
+   under the finger; let go, the mark comes off and it travels the rest of
+   the way on its own transition from there. */
+.desktop-shell[data-room="narrow"][data-luke-drawer-drag] .desktop-sidebar {
+  z-index: 2;
+  box-shadow: var(--luke-menu-shadow);
+  opacity: 1;
+  transform: translateX(calc((var(--luke-drawer-progress, 0) - 1) * 100%));
+  transition: none;
+}
+
 /* A phone's places bar (`mobile-bar.tsx`) stands in the shell's last row,
    under the work, which keeps the row above it whole, so nothing in it is
    measured against the bar. The stage already stops above the home
@@ -156,36 +169,6 @@
   border-top: 1px solid var(--luke-color-border);
   background: var(--luke-color-ground);
   padding: var(--luke-space-2) var(--luke-space-4);
-}
-
-.mobile-bar-item {
-  display: flex;
-  min-height: var(--luke-space-48);
-  flex: 1 1 0;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-space-2);
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.mobile-bar-item[aria-current="page"] {
-  color: var(--luke-color-accent-text);
-}
-
-.mobile-bar-icon {
-  display: flex;
-}
-
-.mobile-bar-icon svg {
-  width: 20px;
-  height: 20px;
 }
 
 .desktop-shell:has(
@@ -225,11 +208,6 @@
   top: calc(var(--title-bar-middle) - var(--luke-control-height) / 2);
   left: var(--title-bar-left);
   display: flex;
-}
-
-/* Back's and Forward's hold-to-list wrapper lays nothing out of its own. */
-.title-bar-history {
-  display: contents;
 }
 
 /* The buttons over the open sidebar, or the floating one, stand on its
@@ -389,12 +367,9 @@
 .desktop-toolbar-title {
   margin: 0 0 0 calc(-1 * var(--luke-space-6));
   padding-left: var(--luke-space-6);
-  overflow: hidden;
   font-size: var(--luke-type-dialog-size);
   font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-toolbar-actions {

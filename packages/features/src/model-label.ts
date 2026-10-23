@@ -72,12 +72,10 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
 /** The name a member's operator goes by everywhere it is named: Luke, never a teammate's first name. */
 export const OPERATOR_NAME = "Luke";
 
-/** What names an agent: what kind it is, the human name it was given, its title, the automation whose run started it, and the model it runs on. */
+/** What names an agent: what kind it is, its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
   /** What kind of agent it is; an operator is named Luke whatever else it holds. Absent for a coder, as the wire leaves it. */
   readonly kind?: CodingAgentKind | undefined;
-  /** The human name the agent was given as it was created (`agent-persona.ts`); none for an agent from before names were given, or for an operator. */
-  readonly personaName?: string | null | undefined;
   readonly title: string | null;
   readonly model: string;
   /** The name of the automation whose run started the agent, as the run started it; none for one started by hand. */
@@ -85,23 +83,18 @@ interface NamedAgent {
 }
 
 /**
- * The name an agent goes by as a person would call it: Luke for an
- * operator, the human name it was given for any other agent, and none for
- * an agent from before names were given. Every place that names an agent
+ * The name an agent goes by apart from its title: Luke for an operator,
+ * and none for any other agent, which goes by its title. Every place that names an agent
  * goes through this, `agentTabLabel` among them, so an operator is Luke in
  * every one; a query names it as `agentGivenNameSql` does.
  */
-export function agentGivenName(
-  agent: Pick<NamedAgent, "kind" | "personaName">,
-): string | undefined {
-  if (agent.kind === CODING_AGENT_KIND.OPERATOR) return OPERATOR_NAME;
-  return agent.personaName ?? undefined;
+export function agentGivenName(agent: Pick<NamedAgent, "kind">): string | undefined {
+  return agent.kind === CODING_AGENT_KIND.OPERATOR ? OPERATOR_NAME : undefined;
 }
 
 /**
  * An agent as every place names it, its tab, a sidebar row, a card, a
- * notification: the name it goes by (`agentGivenName`), or for an agent from
- * before names were given its title, or until it has one the name of the
+ * notification: the name it goes by (`agentGivenName`), or its title, or until it has one the name of the
  * automation whose run started it, or else its model's name (`modelLabel`).
  */
 export function agentTabLabel(agent: NamedAgent, models?: readonly CatalogModel[]): string {

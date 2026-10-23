@@ -18,8 +18,12 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  RowHint,
+  RowHintOptions,
+  Tooltip,
   UnpinIcon,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -34,7 +38,6 @@ import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { agentTranscriptRead } from "./agent-actions.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -197,7 +200,7 @@ const PIN_PULL_REQUEST_KEPT = Duration.seconds(30);
 /**
  * The pull request an agent opened, as a pin's card reads it: read once as
  * the first card of the agent shows, never for a row only crossed, since a
- * card is mounted only once the pointer has rested (`tooltip.tsx`), and
+ * card is mounted only once the pointer has rested (`@luke/ui`'s `Tooltip`), and
  * shared by every card of it while one stands and for
  * `PIN_PULL_REQUEST_KEPT` after. Note that it is the pin's own, apart from
  * the open task's pull requests (`useTaskPullRequests`), so a pin's card
@@ -360,7 +363,7 @@ export function SidebarPinnedTab({
             gone ? (
               <span className="sidebar-pinned-tab-gone">
                 {pin.label}
-                <span className="luke-visually-hidden">(unavailable)</span>
+                <VisuallyHidden>(unavailable)</VisuallyHidden>
               </span>
             ) : (
               pin.label

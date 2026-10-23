@@ -1,6 +1,6 @@
+import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card, PictureTile, Spinner } from "@luke/ui";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 import { ImageOffIcon } from "lucide-react";
-import { Spinner } from "./spinner.js";
 
 /**
  * picture-block.tsx -- a picture drawn in written words: its own block, at its own size up to the column's, its caption under it, a press opening it over the window.
@@ -14,9 +14,6 @@ import { Spinner } from "./spinner.js";
  * masked. Nothing here knows whose picture it is; the place drawing one
  * hands its state and what a press does.
  */
-
-/** What a picture's press is named for a reader, its alt text after it. */
-const ENLARGE_LABEL = "Enlarge";
 
 /** What a picture that is not there says, after its alt text where it has any. */
 const MISSING_WORDS = "not available";
@@ -50,32 +47,11 @@ export function PictureBlock({
   if (state.kind === PICTURE_STATE.READY && onOpen === undefined) {
     return (
       <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-        <span className="picture-frame">
-          <img
-            className="picture-image"
-            src={state.url}
-            alt={alt}
-            decoding="async"
-            draggable={false}
-          />
-        </span>
-        {said}
-      </span>
-    );
-  }
-  if (state.kind === PICTURE_STATE.READY) {
-    const open = onOpen;
-    return (
-      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-        <button
-          type="button"
+        <Card
+          as={CARD_ELEMENT.SPAN}
+          corner={CARD_CORNER.CONTROL}
+          padding={CARD_PADDING.FLUSH}
           className="picture-frame"
-          aria-label={alt === "" ? ENLARGE_LABEL : `${ENLARGE_LABEL} ${alt}`}
-          onClick={(event) => {
-            // Note that the press stops here, because a click into a section opens its editor.
-            event.stopPropagation();
-            open?.();
-          }}
         >
           <img
             className="picture-image"
@@ -84,7 +60,38 @@ export function PictureBlock({
             decoding="async"
             draggable={false}
           />
-        </button>
+        </Card>
+        {said}
+      </span>
+    );
+  }
+  if (state.kind === PICTURE_STATE.READY) {
+    const open = onOpen;
+    return (
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
+        <PictureTile
+          name={alt}
+          onOpen={(event) => {
+            // Note that the press stops here, because a click into a section opens its editor.
+            event.stopPropagation();
+            open?.();
+          }}
+        >
+          <Card
+            as={CARD_ELEMENT.SPAN}
+            corner={CARD_CORNER.CONTROL}
+            padding={CARD_PADDING.FLUSH}
+            className="picture-frame"
+          >
+            <img
+              className="picture-image"
+              src={state.url}
+              alt={alt}
+              decoding="async"
+              draggable={false}
+            />
+          </Card>
+        </PictureTile>
         {said}
       </span>
     );
@@ -92,19 +99,32 @@ export function PictureBlock({
   if (state.kind === PICTURE_STATE.READING) {
     return (
       <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-        <span className="picture-frame picture-pending">
-          <Spinner label={READING_LABEL} />
-        </span>
+        <Card
+          as={CARD_ELEMENT.SPAN}
+          corner={CARD_CORNER.CONTROL}
+          padding={CARD_PADDING.FLUSH}
+          className="picture-frame picture-pending"
+        >
+          <Spinner delay label={READING_LABEL} />
+        </Card>
         {said}
       </span>
     );
   }
   return (
     <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-      <span className="picture-frame picture-missing" role="img" aria-label={alt}>
+      <Card
+        as={CARD_ELEMENT.SPAN}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.NONE}
+        dashed
+        role="img"
+        aria-label={alt}
+        className="picture-frame picture-missing"
+      >
         <ImageOffIcon aria-hidden="true" />
         <span>{alt === "" ? `This picture is ${MISSING_WORDS}` : `${alt} · ${MISSING_WORDS}`}</span>
-      </span>
+      </Card>
       {said}
     </span>
   );

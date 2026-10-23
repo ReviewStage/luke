@@ -7,7 +7,6 @@ import { choiceLabel } from "../tasks/coding-agent-model.js";
 import { ModelMenu, settledChoice } from "../tasks/model-menu.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * start-agent-button.tsx -- the task toolbar's Start: a split button that starts a coding agent on the task.
@@ -71,13 +70,6 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const chosen = settledChoice(models, picked ?? choice);
   const unavailable = !start.available;
 
-  // A press of the main part closes the menu whether or not it starts
-  // anything. Note that a refused press, busy or unavailable, never reaches
-  // `press`, so the split button's own click, heard as it passes, closes it
-  // for any press but the chevron's, which toggles the menu itself.
-  const pressed = (event: React.MouseEvent<HTMLElement>) => {
-    if (!(event.target instanceof Node && chevron.current?.contains(event.target))) setOpen(false);
-  };
   const press = () => {
     setOpen(false);
     if (unavailable || start.busy) return;
@@ -118,15 +110,19 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           </ErrorState>
         </div>
       ) : null}
-      <span className="start-agent-split" onClickCapture={pressed}>
+      <span className="start-agent-split">
+        {/* A press of the main part closes the menu whether or not it starts anything: a refused
+            press, busy or unavailable, never reaches `press`, so the split button hears every
+            press but the chevron's, which toggles the menu itself (`onMainPress`). */}
         <SplitButton
           icon={<PlayIcon />}
           label="Start a coding agent"
           disabled={unavailable}
           busy={start.busy ? "Starting" : undefined}
-          hint={Tooltip}
+          succeeded={start.succeeded}
           hintLabel={hint}
           onClick={press}
+          onMainPress={() => setOpen(false)}
           menu={{
             label: "Choose a model to start with",
             "aria-haspopup": "dialog",

@@ -43,7 +43,12 @@ import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
-import { TASK_STATUS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import {
+  TASK_SKILL_SOURCE,
+  TASK_STATUS,
+  TASK_TREE_ENTRY,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
@@ -652,7 +657,7 @@ const ROW_TITLE = ".luke-list-row-title";
  */
 function needsYouMark(row: HTMLElement): string {
   const mark = row.querySelector(".luke-list-row-meta .attention-mark") !== null;
-  const said = [...row.querySelectorAll(".luke-list-row-meta .visually-hidden")].some(
+  const said = [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
     (each) => each.textContent === "Needs you",
   );
   if (mark && said) return "*";
@@ -2094,7 +2099,7 @@ test("an image an item shows is drawn, and a press opens it over the window", as
   assert.ok(press, "the image is pressed to enlarge it");
   act(() => press.click());
   assert.equal(
-    document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+    document.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
     "The pull request tab.png",
   );
 });
@@ -2190,7 +2195,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
       card.querySelector(".attachment-viewer-place")?.textContent,
     ];
   };
@@ -2287,7 +2292,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
       card.querySelector(".attachment-viewer-place")?.textContent,
     ];
   };
@@ -3363,10 +3368,11 @@ function playListMotions() {
   const motions = playMotions();
   const root = document.documentElement.style;
   const tokens = {
-    "--duration-exit": "90ms",
-    "--motion-exit": "ease",
-    "--duration-shape": "460ms",
-    "--spring": "ease-out",
+    "--luke-duration-exit": "90ms",
+    "--luke-motion-exit": "ease",
+    "--luke-duration-shape": "460ms",
+    "--luke-spring": "ease-out",
+    "--luke-list-travel": "16px",
   };
   for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
   onTestFinished(() => {
@@ -3395,7 +3401,7 @@ async function answerExpiryElsewhere(): Promise<void> {
   await settle();
 }
 
-test("on To do, an item answered on another Mac fades where its row stood, its task's group with it, out of reach while it fades, and leaves the list once the fade has played", async () => {
+test("on To do, an item answered on another Mac slides out from where its row stood, its task's group with it, out of reach while it goes, and leaves the list once its exit has played", async () => {
   const played = playListMotions();
   const { page } = mount();
   await settle();
@@ -3415,7 +3421,10 @@ test("on To do, an item answered on another Mac fades where its row stood, its t
   const fades = played.filter((each) => leaving.includes(each.element as HTMLElement));
   assert.deepEqual(
     fades.map((each) => each.keyframes.at(-1)),
-    [{ opacity: 0 }, { opacity: 0 }],
+    [
+      { opacity: 0, transform: "translateX(-16px)" },
+      { opacity: 0, transform: "translateX(-16px)" },
+    ],
   );
 
   act(() => {
@@ -3443,7 +3452,7 @@ test("a row leaving a list scrolled down holds the list as tall as its scroller 
   vi.spyOn(body, "getBoundingClientRect").mockImplementation(
     () => ({ top: -scrolled, bottom: 900 - scrolled }) as DOMRect,
   );
-  const held = () => body.style.getPropertyValue("--inbox-held-height");
+  const held = () => body.style.getPropertyValue("--luke-list-held-height");
 
   await answerExpiryElsewhere();
   assert.equal(held(), "620px", "as far down as the scroller shows it");
@@ -4149,6 +4158,7 @@ function skillReads(): string[] {
         const release = {
           name: "release",
           description: "Use to cut a release.",
+          source: TASK_SKILL_SOURCE.REPOSITORY,
           path: ".agents/skills/release/SKILL.md",
         };
         return Promise.resolve({
@@ -4459,7 +4469,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
     "Version 3 · Shown by Sweep the flaky tests",
   );
   assert.equal(
-    card.querySelector(".page-card-frame")?.getAttribute("src"),
+    card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ agentId: SWEEP_AGENT, pageId: ledger.id, version: 3 }),
   );
   act(() => {
@@ -5567,7 +5577,7 @@ test("the attention mark stands before the time on the reader's own open item al
     return {
       mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
-      said: meta?.querySelector(".visually-hidden")?.textContent,
+      said: meta?.querySelector(".luke-visually-hidden")?.textContent,
       dot: row.querySelector(".inbox-row-unread") !== null,
       unread: row.closest("li")?.dataset.unread === "true",
     };
@@ -5615,7 +5625,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".luke-list-row-meta");
   assert.equal(meta?.querySelector(".attention-mark"), null);
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
-  assert.equal(meta?.querySelector(".visually-hidden")?.textContent, "Waiting on Charles Pan");
+  assert.equal(meta?.querySelector(".luke-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
   showScope(page, "To do");
   assert.equal(
@@ -5640,7 +5650,7 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const marks = [
     row.querySelector(".inbox-row-gutter .inbox-row-unread") !== null,
     row.closest("li")?.dataset.unread === "true",
-    [...row.querySelectorAll(".luke-list-row-meta .visually-hidden")].some(
+    [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
       (each) => each.textContent === "Unread",
     ),
   ];
@@ -6535,6 +6545,68 @@ test("a thread that grows while the reader is at its end, a message or a picture
   assert.equal(board.scrollTop, 300, "scrolled up, the reader's place stands");
 });
 
+/** Selects the words drawn under `within` as `words`, from `from` through `to`, as a drag lets them go. */
+function selectWithin(within: Element, words: string, from: string, to: string): void {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(from));
+  range.setEnd(text, text.data.indexOf(to) + to.length);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  act(() => {
+    text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+}
+
+/** The quotes the item's box holds, in order. */
+function boxQuotes(pane: HTMLElement): (string | null)[] {
+  const box = pane.querySelector(".inbox-answer") ?? assert.fail("the box is drawn");
+  return [...box.querySelectorAll(".composer-editor .composer-quote-words")].map(
+    (quote) => quote.textContent,
+  );
+}
+
+test("words selected in what an open ask offers, an option's words, quote into its box as the agent's message's do", async () => {
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+
+  selectWithin(pane, "What most teams use.", "What", "use.");
+  const reply = replyPress() ?? assert.fail("Reply stands over an option's words");
+  act(() => reply.click());
+  await settle();
+
+  assert.deepEqual(boxQuotes(pane), ["What most teams use."]);
+  assert.equal(replyPress() === undefined, true, "Reply goes once pressed");
+});
+
+test("a field's name in an open ask quotes into its box, and words typed into a field offer no Reply, being the reader's own", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({
+        type: INBOX_ASK.ANSWER,
+        fields: [{ type: INBOX_FIELD.TEXT, label: "Reason for the change", required: true }],
+      }),
+    ]),
+  );
+  const field = pane.querySelector(".inbox-field-composer") ?? assert.fail("the field is drawn");
+  typeInComposer(field, "Teams abroad miss the window");
+
+  selectWithin(field, "Teams abroad", "Teams", "abroad");
+  assert.equal(
+    replyPress() === undefined,
+    true,
+    "the reader's own typing is not the agent's words",
+  );
+
+  selectWithin(pane, "Reason for the change", "Reason", "change");
+  const reply = replyPress() ?? assert.fail("Reply stands over a field's name");
+  act(() => reply.click());
+  await settle();
+  assert.deepEqual(boxQuotes(pane), ["Reason for the change"]);
+});
+
 /** Everything the thread's subject draws, a part a child: its title alone. */
 function subjectParts(pane: HTMLElement): (string | null)[] {
   const subject = pane.querySelector(".inbox-subject") ?? assert.fail("the subject is drawn");
@@ -6545,7 +6617,7 @@ function subjectParts(pane: HTMLElement): (string | null)[] {
 function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
     box.dataset.inboxAsk,
-    wordsOf(box.querySelector(".inbox-ask-head")),
+    wordsOf(box.querySelector(".luke-card-head")),
   ]);
 }
 
@@ -6555,7 +6627,7 @@ function answeredCard(reply: Element): string | null | undefined {
   if (card === null) return undefined;
   assert.equal(card.closest(".inbox-ask"), null, "no card stands around the controls");
   assert.ok(card.parentElement?.matches(".inbox-comment-body"), "they stand in the reply's body");
-  assert.equal(card.querySelector(".inbox-ask-head"), null, "they have no head");
+  assert.equal(card.querySelector(".luke-card-head"), null, "they have no head");
   return wordsOf(card);
 }
 

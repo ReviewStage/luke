@@ -38,6 +38,7 @@
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
+import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -55,13 +56,13 @@ import {
   TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
 import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
+import { PROVIDER_KEY_KIND } from "@luke/features/provider-key-wire";
 import { isRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
 import { Effect, Option, Result, Schema } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
-import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -160,20 +161,28 @@ const beforeNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * Whether the agent's owner's titles are told by a model, which may land
+ * after its turn ends: only where the owner saved an API key, which the
+ * title model runs on (`coder-host/model.ts`). Without one a title is the
+ * opening's first words, written as the words are received, so no read
+ * waits on it.
+ */
+const titledByModel = (parent: ConversationTarget) =>
+  Effect.map(
+    listProviderKeyRows(parent.userId, PROVIDER_KEY_KIND.API_KEY),
+    (rows) => rows.length > 0,
+  );
+
+/**
  * What a read of an ended agent, or of its worker, waits on for a title:
  * the worker named, or the agent's own or any of its workers' where none
- * is; nothing on a deployment that generates no titles, which is one
- * without Luke's Anthropic key, the title model's (`coder-host/model.ts`).
+ * is; nothing for an owner whose titles no model tells (`titledByModel`).
  */
-const titleAwaitedOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  parent: ConversationTarget,
-  childConversationId?: string,
-): Effect.fn.Return<TitleAwaited, never, HostedEnvironment> {
-  const environment = yield* HostedEnvironment;
-  return environment.anthropicKey === undefined
-    ? NO_TITLE_AWAITED
-    : titleMayLand(parent, childConversationId);
-});
+function titleAwaitedOf(parent: ConversationTarget, childConversationId?: string): TitleAwaited {
+  return Effect.flatMap(titledByModel(parent), (byModel) =>
+    byModel ? titleMayLand(parent, childConversationId) : NO_TITLE_AWAITED,
+  );
+}
 
 /**
  * A page's messages as the wire declares them: each part the stored JSON
@@ -218,16 +227,12 @@ const partAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return answer;
 });
 
-/** When the window of every title `titleAwaitedOf` waits on closes, on the same terms: none where the deployment generates no titles. */
-const titleEdgeOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  parent: ConversationTarget,
-  childConversationId?: string,
-): Effect.fn.Return<TitleEdge, never, HostedEnvironment> {
-  const environment = yield* HostedEnvironment;
-  return environment.anthropicKey === undefined
-    ? NO_TITLE_EDGE
-    : titleWindowEdge(parent, childConversationId);
-});
+/** When the window of every title `titleAwaitedOf` waits on closes, on the same terms: none where no model tells the owner's titles. */
+function titleEdgeOf(parent: ConversationTarget, childConversationId?: string): TitleEdge {
+  return Effect.flatMap(titledByModel(parent), (byModel) =>
+    byModel ? titleWindowEdge(parent, childConversationId) : NO_TITLE_EDGE,
+  );
+}
 
 /** Whether a transcript read asks for the page at once rather than held, as a reader following its live statements does (`live-wire.ts`). */
 function readsNow(wait: string | undefined): boolean {
@@ -316,7 +321,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
     agent: signedIn.agent.effect(function* ({ input, context }) {
       const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
       const { agent, target } = yield* reachedAgent(context.userId, input.id);
-      const titleAwaited = yield* titleAwaitedOf(target);
+      const titleAwaited = titleAwaitedOf(target);
       const cursor = cursorOfWire(after);
       const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
       const { page, holds, wakeIn } = readsNow(input.wait)
@@ -328,7 +333,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
               standing,
               agent,
               titleAwaited,
-              yield* titleEdgeOf(target),
+              titleEdgeOf(target),
             ),
           )
         : {
@@ -385,7 +390,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           now ? true : undefined,
         );
       }
-      const titleAwaited = yield* titleAwaitedOf(target, conversationId);
+      const titleAwaited = titleAwaitedOf(target, conversationId);
       const worker = { userId: agent.userId, conversationId };
       const cursor = cursorOfWire(after);
       const started = { createdAt: read.delegation.createdAt };
@@ -398,7 +403,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
               started,
               undefined,
               titleAwaited,
-              yield* titleEdgeOf(target, conversationId),
+              titleEdgeOf(target, conversationId),
             ),
           )
         : {

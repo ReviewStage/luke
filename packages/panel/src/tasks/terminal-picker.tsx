@@ -1,24 +1,27 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
-import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   COMBOBOX_LIST_HEIGHT,
   ComboboxListBox,
   ComboboxOptionItem,
+  NoteLine,
   PlusIcon,
   SearchIcon,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { Shortcut } from "../shortcut.js";
+import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { agentTabLabel } from "./coding-agent-model.js";
-import { AgentGlyph } from "./tab-look.js";
+import { AgentGlyph, agentEndMark } from "./tab-look.js";
+import { TerminalStanding } from "./terminal-shells.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 
 /**
@@ -27,8 +30,8 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * A terminal belongs to one agent's sandbox (`terminal-entry.ts`), and with
  * several agents on the task New terminal asks, as ⌘J does before any
  * terminal was used. It is the command palette's own dialog and rows: each
- * agent as its tab wears it, its glyph and its name, with how its sandbox
- * stands, the agent whose terminal was used last chosen to begin with and
+ * agent as its tab wears it, its glyph, its name and its failed mark, its
+ * card hung beside it, with how its sandbox stands in the panel's own words, the agent whose terminal was used last chosen to begin with and
  * saying so. Whether the agent works is its glyph's to say, the working mark
  * in its place, so no word repeats it. A task with no agent offers to start one.
  * How each sandbox stands is read as the picker opens, which never wakes
@@ -41,46 +44,62 @@ const START_ROW = "start-agent";
 /** What the picker's field asks. */
 const PICKER_QUESTION = "New terminal in which agent’s sandbox?";
 
-/** How a sandbox stands, said after the agent's name. */
-const SANDBOX_WORDS = {
-  [SANDBOX_STATE.RUNNING]: "sandbox running",
-  [SANDBOX_STATE.STOPPED]: "sandbox stopped",
-  [SANDBOX_STATE.STARTING]: "no sandbox yet",
-} as const satisfies Record<SandboxState, string>;
-
-/** The row's words after the name: the sandbox as last read, and whether it was used last; none where neither is known. */
-function rowDetail(sandbox: SandboxState | undefined, last: boolean): string | undefined {
-  const words = [
-    sandbox === undefined ? undefined : SANDBOX_WORDS[sandbox],
-    last ? "last used" : undefined,
-  ].filter((word) => word !== undefined);
-  return words.length === 0 ? undefined : words.join(" · ");
+/** The row's words after the name: the sandbox as the panel's "+" says it, and whether it was used last; none where neither is known. */
+function RowDetail({
+  agent,
+  last,
+}: {
+  agent: CodingAgentSummary;
+  last: boolean;
+}): React.JSX.Element | null {
+  const listed = useAtomValue(sandboxRead(agent.id));
+  if (listed === undefined && !last) return null;
+  return (
+    <>
+      {listed === undefined ? null : <TerminalStanding agent={agent} />}
+      {listed !== undefined && last ? " · " : null}
+      {last ? "last used" : null}
+    </>
+  );
 }
 
-/** One agent's row: its look, and its standing read from what the window last read of its sandbox. */
+/** One agent's row: its look, its failed mark, and the card its hover hangs, with its standing read from what the window last read of its sandbox. */
 function AgentRow({
   agent,
+  agents,
   name,
   last,
   onPick,
 }: {
   agent: CodingAgentSummary;
+  agents: CodingAgentsControl;
   name: string;
   last: boolean;
   onPick: () => void;
 }): React.JSX.Element {
-  const sandbox = useAtomValue(sandboxRead(agent.id))?.sandbox;
   return (
-    <Command.Item asChild value={agent.id} keywords={[name]} onSelect={onPick}>
-      <ComboboxOptionItem
-        option={{
-          id: agent.id,
-          label: name,
-          icon: <AgentGlyph agent={agent} />,
-          detail: rowDetail(sandbox, last),
-        }}
-      />
-    </Command.Item>
+    <Tooltip
+      label={name}
+      card={
+        <AgentCard
+          subject={agentSubject(agents, agent.id, NOTHING_HELD, false)}
+          models={agents.models}
+        />
+      }
+      cardBeside
+    >
+      <Command.Item asChild value={agent.id} keywords={[name]} onSelect={onPick}>
+        <ComboboxOptionItem
+          option={{
+            id: agent.id,
+            label: name,
+            icon: <AgentGlyph agent={agent} />,
+            detail: <RowDetail agent={agent} last={last} />,
+            hint: agentEndMark(agent, true),
+          }}
+        />
+      </Command.Item>
+    </Tooltip>
   );
 }
 
@@ -158,10 +177,12 @@ export function TerminalPicker({
       <Command.List asChild label="Coding agents">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
           {read ? (
-            <Command.Empty className="command-palette-empty">No agents match.</Command.Empty>
+            <Command.Empty>
+              <NoteLine>No agents match.</NoteLine>
+            </Command.Empty>
           ) : null}
           {!read ? (
-            <div className="command-palette-empty">Reading the task’s agents…</div>
+            <NoteLine status>Reading the task’s agents…</NoteLine>
           ) : listed.length === 0 ? (
             <Command.Item
               asChild
@@ -190,6 +211,7 @@ export function TerminalPicker({
                 <AgentRow
                   key={agent.id}
                   agent={agent}
+                  agents={agents}
                   name={agentTabLabel(agent, agents.models)}
                   last={agent.id === lastUsed}
                   onPick={() => choose(() => onPick(agent.id))}

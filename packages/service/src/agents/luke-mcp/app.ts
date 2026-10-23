@@ -18,6 +18,18 @@
  * (`../../integrations/mcp-tools.ts`); its tests drive it with the SDK's
  * own client, the one a harness speaks.
  *
+ * Beside it stands one server per integration the agent is handed, at
+ * `LUKE_INTEGRATION_MCP_PATH/<connection>` (`notion-2` for a member's second
+ * Notion account), on the same bearer and the same JSON-RPC: its
+ * `initialize` tells the client what eve tells the model of the connection,
+ * which account it is among them, as its `instructions`; its
+ * `tools/list` is the provider's own tools, and its `tools/call` forwards to
+ * the provider on the member's own grant and answers the provider's result
+ * as it sent it (`../../integrations/connection-door.ts`). A harness names
+ * each as a server of its own, so their tools reach the model under the
+ * connection's name, as any remote MCP server's do, and the harness's own
+ * tool search defers them.
+ *
  * A protocol fault, a body that is no JSON-RPC, an unknown method, or a
  * tool the registry does not hold, is a JSON-RPC error. A tool's own
  * refusal, or a door that failed, is the tool's result marked `isError`,
@@ -25,9 +37,12 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { EXCESS_KEYS, isRecord, type UnparsedWireValue } from "@luke/wire";
+import { EXCESS_KEYS, isRecord, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -41,6 +56,13 @@ import {
   parseJsonBytes,
   readBodyBytesEffect,
 } from "../../http/http-effect.js";
+import {
+  type ConnectionRefusal,
+  callConnectionTool,
+  connectionInstructions,
+  listConnectionTools,
+} from "../../integrations/connection-door.js";
+import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
@@ -49,15 +71,25 @@ import { lukeMcpDoorSeams } from "./door-seams.js";
 import type { AgentSandboxDoors } from "./sandbox-door.js";
 import {
   LUKE_MCP_TOOLS,
+  type LukeMcpOfferedTo,
   type LukeMcpServices,
   type LukeMcpTool,
   type LukeMcpToolResult,
   type McpContent,
+  offeredLukeMcpTool,
   refusedByDoor,
 } from "./tools.js";
 
 /** The path a runner's MCP client posts to. */
 export const LUKE_MCP_PATH = "/api/agents/mcp";
+
+/** The path under which each integration the agent is handed is a server of its own, named by its connection. */
+export const LUKE_INTEGRATION_MCP_PATH = `${LUKE_MCP_PATH}/integrations`;
+
+/** An integration server's address under an origin: the connection's name, the one path segment after `LUKE_INTEGRATION_MCP_PATH`. */
+export function lukeIntegrationMcpUrl(origin: string, connection: string): string {
+  return new URL(`${LUKE_INTEGRATION_MCP_PATH}/${encodeURIComponent(connection)}`, origin).href;
+}
 
 /** The function the server is deployed as. */
 export const LUKE_MCP_FUNCTION = {
@@ -73,8 +105,8 @@ export const LUKE_MCP_FUNCTION = {
  */
 export const LUKE_MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
 
-/** How the server names itself to a client. */
-const SERVER_INFO = { name: "luke", version: "1.0.0" } as const;
+/** The version every server names itself with to a client. */
+const SERVER_VERSION = "1.0.0";
 
 /** The most a request body may hold: past every tool input's own bound, and under the platform's. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -92,6 +124,7 @@ const JSON_RPC_ERROR = {
   INVALID_REQUEST: -32600,
   METHOD_NOT_FOUND: -32601,
   INVALID_PARAMS: -32602,
+  INTERNAL_ERROR: -32603,
 } as const;
 
 const MCP_METHOD = {
@@ -188,6 +221,22 @@ function toolResult(tool: LukeMcpTool, result: LukeMcpToolResult): McpToolCallRe
   };
 }
 
+/**
+ * What each listed tool declares to Claude Code: the most of its result it
+ * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
+ * characters it would save the result to a file and hand the model a path
+ * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). Eve
+ * hands its model a Luke tool's whole result, which each door bounds.
+ */
+const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
+
+/** What an agent whose row is gone is offered by: no task, no repository, and no operator's tools. */
+const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
+  taskId: null,
+  repository: null,
+  kind: CODING_AGENT_KIND.CODER,
+};
+
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
   content: [{ type: "text", text: DOOR_FAILED }],
@@ -206,8 +255,28 @@ export interface LukeMcpDoors {
   readonly browser: LukeMcpBrowser;
 }
 
+/**
+ * One MCP server as the endpoint answers it for an admitted agent: the name
+ * it gives itself, its `tools/list`, and its `tools/call` on the call's
+ * params; Luke's own, or one integration's.
+ */
+interface McpServer {
+  readonly name: string;
+  /** What `initialize` tells the client of the server, which the harness shows the model; none for Luke's own, whose tools say it. */
+  readonly instructions: (
+    admitted: AdmittedConversation,
+  ) => Effect.Effect<Option.Option<string>, never, LukeMcpServices>;
+  readonly listTools: (
+    admitted: AdmittedConversation,
+  ) => Effect.Effect<RpcAnswer, never, LukeMcpServices>;
+  readonly callTool: (
+    admitted: AdmittedConversation,
+    params: UnparsedWireValue,
+  ) => Effect.Effect<RpcAnswer, never, LukeMcpServices>;
+}
+
 /** One `tools/call` run through the tool's door as the admitted conversation, with a fresh id of its own. */
-function callTool(
+function callLukeTool(
   doors: LukeMcpDoors,
   admitted: AdmittedConversation,
   params: UnparsedWireValue,
@@ -243,9 +312,99 @@ function callTool(
   );
 }
 
+/**
+ * The tools listed to the admitted agent: those eve offers it, by its task,
+ * its repository, and its kind (`offeredLukeMcpTool`); those eve offers
+ * every agent where its row is gone, since no narrowed tool's door would
+ * carry out a call for an agent that no longer stands.
+ */
+function listLukeTools(
+  admitted: AdmittedConversation,
+): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
+  const { userId, conversationId } = admitted.target;
+  return readCodingAgentOfConversation(userId, conversationId).pipe(
+    Effect.map((found) => {
+      const offered = offeredLukeMcpTool(Option.getOrElse(found, () => NO_AGENT_OFFERED));
+      const tools = [...LUKE_MCP_TOOLS]
+        .filter(([name]) => offered(name))
+        .map(([name, tool]) => ({
+          name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          _meta: TOOL_META,
+        }));
+      return Result.succeed({ tools });
+    }),
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning(`Luke MCP tools/list failed: ${failureKind(cause)}`),
+        rpcFailure(JSON_RPC_ERROR.INTERNAL_ERROR, "Luke could not list its tools just now"),
+      ),
+    ),
+  );
+}
+
+/** Luke's own server, over the doors the edge composes. */
+function lukeServer(doors: LukeMcpDoors): McpServer {
+  return {
+    name: "luke",
+    instructions: () => Effect.succeedNone,
+    listTools: listLukeTools,
+    callTool: (admitted, params) => callLukeTool(doors, admitted, params),
+  };
+}
+
+/** The input schema a provider's tool is listed with where it declared none an MCP client takes: any object. */
+const ANY_OBJECT_SCHEMA = { type: "object" } as const;
+
+/** A provider's tool as its integration's server lists it: as the provider listed it, with an object input schema, as MCP requires. */
+function listedIntegrationTool(tool: McpToolSchema) {
+  return {
+    name: tool.name,
+    ...(tool.title !== undefined ? { title: tool.title } : undefined),
+    ...(tool.description !== undefined ? { description: tool.description } : undefined),
+    inputSchema: isRecord(tool.inputSchema) ? tool.inputSchema : ANY_OBJECT_SCHEMA,
+    ...(isRecord(tool.outputSchema) ? { outputSchema: tool.outputSchema } : undefined),
+    ...(tool.annotations !== undefined ? { annotations: tool.annotations } : undefined),
+  };
+}
+
+/** A refusal of an integration's call as the tool's error the agent reads: the refusal's JSON, `requiresSignIn` among it where the member must connect. */
+function refusedCall(refusal: ConnectionRefusal): WireRecord {
+  return { content: [{ type: "text", text: JSON.stringify(refusal) }], isError: true };
+}
+
+/** One integration's server, named by its connection. */
+function integrationServer(connection: string): McpServer {
+  return {
+    name: connection,
+    instructions: (admitted) => connectionInstructions(admitted, connection),
+    listTools: (admitted) =>
+      Effect.map(listConnectionTools(admitted, connection), (tools) =>
+        Result.succeed({ tools: tools.map(listedIntegrationTool) }),
+      ),
+    callTool: (admitted, params) => {
+      const call = readEither(CallParamsSchema, DROPPING_EXCESS)(params);
+      if (Result.isFailure(call)) {
+        return Effect.succeed(
+          rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, "Invalid tools/call params"),
+        );
+      }
+      const input = fieldOf(params, "arguments");
+      return Effect.map(
+        callConnectionTool(admitted, connection, call.success.name, isRecord(input) ? input : {}),
+        (answered) =>
+          Result.succeed(
+            Result.isSuccess(answered) ? answered.success : refusedCall(answered.failure),
+          ),
+      );
+    },
+  };
+}
+
 /** One request's answer, by its method. */
 function answerRequest(
-  doors: LukeMcpDoors,
+  server: McpServer,
   admitted: AdmittedConversation,
   method: string,
   params: UnparsedWireValue,
@@ -258,28 +417,21 @@ function answerRequest(
           rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, "Invalid initialize params"),
         );
       }
-      return Effect.succeed(
+      return Effect.map(server.instructions(admitted), (instructions) =>
         Result.succeed({
           protocolVersion: negotiatedVersion(asked.success.protocolVersion),
           capabilities: { tools: { listChanged: false } },
-          serverInfo: SERVER_INFO,
+          serverInfo: { name: server.name, version: SERVER_VERSION },
+          ...(Option.isSome(instructions) ? { instructions: instructions.value } : undefined),
         }),
       );
     }
     case MCP_METHOD.PING:
       return Effect.succeed(Result.succeed({}));
     case MCP_METHOD.TOOLS_LIST:
-      return Effect.succeed(
-        Result.succeed({
-          tools: [...LUKE_MCP_TOOLS].map(([name, tool]) => ({
-            name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-          })),
-        }),
-      );
+      return server.listTools(admitted);
     case MCP_METHOD.TOOLS_CALL:
-      return callTool(doors, admitted, params);
+      return server.callTool(admitted, params);
     default:
       return Effect.succeed(
         rpcFailure(JSON_RPC_ERROR.METHOD_NOT_FOUND, `Method not found: ${method}`),
@@ -289,7 +441,7 @@ function answerRequest(
 
 /** One message answered: a request with its response, anything else taken with 202 and no body. */
 function answerMessage(
-  doors: LukeMcpDoors,
+  server: McpServer,
   admitted: AdmittedConversation,
   message: Message,
   raw: UnparsedWireValue,
@@ -299,7 +451,7 @@ function answerMessage(
     return Effect.succeed(HttpServerResponse.empty({ status: HOSTED_HTTP_STATUS.ACCEPTED }));
   }
   return Effect.map(
-    answerRequest(doors, admitted, method, fieldOf(raw, "params") ?? {}),
+    answerRequest(server, admitted, method, fieldOf(raw, "params") ?? {}),
     (answer) => rpcResponse(id, answer),
   );
 }
@@ -312,9 +464,21 @@ function bearerRefused(): HttpServerResponse.HttpServerResponse {
   });
 }
 
-/** POST: one JSON-RPC message, admitted on the runner's bearer. */
+/** The integration server a request's path names by its connection; nothing for a path that names no connection. */
+function integrationServerOf(request: Request): Option.Option<McpServer> {
+  const prefix = `${LUKE_INTEGRATION_MCP_PATH}/`;
+  const { pathname } = new URL(request.url);
+  if (!pathname.startsWith(prefix)) return Option.none();
+  // Note that a connection's name is lower-case letters, digits, and hyphens alone, so its segment needs no decoding.
+  const connection = pathname.slice(prefix.length);
+  return integrationConnectionOf(connection) === undefined
+    ? Option.none()
+    : Option.some(integrationServer(connection));
+}
+
+/** POST: one JSON-RPC message to the server the request's path names, admitted on the runner's bearer. */
 const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
-  doors: LukeMcpDoors,
+  serverOf: (request: Request) => Option.Option<McpServer>,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
@@ -332,6 +496,8 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
   if (bearer === undefined) return bearerRefused();
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
   if (Option.isNone(admitted)) return bearerRefused();
+  const server = serverOf(request);
+  if (Option.isNone(server)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (unspokenVersion(request)) {
     return rpcResponse(
       null,
@@ -351,13 +517,19 @@ const mcpEndpoint = /* @__PURE__ */ Effect.fn("web/lukeMcpEndpoint")(function* (
   if (Result.isFailure(message)) {
     return rpcResponse(null, rpcFailure(JSON_RPC_ERROR.INVALID_REQUEST, "Invalid Request"));
   }
-  return yield* answerMessage(doors, admitted.value, message.success, parsed.success);
+  return yield* answerMessage(server.value, admitted.value, message.success, parsed.success);
 });
 
-/** The group: the one MCP path over the sandbox door and the browser the edge composes, and the hosted vocabulary's own refusal for any other. */
+/** The group: Luke's server over the sandbox door and the browser the edge composes, each integration's server beside it, and the hosted vocabulary's own refusal for any other path. */
 export function lukeMcpApp(doors: LukeMcpDoors): WebRoutes<LukeMcpServices> {
+  const luke = Option.some(lukeServer(doors));
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, LUKE_MCP_PATH, hostedRefusing(mcpEndpoint(doors))),
+    HttpRouter.add(ANY_METHOD, LUKE_MCP_PATH, hostedRefusing(mcpEndpoint(() => luke))),
+    HttpRouter.add(
+      ANY_METHOD,
+      `${LUKE_INTEGRATION_MCP_PATH}/:connection`,
+      hostedRefusing(mcpEndpoint(integrationServerOf)),
+    ),
     hostedNotFoundRoute,
   );
 }

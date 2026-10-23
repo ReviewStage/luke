@@ -10,16 +10,17 @@ import {
   ChoiceList,
   type ChoiceOption,
   ConfirmDialog,
+  CornerCount,
   type DialogQuestion,
+  FoldingButton,
   POPOVER_ALIGN,
+  PopoverPanel,
   useConfirmDialog,
 } from "@luke/ui";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { FoldingButton } from "../folding-button.js";
-import { PopoverPanel } from "../popover-panel.js";
 import type { PendingReview } from "./line-comment.js";
 import { MarkdownField } from "./markdown-field.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
@@ -278,14 +279,9 @@ export function PullRequestReview({
         ref={trigger}
         label={REVIEW_WORDS.OPEN}
         icon={
-          <span className="pull-request-review-mark">
+          <CornerCount count={pending?.comments ?? 0}>
             <MessageSquarePlusIcon aria-hidden="true" />
-            {pending == null || pending.comments === 0 ? null : (
-              <span className="pull-request-review-count" aria-hidden="true">
-                {pending.comments}
-              </span>
-            )}
-          </span>
+          </CornerCount>
         }
         name={
           pending == null || pending.comments === 0

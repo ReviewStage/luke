@@ -12,6 +12,8 @@ import {
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { saveGitHubToken } from "@luke/database/models/github-token-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
@@ -30,16 +32,24 @@ import {
 } from "@luke/features/live-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { type Context, DateTime, Effect, Option, Result, Schema } from "effect";
+import { type Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
+  type FakeCdpPeer,
+  fakeBridgePty,
+  fakeCdpPeer,
+  fakeSandboxApi,
+  noSandboxBrowserLayer,
+} from "../testing/agent-browser-fake.js";
+import {
   agentBrowserTabsProcedures,
   BROWSER_TAKEOVER_HOLD_MS,
 } from "./agent-browser-tabs-procedures.js";
+import { AgentBrowser, agentBrowserOver } from "./browser/agent-browser.js";
 
 /**
  * A task's Browser tabs, answered by the hosted oRPC router the way the web
@@ -49,7 +59,11 @@ import {
  * second member's answers the first as driver until that hold lapses, and a
  * hand-back gives the tab back; a member who does not control a coding agent
  * on its starter's own token may see its tab but not drive it; and a task or
- * tab the bearer does not reach is not found.
+ * tab the bearer does not reach is not found. A member who controls a coding
+ * agent opens a tab at an http or https address in its browser, a fake
+ * Chromium in a fake sandbox, kept with them as its opener and taken over
+ * for them; one who does not, an address of another scheme, an agent with no
+ * sandbox yet, and a sandbox Vercel does not answer for are each refused.
  *
  * Synthetic accounts, bearers, workspaces, agents, and pages throughout.
  */
@@ -145,7 +159,8 @@ const openTask = Effect.gen(function* () {
   const bearers = new Map(
     [starter, teammate, reader, outsider].map((id) => [`Bearer ${id}`, id] as const),
   );
-  const ask = (request: Request) => answer(bearers, request);
+  const ask = (request: Request, agentBrowser: Layer.Layer<AgentBrowser> = noSandboxBrowserLayer) =>
+    answer(bearers, request, agentBrowser);
   return {
     starter,
     teammate,
@@ -160,7 +175,11 @@ const openTask = Effect.gen(function* () {
   };
 });
 
-const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
+const answer = (
+  bearers: ReadonlyMap<string, string>,
+  request: Request,
+  agentBrowser: Layer.Layer<AgentBrowser>,
+) =>
   Effect.gen(function* () {
     // SAFETY: the procedures yield the database and the clock alone, which the test's own context holds.
     const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
@@ -170,6 +189,7 @@ const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
+        agentBrowser,
       }),
     });
     const response = yield* Effect.promise(() => handle(request, services));
@@ -186,6 +206,46 @@ function request(userId: string | undefined, path: string, method = "GET") {
 }
 
 const tabsPath = (taskId: string) => `/api/plans/${taskId}/browser-tabs`;
+
+/** The eve session a coding agent's sandbox is tagged with once it first ran. */
+const SESSION = "wrun_open_tab_fixture";
+
+/** A member's open of a tab at the address in the agent's browser. */
+function openRequest(userId: string, taskId: string, agentId: string, address: string) {
+  return new Request(new URL(tabsPath(taskId), ORIGIN), {
+    method: "POST",
+    headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
+    body: JSON.stringify({ agentId, address }),
+  });
+}
+
+/** The agent's conversation recorded as running in the session, as its first turn records it. */
+const runAgent = (agent: { readonly userId: string; readonly conversationId: string }) =>
+  Effect.flatMap(DateTime.nowAsDate, (now) =>
+    claimRuntimeSession(
+      { userId: agent.userId, conversationId: agent.conversationId },
+      SESSION,
+      now,
+    ),
+  );
+
+/** The addresses of the pages the fake Chromium holds, past the blank page it starts with. */
+const openedAddresses = (peer: FakeCdpPeer) =>
+  Effect.map(peer.pages, (pages) =>
+    pages.map((page) => page.url).filter((url) => url !== "about:blank"),
+  );
+
+/** The agent's browser over a running sandbox tagged with the session, a fake Chromium behind its bridge. */
+const runningBrowser = Effect.map(fakeCdpPeer(), (peer) => ({
+  peer,
+  layer: Layer.succeed(
+    AgentBrowser,
+    agentBrowserOver(
+      fakeSandboxApi({ status: "running", sessionId: SESSION }).api,
+      fakeBridgePty(peer),
+    ),
+  ),
+}));
 
 /** The statement run as Realtime runs it. */
 const runLive = (statement: LiveStatement) =>
@@ -396,6 +456,115 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
         assert.deepEqual(
           yield* ask(request(undefined, tabsPath(taskId))),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+      }),
+  );
+  it.effect(
+    "a member who controls the agent opens a tab in its browser, kept with them as its opener and taken over by them",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, taskId, coder, ask } = yield* openTask;
+        yield* runAgent(coder);
+        const { peer, layer } = yield* runningBrowser;
+
+        const opened = tabOf(
+          yield* ask(
+            openRequest(starter, taskId, coder.id, "https://accounts.test/sign-in"),
+            layer,
+          ),
+        );
+
+        const now = (yield* DateTime.nowAsDate).getTime();
+        assert.equal(opened.agentId, coder.id);
+        assert.equal(opened.address, "https://accounts.test/sign-in");
+        assert.deepEqual(opened.openedBy, {
+          kind: AGENT_BROWSER_TAB_OPENER.MEMBER,
+          userId: starter,
+        });
+        assert.deepEqual(opened.driver, {
+          userId: starter,
+          heldUntil: now + BROWSER_TAKEOVER_HOLD_MS,
+        });
+        // The page stands in the agent's browser beside its kept tab, reopened as the connection
+        // restores it, and the agent's sandbox is held for the sign-in.
+        assert.deepEqual(yield* openedAddresses(peer), [
+          "http://localhost:3000/",
+          "https://accounts.test/sign-in",
+        ]);
+        assert.equal(yield* sandboxHeld(coder.conversationId, new Date(now)), true);
+        // A teammate lists it, driven by the member who opened it.
+        const listed = tabsOf(yield* ask(request(teammate, tabsPath(taskId))));
+        assert.deepEqual(
+          listed.find((tab) => tab.id === opened.id),
+          opened,
+        );
+      }),
+  );
+
+  it.effect(
+    "a member who sees the agent but does not control it is refused, and nothing opens",
+    () =>
+      Effect.gen(function* () {
+        const { reader, taskId, tokenCoder, ask } = yield* openTask;
+        yield* runAgent(tokenCoder);
+        const { peer, layer } = yield* runningBrowser;
+
+        assert.deepEqual(
+          yield* ask(openRequest(reader, taskId, tokenCoder.id, "https://side.test/login"), layer),
+          refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+        );
+        assert.deepEqual(yield* openedAddresses(peer), []);
+      }),
+  );
+
+  it.effect("an address a Browser tab opens none of is refused before the browser is reached", () =>
+    Effect.gen(function* () {
+      const { starter, taskId, coder, ask } = yield* openTask;
+      yield* runAgent(coder);
+      const { peer, layer } = yield* runningBrowser;
+
+      for (const address of ["file:///etc/hosts", "javascript:alert(1)", "localhost:3000"]) {
+        assert.deepEqual(
+          yield* ask(openRequest(starter, taskId, coder.id, address), layer),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }
+      assert.deepEqual(yield* openedAddresses(peer), []);
+    }),
+  );
+
+  it.effect(
+    "an agent with no sandbox yet is refused as not ready, and a sandbox Vercel does not answer for as the upstream's refusal",
+    () =>
+      Effect.gen(function* () {
+        const { starter, taskId, coder, ask } = yield* openTask;
+        const open = (agentBrowser: Layer.Layer<AgentBrowser>) =>
+          ask(openRequest(starter, taskId, coder.id, "https://accounts.test/"), agentBrowser);
+
+        // The agent has run no turn, so no session tags a sandbox of its.
+        const { layer } = yield* runningBrowser;
+        assert.deepEqual(
+          yield* open(layer),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        yield* runAgent(coder);
+        const peer = yield* fakeCdpPeer();
+        const unanswered = Layer.succeed(
+          AgentBrowser,
+          agentBrowserOver(
+            fakeSandboxApi({ status: "running", sessionId: SESSION, unavailable: 503 }).api,
+            fakeBridgePty(peer),
+          ),
+        );
+        assert.deepEqual(
+          yield* open(unanswered),
+          refusal(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
+        );
+        // No tab was kept but those the agents opened.
+        const listed = tabsOf(yield* ask(request(starter, tabsPath(taskId))));
+        assert.deepEqual(
+          listed.map((tab) => tab.openedBy.kind),
+          listed.map(() => AGENT_BROWSER_TAB_OPENER.AGENT),
         );
       }),
   );

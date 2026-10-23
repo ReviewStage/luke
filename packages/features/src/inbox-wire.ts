@@ -767,6 +767,13 @@ export const inboxItemSchema = EffectSchema.Struct({
    * read every item before.
    */
   startedBy: EffectSchema.optionalKey(memberRefSchema),
+  /**
+   * The member the item waits on: its task's assignee, or, where the task
+   * has nobody assigned or the agent works on no task, the member who
+   * started the agent (`startedBy`). Absent from a service before it, which
+   * the desktop reads as waiting on `startedBy`.
+   */
+  waitsOn: EffectSchema.optionalKey(memberRefSchema),
   /** The developer's answer, on an answered item. */
   answer: EffectSchema.optionalKey(inboxReplySchema),
   /** The files the answer carried, in the order they were attached; absent where it carried none. */

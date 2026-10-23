@@ -22,6 +22,7 @@ import {
 import { liveSealingFromEnvironment } from "./live/realtime.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
+import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
 
 /**
  * The deployment's own environment, read as these services are built rather
@@ -53,7 +54,7 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  *
  * What the deployment's environment says about the hosted tier is read here
  * too, once per instance rather than at each invocation: `HostedEnvironment`
- * is the one place `OPENAI_API_KEY`, the brain model override, and the
+ * is the one place the brain model override, the accounts' key ring, and the
  * analytics processor's own deletion key and project are read, and
  * `GitHubApp` the one place the Luke GitHub App's id, slug, client, and
  * private key are.
@@ -90,6 +91,7 @@ export const webServices = Layer.mergeAll(
   webSqlClient,
   hostedEnvironment,
   githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),
+  sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,

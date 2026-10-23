@@ -34,8 +34,6 @@ function environment(secrets: {
   readonly eve: string | undefined;
 }): Layer.Layer<HostedEnvironment> {
   const values: HostedEnvironmentValues = {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,

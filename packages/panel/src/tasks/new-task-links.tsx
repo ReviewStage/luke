@@ -8,17 +8,21 @@ import {
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
   CloseIcon,
   IconButton,
+  OneLine,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  Tooltip,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
-import { FadingWords } from "../fading-words.js";
-import { Tooltip } from "../tooltip.js";
 import { RELATION_DETAIL } from "./task-issue-links-model.js";
 
 /**
@@ -110,7 +114,14 @@ function LinkChip({
 }): React.JSX.Element {
   const github = link.provider === TASK_ISSUE_PROVIDER.GITHUB;
   return (
-    <div className="new-task-issue" data-issue-chip="" data-provider={link.provider}>
+    <Card
+      look={CARD_LOOK.OUTLINE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      className="new-task-issue"
+      data-issue-chip=""
+      data-provider={link.provider}
+    >
       {github ? (
         <CircleDotIcon className="new-task-issue-github" />
       ) : (
@@ -119,7 +130,9 @@ function LinkChip({
       <span className="new-task-issue-key">
         {github ? `#${link.issue.number}` : link.issue.identifier}
       </span>
-      <FadingWords className="new-task-issue-title" words={link.issue.title} />
+      <OneLine className="new-task-issue-title" words={link.issue.title}>
+        {link.issue.title}
+      </OneLine>
       <span className="new-task-issue-relation">
         <Tooltip label={RELATION_DETAIL[link.relation]}>
           <Chip
@@ -143,7 +156,7 @@ function LinkChip({
           />
         </Tooltip>
       </span>
-    </div>
+    </Card>
   );
 }
 

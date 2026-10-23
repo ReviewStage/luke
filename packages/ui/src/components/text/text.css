@@ -48,6 +48,11 @@
     font-weight: var(--luke-weight-bold);
   }
 
+  .luke-text[data-variant="inherit"] {
+    font: inherit;
+    color: inherit;
+  }
+
   .luke-text[data-tone="muted"] {
     color: var(--luke-color-text-muted);
   }
@@ -67,5 +72,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Cut from the start: the line is laid right to left so its end stays,
+     and read left to right (`text-align`); wrap the words in a `<bdi>` so
+     their own direction is kept. */
+  .luke-text[data-truncate="start"] {
+    direction: rtl;
+    text-align: left;
   }
 }

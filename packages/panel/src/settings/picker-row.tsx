@@ -13,7 +13,7 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { type ViewportBox, visibleViewport } from "@luke/ui/visible-viewport";
 import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { ChangedMark } from "./marks.js";
+import { SettingMarks } from "./marks.js";
 
 /**
  * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.
@@ -37,21 +37,17 @@ import { ChangedMark } from "./marks.js";
  */
 
 /**
- * Which of the chip's edges the menu hangs from: its trailing edge, where a
- * settings column is, its leading edge, where a chip leads its line, or
- * whichever leaves the menu more room as it opens, where a chip may stand
- * anywhere along a row that wraps.
+ * Which of the chip's edges the menu asks to hang from: its trailing edge,
+ * where a settings column is, or its leading edge, where a chip leads its
+ * line. The menu takes the other edge where only that keeps it inside what
+ * clips it, and is pushed back inside where neither does.
  */
 export const PICKER_ALIGN = {
   START: "start",
   END: "end",
-  AUTO: "auto",
 } as const;
 
 export type PickerAlign = (typeof PICKER_ALIGN)[keyof typeof PICKER_ALIGN];
-
-/** The edge a menu hangs from once placed: the leading or the trailing one. */
-type PlacedAlign = Exclude<PickerAlign, typeof PICKER_ALIGN.AUTO>;
 
 /** How the menu stands against the chip: below it, or above it where the window leaves more room there. */
 const PICKER_SIDE = {
@@ -64,9 +60,6 @@ type PickerSide = (typeof PICKER_SIDE)[keyof typeof PICKER_SIDE];
 /** The gap the menu keeps from the chip and from the window's edge, which its placement subtracts from the room. */
 const MENU_GAP = 6;
 
-/** The widest a searched menu stands, the issue picker's: an automatic menu hangs from the chip's leading edge while that leaves it this much. */
-const WIDEST_MENU = 420;
-
 /** The least height the list is worth drawing at below the chip before the menu turns to the room above. */
 const LEAST_LIST_HEIGHT = 160;
 
@@ -75,8 +68,11 @@ const MENU_CHROME_HEIGHT = 48;
 
 /**
  * Where the menu fits: the side with room for its list, the list height
- * that side allows, the chip's edge it hangs from, and the widest the menu
- * may stand from that edge before what clips it cuts its far side off.
+ * that side allows, the chip's edge it hangs from, how far past that edge
+ * it is pushed back inside what clips it, and the widest it may stand.
+ * It hangs from the asked edge while it stands whole there, from the other
+ * where only that keeps it whole, and otherwise from the edge with more
+ * room, pushed back over the chip until its far side meets the room's edge.
  */
 function pickerPlacement(input: {
   /** The chip's edges, in window coordinates. */
@@ -90,6 +86,8 @@ function pickerPlacement(input: {
   roomLeft: number;
   roomRight: number;
   align: PickerAlign;
+  /** The menu's own width, in the chip's pixels, before any cap. */
+  menuWidth: number;
   /** How many window pixels one of the chip's own pixels is, which a zoomed page sets above one. */
   scale: number;
 }) {
@@ -97,22 +95,27 @@ function pickerPlacement(input: {
     (input.roomBottom - input.chipBottom) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const above = (input.chipTop - input.roomTop) / input.scale - MENU_GAP * 2 - MENU_CHROME_HEIGHT;
   const side = below >= LEAST_LIST_HEIGHT || below >= above ? PICKER_SIDE.BELOW : PICKER_SIDE.ABOVE;
-  // The widest the menu may stand from either edge, past the gap it keeps from what clips it.
+  const widthMax = Math.max((input.roomRight - input.roomLeft) / input.scale - MENU_GAP * 2, 0);
+  const width = Math.min(input.menuWidth, widthMax);
+  // The room the menu has from either edge, past the gap it keeps from what clips it.
   const fromStart = (input.roomRight - input.chipLeft) / input.scale - MENU_GAP;
   const fromEnd = (input.chipRight - input.roomLeft) / input.scale - MENU_GAP;
-  // Note that an automatic menu hangs from the leading edge while it stands whole there, as a chip leading its line does, and otherwise from the edge with more room.
-  const align: PlacedAlign =
-    input.align === PICKER_ALIGN.AUTO
-      ? fromStart >= WIDEST_MENU || fromStart >= fromEnd
-        ? PICKER_ALIGN.START
-        : PICKER_ALIGN.END
-      : input.align;
-  const across = align === PICKER_ALIGN.END ? fromEnd : fromStart;
+  const asked = input.align;
+  const other = asked === PICKER_ALIGN.END ? PICKER_ALIGN.START : PICKER_ALIGN.END;
+  const across = (edge: PickerAlign) => (edge === PICKER_ALIGN.END ? fromEnd : fromStart);
+  const align: PickerAlign =
+    across(asked) >= width
+      ? asked
+      : across(other) >= width || across(other) > across(asked)
+        ? other
+        : asked;
   return {
     side,
     align,
     listMax: Math.floor(Math.max(side === PICKER_SIDE.BELOW ? below : above, 0)),
-    widthMax: Math.floor(Math.max(across, 0)),
+    widthMax: Math.floor(widthMax),
+    // Note that a negative inset pushes the menu back over the chip, so its far side stays inside.
+    inset: Math.floor(Math.min(across(align) - width, 0)),
   };
 }
 
@@ -139,33 +142,51 @@ function roomAround(chip: HTMLElement): ViewportBox {
   return seen;
 }
 
+/**
+ * The menu's width as its own rules draw it, uncapped by the room the last
+ * opening left it, which a menu reopened in a wider room would otherwise keep.
+ */
+function naturalWidth(menu: HTMLElement): number {
+  const capped = menu.style.maxWidth;
+  menu.style.maxWidth = "none";
+  const width = menu.offsetWidth;
+  menu.style.maxWidth = capped;
+  return width;
+}
+
 /** The attributes the box holding a chip and its menu wears, which say where the menu hangs. */
 interface PickerPlacementProps {
   readonly "data-side": PickerSide;
-  readonly "data-align": PlacedAlign;
+  readonly "data-align": PickerAlign;
   readonly style: React.CSSProperties | undefined;
 }
 
 /**
  * Where a chip's menu hangs as it opens, from the chip's edge `align`
- * names, or the one with more room for an automatic one, as the attributes
- * the box holding the chip and the menu wears: `data-side`, `data-align`
- * for the edge, the list's cap as `--settings-picker-list-max`, and the
- * menu's widest as `--settings-picker-width-max`. Every chip whose menu
- * drops from a form row, a Settings picker and the repository chip in a
- * dialog or an editor, is placed by it, so none runs past the window's foot
- * while there is room above, nor past its side.
+ * names, or the other where only that keeps it whole, as the attributes the
+ * box holding the chip and the menu wears: `data-side`, `data-align` for
+ * the edge, the list's cap as `--settings-picker-list-max`, the menu's
+ * widest as `--settings-picker-width-max`, and how far it stands in from
+ * that edge as `--settings-picker-inset`, which is below zero where the
+ * menu is pushed back over the chip to keep inside. Every chip whose menu
+ * drops from a form row, a Settings picker, a task's standing chips, and the
+ * repository and issue chips, is placed by it, so none runs past the
+ * window's foot while there is room above, nor past the side of what clips
+ * it and scrolls that sideways. The menu is the element `menuId` names,
+ * measured at its own width on the frame it opens.
  */
 export function usePickerPlacement(
   open: boolean,
   chip: RefObject<HTMLElement | null>,
   align: PickerAlign,
+  menuId: string,
 ): PickerPlacementProps {
   const [placement, setPlacement] = useState<ReturnType<typeof pickerPlacement>>();
 
   // The menu is placed from the chip's bounds on the frame it opens, before it is painted.
   useLayoutEffect(() => {
-    if (!open || chip.current === null) return;
+    const menu = document.getElementById(menuId);
+    if (!open || chip.current === null || menu === null) return;
     const bounds = chip.current.getBoundingClientRect();
     const room = roomAround(chip.current);
     // Note that the scale is read off the chip itself, because the page the
@@ -183,20 +204,22 @@ export function usePickerPlacement(
         roomLeft: room.left,
         roomRight: room.right,
         align,
+        menuWidth: naturalWidth(menu),
         scale,
       }),
     );
-  }, [open, chip, align]);
+  }, [open, chip, align, menuId]);
 
   return {
     "data-side": placement?.side ?? PICKER_SIDE.BELOW,
-    "data-align": placement?.align ?? (align === PICKER_ALIGN.END ? align : PICKER_ALIGN.START),
+    "data-align": placement?.align ?? align,
     style:
       placement === undefined
         ? undefined
         : cssCustomProperties({
             "--settings-picker-list-max": `${placement.listMax}px`,
             "--settings-picker-width-max": `${placement.widthMax}px`,
+            "--settings-picker-inset": `${placement.inset}px`,
           }),
   };
 }
@@ -261,7 +284,7 @@ export function Picker({
   const menuId = useId();
   const row = useRef<HTMLSpanElement>(null);
   const chip = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, chip, align);
+  const placement = usePickerPlacement(open, chip, align, menuId);
 
   // Note that we hand focus back to the chip, as a native menu returns it to
   // its button, because closing takes the focused menu away with it.
@@ -328,6 +351,7 @@ export function Picker({
 export function PickerRow({
   detail,
   changed,
+  saves = 0,
   error,
   density,
   ...picker
@@ -336,6 +360,8 @@ export function PickerRow({
   detail?: React.ReactNode;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean | undefined;
+  /** How many of the row's writes have landed, which its Saved tick confirms each of. */
+  saves?: number | undefined;
   /** What the last write was refused with, or nothing while none was. */
   error?: React.ReactNode;
   /** How the row stands; in a settings card where none is named. */
@@ -345,7 +371,7 @@ export function PickerRow({
     <SettingsRow
       density={density}
       label={picker.label}
-      adornment={changed ? <ChangedMark /> : null}
+      adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       error={error}
     >

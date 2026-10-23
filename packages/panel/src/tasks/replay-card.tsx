@@ -8,9 +8,11 @@ import {
   Button,
   DISCLOSURE_BODY,
   Disclosure,
+  DisclosureAction,
   DisclosureBody,
   DisclosureSummary,
   Inline,
+  OneLine,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_LINK_LOOK,
@@ -22,7 +24,6 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -235,7 +236,14 @@ function LineSender({
   return (
     <div className="message-meta">
       <span className="message-sender">
-        <span className="message-sender-words">{view.sender}</span>
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="message-sender-words"
+        >
+          {view.sender}
+        </Text>
       </span>
     </div>
   );
@@ -464,8 +472,6 @@ export function ReplayCard({
       : openSource;
   const left = leftOutLine(replay);
   const summary = summaryLine(replay);
-  // Note that the head's words are a tree, the source's chip among them, so they are watched rather than handed in.
-  const [titleBox, titleClipped] = useClipped();
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin">
       <Plan data-replay-card="" aria-label={replayVerb(replay)}>
@@ -473,20 +479,21 @@ export function ReplayCard({
           <PlanIcon>
             <SplitIcon />
           </PlanIcon>
-          <span ref={titleBox} className="replay-card-title" data-overflow={String(titleClipped)}>
+          {/* Note that the head's words are a tree, the source's chip among them, so they are watched rather than handed in. */}
+          <OneLine className="replay-card-title">
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {replayVerb(replay)}{" "}
             </Text>
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the chip's own press from also folding the card; the chip is the control. */}
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: the chip inside is a button, which takes the keys itself. */}
-            <span className="agent-origin-chip" onClick={(event) => event.stopPropagation()}>
-              <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} />
-            </span>
+            <DisclosureAction>
+              <span className="agent-origin-chip">
+                <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} />
+              </span>
+            </DisclosureAction>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {" "}
               · {replayCount(replay)}
             </Text>
-          </span>
+          </OneLine>
         </PlanHeader>
         <PlanContent layout={PLAN_BODY_LAYOUT.STACK}>
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>

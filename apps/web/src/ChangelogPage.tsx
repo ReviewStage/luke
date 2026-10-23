@@ -1,3 +1,4 @@
+import releases from "virtual:luke/changelog-releases";
 import {
   BUTTON_VARIANT,
   ButtonLink,
@@ -17,37 +18,28 @@ import {
   Text,
   TextLink,
 } from "@luke/ui";
-import changelogMarkdown from "../../../CHANGELOG.md?raw";
+import { formatDayHeading } from "@luke/ui/time-format";
 import {
   CHANGELOG_PATH,
   CHANGELOG_VIEW,
   type ChangelogView,
   changelogPagePath,
   changelogReleasePath,
-  parseReleases,
   type Release,
 } from "./changelog-releases";
 import { REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 /**
  * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
- * (`changelog-releases.ts` reads it and decides which releases an address
- * shows). Every release keeps the same rail and body wherever it appears, so
- * a release read on its own page looks as it does in the list.
+ * (`site-markdown.tsx` draws its releases when the site is built, and
+ * `changelog-releases.ts` decides which releases an address shows). Every
+ * release keeps the same rail and body wherever it appears, so a release
+ * read on its own page looks as it does in the list.
  */
-export const RELEASES = parseReleases(changelogMarkdown);
-
-/* UTC, because the heading's date names a calendar day, not an instant — a
-   visitor west of Greenwich must not read the release as the evening before. */
-const RELEASE_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  timeZone: "UTC",
-});
+export const RELEASES: readonly Release[] = releases;
 
 function formatReleaseDate(date: string): string {
-  return RELEASE_DATE_FORMAT.format(new Date(`${date}T00:00:00Z`));
+  return formatDayHeading(date);
 }
 
 /** The view's door to GitHub, the landing hero's secondary button, so the two GitHub doors read as the same control. */

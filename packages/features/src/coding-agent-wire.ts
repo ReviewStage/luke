@@ -463,8 +463,8 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * prompt, files, source, or note; its first words come later, typed or
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
- * draft's composer: it runs on eve whatever the account's routing would
- * choose, as a blank one does, since a call reaches eve alone.
+ * draft's composer: it runs where the account's routing chooses, as any
+ * Start does, eve or the provider's own harness alike.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -684,8 +684,6 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_CODING_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** The human name the agent was given, which names it ahead of its title; absent for an agent from before names were given, and from a service before them. */
-  personaName: EffectSchema.optionalKey(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** Epoch milliseconds the agent was started. */
@@ -1448,14 +1446,17 @@ const stackAgentSchema = EffectSchema.Struct({
 
 /**
  * One open pull request of the stack a pull request stands in: its number,
- * title, and page; whether it is a draft; and the agent of the workspace
- * whose branch is its head, where one is.
+ * title, and page; whether it is a draft, and whether GitHub's merge queue
+ * holds it; and the agent of the workspace whose branch is its head, where
+ * one is.
  */
 const stackEntrySchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
   url: EffectSchema.String,
   draft: EffectSchema.Boolean,
+  /** True where the merge queue holds it; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   agent: EffectSchema.optionalKey(stackAgentSchema),
 });
 
@@ -2132,6 +2133,13 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  /**
+   * Who pays for the agent (`CODING_AGENT_PAYER`), as its row recorded it at
+   * Start, before any turn settled too, so the chip says whose plan pays,
+   * or none, from the first. Absent on a worker's page, for an agent from
+   * before payers were recorded, and from a service older than it.
+   */
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
   /**
    * What the newest turn alone cost. No service sends it any more, since a
    * price the window draws means the whole run's (`usage`); it stays an

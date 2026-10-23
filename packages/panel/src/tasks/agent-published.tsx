@@ -14,12 +14,14 @@ import {
   List,
   ListRow,
   ProviderMark,
+  RowHint,
+  RowHintOptions,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import {
   checkoutCommand,
   publishedUrl,
@@ -185,7 +187,7 @@ export function PublishedRow({
   doors: PublishedDoors;
 }): ReactNode {
   const menu = useMenu(true);
-  const state = pullRequestStateWord(pullRequest.state);
+  const state = pullRequestStateWord(pullRequest);
   const inPanel = doors.openPullRequest;
   const actions = branchActions(branch, doors, inPanel === undefined ? undefined : pullRequest.url);
   const mentionDoors = useMentionDoors();
@@ -210,7 +212,7 @@ export function PublishedRow({
   return (
     <>
       <div className="agent-published">
-        <List label="Pull request" variant={LIST_VARIANT.CARD}>
+        <List label="Pull request" variant={LIST_VARIANT.CARD} fingerTall>
           {/* Note that the card stands in the pill's place whatever the title's width, since it names the title whole, the published one where GitHub answered nothing. */}
           <RowHintOptions card={card}>
             <ListRow

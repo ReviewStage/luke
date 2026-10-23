@@ -8,15 +8,14 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
-  BROWSER_ACT_KIND,
   TASKS_ACT_KIND,
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { settingsView } from "@luke/settings/testing";
+import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -40,7 +39,7 @@ import {
   refusedOnPort,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DesktopSettings } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
@@ -48,9 +47,8 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 /** The task kinds on the act port, which the call-card test's fake refuses. */
 const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
 
-/** The platform's updater, Browser tab, and window acts, which this window's fake refuses. */
+/** The platform's updater and window acts, which this window's fake refuses. */
 const PLATFORM_KINDS: ReadonlySet<string> = new Set([
-  ...Object.values(BROWSER_ACT_KIND),
   ...Object.values(UPDATE_ACT_KIND),
   ...Object.values(WINDOW_SURFACE_ACT_KIND),
 ]);
@@ -79,7 +77,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Profile", "Agents", "Integrations", "Plan template", "Experimental"],
+    rows: ["Profile", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -322,6 +320,24 @@ test("the sidebar's first group is headed by the listed workspace's name, over i
     ["Acme", "Account", "This Mac"],
   );
   assert.deepEqual(pageGroups(page)[0]?.rows, ["Workspace"]);
+});
+
+test("the sidebar lists Memory under Workspace and its search finds it only while the account has the Memory experiment on", async () => {
+  const off = mount(createElement(SettingsHarness));
+  assert.deepEqual(pageGroups(off)[0]?.rows, ["Workspace"]);
+  // While off, the search finds only the experiment's own switch, where Memory is turned on.
+  assert.deepEqual(foundUnder(off, "Memory"), ["Experimental"]);
+
+  handState(experimentsOn(EXPERIMENT.MEMORY));
+  const on = mount(createElement(SettingsHarness));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(pageGroups(on)[0]?.rows, ["Workspace", "Memory"]);
+  assert.equal(shownTitle(on), "Profile");
+  openPage(on, "Memory");
+  assert.equal(shownTitle(on), "Memory");
 });
 
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {

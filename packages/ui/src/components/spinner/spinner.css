@@ -3,6 +3,12 @@
    over the words' own room rather than taking a width of its own. */
 
 @layer components {
+  :root {
+    /* How long a delayed wait stands before its ring shows: past a read that
+       lands at once, short of a wait anyone notices. */
+    --luke-spinner-delay: 180ms;
+  }
+
   .luke-spinner-ring {
     display: block;
     box-sizing: border-box;
@@ -72,8 +78,33 @@
     gap: inherit;
   }
 
-  .luke-busy-label[data-shown="true"] > .luke-busy-label-words {
+  .luke-busy-label > .luke-busy-label-words {
     visibility: hidden;
+  }
+
+  /* A delayed wait keeps its words and shows no ring until it has stood a
+     moment: the ring appears, and the words give way, at the delay. */
+  .luke-busy-label[data-delay="true"] > .luke-busy-label-words {
+    visibility: visible;
+    animation: luke-spinner-hide 0s linear var(--luke-spinner-delay) forwards;
+  }
+
+  .luke-busy-label[data-delay="true"] > .luke-spinner,
+  .luke-spinner[data-delay="true"] {
+    visibility: hidden;
+    animation: luke-spinner-show 0s linear var(--luke-spinner-delay) forwards;
+  }
+
+  @keyframes luke-spinner-show {
+    to {
+      visibility: visible;
+    }
+  }
+
+  @keyframes luke-spinner-hide {
+    to {
+      visibility: hidden;
+    }
   }
 
   .luke-busy-label > .luke-spinner {

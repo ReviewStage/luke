@@ -5,15 +5,12 @@ import {
   ComposeIcon,
   ExternalIcon,
   FoldingButton,
-  type FoldingButtonHint,
   GAP,
   Inline,
   PlusIcon,
   Stack,
-  TooltipPill,
   UpdateIcon,
 } from "@luke/ui";
-import { cloneElement, useId, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -22,44 +19,21 @@ import { CatalogSection } from "../section";
  * folded to their glyphs, busy either way, round in the tinted looks a
  * release's presses wear, and in a toolbar that folds them once it is
  * narrower than 360px, which its corner resizes. Folded, each
- * raises its words in a pill while the pointer rests on it or the keyboard
- * reaches it: the catalog's own stand-in for the timing an app gives its
- * hints.
+ * raises its words in the window's tooltip once the pointer rests on it or
+ * the keyboard reaches it.
  */
-
-/** The catalog's hint: a pill over the button while the pointer or the keyboard is on it, where it is handed words. */
-const Hint: FoldingButtonHint = ({ label, children }) => {
-  const id = useId();
-  const [anchor, setAnchor] = useState<HTMLElement | undefined>(undefined);
-  const show = (event: { currentTarget: HTMLElement }) => setAnchor(event.currentTarget);
-  const hide = () => setAnchor(undefined);
-  return (
-    <>
-      {cloneElement(children, {
-        onPointerEnter: show,
-        onPointerLeave: hide,
-        onFocus: show,
-        onBlur: hide,
-      })}
-      {anchor === undefined || label === undefined ? null : (
-        <TooltipPill id={id} anchor={anchor} label={label} />
-      )}
-    </>
-  );
-};
 
 /** A toolbar's acts: the way back, Send feedback, and an outlined Run now, busy where asked. */
 function Acts({ busy = false }: { busy?: boolean }): React.JSX.Element {
   return (
     <Inline gap={GAP.CONTROL}>
-      <FoldingButton label="Automations" icon={<ComposeIcon />} hint={Hint} />
-      <FoldingButton label="Send feedback" icon={<PlusIcon />} hint={Hint} />
+      <FoldingButton label="Automations" icon={<ComposeIcon />} />
+      <FoldingButton label="Send feedback" icon={<PlusIcon />} />
       <FoldingButton
         label="Run now"
         icon={<PlusIcon />}
         variant={BUTTON_VARIANT.OUTLINE}
         busy={busy ? "Running" : undefined}
-        hint={Hint}
       />
     </Inline>
   );
@@ -75,7 +49,6 @@ function Tinted(): React.JSX.Element {
         variant={BUTTON_VARIANT.WORKING_TINT}
         shape={BUTTON_SHAPE.ROUND}
         size={BUTTON_SIZE.COMPACT}
-        hint={Hint}
       />
       <FoldingButton
         label="Download"
@@ -83,9 +56,21 @@ function Tinted(): React.JSX.Element {
         variant={BUTTON_VARIANT.DANGER_TINT}
         shape={BUTTON_SHAPE.ROUND}
         size={BUTTON_SIZE.COMPACT}
-        hint={Hint}
       />
     </Inline>
+  );
+}
+
+/** A group's fold: a row-wide press, its glyph then its words, and a count inside its fill. */
+function Counted(): React.JSX.Element {
+  return (
+    <FoldingButton
+      label="Todo"
+      icon={<PlusIcon />}
+      variant={BUTTON_VARIANT.ROW}
+      trailing={3}
+      aria-expanded
+    />
   );
 }
 
@@ -115,6 +100,9 @@ function FoldingButtons(): React.JSX.Element {
             <Tinted />
           </div>
         </Stack>
+      </CatalogSection>
+      <CatalogSection id="folding-counted" title="Row look with a count">
+        <Counted />
       </CatalogSection>
       <CatalogSection id="folding-toolbar" title="Folding with its toolbar">
         <div className="catalog-folding-toolbar">
