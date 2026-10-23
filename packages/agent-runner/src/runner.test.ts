@@ -75,8 +75,12 @@ const CONFIG: RunnerConfig = {
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://luke.test/runner/mcp",
+  integrations: [{ name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" }],
   allowedDomains: ["github.com", "registry.npmjs.org"],
 };
+
+/** The integration server the config hands the agent. */
+const LINEAR_SERVER = { name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" };
 
 const FIRST_MESSAGE: InputLine = {
   type: INPUT_LINE.MESSAGE,
@@ -684,14 +688,17 @@ function fakeCliTransport() {
   return { transport, sent, answered };
 }
 
-/** A launch whose Luke answers its MCP route as `mcp` does, and the SDK server the CLI was handed, connected to a fake channel. */
-function launchWithMcp(mcp: ReturnType<typeof fakeMcpRoute>) {
+/** A launch whose Luke answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; Luke's own unless an integration's is named. */
+function launchWithMcp(
+  mcp: ReturnType<typeof fakeMcpRoute>,
+  named: { readonly name: string; readonly url: string } = { name: "luke", url: CONFIG.mcpUrl },
+) {
   return Effect.gen(function* () {
     const luke = fakeLuke();
     const routed: typeof luke = {
       ...luke,
       layer: fakeHttpClientLayer((url, init) =>
-        url === CONFIG.mcpUrl ? mcp.respond(url, init) : luke.respond(url, init),
+        url === named.url ? mcp.respond(url, init) : luke.respond(url, init),
       ),
     };
     const launched = yield* launch(SHORT_TURN, routed);
@@ -699,7 +706,7 @@ function launchWithMcp(mcp: ReturnType<typeof fakeMcpRoute>) {
     for (let step = 0; step < 500 && launched.cli.options === undefined; step += 1) {
       yield* Effect.yieldNow;
     }
-    const server = launched.cli.options?.mcpServers?.luke;
+    const server = launched.cli.options?.mcpServers?.[named.name];
     assert.ok(server?.type === "sdk" && "instance" in server);
     const cli = fakeCliTransport();
     // @ts-expect-error -- the fake stands in for the SDK's own control-channel transport.
@@ -732,6 +739,32 @@ it.effect("relays the CLI's MCP messages to Luke under the runner's bearer, over
       ],
     );
   }),
+);
+
+it.effect(
+  "hands the CLI each integration as a server of its own, relayed to its endpoint under the runner's bearer",
+  () =>
+    Effect.gen(function* () {
+      const mcp = fakeMcpRoute();
+      const { channel, write, run, cli } = yield* launchWithMcp(mcp, LINEAR_SERVER);
+
+      channel.transport.onmessage?.({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+      yield* Deferred.await(channel.answered);
+      yield* write(FIRST_MESSAGE);
+      yield* Fiber.join(run);
+
+      assert.deepEqual(Object.keys(cli.options?.mcpServers ?? {}), ["luke", "linear"]);
+      assert.deepEqual(channel.sent, [{ jsonrpc: "2.0", id: 1, result: { tools: [] } }]);
+      assert.deepEqual(
+        mcp.calls.map(({ authorization, body }) => ({ authorization, body })),
+        [
+          {
+            authorization: `Bearer ${BEARER}`,
+            body: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          },
+        ],
+      );
+    }),
 );
 
 it.effect("answers the CLI's MCP request with a JSON-RPC error where Luke refuses it", () =>
@@ -784,6 +817,7 @@ it.effect(
       assert.ok(argv.includes("--input-format"), "the stub CLI was started");
       assert.ok(argv.every((argument) => !argument.includes(BEARER)));
       assert.ok(argv.every((argument) => !argument.includes(CONFIG.mcpUrl)));
+      assert.ok(argv.every((argument) => !argument.includes(LINEAR_SERVER.url)));
       assert.ok(!argv.includes("--mcp-config"));
       assert.equal(listened, 0, "the launch opened no listening socket");
     }),

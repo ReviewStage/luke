@@ -198,6 +198,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         firstSequence,
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
+        integrations: yield* options.integrations(agent),
         allowedDomains: [...ALLOWED_DOMAINS],
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
       };

@@ -3,6 +3,7 @@ import { CODEX_LUKE_MCP_SERVER, CODEX_TOOL } from "@luke/features/agent-tools";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
+import { storedServerCall } from "../../integrations/connection-tools.js";
 import {
   NATIVE_MOMENT,
   type NativeHeld,
@@ -40,7 +41,9 @@ import {
  * turn, which settles the spawn that started it: the spawn answers the
  * moment the thread starts, so it is kept open until then. A call to Luke's own
  * MCP server is named as Luke's tool and its answer read as the JSON that
- * tool answers, a picture in it standing in for its bytes. Each shape is
+ * tool answers, a picture in it standing in for its bytes; a call to an
+ * integration's own server is stored as eve's call of that integration's
+ * tool is, so it draws with the service's mark and the tool's own name. Each shape is
  * read with a schema of the fields this reads alone, so a field Codex adds
  * changes nothing here, and a notification no schema fits is no moment.
  */
@@ -153,19 +156,18 @@ const readCommand = Schema.decodeUnknownOption(
 const readFileChange = Schema.decodeUnknownOption(
   Schema.Struct({ ...ITEM_FIELDS, changes: Schema.Array(WireValueSchema), status: Schema.String }),
 );
-const readMcpToolCall = Schema.decodeUnknownOption(
-  Schema.Struct({
-    ...ITEM_FIELDS,
-    server: Schema.String,
-    tool: Schema.String,
-    status: Schema.String,
-    arguments: Schema.optionalKey(WireValueSchema),
-    result: Schema.optionalKey(
-      Schema.NullOr(Schema.Struct({ content: Schema.Array(WireValueSchema) })),
-    ),
-    error: Schema.optionalKey(Schema.NullOr(Schema.Struct({ message: Schema.String }))),
-  }),
-);
+const McpToolCallSchema = Schema.Struct({
+  ...ITEM_FIELDS,
+  server: Schema.String,
+  tool: Schema.String,
+  status: Schema.String,
+  arguments: Schema.optionalKey(WireValueSchema),
+  result: Schema.optionalKey(
+    Schema.NullOr(Schema.Struct({ content: Schema.Array(WireValueSchema) })),
+  ),
+  error: Schema.optionalKey(Schema.NullOr(Schema.Struct({ message: Schema.String }))),
+});
+const readMcpToolCall = Schema.decodeUnknownOption(McpToolCallSchema);
 const readWebSearch = Schema.decodeUnknownOption(
   Schema.Struct({
     ...ITEM_FIELDS,
@@ -269,7 +271,26 @@ function mcpAnswerText(content: readonly WireValue[], lukeTool: boolean): string
     .join("\n");
 }
 
-/** A call to an MCP server: Luke's tool by its own name, any other server's as `mcpToolCall`. */
+/**
+ * The name and input a call to an MCP server is stored under: Luke's tool's
+ * own for Luke's server; for an integration's own server, its integration's
+ * fixed name and envelope, as eve's nested call of the tool is stored
+ * (`storedServerCall`); `mcpToolCall` naming the server and tool otherwise.
+ */
+function storedMcpCall(
+  call: typeof McpToolCallSchema.Type,
+  args: WireValue,
+): { readonly name: string; readonly input: UnparsedWireValue } {
+  if (call.server === CODEX_LUKE_MCP_SERVER) return { name: call.tool, input: args };
+  return (
+    storedServerCall(call.server, call.tool, args, call.id) ?? {
+      name: CODEX_TOOL.MCP_TOOL_CALL,
+      input: { server: call.server, tool: call.tool, arguments: args },
+    }
+  );
+}
+
+/** A call to an MCP server, stored as `storedMcpCall` names it. */
 function mcpCall(item: unknown): Option.Option<Answered> {
   return Option.map(readMcpToolCall(item), (call) => {
     const lukeTool = call.server === CODEX_LUKE_MCP_SERVER;
@@ -281,8 +302,7 @@ function mcpCall(item: unknown): Option.Option<Answered> {
         : mcpAnswerText(call.result.content, lukeTool));
     return {
       callId: call.id,
-      name: lukeTool ? call.tool : CODEX_TOOL.MCP_TOOL_CALL,
-      input: lukeTool ? args : { server: call.server, tool: call.tool, arguments: args },
+      ...storedMcpCall(call, args),
       answer: lukeTool ? { lukeTool: true, text } : { lukeTool: false, text, output: text },
       failed:
         call.error !== undefined && call.error !== null ? true : FAILED_STATUSES.has(call.status),

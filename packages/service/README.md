@@ -802,7 +802,12 @@ wrapper's own result. Both the names and that envelope are the wire's
 (`@luke/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
 `integrationRemoteCallSchema`), because the desktop draws the nested call as
 the provider's tool, under the provider's mark, and leaves its wrapper's row
-out. Every name
+out. A Claude Code or Codex agent has no wrapper: each connection it is
+handed is an MCP server of its own at Luke
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/luke-mcp/app.ts`
+over `src/integrations/connection-door.ts`), and its call of one
+(`mcp__linear__list_issues`, or Codex's `mcpToolCall` on server `linear`) is
+stored under the same name and envelope, the call its own parent. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
