@@ -50,6 +50,8 @@ export const TEXT_FIELD_SIZE = {
   TITLE: "title",
   /** A step under a control in the caption's type, on the well's ground, among a bar's controls, as a Browser tab's address. */
   COMPACT: "compact",
+  /** Words written in place in the body's type, without a well, as a mail's subject among the lines of its head. */
+  INLINE: "inline",
 } as const;
 
 export type TextFieldSize = (typeof TEXT_FIELD_SIZE)[keyof typeof TEXT_FIELD_SIZE];

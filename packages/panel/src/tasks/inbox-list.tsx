@@ -96,7 +96,15 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -135,6 +143,7 @@ import {
   listHeadControl,
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
+import { NEW_THREAD } from "./inbox-compose.js";
 import {
   EVERYONES,
   holderKey,
@@ -224,10 +233,10 @@ import { useOpenPlace } from "./use-open-link.js";
  * menu: first what the list holds, To do, the developer's own items they are
  * not done with, asks waiting on them and anything of theirs unread, a
  * settled thread its agent wrote on again among them, or All, every item,
- * the head naming All after the Inbox's name; then Group by, by task, by
- * person, by status (what needs the developer
+ * the head naming All after the Inbox's name; then Group by, None, one
+ * run, by task, by person, or by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
- * folding as a task's group does), or None, one run; Sort, the latest
+ * folding as a task's group does); Sort, the latest
  * change first or the oldest first; Whose, everyone's
  * items, the developer's own, or one teammate's by face and name, which a
  * chip over the list then says, its × listing everyone's again; each
@@ -851,12 +860,8 @@ export function InboxItemRow({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <>
-              {/* Note that the gutter stands on every row, so the tiles line up whether a row wears the dot or not. */}
-              <span className="inbox-row-gutter">
-                {unread ? <span className="inbox-row-unread" /> : null}
-              </span>
               {/* Note that the tile hangs no card of its own, as a sidebar task's mark hangs none: the row's card names the agent. */}
-              <span className="inbox-row-mark">
+              <InboxRowLeading unread={unread}>
                 <ItemMark
                   holder={holder}
                   agentId={item.agentId}
@@ -864,7 +869,7 @@ export function InboxItemRow({
                   readerId={readerId}
                   plain
                 />
-              </span>
+              </InboxRowLeading>
             </>
           }
           title={title}
@@ -887,7 +892,7 @@ export function InboxItemRow({
             )
           }
           meta={
-            <span className="home-row-meta">
+            <InboxRowMeta>
               {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
               {context === undefined ? null : (
                 <OneLine className="home-row-context" words={context}>
@@ -909,7 +914,7 @@ export function InboxItemRow({
               ) : null}
               <TaskStatusChip holder={holder} />
               <Time at={item.updatedAt} now={now} hint={false} />
-            </span>
+            </InboxRowMeta>
           }
           metaAt={LIST_ROW_META.TITLE}
           actions={
@@ -1265,10 +1270,10 @@ function windowEntries(
       label: GROUP_BY,
       icon: <ListIcon />,
       items: [
+        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
         groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
         groupBy("Person", <UsersIcon />, INBOX_GROUPING.PERSON),
         groupBy("Status", <CircleDotIcon />, INBOX_GROUPING.STATUS),
-        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
       ],
     },
     {
@@ -1399,6 +1404,34 @@ export function ShowEmpty({
 }
 
 /**
+ * An item row's leading: the gutter the unread dot stands in, on every row so
+ * the tiles line up whether a row wears the dot or not, and the tile after
+ * it. The list's rows and its placeholder rows both lead with it, so a tile
+ * lands where its block stood.
+ */
+function InboxRowLeading({
+  unread,
+  children,
+}: {
+  unread: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <>
+      <span className="inbox-row-gutter">
+        {unread ? <span className="inbox-row-unread" /> : null}
+      </span>
+      <span className="inbox-row-mark">{children}</span>
+    </>
+  );
+}
+
+/** An item row's meta, its context, marks, and time in one line at the title's right. */
+function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="home-row-meta">{children}</span>;
+}
+
+/**
  * The list while its items are first read: rows in an item's own row, a
  * block where its agent's tile, its title, its time, and the line under
  * them will stand, so the
@@ -1429,15 +1462,19 @@ export function InboxListSkeleton({
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
-            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
+            leading={
+              <InboxRowLeading unread={false}>
+                <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
+              </InboxRowLeading>
+            }
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={
               context ? (
-                <span className="home-row-meta">
+                <InboxRowMeta>
                   <Skeleton width={SKELETON_CONTEXT} />
                   <Skeleton width={SKELETON_TIME} />
-                </span>
+                </InboxRowMeta>
               ) : (
                 <Skeleton width={SKELETON_TIME} />
               )
@@ -1567,6 +1604,9 @@ function ListHead({
               shown={shown}
               groups={(opener) => [
                 [
+                  ...(head.onCompose === undefined
+                    ? []
+                    : [{ label: NEW_THREAD, icon: <ComposeIcon />, onSelect: head.onCompose }]),
                   ...(onOpen === undefined
                     ? []
                     : [
@@ -1601,6 +1641,11 @@ function ListHead({
   }
   const options = (
     <>
+      {head.onCompose === undefined ? null : (
+        <Tooltip label={NEW_THREAD}>
+          <IconButton icon={<ComposeIcon />} label={NEW_THREAD} onClick={head.onCompose} />
+        </Tooltip>
+      )}
       {search.button}
       <ViewOptions
         shown={shown}
@@ -1742,10 +1787,12 @@ export interface InboxListHead {
   readonly readAll?: InboxReadAll | undefined;
   /** The list's search, which its head's magnifier opens, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
+  /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
+  readonly onCompose?: (() => void) | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
    * phone's places: its one start control, New task, the title centred, and
-   * the ⋯ holding the search and View options; none elsewhere.
+   * the ⋯ holding New thread, the search, and View options; none elsewhere.
    */
   readonly phone?: { readonly start: React.ReactNode } | undefined;
 }

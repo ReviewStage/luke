@@ -2105,6 +2105,34 @@ test("the pill, the title, and the files' count stand from what Luke holds befor
   ]);
 });
 
+test("each part's placeholder stands in the boxes the part lands in: the line under the title in the people line, the conversation in entry cards, the checks in the checks' own list", async () => {
+  const pullRequest = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
+  const checks = held<{ pullRequest: CodingAgentOverviewChecks }>();
+  const conversation = held<{ pullRequest: CodingAgentOverviewConversation }>();
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: pullRequest.read,
+      checks: checks.read,
+      conversation: conversation.read,
+    }),
+  );
+  const placeholder = (label: string) =>
+    [...tab.querySelectorAll<HTMLElement>('[aria-busy="true"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`${label} stands`);
+
+  assert.ok(placeholder("Reading pull request").querySelector(".pull-request-people .luke-skeleton"));
+  assert.ok(
+    placeholder("Reading conversation").querySelectorAll(".pull-request-entry .luke-skeleton")
+      .length > 0,
+  );
+  await choose(tab, "Checks");
+  const rows = placeholder("Reading checks").querySelectorAll(
+    '[aria-label="Check list"] li .luke-skeleton',
+  );
+  assert.ok(rows.length > 0, "the checks' blocks stand in the checks' own list");
+});
+
 /** A read answering each ask with the next of the answers given, the last again once they run out. */
 function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
   let ask = 0;
@@ -2504,12 +2532,28 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
       { ...none, press: "Remove from queue", look: "outline", chevron: false },
     ],
     [
-      "auto-merge on",
-      merging(MERGE_STATE.BLOCKED, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
+      "auto-merge on, waiting on its checks, which its press says",
+      merging(MERGE_STATE.BLOCKED, {
+        checks: CHECK_SUMMARY.PENDING,
+        autoMerge: { method: MERGE_METHOD.SQUASH },
+      }),
+      { ...none, press: "Disable auto-merge", look: "outline", chevron: false },
+    ],
+    [
+      "auto-merge on, about to merge",
+      merging(MERGE_STATE.CLEAN, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
+      { ...none, press: "Disable auto-merge", look: "outline", chevron: false },
+    ],
+    [
+      "auto-merge on, a review required",
+      merging(MERGE_STATE.BLOCKED, {
+        review: REVIEW_DECISION.REVIEW_REQUIRED,
+        autoMerge: { method: MERGE_METHOD.SQUASH },
+      }),
       {
-        chip: "Auto-merge on",
-        tone: "working",
-        sentence: "Auto-merge is on (squash). Merging is blocked by a required review or check",
+        chip: "Review required",
+        tone: "attention",
+        sentence: "Auto-merge is on (squash). A required review is missing",
         press: "Disable auto-merge",
         look: "outline",
         chevron: false,
@@ -3244,6 +3288,42 @@ test("a pull request of the stack GitHub's merge queue holds says Queued in the 
     items.map((item) => item.textContent),
     ["#42 Step 42", "#40 Step 40Queued · Opens on GitHub"],
   );
+  act(() => button.click());
+});
+
+test("the stack's menu draws each pull request's mark in its state's colour: a draft's, a queued one's, and an open one's", async () => {
+  const entry = (number: number, extra: { draft?: boolean; queued?: true }) => ({
+    number,
+    title: `Step ${number}`,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    draft: extra.draft === true,
+    ...(extra.queued === true ? { queued: true as const } : undefined),
+  });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            stack: [entry(40, { queued: true }), entry(42, {}), entry(44, { draft: true })],
+          },
+        }),
+    }),
+    PULL_REQUEST_VIEW.CONVERSATION,
+  );
+  const button =
+    tab.querySelector<HTMLButtonElement>(
+      '.pull-request-branch-row button[aria-label="Stack, 2 of 3"]',
+    ) ?? assert.fail("the stack stands beside the branches");
+
+  act(() => button.click());
+  const states = [
+    ...document.querySelectorAll(':is([role="menuitem"], [role="menuitemcheckbox"])'),
+  ].map((item) =>
+    item.querySelector("[data-pull-request-mark]")?.getAttribute("data-pull-request-state"),
+  );
+
+  assert.deepEqual(states, ["draft", "open", "queued"]);
   act(() => button.click());
 });
 

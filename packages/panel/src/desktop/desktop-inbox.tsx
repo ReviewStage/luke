@@ -17,6 +17,7 @@ import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
+import { InboxCompose } from "../tasks/inbox-compose.js";
 import { InboxList, InboxListNote, ItemMark, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
@@ -123,6 +124,9 @@ const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
 
 const _nothing = (): void => undefined;
 
+/** The column a New thread stands in, which the Inbox shows as it would an item. */
+const COMPOSE_COLUMN = "new-thread";
+
 /** No tab of the Inbox's panel is drawn in semibold: what arrives on a task arrives on its page. */
 const NO_UNREAD: readonly StripTab[] = [];
 
@@ -199,6 +203,7 @@ function InboxShown({
     choose,
     closeItem,
     onRetry,
+    compose,
   } = listing;
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
@@ -208,7 +213,7 @@ function InboxShown({
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
   const { listed, onListed, onSingle } = view;
   const pageColumns = useInboxColumns(
-    chosen?.item.id ?? (missing ? asked?.itemId : undefined),
+    compose.on ? COMPOSE_COLUMN : (chosen?.item.id ?? (missing ? asked?.itemId : undefined)),
     !paneOnly,
     { asked: listed, onAsk: onListed, onSingle: paneOnly ? undefined : onSingle },
   );
@@ -223,6 +228,7 @@ function InboxShown({
     : pageColumns;
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
+    compose.onEnd();
     choose(listed);
     columns.onOpen(listed.item.id);
   };
@@ -266,6 +272,19 @@ function InboxShown({
       : (tasks.workspaces.find((each) => each.id === chosenWorkspaceId)?.slug ?? chosenWorkspaceId);
   // What the chosen item's box offers an `@`, read under that workspace and repository.
   const readMentionAgents = useMentionAgentsReader(place?.workspaceId, tasks.tasks, named.models);
+  // What a New thread's To offers: the agents of the workspace the Inbox lists.
+  const readWorkspaceAgents = useMentionAgentsReader(
+    tasks.workspace?.id,
+    tasks.tasks,
+    named.models,
+  );
+  const startCompose = compose.onStart;
+  const onCompose = tasks.signedIn
+    ? () => {
+        startCompose();
+        columns.onOpen(COMPOSE_COLUMN);
+      }
+    : undefined;
   const mentions =
     place === undefined
       ? undefined
@@ -279,7 +298,7 @@ function InboxShown({
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
   const opened =
-    tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
+    tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST && !compose.on
       ? chosen
       : undefined;
   useReadOnOpen({
@@ -403,6 +422,7 @@ function InboxShown({
                         onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
                       },
                       search,
+                      onCompose,
                       phone:
                         room === SHELL_ROOM.NARROW
                           ? { start: <NewTaskButton tasks={tasks} /> }
@@ -430,7 +450,27 @@ function InboxShown({
                     onClose={closeItem}
                   />
                 )}
-                {chosen === undefined ? (
+                {compose.on ? (
+                  <InboxCompose
+                    hidden={columns.shown === INBOX_COLUMNS.LIST}
+                    onBack={columns.onBack}
+                    readAgents={readWorkspaceAgents}
+                    to={chosen?.item.agentId}
+                    keywords={agents.keywords}
+                    start={agents.startInboxThread}
+                    onStarted={({ item, agent }) => {
+                      compose.onEnd();
+                      view.onChoose({
+                        ...(agent.task === undefined
+                          ? { agentId: agent.id }
+                          : { taskId: agent.task.id }),
+                        itemId: item.id,
+                        opened: true,
+                      });
+                    }}
+                    onDiscard={compose.onEnd}
+                  />
+                ) : chosen === undefined ? (
                   <section
                     className="inbox-view-items"
                     aria-label="Inbox"
@@ -612,6 +652,7 @@ function InboxSidePanel({
         ? panel.tab.transcript === opened.agent
         : panel.tab !== undefined && sameTab(opened, panel.tab),
     shownCode: [],
+    pages: taskId === undefined ? undefined : { taskId },
   });
   const transcript = (agentId: string) => {
     const agent = agents.agents?.find((each) => each.id === agentId);

@@ -43,7 +43,7 @@ import {
   GitPullRequestIcon,
   PencilIcon,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
@@ -388,6 +388,21 @@ const TITLE_WORDS = {
   FIELD: "Pull request title",
 } as const;
 
+/** The title's line in the dialog's type, holding its field while it is edited, or the blocks of a title still being read. */
+export function PullRequestTitleLine({
+  field = false,
+  children,
+}: {
+  field?: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <h2 className={field ? "pull-request-title pull-request-title-field" : "pull-request-title"}>
+      {children}
+    </h2>
+  );
+}
+
 /**
  * The pull request's title and number, the number wrapping with the
  * title's last word, its pencil opening a field over the
@@ -419,7 +434,7 @@ export function PullRequestTitle({
   };
   if (editing) {
     return (
-      <h2 className="pull-request-title pull-request-title-field">
+      <PullRequestTitleLine field>
         <InlineEdit
           value={title}
           label={TITLE_WORDS.FIELD}
@@ -428,7 +443,7 @@ export function PullRequestTitle({
           look={INLINE_EDIT_LOOK.INPUT}
           onEnd={end}
         />
-      </h2>
+      </PullRequestTitleLine>
     );
   }
   const numberWords = <span className="pull-request-number">{number}</span>;

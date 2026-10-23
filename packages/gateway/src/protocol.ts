@@ -341,6 +341,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
   /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  /** A thread the account starts with one agent, its subject and first message under the panel's own key; the thread as it then stands, its message on it, or why there is no answer. */
+  CODING_AGENTS_INBOX_START: "codingAgents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */

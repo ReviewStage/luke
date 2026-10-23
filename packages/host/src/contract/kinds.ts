@@ -192,6 +192,8 @@ export const AGENT_INBOX_ACT_KIND = {
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
   /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  /** A new thread with one agent, its subject and first message, under the panel's own key. */
+  CODING_AGENTS_INBOX_START: "codingAgents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */

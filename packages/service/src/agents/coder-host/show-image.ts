@@ -3,14 +3,11 @@ import { keepConversationPicture } from "@luke/database/models/conversation-pict
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import {
-  CONVERSATION_MEDIA_TYPE,
   CONVERSATION_PICTURE_BOUNDS,
-  type ConversationMediaType,
   type KeptPicture,
 } from "@luke/features/conversation-picture-wire";
-import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
 import { INBOX_BOUNDS } from "@luke/features/inbox-wire";
-import { startsLikeWebm, webmDimensions } from "@luke/features/video-signature";
+import { mediaDimensions, sniffMediaType } from "@luke/features/media-signature";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -105,18 +102,6 @@ interface ReadPicture {
   readonly height: number;
 }
 
-/** The type a shown file's first bytes say it is: a picture's, or a WebM's, whose doctype `webmDimensions` then holds it to. */
-function sniffShown(head: Uint8Array): ConversationMediaType | undefined {
-  return sniffImageType(head) ?? (startsLikeWebm(head) ? CONVERSATION_MEDIA_TYPE.WEBM : undefined);
-}
-
-/** The size a shown file states: a WebM's video track's, or a picture's header's. */
-function shownDimensions(bytes: Uint8Array, type: ConversationMediaType) {
-  return type === CONVERSATION_MEDIA_TYPE.WEBM
-    ? webmDimensions(bytes)
-    : imageDimensions(bytes, type);
-}
-
 /** The picture at the path, read, held to the bound, and measured; or the sentence refusing it. */
 function readPicture(
   binding: ShowImageBinding,
@@ -125,7 +110,7 @@ function readPicture(
   return Effect.map(
     readSandboxImage(binding.sandbox, binding.checkout, path, {
       maxBytes: CONVERSATION_PICTURE_BOUNDS.MAX_BYTES,
-      sniff: sniffShown,
+      sniff: sniffMediaType,
       refusals: {
         NO_FILE: SHOW_IMAGE_REFUSAL.NO_FILE,
         NOT_IMAGE: SHOW_IMAGE_REFUSAL.NOT_IMAGE,
@@ -134,7 +119,7 @@ function readPicture(
       },
     }),
     Result.flatMap((image) => {
-      const dimensions = shownDimensions(image.bytes, image.contentType);
+      const dimensions = mediaDimensions(image.bytes, image.contentType);
       if (dimensions === undefined) return Result.fail(`${SHOW_IMAGE_REFUSAL.NOT_IMAGE} ${path}`);
       return Result.succeed({ ...image, ...dimensions });
     }),

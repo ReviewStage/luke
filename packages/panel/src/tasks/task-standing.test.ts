@@ -229,3 +229,32 @@ test("the assignee's menu opened near the panel's right edge stands inside the p
   );
   assert.equal(width, menuWidth, "the menu keeps its whole width");
 });
+
+test("the assignee's menu says it is reading while the members are unread, and never that none match", async () => {
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => new Promise(() => undefined),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => new Promise(() => undefined),
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  await act(async () => {
+    root.render(
+      createElement(MemberDirectory, {
+        workspace: { id: "workspace-acme", memberCount: 3 },
+        readerId: "user-dean",
+        children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
+      }),
+    );
+  });
+
+  act(() => chip(host, "Assignee").click());
+
+  assert.match(
+    document.querySelector(".luke-combobox-note")?.textContent ?? "",
+    /Reading members/u,
+  );
+  assert.equal(document.querySelector(".luke-combobox-empty"), null);
+});

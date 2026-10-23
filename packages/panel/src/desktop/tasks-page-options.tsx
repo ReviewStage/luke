@@ -416,6 +416,13 @@ function offeredFields(shared: boolean): readonly TasksFilterField[] {
   );
 }
 
+/** The row standing last in a people's field while the members are read, which nothing picks. */
+const READING_MEMBERS: MenuAction = {
+  label: "Reading members…",
+  disabled: true,
+  onSelect: () => undefined,
+};
+
 /** What the Filter says of itself while it keeps anything. */
 export const FILTERED = "Filtered";
 
@@ -433,15 +440,19 @@ function filterEntries(
     return {
       label: FIELD_WORDS[field],
       icon: FIELD_ICON[field],
-      items: fieldValues(field, tasks, filter, reader, pictures).map(
-        ({ value, words, icon }): MenuAction => ({
-          label: words,
-          icon,
-          checked: kept.includes(value),
-          stays: true,
-          onSelect: () => onFilter(toggledFilter(filter, field, value)),
-        }),
-      ),
+      items: [
+        ...fieldValues(field, tasks, filter, reader, pictures).map(
+          ({ value, words, icon }): MenuAction => ({
+            label: words,
+            icon,
+            checked: kept.includes(value),
+            stays: true,
+            onSelect: () => onFilter(toggledFilter(filter, field, value)),
+          }),
+        ),
+        // Note that the members are read for the people's fields alone, so no other field says it is reading.
+        ...(reader.membersReading && PERSON_FIELDS.includes(field) ? [READING_MEMBERS] : []),
+      ],
     };
   });
   return [

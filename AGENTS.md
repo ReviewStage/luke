@@ -104,7 +104,16 @@ fires, use a `@luke/ui` component, or add the component or variant there.
   screenshot (`packages/service/src/agents/browser/browser-tool.ts`), shown and
   deleted on the same terms; the model is never handed the video, the
   transcript's player is left out of session replay, and none of it goes into a
-  trace, a counted event, a fixture, or the voice window. And Sentry's SDKs run
+  trace, a counted event, a fixture, or the voice window. An agent may also
+  post such a recording, or any WebM it recorded in its sandbox, to its task's
+  inbox or its workspace's chat
+  (`packages/service/src/agents/coder-host/inbox-image.ts`), kept beside the
+  inbox item or the chat message, up to 4 MB, as a picture posted there is,
+  shown to whoever may read that item or message and deleted with it; an agent
+  told of a chat message is never handed the video, only told it is there
+  (`coder-host/chat-notify.ts`), the inbox's and the chat's players are left
+  out of session replay, and none of it goes into a trace, a counted event, a
+  fixture, or the voice window. And Sentry's SDKs run
   with their default data collection
   (`packages/service/src/observability/sentry.ts`, the eve roots'
   `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web app's

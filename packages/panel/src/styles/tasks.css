@@ -2539,26 +2539,29 @@
   line-height: var(--luke-type-caption-leading);
 }
 
-.chapters-skeleton {
+/* The placeholder's region takes the room under the line, as the
+   chapters' body does under theirs, so the rail runs the full height. */
+.chapters-generating > .luke-skeleton-region {
   display: flex;
-  gap: var(--luke-section-gap);
-  padding: var(--luke-space-12) var(--column-inset);
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
-.chapters-skeleton-rail {
+/* A placeholder row in the rail's own list, a chapter's row's height and
+   inset, its block where the row's title will stand. */
+.chapter-rail-skeleton-row {
   display: flex;
-  width: min(var(--chapter-rail-width, calc(var(--luke-space-64) * 4)), 40%);
-  flex: none;
-  flex-direction: column;
-  gap: var(--luke-space-12);
+  height: var(--luke-control-height);
+  align-items: center;
+  padding-inline: var(--luke-space-8);
 }
 
 .chapters-skeleton-reading {
   display: flex;
-  min-width: 0;
-  flex: 1;
   flex-direction: column;
   gap: var(--luke-space-8);
+  padding: var(--luke-space-12) var(--column-inset);
 }
 
 /* A panel too narrow for the rail beside the chapter floats it over the
@@ -2601,7 +2604,9 @@
     display: flex;
   }
 
-  .chapters-skeleton-rail {
+  /* The rail floats over the chapter here, only while asked for, so the
+     chapters' placeholder stands none. */
+  .chapters-generating .chapter-rail {
     display: none;
   }
 }
@@ -3296,27 +3301,21 @@
 }
 
 /* A part of the overview still being read: its blocks in the type its
-   words will stand in, at the content inset; under the title, the branches'
-   and the people's two lines; in the checks, rows as boxed as theirs will
-   be. A part whose read failed says so in the same place, with its Retry. */
+   words will stand in, at the content inset. The title, the people line,
+   the checks, and the conversation stand theirs in their own boxes
+   (`agent-pull-request-tab.tsx`). A part whose read failed says so in the
+   same place, with its Retry. */
 .pull-request-skeleton,
 .pull-request-failure {
   padding-inline: var(--row-inset);
 }
 
-.pull-request-skeleton > .skeleton + .skeleton {
+.pull-request-skeleton > .luke-skeleton + .luke-skeleton {
   margin-top: var(--luke-space-6);
 }
 
-.pull-request-head-skeleton,
 .pull-request-title-row + .pull-request-failure {
   margin-top: var(--luke-space-6);
-}
-
-.pull-request-checks-skeleton {
-  padding: var(--luke-space-8) var(--boxed-inset);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
 }
 
 /* A deployment's door to the address it serves, quiet at its row's end. */
@@ -3417,7 +3416,7 @@
   vertical-align: middle;
 }
 
-.pull-request-picture-waiting {
+.pull-request-picture-skeleton {
   display: inline-block;
   width: min(100%, 240px);
   aspect-ratio: 16 / 10;
@@ -4395,7 +4394,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
    the newest lines draw, on the log's own inset, over the composer's card. */
-.agent-log-wait {
+.agent-log-skeleton-wait {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -6263,18 +6262,6 @@ svg.lucide {
   max-height: 520px;
   height: auto;
   object-fit: contain;
-}
-
-/* A video an agent recorded and showed as a picture (`agent-pictures.tsx`):
-   played in the frame at its own shape up to the column's, no taller than a
-   picture is drawn, on black while its first frame loads. */
-.picture-video {
-  display: block;
-  max-width: 100%;
-  max-height: 520px;
-  width: auto;
-  height: auto;
-  background: #000;
 }
 
 .picture-caption {

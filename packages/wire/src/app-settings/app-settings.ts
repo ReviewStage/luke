@@ -41,6 +41,7 @@ export const APP_SETTING_ID = {
   DIFF_LIGATURES: "diff_ligatures",
   DIFF_MINIMIZE_COMMENTS: "diff_minimize_comments",
   LINK_OPEN: "link_open",
+  USAGE_DATA: "usage_data",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];

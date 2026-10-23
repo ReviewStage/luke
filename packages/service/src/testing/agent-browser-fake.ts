@@ -277,6 +277,9 @@ export const FAKE_SANDBOX = {
 } as const;
 
 /** Vercel's REST API over one sandbox as the scenario has it, and the commands it ran, by the session each ran in. */
+/** Where the fake sandbox's recorder leaves its video, under the sandbox user's home, as a read prints it. */
+export const FAKE_RECORDING_PATH = `/home/vercel-sandbox/${SANDBOX_RECORDING.VIDEO}`;
+
 export function fakeSandboxApi(scenario: FakeSandboxScenario) {
   const ran: { readonly sandboxSessionId: string; readonly ask: CommandAsk }[] = [];
   let status = scenario.status;
@@ -327,7 +330,11 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
           const video = scenario.recording?.video;
           return video === undefined
             ? { exitCode: RECORDING_READ_EXIT.NO_VIDEO, stdout: "", stderr: "" }
-            : { exitCode: 0, stdout: Buffer.from(video).toString("base64"), stderr: "" };
+            : {
+                exitCode: 0,
+                stdout: `${FAKE_RECORDING_PATH}\n${Buffer.from(video).toString("base64")}`,
+                stderr: "",
+              };
         }
         // The stop is the recording's other script, named as the start is.
         if (ask.args.includes(RECORDING_SCRIPT_NAME)) {

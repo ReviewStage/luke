@@ -365,8 +365,8 @@ const browserAccount = (service: TabService) =>
         }),
       ),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      // A version the counted events allowlist reads, so the counts are sent.
-      Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
+      // A version the counted events allowlist reads, and packaged as a browser tab is, so the counts are sent.
+      Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: true }),
       Layer.provide(cookieAccountSourceLayer(door), FetchHttpClient.layer),
       NodeFileSystem.layer,
       NodePath.layer,

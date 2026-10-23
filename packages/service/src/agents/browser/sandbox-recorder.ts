@@ -407,9 +407,11 @@ export const RECORDING_READ_EXIT = { NO_VIDEO: 3 } as const;
 
 /**
  * Reads the video back, up to the bytes given and one past them, as base64
- * on one line, with every capability dropped as the sandbox's other file
- * reads are (`luke-mcp/sandbox-door.ts`); read its run with
- * `recordingBytesOf`.
+ * on one line after the line naming its absolute path, with every
+ * capability dropped as the sandbox's other file reads are
+ * (`luke-mcp/sandbox-door.ts`); read its run with `recordingBytesOf`. Note
+ * that the path is the sandbox user's home's, which the agent's own may not
+ * be, as a native runner's is not, so the agent is answered it whole.
  */
 export function readRecording(maxBytes: number): CommandAsk {
   return {
@@ -418,7 +420,7 @@ export function readRecording(maxBytes: number): CommandAsk {
       ...WITHOUT_CAPABILITIES.ARGS,
       "bash",
       "-c",
-      `f="$HOME/$1"; [ -f "$f" ] || exit ${RECORDING_READ_EXIT.NO_VIDEO}; head -c "$2" -- "$f" | base64 | tr -d '\\n'`,
+      `f="$HOME/$1"; [ -f "$f" ] || exit ${RECORDING_READ_EXIT.NO_VIDEO}; printf '%s\\n' "$f"; head -c "$2" -- "$f" | base64 | tr -d '\\n'`,
       RECORDING_SCRIPT_NAME,
       SANDBOX_RECORDING.VIDEO,
       String(maxBytes + 1),
@@ -426,11 +428,23 @@ export function readRecording(maxBytes: number): CommandAsk {
   };
 }
 
-/** The video's bytes as a read printed them; nothing where there was none, or where it ran past the bytes given. */
-export function recordingBytesOf(run: CommandRun, maxBytes: number): Uint8Array | undefined {
+/** The video as a read printed it: the absolute path it stays at, and its bytes. */
+export interface RecordingFile {
+  readonly path: string;
+  readonly bytes: Uint8Array;
+}
+
+/** The video as a read printed it; nothing where there was none, or where it ran past the bytes given. */
+export function recordingBytesOf(run: CommandRun, maxBytes: number): RecordingFile | undefined {
   if (run.exitCode !== 0) return undefined;
-  const bytes = new Uint8Array(Buffer.from(run.stdout.trim(), "base64"));
-  return bytes.byteLength === 0 || bytes.byteLength > maxBytes ? undefined : bytes;
+  const lineEnd = run.stdout.indexOf("\n");
+  if (lineEnd < 0) return undefined;
+  const path = run.stdout.slice(0, lineEnd);
+  const bytes = new Uint8Array(Buffer.from(run.stdout.slice(lineEnd + 1).trim(), "base64"));
+  if (!path.startsWith("/") || bytes.byteLength === 0 || bytes.byteLength > maxBytes) {
+    return undefined;
+  }
+  return { path, bytes };
 }
 
 /** What a start's run says: a recording started, one already running, or which of its exits it ended on. */

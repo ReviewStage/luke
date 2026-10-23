@@ -134,6 +134,7 @@ export const CHAT_BOUNDS = {
   MAX_PATH_CHARS: INBOX_BOUNDS.MAX_PATH_CHARS,
   MAX_ALT_CHARS: INBOX_BOUNDS.MAX_ALT_CHARS,
   MAX_IMAGE_BYTES: INBOX_BOUNDS.MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES: INBOX_BOUNDS.MAX_VIDEO_BYTES,
   MAX_LABEL_CHARS: INBOX_BOUNDS.MAX_LABEL_CHARS,
   MAX_OPTIONS: INBOX_BOUNDS.MAX_OPTIONS,
   MAX_OPTION_DETAIL_CHARS: INBOX_BOUNDS.MAX_OPTION_DETAIL_CHARS,
@@ -254,6 +255,11 @@ export function chatNoticeUnattachedLine(attachmentIds: readonly string[]): stri
   return `Not attached, past what one message carries: ${attachmentIds.map((id) => `attachment ${id}`).join(", ")}.`;
 }
 
+/** A notice's closing line naming the message's videos, which play for the people in the chat and are never handed to a model: each by its attachment id, as the words name it. */
+export function chatNoticeVideosLine(attachmentIds: readonly string[]): string {
+  return `Videos, which play in the chat and are never attached: ${attachmentIds.map((id) => `attachment ${id}`).join(", ")}.`;
+}
+
 /**
  * A notice's head as `chat-notify.ts` writes it, whole: the lead, who said it,
  * by their mention link or a plain name, where, and its place.
@@ -263,8 +269,9 @@ const CHAT_NOTICE_HEAD = new RegExp(
   "u",
 );
 
-/** The closing lines as `chatNoticeUnattachedLine`, `chatNoticeAsksLine`, and `chatNoticeReplyLine` write them, whole, which nothing a member typed is read as. */
+/** The closing lines as `chatNoticeVideosLine`, `chatNoticeUnattachedLine`, `chatNoticeAsksLine`, and `chatNoticeReplyLine` write them, whole, which nothing a member typed is read as. */
 const CHAT_NOTICE_CLOSINGS = [
+  /^Videos, which play in the chat and are never attached: attachment [0-9a-f-]+(?:, attachment [0-9a-f-]+)*\.$/u,
   /^Not attached, past what one message carries: attachment [0-9a-f-]+(?:, attachment [0-9a-f-]+)*\.$/u,
   /^It asks you \([a-z-]+\): answer it in its thread\.$/u,
   new RegExp(`^Reply with ${CHAT_TOOL.POST}\\(\\{ replyTo: \\d+, text \\}\\)\\.$`, "u"),

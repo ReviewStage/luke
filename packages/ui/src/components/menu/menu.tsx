@@ -394,19 +394,31 @@ function itemAfter(key: string, at: number, count: number): number | undefined {
   }
 }
 
+/** The control a standing card describes, which names it by its `aria-describedby`, wherever it stands. */
+function describerOf(card: Element): Element | undefined {
+  return [...document.querySelectorAll("[aria-describedby]")].find(
+    (control) => control.getAttribute("aria-describedby") === card.id,
+  );
+}
+
 /**
- * Whether a press landed on the card an item of one of `menus` hangs, which
- * stands apart from the menu, portalled to the body, and names the item it
- * describes by the item's `aria-describedby`.
+ * Whether a press landed on the card an item of one of `menus` hangs, or on
+ * a card hung from a control on that card, as a person named on an agent's
+ * card hangs their own. Each card stands apart from the menu, portalled to
+ * the body, so it is traced back through the control that describes it,
+ * card by card, until one stands in a menu.
  */
 function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[]): boolean {
-  const card = target instanceof Element ? target.closest('[role="tooltip"]') : null;
-  if (card === null || card.id === "") return false;
-  return menus.some((menu) =>
-    [...(menu?.querySelectorAll("[aria-describedby]") ?? [])].some(
-      (item) => item.getAttribute("aria-describedby") === card.id,
-    ),
-  );
+  const seen = new Set<Element>();
+  let card = target instanceof Element ? target.closest('[role="tooltip"]') : null;
+  while (card !== null && card.id !== "" && !seen.has(card)) {
+    seen.add(card);
+    const control = describerOf(card);
+    if (control === undefined) return false;
+    if (menus.some((menu) => menu?.contains(control) === true)) return true;
+    card = control.closest('[role="tooltip"]');
+  }
+  return false;
 }
 
 /** The items of one menu, its own and not a submenu's within it, that the keys move between now. */

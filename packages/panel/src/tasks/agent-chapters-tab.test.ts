@@ -491,6 +491,10 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
     tab.querySelector(".chapters-generating-line")?.textContent ?? "",
     /^Generating chapters/u,
   );
+  assert.ok(
+    tab.querySelectorAll('[aria-busy="true"] nav[aria-label] li .luke-skeleton').length > 0,
+    "the rows' blocks stand in the rail's own pane, where the chapters' rows land",
+  );
 
   generated.resolve(answering(ready()));
   await settle();

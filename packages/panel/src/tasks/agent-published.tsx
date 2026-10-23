@@ -19,15 +19,11 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import {
-  checkoutCommand,
-  publishedUrl,
-  pullRequestNumberLabel,
-  pullRequestStateWord,
-} from "./coding-agent-model.js";
+import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./coding-agent-model.js";
 import { MentionChipCard } from "./mention-chip.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
@@ -217,11 +213,7 @@ export function PublishedRow({
           <RowHintOptions card={card}>
             <ListRow
               leading={<PullRequestMark pullRequest={pullRequest} />}
-              title={
-                <>
-                  {pullRequestNumberLabel(pullRequest)} · {pullRequest.title}
-                </>
-              }
+              title={pullRequestLabelOf(pullRequest)}
               meta={
                 <span className="agent-published-meta">
                   {pullRequest.checks === CHECK_SUMMARY.FAILING ? (

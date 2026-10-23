@@ -54,12 +54,8 @@ const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
 const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === undefined ? PRODUCT_SETTING_VALUE.CLEARED : PRODUCT_SETTING_VALUE.SET;
 
-/**
- * A stored on/off. That it is a toggle is what fixes its guard, its
- * description's kind and words for its two states, and the shape a change is
- * counted in, so a toggle declares only what is its own.
- */
-export function toggleSetting<Field extends string, Id extends AppSettingId>(spec: {
+/** What a toggle declares of its own; the rest is fixed by its being a toggle. */
+interface ToggleSpec<Field extends string, Id extends AppSettingId> {
   field: Field;
   id: Id;
   label: string;
@@ -72,11 +68,18 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
   sideEffect: SettingSideEffectId;
   resetScope?: SettingsResetScope;
   visible?: (view: SettingsVisibility) => boolean;
-}): AppSettingSchemaEntry<Field, boolean, Id, boolean> {
+}
+
+/**
+ * One toggle's entry but for its guard, which decides what nothing stored
+ * reads as and so is each builder's own.
+ */
+function toggleEntry<Field extends string, Id extends AppSettingId>(
+  spec: ToggleSpec<Field, Id>,
+): Omit<AppSettingSchemaEntry<Field, boolean, Id, boolean>, "guard" | "control"> {
   return {
     field: spec.field,
     default: spec.default,
-    guard: boolean(spec.default),
     page: spec.page,
     section: spec.section ?? SETTING_SECTION.MAIN,
     order: spec.order,
@@ -93,6 +96,36 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
     }),
     visible: spec.visible,
     analytics: { value: toggleAnalytics },
+  };
+}
+
+/**
+ * A stored on/off. That it is a toggle is what fixes its guard, its
+ * description's kind and words for its two states, and the shape a change is
+ * counted in, so a toggle declares only what is its own.
+ */
+export function toggleSetting<Field extends string, Id extends AppSettingId>(
+  spec: ToggleSpec<Field, Id>,
+): AppSettingSchemaEntry<Field, boolean, Id, boolean> {
+  return { ...toggleEntry(spec), guard: boolean(spec.default) };
+}
+
+/**
+ * A stored on/off whose default is the build's: `default` in a packaged build,
+ * `unpackagedDefault` in a development one. Nothing stored is kept as nothing
+ * rather than read as `default`, because only the store knows which build it
+ * runs in, and it answers its snapshot with that build's default.
+ */
+export function buildToggleSetting<Field extends string, Id extends AppSettingId>(
+  spec: ToggleSpec<Field, Id> & { unpackagedDefault: boolean },
+): AppSettingSchemaEntry<Field, boolean | undefined, Id, boolean> & {
+  readonly unpackagedDefault: boolean;
+} {
+  const isBoolean = Schema.is(Schema.Boolean);
+  return {
+    ...toggleEntry(spec),
+    guard: (value: UnparsedWireValue) => optional(value, isBoolean),
+    unpackagedDefault: spec.unpackagedDefault,
   };
 }
 

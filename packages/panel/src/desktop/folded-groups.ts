@@ -407,13 +407,13 @@ export function useTaskInboxShow(): InboxShowChoice {
   return useKeptShow(STORAGE_KEY.TASK_INBOX_SHOW, STORAGE_KEY.TASK_INBOX_WAITING_ONLY);
 }
 
-/** The Inbox's view choices, To do of everyone's, grouped by task, the latest first, with no media shown, until first changed, and kept as each is pressed. */
+/** The Inbox's view choices, To do of everyone's, grouped by nothing, the latest first, with no media shown, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
   const shown = useKeptShow(STORAGE_KEY.INBOX_SHOW, STORAGE_KEY.INBOX_WAITING_ONLY);
   const [grouping, onGrouping] = useKeptChoice<InboxGrouping>(
     STORAGE_KEY.INBOX_GROUPING,
     storedGrouping,
-    INBOX_GROUPING.TASK,
+    INBOX_GROUPING.NONE,
   );
   const [sort, onSort] = useKeptChoice<InboxSort>(
     STORAGE_KEY.INBOX_SORT,
