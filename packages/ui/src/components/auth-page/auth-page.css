@@ -70,6 +70,8 @@
     font-size: var(--luke-type-title-size);
     line-height: var(--luke-type-title-leading);
     font-weight: var(--luke-weight-bold);
+    /* A title that wraps splits its words evenly rather than leaving one alone. */
+    text-wrap: balance;
   }
 
   /* The card's first child opens it flush, whichever part that is. */
