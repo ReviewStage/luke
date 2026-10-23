@@ -17,7 +17,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { ItemMark } from "./inbox-list.js";
+import { ItemMark } from "./inbox-item-parts.js";
 import { taskHolder } from "./inbox-model.js";
 
 /**

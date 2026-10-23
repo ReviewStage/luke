@@ -1,4 +1,5 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -12,12 +13,16 @@ import {
   ListRow,
   type ListRowHint,
   OneLine,
+  RowHint,
+  RowHintOptions,
   Shortcut,
   Tooltip,
+  useMinute,
 } from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cloneElement, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { InboxItemCard, InboxItemEnd, ItemMark } from "./inbox-item-parts.js";
 import {
   INBOX_DIRECTION,
   type InboxDirection,
@@ -51,9 +56,13 @@ import { cardTitle } from "./tool-call-model.js";
  * press on a row turns no way, so Next goes on the way the keys last went.
  */
 
-/** What a hint names as the key it is reached by: the chord, on the row's press. */
+/** What a hint names as the key it is reached by: the chord, on the row's press, the row's card hung through `RowHintOptions` beside it. */
 function keyHint(chord: ShortcutChord): ListRowHint {
-  return ({ children }) => cloneElement(children, { "aria-keyshortcuts": shortcutAria(chord) });
+  return ({ label, children }) => (
+    <RowHint label={label}>
+      {cloneElement(children, { "aria-keyshortcuts": shortcutAria(chord) })}
+    </RowHint>
+  );
 }
 
 /** How Next reads and which key reaches it, each way through the list: K and an arrow up, or J as it always read. */
@@ -83,10 +92,11 @@ export interface InboxPager {
   readonly onNext: (() => void) | undefined;
 }
 
-/** The next item that needs the developer, as a settled item offers it: its agent's tile and title, which way it was looked for in, whether that way's key reaches it too, and the press that opens it. */
+/** The next item that needs the developer, as a settled item offers it: the Inbox's own row of it, which way it was looked for in, whether that way's key reaches it too, and the press that opens it. */
 export interface InboxNext {
-  readonly title: string;
-  readonly mark: React.ReactNode;
+  readonly listed: InboxListed;
+  readonly models: readonly CatalogModel[] | undefined;
+  readonly readerId: string | undefined;
   /** The way the developer last stepped, which it was looked for in, wrapping round past the list's end. */
   readonly direction: InboxDirection;
   /** Whether it is also the item that way's key chooses, the one just beside it in the list, so the row may name the key. */
@@ -98,7 +108,10 @@ export interface InboxNext {
 export function inboxNext(
   view: InboxListView,
   chosen: InboxListed | undefined,
-  mark: (listed: InboxListed) => React.ReactNode,
+  seams: {
+    readonly models: readonly CatalogModel[] | undefined;
+    readonly readerId: string | undefined;
+  },
   onChoose: (listed: InboxListed) => void,
   folded: (key: string) => boolean,
   direction: InboxDirection,
@@ -109,35 +122,66 @@ export function inboxNext(
   const steps = inboxSteps(view, chosen.item.id, folded);
   const beside = direction === INBOX_DIRECTION.UP ? steps?.previous : steps?.next;
   return {
-    title: cardTitle(next.item.title),
-    mark: mark(next),
+    listed: next,
+    ...seams,
     direction,
     byKey: beside?.item.id === next.item.id,
     onOpen: () => onChoose(next),
   };
 }
 
-/** The row a settled item offers over its box, a card of one row: Next, an arrow up where it lies above, the item's agent's tile and title, and K or J where that key reaches it. */
+/**
+ * The row a settled item offers over its box, a card of one row: Next, an
+ * arrow up where it lies above, the item's agent's tile and title, the marks
+ * the Inbox's own row wears at its end, and K or J where that key reaches
+ * it. The item's card hangs beside it, as the Inbox's row hangs it.
+ */
 export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
   const way = NEXT_WAY[next.direction];
+  const now = useMinute();
+  const { listed, models, readerId } = next;
+  const { holder, item } = listed;
+  const title = cardTitle(item.title);
   return (
     <div className="inbox-next-dock">
       <List label="Next item" variant={LIST_VARIANT.CARD}>
-        <ListRow
-          leading={<span className="inbox-row-mark">{next.mark}</span>}
-          title={
-            <span className="inbox-next-words">
-              <span className="inbox-next-lead">{way.lead}</span>
-              <OneLine className="inbox-next-title" words={next.title}>
-                {next.title}
-              </OneLine>
-            </span>
-          }
-          meta={next.byKey ? <Shortcut chord={way.chord} /> : null}
-          unread
-          hint={next.byKey ? { Hint: way.Hint, label: next.title } : undefined}
-          onPress={next.onOpen}
-        />
+        <RowHintOptions
+          card={<InboxItemCard listed={listed} now={now} models={models} readerId={readerId} />}
+          cardBeside
+        >
+          <ListRow
+            leading={
+              <span className="inbox-row-mark">
+                <ItemMark
+                  holder={holder}
+                  agentId={item.agentId}
+                  models={models}
+                  readerId={readerId}
+                  plain
+                />
+              </span>
+            }
+            title={
+              <span className="inbox-next-words">
+                <span className="inbox-next-lead">{way.lead}</span>
+                <OneLine className="inbox-next-title" words={title}>
+                  {title}
+                </OneLine>
+              </span>
+            }
+            meta={
+              <InboxItemEnd
+                listed={listed}
+                now={now}
+                readerId={readerId}
+                after={next.byKey ? <Shortcut chord={way.chord} /> : undefined}
+              />
+            }
+            unread
+            hint={{ Hint: next.byKey ? way.Hint : RowHint, label: title }}
+            onPress={next.onOpen}
+          />
+        </RowHintOptions>
       </List>
     </div>
   );

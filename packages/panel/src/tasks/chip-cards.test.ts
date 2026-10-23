@@ -8,7 +8,15 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import {
+  INBOX_REPLY,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
@@ -32,6 +40,7 @@ import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.j
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { ChipCards, type TaskFocus } from "./chip-cards.js";
@@ -44,7 +53,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * same card's head and the section's heading for a section, or the
  * version for a version; a page's title, version, and when it moved; a
  * file's or a folder's path, repository, and where it is read; a member's
- * card; an Inbox item's question and that it waits; an automation's card,
+ * card; an Inbox item's Inbox row's own card; an automation's card,
  * its workspace's automations read as it is first hung. A place the window
  * holds nothing of keeps the chip's own card. Synthetic workspace, plan,
  * page, people, and automation.
@@ -196,6 +205,60 @@ const STATE: AppStateSnapshot = (() => {
   };
 })();
 
+/** An item of the plan's agent, open and asking a choice, as the service answers one. */
+const WAITING: InboxItem = {
+  id: ITEM_ID,
+  agentId: "agent-1",
+  key: "4b9e",
+  revision: 1,
+  version: INBOX_WIRE_VERSION,
+  title: "Keep expired links?",
+  blocks: [],
+  response: {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Keep them a week" }, { label: "Drop them at once" }],
+    recommended: "Keep them a week",
+  },
+  needsReply: true,
+  status: INBOX_STATUS.OPEN,
+  postedAt: AT,
+  updatedAt: AT,
+};
+
+/** An item of the same plan the reader answered, which main's document no longer lists as waiting. */
+const ANSWERED_ITEM = "item_7d2c";
+
+const ANSWERED: InboxItem = {
+  ...WAITING,
+  id: ANSWERED_ITEM,
+  key: "7d2c",
+  title: "Rename the invite email?",
+  status: INBOX_STATUS.ANSWERED,
+  settledAt: AT,
+  answeredBy: { userId: DEAN, name: "Dean Stratakos" },
+  answer: { reply: INBOX_REPLY.CHOSE, choices: ["Keep them a week"] },
+};
+
+/** An item of the agent on no task, answered too. */
+const SWEEP_ITEM = "item_9a1f";
+
+const SWEPT: InboxItem = {
+  ...ANSWERED,
+  id: SWEEP_ITEM,
+  agentId: SWEEP_AGENT,
+  key: "9a1f",
+  title: "Quarantine the flaky test?",
+};
+
+/** The host's side of the inbox streams: the plan's items and the agent on no task's, each followed as a chip's glyph or card reads them. */
+const inboxes = followedInboxes((scope) => {
+  if (scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === TASK_ID) {
+    return { items: [WAITING, ANSWERED] };
+  }
+  if (scope.kind === INBOX_SCOPE_KIND.AGENT && scope.id === SWEEP_AGENT) return { items: [SWEPT] };
+  return undefined;
+});
+
 /** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
 
@@ -257,6 +320,7 @@ async function drawn(text: string): Promise<HTMLElement> {
     requestAppState: () => Promise.resolve(STATE),
   });
   fakeActPort({
+    ...inboxes.procedures,
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
       Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
@@ -300,7 +364,7 @@ async function drawn(text: string): Promise<HTMLElement> {
 
 async function settle(): Promise<void> {
   await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    for (let tick = 0; tick < 40; tick += 1) await Promise.resolve();
   });
 }
 
@@ -500,21 +564,44 @@ test("a file's and a folder's chips hang their path, their repository, and where
   );
 });
 
-test("a member's chip hangs their card, and an Inbox item's its question and that it waits", async () => {
+test("an Inbox item's chip wears its agent's tile and hangs its Inbox row's own card, whether the item waits or was answered, on a task or on an agent with no task", async () => {
   const container = await drawn(
-    `Ask [Sam](${HOME}/person/${SAM}) about [the links](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID}).`,
+    [
+      `[waiting](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,
+      `[answered](${HOME}/plan/${TASK_ID}/inbox/${ANSWERED_ITEM})`,
+      `[swept](${HOME}/agent/${SWEEP_AGENT}/inbox/${SWEEP_ITEM})`,
+    ].join(" "),
   );
-  const [person, item] = chipsOf(container);
+  const [waiting, answered, swept] = chipsOf(container);
 
-  const member = await cardOf(person);
-  const question = await cardOf(item);
+  for (const chip of [waiting, answered, swept]) {
+    assert.ok(
+      chip?.querySelector('.actor-mark[data-kind="agent"]'),
+      "the chip leads with the agent's tile",
+    );
+  }
+  const asking = await cardOf(waiting);
+  const settled = await cardOf(answered);
+  const sweep = await cardOf(swept);
+
+  assert.equal(asking.card, "data-inbox-row-card");
+  assert.equal(asking.name, "Keep expired links?");
+  assert.equal(asking.sub, "Needs you");
+  assert.equal(settled.card, "data-inbox-row-card");
+  assert.equal(settled.name, "Rename the invite email?");
+  assert.match(settled.sub ?? "", /^Answered/u);
+  assert.equal(sweep.card, "data-inbox-row-card");
+  assert.equal(sweep.name, "Quarantine the flaky test?");
+});
+
+test("a member's chip hangs their card", async () => {
+  const container = await drawn(`Ask [Sam](${HOME}/person/${SAM}).`);
+
+  const member = await cardOf(chipsOf(container)[0]);
 
   assert.equal(member.card, "data-actor-card");
   assert.equal(member.name, "Sam Okafor");
   assert.equal(member.sub, "sam@example.com");
-  assert.equal(question.card, "data-inbox-item-card");
-  assert.equal(question.name, "Keep expired links?");
-  assert.deepEqual(question.notes, ["Waiting for an answer"]);
 });
 
 test("an automation's chip hangs its card, the workspace's automations read only once the card is hung", async () => {

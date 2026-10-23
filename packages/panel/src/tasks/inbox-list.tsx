@@ -1,10 +1,7 @@
-import { INBOX_ASK, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
-  Badge,
   BUTTON_SIZE,
   CHIP_LOOK,
   Chip,
@@ -16,16 +13,9 @@ import {
   type EmptyStateAction,
   ErrorState,
   GAP,
-  HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
-  HoverCardList,
-  HoverCardNote,
-  HoverCardRow,
-  HoverCardRule,
   IconButton,
-  INLINE_REF_LOOK,
-  InlineRef,
   LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
   LIST_ROW_ACTIONS,
@@ -52,8 +42,6 @@ import {
   Skeleton,
   SkeletonRegion,
   Stack,
-  TaskStatusMark,
-  Time,
   Tooltip,
   useLeaving,
   useMenu,
@@ -70,14 +58,12 @@ import {
   personActor,
 } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import * as Atom from "effect/reactivity/Atom";
 import {
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
   CheckIcon,
   CircleCheckIcon,
   CircleDotIcon,
-  CircleIcon,
   ClockArrowDownIcon,
   ClockArrowUpIcon,
   FactoryIcon,
@@ -92,7 +78,6 @@ import {
   Rows2Icon,
   SlidersHorizontalIcon,
   SquareCheckIcon,
-  SquareIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
@@ -108,7 +93,7 @@ import {
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
-import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
+import { useInboxItemDraft } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import {
@@ -128,13 +113,8 @@ import {
 } from "../desktop/phone-head.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
-import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { TaskChipCard } from "./chip-cards.js";
-import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
   INBOX_COLUMNS,
@@ -144,6 +124,13 @@ import {
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
 import { NEW_THREAD } from "./inbox-compose.js";
+import {
+  HolderGlyph,
+  InboxItemCard,
+  InboxItemEnd,
+  ItemMark,
+  useInboxStanding,
+} from "./inbox-item-parts.js";
 import {
   EVERYONES,
   holderKey,
@@ -158,7 +145,6 @@ import {
   type InboxCounts,
   type InboxGrouping,
   type InboxHolder,
-  type InboxKnownAsk,
   type InboxLineKind,
   type InboxListed,
   type InboxListView,
@@ -169,20 +155,15 @@ import {
   type InboxStatusGroup,
   type InboxStatusGroupKind,
   type InboxWhose,
-  inboxCardThread,
   inboxLineKind,
   inboxMedia,
   inboxPreview,
-  inboxSettledStanding,
-  inboxSettledWords,
   inboxShownTicks,
-  inboxWaitsOn,
   isDone,
   isUnread,
   listedItems,
   NEEDS_YOU,
   needsYou as needsYouOf,
-  readersItem,
 } from "./inbox-model.js";
 import {
   RowMedia,
@@ -190,12 +171,9 @@ import {
   useRowMediaAsks,
   useRowMediaReads,
 } from "./inbox-row-media.js";
-import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
-import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
-import { cardTitle, plainWords } from "./tool-call-model.js";
-import { useOpenPlace } from "./use-open-link.js";
+import { cardTitle } from "./tool-call-model.js";
 
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
@@ -299,9 +277,6 @@ const SKELETON_ROWS = [
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
-/** How wide a placeholder row's context stands, as wide as a short plan's name in a row's caption type. */
-const SKELETON_CONTEXT = "7em";
-
 /** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
 const SKELETON_MARK = "16px";
 
@@ -358,19 +333,6 @@ const WHOSE = "Whose";
 /** What the chip over the list says its × does. */
 const CLEAR_WHOSE = "Show everyone's items";
 
-/** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
-function waitingOn(starter: Actor): string {
-  return `Waiting on ${actorName(starter, { sentence: true })}`;
-}
-
-/** The tile of an agent the window names nothing of. */
-const UNNAMED_AGENT = {
-  kind: ACTOR_KIND.AGENT,
-  name: "",
-  provider: undefined,
-  state: ACTOR_STATE.REST,
-} as const;
-
 /**
  * What the list leaves the item beside it, in CSS pixels: the list is
  * dragged no wider than the Inbox less this, so the item keeps the room a
@@ -391,306 +353,6 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
   if (alone) return undefined;
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
-
-/** The agent that posted an item as its holder names it: the task's summary's line, or main's line for an agent with no task; none where neither holds it. */
-function itemSubject(
-  holder: InboxHolder,
-  agentId: string,
-  models: readonly CatalogModel[] | undefined,
-  readerId: string | undefined,
-): AgentSubject | undefined {
-  if (holder.kind === INBOX_HOLDER.AUTOMATION) {
-    const line = holder.agents.get(agentId);
-    return line === undefined
-      ? undefined
-      : tasklessSubject(
-          {
-            title: line.agentTitle,
-            model: line.agentModel,
-            automationId: line.automationId,
-            automationName: holder.automationId === null ? undefined : holder.name,
-          },
-          models,
-        );
-  }
-  const line = holder.task.agents?.agents.find((each) => each.id === agentId);
-  return line === undefined ? undefined : lineSubject(line, models, readerId);
-}
-
-/**
- * The tile of the agent that posted an item, hanging the agent's card and
- * leaving the press to its row; where the holder names no such agent, an
- * archived one say, whose items still stand, a bare tile of the harness
- * read for it on its task (`ReadAgentModel`), and of no known harness
- * while that is read and where nothing is.
- */
-export function ItemMark({
-  holder,
-  agentId,
-  models,
-  readerId,
-  plain = false,
-}: {
-  holder: InboxHolder;
-  agentId: string;
-  models: readonly CatalogModel[] | undefined;
-  readerId: string | undefined;
-  /** Whether the tile hangs no card of its own, as a row's leading mark does, the row's own card naming the agent instead. */
-  plain?: boolean;
-}): React.JSX.Element {
-  const subject = itemSubject(holder, agentId, models, readerId);
-  if (subject === undefined) {
-    if (holder.kind !== INBOX_HOLDER.TASK) return <ActorMark actor={UNNAMED_AGENT} />;
-    return (
-      <ReadAgentModel agentId={agentId} taskId={holder.task.id}>
-        {(model) => (
-          <ActorMark
-            actor={{
-              ...UNNAMED_AGENT,
-              provider: model === undefined ? undefined : providerOf(model),
-            }}
-          />
-        )}
-      </ReadAgentModel>
-    );
-  }
-  return plain ? (
-    <ActorMark actor={subject.tile} />
-  ) : (
-    <AgentMarkRef subject={subject} models={models} />
-  );
-}
-
-/** Where an item stands, as its row's card says it under its title. */
-function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | undefined): string {
-  if (needsYou) return NEEDS_YOU.LABEL;
-  if (item.status === INBOX_STATUS.OPEN) {
-    return starter === undefined ? "Waiting" : waitingOn(starter);
-  }
-  return inboxSettledStanding(item);
-}
-
-/**
- * An Inbox row's card, hung beside the row as a sidebar task's row hangs
- * its task's, so the row's tile hangs none of its own: the card of the
- * thread. It leads with what holds it, a task as its key and its chip,
- * which wears its status, or an automation by its name, as a task's card
- * leads with where it stands; then the item's title and when it last moved; where it stands,
- * waiting on the reader, on a teammate, or settled;
- * the ask in full while one waits, every option with the recommended one
- * marked or every step as the reader's draft ticks it, or how it ended; and
- * the agent's latest words, three lines at most. The agent that asked
- * stands at its foot, the loading spinner beside it while it works.
- */
-function InboxItemCard({
-  listed,
-  now,
-  models,
-  readerId,
-  needsYou,
-  starter,
-  settled,
-}: {
-  listed: InboxListed;
-  now: number;
-  models: readonly CatalogModel[] | undefined;
-  readerId: string | undefined;
-  needsYou: boolean;
-  starter: Actor | undefined;
-  /** How the item ended, as its row's second line says it, where nothing waits any longer. */
-  settled: string | undefined;
-}): React.JSX.Element {
-  const { holder, item } = listed;
-  const subject = itemSubject(holder, item.agentId, models, readerId);
-  const thread = inboxCardThread(item);
-  const ticked = inboxShownTicks(item, useInboxItemDraft(item));
-  // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
-  const line =
-    holder.kind === INBOX_HOLDER.TASK
-      ? holder.task.agents?.agents.find((each) => each.id === item.agentId)
-      : undefined;
-  const working = line !== undefined && agentStillWriting(line.status);
-  return (
-    <HoverCard data-inbox-row-card="">
-      <HolderLine holder={holder} />
-      <HoverCardHead
-        name={cardTitle(item.title)}
-        sub={
-          <>
-            {needsYou ? <AttentionMark /> : null}
-            <span>{standingWords(item, needsYou, starter)}</span>
-          </>
-        }
-        corner={<Time at={item.updatedAt} now={now} hint={false} />}
-      />
-      {thread.ask === undefined ? (
-        settled === undefined ? null : (
-          <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
-        )
-      ) : (
-        <CardAsk ask={thread.ask} ticked={ticked} title={cardTitle(item.title)} />
-      )}
-      {thread.words === "" ? null : <HoverCardNote>{thread.words}</HoverCardNote>}
-      <HoverCardRule />
-      <HoverCardRow
-        look={HOVER_CARD_ROW_LOOK.DETAIL}
-        glyph={
-          <ItemMark
-            holder={holder}
-            agentId={item.agentId}
-            models={models}
-            readerId={readerId}
-            plain
-          />
-        }
-        label={subject?.name ?? UNNAMED_AGENT.name}
-        end={working ? <StateGlyph state={GLYPH_STATE.WORKING} /> : undefined}
-      />
-    </HoverCard>
-  );
-}
-
-/** The account's workspaces, which tell their readers only as the list moves, not as the tasks beside it do. */
-const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
-
-/**
- * What holds an item, as its card leads with it, on one line: a task by its
- * key, as the task's own card leads with it (`TaskKey`), and by its chip
- * as a mention of it is drawn (`HolderRef`), which wears the task's status
- * as its mark, so the card says no status in words; an automation, or the
- * agents no automation names, by their chip alone.
- */
-function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
-  const workspaces = useAppSlice(WORKSPACES);
-  const workspaceName =
-    holder.kind === INBOX_HOLDER.TASK
-      ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name
-      : undefined;
-  return (
-    <div className="task-card-standing" data-line="one">
-      {holder.kind === INBOX_HOLDER.TASK ? (
-        <TaskKey workspaceName={workspaceName} number={holder.task.number} />
-      ) : null}
-      <HolderRef holder={holder} />
-    </div>
-  );
-}
-
-/**
- * What holds an item, named as a mention of it is (`mention-chip.tsx`): a
- * pill of its glyph and its name, cut at its end where the card is too
- * narrow for it. A task's hangs the task's card and opens the task, as a
- * mention of the task does; an automation's hangs its card where the window
- * reads it; the agents no automation names hang their name alone.
- */
-function HolderRef({ holder }: { holder: InboxHolder }): React.JSX.Element {
-  const openPlace = useOpenPlace();
-  const known = useAutomation(
-    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
-  );
-  const glyph = <HolderGlyph holder={holder} />;
-  const name = holderName(holder);
-  if (holder.kind !== INBOX_HOLDER.TASK) {
-    return (
-      <InlineRef
-        look={INLINE_REF_LOOK.PILL}
-        glyph={glyph}
-        label={name}
-        card={known === undefined ? undefined : <AutomationCard {...known} />}
-        data-holder-ref=""
-        data-kind={holder.kind}
-      />
-    );
-  }
-  const { task } = holder;
-  const fallback = (
-    <HoverCard>
-      <HoverCardHead glyph={glyph} name={name} />
-    </HoverCard>
-  );
-  return (
-    <InlineRef
-      look={INLINE_REF_LOOK.PILL}
-      glyph={glyph}
-      label={name}
-      card={<TaskChipCard taskId={task.id} fallback={fallback} />}
-      onPress={
-        openPlace === undefined
-          ? undefined
-          : () => openPlace({ kind: LINK_PLACE.TASK, planId: task.id })
-      }
-      data-holder-ref=""
-      data-kind={holder.kind}
-    />
-  );
-}
-
-/** An open ask as an item's card shows it in full: a choice's options, the recommended one marked; a to-do's steps, ticked as the reader's draft ticks them; or what a form or an answer asks. */
-function CardAsk({
-  ask,
-  ticked,
-  title,
-}: {
-  ask: InboxKnownAsk;
-  ticked: readonly number[];
-  /** The item's title, which a to-do naming no steps of its own asks as its one step, as its box shows it. */
-  title: string;
-}): React.JSX.Element {
-  switch (ask.type) {
-    case INBOX_ASK.DECIDE:
-      return (
-        <HoverCardList label="Options">
-          {ask.options.map((option) => (
-            <li key={option.label}>
-              <HoverCardRow
-                glyph={<CircleIcon aria-hidden="true" />}
-                label={option.label}
-                end={
-                  option.label === ask.recommended ? (
-                    <Badge tone={BADGE_TONE.ATTENTION}>{RECOMMENDED}</Badge>
-                  ) : undefined
-                }
-              />
-            </li>
-          ))}
-        </HoverCardList>
-      );
-    case INBOX_ASK.DO:
-      return (
-        <HoverCardList label="Steps">
-          {(ask.steps.length === 0 ? [title] : ask.steps).map((step, at) => (
-            <li key={at} data-done={ticked.includes(at) ? "true" : undefined}>
-              <HoverCardRow
-                glyph={
-                  ticked.includes(at) ? (
-                    <SquareCheckIcon aria-hidden="true" />
-                  ) : (
-                    <SquareIcon aria-hidden="true" />
-                  )
-                }
-                label={plainWords(step)}
-              />
-            </li>
-          ))}
-        </HoverCardList>
-      );
-    case INBOX_ASK.ANSWER:
-      return (
-        <HoverCardRow
-          look={HOVER_CARD_ROW_LOOK.DETAIL}
-          glyph={<PenLineIcon />}
-          label={
-            ask.fields === undefined
-              ? "Write an answer"
-              : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`
-          }
-        />
-      );
-  }
-}
-
-/** What marks a choice's option the agent recommends, on an item's card. */
-const RECOMMENDED = "Recommended";
 
 /** The glyph leading an item's second line: its open ask's kind, a tick where an answer settled it, and none before words alone. */
 function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
@@ -731,11 +393,10 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * its right-click menu, which names the key that does the same to the
  * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
- * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). The home page's Inbox
- * names the item's plan at the row's end, in `context`, since its rows stand
- * under no plan's header; the Inbox's own list, grouped by anything but
- * task, names it in a chip before the preview instead (`chip`), its glyph
- * and its name cut short, so the title keeps its whole line. Its right-click offers
+ * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
+ * do not head, the person page's or the Inbox's own grouped by anything but
+ * task, names the item's task in a chip before the preview (`chip`), its
+ * glyph and its name cut short, so the title keeps its whole line. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list hands
  * down its media reads (`media`), the row shows the pictures and pages its
@@ -752,7 +413,6 @@ export function InboxItemRow({
   now,
   models,
   readerId,
-  context,
   face = true,
   chip = false,
   line = true,
@@ -771,7 +431,6 @@ export function InboxItemRow({
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards and rows name no starter, and whose own open items alone need them. */
   readerId: string | undefined;
-  context?: string;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
   /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
@@ -794,16 +453,10 @@ export function InboxItemRow({
   const unread = isUnread(item);
   const title = cardTitle(item.title);
   const directory = useMemberDirectory();
-  const reader = directory.readerId ?? readerId;
-  const needsYou = needsYouOf(listed, reader);
-  const drafted = useInboxItemDrafted(item) && !open;
-  const starter = readersItem(item, reader)
-    ? undefined
-    : personActor(inboxWaitsOn(item), directory.members, reader, directory.former);
+  const _reader = directory.readerId ?? readerId;
+  const { nameOf } = useInboxStanding(listed, readerId);
   const ticked = inboxShownTicks(item, useInboxItemDraft(item));
   const lineKind = inboxLineKind(item);
-  const nameOf = (member: Parameters<typeof personActor>[0]) =>
-    actorName(personActor(member, directory.members, reader, directory.former));
   const preview = inboxPreview(item, nameOf, ticked);
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
@@ -840,17 +493,7 @@ export function InboxItemRow({
   return (
     <>
       <RowHintOptions
-        card={
-          <InboxItemCard
-            listed={listed}
-            now={now}
-            models={models}
-            readerId={readerId}
-            needsYou={needsYou}
-            starter={starter}
-            settled={inboxSettledWords(item, nameOf)}
-          />
-        }
+        card={<InboxItemCard listed={listed} now={now} models={models} readerId={readerId} />}
         cardBeside
         cardRegion={region}
       >
@@ -892,29 +535,14 @@ export function InboxItemRow({
             )
           }
           meta={
-            <InboxRowMeta>
-              {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
-              {context === undefined ? null : (
-                <OneLine className="home-row-context" words={context}>
-                  {context}
-                </OneLine>
-              )}
-              {starter === undefined || !face ? null : (
-                <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
-              )}
-              {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
-                <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
-              )}
-              {drafted ? <DraftMark /> : null}
-              {needsYou ? (
-                <span className="inbox-row-attention">
-                  <AttentionMark />
-                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-                </span>
-              ) : null}
-              <TaskStatusChip holder={holder} />
-              <Time at={item.updatedAt} now={now} hint={false} />
-            </InboxRowMeta>
+            <InboxItemEnd
+              listed={listed}
+              now={now}
+              readerId={readerId}
+              open={open}
+              face={face}
+              before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
+            />
           }
           metaAt={LIST_ROW_META.TITLE}
           actions={
@@ -966,48 +594,6 @@ export function InboxItemRow({
       )}
       {close.dialog}
     </>
-  );
-}
-
-/**
- * An item's task's status as its row wears it before its time: the
- * status's mark alone, small and quiet, as the task's sidebar row wears
- * it, so a Done task's item reads ✓ and a Canceled one's ×, its words said
- * to a reader and in the row's card (`HolderLine`). Note that it is drawn
- * whatever the status, an item of a finished task staying listed until it
- * is read or answered, and none for an agent with no task, nor for a task
- * from a service before statuses.
- */
-function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element | null {
-  if (holder.kind !== INBOX_HOLDER.TASK || holder.task.status === undefined) return null;
-  const { status } = holder.task;
-  return (
-    <span className="inbox-row-task-status" data-task-status={status}>
-      <TaskStatusMark status={status} />
-      <VisuallyHidden>{TASK_STATUS_WORDS[status]}</VisuallyHidden>
-    </span>
-  );
-}
-
-/**
- * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the factory glyph for the agents no
- * automation names, as the holder's group header draws them.
- */
-export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
-  const known = useAutomation(
-    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
-  );
-  if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
-  if (holder.automationId === null) return <FactoryIcon />;
-  return (
-    <ActorMark
-      actor={
-        known === undefined
-          ? { kind: ACTOR_KIND.AUTOMATION, name: holder.name, state: ACTOR_STATE.REST }
-          : automationActor(known.automation)
-      }
-    />
   );
 }
 
@@ -1433,31 +1019,21 @@ function InboxRowLeading({
   );
 }
 
-/** An item row's meta, its context, marks, and time in one line at the title's right. */
-function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="home-row-meta">{children}</span>;
-}
-
 /**
  * The list while its items are first read: rows in an item's own row, a
  * block where its agent's tile, its title, its time, and the line under
  * them will stand, so the
  * items land where the blocks stood rather than a lone ring in the list's
  * corner. The rows open nothing and the region says what is being read. A
- * list whose rows name what each item is about, as Home's do, asks for a
- * block before each time where that name will stand, and a short list asks
- * for fewer rows than the five a whole Inbox stands.
+ * short list asks for fewer rows than the five a whole Inbox stands.
  */
 export function InboxListSkeleton({
   rows = SKELETON_ROWS.length,
-  context = false,
   reading = READING_ITEMS,
   list = TAB_WORDS.INBOX,
 }: {
   /** How many placeholder rows stand, at most five. */
   rows?: number;
-  /** Whether each row holds a block for its context before its time, as an item row given a `context` draws it. */
-  context?: boolean;
   /** What a reader hears is being read, where the list is another's than the Inbox's, as Chat's rail. */
   reading?: string;
   /** What the list is called, where it is another's than the Inbox's. */
@@ -1476,16 +1052,7 @@ export function InboxListSkeleton({
             }
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
-            meta={
-              context ? (
-                <InboxRowMeta>
-                  <Skeleton width={SKELETON_CONTEXT} />
-                  <Skeleton width={SKELETON_TIME} />
-                </InboxRowMeta>
-              ) : (
-                <Skeleton width={SKELETON_TIME} />
-              )
-            }
+            meta={<Skeleton width={SKELETON_TIME} />}
             metaAt={LIST_ROW_META.TITLE}
           />
         ))}

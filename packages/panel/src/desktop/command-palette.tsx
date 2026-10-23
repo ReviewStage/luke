@@ -91,7 +91,6 @@ import {
   Tooltip,
   UnpinIcon,
   useMinute,
-  VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import {
@@ -123,7 +122,6 @@ import {
   useAppCommand,
   useOverlayHold,
 } from "../app-commands.js";
-import { AttentionMark } from "../attention-mark.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { Highlighted } from "../search-field.js";
@@ -140,14 +138,8 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
-import { ItemMark } from "../tasks/inbox-list.js";
-import {
-  holderName,
-  type InboxListed,
-  inboxItemWords,
-  NEEDS_YOU,
-  needsYou,
-} from "../tasks/inbox-model.js";
+import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
+import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
@@ -844,9 +836,10 @@ function snippetOf(
 /**
  * The listed workspace's Inbox items, each by its agent's tile and title,
  * beside its task's or automation's name and, where its thread rather than
- * those found it, the words that did; one that needs the reader wears the
- * mark its Inbox row wears. Each is found by its title and its holder's
- * name, and else by everything it says (`inboxItemWords`).
+ * those found it, the words that did, the marks its Inbox row wears at its
+ * end and its card hung beside it (`inbox-item-parts.tsx`). Each is found
+ * by its title and its holder's name, and else by everything it says
+ * (`inboxItemWords`).
  */
 function inboxRows(
   items: readonly InboxListed[],
@@ -854,6 +847,7 @@ function inboxRows(
     readonly readerId: string | undefined;
     readonly models: CodingAgentsControl["models"];
     readonly tokens: readonly string[];
+    readonly now: number;
     readonly open: (listed: InboxListed) => void;
   },
 ): readonly PaletteRow[] {
@@ -875,12 +869,15 @@ function inboxRows(
       ),
       label: title,
       detail: snippet === undefined ? name : `${name} · ${snippet}`,
-      endMark: needsYou(listed, seams.readerId) ? (
-        <span className="inbox-row-attention">
-          <AttentionMark />
-          <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-        </span>
-      ) : undefined,
+      endMark: <InboxItemEnd listed={listed} now={seams.now} readerId={seams.readerId} />,
+      card: (
+        <InboxItemCard
+          listed={listed}
+          now={seams.now}
+          models={seams.models}
+          readerId={seams.readerId}
+        />
+      ),
       terms: [title, name],
       keywords: words,
       onChoose: () => seams.open(listed),
@@ -1492,6 +1489,7 @@ export function CommandPalette({
   const inboxAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.INBOX || tokens.length > 0);
   const inboxSearch = useInboxSearch(tasks, inboxAsked);
+  const now = useMinute();
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
@@ -1547,6 +1545,7 @@ export function CommandPalette({
             readerId: tasks.me,
             models: tasks.agents.models,
             tokens,
+            now,
             open: (listed) =>
               onTasks(() => tasks.inboxView.onOpenItem({ ...choiceOf(listed), opened: true })),
           })

@@ -41,13 +41,7 @@ import { agentActor, agentTabLabel, type SentLine } from "../tasks/coding-agent-
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import {
-  InboxList,
-  InboxListSkeleton,
-  ItemMark,
-  SearchEmpty,
-  ShowEmpty,
-} from "../tasks/inbox-list.js";
+import { InboxList, InboxListSkeleton, SearchEmpty, ShowEmpty } from "../tasks/inbox-list.js";
 import {
   firstChoice,
   INBOX_GROUPING,
@@ -384,14 +378,7 @@ function TaskInboxTab({
   const next = inboxNext(
     steps,
     chosen,
-    ({ holder, item }) => (
-      <ItemMark
-        holder={holder}
-        agentId={item.agentId}
-        models={tasks.agents.models}
-        readerId={tasks.me}
-      />
-    ),
+    { models: tasks.agents.models, readerId: tasks.me },
     open,
     NO_FOLDS,
     direction,

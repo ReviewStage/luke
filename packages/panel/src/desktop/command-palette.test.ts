@@ -2329,6 +2329,31 @@ test("the Inbox is followed only once it is searched, and then lists what needs 
   ]);
 });
 
+test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its Inbox row and its time at its end, and its card hung beside it", async () => {
+  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  chooseFilter("Inbox");
+  await settle();
+
+  const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  assert.ok(needs, "the item that needs you is listed");
+  assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  assert.ok(needs.querySelector(".luke-combobox-option-hint .inbox-row-attention"), "it needs you");
+  assert.ok(needs.querySelector(".luke-combobox-option-hint time"), "its time stands at its end");
+  assert.equal(
+    answered?.querySelector(".inbox-row-attention"),
+    null,
+    "an answered item needs no one",
+  );
+
+  restOn(needs);
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.equal(
+    card?.querySelector(".luke-hover-card-name")?.textContent,
+    "Which webhook secret should rotate?",
+  );
+  assert.match(card?.textContent ?? "", /Rotate the Stripe signing secret today\./u);
+});
+
 test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {
   paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
 
