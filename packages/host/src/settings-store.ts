@@ -95,6 +95,11 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
   /**
+   * Whether this run is a packaged build, which decides what a setting whose
+   * default is the build's reads as while nothing is stored. True by default.
+   */
+  packaged?: boolean;
+  /**
    * Who is signed in, for a store handed no cipher, which keeps no account of
    * its own (a browser's cookie session): the address the account's
    * experiments and synced preferences are kept under. A store that keeps
@@ -579,6 +584,7 @@ export class SettingsStore {
   readonly #cipher: SecretCipher | undefined;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
+  readonly #packaged: boolean;
   readonly #sessionAccountEmail: (() => Effect.Effect<string | undefined>) | undefined;
   readonly #fileSystem: FileSystem.FileSystem;
   readonly #path: Path.Path;
@@ -788,6 +794,7 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
+    this.#packaged = options.packaged ?? true;
     this.#sessionAccountEmail = options.sessionAccountEmail;
     this.#fileSystem = options.fileSystem;
     this.#path = options.path;
@@ -804,6 +811,13 @@ export class SettingsStore {
           // Resolved the way the session source resolves it, so the panel marks
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
+          // Resolved by the build, so a run from source counts nothing until
+          // its developer turns usage data on.
+          usageData:
+            persisted.usageData ??
+            (this.#packaged
+              ? APP_SETTING_SCHEMA.usageData.default
+              : APP_SETTING_SCHEMA.usageData.unpackagedDefault),
         },
         experiments: experimentsOf(persisted, (yield* this.#accountEmailOf())(persisted)),
         status: {

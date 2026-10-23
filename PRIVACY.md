@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 16 October 2026
+Last updated: 23 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -1070,7 +1070,8 @@ never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text. Each count also carries Luke's version, whether
 it is a released build or a development one, and which deployment of our
-service recorded it.
+service recorded it. Settings › Account › "Share usage data" turns these
+counts off (see "Your choices").
 
 Our service also counts, under the same account, the work done through it:
 a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
@@ -1593,6 +1594,13 @@ and error, performance, and agent reports by Sentry.
 ## Your choices
 
 - Sign out of your Luke account to turn voice off.
+- Turn off Settings › Account › "Share usage data" to stop Luke sending the
+  usage counts it makes (see "Usage data"); what is waiting to be sent is
+  dropped, and nothing more is sent until you turn it on again. It is set on
+  each Mac, and in each browser, apart. It is on by default in the Luke you
+  download, and off in a Luke you build and run from its source, which sends
+  no usage counts unless you turn it on. It does not stop the counts our
+  service makes of the work done through it.
 - Turn off Settings › This Mac › "Let agents run commands on this Mac" to stop
   coding agents running commands on that Mac; it is set on each Mac apart, and
   signing out stops it too.

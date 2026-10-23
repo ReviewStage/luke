@@ -161,6 +161,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       // A fixture or evidence run refuses the account it holds, so nothing is
       // reported as available that would not actually happen.
       credentialsUsable: runMode.observesProviders,
+      // A run from source shares no usage data until its developer turns it on.
+      packaged: identity.packaged,
       // The account source's own: a source that keeps no tokens here hands none.
       cipher: tokenCipher,
       // Note that the link is peeked, because a read before the merge links the account must read no one rather than wait.
@@ -420,6 +422,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
       endLiveSession: linked((links) => links.endLiveSession),
+      shareUsageData: (on) =>
+        Effect.sync(() => {
+          if (on) productEvents.arm();
+          else productEvents.disarm();
+        }),
     });
 
     /**
@@ -610,8 +617,15 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       flushProductEvents: productEvents.flush,
       link: (next) => Effect.asVoid(late.set(next)),
       lifetime: Effect.gen(function* () {
+        // Armed only where the developer shares usage data; a write of the
+        // switch arms or disarms it from then on (`settings-side-effects.ts`).
+        const sharesUsageData = yield* Effect.map(
+          Effect.orElseSucceed(store.snapshot(), () => undefined),
+          (snapshot) => snapshot?.stored.usageData === true,
+        );
         yield* startedAndStopped(
           Effect.sync(() => {
+            if (!sharesUsageData) return;
             productEvents.arm();
             productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
           }),
