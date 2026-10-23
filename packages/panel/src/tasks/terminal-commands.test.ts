@@ -20,6 +20,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import type { MainTab } from "./use-main-tabs.js";
@@ -240,8 +241,8 @@ test("with several agents, ⌘J shows the terminal used last, and New terminal a
   const asked = picker();
   assert.equal(asked?.question, "New terminal in which agent’s sandbox?");
   assert.deepEqual(asked?.rows, [
-    { name: "Invite flow", detail: "sandbox running", working: true, chosen: false },
-    { name: "Expiry job", detail: "sandbox stopped · last used", working: false, chosen: true },
+    { name: "Invite flow", detail: "0 shells", working: true, chosen: false },
+    { name: "Expiry job", detail: "Sandbox stopped · last used", working: false, chosen: true },
   ]);
   await asked?.choose("Invite flow");
   assert.deepEqual(task.shown.at(-1), { terminal: WORKING.id });
@@ -441,4 +442,30 @@ test("while the plan's agents are still being read, the picker says so and offer
     "Reading the task’s agents…",
   );
   assert.deepEqual(task.shown, []);
+});
+
+const FAILED = agent(
+  "ae3c8c6f-5f40-4fad-8d88-8b6e9c4f5d43",
+  "Retry job",
+  CODING_AGENT_STATUS.FAILED,
+);
+
+test("the picker marks a failed agent's row as its tab is marked, and no other", async () => {
+  const task = await mount({ agents: [WORKING, FAILED] });
+  await task.run(APP_COMMAND.NEW_TERMINAL);
+  const marked = [...document.querySelectorAll('.terminal-picker [role="option"]')].map(
+    (row) => row.querySelector('[role="img"][aria-label="Failed"]') !== null,
+  );
+  assert.deepEqual(marked, [false, true]);
+});
+
+test("a row at rest hangs its agent's card beside it, naming the agent", async () => {
+  const task = await mount({ agents: [WORKING, DONE] });
+  await task.run(APP_COMMAND.NEW_TERMINAL);
+  const row = [...document.querySelectorAll('.terminal-picker [role="option"]')].at(-1);
+  assert.ok(row, "a row");
+  restOn(row);
+  await settle();
+  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Expiry job");
 });

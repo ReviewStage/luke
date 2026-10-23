@@ -268,15 +268,12 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.equal(container.querySelector("[data-replay-step]"), null);
 });
 
-test("opened, the card draws each step as a transcript does, a line as a sent message under its sender, the agent's words as words, and a call as a call's row opening onto its input and result, and a continuation's transcript opens on the source's tab", async () => {
+test("opened, the card draws each step as a transcript does, a line as a sent message under its sender, the agent's words as words, and a call as a call's row opening onto its input and result, under a foot naming no way to the full transcript, which the source's chip already opens", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: CODING_AGENT_BRIEF.PLAN,
   });
-  const { container, opened, places } = await drawn(
-    agent,
-    firstMessageText("# Invite flow", replay(), undefined),
-  );
+  const { container } = await drawn(agent, firstMessageText("# Invite flow", replay(), undefined));
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
 
@@ -307,17 +304,15 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   assert.match(call?.textContent ?? "", /"filePath":"src\/invite\.ts"/u);
   assert.match(call?.textContent ?? "", /export const INVITE_DAYS = 7;/u);
 
-  press(container.querySelector("[data-replay-open] button"));
-  assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
-  assert.deepEqual(places, []);
+  assert.doesNotMatch(body?.textContent ?? "", /full transcript/u);
 });
 
-test("a fork trimmed of its earliest steps says Forked and its steps of how many, says how many were left out, and opens the source's transcript at the message it was cut at", async () => {
+test("a fork trimmed of its earliest steps says Forked and its steps of how many, and says how many were left out", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: CODING_AGENT_BRIEF.PROMPT,
   });
-  const { container, places } = await drawn(
+  const { container } = await drawn(
     agent,
     firstMessageText(
       "Find why the toast fires twice.",
@@ -337,10 +332,6 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
     container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
     /209 earlier steps were left out to keep the replay within its size limit\./u,
   );
-  press(container.querySelector("[data-replay-open] button"));
-  assert.deepEqual(places, [
-    { kind: LINK_PLACE.MESSAGE, planId: TASK_ID, agentId: SOURCE.id, messageId: FORKED_AT },
-  ]);
 });
 
 test("an agent continued from an automation's run opens on the run's Prompt card under the automation, though it is no run itself", async () => {

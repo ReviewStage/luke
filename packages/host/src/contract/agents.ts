@@ -46,6 +46,7 @@ import {
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
   codingAgentReviewOptionsAnswerViewSchema,
+  codingAgentRewindParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
@@ -155,6 +156,9 @@ export const agentActsContract = {
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_STOP]: actProcedure("Could not stop the agent on this system.")
     .input(exactInput(codingAgentStopParamsSchema))
+    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_REWIND]: actProcedure("Could not rewind the agent on this system.")
+    .input(exactInput(codingAgentRewindParamsSchema))
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: actProcedure(
     "Could not archive the agent on this system.",

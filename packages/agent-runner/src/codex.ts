@@ -140,6 +140,8 @@ const METHOD = {
   SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
+  THREAD_TURNS_LIST: "thread/turns/list",
+  THREAD_REVERT: "thread/revert",
   TURN_START: "turn/start",
   TURN_STEER: "turn/steer",
   TURN_INTERRUPT: "turn/interrupt",
@@ -188,7 +190,23 @@ interface Outgoing {
 /** The fields of an answer the controller reads. */
 const ThreadAnswerSchema = Schema.Struct({ thread: Schema.Struct({ id: Schema.String }) });
 const TurnAnswerSchema = Schema.Struct({ turn: Schema.Struct({ id: Schema.String }) });
+/** A page of a thread's turns as the rewind reads it: each turn's id and its user messages' client ids. */
+const TurnsPageSchema = Schema.Struct({
+  data: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      items: Schema.Array(
+        Schema.Struct({
+          type: Schema.String,
+          clientId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+        }),
+      ),
+    }),
+  ),
+  nextCursor: Schema.NullOr(Schema.String),
+});
 const decodeThreadAnswer = Schema.decodeUnknownOption(ThreadAnswerSchema);
+const decodeTurnsPage = Schema.decodeUnknownOption(TurnsPageSchema);
 const decodeTurnAnswer = Schema.decodeUnknownOption(TurnAnswerSchema);
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
 /** The field of a refusal's `data` read here: the `TurnError`'s info, where app-server sent one. */
@@ -460,6 +478,46 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   return { server, serverScope, threadId: openedThread };
 });
 
+/** How many turns a page of the rewind's read back from the thread's end holds. */
+const TURNS_PAGE = 10;
+
+/**
+ * The resumed thread reverted to before the turn that took the message a
+ * rewind dropped, found by its client id reading back from the thread's
+ * end; a thread no turn of which took it is left whole, as a rewind Codex
+ * never heard of leaves nothing of its own to cut. A revert that fails is
+ * logged and the thread goes on whole, since the launch's message still
+ * stands to be answered.
+ */
+const revertedBefore = Effect.fn("agent-runner/codex/revertedBefore")(function* (
+  server: AppServer,
+  threadId: string,
+  rewindBefore: string,
+) {
+  let cursor: string | null = null;
+  for (;;) {
+    const page = decodeTurnsPage(
+      yield* server.request(METHOD.THREAD_TURNS_LIST, {
+        threadId,
+        cursor,
+        limit: TURNS_PAGE,
+        sortDirection: "desc",
+        itemsView: "full",
+      }),
+    );
+    if (Option.isNone(page)) return;
+    const taking = page.value.data.find((turn) =>
+      turn.items.some((item) => item.type === "userMessage" && item.clientId === rewindBefore),
+    );
+    if (taking !== undefined) {
+      yield* server.request(METHOD.THREAD_REVERT, { threadId, beforeTurnId: taking.id });
+      return;
+    }
+    if (page.value.nextCursor === null) return;
+    cursor = page.value.nextCursor;
+  }
+});
+
 /**
  * Says each of Luke's lines a message carries was taken by app-server, as
  * Claude Code's launch says a line was handed to the SDK, so Luke ties the
@@ -683,6 +741,13 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   ).pipe(Effect.result);
   if (opened._tag === "Failure") {
     return ended(RUNNER_END.FAILED, `${opened.failure.method}: ${opened.failure.detail}`);
+  }
+  if (config.threadId !== undefined && config.rewindBefore !== undefined) {
+    yield* revertedBefore(opened.success.server, opened.success.threadId, config.rewindBefore).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(`agent-runner: the thread was not rewound: ${error.method}`),
+      ),
+    );
   }
   const launch: CodexLaunch = {
     context,

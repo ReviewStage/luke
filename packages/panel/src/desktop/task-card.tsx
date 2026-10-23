@@ -83,7 +83,7 @@ const CARD_ROWS = {
  * which its card names (`strandedHome`); else an agent at work, else its
  * pull request, else nothing.
  */
-export function TaskStatusMark({
+export function TaskRowMark({
   task,
   stranded,
 }: {

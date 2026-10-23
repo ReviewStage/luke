@@ -18,8 +18,11 @@
  * once eve took the message; past the answer (`after-response.ts`) it opens
  * a sandbox from the coding agent's image (`agent-sandbox-image.ts`),
  * waiting while the image is prepared, checks the agent's repository out
- * into it exactly as eve's sandbox does (`checkout.ts`, the same token at
- * the firewall, the history deepened before the runner starts), writes the
+ * into it on eve's terms (`checkout.ts`, the same token at the firewall,
+ * but cloned whole, since the history is deepened before the runner starts
+ * anyway), or opens it from its workspace's repository snapshot of the
+ * same image and fetches only what landed since (`repository-snapshot.ts`),
+ * building that snapshot past the answer where none was ready, writes the
  * skills its member installed into Luke beside it (`native-skills.ts`), and
  * launches the runner. A launch that fails there is the agent's failed turn.
  * A launch mints the runner's bearer and records its digest on the
@@ -93,10 +96,16 @@ import {
   readCodingAgentOfConversation,
   readCodingAgentRouting,
   recordCodingAgentRunnerToken,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+import {
+  clearNativeRewindHanded,
+  readNativeRewind,
+} from "@luke/database/models/conversation-rewind";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { causeKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
 import {
@@ -116,6 +125,7 @@ import type { HostedEnvironment } from "../../environment.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
   AgentSandboxImage,
+  type AgentSandboxImageService,
   IMAGE_PREPARING_STATUS,
   ImagePreparing,
 } from "../agent-sandbox-image.js";
@@ -131,6 +141,13 @@ import {
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { REPOSITORY_REFUSAL, type RepositorySandbox } from "../repository-shell.js";
+import {
+  buildRepositorySnapshot,
+  forgetRepositorySnapshot,
+  REPOSITORY_SNAPSHOT_STATE,
+  type RepositorySnapshotOf,
+  readRepositorySnapshot,
+} from "../repository-snapshot.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
@@ -142,6 +159,7 @@ import {
   deploymentOidcToken,
   type ListedSandbox,
   type NetworkPolicy,
+  NOT_FOUND_STATUS,
   type SandboxFile,
   SandboxUnavailable,
   SESSION_TAG,
@@ -151,12 +169,16 @@ import {
 } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import {
+  type AgentRepositoryRead,
+  agentRepositoryRead,
   agentRepositoryToken,
+  CHECKOUT_DEPTH,
   CheckoutRefused,
   type CheckoutServices,
-  checkOutAgentRepository,
+  cloneAgentRepository,
   deepenAgentCheckout,
   openWorkingFolder,
+  refreshAgentCheckout,
 } from "./checkout.js";
 import { NATIVE_SKILLS_PATH, nativeSkillFiles } from "./native-skills.js";
 import { RunnerBundle } from "./runner-bundle.js";
@@ -227,11 +249,12 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   readonly launch: (
     agent: CodingAgent,
   ) => Effect.Effect<HarnessLaunch, E | LaunchRefused, RunnerServices>;
-  /** The config line of a launch, resuming the harness's session where one is named. */
+  /** The config line of a launch, resuming the harness's session where one is named, cut before the line a rewind dropped where one waits. */
   readonly config: (
     agent: CodingAgent,
     resume: string | undefined,
     firstSequence: number,
+    rewindBefore: string | undefined,
   ) => Effect.Effect<RunnerConfig, LaunchRefused>;
   /** The checkout's folders the harness finds a repository's skills in, whose names it keeps over an installed skill's. */
   readonly skillRoots: readonly string[];
@@ -776,7 +799,12 @@ export const runnerSessions = <
               firstSequence,
             }),
           );
-          const config = yield* harness.config(agent, resume, firstSequence);
+          // A rewind's cut is handed to the launch that resumes the harness's session, and let go once
+          // the runner has it; a fresh session never heard the line it names.
+          const target = { userId, conversationId: agent.conversationId };
+          const rewind = Option.getOrUndefined(yield* readNativeRewind(target));
+          const rewindBefore = resume === undefined ? undefined : rewind;
+          const config = yield* harness.config(agent, resume, firstSequence, rewindBefore);
           yield* api
             .writeStdin(sandbox.running, commandId, `${line(config)}${line(first.line)}`)
             .pipe(
@@ -787,6 +815,7 @@ export const runnerSessions = <
                 ]),
               ),
             );
+          if (rewind !== undefined) yield* clearNativeRewindHanded(agent.conversationId, rewind);
         }).pipe(
           Effect.tapError(() =>
             Effect.ignore(
@@ -848,11 +877,181 @@ export const runnerSessions = <
         },
       );
 
+    /** A new sandbox of the agent's, under the session given, opened from the snapshot named. */
+    const createdFrom = (agent: CodingAgent, sessionId: string, snapshotId: string) =>
+      api.create({
+        name: `${SANDBOX_NAME}${randomUUID()}`,
+        snapshotId,
+        tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
+        timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
+        vcpus: CODER.SANDBOX_VCPUS,
+        keepLastSnapshots: {
+          count: CODER.SANDBOX_SNAPSHOTS.count,
+          expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
+          deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
+        },
+        env: SANDBOX_ENV,
+      });
+
+    /** The sandbox as it runs: its name, and the session it runs in; one Vercel names no session of is deleted again. */
+    const runningOf = (opened: ListedSandbox) =>
+      opened.currentSessionId === undefined
+        ? Effect.andThen(
+            Effect.ignore(api.deleteSandbox(opened.name)),
+            Effect.fail(new SandboxUnavailable({})),
+          )
+        : Effect.succeed({ name: opened.name, running: opened.currentSessionId });
+
+    /**
+     * The repository snapshot the agent's sandbox may open from: one of its
+     * workspace's, made on the image this launch opens, of the repository's
+     * default branch; none for an agent started on another branch, or on its
+     * starter's own token, whose access is not the workspace's.
+     */
+    const repositorySnapshotOf = (
+      agent: WithRepository<CodingAgent>,
+      read: AgentRepositoryRead,
+      imageSnapshotId: string,
+    ): Option.Option<RepositorySnapshotOf> =>
+      agent.startBranch === null && read.access.kind === GITHUB_ACCESS.APP
+        ? Option.some({
+            imageSnapshotId,
+            workspaceId: read.workspaceId,
+            fullName: read.fullName,
+            defaultBranch: read.defaultBranch,
+          })
+        : Option.none();
+
+    /**
+     * The repository snapshot built past the request's answer, apart from
+     * the launch and its runner lease, so neither waits on it; nothing where
+     * no request's answer is being kept, as for a relaunch a message makes,
+     * which leaves the build to the next Start.
+     */
+    const buildInBackground = (of: RepositorySnapshotOf, read: AgentRepositoryRead) =>
+      Effect.gen(function* () {
+        if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
+        yield* afterResponse(
+          "A repository snapshot's build",
+          buildRepositorySnapshot(api, of, read, (running) =>
+            repositorySandboxOver(api, running, options.run),
+          ),
+        );
+      });
+
+    /**
+     * The agent's sandbox opened from its repository snapshot and its
+     * checkout brought up to the default branch; none where the snapshot was
+     * gone or its checkout would not refresh, the snapshot then forgotten so
+     * the next launch builds it again, and the sandbox this opened deleted.
+     * A Vercel that did not answer the create opens nothing here either, and
+     * forgets nothing, so the launch goes on as without a snapshot.
+     */
+    const openedFromRepositorySnapshot = (
+      agent: WithRepository<CodingAgent>,
+      sessionId: string,
+      of: RepositorySnapshotOf,
+      snapshotId: string,
+      read: AgentRepositoryRead,
+    ) =>
+      Effect.gen(function* () {
+        const opened = yield* Effect.flatMap(createdFrom(agent, sessionId, snapshotId), runningOf);
+        yield* refreshAgentCheckout(
+          agent,
+          repositorySandboxOver(api, opened.running, options.run),
+          read,
+        ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+        return Option.some(opened);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.gen(function* () {
+            yield* Effect.logWarning(
+              `A ${harness.name} sandbox did not open from its repository snapshot: ${describeFailure(failure)}`,
+            );
+            const unusable =
+              failure instanceof CheckoutRefused ||
+              failure.status === SNAPSHOT_GONE_STATUS ||
+              failure.status === NOT_FOUND_STATUS;
+            if (unusable) yield* Effect.ignore(forgetRepositorySnapshot(api, of, snapshotId));
+            return Option.none<{ readonly name: string; readonly running: string }>();
+          }),
+        ),
+      );
+
+    /**
+     * The agent's sandbox opened from the image, the image prepared again
+     * where its snapshot is gone, because otherwise every launch would fail
+     * on it until someone deleted the template by hand; this launch answers
+     * as preparing meanwhile.
+     */
+    const openedFromImage = (
+      image: AgentSandboxImageService,
+      agent: CodingAgent,
+      sessionId: string,
+      snapshotId: string,
+    ) =>
+      createdFrom(agent, sessionId, snapshotId).pipe(
+        Effect.catchIf(
+          (failure) => failure.status === SNAPSHOT_GONE_STATUS,
+          () =>
+            Effect.flatMap(image.snapshotGone(snapshotId), () => Effect.fail(new ImagePreparing())),
+        ),
+        Effect.flatMap(runningOf),
+      );
+
+    /**
+     * The agent's sandbox with its repository checked out. The repository is
+     * read first, which confirms its workspace still reaches it before any
+     * sandbox opens on its code. Where its workspace's repository snapshot
+     * is ready, the sandbox opens from it and fetches only what landed
+     * since; otherwise it opens from the image and clones the repository
+     * whole, and the snapshot is built past the answer for the next launch
+     * (`repository-snapshot.ts`). A snapshot Vercel could not be asked about
+     * is passed by, and no build is started on it.
+     */
+    const checkedOutSandbox = (
+      image: AgentSandboxImageService,
+      target: ConversationTarget,
+      agent: WithRepository<CodingAgent>,
+      sessionId: string,
+      imageSnapshotId: string,
+    ) =>
+      Effect.gen(function* () {
+        const read = yield* agentRepositoryRead(target, agent);
+        const of = repositorySnapshotOf(agent, read, imageSnapshotId);
+        if (Option.isSome(of)) {
+          const found = yield* readRepositorySnapshot(api, of.value).pipe(Effect.option);
+          if (Option.isSome(found) && found.value.state === REPOSITORY_SNAPSHOT_STATE.READY) {
+            const fromSnapshot = yield* openedFromRepositorySnapshot(
+              agent,
+              sessionId,
+              of.value,
+              found.value.snapshotId,
+              read,
+            );
+            if (Option.isSome(fromSnapshot)) return fromSnapshot.value;
+          }
+          // The build reads the snapshot again and leaves one ready or being built be.
+          if (Option.isSome(found)) yield* buildInBackground(of.value, read);
+        }
+        const opened = yield* openedFromImage(image, agent, sessionId, imageSnapshotId);
+        yield* cloneAgentRepository(
+          agent,
+          repositorySandboxOver(api, opened.running, options.run),
+          read,
+          CHECKOUT_DEPTH.WHOLE,
+        ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+        return opened;
+      });
+
     /**
      * A new sandbox opened under the session given, the agent's repository
-     * checked out in it, and the runner launched on the first line. A sandbox
-     * whose launch failed is deleted again, since no conversation records the
-     * session that would find it.
+     * checked out in it (`checkedOutSandbox`), then at once what eve's first
+     * write does (`deepenAgentCheckout`): the write token at the firewall and
+     * the commit identity, since the harness's own shell has no hook for a
+     * first write; and the runner launched on the first line. A sandbox
+     * whose launch failed is deleted again, since no conversation records
+     * the session that would find it.
      */
     const openedSandbox = (
       agent: CodingAgent,
@@ -866,55 +1065,19 @@ export const runnerSessions = <
         if (Option.isNone(snapshot))
           return yield* Effect.fail(new LaunchRefused({ reason: "no snapshot" }));
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-        const opened = yield* api
-          .create({
-            name: `${SANDBOX_NAME}${randomUUID()}`,
-            snapshotId: snapshot.value,
-            tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
-            timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-            vcpus: CODER.SANDBOX_VCPUS,
-            keepLastSnapshots: {
-              count: CODER.SANDBOX_SNAPSHOTS.count,
-              expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
-              deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-            },
-            env: SANDBOX_ENV,
-          })
-          .pipe(
-            // Note that a template's snapshot gone under it is handed back, so the image is
-            // prepared again, because otherwise every launch would fail on it until someone
-            // deleted the template by hand; this launch answers as preparing meanwhile.
-            Effect.catchIf(
-              (failure) => failure.status === SNAPSHOT_GONE_STATUS,
-              () =>
-                Effect.flatMap(image.snapshotGone(snapshot.value), () =>
-                  Effect.fail(new ImagePreparing()),
-                ),
-            ),
-          );
+        const { name, running } = hasRepository(agent)
+          ? yield* checkedOutSandbox(image, target, agent, sessionId, snapshot.value)
+          : yield* openedFromImage(image, agent, sessionId, snapshot.value);
         yield* Effect.gen(function* () {
-          const running = opened.currentSessionId;
-          if (running === undefined) return yield* new SandboxUnavailable({});
           const repositorySandbox = repositorySandboxOver(api, running, options.run);
-          // The checkout eve's sandbox makes, then at once what eve's first write does
-          // (`deepenAgentCheckout`): the write token at the firewall, the whole history, and the
-          // commit identity, since the harness's own shell has no hook for a first write.
           if (hasRepository(agent)) {
-            yield* checkOutAgentRepository(target, agent, repositorySandbox);
             yield* deepenAgentCheckout(target, agent, repositorySandbox);
           } else {
             yield* openWorkingFolder(repositorySandbox);
           }
           yield* writeInstalledSkills(target, agent, running);
-          yield* launch(
-            sessionId,
-            agent,
-            { name: opened.name, running },
-            first,
-            undefined,
-            credential,
-          );
-        }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+          yield* launch(sessionId, agent, { name, running }, first, undefined, credential);
+        }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
       });
 
     /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
@@ -1016,6 +1179,46 @@ export const runnerSessions = <
           line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
         );
         return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+      });
+
+    /**
+     * The session's runner ended, under the agent's runner lease, so the
+     * next message relaunches it: a Stop written to it, its exit waited for
+     * at most `CODER.RUNNER_HALT`, its command ended where it still runs and
+     * waited for again, its bearer let go, so nothing it posts on the way
+     * down is taken, and the sandbox's tags cleared of it. Note that the tags
+     * are what say a runner runs (`liveRunner`), and Vercel may still answer
+     * a command it was just told to end as running, so a message sent next
+     * would otherwise be written to a runner on its way down and lost. A
+     * session no runner runs in has nothing to end.
+     */
+    const haltHolding = (sessionId: string, conversationId: string) =>
+      Effect.gen(function* () {
+        const found = yield* sandboxOf(api, sessionId);
+        if (Option.isNone(found)) return;
+        const agent = yield* agentOf(conversationId);
+        if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) return;
+        const live = yield* liveRunner(api, found.value);
+        if (live === undefined) return;
+        yield* api.writeStdin(
+          live.sandboxSessionId,
+          live.commandId,
+          line({ type: INPUT_LINE.STOP, launch: live.firstSequence }),
+        );
+        // Note that a read of the exit answers null for a command still running once its own wait is up.
+        const exited = api
+          .commandExit(live.sandboxSessionId, live.commandId)
+          .pipe(Effect.timeoutOption(CODER.RUNNER_HALT));
+        const stopped = yield* exited;
+        if (Option.isNone(stopped) || stopped.value === null) {
+          yield* api.kill(live.sandboxSessionId, live.commandId);
+          yield* exited;
+        }
+        yield* recordCodingAgentRunnerToken(userId, agent.id, null);
+        yield* api.updateTags(found.value.name, {
+          [SESSION_TAG]: sessionId,
+          [RUNNER_TAG.AGENT]: agent.id,
+        });
       });
 
     /** A change of model or effort, under the agent's runner lease. */
@@ -1147,6 +1350,21 @@ export const runnerSessions = <
 
       // The runner posts its events to Luke itself, so there is no stream of a session's to follow here.
       stream: () => Stream.empty,
+
+      halt: (sessionId, conversationId) =>
+        Effect.gen(function* () {
+          const { id } = yield* agentOf(conversationId);
+          yield* holdingRunner(id, haltHolding(sessionId, conversationId));
+          return true;
+        }).pipe(
+          Effect.catch((failure) =>
+            Effect.as(
+              Effect.logWarning(`A ${harness.name} halt failed: ${describeFailure(failure)}`),
+              false,
+            ),
+          ),
+          Effect.provideContext(context),
+        ),
 
       // A change of model or effort goes to a runner that runs as the harness's `model` lines alone,
       // which it takes at its next model call; a runner not up takes it at the next message's launch.

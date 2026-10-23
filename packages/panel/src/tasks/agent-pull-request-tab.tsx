@@ -112,6 +112,7 @@ import {
   MessagesSquareIcon,
   PlayIcon,
   RotateCwIcon,
+  ScanSearchIcon,
   XIcon,
 } from "lucide-react";
 import {
@@ -235,15 +236,16 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * comes on screen, when the developer presses Retry or Refresh, and the
  * moment the agent ends, since that is when what it published settles
  * (`useAgentRead`, as the Changes tab reads). It is three reads, each
- * landing on its own: the pull request itself (its description, branches,
- * mergeability, and people) and its conversation, whose reviews say where
- * each reviewer the header draws stands, both asked as the tab is shown;
- * and its checks, as the Checks tab is first shown. What Luke already holds of
+ * landing on its own, all asked as the tab is shown: the pull request
+ * itself (its description, branches, mergeability, and people); its
+ * conversation, whose reviews say where each reviewer the header draws
+ * stands; and its checks, whose deployments the header's Preview opens, as
+ * stage-cli's header reads them. What Luke already holds of
  * the pull request, what the agent published, draws the pill, the title,
  * and the Files changed tab's lines at once; each part stands as a skeleton
  * until its read lands, and says so with its own Retry where its read
- * failed, the other parts and the tabs standing. Refresh reads again the
- * header's reads and the checks where their tab was shown, each part drawn
+ * failed, the other parts and the tabs standing. Refresh reads again all
+ * three, each part drawn
  * standing until its answer lands; an agent with no pull request yet says
  * that.
  *
@@ -255,7 +257,9 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * (⌘-click opens it on GitHub), the title first in the markup so a screen
  * reader names it before the pill drawn ahead of it, and at the row's end, while it is open or a
  * draft, the merge control saying what can happen now, its panel holding
- * GitHub's own sentence and the presses (`merge-box.tsx`), with Run before
+ * GitHub's own sentence and the presses (`merge-box.tsx`), with Preview
+ * first where a deployment of its head serves an address, opening it or, for
+ * several, a menu of their environments (`PreviewControl`), and Run before
  * it, which runs the agent's branch in a terminal of this Mac in the side
  * panel, where the panel offers one (`onRun`). Open on GitHub
  * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
@@ -325,6 +329,8 @@ const PULL_REQUEST_WORDS = {
   NO_PULL_REQUEST: "No pull request yet.",
   RUN: "Run",
   RUN_LABEL: "Run on this Mac",
+  PREVIEW: "Preview",
+  PREVIEWS: "Preview deployments",
   NO_DESCRIPTION: "No description provided.",
   NO_CHECKS: "No checks have run on this pull request.",
   NO_CONVERSATION: "Nobody has commented yet.",
@@ -1433,6 +1439,77 @@ function Deployments({
   );
 }
 
+/** The head's deployments that serve an address now, the newest of each environment, as the header's Preview opens them. */
+function servingOf(
+  checks: CodingAgentOverviewChecks | undefined,
+): readonly (PullRequestDeployment & { readonly url: string })[] {
+  return (checks?.deployments ?? []).filter(
+    (deployment): deployment is PullRequestDeployment & { readonly url: string } =>
+      deployment.state === DEPLOYMENT_STATE.READY && deployment.url !== null,
+  );
+}
+
+/**
+ * The header's Preview, as stage-cli's header offers a pull request's
+ * previews: one deployment serving an address opens at a press, and several
+ * drop a menu naming each environment. Nothing stands until the checks land
+ * or where nothing serves an address, so a head still deploying offers no
+ * door that leads nowhere.
+ */
+function PreviewControl({
+  checks,
+  shown,
+}: {
+  checks: CodingAgentOverviewChecks | undefined;
+  shown: boolean;
+}): React.JSX.Element | null {
+  const openLink = useOpenLink();
+  const menu = useMenu(shown);
+  const serving = servingOf(checks);
+  const [only] = serving;
+  if (only === undefined) return null;
+  if (serving.length === 1) {
+    return (
+      <Tooltip label={only.environment}>
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          icon={<ScanSearchIcon />}
+          label={`${PULL_REQUEST_WORDS.PREVIEW} ${only.environment}`}
+          onClick={() => openLink(only.url)}
+        >
+          {PULL_REQUEST_WORDS.PREVIEW}
+        </Button>
+      </Tooltip>
+    );
+  }
+  const actions: MenuAction[] = serving.map((deployment) => ({
+    label: deployment.environment,
+    icon: <ExternalLinkIcon aria-hidden="true" />,
+    onSelect: () => openLink(deployment.url),
+  }));
+  return (
+    <span className="pull-request-preview">
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        icon={<ScanSearchIcon />}
+        label={PULL_REQUEST_WORDS.PREVIEWS}
+        trailing={formatLocaleCount(serving.length)}
+        {...menu.trigger()}
+      >
+        {PULL_REQUEST_WORDS.PREVIEW}
+      </Button>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={PULL_REQUEST_WORDS.PREVIEWS}
+          menu={menu.drawn}
+          groups={[actions]}
+          onClose={menu.close}
+        />
+      )}
+    </span>
+  );
+}
+
 /** The checks section as its read stands: every check once landed, its running counts moving while the tab is shown (`live`), a skeleton of rows while out, its failure with Retry. */
 function ChecksPart({
   agentId,
@@ -2282,7 +2359,7 @@ function PullRequestTabBody({
     tab: `${id}-${each}-tab`,
     panel: `${id}-${each}-panel`,
   });
-  // The header's reads are asked as the tab is shown, the conversation among them for where its reviewers stand; the checks as their tab is first shown.
+  // The header's reads are asked as the tab is shown, the conversation among them for where its reviewers stand, and the checks for the deployments its Preview opens.
   const pullRequestRead = useAgentRead(
     agentId,
     shown,
@@ -2299,7 +2376,7 @@ function PullRequestTabBody({
   );
   const checksRead = useAgentRead(
     agentId,
-    shown && view === PULL_REQUEST_VIEW.CHECKS,
+    shown,
     ended,
     (id: string) => control.readOverviewChecks(id, number),
     UNANSWERED,
@@ -2309,12 +2386,12 @@ function PullRequestTabBody({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads, and the checks and the chapters where their tab was shown, never before,
+  // Refresh reads again the header's reads, the checks among them, and the chapters where their tab was shown, never before,
   // and what the agent published, which names this tab and its pin by the pull request's title.
   const refresh = () => {
     ask.pullRequest();
     ask.conversation();
-    if (askedYet(checksRead)) ask.checks();
+    ask.checks();
     if (askedYet(chapters)) chapters.ask();
     const read =
       number === undefined
@@ -2450,6 +2527,7 @@ function PullRequestTabBody({
                       </div>
                     )}
                     <div className="pull-request-title-actions">
+                      <PreviewControl checks={landed(parts.checks)} shown={shown} />
                       {onRun === undefined || held === undefined ? null : (
                         <Button
                           variant={BUTTON_VARIANT.OUTLINE}
