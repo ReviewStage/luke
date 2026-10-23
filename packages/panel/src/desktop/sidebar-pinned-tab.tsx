@@ -34,6 +34,7 @@ import { ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
@@ -106,7 +107,7 @@ function pinSubject(
   pin: PinnedTab,
   task: TaskSummary,
   agent: TaskAgentLine | undefined,
-  pullRequest: TaskPullRequestLine | undefined,
+  pullRequest: PinnedPullRequest | undefined,
 ): TabSubject {
   const { tab } = pin;
   if (isAgentTab(tab)) {
@@ -118,25 +119,46 @@ function pinSubject(
   return { kind: TAB_KIND.PANEL, tab, plan: { name: task.name, status: task.status } };
 }
 
+/** What a pin's pull request is drawn and named from: its number, title, and where it stands. */
+type PinnedPullRequest = PullRequestMarked & Pick<CodingAgentPullRequest, "title">;
+
+/** The repository a pull request's address names, without its number: what two pull requests of one repository share. */
+function repositoryOfLine(line: TaskPullRequestLine): string | undefined {
+  return line.url?.replace(/\/pull\/\d+.*$/u, "");
+}
+
 /**
- * The pull request a pin of an agent's Changes shows, as the task's row last
- * read it from GitHub: the one its tab names by number, else the one of its
- * agent. Nothing for any other pin, or where the row holds no such pull request.
+ * The pull request a pin of an agent's Changes shows, as the window last
+ * read it from GitHub. An agent's own is the open task's read of that agent
+ * where the pin is on it, else the task's row's line naming the agent. A
+ * numbered tab names another pull request of its agent's repository, which
+ * the row's lines identify by number alone, so one is taken from the row only
+ * where all its lines stand in one repository. Nothing for any other pin,
+ * or where the window cannot tell which pull request the pin is of; the pin
+ * then keeps the label and the grey icon it was pinned with.
  */
-function pinPullRequest(pin: PinnedTab, task: TaskSummary): TaskPullRequestLine | undefined {
+function pinPullRequest(
+  pin: PinnedTab,
+  task: TaskSummary,
+  tasks: TasksControl,
+): PinnedPullRequest | undefined {
   const { tab } = pin;
   if (!isChangesTab(tab)) return undefined;
   const lines = task.agents?.pullRequests ?? [];
-  return lines.find((line) =>
-    tab.number === undefined ? line.agentId === tab.changes : line.number === tab.number,
-  );
+  if (tab.number !== undefined) {
+    const sameRepository = new Set(lines.map(repositoryOfLine)).size <= 1;
+    return sameRepository ? lines.find((line) => line.number === tab.number) : undefined;
+  }
+  const own =
+    pin.task === tasks.activeTaskId ? tasks.agents.pullRequests.get(tab.changes) : undefined;
+  return own ?? lines.find((line) => line.agentId === tab.changes);
 }
 
 /** A pin as the sidebar names it: by the label it was pinned under, but a Plan tab's by its task's name and a Changes tab's by its pull request's number and title as they stand now, as the tab itself is named. */
 function namedPin(
   pin: PinnedTab,
   task: TaskSummary,
-  pullRequest: TaskPullRequestLine | undefined,
+  pullRequest: PinnedPullRequest | undefined,
 ): PinnedTab {
   if (pin.tab === SIDE_PANEL_TAB.PLAN) return { ...pin, label: task.name };
   return pullRequest === undefined ? pin : { ...pin, label: pullRequestLabelOf(pullRequest) };
@@ -289,7 +311,7 @@ function PinnedTabCard({
   pin: PinnedTab;
   task: TaskSummary;
   agent: TaskAgentLine | undefined;
-  pullRequest: TaskPullRequestLine | undefined;
+  pullRequest: PinnedPullRequest | undefined;
   gone: boolean;
   tasks: TasksControl;
   onOpenTask: () => void;
@@ -345,7 +367,7 @@ export function SidebarPinnedTab({
   /** Opens the task the tab is of, as its own row does. */
   onOpenTask: () => void;
 }): React.JSX.Element {
-  const livePullRequest = pinPullRequest(kept, task);
+  const livePullRequest = pinPullRequest(kept, task, tasks);
   const pin = namedPin(kept, task, livePullRequest);
   const copied = useTranscriptCopier();
   const menu = useMenu(tasks.shown && inSight);
