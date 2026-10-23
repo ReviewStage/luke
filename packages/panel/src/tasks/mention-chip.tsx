@@ -90,7 +90,12 @@ import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { ServerCard } from "./server-card.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
-import { useKnownNames, useTaskNameCatchUp, useTaskStatus } from "./use-known-names.js";
+import {
+  useKnownNames,
+  useTaskKeyTargets,
+  useTaskNameCatchUp,
+  useTaskStatus,
+} from "./use-known-names.js";
 import {
   type ChipWhere,
   type LinkStanding,
@@ -730,8 +735,12 @@ function MentionChip({
   const section = mention.kind === MENTION_KIND.SECTION ? mention : undefined;
   const heading = useSectionHeading(section?.taskId, section?.anchor ?? "");
   useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
+  // Note that a plan written as its key (`ACME-42`) says the key, as the words wrote it.
+  const keys = useTaskKeyTargets();
+  const keyed = mention.kind === MENTION_KIND.TASK && keys.has(written);
   const name =
-    githubName(mention, standing) ?? chipName(mention, written, bare, known, standing, heading);
+    githubName(mention, standing) ??
+    (keyed ? written : chipName(mention, written, bare, known, standing, heading));
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const card = (

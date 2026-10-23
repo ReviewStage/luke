@@ -23,6 +23,7 @@ import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { TaskIssueLinks } from "./task-issue-links.js";
 
@@ -233,6 +234,18 @@ test("each link is drawn with its key, title, live state, and keyword, and its m
   ]);
   choose(container, 0, "Open on GitHub");
   assert.deepEqual(opened, ["https://github.com/acme/web/issues/312"]);
+});
+
+test("a chip hangs its issue's card while the pointer rests on it: its title, repository key, state, and keyword", async () => {
+  const { container } = await mount({ links: [SAFARI] });
+
+  restOn(container.querySelector(".task-issue-link button") ?? assert.fail("the chip"));
+  const card = document.querySelector("[data-issue-card]");
+
+  assert.match(card?.textContent ?? "", /Login fails on Safari 18/);
+  assert.match(card?.textContent ?? "", /acme\/web#312 · Not planned/);
+  assert.match(card?.textContent ?? "", /Closes: Merging closes the issue/);
+  assert.ok(card?.querySelector("[data-issue-mark]"), "the issue's live mark leads the card");
 });
 
 test("a keyword switched and an issue unlinked from a chip's menu reach the host for that link, and the chips follow", async () => {

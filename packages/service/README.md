@@ -662,30 +662,21 @@ more than one sees exactly what it saw before:
 
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
   status }, accounts?: [{ provider, connection, label?, status }],
-  addable?: [provider], signInFailures?: [{ provider, connection?, reason,
-  message? }] }`: each provider's first account's word, every account the
-  Luke account holds but one whose first sign-in ended without a grant, the
-  providers it may add another account at, and each failure; each
-  status `connected`, `pending`, `expired`, `disconnected`, or
-  `unavailable` (no connector for it on this deployment). For a caller
-  that carries a bearer, as the desktop does, a sign-in still
-  under way, begun within the last fifteen minutes, is settled here by
-  asking Connect for a token afresh, and stands `pending` until it settles,
-  over an `expired` row as over none. One with no token yet is asked after
-  by the `verifier` Connect's `startAuthorization` answered it with, kept in
-  the row's `connect_verifier` beside its state (never logged, never
-  answered): Connect's `GET /v1/connect/result/{verifier}`, the read its
-  CLI polls, under the deployment's OIDC token. One Connect answers
-  `canceled` (the developer cancelled on Connect's page) or `error` (Connect
-  or the provider refused it) is ended here and named once in
-  `signInFailures`, `reason` `canceled` or `error`, with the first line of
-  Connect's error message, cut to 200 characters, where it is shaped like no
-  credential (`credentialFreeLine` in `src/integrations/mcp-tools.ts`).
-  A caller with only the browser's session cookie is answered where each
-  row stands as stored, a sign-in within its window `pending`, and nothing
-  is settled, ended, or labelled, and Connect is not asked: a Lax cookie
-  rides a link another site sends the browser on, which must not settle
-  the account's sign-in or spend its one `signInFailures` notice. The
+  addable?: [provider] }`: each provider's first account's word, every
+  account the Luke account holds but one whose first sign-in ended without
+  a grant, and the providers it may add another account at; each status
+  `connected`, `pending`, `expired`, `disconnected`, or `unavailable` (no
+  connector for it on this deployment). For a caller that carries a bearer,
+  as the desktop does, a sign-in still under way, begun within the last
+  fifteen minutes, is settled here by asking Connect for a token afresh,
+  and stands `pending` until it settles or its fifteen minutes run out,
+  over an `expired` row as over none. Connect is asked nothing else about
+  it: Connect documents no way to read why a sign-in that never came back
+  ended, so the service does not ask. A caller with only the browser's
+  session cookie is answered where each row stands as stored, a sign-in
+  within its window `pending`, and nothing is settled, ended, or labelled,
+  and Connect is not asked: a Lax cookie rides a link another site sends
+  the browser on, which must not settle the account's sign-in. The
   endpoint reads the `Authorization` header itself (`hostedCarriesBearer`
   in `src/http/http-effect.ts`), since every function holding the group
   answers every path it declares.
@@ -697,7 +688,7 @@ more than one sees exactly what it saw before:
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
   `startAuthorization` for the account under its row's subject, with
   `/api/account/integrations/connected?state=…` as the callback, records the
-  sign-in's one-time state and Connect's verifier, and answers the address
+  sign-in's one-time state, and answers the address
   and the account it signs in (`{ url, connection }`). With `add=true` it
   signs in a new account under a minted subject and the next free name,
   where the provider offers more than one and the account holds fewer than
