@@ -1074,12 +1074,9 @@ screen recording leaves them out.
 
 **Browser tabs.** With the Browser tab experiment on, a Browser tab shows an
 agent's cloud browser, which the agent drives and you can watch and take over.
-Earlier versions of the Mac app also had a Browser tab that opened pages on
-your Mac; the first launch after you update clears the cookies, storage, and
-cache it kept there. The cloud browser is a Chromium that runs in the agent's
-own Vercel Sandbox, never on
-your Mac, so it reaches that sandbox's own `localhost` and holds none of your
-Mac's cookies or signed-in sites. What the agent does with it reaches the model:
+The cloud browser is a Chromium that runs in the agent's own Vercel Sandbox,
+never on your Mac, so it reaches that sandbox's own `localhost` and holds none
+of your Mac's cookies or signed-in sites. What the agent does with it reaches the model:
 each page's address and title, a screenshot, and a text snapshot of the page;
 the transcript keeps these, under its terms. A screenshot is taken twice: the
 model is handed a small copy, which the stored transcript leaves out, and our

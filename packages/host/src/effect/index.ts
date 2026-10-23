@@ -27,10 +27,6 @@ export {
   NOT_ON_THIS_PLATFORM,
 } from "../host-concerns.js";
 export { oauthAccountSourceLayer } from "../oauth-account-source.js";
-export {
-  clearRetiredBrowserPartition,
-  type RetiredBrowserPartition,
-} from "../retired-browser-partition.js";
 export { layersInOrder } from "./composer.js";
 export { HostAssemblyTag, type HostAvatar, HostTag, hostStandingLayer } from "./host.js";
 export { hostKernelLayer } from "./kernel.js";
