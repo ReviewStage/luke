@@ -15,6 +15,8 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
+  GROUP_ACTIONS,
+  GROUP_HEADING,
   GROUP_SURFACE,
   GroupHeader,
   HoverCard,
@@ -113,7 +115,6 @@ import {
   useMenuAsk,
 } from "../desktop/phone-head.js";
 import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
-import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { TaskChipCard } from "./chip-cards.js";
@@ -1165,16 +1166,17 @@ function ListHead({
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
       {sidebar ? (
-        <SidebarSectionHead
-          name={title}
+        <GroupHeader
+          heading={GROUP_HEADING.NONE}
+          label={title}
+          actionsShown={GROUP_ACTIONS.AT_REST}
+          actions={options}
           search={
             head.search === undefined
               ? undefined
               : { label: SEARCH_INBOX, value: head.search.query, onChange: head.search.onQuery }
           }
-        >
-          {options}
-        </SidebarSectionHead>
+        />
       ) : (
         <>
           {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}

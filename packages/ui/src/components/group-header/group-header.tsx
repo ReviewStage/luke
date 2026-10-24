@@ -7,6 +7,7 @@ import {
   DisclosureScope,
   useDisclosureFold,
 } from "../disclosure/disclosure.js";
+import { FoldingSearch } from "../folding-search/folding-search.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { NAV_COUNT_SHOWN, type NavCount } from "../nav-item/nav-item.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
@@ -57,9 +58,19 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * A group's actions (a repository's ⋯ and +) stand at the head's end beside
  * the fold, so pressing one folds nothing, shown while the head is hovered
- * or holds the focus, and at rest where there is no hover. A right-click on
- * the head is the ⋯'s second door (`contextMenu`), and the head stays ringed
- * while the menu it opened stands (`menuOpen`).
+ * or holds the focus, and at rest where there is no hover; a head whose
+ * buttons are the list's own, Tasks' View options, keeps them standing at
+ * rest (`actionsShown`). A right-click on the head is the ⋯'s second door
+ * (`contextMenu`), and the head stays ringed while the menu it opened stands
+ * (`menuOpen`).
+ *
+ * A head that is too tight for a search of its own may offer one (`search`):
+ * a magnifier after the label unfolds a field laid over the label and the
+ * magnifier alone, so the actions beside it stay under the pointer as it
+ * opens and folds.
+ *
+ * A label is words, or a placeholder block while the group is read, so a
+ * skeleton draws through the head its loaded state draws.
  */
 
 /** The element a head stands in: a heading at its level in the page's outline, or none, for a head that is no heading. */
@@ -70,6 +81,13 @@ export const GROUP_HEADING = {
   NONE: "div",
 } as const;
 export type GroupHeading = (typeof GROUP_HEADING)[keyof typeof GROUP_HEADING];
+
+/** Whether a group's actions wait for the pointer or the keyboard, or stand at rest. */
+export const GROUP_ACTIONS = {
+  ON_HOVER: "on-hover",
+  AT_REST: "at-rest",
+} as const;
+export type GroupActions = (typeof GROUP_ACTIONS)[keyof typeof GROUP_ACTIONS];
 
 /** How wide the surface a group stands on is, which says where its count stands: always on a wide page, only folded or under the pointer in a narrow column. */
 export const GROUP_SURFACE = {
@@ -126,7 +144,7 @@ function Lead({
 }: {
   glyph: ReactNode;
   folds: boolean;
-  label: string;
+  label: ReactNode;
   mark: ReactNode;
   count: NavCount | undefined;
 }): React.JSX.Element {
@@ -158,6 +176,8 @@ export function GroupHeader({
   mark,
   count,
   actions,
+  actionsShown = GROUP_ACTIONS.ON_HOVER,
+  search,
   fold,
   standing,
   tooltip,
@@ -170,8 +190,8 @@ export function GroupHeader({
   contextMenu,
   children,
 }: {
-  /** The group's name. */
-  label: string;
+  /** The group's name, or a placeholder block while it is read. */
+  label: ReactNode;
   /** The group's glyph, decoration a reader is not told. */
   glyph?: ReactNode;
   /** Said after the label, quietly: a pinned repository's pin. */
@@ -180,6 +200,10 @@ export function GroupHeader({
   count?: NavCount | undefined;
   /** The group's buttons at the head's end, beside the fold rather than inside it. */
   actions?: ReactNode;
+  /** Whether the actions wait for the pointer or the keyboard, or stand at rest. */
+  actionsShown?: GroupActions;
+  /** A search the head offers, named `label`, which narrows the caller's list as it is typed in. */
+  search?: { label: string; value: string; onChange: (value: string) => void } | undefined;
   /** How the group folds; left out, the head folds nothing and the rows always stand. */
   fold?: GroupFold | undefined;
   /** What a folded group leaves drawn under its head once its rows have faded; nothing is drawn while the group stands open. */
@@ -224,7 +248,7 @@ export function GroupHeader({
               : NAV_COUNT_SHOWN.ALWAYS),
         };
   const lead = <Lead glyph={glyph} folds={folds} label={label} mark={mark} count={counted} />;
-  const hint = tooltip ?? (card === undefined ? undefined : label);
+  const hint = tooltip ?? (card === undefined || typeof label !== "string" ? undefined : label);
   // Note that only a head with a hint or a card is wrapped, because the tooltip hands its control a click handler of its own, which a head that folds nothing must not hear.
   const control = folds ? (
     <button
@@ -238,6 +262,17 @@ export function GroupHeader({
     </button>
   ) : (
     <span className="luke-group-header-lead">{lead}</span>
+  );
+  const named = (
+    <Heading className="luke-group-header-heading">
+      {hint === undefined ? (
+        control
+      ) : (
+        <Tooltip label={hint} card={card}>
+          {control}
+        </Tooltip>
+      )}
+    </Heading>
   );
   return (
     <DisclosureScope state={state}>
@@ -253,16 +288,12 @@ export function GroupHeader({
           data-menu-open={menuOpen ? "true" : undefined}
           {...withContextMenu<HTMLDivElement>(contextMenu, {})}
         >
-          <Heading className="luke-group-header-heading">
-            {hint === undefined ? (
-              control
-            ) : (
-              <Tooltip label={hint} card={card}>
-                {control}
-              </Tooltip>
-            )}
-          </Heading>
-          {said(actions) ? <span className="luke-group-header-actions">{actions}</span> : null}
+          {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}
+          {said(actions) ? (
+            <span className="luke-group-header-actions" data-shown={actionsShown}>
+              {actions}
+            </span>
+          ) : null}
         </div>
         {/* Note that the rows are the root's own child, the body disclosure.css unrolls and fades. */}
         {rows ? (

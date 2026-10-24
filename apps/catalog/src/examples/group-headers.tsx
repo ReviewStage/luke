@@ -1,6 +1,7 @@
 import {
   EllipsisIcon,
   FolderIcon,
+  GROUP_ACTIONS,
   GROUP_HEADING,
   GROUP_SURFACE,
   GroupHeader,
@@ -19,8 +20,9 @@ import { CatalogSection } from "../section";
  * group-headers.tsx -- a group's head folding its rows, open and folded,
  * with its glyph, a pin, a count shown at rest or under the pointer, and
  * its actions beside the fold; a group its holder keeps; a head with no
- * glyph, whose chevron stands at rest; heads that fold nothing; and the count
- * on a wide page and in a narrow column.
+ * glyph, whose chevron stands at rest; heads that fold nothing; a list's head
+ * with a search and its buttons standing; and the count on a wide page and in a
+ * narrow column.
  */
 
 const ignore = (): void => undefined;
@@ -126,6 +128,22 @@ function Surfaces(): React.JSX.Element {
   );
 }
 
+/** A list's own head: its buttons standing at rest, and a search a magnifier unfolds over its label. */
+function Searched(): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  return (
+    <div className="catalog-narrow">
+      <GroupHeader
+        label="Tasks"
+        heading={GROUP_HEADING.NONE}
+        actionsShown={GROUP_ACTIONS.AT_REST}
+        actions={<IconButton label="View options" icon={<EllipsisIcon />} onClick={ignore} />}
+        search={{ label: "Search tasks", value: query, onChange: setQuery }}
+      />
+    </div>
+  );
+}
+
 function GroupHeaders(): React.JSX.Element {
   return (
     <>
@@ -137,6 +155,12 @@ function GroupHeaders(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="group-header-still" title="Heads that fold nothing">
         <Still />
+      </CatalogSection>
+      <CatalogSection
+        id="group-header-search"
+        title="A list's head, with a search and standing buttons"
+      >
+        <Searched />
       </CatalogSection>
       <CatalogSection
         id="group-header-surfaces"

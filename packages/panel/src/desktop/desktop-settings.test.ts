@@ -340,6 +340,39 @@ test("Settings names its page once, by the page's own header, which also holds t
   );
 });
 
+test("a page group's head folds its pages, its one chevron turning with the fold, and a press brings them back", () => {
+  const page = mount(createElement(SettingsHarness));
+  const head = (name: string) =>
+    [
+      ...page.querySelectorAll<HTMLButtonElement>(
+        'nav[aria-label="Settings pages"] button[aria-expanded]',
+      ),
+    ].find((each) => each.textContent === name) ?? assert.fail(`${name} heads a group`);
+  const account = head("Account");
+  const turns = () => [...account.querySelectorAll(".luke-disclosure-turn")];
+  assert.equal(turns().length, 1, "the head draws one chevron");
+  assert.deepEqual(
+    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
+    ["true", "true"],
+  );
+  assert.ok(pageButtons(page).some((each) => each.textContent === "Profile"));
+
+  act(() => account.click());
+  assert.deepEqual(
+    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
+    ["false", "false"],
+  );
+  assert.ok(!pageButtons(page).some((each) => each.textContent === "Profile"));
+  assert.ok(
+    pageButtons(page).some((each) => each.textContent === "Workspace"),
+    "the other groups stand",
+  );
+
+  act(() => account.click());
+  assert.equal(turns()[0]?.getAttribute("data-open"), "true");
+  assert.ok(pageButtons(page).some((each) => each.textContent === "Profile"));
+});
+
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   assert.deepEqual(

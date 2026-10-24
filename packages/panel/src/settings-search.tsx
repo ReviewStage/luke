@@ -40,6 +40,7 @@ import {
 import {
   commandKeyshortcuts,
   GAP,
+  GroupHeader,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
@@ -48,9 +49,6 @@ import {
   SearchField,
   Shortcut,
   Stack,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
 } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { land } from "@luke/ui/landed";
@@ -643,22 +641,21 @@ export function SettingsSearchResults({
     <div className="settings-search-results">
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
-          <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.GROUP} className="section-heading">
-            {resultPageWord(group.page)}
-          </Text>
-          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
-            {group.items.map((entry) => (
-              <li key={entry.id}>
-                <NavItem
-                  current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
-                  roving
-                  onClick={() => onOpen(entry)}
-                >
-                  <Highlighted text={entry.label} tokens={search.tokens} />
-                </NavItem>
-              </li>
-            ))}
-          </Stack>
+          <GroupHeader label={resultPageWord(group.page)}>
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
+              {group.items.map((entry) => (
+                <li key={entry.id}>
+                  <NavItem
+                    current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
+                    roving
+                    onClick={() => onOpen(entry)}
+                  >
+                    <Highlighted text={entry.label} tokens={search.tokens} />
+                  </NavItem>
+                </li>
+              ))}
+            </Stack>
+          </GroupHeader>
         </section>
       ))}
     </div>

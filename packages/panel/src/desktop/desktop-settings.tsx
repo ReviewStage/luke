@@ -16,6 +16,7 @@ import {
   BackButton,
   Fill,
   GAP,
+  GroupHeader,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
@@ -33,7 +34,7 @@ import {
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -141,32 +142,29 @@ function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.El
   return <PageToolbar lead={<ListBack onList={onList} />} />;
 }
 
-/** A group's heading: the listed workspace's tile and name over its own group, the group's words otherwise. */
-function GroupHeading({
+/** A group of pages under its head, which folds them: the listed workspace's tile and name over its own group, the group's words otherwise. */
+function PageGroup({
   group,
   listed,
   capabilities,
+  children,
 }: {
   group: SettingsPageGroup;
   listed: Workspace | undefined;
   capabilities: readonly HostCapability[];
+  children: ReactNode;
 }): React.JSX.Element {
-  if (group !== SETTINGS_PAGE_GROUP.WORKSPACE || listed === undefined) {
-    return (
-      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.GROUP} className="section-heading">
-        {settingsGroupHeadingOf(group, capabilities)}
-      </Text>
-    );
-  }
+  const workspace = group === SETTINGS_PAGE_GROUP.WORKSPACE ? listed : undefined;
   return (
-    <Text
-      as={TEXT_ELEMENT.H2}
-      variant={TEXT_VARIANT.GROUP}
-      className="section-heading settings-nav-workspace"
-    >
-      <WorkspaceTile workspace={listed} />
-      {listed.name}
-    </Text>
+    <section className="settings-nav-group">
+      <GroupHeader
+        label={workspace?.name ?? settingsGroupHeadingOf(group, capabilities)}
+        glyph={workspace === undefined ? undefined : <WorkspaceTile workspace={workspace} />}
+        fold={{ defaultOpen: true }}
+      >
+        {children}
+      </GroupHeader>
+    </section>
   );
 }
 
@@ -348,12 +346,12 @@ export function DesktopSettings({
                 ) : (
                   shownSettingsPageGroups(settings.capabilities, experiments).map(
                     ({ group, pages }) => (
-                      <section key={group} className="settings-nav-group">
-                        <GroupHeading
-                          group={group}
-                          listed={listed}
-                          capabilities={settings.capabilities}
-                        />
+                      <PageGroup
+                        key={group}
+                        group={group}
+                        listed={listed}
+                        capabilities={settings.capabilities}
+                      >
                         <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                           {pages.map((view) => (
                             <SettingsPageRow
@@ -365,7 +363,7 @@ export function DesktopSettings({
                             />
                           ))}
                         </Stack>
-                      </section>
+                      </PageGroup>
                     ),
                   )
                 )}

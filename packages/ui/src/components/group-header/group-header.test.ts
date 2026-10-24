@@ -6,13 +6,15 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { NAV_COUNT_SHOWN } from "../nav-item/nav-item.js";
-import { GROUP_SURFACE, type GroupFold, GroupHeader } from "./group-header.js";
+import { GROUP_ACTIONS, GROUP_SURFACE, type GroupFold, GroupHeader } from "./group-header.js";
 
 /**
  * group-header.test.ts -- pressing a group's head folds and unfolds its
  * rows and says so in `aria-expanded`, open or folded from the start or as
  * its holder keeps it; an action beside the fold presses without folding;
  * a head that folds nothing draws its rows always and no fold control; the
+ * actions wait for the pointer or stand at rest as the head says; a head may
+ * offer a search that the actions beside it survive; the
  * count is drawn as its caller gives it, always on a wide page and, in a
  * narrow column, only folded or under the pointer; a folded group draws what it leaves
  * standing; a press that opens plays the
@@ -123,6 +125,43 @@ test("an action beside the fold is pressed without folding the group", () => {
   assert.equal(presses, 1);
   assert.equal(headOf(container).getAttribute("aria-expanded"), "true");
   assert.ok(container.textContent?.includes(ROWS));
+});
+
+test("a head's actions wait for the pointer unless the head keeps them standing", () => {
+  const shown = (extra: object) =>
+    render(group(undefined, { actions: createElement("button", null, "View options"), ...extra }))
+      .querySelector(".luke-group-header-actions")
+      ?.getAttribute("data-shown");
+
+  assert.equal(shown({}), GROUP_ACTIONS.ON_HOVER);
+  assert.equal(shown({ actionsShown: GROUP_ACTIONS.AT_REST }), GROUP_ACTIONS.AT_REST);
+});
+
+test("a head that offers a search unfolds it over the label while the actions beside it stay pressable", () => {
+  const typed: string[] = [];
+  let presses = 0;
+  const container = render(
+    group(undefined, {
+      actions: createElement("button", { onClick: () => (presses += 1) }, "View options"),
+      search: { label: "Search tasks", value: "", onChange: (value: string) => typed.push(value) },
+    }),
+  );
+  const magnifier = container.querySelector<HTMLButtonElement>('button[aria-label="Search tasks"]');
+  assert.ok(magnifier, "the head offers the search");
+  assert.equal(container.querySelector("h2")?.textContent, "acme/web");
+
+  act(() => magnifier.click());
+  assert.ok(container.querySelector("input"), "the field is open");
+  const options = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "View options",
+  );
+  act(() => options?.click());
+  assert.equal(presses, 1);
+});
+
+test("a label that is a placeholder block heads a group as its words do", () => {
+  const container = render(group(undefined, { label: createElement("i", null, "block") }));
+  assert.equal(container.querySelector("h2")?.textContent, "block");
 });
 
 test("a head that folds nothing is a heading with its rows always drawn under it", () => {

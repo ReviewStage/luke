@@ -46,7 +46,7 @@ import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { matchesTokens } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import type { CountNoun } from "../desktop/sidebar-group-header.js";
+import type { CountNoun } from "../desktop/sidebar-fold.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
 import { plainWords } from "./tool-call-model.js";
