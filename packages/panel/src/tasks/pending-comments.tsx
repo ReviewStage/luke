@@ -13,6 +13,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, Trash2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useState } from "react";
+import type { HeldBodies } from "./comment-drafts.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
@@ -141,22 +142,30 @@ export function PendingBadge(): React.JSX.Element {
   return <Badge tone={STATUS_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
 }
 
-/** The words being written over a pending comment's: the field, Cancel, and Save; ⌘↩ saves. */
+/** The words being written over a pending comment's: the field, Cancel, and Save; ⌘↩ saves, Esc lets go keeping them for the next time Edit opens, and Cancel keeps nothing. */
 function EditForm({
   draft,
+  held,
   busy,
   saving,
   onSave,
   onCancel,
 }: {
   draft: PendingReviewComment;
+  /** The place that keeps the words written over the comment's own, from the last time Edit was open. */
+  held: HeldBodies;
   busy: boolean;
   saving: boolean;
   onSave: (body: string) => void;
   onCancel: () => void;
 }): React.JSX.Element {
-  const [body, setBody] = useState(draft.body);
+  const [body, setBody] = useState(held.of(draft.id) ?? draft.body);
   const blank = body.trim() === "" || overCommentBound(body);
+  const write = (next: string) => {
+    setBody(next);
+    // Note that words written back to the comment's own are no edit, so none are held.
+    held.keep(draft.id, next === draft.body ? undefined : next);
+  };
   const save = () => {
     if (!blank && !busy) onSave(body);
   };
@@ -167,7 +176,7 @@ function EditForm({
         label={PENDING_WORDS.FIELD}
         placeholder={PENDING_WORDS.PLACEHOLDER}
         value={body}
-        onChange={setBody}
+        onChange={write}
         busy={busy}
         focus
         onSubmit={save}
@@ -176,7 +185,13 @@ function EditForm({
         }}
       />
       <div className="pull-request-thread-reply-foot">
-        <Button disabled={busy} onClick={onCancel}>
+        <Button
+          disabled={busy}
+          onClick={() => {
+            held.keep(draft.id, undefined);
+            onCancel();
+          }}
+        >
           {PENDING_WORDS.CANCEL}
         </Button>
         <Button
@@ -195,8 +210,8 @@ function EditForm({
 
 /**
  * One of the member's pending comments: its head, marked Pending, then its
- * words, or the field over them while Edit is open, Cancel keeping nothing
- * written; then Edit and Delete, Delete asking first; GitHub's refusal of
+ * words, or the field over them while Edit is open, Esc keeping what
+ * was written for the next Edit and Cancel keeping nothing; then Edit and Delete, Delete asking first; GitHub's refusal of
  * either under them. Outside a tab that writes, it is drawn without them.
  */
 export function PendingComment({
@@ -236,15 +251,19 @@ export function PendingComment({
           {marked ? <PendingBadge /> : null}
         </span>
       )}
-      {editing ? (
+      {editing && writing !== undefined ? (
         <EditForm
           draft={draft}
+          held={writing.edits}
           busy={out !== undefined}
           saving={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
           onSave={(body) =>
             writes.write(
               { action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT, commentId: draft.id, body },
-              () => setEditing(false),
+              () => {
+                writing.edits.keep(draft.id, undefined);
+                setEditing(false);
+              },
             )
           }
           onCancel={() => setEditing(false)}
