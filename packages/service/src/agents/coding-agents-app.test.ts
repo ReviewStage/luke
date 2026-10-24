@@ -10375,6 +10375,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ],
         );
         assert.match(parts.replay?.steps[2]?.words ?? "", /Result: ok/u);
+        // A call names the tool it called, and a line when it was sent, which the replay card draws them by.
+        assert.equal(parts.replay?.steps[2]?.tool, "bash");
+        assert.ok(
+          parts.replay?.steps
+            .filter((step) => step.kind === REPLAY_STEP_KIND.LINE)
+            .every((step) => Number.isSafeInteger(step.at)),
+        );
         assert.match(parts.replay?.preamble ?? "", /You continue the work/u);
         assert.ok(parts.replay?.preamble.includes(PUBLISHED.branch));
         assert.match(

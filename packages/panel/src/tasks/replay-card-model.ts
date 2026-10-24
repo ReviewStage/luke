@@ -15,9 +15,15 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
-import { isRecord } from "@luke/wire";
-import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
+import { isRecord, valueFromJsonText, type WireValue } from "@luke/wire";
+import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { AGENT_PART, agentParts, messageWords } from "./coding-agent-model.js";
+import {
+  type CalledAgent,
+  calledAgent,
+  type ToolCallView,
+  toolCallView,
+} from "./tool-call-model.js";
 
 /**
  * replay-card-model.ts -- the opening of an agent started from another, read out of its first message: the brief as its source's was, the replay's card, and the developer's note.
@@ -94,17 +100,19 @@ export type StepView =
       readonly sentBy: CodingAgentSender | undefined;
       /** Whether the developer sent it, drawn as the reader's own. */
       readonly own: boolean;
+      /** When it was sent, where its marker said; none for a step written before. */
+      readonly at: number | undefined;
       readonly words: string;
     }
   | { readonly kind: typeof STEP_VIEW.SAID; readonly words: string }
   | {
       readonly kind: typeof STEP_VIEW.CALL;
-      readonly call: CallKind;
       readonly state: ToolState;
-      readonly subject: string;
-      readonly input: string;
-      readonly output: string | undefined;
+      /** The call's row and body as a transcript's call of its tool draws them, or as its summary's verb says where its marker named no tool. */
+      readonly view: ToolCallView;
       readonly errorText: string | undefined;
+      /** The agent a call about one names, which its row draws as the agent's chip; none for any other call. */
+      readonly agent: CalledAgent | undefined;
     };
 
 /** The most links of a `from` chain a brief's source is looked for along, so a chain that loops ends. */
@@ -348,6 +356,12 @@ export function briefAgent(
   };
 }
 
+/** The words a call took or gave as the value they spell: an object or a list read back from its JSON, anything else as the words it is, as the service wrote a string as it is and every other value as its JSON. */
+function wireOf(words: string): WireValue {
+  const value = valueFromJsonText(words);
+  return isRecord(value) || Array.isArray(value) ? value : words;
+}
+
 /** Where a call stood and what it took and gave, as a call's row draws them. */
 interface CallRead {
   readonly state: ToolState;
@@ -405,13 +419,38 @@ function spelledCall(step: ReplayStep): CallRead {
   };
 }
 
-/** A call's step read back as its row: its kind and subject from its summary, and where it stood, its input, and its output from its marker, or from its words where the marker names none. */
+/**
+ * A call's step whose marker named its tool, read back as a transcript
+ * draws a call of that tool (`toolCallView`): its kind, subject, and
+ * description, the integration whose mark it wears and the server it ran
+ * on, its input and its result drawn as that tool's are, and the agent it
+ * is about.
+ */
+function toolView(
+  step: ReplayStep & { readonly state: ReplayToolState; readonly input: string },
+  tool: string,
+): StepView {
+  const read = markedCall(step);
+  const call = {
+    tool,
+    input: wireOf(read.input),
+    output: read.output === undefined ? undefined : wireOf(read.output),
+  };
+  return {
+    kind: STEP_VIEW.CALL,
+    state: read.state,
+    view: toolCallView(call),
+    errorText: read.errorText,
+    agent: calledAgent(call),
+  };
+}
+
+/** A call's step read back as its row: as a transcript draws its tool where its marker named one, and otherwise its kind and subject from its summary, and where it stood, its input, and its output from its marker, or from its words where the marker names none. */
 function callView(step: ReplayStep): StepView {
-  const { state, input } = step;
-  const read =
-    state !== undefined && input !== undefined
-      ? markedCall({ ...step, state, input })
-      : spelledCall(step);
+  const { state, input, tool } = step;
+  const marked = state !== undefined && input !== undefined ? { ...step, state, input } : undefined;
+  if (marked !== undefined && tool !== undefined) return toolView(marked, tool);
+  const read = marked === undefined ? spelledCall(step) : markedCall(marked);
   const split = step.summary.indexOf(SPEAKER_SEPARATOR);
   const verb = split < 0 ? step.summary : step.summary.slice(0, split);
   const running = read.state === TOOL_STATE.INPUT_AVAILABLE && step.summary.endsWith(RUNNING_MARK);
@@ -424,9 +463,15 @@ function callView(step: ReplayStep): StepView {
         );
   return {
     kind: STEP_VIEW.CALL,
-    call: VERB_KIND.get(verb) ?? CALL_KIND.OTHER,
-    subject: subject === "" ? step.summary : subject,
-    ...read,
+    state: read.state,
+    view: {
+      kind: VERB_KIND.get(verb) ?? CALL_KIND.OTHER,
+      subject: subject === "" ? step.summary : subject,
+      input: { kind: TOOL_BLOCK.TEXT, text: read.input },
+      output: read.output === undefined ? undefined : { kind: TOOL_BLOCK.TEXT, text: read.output },
+    },
+    errorText: read.errorText,
+    agent: undefined,
   };
 }
 
@@ -471,6 +516,7 @@ export function stepView(step: ReplayStep): StepView {
         sender,
         sentBy: sentByOf(step, sender),
         own: step.sender?.kind === REPLAY_SENDER.DEVELOPER,
+        at: step.at,
         words: step.words,
       };
     }
@@ -479,4 +525,22 @@ export function stepView(step: ReplayStep): StepView {
     case REPLAY_STEP_KIND.TOOL:
       return callView(step);
   }
+}
+
+/** One step as the card's Copy copies it: a line under who sent it, the agent's words as they are, and a call under its line with its input and its result. */
+function stepWords(step: ReplayStep): string {
+  switch (step.kind) {
+    case REPLAY_STEP_KIND.LINE:
+      return `${stepLine(step).who}${SPEAKER_SEPARATOR}${step.words}`;
+    case REPLAY_STEP_KIND.SAID:
+      return step.words;
+    case REPLAY_STEP_KIND.TOOL:
+      return `${step.summary}\n${step.words}`;
+  }
+}
+
+/** The replay as its card's Copy copies it, as the agent was handed it: Luke's summary of the oldest steps where he wrote one, then each step. */
+export function replayWords(replay: Replay): string {
+  const summary = replay.summary === undefined ? [] : [replay.summary.text];
+  return [...summary, ...replay.steps.map(stepWords)].join("\n\n");
 }

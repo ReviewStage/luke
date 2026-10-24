@@ -19,7 +19,7 @@ import {
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
-import { TOOL_STATE } from "../ai-elements/tool.js";
+import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { messageFileChips } from "./attached-file-chips.js";
 import { messageWords } from "./coding-agent-model.js";
 import {
@@ -29,6 +29,7 @@ import {
   replayCount,
   replayOpening,
   replayVerb,
+  replayWords,
   STEP_VIEW,
   stepLine,
   stepView,
@@ -207,24 +208,30 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
     call("Read: src/invite.ts", 'Input: {"filePath":"src/invite.ts"}\nResult: 42 lines'),
     {
       kind: STEP_VIEW.CALL,
-      call: CALL_KIND.READ_FILE,
       state: TOOL_STATE.OUTPUT_AVAILABLE,
-      subject: "src/invite.ts",
-      input: '{"filePath":"src/invite.ts"}',
-      output: "42 lines",
+      view: {
+        kind: CALL_KIND.READ_FILE,
+        subject: "src/invite.ts",
+        input: { kind: TOOL_BLOCK.TEXT, text: '{"filePath":"src/invite.ts"}' },
+        output: { kind: TOOL_BLOCK.TEXT, text: "42 lines" },
+      },
       errorText: undefined,
+      agent: undefined,
     },
   );
   assert.deepEqual(
     call("Ran: pnpm test", 'Input: {"command":"pnpm test"}\nResult: Failed: exit 1'),
     {
       kind: STEP_VIEW.CALL,
-      call: CALL_KIND.COMMAND,
       state: TOOL_STATE.OUTPUT_ERROR,
-      subject: "pnpm test",
-      input: '{"command":"pnpm test"}',
-      output: undefined,
+      view: {
+        kind: CALL_KIND.COMMAND,
+        subject: "pnpm test",
+        input: { kind: TOOL_BLOCK.TEXT, text: '{"command":"pnpm test"}' },
+        output: undefined,
+      },
       errorText: "exit 1",
+      agent: undefined,
     },
   );
   const running = call(
@@ -232,29 +239,135 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
     "Input: {}\nResult: (no result: the call was still under way)",
   );
   assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
-  assert.equal(running.kind === STEP_VIEW.CALL && running.subject, "invite");
+  assert.equal(running.kind === STEP_VIEW.CALL && running.view.subject, "invite");
   // A finished call whose subject ends in the mark's words keeps them, and its result.
   const placeholderLike = call(
     "Read: report (running)",
     "Input: {}\nResult: (no result found in archive)",
   );
-  assert.equal(
-    placeholderLike.kind === STEP_VIEW.CALL && placeholderLike.output,
-    "(no result found in archive)",
-  );
+  assert.deepEqual(placeholderLike.kind === STEP_VIEW.CALL && placeholderLike.view.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "(no result found in archive)",
+  });
   const named = call("Read: report (running)", "Input: {}\nResult: 3 lines");
   assert.equal(named.kind === STEP_VIEW.CALL && named.state, TOOL_STATE.OUTPUT_AVAILABLE);
-  assert.equal(named.kind === STEP_VIEW.CALL && named.subject, "report (running)");
-  assert.equal(named.kind === STEP_VIEW.CALL && named.output, "3 lines");
+  assert.equal(named.kind === STEP_VIEW.CALL && named.view.subject, "report (running)");
+  assert.deepEqual(named.kind === STEP_VIEW.CALL && named.view.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "3 lines",
+  });
   // An input is its JSON, so a result lead inside one of its strings is no boundary.
   const quoted = call(
     "Ran: printf",
     'Input: {"command":"printf \'x\\nResult: fake\'"}\nResult: done',
   );
-  assert.equal(quoted.kind === STEP_VIEW.CALL && quoted.output, "done");
+  assert.deepEqual(quoted.kind === STEP_VIEW.CALL && quoted.view.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "done",
+  });
   // A verb no transcript row says is another call's.
   const used = call("Used: list_tasks", "Input: {}\nResult: []");
-  assert.equal(used.kind === STEP_VIEW.CALL && used.call, CALL_KIND.OTHER);
+  assert.equal(used.kind === STEP_VIEW.CALL && used.view.kind, CALL_KIND.OTHER);
+});
+
+test("a call's step whose marker names its tool is drawn as the live transcript draws a call of that tool", () => {
+  const command = stepView(
+    toolStep({
+      summary: "Ran: pnpm test",
+      tool: "bash",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: '{"command":"pnpm test","description":"Run the tests"}',
+      output: "ok",
+    }),
+  );
+  assert.ok(command.kind === STEP_VIEW.CALL);
+  assert.equal(command.view.kind, CALL_KIND.COMMAND);
+  assert.equal(command.view.description, "Run the tests");
+  assert.deepEqual(command.view.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm test" });
+  // A patch's body is drawn as a patch, which wears its colours.
+  const patch = stepView(
+    toolStep({
+      summary: "Edited: src/a.ts",
+      tool: "apply_patch",
+      state: REPLAY_TOOL_STATE.RUNNING,
+      input: JSON.stringify({ patchText: "*** Update File: src/a.ts\n-a\n+b" }),
+    }),
+  );
+  assert.ok(patch.kind === STEP_VIEW.CALL);
+  assert.equal(patch.view.kind, CALL_KIND.EDIT);
+  assert.equal(patch.view.input.kind, TOOL_BLOCK.PATCH);
+  assert.equal(patch.state, TOOL_STATE.INPUT_AVAILABLE);
+  // A call about an agent names that agent, which its row draws as the agent's chip.
+  const read = stepView(
+    toolStep({
+      summary: "Used: read_agent",
+      tool: "read_agent",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: '{"agentId":"agent-ada"}',
+      output: '{"agent":{"id":"agent-ada","title":"Fix the tile"}}',
+    }),
+  );
+  assert.ok(read.kind === STEP_VIEW.CALL);
+  assert.equal(read.view.kind, CALL_KIND.READ_AGENT);
+  assert.deepEqual(read.agent, { id: "agent-ada", title: "Fix the tile" });
+  // A failed call keeps its error apart from its result.
+  const failed = stepView(
+    toolStep({
+      summary: "Ran: pnpm lint",
+      tool: "bash",
+      state: REPLAY_TOOL_STATE.FAILED,
+      input: '{"command":"pnpm lint"}',
+      output: "exit 1",
+    }),
+  );
+  assert.ok(failed.kind === STEP_VIEW.CALL);
+  assert.equal(failed.state, TOOL_STATE.OUTPUT_ERROR);
+  assert.equal(failed.errorText, "exit 1");
+  assert.equal(failed.view.output, undefined);
+});
+
+test("a line's step whose marker names when it was sent carries that moment", () => {
+  const at = Date.UTC(2026, 9, 14, 15, 42);
+  const line = stepView({
+    kind: REPLAY_STEP_KIND.LINE,
+    summary: "Charles Pan: Go.",
+    words: "Go.",
+    sender: { kind: REPLAY_SENDER.MEMBER, memberId: "user-charles" },
+    at,
+  });
+  assert.equal(line.kind === STEP_VIEW.LINE && line.at, at);
+});
+
+test("the card's Copy copies the replay as the agent was handed it: Luke's summary, each line under its sender, the agent's words, and each call with its input and result", () => {
+  const words = replayWords({
+    agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
+    preamble: "Below is the work.",
+    summary: { text: "Earlier, the agent read the docs.", steps: 4 },
+    steps: [
+      {
+        kind: REPLAY_STEP_KIND.LINE,
+        summary: "Charles Pan: Use seven days.",
+        words: "Use seven days.",
+      },
+      toolStep({
+        summary: "Read: src/invite.ts",
+        state: REPLAY_TOOL_STATE.DONE,
+        input: '{"filePath":"src/invite.ts"}',
+        output: "7",
+      }),
+      { kind: REPLAY_STEP_KIND.SAID, summary: "Said: Done.", words: "Done." },
+    ],
+    totalSteps: 7,
+  });
+  assert.equal(
+    words,
+    [
+      "Earlier, the agent read the docs.",
+      "Charles Pan: Use seven days.",
+      'Read: src/invite.ts\nInput: {"filePath":"src/invite.ts"}\nResult: 7',
+      "Done.",
+    ].join("\n\n"),
+  );
 });
 
 test("an opened pull request's step is drawn as the pull request's row, as the service says it", () => {
@@ -263,8 +376,11 @@ test("an opened pull request's step is drawn as the pull request's row, as the s
     summary: "Opened pull request: feat(billing): export invoices",
     words: 'Input: {"title":"feat(billing): export invoices"}\nResult: {"number":4951}',
   });
-  assert.equal(opened.kind === STEP_VIEW.CALL && opened.call, CALL_KIND.OPEN_PULL_REQUEST);
-  assert.equal(opened.kind === STEP_VIEW.CALL && opened.subject, "feat(billing): export invoices");
+  assert.equal(opened.kind === STEP_VIEW.CALL && opened.view.kind, CALL_KIND.OPEN_PULL_REQUEST);
+  assert.equal(
+    opened.kind === STEP_VIEW.CALL && opened.view.subject,
+    "feat(billing): export invoices",
+  );
 });
 
 test("a line's step is drawn as a sent message under its sender, and the agent's words as its words whole", () => {
@@ -279,6 +395,7 @@ test("a line's step is drawn as a sent message under its sender, and the agent's
       sender: "Luke",
       sentBy: undefined,
       own: false,
+      at: undefined,
       words: "Use seven days.",
     },
   );
@@ -303,12 +420,15 @@ test("a call's step read from its marker is drawn as its marker says, whatever i
   );
   assert.deepEqual(done, {
     kind: STEP_VIEW.CALL,
-    call: CALL_KIND.READ_FILE,
     state: TOOL_STATE.OUTPUT_AVAILABLE,
-    subject: "report (running)",
-    input: '{"filePath":"report (running)"}',
-    output: "Failed: 0 tests\nResult: all green",
+    view: {
+      kind: CALL_KIND.READ_FILE,
+      subject: "report (running)",
+      input: { kind: TOOL_BLOCK.TEXT, text: '{"filePath":"report (running)"}' },
+      output: { kind: TOOL_BLOCK.TEXT, text: "Failed: 0 tests\nResult: all green" },
+    },
     errorText: undefined,
+    agent: undefined,
   });
   const failed = stepView(
     toolStep({
@@ -324,8 +444,8 @@ test("a call's step read from its marker is drawn as its marker says, whatever i
     toolStep({ summary: "Ran: pnpm dev (running)", state: REPLAY_TOOL_STATE.RUNNING, input: "{}" }),
   );
   assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
-  assert.equal(running.kind === STEP_VIEW.CALL && running.subject, "pnpm dev");
-  assert.equal(running.kind === STEP_VIEW.CALL && running.output, undefined);
+  assert.equal(running.kind === STEP_VIEW.CALL && running.view.subject, "pnpm dev");
+  assert.equal(running.kind === STEP_VIEW.CALL && running.view.output, undefined);
 });
 
 test("a summary Luke wrote of the oldest steps is named on its row, and the steps it stands for are not left out", () => {

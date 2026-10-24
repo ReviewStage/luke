@@ -5,7 +5,9 @@ import {
   firstMessageText,
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
+  REPLAY_TOOL_STATE,
   type Replay,
+  toolStep,
 } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_BRIEF,
@@ -21,6 +23,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -249,8 +252,14 @@ test("an agent continued from another opens on the plan's card, the folded Conti
     /Invite flow/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
-  // The reader started it, and the message's time is unknown, so the card names nobody under it.
-  assert.equal(cards[1]?.querySelector(":scope > .luke-message-line"), null);
+  // The reader started it, and the message's time is unknown, so the card's line names nobody and no time, and holds its Copy alone.
+  const cardLine = cards[1]?.querySelector(":scope > .luke-message-line");
+  assert.equal(cardLine?.querySelector(".luke-message-line-sender") ?? null, null);
+  assert.equal(cardLine?.querySelector("time") ?? null, null);
+  assert.equal(
+    cardLine?.querySelector('button[aria-label="Copy message"]') instanceof HTMLElement,
+    true,
+  );
   // The note is the developer's own bubble after the card.
   const bubbles = [...container.querySelectorAll(".is-user")].filter(
     (each) => !each.classList.contains("agent-origin"),
@@ -612,4 +621,102 @@ test("Luke's summary and the steps left out stand over the earlier-steps row, wh
     "Summary of 100 earlier steps (written by Luke)",
   );
   assert.match(body?.textContent ?? "", /10 earlier steps were left out/u);
+});
+
+test("a replayed call whose marker names its tool is drawn as the live transcript draws it: a command by its description, a patch as a patch, and an agent it is about by its tab's chip", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const steps: Replay["steps"] = [
+    toolStep({
+      summary: "Ran: pnpm test",
+      tool: "bash",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: '{"command":"pnpm test","description":"Run the invite tests"}',
+      output: "ok",
+    }),
+    toolStep({
+      summary: "Edited: src/invite.ts",
+      tool: "apply_patch",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ patchText: "*** Update File: src/invite.ts\n-a\n+b" }),
+      output: "Done",
+    }),
+    toolStep({
+      summary: "Used: read_agent",
+      tool: "read_agent",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: JSON.stringify({ agentId: SOURCE.id }),
+      output: JSON.stringify({ agent: { id: SOURCE.id, title: "Wire the start from field" } }),
+    }),
+  ];
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay({ steps, totalSteps: steps.length }), undefined),
+  );
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+
+  const [command, patch, read] = [...container.querySelectorAll("[data-replay-step]")];
+  // A command's line says what it is for, as the live transcript's does.
+  assert.match(command?.querySelector("summary")?.textContent ?? "", /Run the invite tests/u);
+  // A patch opens onto its body drawn as a patch, which wears its added and removed lines' colours.
+  press(patch?.querySelector("summary"));
+  assert.ok(patch?.querySelector('[data-row="added"]') instanceof HTMLElement);
+  assert.ok(patch?.querySelector('[data-row="removed"]') instanceof HTMLElement);
+  // A call about an agent names it by the chip its tab wears.
+  assert.equal(
+    read?.querySelector("[data-tool-agent-ref] .luke-inline-ref-label")?.textContent,
+    "Wire the start from field",
+  );
+});
+
+test("a replayed line stands over who sent it, when, and Copy, and the card's Copy copies the replay as it was handed", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const steps: Replay["steps"] = [
+    {
+      kind: REPLAY_STEP_KIND.LINE,
+      summary: "Charles Pan: Use seven days.",
+      words: "Use seven days.",
+      sender: { kind: REPLAY_SENDER.MEMBER, memberId: CHARLES.userId },
+      at: SENT_AT,
+    },
+    { kind: REPLAY_STEP_KIND.SAID, summary: "Said: Seven days it is.", words: "Seven days it is." },
+  ];
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay({ steps, totalSteps: steps.length }), undefined),
+  );
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+
+  const line = container.querySelector("[data-replay-step='line'] > .luke-message-line");
+  assert.equal(
+    line?.querySelector(".luke-message-line-sender .luke-inline-ref-label")?.textContent,
+    "Charles Pan",
+  );
+  assert.equal(
+    line?.querySelector("time")?.getAttribute("dateTime"),
+    new Date(SENT_AT).toISOString(),
+  );
+  press(line?.querySelector('button[aria-label="Copy message"]'));
+  await settle();
+  assert.deepEqual(copied, ["Use seven days."]);
+
+  press(
+    container.querySelector(
+      ':has(> [data-replay-card]) ~ .luke-message-line button[aria-label="Copy message"]',
+    ),
+  );
+  await settle();
+  assert.deepEqual(copied, [
+    "Use seven days.",
+    "Charles Pan: Use seven days.\n\nSeven days it is.",
+  ]);
 });

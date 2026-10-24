@@ -242,3 +242,61 @@ test("a step behind a marker from before the marker named its state or sender re
     { kind: REPLAY_STEP_KIND.TOOL, summary: "Ran: ls", words: "Input: ls\nResult: Failed: x" },
   ]);
 });
+
+test("a tool step's tool and a line's moment read back from their markers, and a step from before the marker named them reads back with neither", () => {
+  const at = Date.UTC(2026, 9, 14, 15, 42);
+  const steps: readonly ReplayStep[] = [
+    toolStep({
+      summary: "Ran: pnpm test",
+      tool: "bash",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: '{"command":"pnpm test"}',
+      output: "ok",
+    }),
+    toolStep({
+      summary: "Used: save_issue",
+      tool: "mcp__linear__save_issue",
+      state: REPLAY_TOOL_STATE.RUNNING,
+      input: "{}",
+    }),
+    {
+      kind: REPLAY_STEP_KIND.LINE,
+      summary: "Ada: carry on",
+      words: "Carry on.",
+      sender: { kind: REPLAY_SENDER.MEMBER, memberId: "user-1a2b" },
+      at,
+    },
+    { kind: REPLAY_STEP_KIND.LINE, summary: "The developer: go", words: "Go.", at },
+  ];
+  const read = firstMessageParts(firstMessageText("Fix it.", { ...replay, steps }, undefined))
+    .replay?.steps;
+
+  assert.deepEqual(read, steps);
+  const body = "Ran: ls\nInput: ls\nResult: x";
+  const old =
+    "Fix it.\n\n## The work you continue from\n\n<!-- luke:replay agent=" +
+    `${SOURCE} steps=1 total-steps=1 chars=2 -->\nGo\n` +
+    `<!-- luke:step kind=tool state=done input-chars=2 chars=${body.length} -->\n${body}\n<!-- /luke:replay -->`;
+  assert.equal(firstMessageParts(old).replay?.steps[0]?.tool, undefined);
+});
+
+test("a tool name or a moment the marker cannot spell is left out, and the step still reads back", () => {
+  const steps: readonly ReplayStep[] = [
+    toolStep({
+      summary: "Used: odd",
+      tool: "odd tool=name",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: "{}",
+      output: "ok",
+    }),
+    { kind: REPLAY_STEP_KIND.LINE, summary: "Luke: hi", words: "Hi.", at: -1 },
+  ];
+  const read = firstMessageParts(firstMessageText("Fix it.", { ...replay, steps }, undefined))
+    .replay?.steps;
+
+  assert.equal(read?.length, 2);
+  assert.equal(read?.[0]?.tool, undefined);
+  assert.equal(read?.[0]?.output, "ok");
+  assert.equal(read?.[1]?.at, undefined);
+  assert.equal(read?.[1]?.words, "Hi.");
+});
