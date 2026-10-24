@@ -39,7 +39,7 @@ import {
 } from "react";
 import type { ActHandle } from "../act.js";
 import { useExperiment } from "../use-app-state.js";
-import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
+import { useMicrophoneGranted, useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
 function returnLabel(taskName: string): string {
@@ -154,6 +154,7 @@ export function CallCard({
   onLeft?: () => void;
 }): React.JSX.Element {
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
+  const microphoneGranted = useMicrophoneGranted();
   const returnButton = (
     <IconButton
       icon={<ReturnIcon />}
@@ -206,7 +207,11 @@ export function CallCard({
       <div>
         <CallBar
           status={card.status}
-          microphone={{ muted: card.microphoneMuted, onPress: controls.onToggleMicrophone }}
+          microphone={{
+            muted: card.microphoneMuted,
+            offered: microphoneGranted,
+            onPress: controls.onToggleMicrophone,
+          }}
           speaker={{ muted: speakerMuted, onPress: controls.onToggleSpeaker }}
           onEnd={controls.onEnd}
           titled={inWindow}

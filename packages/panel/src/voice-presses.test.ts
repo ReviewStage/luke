@@ -10,8 +10,10 @@
 import assert from "node:assert/strict";
 import { VOICE_FAILURE } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CONTROL_LABEL } from "@luke/ui";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -75,8 +77,9 @@ async function drawOver(
   surface: ReactElement,
   procedures: Partial<FakeActPort>,
   voice: VoiceView = ON_CALL,
+  patch: Partial<AppStateSnapshot> = {},
 ): Promise<void> {
-  handState({}, { voice: { avatar: AVATAR_OFF, view: voice } });
+  handState({}, { voice: { avatar: AVATAR_OFF, view: voice }, ...patch });
   fakeActPort(procedures);
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -197,3 +200,40 @@ test("a refused microphone's Open System Settings main refuses says why in a toa
 
   assert.equal(newestToast(), "System Settings could not be opened.");
 });
+
+/** The microphone's mute, which the keymap answers only once macOS grants the microphone. */
+function microphoneMute(): HTMLButtonElement {
+  return button(CALL_CONTROL_LABEL.MUTE_MICROPHONE);
+}
+
+const MICROPHONE_SURFACES = {
+  "the agent box": createElement(AgentCallControls, {
+    agentId: AGENT_ID,
+    doors: { onPress: () => undefined },
+    startedAt: undefined,
+  }),
+  "the call card": createElement(CallCard, {
+    card: { taskName: "Invite expiry", status: undefined, microphoneMuted: false },
+    speakerMuted: false,
+    controls: callControls(pressAct, false),
+    surface: CALL_CARD_SURFACE.SIDEBAR,
+  }),
+};
+
+for (const [name, surface] of Object.entries(MICROPHONE_SURFACES)) {
+  test(`${name}'s microphone mute names no chord until the microphone is granted, then ⇧⌘M`, async () => {
+    await drawOver(surface, {}, ON_CALL, {
+      audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
+    });
+    assert.equal(microphoneMute().getAttribute("aria-keyshortcuts"), null);
+    await act(async () => {
+      for (const root of roots.splice(0)) root.unmount();
+      document.body.innerHTML = "";
+    });
+
+    await drawOver(surface, {}, ON_CALL, {
+      audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
+    });
+    assert.match(microphoneMute().getAttribute("aria-keyshortcuts") ?? "", /Shift\+M/u);
+  });
+}

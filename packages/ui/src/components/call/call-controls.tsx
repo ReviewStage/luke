@@ -100,22 +100,28 @@ const MUTE = {
  * A mute the call offers, round in the call bar and square in an agent's
  * composer row: named for what the press will do, with its chord in its
  * hint, and its glyph struck through, lit in neutral grey, while muted.
+ * Where the chord is not `offered`, as the microphone's is not until macOS
+ * grants it, the hint names no chord, since a key that answers nothing is
+ * not one to advertise.
  */
 export function CallMute({
   device,
   muted,
   shape = BUTTON_SHAPE.ROUND,
+  offered = true,
   onPress,
 }: {
   device: CallDevice;
   muted: boolean;
   shape?: ButtonShape | undefined;
+  /** Whether the owner answers the mute's chord now. */
+  offered?: boolean | undefined;
   onPress: () => void;
 }): React.JSX.Element {
   const mute = MUTE[device];
   const label = muted ? mute.unmute : mute.mute;
   return (
-    <Tooltip label={label} command={mute.command}>
+    <Tooltip label={label} command={offered ? mute.command : undefined}>
       <IconButton
         variant={BUTTON_VARIANT.QUIET}
         shape={shape}
@@ -310,7 +316,12 @@ export function CallBar({
 }: {
   /** The call's status, absent while the voice names none, which draws the controls alone. */
   status: CallStatus | undefined;
-  microphone: { muted: boolean; onPress: () => void };
+  microphone: {
+    muted: boolean;
+    onPress: () => void;
+    /** Whether the microphone's chord answers now, which it does not until macOS grants the microphone. */
+    offered?: boolean | undefined;
+  };
   speaker: { muted: boolean; onPress: () => void };
   onEnd: () => void;
   /** Whether Luke's command carries its whole words as the system's hint, where no tooltip fits. */
@@ -325,6 +336,7 @@ export function CallBar({
           <CallMute
             device={CALL_DEVICE.MICROPHONE}
             muted={microphone.muted}
+            offered={microphone.offered}
             onPress={microphone.onPress}
           />
         </div>

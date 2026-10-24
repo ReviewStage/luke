@@ -85,6 +85,11 @@ const microphoneGrantedAtom: Atom.Atom<boolean> = Atom.map(
   (audio) => audio?.microphoneStatus === MICROPHONE_STATUS.GRANTED,
 );
 
+/** Whether the microphone is granted, which is when its mute chord is offered (`useCallCommands`). */
+export function useMicrophoneGranted(): boolean {
+  return useAppSlice(microphoneGrantedAtom);
+}
+
 /**
  * The failure drawn on the voice's notice line. A fault is worth reading
  * where the call is steered from — just above the composer that holds the
@@ -141,7 +146,7 @@ export function useVoiceView(): VoiceViewState {
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.
   const view = useAppSlice(voiceViewAtom);
-  useCallCommands(view, useAppSlice(microphoneGrantedAtom), (command) =>
+  useCallCommands(view, useMicrophoneGranted(), (command) =>
     press(ACT_KIND.VOICE_COMMAND, { command }),
   );
 
