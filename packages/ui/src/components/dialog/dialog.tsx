@@ -266,26 +266,49 @@ function rowFocus(row: Element | null): HTMLElement | null {
   return row.querySelector<HTMLElement>(ROW_FOCUS);
 }
 
+/** A row the opener stood in, the row after it, and the list holding them, as they stood as the card opened. */
+interface RowPlace {
+  row: Element;
+  next: Element | null;
+  list: Element;
+}
+
+/** The row after `place`'s, or its list's first row but its own, whichever still stands within reach. */
+function neighbourIn({ row, next, list }: RowPlace): HTMLElement | null {
+  const after = rowFocus(next);
+  if (after !== null) return after;
+  for (const each of list.children) {
+    const head = each === row ? null : rowFocus(each);
+    if (head !== null) return head;
+  }
+  return null;
+}
+
+/** Every row `opener` stands in, innermost first: a reply in its thread, then the thread in its list. */
+function rowPlaces(opener: HTMLElement): RowPlace[] {
+  const row = opener.closest("li");
+  const list = row?.parentElement;
+  if (row === null || list === null || list === undefined) return [];
+  return [{ row, next: row.nextElementSibling, list }, ...rowPlaces(list)];
+}
+
 /**
  * The row after the one `opener` stands in, or the first row of its list
  * where that one is gone too, as they stand once the card is gone: where
  * focus goes when the card's act took the opener's row with it (a task
  * deleted, an Inbox item resolved), so the keyboard carries on down the list
  * rather than falling to the window. A row is the list item the opener
- * stands in, and one leaving its list, out of reach, is passed over; an
- * opener in no list has no neighbour.
+ * stands in, and one leaving its list, out of reach, is passed over; where
+ * the act took the whole list with it, as a thread goes with the one comment
+ * it held, the row around that list is looked past the same way, and so on
+ * out. An opener in no list has no neighbour.
  */
 export const nextRowOrHead: RestoreTo = (opener) => {
-  const row = opener.closest("li");
-  const list = row?.parentElement;
-  if (row === null || list === null || list === undefined) return () => null;
-  const next = row.nextElementSibling;
+  const places = rowPlaces(opener);
   return () => {
-    const after = rowFocus(next);
-    if (after !== null) return after;
-    for (const each of list.children) {
-      const head = each === row ? null : rowFocus(each);
-      if (head !== null) return head;
+    for (const place of places) {
+      const found = neighbourIn(place);
+      if (found !== null) return found;
     }
     return null;
   };

@@ -682,3 +682,62 @@ test("a dialog unmounted with the row its act took away hands focus to the row a
   expect(card()).toBeNull();
   expect(holds(button("Gamma"))).toBe(true);
 });
+
+/** Threads in a list, each holding its comments in a list of their own, and the one comment of the first thread asked about; deleting it takes its thread with it. */
+function ThreadsOwner(): React.JSX.Element {
+  const [threads, setThreads] = useState(["First", "Second"]);
+  const [asked, setAsked] = useState(false);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "ul",
+      null,
+      threads.map((thread) =>
+        createElement(
+          "li",
+          { key: thread },
+          createElement(
+            "ul",
+            null,
+            createElement(
+              "li",
+              null,
+              createElement("button", { type: "button", onClick: () => setAsked(true) }, thread),
+            ),
+          ),
+        ),
+      ),
+    ),
+    createElement(Dialog, {
+      open: asked,
+      title: "Delete comment?",
+      restoreTo: nextRowOrHead,
+      onDismiss: () => setAsked(false),
+      children: createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            setThreads((now) => now.filter((thread) => thread !== "First"));
+            setAsked(false);
+          },
+        },
+        "Delete",
+      ),
+    }),
+  );
+}
+
+test("a dialog whose act took the opener's whole list hands focus to the row after the one around it", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  draw(createElement(ThreadsOwner));
+  const opener = button("First");
+  opener.focus();
+  act(() => opener.click());
+  act(() => button("Delete").click());
+
+  expect(card()).toBeNull();
+  expect(holds(button("Second"))).toBe(true);
+});
