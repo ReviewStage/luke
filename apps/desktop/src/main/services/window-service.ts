@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
+import type { TasksPageParams } from "@luke/features/tasks-view";
 import type {
   AgentEndToast,
   AgentPlace,
@@ -23,6 +24,7 @@ import {
 } from "@luke/host/client";
 import { type EventPushName, PUSH, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
+import { callStaged, fixturePage } from "@luke/host/fixture-stage";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -223,7 +225,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       panels.setVoiceExchange(false);
     },
   });
-  const voiceWindowWanted = runMode.takesFocus || runMode.sendsNetwork;
+  // A call profile's fixture run stands on its staged call, which a voice window would report over.
+  const stagedCall = callStaged(config.launch);
+  const voiceWindowWanted = (runMode.takesFocus || runMode.sendsNetwork) && !stagedCall;
   const callWindow = new CallWindow({
     runMode,
     preloadPath,
@@ -361,12 +365,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   // Which panel has the keyboard, for the call window: while one does, that
-  // panel draws the call itself, as its call bar or its own call card.
+  // panel draws the call itself, as its call bar or its own call card. Note
+  // that a staged call is told of no panel, because its profile shoots the
+  // floating window beside the panel that has the keyboard.
   const panelFocused = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents)) callPresence.panelFocused(window.webContents);
+    if (panels.owns(window.webContents) && !stagedCall) {
+      callPresence.panelFocused(window.webContents);
+    }
   };
   const panelBlurred = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents)) callPresence.panelBlurred(window.webContents);
+    if (panels.owns(window.webContents) && !stagedCall) {
+      callPresence.panelBlurred(window.webContents);
+    }
   };
 
   /**
@@ -483,9 +493,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // macOS asks only once, and a switch turned on later would otherwise
       // leave its first notification to ask, and be refused.
       if (runMode.observesProviders) askForNotifications();
-      // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone.
+      // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone;
+      // a fixture run's, which reads no service, are its staged page.
+      const readPage = config.launch.fixtureMode
+        ? (page: TasksPageParams) => Effect.succeed(fixturePage(page))
+        : operator.host.tasksPage;
       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
-        run(pageResponse(request.url, operator.host.tasksPage)),
+        run(pageResponse(request.url, readPage)),
       );
       // A development build writes its windows' errors where the run's own
       // lines go, from before the first window opens, and offers their

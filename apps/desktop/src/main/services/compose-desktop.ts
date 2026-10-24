@@ -17,6 +17,7 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@luke/host/effect";
+import { callStaged } from "@luke/host/fixture-stage";
 import { openMacTerminals } from "@luke/host/node";
 import {
   confirmingHold,
@@ -32,7 +33,7 @@ import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Stream } from "effect";
 import { net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
@@ -243,9 +244,10 @@ export function composeDesktop(
         launchStanding: quit.launchStanding,
       });
       // The host's avatar, bound from the launch on: its grants to the panel
-      // alone and where it stands to the document.
+      // alone and where it stands to the document, but where a call profile
+      // stages the avatar, which the host, holding no call, would put down.
       const avatar = yield* linkAvatar({
-        host: host.avatar,
+        host: callStaged(config.launch) ? { ...host.avatar, states: Stream.never } : host.avatar,
         state,
         panel: windows.panels,
         setVideo: (on) => operator.host.setVideo(on),

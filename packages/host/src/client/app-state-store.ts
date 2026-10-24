@@ -16,6 +16,7 @@ import {
   type AppWindowFacts,
   NO_ACCESS,
 } from "../app-state.js";
+import { stagedVoice } from "../fixture-stage.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -220,7 +221,8 @@ interface ClientRunFacts {
 /**
  * The document as a launch begins it: this process's own facts, what the
  * platform offers, and an empty
- * standing for everything the host has not answered yet. Nothing here reads
+ * standing for everything the host has not answered yet, but the call a
+ * call profile's fixture run stages (`fixture-stage.ts`). Nothing here reads
  * a device or the host — the first bootstrap and the events after it are
  * what fill the rest in.
  */
@@ -230,6 +232,8 @@ export function initialAppState(
   capabilities: readonly HostCapability[],
 ): Omit<AppState, "version"> {
   const { launch, runMode } = config;
+  // A call profile's fixture run opens on its staged call, as no voice window reports one.
+  const staged = stagedVoice(launch);
   return {
     run: {
       profile: launch.profile,
@@ -247,7 +251,7 @@ export function initialAppState(
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    voice: { avatar: AVATAR_OFF },
+    voice: staged?.voice ?? { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
@@ -255,5 +259,6 @@ export function initialAppState(
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
+    ...(staged === undefined ? undefined : { callTranscript: staged.callTranscript }),
   };
 }
