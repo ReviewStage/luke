@@ -110,6 +110,9 @@ function Problem({ children }: { children: string }): React.JSX.Element {
   );
 }
 
+/** The space a fact ends in, so the text of the line reads its facts apart where the gap only draws them so; at a line's end it collapses. */
+const FACT_BREAK = " ";
+
 /** The expiry's words, whole: "Expires Dec 23, 2026" never breaks inside, so a narrow row moves it as one. */
 function expiryWords(expiresAt: number): string {
   return `Expires ${dayText(expiresAt)}`.replaceAll(" ", "\u00a0");
@@ -134,10 +137,12 @@ export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
           {token.login}
         </Text>
+        {FACT_BREAK}
       </Text>
       {token.expiresAt === null ? null : (
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT}>
           {expiryWords(token.expiresAt)}
+          {FACT_BREAK}
         </Text>
       )}
       {status === undefined ? null : <Problem>{status}</Problem>}

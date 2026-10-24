@@ -174,7 +174,7 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
   act(() => button("Done").click());
   assert.match(
     document.body.textContent ?? "",
-    /GitHub personal access tokenghp_…wxyz\u00a0·\u00a0octo-memberExpires\u00a0/u,
+    /GitHub personal access tokenghp_…wxyz\u00a0·\u00a0octo-member Expires\u00a0/u,
   );
   button("Manage");
   assert.ok(!document.body.innerHTML.includes(PASTED), "the page holds the token nowhere");
@@ -187,7 +187,7 @@ test("a token's expiry is one unbreakable unit and no fact on the row's line car
     ...(document.querySelector(".luke-settings-row-description .luke-inline")?.children ?? []),
   ].map((each) => each.textContent ?? "");
   const expiry = facts.find((each) => each.startsWith("Expires"));
-  assert.match(expiry ?? "", /^Expires\u00a0[A-Z][a-z]{2}\u00a0\d{1,2},\u00a0\d{4}$/u);
+  assert.match(expiry ?? "", /^Expires\u00a0[A-Z][a-z]{2}\u00a0\d{1,2},\u00a0\d{4} $/u);
   assert.deepEqual(
     facts.filter((each) => /^·|·$/u.test(each)),
     [],
