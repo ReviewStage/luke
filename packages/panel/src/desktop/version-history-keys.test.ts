@@ -5,6 +5,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -84,6 +85,7 @@ function drawn(
   older: { earlier?: number; onLoadEarlier?: () => Promise<boolean> } = {},
   onExit: () => void = ignore,
   stepBehind: string | undefined = undefined,
+  sectionsOf: number | undefined = undefined,
 ): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
@@ -101,6 +103,10 @@ function drawn(
         earlier: older.earlier,
       },
       selected: 3,
+      spot:
+        sectionsOf === undefined
+          ? undefined
+          : { revision: sectionsOf, opened: { seq: sectionsOf, heading: undefined } },
       onSelect: (seq: number) => chosen.push(seq),
       ...(older.onLoadEarlier === undefined ? {} : { onLoadEarlier: older.onLoadEarlier }),
     },
@@ -269,4 +275,29 @@ test("the Back row names the page the window goes back to, where the history ope
   expect(back).toBeDefined();
   if (back === undefined) return;
   expect(hintOf(back)).toContain("Back to Inbox");
+});
+
+/** The Back row that leads to All versions, at the head of a revision's sections. */
+function allVersionsRow(view: HTMLElement): HTMLButtonElement | undefined {
+  return [...view.querySelectorAll<HTMLButtonElement>(".version-log-pane button")].find(
+    (button) => button.textContent?.trim() === "All versions",
+  );
+}
+
+test("with a version's sections open, All versions shows Esc and the Back row does not", () => {
+  const view = drawn([], {}, ignore, undefined, 3);
+  const back = backRow(view);
+  const all = allVersionsRow(view);
+  expect(back).toBeDefined();
+  expect(all).toBeDefined();
+  if (back === undefined || all === undefined) return;
+  expect(hintOf(all)).toContain(SHORTCUT_KEY.ESCAPE.glyph);
+  expect(hintOf(back)).not.toContain(SHORTCUT_KEY.ESCAPE.glyph);
+});
+
+test("with the sections closed, the Back row shows Esc", () => {
+  const back = backRow(drawn([]));
+  expect(back).toBeDefined();
+  if (back === undefined) return;
+  expect(hintOf(back)).toContain(SHORTCUT_KEY.ESCAPE.glyph);
 });

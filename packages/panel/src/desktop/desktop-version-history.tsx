@@ -20,6 +20,7 @@ import {
   LIST_ROW_CURRENT,
   List,
   ListRow,
+  NO_BACK_KEY,
   OneLine,
   ResizeEdge,
   RowHint,
@@ -321,6 +322,7 @@ function SectionsHead({
           look={BACK_BUTTON_LOOK.COLUMN}
           label={ALL_VERSIONS}
           place={ALL_VERSIONS_PLACE}
+          command={APP_COMMAND.EXIT_VERSION_HISTORY}
           onBack={onBack}
         />
       )}
@@ -807,7 +809,8 @@ export function DesktopVersionHistory({
               look={BACK_BUTTON_LOOK.COLUMN}
               label="Back"
               place={exitPlaceName}
-              command={APP_COMMAND.EXIT_VERSION_HISTORY}
+              // Note that Escape closes the sections while they are open, so the key moves to All versions.
+              command={opened === undefined ? APP_COMMAND.EXIT_VERSION_HISTORY : NO_BACK_KEY}
               onBack={onExit}
             />
           </>
