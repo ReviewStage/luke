@@ -211,6 +211,19 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
   });
 });
 
+test("a row in the @ list marks the word that found it, where it starts a word of its name", () => {
+  const { picker, page } = mounted();
+  act(() => picker().onTrigger(word("chen")));
+  const row = page.querySelector<HTMLElement>('[role="option"]');
+  assert.equal(row?.querySelector(".luke-combobox-option-label")?.textContent, "Maria Chen");
+  assert.deepEqual(
+    [...(row?.querySelectorAll(".luke-combobox-option-label mark") ?? [])].map(
+      (mark) => mark.textContent,
+    ),
+    ["Chen"],
+  );
+});
+
 test("a person's row in the @ list hangs their card while the pointer rests on it", () => {
   const { picker, page } = mounted();
   act(() => picker().onTrigger(word("mar")));

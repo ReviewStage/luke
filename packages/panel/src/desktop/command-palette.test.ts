@@ -371,6 +371,25 @@ test("a page is found by its name, above every setting the query finds", () => {
   assert.equal(rows()[0], "Agents");
 });
 
+test('"the" finds Theme, marking the words it begins, while "thm" finds no Theme, since only a file or a command is found by letters in order', () => {
+  openPalette();
+
+  type("the");
+  const theme = [...document.querySelectorAll('[role="option"]')].find(
+    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Theme",
+  );
+  assert.ok(theme, '"the" finds Theme');
+  assert.deepEqual(
+    [...theme.querySelectorAll(".luke-combobox-option-label mark")].map((mark) => mark.textContent),
+    ["The"],
+  );
+  type("thm");
+  assert.equal(
+    rows().some((row) => row.startsWith("Theme")),
+    false,
+  );
+});
+
 test("a key typed in ⌘K stands in its field at once, and the rows are ranked for it in a render of their own after", async () => {
   openPalette();
   chooseFilter("Settings");
@@ -1449,15 +1468,11 @@ test("a task wears who is on it at its row's end, a teammate by face, no one on 
   ]);
   type("priya");
   assert.deepEqual(rows(), ["Cache keys · relay · Priya Raman"]);
-  // A query the name answers only loosely still shows the name it was found by,
-  // and one the task's other words answer, however loosely, leaves the name unsaid.
+  // A query the task's own words answer leaves the name unsaid, and letters in order find no task.
+  type("retry");
+  assert.deepEqual(rows(), ["Retry budget · relay"]);
   type("chrls");
-  assert.equal(rows()[0], "Retry budget · relay · Charles Pan");
-  type("rtry");
-  assert.equal(rows()[0], "Retry budget · relay");
-  // A query running from the task's name into its assignee's names them too.
-  type("budgetch");
-  assert.deepEqual(rows(), ["Retry budget · relay · Charles Pan"]);
+  assert.deepEqual(rows(), []);
 });
 
 test("a task whose assignee and creator share a first name says the one the whole query names", () => {
