@@ -133,7 +133,7 @@ import { TaskRowMark, taskCardOf } from "./task-card.js";
  * place in the pane beside the rail (`chat-pane.tsx`), whose head ends on
  * the channel's menu, as an Inbox item's bar ends on the item's: Mark as
  * read and Copy link for every channel, Open task for a task's, and Edit
- * and Archive, or Bring back, for a topic. The agents are named from the
+ * and Archive, or Unarchive, for a topic. The agents are named from the
  * plans' summaries, the way the sidebar names them, from the lines the
  * chat read carries where those name more, and from a read of each agent
  * drawn past both (`useChatNames`). With nothing read, it says
@@ -306,7 +306,7 @@ function useTaskDoors(
 const CHAT_LIST = "Chat";
 
 /** What a reader hears while the chat is read, under the rail's placeholder rows. */
-const READING_CHAT = "Reading chat…";
+const READING_CHAT = readingWords("chat");
 
 /** What View options' toggle of the archived channels is called. */
 const SHOW_ARCHIVED = "Show archived channels";
@@ -546,7 +546,7 @@ function topicActionGroups(channel: ChatChannel, dialogs: ChannelDialogs): MenuA
     return [
       [
         {
-          label: "Bring back channel",
+          label: "Unarchive channel",
           icon: <UnarchiveIcon />,
           onSelect: () => dialogs.askArchive(channel),
         },
@@ -1334,7 +1334,7 @@ function ChatViewOptions({
  * A channel's menu at its head's end, as an Inbox item's bar ends on the
  * item's: Mark as read while anything in it is unread, and Copy link, for
  * every channel; Open task for a task's; and for a topic, Edit and Archive,
- * or Bring back once archived.
+ * or Unarchive once archived.
  */
 function ChannelActions({
   channel,
@@ -1429,7 +1429,7 @@ export function TaskChatTab({
             {CHAT_FAILED}
           </ErrorState>
         ) : read === undefined && view.available ? (
-          <SpinnerRegion delay label={readingWords("the chat")} />
+          <SpinnerRegion delay label={readingWords("chat")} />
         ) : (
           // Note that a chat nothing could be read of says so, rather than that nothing is posted in it.
           <EmptyState icon={<MessagesSquareIcon />}>

@@ -39,8 +39,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * the same bubble at the left instead, the way a chat app sets the other
  * side's words, with the line under it the mirror of a sent message's: the
  * sender's mark and name, then when it was posted, then, while the pointer
- * or the keyboard is on it, Open in Chat, Copy, and Copy link. Where it was
- * said is no part of that line: Open in Chat hangs a hover card saying it,
+ * or the keyboard is on it, Open in chat, Copy, and Copy link. Where it was
+ * said is no part of that line: Open in chat hangs a hover card saying it,
  * a direct message and its two, or the channel and, for a reply, the
  * thread's first message, and the moment in full; a press on it opens the
  * window's Chat on that channel. Its body is the message as the chat holds
@@ -59,8 +59,8 @@ const NO_NAMES: ChatNames = {
   selfName: undefined,
 };
 
-/** What Open in Chat is called. */
-const OPEN_IN_CHAT = "Open in Chat";
+/** What Open in chat is called. */
+const OPEN_IN_CHAT = "Open in chat";
 
 /** What a direct message's card is named. */
 const DIRECT_MESSAGE = "Direct message";
@@ -86,7 +86,7 @@ function heldWords(message: HeldMessage): string {
     .join("\n\n");
 }
 
-/** Where a notice's message was said, hung from its Open in Chat: a DM and its two, or the channel and the thread it replies in, its first message as plain words (`chat-preview.ts`), then the moment in full. */
+/** Where a notice's message was said, hung from its Open in chat: a DM and its two, or the channel and the thread it replies in, its first message as plain words (`chat-preview.ts`), then the moment in full. */
 function NoticePlaceCard({
   doors,
   channel,
@@ -133,7 +133,7 @@ function NoticePlaceCard({
   );
 }
 
-/** A chat notice's bubble at the column's left: the message, then its sender and when, and its actions, Open in Chat among them where the window holds the chat. */
+/** A chat notice's bubble at the column's left: the message, then its sender and when, and its actions, Open in chat among them where the window holds the chat. */
 export function ChatNoticeCard({
   messageId,
   notice,

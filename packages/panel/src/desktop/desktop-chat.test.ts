@@ -1112,7 +1112,7 @@ test("until the chat is read, the window's Chat keeps its titled bar with New ch
   assert.equal(create.disabled, true, "but opens no channel against no chat");
   const windowWait = chat.querySelector('.chat-rail [role="status"]');
   assert.ok(windowWait, "the window's Chat says it is waiting");
-  assert.equal(windowWait.querySelector(".luke-visually-hidden")?.textContent, "Reading chat…");
+  assert.equal(windowWait.querySelector(".luke-visually-hidden")?.textContent, "Reading chat");
   assert.ok(windowWait.querySelector(".luke-list-row"), "the wait stands as the rail's rows");
   assert.equal(chat.querySelector(".luke-spinner-region"), null);
   act(() => root?.unmount());
@@ -1573,13 +1573,21 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   pickViewOption(page, "Show archived channels");
   assert.deepEqual(archivedRows(), ["release-train"]);
   act(() => railRow(page, "release-train").click());
+  assert.deepEqual(
+    rightClick(railRow(page, "release-train")).map((each) => each.textContent),
+    ["Unarchive channel"],
+    "an archived topic's menu unarchives it",
+  );
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
   const bring = [
     ...page.querySelectorAll<HTMLButtonElement>(".chat-stream .agent-composer button"),
-  ].find((each) => each.textContent === "Bring back channel");
+  ].find((each) => each.textContent === "Unarchive channel");
   assert.ok(bring, "the archived topic's foot offers to bring it back");
   act(() => bring.click());
-  assert.equal(dialogButton("Bring back channel").getAttribute("data-variant"), "primary");
-  act(() => dialogButton("Bring back channel").click());
+  assert.equal(dialogButton("Unarchive channel").getAttribute("data-variant"), "primary");
+  act(() => dialogButton("Unarchive channel").click());
   await settle();
   assert.ok(
     rail(page).includes("▸ release-train"),

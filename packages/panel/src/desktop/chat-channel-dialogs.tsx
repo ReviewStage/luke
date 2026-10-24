@@ -205,10 +205,10 @@ export function useChannelDialogs(
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           ...(doomed?.archived === true
             ? {
-                title: "Bring back channel?",
+                title: "Unarchive channel?",
                 body: `#${doomed.name ?? ""} returns to the rail and takes posts again.`,
-                verb: "Bring back channel",
-                running: "Bringing back",
+                verb: "Unarchive channel",
+                running: "Unarchiving",
               }
             : {
                 title: "Archive channel?",

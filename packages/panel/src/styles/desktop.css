@@ -3287,7 +3287,7 @@ ul.actor-stack {
    baseline, at the size a menu's glyph stands. */
 .chat-channel-glyph {
   display: inline-flex;
-  margin-right: 0.3em;
+  margin-right: var(--luke-icon-gap);
   vertical-align: -0.125em;
 }
 
@@ -3364,7 +3364,7 @@ ul.actor-stack {
   justify-content: flex-end;
   padding-top: 0;
   color: var(--luke-color-text-muted);
-  font-size: 10px;
+  font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-body-leading);
   white-space: nowrap;
   opacity: 0;
@@ -3472,7 +3472,7 @@ ul.actor-stack {
   margin-block: var(--luke-control-gap);
   color: var(--luke-color-accent-text);
   font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-semibold);
   scroll-margin-top: var(--luke-space-16);
 }
 
