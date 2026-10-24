@@ -883,7 +883,7 @@ test("a paste past an ask note's cap is cut to the room left and the card's note
   const page = mount();
   const card = openAsk(page, UNIQUE_INDEX);
   const cap = CHAT_BOUNDS.MAX_NOTE_CHARS;
-  const note = () => card.querySelector(".agent-composer-note")?.textContent;
+  const note = () => card.querySelector(".luke-composer-foot-note")?.textContent;
 
   pasteInComposer(card, "x".repeat(cap + 100));
   assert.equal(boxWords(card).length, cap);

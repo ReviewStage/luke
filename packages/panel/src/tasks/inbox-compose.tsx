@@ -530,17 +530,13 @@ function ComposeCard({
             onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
             onPasteFiles={files.paste}
             tools={<AttachFilesButton onFiles={files.attach} />}
+            says={note === undefined ? undefined : { words: note }}
             nod={false}
             sending={sending}
             held={sending || files.reading}
             sendable={sendable}
             onSubmit={send}
           />
-          {note === undefined ? null : (
-            <p className="error-message agent-composer-note" role="alert">
-              {note}
-            </p>
-          )}
         </div>
       </div>
     </section>

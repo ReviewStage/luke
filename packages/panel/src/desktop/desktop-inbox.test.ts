@@ -1327,7 +1327,7 @@ test("a paste past an item's reply cap is cut to the room left and its note line
   await settle();
   const pane = itemPane(page);
   const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => pane.querySelector(".agent-composer-note")?.textContent;
+  const note = () => pane.querySelector(".luke-composer-foot-note")?.textContent;
   assert.equal(pane.querySelector(".luke-length-counter"), null);
 
   pasteInComposer(pane, "x".repeat(cap + 100));
@@ -1424,7 +1424,7 @@ function footWords(pane: HTMLElement): string {
   const copy = box.cloneNode(true);
   assert.ok(copy instanceof Element);
   for (const part of copy.querySelectorAll(
-    ":scope > :is([data-inbox-draft-ask], .attached-files, .agent-composer-field)",
+    ":scope > :is([data-inbox-draft-ask], .agent-composer-field), .attached-files, .luke-composer-foot-note",
   )) {
     part.remove();
   }
@@ -1444,7 +1444,7 @@ function boxParts(pane: HTMLElement): string[] {
       const line = part.querySelector(".composer-editor") ?? assert.fail("the line's editor");
       return [`line: ${line.getAttribute("aria-label")}`];
     }
-    if (part.matches(".inbox-answer-foot")) {
+    if (part.matches(".luke-composer-foot")) {
       const presses = [...part.querySelectorAll<HTMLElement>("button, .composer-editor")].map(
         (press) => press.getAttribute("aria-label") ?? press.textContent,
       );
@@ -5032,7 +5032,7 @@ test("a message refused as naming no agent says the agent is archived where it i
   const pane = itemPane(page);
   const note = () => pane.querySelector('.agent-composer [role="alert"]');
   const unarchive = () =>
-    [...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button")].find(
+    [...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button")].find(
       (button) => button.textContent === "Unarchive",
     );
 
@@ -5062,7 +5062,11 @@ test("a message refused as naming no agent says the agent is archived where it i
     goneItem.querySelector('.agent-composer [role="alert"]')?.textContent,
     "This agent no longer exists.",
   );
-  assert.equal(goneItem.querySelector(".agent-composer-note button"), null, "nothing to unarchive");
+  assert.equal(
+    goneItem.querySelector(".luke-composer-foot-note button"),
+    null,
+    "nothing to unarchive",
+  );
 });
 
 test("an Unarchive that lands after another send was refused lets only the archived note go, so the newer refusal still says why", async () => {
@@ -5101,7 +5105,7 @@ test("an Unarchive that lands after another send was refused lets only the archi
   send();
   await settle();
   const unarchive = [
-    ...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button"),
+    ...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button"),
   ].find((button) => button.textContent === "Unarchive");
   act(() => (unarchive ?? assert.fail("Unarchive follows the note")).click());
   refusal = CODING_AGENT_CALL_FAILURE.UNANSWERED;
@@ -8481,7 +8485,7 @@ test("a paste past a New thread's cap is cut to the room left and its note line 
   await settle();
   const pane = await openNewThread(page);
   const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => pane.querySelector(".agent-composer-note")?.textContent;
+  const note = () => pane.querySelector(".luke-composer-foot-note")?.textContent;
 
   pasteInComposer(pane, "x".repeat(cap + 100));
   await settle();

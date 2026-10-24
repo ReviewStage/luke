@@ -8,7 +8,8 @@ import { ComposerFoot } from "./composer-foot.js";
 /**
  * composer-foot.test.ts -- a message box's foot takes no send while the box
  * is empty, says its one note, shows its counter from four fifths of the
- * limit, and keeps a call's status beside the send and beside a strip.
+ * limit, offers a remedy beside its note, and keeps a call's status beside
+ * the send and beside a strip.
  */
 
 declare global {
@@ -100,6 +101,23 @@ test("a refused send's note offers Retry, which tries again", () => {
   });
   act(() => button(container, "Retry").click());
   expect(tries).toEqual(["again"]);
+});
+
+test("a note's remedy mends what Retry cannot, and a send in words says what it settles", () => {
+  const mended: string[] = [];
+  const settled: string[] = [];
+  const { container } = draw({
+    send: { label: "Got it", empty: false, inWords: true, onSend: () => settled.push("nod") },
+    note: {
+      words: "The agent is archived.",
+      remedy: { label: "Unarchive", onClick: () => mended.push("back") },
+    },
+  });
+  act(() => button(container, "Unarchive").click());
+  act(() => button(container, "Got it").click());
+  expect(mended).toEqual(["back"]);
+  expect(settled).toEqual(["nod"]);
+  expect(button(container, "Got it").textContent).toBe("Got it");
 });
 
 test("the counter shows once the words reach four fifths of the limit", () => {
