@@ -92,6 +92,7 @@ import {
   ChipName,
   ChoiceList,
   ConfirmDialog,
+  CopyButton,
   cssCustomProperties,
   DetailPage,
   ErrorState,
@@ -155,7 +156,7 @@ import {
 } from "react";
 import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
@@ -1385,7 +1386,6 @@ function ShownSecretRow({
   secret: string;
   onDone: () => void;
 }): React.JSX.Element {
-  const copy = useCopyFeedback();
   return (
     <div className="ph-no-capture">
       <SettingsRow
@@ -1404,11 +1404,7 @@ function ShownSecretRow({
                 onChange={() => undefined}
               />
             </span>
-            <IconButton
-              icon={<CopyGlyph state={copy.state} />}
-              label={copyHint(copy.state, "Copy secret")}
-              onClick={() => copy.copy(secret)}
-            />
+            <CopyButton text={secret} what="secret" copy={copyThroughShell} />
             <Button onClick={onDone}>Done</Button>
           </>
         )}
@@ -1437,7 +1433,6 @@ function WebhookRows({
   secret: string | undefined;
   onSecret: (secret: string | undefined) => void;
 }): React.JSX.Element {
-  const address = useCopyFeedback();
   const rotation = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
@@ -1491,11 +1486,7 @@ function WebhookRows({
                 onChange={() => undefined}
               />
             </span>
-            <IconButton
-              icon={<CopyGlyph state={address.state} />}
-              label={copyHint(address.state, "Copy address")}
-              onClick={() => address.copy(url)}
-            />
+            <CopyButton text={url} what="address" copy={copyThroughShell} />
           </>
         )}
       </SettingsRow>

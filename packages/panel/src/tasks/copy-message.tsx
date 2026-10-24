@@ -1,8 +1,8 @@
-import { MessageActions } from "@luke/ui";
+import { BUTTON_SIZE, CopyButton, MessageActions } from "@luke/ui";
 import { LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { MessageAction } from "../ai-elements/message.js";
-import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback.js";
+import { copyThroughShell, LINK_COPY } from "../copy-feedback.js";
 import { useCopyLink } from "../copy-link-item.js";
 import { ForkMessageAction } from "./fork-action.js";
 import type { ForkCut } from "./fork-model.js";
@@ -18,13 +18,12 @@ import {
  * copy-message.tsx -- the actions under a transcript's message: a copy of its words to the clipboard, where its transcript names its messages Copy link, on an agent's own message where its tab offers it, Fork to new agent (`fork-action.tsx`), and, where its tab offers a rewind, a line's Edit or a reply's Revert to here (`rewind-action.tsx`).
  *
  * A thin wrapper over AI Elements' message actions, shared by every
- * transcript's messages, answered as every copy button
- * in the window is (`copy-feedback.tsx`): the glyph turns to a check for a
- * moment and back, and the button's name stays "Copy".
+ * transcript's messages, whose Copy is `@luke/ui`'s, answered as every copy
+ * button in the window is: the glyph turns to a check for a moment and back.
  */
 
-/** What the action is called, which is its accessible name and its hint. */
-const COPY_LABEL = "Copy";
+/** What its Copy copies, which `CopyButton` names ("Copy message"). */
+const COPY_WHAT = "message";
 
 export function CopyMessageAction({
   words,
@@ -49,20 +48,18 @@ export function CopyMessageAction({
   /** How its tab may offer to rewind to it: Edit on a line of the developer's, Revert to here on the agent's own; none where it offers neither. */
   rewind?: RewindAction | undefined;
 }): ReactNode {
-  const { state, copy } = useCopyFeedback();
   const place = useMessagePlace(messageId ?? "");
   const copyLink = useCopyLink();
   return (
     <MessageActions>
       {lead}
       {copyable ? (
-        <MessageAction
-          label={COPY_LABEL}
-          tooltip={copyHint(state, COPY_LABEL)}
-          onClick={() => copy(words)}
-        >
-          <CopyGlyph state={state} />
-        </MessageAction>
+        <CopyButton
+          text={words}
+          what={COPY_WHAT}
+          copy={copyThroughShell}
+          size={BUTTON_SIZE.COMPACT}
+        />
       ) : null}
       {messageId === undefined || place === undefined || copyLink === undefined ? null : (
         <MessageAction
