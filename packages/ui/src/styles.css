@@ -12,6 +12,7 @@
 @import "./components/layout/layout.css";
 @import "./components/scroll-area/scroll-area.css";
 @import "./components/list-row/list-row.css";
+@import "./components/selection/selection-bar.css";
 @import "./components/list-motion/list-motion.css";
 @import "./components/reveal/reveal.css";
 @import "./components/menu/menu.css";

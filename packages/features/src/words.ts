@@ -120,6 +120,18 @@ export function showMoreWords(count: number): string {
 /** What the foot of a capped list says once it shows every row, which puts them back. */
 export const SHOW_LESS_WORDS = "Show less";
 
+/** What a list's selection bar says of the rows chosen: "3 selected". */
+export function selectedWords(count: number): string {
+  return `${formatCount(count)} selected`;
+}
+
+/** What a selection says of a row in it, the selection bar's Clear, and the name that Clear is heard by. */
+export const SELECTION_WORDS = {
+  SELECTED: "Selected",
+  CLEAR: "Clear",
+  CLEAR_SELECTION: "Clear selection",
+} as const;
+
 /** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */
 export const REFRESH_FAILED_WORDS = "Could not refresh";
 
