@@ -49,6 +49,7 @@ export * from "./components/folding-search/folding-search.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/format-toolbar/format-toolbar.js";
 export * from "./components/glyph-slot/glyph-slot.js";
+export * from "./components/group-header/group-header.js";
 export * from "./components/hold-press/hold-press.js";
 export * from "./components/hover-card/hover-card.js";
 export * from "./components/inline-edit/inline-edit.js";
