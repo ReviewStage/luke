@@ -1,43 +1,15 @@
-/* skeleton.css -- the loading blocks. A line is the words' height centred
-   in their line, so a column of blocks sits where the lines will; a control
-   is a control's box; a circle is a person's mark; a block fills its
-   container, whose box is the size of what it stands for. Only opacity moves, in
-   step across every block, and the loop answers `--luke-loop-motion`. */
+/* skeleton.css -- what of the loading blocks Tailwind's utilities cannot
+   say: their breath, a keyframed loop. The blocks' boxes are utilities over
+   the theme (`skeleton.tsx`, `../../shadcn/skeleton.tsx`). */
 
 @layer components {
+  /* Only opacity moves, in step across every block. An endless loop with no
+     end to wait for, so its duration is a literal; it holds still on
+     --luke-loop-motion with every other, under reduced motion and a capture
+     run. */
   .luke-skeleton {
-    display: block;
-    width: var(--luke-skeleton-width, 100%);
-    max-width: 100%;
-    height: 0.8em;
-    margin: calc((1lh - 0.8em) / 2) 0;
-    border-radius: 4px;
-    background: var(--luke-color-fill-strong);
-    /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --luke-loop-motion with every other. */
     animation: luke-skeleton-pulse 1500ms ease-in-out infinite;
     animation-play-state: var(--luke-loop-motion);
-  }
-
-  .luke-skeleton[data-shape="control"] {
-    height: var(--luke-control-height);
-    margin: 0;
-    border-radius: var(--luke-control-radius);
-  }
-
-  .luke-skeleton[data-shape="circle"] {
-    width: var(--luke-skeleton-width, var(--luke-control-height));
-    height: auto;
-    margin: 0;
-    aspect-ratio: 1;
-    border-radius: var(--luke-radius-full);
-  }
-
-  .luke-skeleton[data-shape="block"] {
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    border-radius: var(--luke-control-radius);
   }
 
   @keyframes luke-skeleton-pulse {

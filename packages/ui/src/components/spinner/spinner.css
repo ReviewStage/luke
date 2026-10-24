@@ -1,19 +1,22 @@
-/* spinner.css -- the ring, its three sizes, a region holding one at its
-   centre, and a control's words sharing one cell with it, so the ring stands
-   over the words' own room rather than taking a width of its own. */
+/* spinner.css -- what of the ring and a busy control's words Tailwind's
+   utilities cannot say: the turn and the delay, which are keyframes, and the
+   ring's stroke, which a region's box sets for the ring inside it.
+   The ring's look, its sizes, and the region are utilities over the theme
+   (`spinner.tsx`, `../../shadcn/spinner.tsx`). */
 
 @layer components {
+  /* A region's box thickens the stroke of the ring inside it, since the
+     ring itself never knows the size it is drawn at. */
+  .luke-spinner[data-size="region"] {
+    --luke-spinner-stroke: 2px;
+  }
+
+  /* The ring's stroke, as its box sets it, and its turn: an endless loop
+     with no end to wait for, so its duration is a literal; it holds still on
+     --luke-loop-motion with every other. The panel's plan heading turns on
+     the same keyframes (`tasks.css`). */
   .luke-spinner-ring {
-    display: block;
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    border: var(--luke-spinner-stroke, 1.5px) solid
-      color-mix(in srgb, currentColor 22%, transparent);
-    border-top-color: currentColor;
-    border-radius: 50%;
-    /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --luke-loop-motion with every other. */
+    border-width: var(--luke-spinner-stroke, 1.5px);
     animation: luke-spinner-turn 900ms linear infinite;
     animation-play-state: var(--luke-loop-motion);
   }
@@ -24,54 +27,8 @@
     }
   }
 
-  /* A wait: 12px on a caption's line, 16px beside words or inside a
-     control, 22px alone in a region, in the muted ink a wait is said in. */
-  .luke-spinner {
-    display: inline-flex;
-    flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-spinner[data-size="small"] {
-    width: 12px;
-    height: 12px;
-  }
-
-  .luke-spinner[data-size="region"] {
-    --luke-spinner-stroke: 2px;
-    width: 22px;
-    height: 22px;
-  }
-
-  .luke-spinner-region {
-    display: flex;
-    flex: 1;
-    align-self: stretch;
-    align-items: center;
-    justify-content: center;
-    min-height: 0;
-    padding: var(--luke-space-24);
-  }
-
-  .luke-busy-label {
-    display: inline-grid;
-    align-items: center;
-    justify-items: center;
-    gap: inherit;
-  }
-
-  .luke-busy-label > :not(.luke-visually-hidden) {
-    grid-area: 1 / 1;
-  }
-
-  .luke-busy-label-words {
-    display: inline-flex;
-    align-items: center;
-    gap: inherit;
-  }
-
+  /* A busy control's words keep their room under the ring, hidden; this
+     stays beside the delay below, which shows them until the ring does. */
   .luke-busy-label > .luke-busy-label-words {
     visibility: hidden;
   }
@@ -99,9 +56,5 @@
     to {
       visibility: hidden;
     }
-  }
-
-  .luke-busy-label > .luke-spinner {
-    color: inherit;
   }
 }

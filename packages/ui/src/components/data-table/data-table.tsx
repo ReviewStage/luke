@@ -1,5 +1,13 @@
 import type { MouseEvent, ReactNode } from "react";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../shadcn/table.js";
 import { SORT_DIRECTION, type SortDirection } from "../../sort-direction.js";
 import { CARD_PADDING, Card } from "../card/card.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -23,6 +31,9 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * A keyboard opens a row through such a link in its cells, since a table row
  * is no control. The table owns every length in it and takes no class or
  * style.
+ *
+ * The table is shadcn/ui's (`../../shadcn/table.tsx`), drawn in Tailwind
+ * utilities over the theme.
  */
 
 /** What a column holds: words, figures aligned on their end, or a row's leading mark (a star, a check). */
@@ -62,6 +73,25 @@ export interface DataTableColumn<Row, Key extends string = string> {
   cell: (row: Row) => ReactNode;
 }
 
+/** A cell's utilities by what its column holds: a figure's end-aligned in figures of one width, and a mark's as narrow as its mark, standing against the next column's words. */
+const CELL_KIND =
+  "data-[kind=numeric]:text-end data-[kind=numeric]:tabular-nums data-[kind=mark]:w-0 data-[kind=mark]:pe-0";
+
+/** The widths past which more columns crush instead of shrinking. */
+const TABLE_MIN_WIDTH =
+  "data-[min-width=narrow]:min-w-data-table-narrow data-[min-width=medium]:min-w-data-table-medium data-[min-width=wide]:min-w-data-table-wide";
+
+/** A row's fill eases in and out under the pointer. */
+const ROW = "transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+
+/** A row that opens something: lit under the pointer, and pressed with the web's pointing hand but a Mac list's arrow on the desktop. */
+const PRESSABLE_ROW =
+  "cursor-pointer [&:hover]:bg-muted in-data-[luke-profile=desktop]:cursor-default";
+
+/** A sortable heading's press: its words alone, in the heading's own type and ink, its ring a little off them. */
+const SORT_BUTTON =
+  "m-0 inline-flex items-baseline border-0 bg-transparent p-0 text-inherit [font:inherit] cursor-pointer outline-offset-2 in-data-[luke-profile=desktop]:cursor-default";
+
 /** The elements a press inside a row answers for itself. */
 const OWN_CONTROL = "a, button, input, select, textarea, label, [role='button']";
 
@@ -86,26 +116,26 @@ function DataTableHeading<Row, Key extends string>({
   const kind = column.kind ?? DATA_TABLE_COLUMN_KIND.TEXT;
   if (kind === DATA_TABLE_COLUMN_KIND.MARK) {
     return (
-      <th className="luke-data-table-cell" data-kind={kind}>
+      <TableHead className={CELL_KIND} data-kind={kind}>
         <span className="luke-visually-hidden">{column.label}</span>
-      </th>
+      </TableHead>
     );
   }
   const direction = sort?.key === column.key ? sort.direction : undefined;
   if (!onSort || column.sortable !== true) {
     return (
-      <th className="luke-data-table-cell" data-kind={kind} aria-sort={direction}>
+      <TableHead className={CELL_KIND} data-kind={kind} aria-sort={direction}>
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
           {column.label}
         </Text>
-      </th>
+      </TableHead>
     );
   }
   return (
-    <th className="luke-data-table-cell" data-kind={kind} aria-sort={direction}>
+    <TableHead className={CELL_KIND} data-kind={kind} aria-sort={direction}>
       <button
         type="button"
-        className="luke-data-table-sort"
+        className={SORT_BUTTON}
         onClick={pulseOnPress(() => onSort(column.key))}
       >
         <Text
@@ -119,7 +149,7 @@ function DataTableHeading<Row, Key extends string>({
           ) : null}
         </Text>
       </button>
-    </th>
+    </TableHead>
   );
 }
 
@@ -159,7 +189,7 @@ export function DataTable<Row, Key extends string = string>({
   if (rows.length === 0) {
     return (
       <Card>
-        <div className="luke-data-table-empty">
+        <div className="py-data-table-cell-block text-center">
           <Text tone={TEXT_TONE.MUTED}>{empty}</Text>
         </div>
       </Card>
@@ -167,49 +197,47 @@ export function DataTable<Row, Key extends string = string>({
   }
   return (
     <Card padding={CARD_PADDING.FLUSH}>
-      <div className="luke-data-table-scroller">
-        <table className="luke-data-table-table" aria-label={label} data-min-width={minWidth}>
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <DataTableHeading key={column.key} column={column} sort={sort} onSort={onSort} />
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const press = onRowPress && (rowPressable?.(row) ?? true) ? onRowPress : undefined;
-              return (
-                <tr
-                  key={rowKey(row)}
-                  className="luke-data-table-row"
-                  data-pressable={press ? "true" : undefined}
-                  onClick={
-                    press
-                      ? (event) => {
-                          if (onOwnControl(event)) return;
-                          // Note that a row runs the card's width, so its press leaves its fill and rule standing.
-                          pulsePress(event.currentTarget, PRESS_PULSE.FLUSH);
-                          press(row);
-                        }
-                      : undefined
-                  }
-                >
-                  {columns.map((column) => (
-                    <td
-                      key={column.key}
-                      className="luke-data-table-cell"
-                      data-kind={column.kind ?? DATA_TABLE_COLUMN_KIND.TEXT}
-                    >
-                      {column.cell(row)}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table className={TABLE_MIN_WIDTH} aria-label={label} data-min-width={minWidth}>
+        <TableHeader>
+          <TableRow>
+            {columns.map((column) => (
+              <DataTableHeading key={column.key} column={column} sort={sort} onSort={onSort} />
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => {
+            const press = onRowPress && (rowPressable?.(row) ?? true) ? onRowPress : undefined;
+            return (
+              <TableRow
+                key={rowKey(row)}
+                className={press ? `${ROW} ${PRESSABLE_ROW}` : ROW}
+                data-pressable={press ? "true" : undefined}
+                onClick={
+                  press
+                    ? (event) => {
+                        if (onOwnControl(event)) return;
+                        // Note that a row runs the card's width, so its press leaves its fill and rule standing.
+                        pulsePress(event.currentTarget, PRESS_PULSE.FLUSH);
+                        press(row);
+                      }
+                    : undefined
+                }
+              >
+                {columns.map((column) => (
+                  <TableCell
+                    key={column.key}
+                    className={CELL_KIND}
+                    data-kind={column.kind ?? DATA_TABLE_COLUMN_KIND.TEXT}
+                  >
+                    {column.cell(row)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </Card>
   );
 }
