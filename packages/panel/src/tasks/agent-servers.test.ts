@@ -17,6 +17,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { restOn } from "../testing/hint-rest.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AgentServersButton } from "./agent-servers.js";
 
 /**
@@ -93,6 +94,8 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  releaseMotion();
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 const statuses: IntegrationStatuses = {
@@ -554,4 +557,64 @@ test("a connected server that lists no tools has no page to open, so a press on 
   act(() => serverPress(container, "Linear")?.click());
 
   assert.deepEqual(switched, [[LINEAR]]);
+});
+
+/** The popover's panel in `container`, while it is drawn. */
+function panelIn(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>('[role="dialog"]');
+}
+
+/** One exit running on every panel that is ending, as the engine would run its fade, until `finish` ends them: jsdom plays no motion of its own. */
+function holdPanelExits() {
+  const exits: EventTarget[] = [];
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value(this: Element) {
+      if (!this.hasAttribute("data-ending-style")) return [];
+      const exit = new EventTarget();
+      exits.push(exit);
+      return [exit];
+    },
+  });
+  return () => {
+    for (const exit of exits.splice(0)) exit.dispatchEvent(new Event("finish"));
+  };
+}
+
+test("Escape from the home fades the popover out, inert and ending, then takes it away, and it opens afresh", async () => {
+  const finishExits = holdPanelExits();
+  const { container, key, type, field } = await opened();
+  const button = () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]') ??
+    assert.fail("no button");
+  type("deploy");
+
+  key("Escape");
+  const fading = panelIn(container);
+  const ending = fading?.hasAttribute("data-ending-style");
+  const inert = fading?.hasAttribute("inert");
+  const expanded = button().getAttribute("aria-expanded");
+  act(() => finishExits());
+  const gone = panelIn(container) === null;
+  act(() => button().click());
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+
+  assert.ok(fading, "the popover stands while it fades");
+  assert.equal(ending, true, "it is in its ending state");
+  assert.equal(inert, true, "it takes nothing while it fades");
+  assert.equal(expanded, "false", "its button already says it is closed");
+  assert.equal(gone, true, "it goes once its fade has run");
+  assert.equal(field().value, "", "opened again it holds no search from before");
+});
+
+test("Escape from the home takes the popover away at once where motion is held", async () => {
+  holdPanelExits();
+  holdMotion();
+  const { container, key } = await opened();
+
+  key("Escape");
+
+  assert.equal(panelIn(container), null);
 });

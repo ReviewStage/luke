@@ -125,6 +125,7 @@ interface ReviewDraft {
  * leaving it closes it, its words kept, unless a review is on its way.
  */
 function ReviewPanel({
+  open,
   id,
   draft,
   writes,
@@ -134,6 +135,8 @@ function ReviewPanel({
   onClose,
   onLeave,
 }: {
+  /** Whether it stands; closed, it fades out. */
+  open: boolean;
   id: string;
   draft: ReviewDraft;
   writes: PullRequestWrites;
@@ -156,6 +159,7 @@ function ReviewPanel({
 
   return (
     <PopoverPanel
+      open={open}
       id={id}
       title={REVIEW_WORDS.TITLE}
       closeLabel={REVIEW_WORDS.CLOSE}
@@ -291,36 +295,36 @@ export function PullRequestReview({
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen(!open)}
       />
-      {open ? (
-        // Note that a press outside closes it too, as a menu's does, because
-        // the field keeps the focus through a press on words nothing can
-        // focus, so no blur says it was left; a review on its way, or the
-        // question it asked, holds it open all the same.
-        <AnchoredPopover
-          align={POPOVER_ALIGN.END}
-          width={PANEL_WIDTH}
-          onPressAway={sending ? undefined : () => setOpen(false)}
-          holds={inQuestion}
-        >
-          <ReviewPanel
-            id={panelId}
-            draft={{ event, body, setEvent, setBody, submit }}
-            writes={writes}
-            pending={pending}
-            pendingList={pendingList}
-            onDiscard={discarding.ask}
-            onClose={close}
-            onLeave={(left) => {
-              // Note that a review on its way holds the panel open, because the
-              // press it was sent from is disabled as it goes, which drops the
-              // focus the way a click outside would, and GitHub's answer is
-              // drawn in the panel.
-              if (sending || inQuestion(left)) return;
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
-      ) : null}
+      {/* Note that a press outside closes it too, as a menu's does, because
+          the field keeps the focus through a press on words nothing can
+          focus, so no blur says it was left; a review on its way, or the
+          question it asked, holds it open all the same. */}
+      <AnchoredPopover
+        open={open}
+        align={POPOVER_ALIGN.END}
+        width={PANEL_WIDTH}
+        onPressAway={sending ? undefined : () => setOpen(false)}
+        holds={inQuestion}
+      >
+        <ReviewPanel
+          open={open}
+          id={panelId}
+          draft={{ event, body, setEvent, setBody, submit }}
+          writes={writes}
+          pending={pending}
+          pendingList={pendingList}
+          onDiscard={discarding.ask}
+          onClose={close}
+          onLeave={(left) => {
+            // Note that a review on its way holds the panel open, because the
+            // press it was sent from is disabled as it goes, which drops the
+            // focus the way a click outside would, and GitHub's answer is
+            // drawn in the panel.
+            if (sending || inQuestion(left)) return;
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
+      </AnchoredPopover>
       <ConfirmDialog confirm={discarding} question={DISCARD_QUESTION} />
     </div>
   );

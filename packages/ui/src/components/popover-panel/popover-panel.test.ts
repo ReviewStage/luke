@@ -215,7 +215,7 @@ test("focus moving inside the panel is not a leaving", () => {
 });
 
 /** A button that opens and closes a panel through `open`, its field taking the focus each time it opens. */
-function OpenStage(): React.JSX.Element {
+function OpenStage({ exits }: { exits?: { count: number } }): React.JSX.Element {
   const [open, setOpen] = useState(true);
   const field = useRef<HTMLInputElement>(null);
   return createElement(
@@ -228,6 +228,9 @@ function OpenStage(): React.JSX.Element {
       initialFocus: field,
       onDismiss: () => setOpen(false),
       onLeave: () => undefined,
+      onExited: () => {
+        if (exits !== undefined) exits.count += 1;
+      },
       children: createElement("input", { ref: field, "aria-label": "Search" }),
     }),
   );
@@ -265,4 +268,18 @@ test("a panel closed through open while motion is held goes at once", () => {
   act(() => button(container, "Toggle")?.click());
 
   assert.equal(panelIn(container), null);
+});
+
+test("a panel tells its owner it is gone once its fade has run, and not while it fades or before it first opened", () => {
+  const exits = holdExits();
+  const told = { count: 0 };
+  const container = drawn(createElement(OpenStage, { exits: told }));
+  const beforeClose = told.count;
+  act(() => button(container, "Toggle")?.click());
+  const whileFading = told.count;
+  act(() => exits.finish());
+
+  assert.equal(beforeClose, 0, "an open panel has not gone");
+  assert.equal(whileFading, 0, "a fading panel has not gone");
+  assert.equal(told.count, 1, "a faded panel has");
 });
