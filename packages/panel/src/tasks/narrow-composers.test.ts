@@ -223,6 +223,7 @@ test("in a wide room, an open thread keeps the margin card's width", () => {
 async function composerDialog(): Promise<HTMLElement> {
   await draw(
     createElement(Dialog, {
+      open: true,
       title: "New task",
       size: DIALOG_SIZE.COMPOSER,
       onDismiss: ignore,

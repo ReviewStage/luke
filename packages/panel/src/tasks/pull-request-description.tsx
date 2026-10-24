@@ -380,7 +380,7 @@ export function PullRequestDescription({
       >
         <DescriptionNote note={note} onDismiss={dismiss} onReload={reload.ask} />
       </MarkdownEditor>
-      <ConfirmDialog confirm={reload} question={RELOAD_QUESTION} />
+      <ConfirmDialog open confirm={reload} question={RELOAD_QUESTION} />
     </>
   );
 }

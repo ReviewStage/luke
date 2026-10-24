@@ -147,6 +147,7 @@ function SavedToken({
         Remove
       </Button>
       <ConfirmDialog
+        open
         confirm={removal}
         question={{
           title: "Remove your GitHub token?",

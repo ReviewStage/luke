@@ -74,6 +74,7 @@ function Owner({
     createElement("button", { type: "button", onClick: () => setSubject((v) => !v) }, "Key"),
     createElement("button", { type: "button", onClick: () => setSurfaceOpen((v) => !v) }, "Page"),
     createElement(ConfirmDialog, {
+      open: true,
       confirm,
       question: {
         title: "Delete the OpenAI key?",
@@ -372,6 +373,7 @@ function actLook(loss: DialogQuestion["loss"]): string | null {
       confirm.ask();
     }
     return createElement(ConfirmDialog, {
+      open: true,
       confirm,
       question: { title: "Remove Ada?", verb: "Remove", running: "Removing", loss },
     });

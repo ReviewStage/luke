@@ -1493,6 +1493,7 @@ function WebhookRows({
         <ShownSecretRow key={secret} secret={secret} onDone={() => onSecret(undefined)} />
       )}
       <ConfirmDialog
+        open
         confirm={rotation}
         question={{
           title: "Make a new secret?",
@@ -2508,6 +2509,7 @@ export function AutomationEditor({
         />
       ) : null}
       <ConfirmDialog
+        open
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
@@ -2517,6 +2519,7 @@ export function AutomationEditor({
         }}
       />
       <ConfirmDialog
+        open
         confirm={deletion}
         question={{
           title: `Delete ${automation?.name ?? "this automation"}?`,

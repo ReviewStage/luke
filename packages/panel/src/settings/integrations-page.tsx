@@ -715,6 +715,7 @@ function IntegrationRow({
         <RowToolsPanel id={panelId} name={name} tools={tools} />
       ) : null}
       <ConfirmDialog
+        open
         confirm={disconnect}
         question={{
           title: `Disconnect ${name}?`,

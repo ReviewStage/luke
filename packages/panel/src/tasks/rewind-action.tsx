@@ -179,7 +179,7 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
       >
         <Undo2Icon />
       </MessageAction>
-      <ConfirmDialog confirm={confirm} question={REVERT_QUESTION} />
+      <ConfirmDialog open confirm={confirm} question={REVERT_QUESTION} />
     </>
   );
 }

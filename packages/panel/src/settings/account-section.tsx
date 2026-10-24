@@ -193,6 +193,7 @@ export function AccountSection({
         </SettingsRow>
       </div>
       <ConfirmDialog
+        open
         confirm={signOut}
         question={{
           title: `${VERB.SIGN_OUT} of ${account.email}?`,
@@ -202,6 +203,7 @@ export function AccountSection({
         }}
       />
       <ConfirmDialog
+        open
         confirm={deletion}
         gate={account.email}
         question={{

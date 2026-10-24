@@ -230,15 +230,15 @@ function ConfirmCard({
  * in the shared `Dialog`, fading out as it goes.
  */
 export function ConfirmDialog({
-  open = true,
+  open,
   confirm,
   question,
   field,
   gate,
   children,
 }: {
-  /** Whether its owner shows it at all; falling, the card fades out. Shown while mounted where it is left out. */
-  open?: boolean | undefined;
+  /** Whether its owner shows it at all; falling, the card fades out. */
+  open: boolean;
   confirm: DialogConfirm;
   question: DialogQuestion;
   /** A field the question asks to be filled, which takes focus in Cancel's place; Enter in it answers. */

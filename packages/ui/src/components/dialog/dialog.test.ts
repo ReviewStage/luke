@@ -67,6 +67,7 @@ function Owner({ heard, busy }: { heard: Heard; busy: boolean }): React.JSX.Elem
     createElement("button", { type: "button", onClick: () => setShown(false) }, "Withdraw"),
     open && shown
       ? createElement(Dialog, {
+          open: true,
           labelledBy: titleId,
           busy,
           initialFocus: field,
@@ -167,6 +168,7 @@ test("it opens named by its title on its field, keeps Tab and Shift-Tab among it
 test("a link or a select at either end of the card is one of its controls, and what is out of the Tab order is not", () => {
   draw(
     createElement(Dialog, {
+      open: true,
       labelledBy: "title",
       onDismiss: () => undefined,
       children: [
@@ -239,6 +241,7 @@ test("asked away while busy, by the dimmed window or Escape, the card nudges eac
   let dismissals = 0;
   draw(
     createElement(Dialog, {
+      open: true,
       title: "Deleting plan",
       busy: true,
       onDismiss: () => {
@@ -262,6 +265,7 @@ test("asked away while busy, by the dimmed window or Escape, the card nudges eac
 test("a question that must be answered is an alert dialog, named by its title and described by what it asks", () => {
   draw(
     createElement(Dialog, {
+      open: true,
       role: DIALOG_ROLE.ALERT_DIALOG,
       labelledBy: "title",
       describedBy: "body",
@@ -283,6 +287,7 @@ test("a dialog given a title and actions is named by its title, and what it hold
   const field = createRef<HTMLTextAreaElement>();
   draw(
     createElement(Dialog, {
+      open: true,
       title: "Send feedback",
       initialFocus: field,
       onDismiss: () => undefined,
@@ -310,6 +315,7 @@ test("a dialog given a title and actions is named by its title, and what it hold
 test("what a dialog holds stands in one middle between its head and its foot, so a short window scrolls the middle and keeps the title and the answers", () => {
   draw(
     createElement(Dialog, {
+      open: true,
       title: "New section",
       onDismiss: () => undefined,
       actions: createElement("button", { type: "button" }, "Save"),
@@ -337,6 +343,7 @@ test("what a dialog holds stands in one middle between its head and its foot, so
 /** A dialog whose act its owner refuses or lets through, at the owner's word. */
 function Refusing({ refused }: { refused: boolean }): React.JSX.Element {
   return createElement(Dialog, {
+    open: true,
     title: "Delete plan?",
     refused,
     onDismiss: () => undefined,
@@ -370,6 +377,7 @@ test("a dialog holding a draft is nudged and kept by the first Escape or press o
   let dismissals = 0;
   const drawn = (holding: boolean) =>
     createElement(Dialog, {
+      open: true,
       title: "Send feedback",
       holding,
       onDismiss: () => {
@@ -407,6 +415,7 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
   const handle = createRef<DialogHandle>();
   draw(
     createElement(Dialog, {
+      open: true,
       ref: handle,
       title: "New task",
       holding: true,
@@ -429,12 +438,14 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
 function Stacked({ onOuter, onInner }: { onOuter: () => void; onInner: () => void }) {
   const [inner, setInner] = useState(false);
   return createElement(Dialog, {
+    open: true,
     title: "Settings",
     onDismiss: onOuter,
     children: [
       createElement("button", { key: "ask", type: "button", onClick: () => setInner(true) }, "Ask"),
       inner
         ? createElement(Dialog, {
+            open: true,
             key: "inner",
             role: DIALOG_ROLE.ALERT_DIALOG,
             title: "Delete key?",

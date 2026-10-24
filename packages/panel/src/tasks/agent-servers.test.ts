@@ -438,9 +438,7 @@ test("a press on a tool opens its page with the popover standing open, and its b
   );
 
   act(() =>
-    container
-      .querySelector<HTMLButtonElement>(".integration-tool-detail-head button")
-      ?.click(),
+    container.querySelector<HTMLButtonElement>(".integration-tool-detail-head button")?.click(),
   );
   assert.equal(container.querySelector(".integration-tool-detail"), null);
   assert.equal(container.querySelector(".agent-servers-page-title")?.textContent, "Vercel");

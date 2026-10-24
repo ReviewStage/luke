@@ -456,6 +456,7 @@ export function PullRequestStateMenu({
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
       <ConfirmDialog
+        open
         confirm={confirm}
         question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
       />

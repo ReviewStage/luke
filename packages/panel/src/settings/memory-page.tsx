@@ -132,6 +132,7 @@ function MemoryRow({
         }}
       />
       <ConfirmDialog
+        open
         confirm={forgetting}
         question={{
           title: "Forget this memory?",

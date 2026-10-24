@@ -154,7 +154,12 @@ test("the regions stay heard while a modal dialog hides the rest of the window",
   const dialog = mount();
   act(() =>
     dialog.render(
-      createElement(Dialog, { title: "Rename", onDismiss: () => undefined, children: "Name" }),
+      createElement(Dialog, {
+        open: true,
+        title: "Rename",
+        onDismiss: () => undefined,
+        children: "Name",
+      }),
     ),
   );
   assert.ok(document.querySelector('[role="dialog"]'), "the dialog opens");

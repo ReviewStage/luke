@@ -235,6 +235,7 @@ export function TaskIssueLinks({
   };
   const question = (
     <ConfirmDialog
+      open
       confirm={unlinking}
       question={{
         title: `Unlink ${doomed?.key ?? ""}?`,

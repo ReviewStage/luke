@@ -199,6 +199,7 @@ export function useChannelDialogs(
         <ErrorLine>{form.refusal}</ErrorLine>
       </Dialog>
       <ConfirmDialog
+        open
         confirm={archive}
         question={{
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,

@@ -241,7 +241,7 @@ export function PendingComment({
         </div>
       )}
       <PullRequestWriteNote writes={writes} className="pull-request-thread-note" />
-      <ConfirmDialog confirm={deleting} question={DELETE_QUESTION} />
+      <ConfirmDialog open confirm={deleting} question={DELETE_QUESTION} />
     </div>
   );
   if (head === undefined) return body;

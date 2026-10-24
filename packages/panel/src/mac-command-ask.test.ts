@@ -2,17 +2,23 @@
 
 import assert from "node:assert/strict";
 import { ACT_KIND } from "@luke/host/acts";
-import type { MacCommandAsk } from "@luke/host/app-state";
+import type { AppStateDelivery, MacCommandAsk } from "@luke/host/app-state";
 import { MAC_COMMAND_DECISION, type MacCommandAnswer } from "@luke/host/contract";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { tellAct } from "./act.js";
 import { MacCommandAskDialog } from "./mac-command-ask.js";
 import { rendererRegistry } from "./renderer-runtime.js";
-import { fakeActPort, refusedOnPort } from "./testing/app-bridge.js";
-import { handState } from "./testing/app-state.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  refusedOnPort,
+} from "./testing/app-bridge.js";
+import { deliveryOf, handState, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 
@@ -41,6 +47,8 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
+  vi.useRealTimers();
 });
 
 /** The dialog drawn over main's document holding `asks`, with what it answered main. */
@@ -139,4 +147,42 @@ test("an answer main refuses as a report nobody pressed for raises no toast", as
   });
 
   assert.ok(!toasts().includes(refusal), `toasts stood: ${toasts().join(" | ")}`);
+});
+
+test("an ask main drops fades its card out in place, its words as they were, before the card goes", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  let push: ((delivery: AppStateDelivery) => void) | undefined;
+  const snapshot = stateWith({}, { macCommands: { asks: [FIRST] } });
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      push = heard;
+      return () => undefined;
+    },
+    requestAppState: () => Promise.resolve(snapshot),
+  });
+  fakeActPort({});
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(onRegistry(AtomRegistry.make(), createElement(MacCommandAskDialog))),
+  );
+  await act(async () => vi.advanceTimersToNextFrame());
+  const card = document.querySelector('[role="alertdialog"]') ?? assert.fail("the prompt stands");
+
+  await act(async () =>
+    push?.({
+      ...deliveryOf(stateWith({}, { macCommands: { asks: [] } })),
+      version: snapshot.version + 1,
+    }),
+  );
+  await act(async () => vi.advanceTimersToNextFrame());
+  assert.ok(card.isConnected, "the card goes the moment the ask does");
+  assert.equal(document.querySelector(".luke-file-text-words")?.textContent, FIRST.command);
+
+  await act(async () => exits.finish());
+  await act(async () => vi.advanceTimersToNextFrame());
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });

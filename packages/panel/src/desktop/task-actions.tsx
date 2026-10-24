@@ -470,7 +470,7 @@ export function useTaskMenuItems(
   const footer = task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />;
   const dialog = (
     <>
-      <ConfirmDialog confirm={deletion} question={deleteQuestion(name, settledTask(task))} />
+      <ConfirmDialog open confirm={deletion} question={deleteQuestion(name, settledTask(task))} />
       {moving.dialog}
       {sections.dialog}
     </>

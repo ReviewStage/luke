@@ -272,6 +272,7 @@ function ShellRow({
         }
       />
       <ConfirmDialog
+        open
         confirm={ending}
         question={{
           title: `${kill}?`,

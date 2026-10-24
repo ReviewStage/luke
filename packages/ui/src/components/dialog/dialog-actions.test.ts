@@ -57,6 +57,7 @@ function button(name: string): HTMLButtonElement {
 function Asking(): React.JSX.Element {
   const [running, setRunning] = useState(false);
   return createElement(Dialog, {
+    open: true,
     title: "Archive #design?",
     onDismiss: () => undefined,
     actions: createElement(DialogActions, {
@@ -78,6 +79,7 @@ function Showing(): React.JSX.Element | null {
   const [open, setOpen] = useState(true);
   if (!open) return null;
   return createElement(Dialog, {
+    open: true,
     title: "Webhook secret",
     onDismiss: () => setOpen(false),
     actions: createElement(DialogActions, { onDone: () => setOpen(false) }),

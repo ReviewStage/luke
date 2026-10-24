@@ -15,8 +15,9 @@ import { TEXT_TONE, Text } from "../text/text.js";
  * Escape and a press on the dimmed window deny too, since a prompt waved
  * away must not run the command. Always allow says beside it that it stops
  * the asking for every later command, which is the setting it writes.
- * Whoever owns the card holds it mounted while the ask stands and takes it
- * down as the ask goes, answered or timed out.
+ * Whoever owns the card holds it mounted while the ask stands and passes
+ * `open` as the ask goes, answered or timed out, so the card fades out
+ * (`Dialog`'s `open`), taking it down once it says it is gone.
  */
 
 /** What the card is titled. */
@@ -26,11 +27,15 @@ const TITLE = "Run this command on your Mac?";
 const COMMAND_LABEL = "The command";
 
 export function CommandAsk({
+  open,
   command,
   onAllowOnce,
   onAllowAlways,
   onDeny,
+  onExited,
 }: {
+  /** Whether the ask stands; falling, the card fades out before it goes. */
+  open: boolean;
   /** The shell command, as the agent wrote it. */
   command: string;
   /** Run it this once. */
@@ -39,16 +44,20 @@ export function CommandAsk({
   onAllowAlways: () => void;
   /** Do not run it, which Escape and the dimmed window also answer. */
   onDeny: () => void;
+  /** Its fade has run and the card is gone, which its owner takes the ask down on. */
+  onExited?: (() => void) | undefined;
 }): React.JSX.Element {
   const deny = useRef<HTMLButtonElement | null>(null);
   const bodyId = useId();
   return (
     <Dialog
+      open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
       title={TITLE}
       describedBy={bodyId}
       initialFocus={deny}
       onDismiss={onDeny}
+      onExited={onExited}
       actions={
         <>
           <Button ref={deny} variant={BUTTON_VARIANT.QUIET} onClick={onDeny}>

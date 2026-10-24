@@ -52,7 +52,7 @@ function Asking({
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={confirm.ask}>
         {label}
       </Button>
-      <ConfirmDialog confirm={confirm} question={question} gate={gate} />
+      <ConfirmDialog open confirm={confirm} question={question} gate={gate} />
     </>
   );
 }
@@ -99,6 +99,7 @@ function Named(): React.JSX.Element {
         New workspace…
       </Button>
       <ConfirmDialog
+        open
         confirm={confirm}
         field={field}
         question={{

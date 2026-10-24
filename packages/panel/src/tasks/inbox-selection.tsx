@@ -163,7 +163,11 @@ export function InboxSelectionBar({
           <SelectionBar count={listed.length} acts={acts} onClear={onClear} controls={controls} />
         </Stack>
       )}
-      <ConfirmDialog confirm={confirm} question={closeAllQuestion(asked.map(({ item }) => item))} />
+      <ConfirmDialog
+        open
+        confirm={confirm}
+        question={closeAllQuestion(asked.map(({ item }) => item))}
+      />
     </>
   );
 }

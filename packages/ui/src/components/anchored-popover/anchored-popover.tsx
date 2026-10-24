@@ -141,7 +141,7 @@ function askedWidth(layer: HTMLElement, width: number | PopoverWidth): number {
  * the focus its popover takes as it mounts.
  */
 export function AnchoredPopover({
-  open = true,
+  open,
   align,
   width = DEFAULT_WIDTH,
   bounds = POPOVER_BOUNDS.ROOM,
@@ -149,8 +149,8 @@ export function AnchoredPopover({
   holds,
   children,
 }: PressAway & {
-  /** Whether what it holds stands open; closed, the layer stays where it stood while that fades. Open where it is left out. */
-  open?: boolean | undefined;
+  /** Whether what it holds stands open; closed, the layer stays where it stood while that fades. */
+  open: boolean;
   align: PopoverAlign;
   /** The width it asks for, in pixels or by name, a form's wider than a menu's. */
   width?: number | PopoverWidth | undefined;

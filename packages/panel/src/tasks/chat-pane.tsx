@@ -576,7 +576,7 @@ function PendingRow({
               {entry.refused}
             </FailureNote>
           )}
-          <ConfirmDialog confirm={discard} question={DISCARD_QUESTION} />
+          <ConfirmDialog open confirm={discard} question={DISCARD_QUESTION} />
         </div>
       </MessageComment>
     </li>

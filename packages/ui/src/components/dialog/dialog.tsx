@@ -50,8 +50,8 @@ import { useHeldFocus } from "./held-focus.js";
  * begins. Reduced motion and a capture run, which zero the tokens, take it
  * away at once. An owner whose card holds state or reads data while it is
  * drawn hears `onExited` once the card is gone, and takes it out then. An
- * owner that has yet to pass `open` mounts the dialog to
- * open it and unmounts it to close it, which goes at once. Asked away while it
+ * owner always passes `open`: one that mounts the dialog to open it and
+ * unmounts it to close it passes `true`, and its card goes at once. Asked away while it
  * is at work, by Escape or the dimmed window, the card swells for a moment,
  * so the press is answered even though the owner keeps it open. A dialog
  * whose act was refused shakes its card once as the refusal lands, so the
@@ -171,8 +171,8 @@ const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
 /** What a dialog is told: who names it, whether it is at work, where focus lands, and how it is put away. */
 export type DialogProps = DialogName & {
   ref?: Ref<DialogHandle> | undefined;
-  /** Whether the card stands; falling, it fades out before it goes. Open while mounted where it is left out. */
-  open?: boolean | undefined;
+  /** Whether the card stands; falling, it fades out before it goes. */
+  open: boolean;
   role?: DialogRole | undefined;
   /** How wide the card stands, a question's measure unless asked. */
   size?: DialogSize | undefined;
@@ -277,7 +277,7 @@ function useInvokerFocus(open: boolean): void {
  */
 export function Dialog({
   ref,
-  open = true,
+  open,
   role = DIALOG_ROLE.DIALOG,
   size = DIALOG_SIZE.CONFIRM,
   title,

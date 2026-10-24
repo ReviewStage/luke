@@ -124,7 +124,12 @@ test("the tab wears the account's theme, follows the machine under System, and a
   const host = document.body.appendChild(document.createElement("div"));
   const overlay = createRoot(host);
   overlay.render(
-    createElement(Dialog, { title: "Rename", onDismiss: () => undefined, children: "Words" }),
+    createElement(Dialog, {
+      open: true,
+      title: "Rename",
+      onDismiss: () => undefined,
+      children: "Words",
+    }),
   );
   const card = await vi.waitFor(() => {
     const drawnCard = document.body.querySelector('[role="dialog"]');

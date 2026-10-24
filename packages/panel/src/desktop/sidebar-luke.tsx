@@ -134,7 +134,7 @@ export function SidebarLuke({
         actionsAt={operator.failed ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
         actions={actions}
       />
-      <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
+      <ConfirmDialog open confirm={reset} question={RESET_QUESTION} />
     </>
   );
 }
