@@ -9,6 +9,7 @@ import {
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
   type IntegrationStatus,
+  type IntegrationToolsProblemReason,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
@@ -482,8 +483,11 @@ test("two accounts at a provider stand as two rows, each named by its label, and
   assert.deepEqual(switched, [["notion-2"]]);
 });
 
-/** The act port answering where each provider stands and each server's tools, Linear's refused, as the service would. */
-function answerLinearRefused(): void {
+/** The act port answering where each provider stands and each server's tools, Linear's with `problem`, as the service would. */
+function answerLinear(problem: {
+  readonly reason: IntegrationToolsProblemReason;
+  readonly message?: string;
+}): void {
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () =>
       Promise.resolve({
@@ -498,10 +502,15 @@ function answerLinearRefused(): void {
     [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
       Promise.resolve(
         (payload.connection ?? payload.provider) === LINEAR
-          ? { problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED } }
+          ? { problem }
           : { tools: TOOLS.get(payload.connection ?? payload.provider) ?? [] },
       ),
   });
+}
+
+/** The act port answering as `answerLinear` does, Linear's sign-in refused. */
+function answerLinearRefused(): void {
+  answerLinear({ reason: INTEGRATION_TOOLS_PROBLEM.REFUSED });
 }
 
 test("a server's problem fades where its row cuts it short, as every cut line of the app does, rather than ending in an ellipsis", async () => {
@@ -511,6 +520,22 @@ test("a server's problem fades where its row cuts it short, as every cut line of
   const problem = container.querySelector(".agent-servers-problem");
   assert.equal(problem?.textContent, "Linear refused the sign-in.");
   assert.equal(problem?.getAttribute("data-end"), "fade");
+});
+
+test("a server's own error is no part of its row's sentence, and stands quoted after it in the problem's hint", async () => {
+  answerLinear({
+    reason: INTEGRATION_TOOLS_PROBLEM.REJECTED,
+    message: "workspace is suspended",
+  });
+  const { container } = await opened();
+  const problem = container.querySelector(".agent-servers-problem") ?? assert.fail("no problem");
+  const words = problem.textContent;
+
+  restOn(problem);
+  const hint = document.querySelector('[role="tooltip"]:not([inert])');
+
+  assert.equal(words, "Could not reach Linear.");
+  assert.equal(hint?.textContent, "Could not reach Linear. Linear said: “workspace is suspended”");
 });
 
 test("a server's row hangs the server's card beside it, and a tool a search found hangs the card of its tool", async () => {

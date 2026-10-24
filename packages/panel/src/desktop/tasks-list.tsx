@@ -145,6 +145,7 @@ import {
   OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
+import { useHeldTasks } from "./use-held-tasks.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -999,7 +1000,7 @@ function gridColumns(properties: readonly TaskProperty[]): string {
 
 /** The List: the listed workspace's tasks under their pins, sections, and the grouping chosen, in one grid whose columns line up down the page. */
 export function TasksList({
-  tasks,
+  tasks: control,
   room,
   frame,
 }: {
@@ -1007,19 +1008,18 @@ export function TasksList({
   room: ShellRoom;
   frame: TasksViewFrame;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
+  useAppCommand(APP_COMMAND.EXIT_BOARD, control.boardView.onClose);
   const { filter, display } = frame;
   const directory = useMemberDirectory();
   const now = useMinute();
   const folds = useListFolds();
-  const setStanding = useStandingDoor(tasks);
-  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
+  const { waiting } = useSettledWaiting(control.listed.inbox, control.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const narrow = room === SHELL_ROOM.NARROW;
   const properties = narrow
     ? display.properties.filter((property) => !NARROW_LEFT_OUT.includes(property))
     : display.properties;
-  const listed = tasks.listed.tasks;
+  const listed = control.listed.tasks;
   const pinned = inPinOrder(
     listed.filter((task) => task.pinnedAt !== undefined),
     pinPlaceOf,
@@ -1040,17 +1040,24 @@ export function TasksList({
       <ActorMark actor={assigneeFor(assigneeId, directory, listed)} size={ACTOR_SIZE.MARK} />
     ),
   };
-  const groups = tasksListGroups(listed, {
-    filter,
-    display,
-    pinned,
-    sections: listSections(tasks),
-    readerId: tasks.me,
-    personName:
-      display.grouping === TASKS_GROUPING.ASSIGNEE ? people.assigneeName : people.creatorName,
-    members: (directory.members ?? []).map((member) => member.userId),
-    now,
-  });
+  // While the page is shown each task keeps the group and the place it was first drawn in, so one a teammate's change would move stays under the reader's eye.
+  const { groups, tasks } = useHeldTasks(
+    control,
+    { workspaceId: control.workspace?.id, filter, display },
+    (standing) =>
+      tasksListGroups(standing, {
+        filter,
+        display,
+        pinned,
+        sections: listSections(control),
+        readerId: control.me,
+        personName:
+          display.grouping === TASKS_GROUPING.ASSIGNEE ? people.assigneeName : people.creatorName,
+        members: (directory.members ?? []).map((member) => member.userId),
+        now,
+      }),
+  );
+  const setStanding = useStandingDoor(tasks);
   const repositories = groups.flatMap((group) =>
     group.tasks.map((task) => ({ repository: task.repository })),
   );
@@ -1143,7 +1150,11 @@ export function TasksList({
                     waiting={waitingOn.get(task.id) ?? 0}
                     now={now}
                     properties={properties}
-                    assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
+                    assigneeHeld={
+                      !narrow &&
+                      group.head.kind === TASKS_GROUP.ASSIGNEE &&
+                      group.head.assigneeId === (task.assignee?.userId ?? null)
+                    }
                     chosen={several !== undefined && selected.has(task.id) ? several : undefined}
                     onOpen={() => tasks.onSelect(task.id)}
                     onStanding={(standing) => setStanding(task, standing)}

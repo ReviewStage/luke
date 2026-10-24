@@ -107,7 +107,15 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AssigneeFaceMark } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -1466,11 +1474,36 @@ export function CommandPalette({
       settings.onViewChange(page);
     });
 
+  // Note that the rows are ranked for the words a render behind the field
+  // (`sought`), so a key paints in the field at once and the ranking of every
+  // row follows in a render of its own, which the next key may cut short. A
+  // closed palette seeks nothing, so an opening starts level with its empty field.
+  const sought = useDeferredValue(open ? query : "");
+  // The words a Return was pressed on before the rows were ranked for them, held until they are.
+  const owedReturn = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const owed = owedReturn.current;
+    if (!open) owedReturn.current = undefined;
+    if (!open || owed === undefined || sought !== query) return;
+    owedReturn.current = undefined;
+    // Note that the Return chooses the row its words rank first, as a Return typed after them would,
+    // whatever was highlighted before; and none where the words changed again before they were ranked.
+    if (owed !== query) return;
+    const items = stood.current.flatMap((group) => group.items);
+    items.find((item) => item.disabled !== true)?.onSelect();
+  }, [open, sought, query]);
+
   // Note that no key pressed in the palette goes on to the window, which the
   // dialog sees to, because the window's Escape would stop Luke mid-reply and
   // a window chord would change what stands behind the palette. Escape itself
   // is the dialog's, which closes the palette alone.
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Note that a Return the rows have not caught up with waits for them, so it never chooses a row the earlier words ranked.
+    if (event.key === "Enter" && sought !== query) {
+      event.preventDefault();
+      owedReturn.current = query;
+      return;
+    }
     const step = arrowStep(event, query);
     if (step !== 0) {
       event.preventDefault();
@@ -1489,7 +1522,7 @@ export function CommandPalette({
     else changeFilter(steppedFilter(filter, pressed === APP_COMMAND.BACK ? -1 : 1));
   };
 
-  const tokens = searchTokens(query);
+  const tokens = searchTokens(sought);
   // Luke leads the list as Ask Luke, so the rows that list agents leave him out.
   const operator = useLukeOperator({
     accountId: tasks.me,
@@ -1501,7 +1534,7 @@ export function CommandPalette({
     open &&
     askLuke !== undefined &&
     (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.AGENTS) &&
-    (tokens.length === 0 || rowScore(askLuke, query, tokens) > 0);
+    (tokens.length === 0 || rowScore(askLuke, sought, tokens) > 0);
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
@@ -1545,7 +1578,7 @@ export function CommandPalette({
   }, [filesAsked, taskId, repository, held, readFiles]);
 
   const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
-  const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? query : undefined;
+  const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? sought : undefined;
   // Ranked once a query or the listing changes, not on every render, since
   // a repository may list tens of thousands of paths.
   const matchedPaths = useMemo(
@@ -1558,7 +1591,7 @@ export function CommandPalette({
 
   // Each kind's rows in tiers, built only for the filter shown and only
   // while open: every row a tier matches ranks above the next tier's.
-  const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
+  const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, sought, words);
   const tiersOf = {
     [PALETTE_FILTER.TASKS]: () => [
       tasks.signedIn
@@ -1615,7 +1648,7 @@ export function CommandPalette({
           fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
         )
       : tiersOf[kind]()
-          .flatMap((tier) => ranked(tier, query, limit, byRow))
+          .flatMap((tier) => ranked(tier, sought, limit, byRow))
           .slice(0, limit);
   const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
@@ -1640,23 +1673,11 @@ export function CommandPalette({
       ? undefined
       : notice;
   };
-  const sections: readonly PaletteSection[] = open
-    ? kinds
-        .map((kind) => ({ kind, rows: rowsFor(kind), notice: noticeFor(kind) }))
-        .filter((section) => section.rows.length > 0 || section.notice !== undefined)
-    : [];
   const cut =
     filesOpen &&
     filter === PALETTE_FILTER.FILES &&
     held?.read === FILES_READ.LISTED &&
     held.truncated;
-  // Note that Ask Luke, where it stands, is the first row, so the first row chosen as the palette opens is his.
-  let place = askLukeShown ? 1 : 0;
-  const items = (rows: readonly PaletteRow[]): CommandItem[] =>
-    rows.map((row) => {
-      place += 1;
-      return paletteItem(row, String(place), query, tokens);
-    });
   // A kind's notice after its rows, or, under Files, that the listing searched was cut short.
   const noteOf = (section: PaletteSection): ReactNode =>
     section.notice !== undefined ? (
@@ -1664,18 +1685,33 @@ export function CommandPalette({
     ) : cut && section.kind === PALETTE_FILTER.FILES ? (
       TRUNCATED_LINE
     ) : undefined;
-  const groups: readonly CommandGroup[] = [
-    ...(askLukeShown && askLuke !== undefined
-      ? [{ id: ASK_LUKE_GROUP, items: [paletteItem(askLuke, FIRST_ROW, query, tokens)] }]
-      : []),
-    ...sections.map((section) => ({
-      id: section.kind,
-      label: FILTER_LABEL[section.kind],
-      items: items(section.rows),
-      note: noteOf(section),
-    })),
-  ];
-  if (open) stood.current = groups;
+  // Every kind's rows ranked for the words sought, each group's items placed after the last.
+  const rank = (): readonly CommandGroup[] => {
+    const sections = kinds
+      .map((kind) => ({ kind, rows: rowsFor(kind), notice: noticeFor(kind) }))
+      .filter((section) => section.rows.length > 0 || section.notice !== undefined);
+    // Note that Ask Luke, where it stands, is the first row, so the first row chosen as the palette opens is his.
+    let place = askLukeShown ? 1 : 0;
+    const items = (rows: readonly PaletteRow[]): CommandItem[] =>
+      rows.map((row) => {
+        place += 1;
+        return paletteItem(row, String(place), sought, tokens);
+      });
+    return [
+      ...(askLukeShown && askLuke !== undefined
+        ? [{ id: ASK_LUKE_GROUP, items: [paletteItem(askLuke, FIRST_ROW, sought, tokens)] }]
+        : []),
+      ...sections.map((section) => ({
+        id: section.kind,
+        label: FILTER_LABEL[section.kind],
+        items: items(section.rows),
+        note: noteOf(section),
+      })),
+    ];
+  };
+  // The render a key paints the field in draws the ranking already standing, and only the
+  // render the words sought catch up in ranks them, so no key waits on the ranking.
+  if (open) stood.current = sought === query ? rank() : stood.current;
 
   return (
     <CommandDialog

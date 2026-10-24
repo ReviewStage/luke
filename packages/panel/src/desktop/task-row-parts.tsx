@@ -131,7 +131,6 @@ function StandingChip<T extends string>({
   words,
   mark,
   look,
-  named,
   card,
   onPick,
 }: {
@@ -142,8 +141,6 @@ function StandingChip<T extends string>({
   words: Readonly<Record<T, string>>;
   mark: (value: T) => React.JSX.Element;
   look: ChipLook;
-  /** Whether it says its value in words beside its mark, as on a phone's Board, where it is how a card moves. */
-  named: boolean;
   /** The card the value standing hangs in its pill's place, as an assignee's face hangs theirs. */
   card?: ReactNode;
   onPick: (value: T) => void;
@@ -156,7 +153,7 @@ function StandingChip<T extends string>({
         <Chip
           look={look}
           size={CHIP_SIZE.COMPACT}
-          iconOnly={!named}
+          iconOnly
           aria-label={name}
           {...trigger(dropBelowStart)}
         >
@@ -203,7 +200,6 @@ export function PriorityChip({
       words={TASK_PRIORITY_WORDS}
       mark={(priority) => <TaskPriorityMark priority={priority} />}
       look={look}
-      named={false}
       onPick={(priority) => onStanding({ priority })}
     />
   );
@@ -248,23 +244,20 @@ export function AssigneeChip({
       words={words}
       mark={(id) => <>{icons.get(id)}</>}
       look={look}
-      named={false}
       card={task.assignee === undefined ? undefined : actorCard(person)}
       onPick={(id) => onStanding({ assigneeId: id === NO_ASSIGNEE ? null : id })}
     />
   );
 }
 
-/** The chip that says a task's status and changes it, its words beside its mark where `named`. */
+/** The chip that says a task's status by its mark and changes it. */
 export function StatusChip({
   task,
   look,
-  named = false,
   onStanding,
 }: {
   task: TaskSummary;
   look: ChipLook;
-  named?: boolean;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
   return (
@@ -275,7 +268,6 @@ export function StatusChip({
       words={TASK_STATUS_WORDS}
       mark={(status) => <TaskStatusMark status={status} />}
       look={look}
-      named={named}
       onPick={(status) => onStanding({ status })}
     />
   );

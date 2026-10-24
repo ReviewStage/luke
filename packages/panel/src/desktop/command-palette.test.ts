@@ -40,6 +40,7 @@ import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -368,6 +369,75 @@ test("a page is found by its name, above every setting the query finds", () => {
   ]);
   type("agents");
   assert.equal(rows()[0], "Agents");
+});
+
+test("a key typed in ⌘K stands in its field at once, and the rows are ranked for it in a render of their own after", async () => {
+  openPalette();
+  chooseFilter("Settings");
+  const before = rows();
+
+  // Note that the key goes in outside `act`, which would draw the ranking's own render with it, so the paint the key gets is the one read.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  flushSync(() => {
+    setValue?.call(input, "agents");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const painted = { typed: field().value, rows: rows() };
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(painted, { typed: "agents", rows: before });
+  assert.equal(rows()[0], "Agents");
+});
+
+test("a Return pressed before the rows are ranked for the words typed chooses the row they rank first, never one the earlier words ranked or highlighted", async () => {
+  const sent = openPalette();
+  chooseFilter("Settings");
+  key({ key: "ArrowDown" });
+  key({ key: "ArrowDown" });
+
+  // Note that the key and the Return go in outside `act`, which would draw the ranking's own render between them.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  flushSync(() => {
+    setValue?.call(input, "integrations");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  flushSync(() => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  const before = { tabs: [...sent.tabs], views: [...sent.views] };
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(before, { tabs: [], views: [] }, "nothing chosen from the earlier rows");
+  assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+});
+
+test("a Return held for its words is let go once other words are typed before they are ranked, choosing nothing", async () => {
+  const sent = openPalette();
+  chooseFilter("Settings");
+
+  // Note that the keys and the Return go in outside `act`, which would draw the ranking's own render between them.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const typeNow = (words: string) =>
+    flushSync(() => {
+      setValue?.call(input, words);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  typeNow("integrations");
+  flushSync(() => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  typeNow("agents");
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(sent, { tabs: [], views: [] });
+  assert.equal(rows()[0], "Agents", "the palette stands, ranked for the words now typed");
 });
 
 test("choosing a page opens Settings on that page", () => {

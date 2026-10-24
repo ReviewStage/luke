@@ -9,8 +9,6 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   TEXT_ELEMENT,
-  TEXT_FONT,
-  TEXT_TONE,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
@@ -100,15 +98,10 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   );
 }
 
-/** A column's heading in the mono face the grid keeps for its labels. */
+/** A column's heading, in the Group role every list's heading takes. */
 function HeaderWords({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <Text
-      as={TEXT_ELEMENT.SPAN}
-      variant={TEXT_VARIANT.CAPTION}
-      tone={TEXT_TONE.MUTED}
-      font={TEXT_FONT.MONO}
-    >
+    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.GROUP}>
       {children}
     </Text>
   );
@@ -160,14 +153,14 @@ export function RetentionGrid({
                   gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
                 }}
               >
-                <div className="flex items-center uppercase">
+                <div className="flex items-center">
                   <HeaderWords>Cohort</HeaderWords>
                 </div>
-                <div className="flex items-center justify-end uppercase">
+                <div className="flex items-center justify-end">
                   <HeaderWords>Accounts</HeaderWords>
                 </div>
                 {offsets.map((offset) => (
-                  <div key={offset} className="flex items-center justify-center uppercase">
+                  <div key={offset} className="flex items-center justify-center">
                     <HeaderWords>Wk {offset}</HeaderWords>
                   </div>
                 ))}

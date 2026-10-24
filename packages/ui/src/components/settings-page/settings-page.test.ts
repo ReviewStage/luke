@@ -10,6 +10,7 @@ import {
   SettingsRowsSkeleton,
   SettingsSection,
 } from "../settings-section/settings-section.js";
+import { TOOLBAR_LOOK } from "../toolbar/toolbar.js";
 import { SettingsPage } from "./settings-page.js";
 
 /**
@@ -97,6 +98,25 @@ test("the page's actions stand in its head beside its title", async () => {
   );
   expect(head?.querySelector("h1")?.textContent).toBe("Voice");
   expect(button).toBeDefined();
+});
+
+test("on a phone the page's actions end its bar, and its head holds its title alone", async () => {
+  const container = await render(
+    createElement(SettingsPage, {
+      title: "Voice",
+      look: TOOLBAR_LOOK.PHONE,
+      lead: createElement(Button, { children: "Settings" }),
+      actions: createElement(Button, { children: "Reset" }),
+      children: section("Microphone"),
+    }),
+  );
+  const bar = container.querySelector('header[data-look="phone"]');
+  expect([...(bar?.querySelectorAll("button") ?? [])].map((each) => each.textContent)).toEqual([
+    "Settings",
+    "Reset",
+  ]);
+  expect(container.querySelectorAll("h1").length).toBe(1);
+  expect(container.querySelector("h1")?.closest('header[data-look="phone"]')).toBeNull();
 });
 
 test("a page with no actions holds only its title in its head", async () => {

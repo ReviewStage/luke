@@ -97,6 +97,8 @@ export interface ServerRow {
   readonly tools?: readonly IntegrationTool[];
   /** Why a connected server lists no tools, where it answered why, or why its sign-in failed. */
   readonly problem?: string;
+  /** The server's or the sign-in's own words behind `problem`, quoted and naming who said them, where they said any. */
+  readonly said?: string;
   /** Where a sign-in stands that is no problem: waiting on the browser, or never finished. */
   readonly note?: string;
 }
@@ -132,23 +134,30 @@ function kindOf(
   }
 }
 
+/** Someone else's words behind a row's problem, where there are any. */
+function saidOf(said: string | undefined): Pick<ServerRow, "said"> {
+  return said === undefined ? {} : { said };
+}
+
 /** What a row says of where it stands in words: a connected server's problem, or its sign-in's line. */
 function wordsOf(
   provider: IntegrationProvider,
   status: IntegrationStatus | undefined,
   health: ConnectionHealth,
   signIn: SignIn | undefined,
-): Pick<ServerRow, "problem" | "note"> | undefined {
+): Pick<ServerRow, "problem" | "said" | "note"> | undefined {
   if (status === INTEGRATION_STATUS.CONNECTED) {
-    if (health.kind === CONNECTION_HEALTH.BROKEN) return { problem: health.problem };
+    if (health.kind === CONNECTION_HEALTH.BROKEN) {
+      return { problem: health.problem, ...saidOf(health.said) };
+    }
     // Note that a read Luke's own service could not answer is said, never drawn as a server that works.
     return health.kind === CONNECTION_HEALTH.FAILED
       ? { problem: readFailedWords("the tools") }
       : undefined;
   }
   if (signIn === undefined) return undefined;
-  const { text, problem } = signInLine(provider, signIn);
-  return problem ? { problem: text } : { note: text };
+  const { text, problem, said } = signInLine(provider, signIn);
+  return problem ? { problem: text, ...saidOf(said) } : { note: text };
 }
 
 /**

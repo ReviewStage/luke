@@ -12,7 +12,7 @@
  * inert while it stands, as the app's is (`stage-room.ts` measures the room).
  *
  * The account stands at the sidebar's foot, as the app's does: its face and
- * name, raising its menu above it, whose one act is Sign out, asked first.
+ * name, raising its menu above it, whose one act is Sign out, which acts on the press.
  */
 
 import { VERB } from "@luke/features/words";
@@ -25,8 +25,7 @@ import { SHELL_ROOM } from "@luke/panel/shell-room";
 import { useStageRoom } from "@luke/panel/stage-room";
 import {
   AVATAR_SIZE,
-  CONFIRM_LOSS,
-  ConfirmDialog,
+  FailureNote,
   IconButton,
   Menu,
   NAV_CURRENT,
@@ -37,11 +36,9 @@ import {
   SidebarIcon,
   TEXT_TONE,
   Text,
-  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { LogOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -63,37 +60,26 @@ const SIDEBAR_OVERLAY = {
 
 type SidebarOverlay = (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY];
 
-/** What the Sign out dialog says where signing out failed, in the app's words. */
-const LOG_OUT_REFUSED = "Luke could not sign out. Try again.";
+/** What the foot says where signing out failed, in the app's words. */
+const SIGN_OUT_REFUSED = "The account could not be signed out. Try again.";
 
 /**
  * The foot's account: the signed-in account's face and name, raising its
  * menu over the column, whose heading says whose account it is over Sign out.
- * Sign out asks first, as the app's does: getting back in costs a whole trip
- * through the provider's sign-in.
+ * Sign out acts on the press, as the app's does: nothing is lost, and a
+ * refusal is said above the foot (`AdminSidebar`).
  */
 function AccountFoot({
   account,
   shown,
-  onLogOut,
+  onSignOut,
 }: {
   account: ViewerAccount;
   /** Whether the sidebar is in sight; hidden, nothing it raised stands over the page. */
   shown: boolean;
-  onLogOut: () => Promise<void>;
+  onSignOut: () => void;
 }): React.JSX.Element {
   const menu = useMenu(shown);
-  const logOut = useConfirmDialog(
-    { subject: true, surfaceOpen: shown },
-    async (): Promise<ActionResult> => {
-      try {
-        await onLogOut();
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
-      } catch {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: LOG_OUT_REFUSED };
-      }
-    },
-  );
   return (
     <>
       <NavItem
@@ -113,20 +99,10 @@ function AccountFoot({
               <Text tone={TEXT_TONE.MUTED}>{account.email}</Text>
             </>
           }
-          groups={[[{ label: VERB.SIGN_OUT, icon: <LogOutIcon />, onSelect: logOut.ask }]]}
+          groups={[[{ label: VERB.SIGN_OUT, icon: <LogOutIcon />, onSelect: onSignOut }]]}
           onClose={menu.close}
         />
       )}
-      <ConfirmDialog
-        open
-        confirm={logOut}
-        question={{
-          title: `${VERB.SIGN_OUT} of ${account.email}?`,
-          verb: VERB.SIGN_OUT,
-          running: "Signing out",
-          loss: CONFIRM_LOSS.REVERSIBLE,
-        }}
-      />
     </>
   );
 }
@@ -142,16 +118,22 @@ function AdminSidebar({
   inSight,
   account,
   onNavigate,
-  onLogOut,
+  onSignOut,
   ref,
 }: {
   active: AdminTab;
   inSight: boolean;
   account: ViewerAccount | undefined;
   onNavigate: (tab: AdminTab) => void;
-  onLogOut: () => Promise<void>;
+  onSignOut: () => Promise<void>;
   ref: React.Ref<HTMLElement>;
 }): React.JSX.Element {
+  // Note that a refusal stays up until the next press, since the account is still signed in.
+  const [refused, setRefused] = useState(false);
+  const signOut = () => {
+    setRefused(false);
+    onSignOut().catch(() => setRefused(true));
+  };
   const go = (tab: AdminTab) => (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!plainLeftClick(event)) return;
     event.preventDefault();
@@ -176,9 +158,10 @@ function AdminSidebar({
       </nav>
       <div className="min-h-0 flex-1" />
       <div className="sidebar-foot">
+        {refused ? <FailureNote>{SIGN_OUT_REFUSED}</FailureNote> : null}
         <div className="sidebar-account-row">
           {account === undefined ? null : (
-            <AccountFoot account={account} shown={inSight} onLogOut={onLogOut} />
+            <AccountFoot account={account} shown={inSight} onSignOut={signOut} />
           )}
         </div>
       </div>
@@ -192,7 +175,7 @@ function AdminSidebar({
  * it, which hands the keyboard back to the toggle. Opened, it takes the keyboard
  * to the place shown, as the app's drawer does. Note that a press outside
  * the shell, or Escape there, is not the view's: the account's menu and the
- * Sign out question are drawn over the page from the body, and what is
+ * menu are drawn over the page from the body, and what is
  * pressed in them is theirs, so it must not put the drawer, and them with
  * it, away.
  */
@@ -240,7 +223,7 @@ export function AdminShell({
   account,
   onToggleHidden,
   onNavigate,
-  onLogOut,
+  onSignOut,
   children,
 }: {
   active: AdminTab;
@@ -249,7 +232,7 @@ export function AdminShell({
   account: ViewerAccount | undefined;
   onToggleHidden: () => void;
   onNavigate: (tab: AdminTab) => void;
-  onLogOut: () => Promise<void>;
+  onSignOut: () => Promise<void>;
   children: React.ReactNode;
 }): React.JSX.Element {
   const stage = useStageRoom();
@@ -298,7 +281,7 @@ export function AdminShell({
           inSight={inSight}
           account={account}
           onNavigate={navigate}
-          onLogOut={onLogOut}
+          onSignOut={onSignOut}
         />
         {/* The content region is the app's work column and the page's `main`
             landmark, as the app's own is. The page owns its scroll under

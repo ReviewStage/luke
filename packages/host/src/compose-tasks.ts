@@ -163,6 +163,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { boardMoves } from "./board-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { fixturePage } from "./fixture-stage.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   confirmWrite,
@@ -2066,6 +2067,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "reading a page names a task or an agent, the page, and its version",
         );
+        // A run that sends nothing reads the page its fixture stages, frame and source alike.
+        if (!kernel.runMode.sendsNetwork) return carried<TasksPageAnswer>(fixturePage(read));
         if (!gate()) return carried<TasksPageAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { pageId, version } = read;
         const place = "taskId" in read ? { taskId: read.taskId } : { agentId: read.agentId };

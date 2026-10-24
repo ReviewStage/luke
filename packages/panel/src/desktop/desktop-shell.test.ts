@@ -53,6 +53,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
+import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -243,6 +244,80 @@ test("while Settings is still loading its frame stands, a page of placeholder se
   });
 
   assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
+});
+
+/**
+ * The shell in a narrow room on `tab` over `overrides`, Settings standing on
+ * its list or its page as `listed` says, over a history whose Back goes to
+ * the Inbox, drawn once and not waited on, so a page still loading stands
+ * its frame; every way out and back to a list written down.
+ */
+function mountLoadingNarrow(
+  tab: PanelTab,
+  overrides: Partial<TasksControl>,
+  listed: boolean,
+): { page: HTMLElement; went: string[] } {
+  const went: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const tasks = tasksControl({ page: TASKS_PAGE.HOME, ...overrides });
+  const props = shellProps(tasks, tab, ignore, {});
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...props,
+          room: SHELL_ROOM.NARROW,
+          settingsStep: { listed, onList: () => went.push("list") },
+          history: {
+            ...props.history,
+            canGoBack: true,
+            onBack: () => went.push("back"),
+            steps: {
+              back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+              forward: [],
+            },
+          },
+        }),
+      ),
+    ),
+  );
+  return { page: container, went };
+}
+
+test("on a phone, while Settings is still loading, its list and its page stand headed as they will be: the way out or back, and the title centred", () => {
+  const list = mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, true);
+  assert.deepEqual(readPhoneHead(list.page, "settings-pages"), {
+    start: ["Back"],
+    title: "Settings",
+    end: [],
+  });
+  pressInPhoneHead(list.page, "settings-pages", "Back");
+  assert.deepEqual(list.went, ["back"]);
+  act(() => root?.unmount());
+
+  const page = mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, false);
+  assert.deepEqual(readPhoneHead(page.page, "settings-page").start, ["Settings"]);
+  pressInPhoneHead(page.page, "settings-page", "Settings");
+  assert.deepEqual(page.went, ["list"]);
+});
+
+test("on a phone, while the account's access is read, Admin stands headed as it will be: its list by the way out and its name, a view by the way back to the list", () => {
+  const control = tasksControl();
+  const adminView = (listed: boolean) => ({
+    adminView: { ...control.adminView, open: true, listed, onList: ignore },
+  });
+  const list = mountLoadingNarrow(PANEL_TAB.TASKS, adminView(true), true);
+  assert.deepEqual(readPhoneHead(list.page, "admin-sections"), {
+    start: ["Back"],
+    title: "Admin",
+    end: [],
+  });
+  act(() => root?.unmount());
+
+  const view = mountLoadingNarrow(PANEL_TAB.TASKS, adminView(false), true);
+  assert.deepEqual(readPhoneHead(view.page, "admin").start, ["Admin"]);
 });
 
 test("with the sidebar folded, New plan stands beside its toggle over the welcome and the Inbox alike", () => {
@@ -871,7 +946,7 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.deepEqual(closed, ["closed"]);
 });
 
-test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands", async () => {
+test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands, and on a phone its list stands headed as it will be, by the way out and its title", async () => {
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
   handState({});
@@ -888,6 +963,21 @@ test("while a version history's chunk is still loading, its Back row and Escape 
     assert.ok(runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY), "Escape leaves the history");
   });
   assert.deepEqual(closed, ["closed", "closed"]);
+  act(() => root?.unmount());
+
+  // Note that the chunk is still on its way, so the phone's frame is drawn in the same turn.
+  const phone = mountLoadingNarrow(
+    PANEL_TAB.TASKS,
+    { history: { ...history, listed: true } },
+    true,
+  );
+  assert.deepEqual(readPhoneHead(phone.page, "version-log"), {
+    start: ["Back"],
+    title: "Version history",
+    end: [],
+  });
+  pressInPhoneHead(phone.page, "version-log", "Back");
+  assert.deepEqual(phone.went, ["back"]);
   await settle();
 });
 

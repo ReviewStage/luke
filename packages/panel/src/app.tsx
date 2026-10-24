@@ -69,7 +69,7 @@ import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
-import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
+import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
@@ -280,8 +280,15 @@ function AppWindow(): React.JSX.Element {
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
-  const settingsPlace = useSettingsPlace();
+  // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
+  const [launched] = useState(() => {
+    const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);
+    return place !== undefined && "settings" in place ? place.settings : undefined;
+  });
+  const [tab, setTab] = useStateWithRef<PanelTab>(
+    launched === undefined ? PANEL_TAB.TASKS : PANEL_TAB.SETTINGS,
+  );
+  const settingsPlace = useSettingsPlace(launched?.page);
   const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
   /** The note being written to the people who make Luke, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
@@ -424,6 +431,7 @@ function AppWindow(): React.JSX.Element {
     listedId: tasks.workspace?.id,
     workspaces: tasks.workspaces,
     settingsShown: tab === PANEL_TAB.SETTINGS,
+    launched: launched?.workspaceId,
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.

@@ -18,6 +18,7 @@ import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { appBridge } from "./app-bridge.js";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
+import { loadedTasksFixture, loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 
 /** The two bridge calls a window reads its state through, and nothing else. */
 interface AppStateSource {
@@ -143,6 +144,21 @@ const adopted = (
   );
 
 /**
+ * The document as this window draws it: main's, but in a fixture run, which
+ * signs in to nothing, with what its profile stages laid over it, such as a
+ * synthetic account signed in (`tasks-fixture.ts`'s `fixtureAppState`). Note
+ * that the fixture is imported before the run's first document is handed
+ * on, because no reader may draw that document unstaged first.
+ */
+function staged(state: AppStateSnapshot): Effect.Effect<AppStateSnapshot> {
+  if (!state.run.fixtureMode) return Effect.succeed(state);
+  return Effect.map(
+    Effect.promise(loadTasksFixture),
+    () => loadedTasksFixture()?.fixtureAppState(state) ?? state,
+  );
+}
+
+/**
  * This window's copy of the one document main holds, and the one subscription
  * behind it.
  *
@@ -153,7 +169,11 @@ const adopted = (
  * listening, and the window going away is the whole of its life.
  */
 const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppStateUnavailable>> =
-  Atom.keepAlive(rendererRuntime.atom((get) => adopted(readings(get(appStateSourceAtom)))));
+  Atom.keepAlive(
+    rendererRuntime.atom((get) =>
+      Stream.mapEffect(adopted(readings(get(appStateSourceAtom))), staged),
+    ),
+  );
 
 /**
  * The document as main holds it, read before anything is drawn over it: the

@@ -16,6 +16,7 @@ import {
   LIST_ROW_INK,
   ListRow,
   MoreButton,
+  nextRowOrHead,
   OneLine,
   RowHint,
   RowHintOptions,
@@ -470,7 +471,12 @@ export function useTaskMenuItems(
   const footer = task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />;
   const dialog = (
     <>
-      <ConfirmDialog open confirm={deletion} question={deleteQuestion(name, settledTask(task))} />
+      <ConfirmDialog
+        open
+        confirm={deletion}
+        question={deleteQuestion(name, settledTask(task))}
+        restoreTo={nextRowOrHead}
+      />
       {moving.dialog}
       {sections.dialog}
     </>

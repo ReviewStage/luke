@@ -10,7 +10,7 @@ import {
   type HeldConfirm,
   useConfirm,
 } from "../../confirm-state.js";
-import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
+import { DIALOG_ROLE, Dialog, type RestoreTo } from "../dialog/dialog.js";
 import { DIALOG_TONE, DialogActions, type DialogTone } from "../dialog/dialog-actions.js";
 import { DIALOG_ANSWERS, useDialogFoot } from "../dialog/dialog-foot.js";
 import { ErrorLine } from "../error-line/error-line.js";
@@ -29,7 +29,8 @@ import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js
  * someone else. Focus lands on Cancel, so a key already pressed changes
  * nothing; Tab stays inside the card; Escape, a press on the dimmed window,
  * and Cancel all withdraw it, and however it goes, focus goes back to
- * whatever asked if that still stands. Enter is the focused button's own, so
+ * whatever asked if that still stands, or where its owner says once the act
+ * took that away (`restoreTo`). Enter is the focused button's own, so
  * it acts only from the act's button.
  *
  * The question is `confirm-state.ts`'s, so it withdraws the render its subject
@@ -126,6 +127,7 @@ function ConfirmCard({
   question,
   field,
   gate,
+  restoreTo,
   act,
   children,
 }: {
@@ -134,6 +136,7 @@ function ConfirmCard({
   question: DialogQuestion;
   field: React.RefObject<HTMLInputElement | null> | undefined;
   gate: string | undefined;
+  restoreTo: RestoreTo | undefined;
   act: ActState;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -175,6 +178,7 @@ function ConfirmCard({
       refused={rejection !== undefined && !acting}
       initialFocus={field ?? (gate === undefined ? cancel : gateField)}
       onDismiss={dismiss}
+      restoreTo={restoreTo}
       onKeyDown={fieldKey}
       actions={
         <DialogActions
@@ -275,6 +279,7 @@ export function ConfirmDialog({
   question,
   field,
   gate,
+  restoreTo,
   children,
 }: {
   /** Whether its owner shows it at all; falling, the card fades out. */
@@ -289,6 +294,8 @@ export function ConfirmDialog({
    * field that takes focus in Cancel's place. An ordinary delete asks no gate.
    */
   gate?: string | undefined;
+  /** Where focus goes once the card is gone if the act took away what asked (`nextRowOrHead`), as `Dialog` takes it. */
+  restoreTo?: RestoreTo | undefined;
   /** What the card holds under its body: the field, where the question asks one. */
   children?: React.ReactNode;
 }): React.JSX.Element {
@@ -304,6 +311,7 @@ export function ConfirmDialog({
       question={question}
       field={field}
       gate={gate}
+      restoreTo={restoreTo}
       act={answer}
     >
       {children}

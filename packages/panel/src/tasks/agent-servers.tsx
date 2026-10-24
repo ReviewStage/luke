@@ -28,6 +28,7 @@ import {
   McpIcon,
   NO_BACK_KEY,
   OneLine,
+  type OneLineHint,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
   PopoverPanel,
@@ -205,6 +206,17 @@ function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
 }
 
 /**
+ * The hint over a row's problem: its whole words where the row cut them,
+ * and where the server or the sign-in said words of its own, those after
+ * ours, quoted and named, whether cut or not. Note that the row's one line
+ * holds our sentence alone, because their words are no sentence of Luke's.
+ */
+function problemHint(problem: string, said: string | undefined): OneLineHint {
+  if (said === undefined) return wholeWordsHint(problem);
+  return (line) => <Tooltip label={`${problem} ${said}`}>{line}</Tooltip>;
+}
+
+/**
  * What a server's row says between its mark and its end, here and on the
  * card a mention of the server hangs (`server-card.tsx`): its name, how many
  * tools it offers, and where its sign-in or its server stands.
@@ -226,7 +238,7 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <OneLine hint={wholeWordsHint(row.problem)} className="agent-servers-problem">
+        <OneLine hint={problemHint(row.problem, row.said)} className="agent-servers-problem">
           {row.problem}
         </OneLine>
       ) : null}

@@ -14,6 +14,11 @@
 /* The shared components' own rules, in Tailwind's `components` layer, over
    the preflight and under the utilities. */
 @import "@luke/ui/styles.css";
+/* The utilities `@luke/ui`'s components spell (a button's box, corner, and
+   edge), read from its own modules, and the shadcn/ui vocabulary they are
+   spelled in, as every app's Tailwind entry takes them. */
+@import "@luke/ui/tailwind/sources.css";
+@import "@luke/ui/tailwind/theme.css";
 
 /* The three faces the page loads, declared beside the stack that names them
    rather than at each of the four HTML entry points. */

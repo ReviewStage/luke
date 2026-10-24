@@ -67,6 +67,7 @@ import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
+import { FIXTURE_IDS, FIXTURE_PAGE } from "@luke/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { AsyncIteratorClass } from "@orpc/client";
 import {
@@ -80,7 +81,7 @@ import {
 const REPOSITORY = "ada/relay";
 
 /** The agent's id, its turn's, and its shell's. */
-export const FIXTURE_AGENT_ID = "4c8e2a6b-1d3f-4e5a-9b7c-2d4e6f8a0b1c";
+export const FIXTURE_AGENT_ID = FIXTURE_IDS.AGENT;
 const TURN_ID = "5d9f3b7c-2e4a-4f6b-8c8d-3e5f7a9b1c2d";
 const SHELL_ID = "6e0a4c8d-3f5b-4a7c-9d9e-4f6a8b0c2d3e";
 
@@ -605,10 +606,11 @@ type TerminalStage =
       readonly code?: number;
     };
 
-/** What one agent profile opens beside the agent: its Pull request tab on a view, a file's tab, or its Terminal staged one way. */
+/** What one agent profile opens beside the agent: its Pull request tab on a view, a file's tab, the page it showed, or its Terminal staged one way. */
 type AgentStage =
   | { readonly view: PullRequestView }
   | { readonly file: string }
+  | { readonly page: string }
   | { readonly terminal: TerminalStage };
 
 const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage>([
@@ -640,6 +642,10 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
     { terminal: { kind: TERMINAL_STAGE.SANDBOX, sandbox: SANDBOX_STATE.STARTING } },
   ],
   [RUN_PROFILE.AGENT_TERMINAL_UNREACHABLE, { terminal: { kind: TERMINAL_STAGE.REFUSED } }],
+  [RUN_PROFILE.AGENT_PAGE, { page: FIXTURE_PAGE.id }],
+  // The call itself is the host's to stage (`fixture-stage.ts`); beside it the agent's pull request stands.
+  [RUN_PROFILE.AGENT_CALL, { view: PULL_REQUEST_VIEW.CONVERSATION }],
+  [RUN_PROFILE.AGENT_CALL_VIDEO, { view: PULL_REQUEST_VIEW.CONVERSATION }],
 ]);
 
 /** The shell the agent's sandbox holds. */
@@ -799,8 +805,8 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
 /**
  * The task as an agent profile draws it, from the open task the tasks
  * profiles draw: holding the agent, its row naming the agent and its pull
- * request, with no call under way and no code shown on one; none under
- * any other profile.
+ * request, and the page it showed, with no call under way and no code
+ * shown on one; none under any other profile.
  */
 export function agentTasksView(profile: string, open: TasksView): TasksView | undefined {
   const taskId = open.activeTaskId;
@@ -835,19 +841,22 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
       },
     ],
   };
+  const { html: _html, ...pageLine } = FIXTURE_PAGE;
   // Note that the call's work and the code Luke showed on it are left out, because they are of the tasks profiles' call, not this agent's.
   const { activity: _activity, shownCode: _shownCode, ...still } = open;
   return {
     ...still,
     tasks: open.tasks.map((task) => (task.id === taskId ? { ...task, agents } : task)),
     taskAgents: [agent],
+    pages: [pageLine],
   };
 }
 
 /**
  * The side panel an agent profile opens with, from the panel the tasks
  * profiles open: the agent's Pull request tab on the profile's view, the
- * file's tab, or the agent's Terminal; none under any other profile.
+ * file's tab, the page's, or the agent's Terminal; none under any other
+ * profile.
  */
 export function agentSidePanel(
   profile: string,
@@ -871,6 +880,10 @@ export function agentSidePanel(
       tab: { file: stage.file },
       files: [{ path: stage.file, range: undefined, opened: 1, browsedOn: taskId }],
     };
+  }
+  if ("page" in stage) {
+    const page = { page: stage.page };
+    return { ...panel, tab: page, pages: [page] };
   }
   const terminal = { terminal: FIXTURE_AGENT_ID };
   return { ...panel, tab: terminal, terminals: [terminal] };

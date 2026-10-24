@@ -473,6 +473,7 @@ function CommentEntry({
   const menu = useMenu(true);
   const trigger = menu.trigger();
   const mine = writtenByReader(entry, doors.me);
+  // Note that a thread's starter deletes it whole, or any member where Luke or an agent started it, as the service holds it to.
   const items: MenuAction[] = [
     ...(copyLink === undefined ? [] : [copyLink]),
     ...(mine
@@ -495,7 +496,7 @@ function CommentEntry({
           },
         ]
       : []),
-    ...(first
+    ...(first && (mine || entry.writer.actor !== PLAN_COMMENT_ACTOR.MEMBER)
       ? [
           {
             label: COMMENT_WORDS.DELETE_THREAD,

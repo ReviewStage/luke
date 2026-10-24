@@ -1895,7 +1895,7 @@ ul.actor-stack {
   flex: 0 0 auto;
   align-items: center;
   gap: var(--luke-icon-gap);
-  height: 40px;
+  height: var(--luke-pane-bar-height);
   padding: 0 var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
@@ -3635,12 +3635,6 @@ ul.actor-stack {
   margin: var(--luke-block-gap) var(--row-inset);
 }
 
-.settings-pages-title {
-  font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: -0.015em;
-}
-
 /* The search field at the sidebar's head (`SearchField`), apart from the
    list beneath it. */
 .settings-search {
@@ -5260,9 +5254,9 @@ ul.actor-stack {
   pointer-events: none;
 }
 
-/* The pills: its priority, its assignee, its repository, its agents at
-   work and their pull requests, and the issues it links, wrapping onto as
-   many lines as they take rather than running past the card's edge, as
+/* Its priority's and its assignee's marks, drawn bare as the List draws
+   them, then the pills: its repository, its agents at work and their pull
+   requests, and the issues it links, wrapping onto as many lines as they take rather than running past the card's edge, as
    Linear's do. A pill too long for a line alone, a repository's name, is
    cut short within it. */
 .tasks-board-card-pills {

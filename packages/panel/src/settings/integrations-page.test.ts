@@ -297,17 +297,25 @@ function granolaRowOf(page: HTMLElement): Element {
   );
 }
 
-/** A row as the developer reads it: its line, and the labels of the buttons it offers. */
+/** A row as the developer reads it: its lines, one under another, and the labels of the buttons it offers. */
 interface RowRead {
   readonly line: string | undefined;
   readonly buttons: readonly string[];
 }
 
 /** Granola's row: its line, and the labels of the buttons it offers. */
+/** A row's state lines as a reader reads them, each on its own line; none where it draws none. */
+function stateLines(row: Element): string | undefined {
+  const lines = [...row.querySelectorAll(".luke-settings-row-state")].map(
+    (line) => line.textContent ?? "",
+  );
+  return lines.length === 0 ? undefined : lines.join("\n");
+}
+
 function granolaRow(page: HTMLElement): RowRead {
   const row = granolaRowOf(page);
   return {
-    line: row.querySelector(".luke-settings-row-state")?.textContent ?? undefined,
+    line: stateLines(row),
     buttons: [...row.querySelectorAll("button")].flatMap((button) =>
       button.textContent === "" ? [] : [button.textContent ?? ""],
     ),
@@ -574,6 +582,28 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
   assert.deepEqual(menuOf(refused), { items: ["Disconnect"], heading: undefined });
 });
 
+test("a server's own error stands quoted on a plain line under our sentence, never inside it", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.SLACK,
+  );
+  standing.set(INTEGRATION_PROVIDER.SLACK, INTEGRATION_STATUS.CONNECTED);
+  toolReads.set(INTEGRATION_PROVIDER.SLACK, {
+    problem: {
+      reason: INTEGRATION_TOOLS_PROBLEM.REJECTED,
+      message: "App is not enabled for Slack MCP server access",
+    },
+  });
+  const page = await mount();
+  const lines = [...rowNamed(page, "Slack").querySelectorAll(".luke-settings-row-state")].map(
+    (line) => [line.textContent, line.getAttribute("data-state")],
+  );
+
+  assert.deepEqual(lines, [
+    ["Could not reach Slack.", "attention"],
+    ["Slack said: “App is not enabled for Slack MCP server access”", "plain"],
+  ]);
+});
+
 test("a connection whose tools could not be read says so in the attention tint, never Connected, and Retry reads them again", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => provider !== INTEGRATION_PROVIDER.LINEAR,
@@ -692,7 +722,7 @@ test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Try
   assert.equal(granolaRow(page).line, "You cancelled connecting Granola.");
 });
 
-test("a sign-in Connect refused says why in Connect's own line, with Try again", async () => {
+test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Try again", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
 
@@ -706,7 +736,7 @@ test("a sign-in Connect refused says why in Connect's own line, with Try again",
   ];
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Couldn't connect to Granola: client_assertion aud must be the authorization server issuer.",
+    line: "Could not connect to Granola.\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
     buttons: ["Try again"],
   });
 
@@ -723,7 +753,7 @@ test("a sign-in the browser came back from without a grant says it could not con
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await focusWindow();
   assert.deepEqual(granolaRow(page), {
-    line: "Couldn't connect to Granola: the sign-in came back without access.",
+    line: "Could not connect to Granola: the sign-in came back without access.",
     buttons: ["Try again"],
   });
 
@@ -1428,10 +1458,7 @@ test("an added account whose first sign-in Connect refused keeps its row with th
     [...page.querySelectorAll(".luke-settings-row")].find(
       (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
-  assert.match(
-    added.querySelector(".luke-settings-row-state")?.textContent ?? "",
-    /access_denied/u,
-  );
+  assert.match(stateLines(added) ?? "", /access_denied/u);
 
   sent = [];
   act(() =>
@@ -1611,7 +1638,7 @@ test("a statuses read answered after a newer one still says why the sign-in it s
   await settle();
 
   assert.deepEqual(granolaRow(page), {
-    line: "Couldn't connect to Granola: access_denied.",
+    line: "Could not connect to Granola.\nGranola's sign-in said: “access_denied”",
     buttons: ["Try again"],
   });
 });

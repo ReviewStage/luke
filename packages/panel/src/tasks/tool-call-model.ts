@@ -1212,7 +1212,7 @@ export const TOOL_TARGET = {
   PLAN: "plan",
   /** The File tab of a file Luke showed, its lines lit as the call showed them. */
   SHOWN_CODE: "shown-code",
-  /** The task's Inbox tab. */
+  /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
   /** The plan's Chat tab, its channel of the workspace's chat. */
   CHAT: "chat",
@@ -1228,7 +1228,11 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
   | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
-  | { readonly kind: typeof TOOL_TARGET.INBOX }
+  | {
+      readonly kind: typeof TOOL_TARGET.INBOX;
+      /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
+      readonly key?: string;
+    }
   | { readonly kind: typeof TOOL_TARGET.CHAT }
   | { readonly kind: typeof TOOL_TARGET.TASK; readonly task: string }
   | { readonly kind: typeof TOOL_TARGET.PULL_REQUEST; readonly url: string };
@@ -1258,6 +1262,12 @@ const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 const CHAT_TARGET: ToolTarget = { kind: TOOL_TARGET.CHAT };
+
+/** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens; the whole Inbox where it names none. */
+function namedThread(call: TargetedCall): ToolTarget {
+  const key = stringAt(call.input, "key");
+  return key === undefined || key === "" ? INBOX_TARGET : { kind: TOOL_TARGET.INBOX, key };
+}
 
 /**
  * A post into the poster's plan channel, where its plan's Chat tab shows it:
@@ -1378,8 +1388,8 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
-  [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
-  [AGENT_TOOL.WITHDRAW_ASK, () => INBOX_TARGET],
+  [AGENT_TOOL.POST_TO_INBOX, namedThread],
+  [AGENT_TOOL.WITHDRAW_ASK, namedThread],
   [RETIRED_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
   [RETIRED_TOOL.REPLY_INBOX, () => INBOX_TARGET],

@@ -17,6 +17,7 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { createCodingAgent } from "../coding-agent-store.js";
 import { readPlanAttachment } from "../plan-attachments.js";
 import {
   actOnPlanCommentThread,
@@ -408,7 +409,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: first.id } },
       );
       assert.deepEqual(
-        yield* actOnPlanCommentThread(member(owner), taskId, second.id, {
+        yield* actOnPlanCommentThread(member(teammate), taskId, second.id, {
           action: PLAN_COMMENT_ACTION.DELETE_THREAD,
         }),
         { status: PLAN_COMMENT_OUTCOME.DONE, answer: { deleted: second.id } },
@@ -421,6 +422,63 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         PLAN_COMMENT_OUTCOME.NO_THREAD,
       );
     }),
+  );
+
+  it.effect(
+    "only a thread's starter deletes it whole, and any member deletes one an agent started",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const agentId = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: PLAN_TEXT,
+            prompt: null,
+            repository: null,
+          }),
+        ).agent.id;
+        const deleteWhole = (writer: PlanCommentWriterRef, threadId: string) =>
+          actOnPlanCommentThread(writer, taskId, threadId, {
+            action: PLAN_COMMENT_ACTION.DELETE_THREAD,
+          });
+        const theirs = threadOf(
+          yield* startPlanCommentThread(
+            member(teammate),
+            taskId,
+            startOn(PLAN_TEXT, "email", "Mine"),
+          ),
+        );
+        const agents = threadOf(
+          yield* startPlanCommentThread(
+            { actor: PLAN_COMMENT_ACTOR.AGENT, userId: owner, agentId },
+            taskId,
+            startOn(PLAN_TEXT, "invite", "From the agent"),
+          ),
+        );
+
+        assert.deepEqual(yield* deleteWhole(member(owner), theirs.id), {
+          status: PLAN_COMMENT_OUTCOME.DONE,
+          answer: { refused: PLAN_COMMENT_REFUSAL.NOT_YOURS },
+        });
+        assert.deepEqual(
+          Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId))
+            .map((each) => each.id)
+            .sort(),
+          [theirs.id, agents.id].sort(),
+          "the refused delete left the thread standing",
+        );
+        assert.deepEqual(yield* deleteWhole(member(teammate), theirs.id), {
+          status: PLAN_COMMENT_OUTCOME.DONE,
+          answer: { deleted: theirs.id },
+        });
+        assert.deepEqual(yield* deleteWhole(member(owner), agents.id), {
+          status: PLAN_COMMENT_OUTCOME.DONE,
+          answer: { deleted: agents.id },
+        });
+      }),
   );
 
   it.effect(

@@ -142,8 +142,10 @@ let inviteHeld: Promise<void> | undefined;
 let refuseGitHubOpen = false;
 /** Where the next Linear sign-in waits before the browser is sent, so a test can hold it on the wire. */
 let linearConnectHeld: Promise<void> | undefined;
+/** The workspace's Sentry on a deployment that holds no Sentry integration, which every test reads unless it says otherwise. */
+const SENTRY_NOT_SET_UP: WorkspaceSentry = { configured: false, installations: [] };
 /** The workspace's Sentry as the service answers it; none where the read is refused. */
-let sentry: WorkspaceSentry | undefined;
+let sentry: WorkspaceSentry | undefined = SENTRY_NOT_SET_UP;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -522,7 +524,7 @@ beforeEach(() => {
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   linearConnectHeld = undefined;
-  sentry = undefined;
+  sentry = SENTRY_NOT_SET_UP;
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
@@ -2418,7 +2420,13 @@ const SENTRY_INSTALLED: WorkspaceSentry = {
   installations: [{ installationId: "installation-1", account: "acme" }],
 };
 
-test("the Sentry row reads again as the window comes forward: an install made on Sentry shows, and a read that then fails hides the row rather than keep what may be gone", async () => {
+/** The line a Sentry read that did not land draws in the row's place, with Retry. */
+const sentryFailure = (page: HTMLElement) =>
+  [...githubGroup(page).querySelectorAll('[role="alert"]')].find(
+    (each) => each.textContent === "The workspace's Sentry could not be read.Retry",
+  );
+
+test("the Sentry row reads again as the window comes forward: an install made on Sentry shows, and a read that then fails says so in its place rather than keep what may be gone", async () => {
   sentry = { configured: true, installations: [] };
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const before = rowWords(rowNamed(githubGroup(page), "Sentry"));
@@ -2438,6 +2446,7 @@ test("the Sentry row reads again as the window comes forward: an install made on
   assert.deepEqual(before, ["Sentry", "Not installed."]);
   assert.deepEqual(installed, ["Sentry", "Installed · acme"]);
   assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
+  assert.ok(sentryFailure(page));
 });
 
 test("a Disconnect still being asked is dismissed once a read finds its installation gone", async () => {
@@ -2457,19 +2466,26 @@ test("a Disconnect still being asked is dismissed once a read finds its installa
   assert.deepEqual(sentrySent(), []);
 });
 
-test("Integrations draws no Sentry row where the service holds no Sentry integration, or its read failed", async () => {
-  sentry = { configured: false, installations: [] };
-  const unconfigured = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const hidden = [...githubGroup(unconfigured.page).querySelectorAll(ROWS)].map(nameOf);
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  sentry = undefined;
-  const unread = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+test("Integrations draws no Sentry row where the service holds no Sentry integration", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  assert.equal(hidden.includes("Sentry"), false);
-  assert.equal(
-    [...githubGroup(unread.page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"),
-    false,
-  );
+  assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
+  assert.equal(sentryFailure(page), undefined);
+});
+
+test("a Sentry read that failed says so with Retry, for a member too, and Retry reads it again", async () => {
+  sentry = undefined;
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
+  const failed = sentryFailure(page) !== undefined;
+
+  sentry = SENTRY_INSTALLED;
+  const retry = sentryFailure(page)?.querySelector("button") ?? assert.fail("no Retry");
+  act(() => retry.click());
+  await settle();
+
+  assert.equal(failed, true);
+  assert.equal(sentryFailure(page), undefined);
+  assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), ["Sentry", "Installed · acme"]);
 });
 
 test("an admin installs Sentry for the workspace from its row, which opens Sentry at once", async () => {

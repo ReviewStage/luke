@@ -12,7 +12,10 @@
  *
  * A narrow room shows the list or the view, one at a time
  * (`hiddenColumns`): the place opens on its list, a section chosen there
- * stands alone the whole width, its toolbar led by a way back to the list.
+ * stands alone the whole width, and each is headed as a phone heads every
+ * page (`phone-head.tsx`): the list by its way out and its name, with no
+ * Back and Forward, and a view by one way back, to the list or to the
+ * section a page stands under, its title, and its View options.
  * A view's toolbar stands in the title bar's row, as a page's does beside
  * the plans' sidebar, rather than under a drag strip of its own, and ⌘F
  * finds in the view standing (`PageFind`). The views themselves are
@@ -51,6 +54,7 @@ import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /** The place's name, at the list's head and on the way back to it in a narrow room. */
@@ -121,18 +125,41 @@ export function DesktopAdmin({
   return (
     <div ref={screen} className="desktop-admin">
       <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <BackButton
-          look={BACK_BUTTON_LOOK.COLUMN}
-          label="Back"
-          place={backPlaceOf(history, ADMIN_EXIT_PLACE)}
-          command={APP_COMMAND.EXIT_ADMIN}
-          onBack={onExit}
-        />
-        <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="admin-sections-title">
-          {ADMIN_TITLE}
-        </Text>
+        {room === SHELL_ROOM.NARROW ? (
+          // A phone's header: the way out alone, the history's buttons left out, and the place's name centred.
+          <PhoneHead
+            place="admin-sections"
+            start={
+              <BackButton
+                label="Back"
+                place={backPlaceOf(history, ADMIN_EXIT_PLACE)}
+                command={APP_COMMAND.EXIT_ADMIN}
+                onBack={onExit}
+              />
+            }
+            title={ADMIN_TITLE}
+            end={null}
+          />
+        ) : (
+          <>
+            <div className="desktop-drag-strip" />
+            <HistoryButtons history={history} room={room} />
+            <BackButton
+              look={BACK_BUTTON_LOOK.COLUMN}
+              label="Back"
+              place={backPlaceOf(history, ADMIN_EXIT_PLACE)}
+              command={APP_COMMAND.EXIT_ADMIN}
+              onBack={onExit}
+            />
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TITLE}
+              className="admin-sections-title"
+            >
+              {ADMIN_TITLE}
+            </Text>
+          </>
+        )}
         <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
@@ -165,7 +192,7 @@ export function DesktopAdmin({
       <section className="admin-page" aria-label={ADMIN_TITLE} hidden={hidden.item}>
         {/* The view's own toolbar stands in the title bar's row, as a page's
             does beside the plans' sidebar, so no drag strip stands over it;
-            a narrow room leads it with the way back to the list. */}
+            a narrow room makes it a phone's header, led by the way back to the list. */}
         <AdminToolbarLead
           value={
             room === SHELL_ROOM.NARROW ? (

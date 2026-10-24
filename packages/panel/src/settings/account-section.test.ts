@@ -4,11 +4,14 @@ import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { act, createElement, Fragment } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { rendererRegistry } from "../renderer-runtime.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { ToastHost } from "../toast.js";
 import { AccountSection } from "./account-section.js";
 
 /**
@@ -75,30 +78,59 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("a Sign out the host refused keeps its dialog up saying so", async () => {
+/** The section drawn with a toast host on the window's own registry, over a Sign out of the given answer. */
+function mountSection(onSignOut: () => Promise<void>): { container: HTMLElement; root: Root } {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   act(() =>
     root.render(
-      createElement(AccountSection, {
-        account: ADA,
-        onSignOut: () => Promise.reject(new Error("refused")),
-        onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      }),
+      onRegistry(
+        rendererRegistry,
+        createElement(
+          Fragment,
+          null,
+          createElement(AccountSection, {
+            account: ADA,
+            onSignOut,
+            onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+          }),
+          createElement(ToastHost),
+        ),
+      ),
     ),
   );
-  const button = (within: ParentNode, label: string) =>
-    [...within.querySelectorAll("button")].find((candidate) => candidate.textContent === label) ??
-    assert.fail(`a ${label} button stands`);
+  return { container, root };
+}
 
-  act(() => button(container, "Sign out").click());
-  const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
-  await act(async () => button(dialog() ?? assert.fail("Sign out asks first"), "Sign out").click());
+const signOutButton = (within: ParentNode) =>
+  [...within.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === "Sign out",
+  ) ?? assert.fail("a Sign out button stands");
+
+test("Sign out signs the account out on the press, with no question first", async () => {
+  let signOuts = 0;
+  const { container, root } = mountSection(() => {
+    signOuts += 1;
+    return Promise.resolve();
+  });
+
+  await act(async () => signOutButton(container).click());
+
+  assert.equal(signOuts, 1);
+  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]'), null);
+  act(() => root.unmount());
+});
+
+test("a Sign out the host refused says so in a toast, and the button is pressable again", async () => {
+  const { container, root } = mountSection(() => Promise.reject(new Error("refused")));
+
+  await act(async () => signOutButton(container).click());
 
   assert.match(
-    dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "",
-    /could not sign out/u,
+    document.body.textContent ?? "",
+    /The account could not be signed out\. Try again\./u,
   );
+  assert.equal(signOutButton(container).disabled, false);
   act(() => root.unmount());
 });

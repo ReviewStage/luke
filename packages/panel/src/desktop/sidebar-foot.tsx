@@ -11,8 +11,6 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   type ButtonVariant,
-  CONFIRM_LOSS,
-  ConfirmDialog,
   ExternalIcon,
   FoldingButton,
   type FoldingButtonHint,
@@ -28,12 +26,10 @@ import {
   Text,
   Tooltip,
   UpdateIcon,
-  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   LifeBuoyIcon,
   LightbulbIcon,
@@ -49,6 +45,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useOpenPerson } from "../person-door.js";
+import { signOutSayingFailure } from "../settings/account-section.js";
 import { useCapability } from "../use-app-state.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { OfflineMark } from "./offline-mark.js";
@@ -63,7 +60,7 @@ import { OfflineMark } from "./offline-mark.js";
  * between them as a small pill while they hold, and take no room while they
  * do not. The menu offers what the menu bar's Help menu offers, by the same
  * commands, with Settings at its head, the ways to reach the people who make
- * Luke under it, and Sign out last, which asks first as Settings' does.
+ * Luke under it, and Sign out last, which acts on the press.
  */
 
 /** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
@@ -204,7 +201,7 @@ function accountMenuGroups(
     onOpenChangelog: () => void;
     onOpenIssues: () => void;
     onEmail: () => void;
-    onLogOut: () => void;
+    onSignOut: () => void;
   },
 ): MenuEntry[][] {
   const profile =
@@ -258,14 +255,14 @@ function accountMenuGroups(
     ],
   ];
   if (signedIn)
-    groups.push([{ label: VERB.SIGN_OUT, icon: <LogOutIcon />, onSelect: acts.onLogOut }]);
+    groups.push([{ label: VERB.SIGN_OUT, icon: <LogOutIcon />, onSelect: acts.onSignOut }]);
   return groups;
 }
 
 /**
- * The foot's account button and the menu it raises. Sign out asks first, in a
- * dialog over the window, as Settings' does: getting back
- * in costs a whole trip through the browser.
+ * The foot's account button and the menu it raises. Sign out acts on the
+ * press, as Settings' does, and a refusal is said in a toast
+ * (`signOutSayingFailure`).
  */
 function AccountMenu({
   account,
@@ -281,22 +278,6 @@ function AccountMenu({
   const { press } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   const { drawn, close, trigger } = useMenu(shown);
-  const logOut = useConfirmDialog(
-    { subject: signedIn, surfaceOpen: shown },
-    // A sign-out main refused keeps the dialog up saying so, rather than
-    // closing on an account still signed in.
-    async (): Promise<ActionResult> => {
-      try {
-        await onSignOut();
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
-      } catch {
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: "Luke could not log out. Try again.",
-        };
-      }
-    },
-  );
   const openPerson = useOpenPerson();
   const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
   const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
@@ -307,7 +288,7 @@ function AccountMenu({
     onOpenChangelog: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
     onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
     onEmail: () => press(ACT_KIND.CONTACT_EMAIL),
-    onLogOut: logOut.ask,
+    onSignOut: () => void signOutSayingFailure(onSignOut),
   });
   return (
     <>
@@ -327,16 +308,6 @@ function AccountMenu({
           onClose={close}
         />
       )}
-      <ConfirmDialog
-        open
-        confirm={logOut}
-        question={{
-          title: signedIn ? `${VERB.SIGN_OUT} of ${account.email}?` : `${VERB.SIGN_OUT}?`,
-          verb: VERB.SIGN_OUT,
-          running: "Signing out",
-          loss: CONFIRM_LOSS.REVERSIBLE,
-        }}
-      />
     </>
   );
 }

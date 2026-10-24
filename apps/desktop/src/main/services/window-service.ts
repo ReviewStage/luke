@@ -23,6 +23,7 @@ import {
 } from "@luke/host/client";
 import { type EventPushName, PUSH, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
+import { callStaged } from "@luke/host/fixture-stage";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -223,7 +224,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       panels.setVoiceExchange(false);
     },
   });
-  const voiceWindowWanted = runMode.takesFocus || runMode.sendsNetwork;
+  // A call profile's fixture run stands on its staged call, which a voice window would report over.
+  const stagedCall = callStaged(config.launch);
+  const voiceWindowWanted = (runMode.takesFocus || runMode.sendsNetwork) && !stagedCall;
   const callWindow = new CallWindow({
     runMode,
     preloadPath,
@@ -361,12 +364,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   // Which panel has the keyboard, for the call window: while one does, that
-  // panel draws the call itself, as its call bar or its own call card.
+  // panel draws the call itself, as its call bar or its own call card. Note
+  // that a staged call is told of no panel, because its profile shoots the
+  // floating window beside the panel that has the keyboard.
   const panelFocused = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents)) callPresence.panelFocused(window.webContents);
+    if (panels.owns(window.webContents) && !stagedCall) {
+      callPresence.panelFocused(window.webContents);
+    }
   };
   const panelBlurred = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents)) callPresence.panelBlurred(window.webContents);
+    if (panels.owns(window.webContents) && !stagedCall) {
+      callPresence.panelBlurred(window.webContents);
+    }
   };
 
   /**

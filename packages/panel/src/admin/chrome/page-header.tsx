@@ -2,6 +2,7 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
+  BackButton,
   CollectionPage,
   type CollectionState,
   DetailPage,
@@ -16,6 +17,7 @@ import {
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { createContext, useContext } from "react";
+import { PhoneHead } from "../../desktop/phone-head.js";
 import type { AdminTab } from "../routing.js";
 import { adminPlace } from "./places.js";
 
@@ -65,7 +67,8 @@ export interface AdminWayBack {
  * What leads every admin toolbar under it, before the page's heading: the
  * app's way back to the section list where a narrow room stands a view
  * alone (`desktop-admin.tsx`), as a version's toolbar leads with its way
- * back to the versions. None elsewhere.
+ * back to the versions, which makes the toolbar a phone's header. None
+ * elsewhere, the web page's included.
  */
 const AdminToolbarLeadContext = createContext<React.ReactNode>(undefined);
 
@@ -81,7 +84,10 @@ export function useAdminToolbarLead(): React.ReactNode {
  * The page's toolbar: the page's title, or, under a section, the way back to
  * it and then the page's name; the note on what it covers after it; and the
  * view's controls at its end. It stands still over the page's scroll, and a
- * folded sidebar's toggle stands over its start.
+ * folded sidebar's toggle stands over its start. Where the app stands a view
+ * alone on a phone, it is a phone's header (`phone-head.tsx`): one way back,
+ * to the section a page stands under or else to the list, the title and what
+ * it covers centred, and the view's one control, its View options.
  */
 function AdminToolbar({
   title,
@@ -97,6 +103,34 @@ function AdminToolbar({
 }): React.JSX.Element {
   const lead = useContext(AdminToolbarLeadContext);
   const section = back === undefined ? undefined : adminPlace(back.tab);
+  const tag =
+    note === undefined ? undefined : (
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+        {note}
+      </Text>
+    );
+  // Note that a phone has room for one way back, so a page under a section goes back to the section, the list one step further.
+  if (lead !== undefined) {
+    return (
+      <PhoneHead
+        place="admin"
+        start={
+          back === undefined || section === undefined ? (
+            lead
+          ) : (
+            <BackButton
+              label={section.label}
+              place={section.label.toLowerCase()}
+              onBack={back.onBack}
+            />
+          )
+        }
+        title={title}
+        tag={tag}
+        end={controls ?? null}
+      />
+    );
+  }
   return (
     <Toolbar
       lead={lead}
@@ -107,13 +141,7 @@ function AdminToolbar({
           ? undefined
           : [{ label: section.label, icon: section.icon, onPress: back.onBack }]
       }
-      tag={
-        note === undefined ? undefined : (
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {note}
-          </Text>
-        )
-      }
+      tag={tag}
       actions={controls}
     />
   );
