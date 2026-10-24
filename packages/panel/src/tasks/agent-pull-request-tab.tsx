@@ -202,8 +202,10 @@ import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-numb
 import { HeaderReviewers, OpenedLine, ReviewStanding, useNamer } from "./pull-request-people.js";
 import {
   LabelPicker,
+  type PullRequestPicks,
   ReviewerPicker,
   type ReviewOptions,
+  usePullRequestPicks,
   useReviewOptions,
 } from "./pull-request-pickers.js";
 import { EntryPictures, useGitHubImageRead, usePictureDrawer } from "./pull-request-pictures.js";
@@ -1452,8 +1454,12 @@ function PullRequestHead({
   parts: OverviewParts;
   now: number;
   writes: PullRequestWrites;
-  /** What the reviewer and label pickers read, and whether the pull request is being read again after a change. */
-  editing: { readonly options: ReviewOptions; readonly refreshing: boolean };
+  /** What the reviewer and label pickers read, the reviewers and labels with their choices drawn at once, and whether the pull request is being read again after a change. */
+  editing: {
+    readonly options: ReviewOptions;
+    readonly picks: PullRequestPicks;
+    readonly refreshing: boolean;
+  };
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
@@ -1464,8 +1470,9 @@ function PullRequestHead({
   }
   const pullRequest = part.value;
   const { author, mergedAt } = pullRequest;
+  const { picks } = editing;
   const reviewers = reviewersOf(
-    pullRequest.requested,
+    picks.requested,
     landed(conversation)?.reviewers ?? [],
     author?.login,
   );
@@ -1490,18 +1497,10 @@ function PullRequestHead({
       />
       <span className="pull-request-reviewers">
         {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
-        {open ? (
-          <ReviewerPicker
-            author={author?.login}
-            requested={pullRequest.requested}
-            requestedTeams={pullRequest.requestedTeams ?? []}
-            writes={writes}
-            {...editing}
-          />
-        ) : null}
-        <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
+        {open ? <ReviewerPicker author={author?.login} writes={writes} {...editing} /> : null}
+        <LabelPicker writes={writes} {...editing} />
       </span>
-      <PullRequestLabels labels={pullRequest.labels ?? []} />
+      <PullRequestLabels labels={picks.labels} />
     </PeopleLine>
   );
 }
@@ -2655,6 +2654,7 @@ function PullRequestTabBody({
   const picture = usePictureDrawer(agentId);
   const comment = usePullRequestComment(agentId, written);
   const options = useReviewOptions(agentId, control.readReviewOptions);
+  const picks = usePullRequestPicks(overview, writes);
   // Note that Files changed is handed the same threads while the conversation
   // and the minute stand, because a file a thread is on draws its notes anew
   // for new ones.
@@ -2763,7 +2763,7 @@ function PullRequestTabBody({
                     parts={parts}
                     now={now}
                     writes={writes}
-                    editing={{ options, refreshing: pullRequestRead.out }}
+                    editing={{ options, picks, refreshing: pullRequestRead.out }}
                   />
                 </header>
                 <PaneBar
