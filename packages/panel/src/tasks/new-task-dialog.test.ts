@@ -129,7 +129,7 @@ async function mount(
   answer: string | undefined = undefined,
   preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
-  issues?: readonly LinearIssueSummary[],
+  issues?: readonly LinearIssueSummary[] | Error,
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
   github?: (repository: string, ask: RepositoryIssuesAsk) => GitHubRepositoryIssuesAnswer,
 ) {
@@ -180,16 +180,21 @@ async function mount(
           issues === undefined
             ? undefined
             : (ask?: LinearIssuesAsk) => {
+                // An error stands for a Linear that cannot be read, and a find that throws for one whose search cannot.
+                if (issues instanceof Error) return Promise.reject(issues);
                 if (ask === undefined) return Promise.resolve(issues);
                 asks.push(ask);
-                return Promise.resolve(finds(ask));
+                return new Promise<readonly LinearIssueSummary[]>((resolve) => resolve(finds(ask)));
               },
         githubIssuesIn: () =>
           github === undefined
             ? undefined
             : (repository: string, ask: RepositoryIssuesAsk) => {
                 githubAsks.push([repository, ask]);
-                return Promise.resolve(github(repository, ask));
+                // A read that throws stands for a GitHub that cannot be read.
+                return new Promise<GitHubRepositoryIssuesAnswer>((resolve) =>
+                  resolve(github(repository, ask)),
+                );
               },
       },
     });
@@ -1491,4 +1496,54 @@ test("for an automation's agent files alone hold Start, since the words are the 
   card.type("Post the notes every Friday.");
   await settle();
   assert.equal(card.startButton().disabled, false, "words let it start");
+});
+
+/** What the open Issue menu says after its rows, and the press that reads again. */
+function issueNote(): { words: string; retry: HTMLButtonElement | null } {
+  const note = document.querySelector('[role="listbox"] .luke-combobox-note');
+  return {
+    words: note?.textContent ?? "",
+    retry:
+      [...(note?.querySelectorAll("button") ?? [])].find((button) =>
+        (button.textContent ?? "").includes("Retry"),
+      ) ?? null,
+  };
+}
+
+test("a GitHub read that failed says the issues could not be read, with Retry, never that none match, keeps Linear's, and Retry reads again", async () => {
+  let reachable = false;
+  const github = (repository: string, ask: RepositoryIssuesAsk): GitHubRepositoryIssuesAnswer => {
+    if (!reachable) throw new Error("offline");
+    return acmeGitHub(repository, ask);
+  };
+  await mount(undefined, undefined, {}, ISSUES, () => [], github);
+
+  await openLinear();
+  const failed = issueNote();
+
+  assert.match(failed.words, /GitHub's issues could not be read\./u);
+  assert.doesNotMatch(document.body.textContent ?? "", /No open issues match|No issues found/u);
+  assert.deepEqual(
+    issueRows().rows.map((row) => row.replace(/[A-Z]+-\d+.*$/u, "")),
+    ["Restack the deploy queue", "Add support for stacked PRs", "Rotate the deploy key"],
+    "Linear's issues stand beside the failure",
+  );
+
+  reachable = true;
+  act(() => (failed.retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(issueNote().words, "");
+  assert.equal(issueRows().rows[0]?.split("#")[0], "Login fails on Safari 18");
+});
+
+test("a Linear read that failed says its issues could not be read, with Retry, and not that no issues were found", async () => {
+  await mount(undefined, undefined, {}, new Error("offline"));
+
+  await openLinear();
+
+  assert.match(issueNote().words, /Linear's issues could not be read\./u);
+  assert.notEqual(issueNote().retry, null);
+  assert.deepEqual(issueRows().rows, []);
+  assert.doesNotMatch(document.body.textContent ?? "", /No issues found/u);
 });

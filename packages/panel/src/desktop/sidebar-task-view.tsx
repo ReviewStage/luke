@@ -38,7 +38,7 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
+import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import type { CountNoun } from "./sidebar-group-header.js";
@@ -144,13 +144,6 @@ function filteredActor(
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
 
-/** The row standing last in a people menu while the members are read, which nothing picks. */
-const READING_MEMBERS: MenuAction = {
-  label: "Reading members…",
-  disabled: true,
-  onSelect: () => undefined,
-};
-
 /** Assigned to's and Created by's choices, as every filter by person offers them: Anyone, Me, then each other member, the account id filtered to checked, and while the members are read a row saying so. */
 function memberFilter(
   chosen: string | undefined,
@@ -175,7 +168,7 @@ function memberFilter(
             : filter.userId,
       ),
   });
-  return [...people, ...(reader.membersReading ? [READING_MEMBERS] : [])];
+  return [...people, ...memberReadNotice(reader)];
 }
 
 /** The menu's choices: how the list groups, Assignee and Creator only where the workspace is shared, how it orders, and who the tasks it lists are assigned to and who created them, where shared. */

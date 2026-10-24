@@ -207,6 +207,9 @@ const told: AnyAct[] = [];
 /** The repository the task's tree is read from now. */
 let standing = "acme/relay";
 
+/** The kinds of act main refuses now, as it does while GitHub or the service cannot be reached. */
+const refusing = new Set<string>();
+
 const noSkills: SkillSource = () => Promise.resolve({ skills: [] });
 
 const ignore = () => undefined;
@@ -222,6 +225,9 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 /** What main answers the box's acts with on the act port, every one told. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   told.push(request);
+  if (refusing.has(request.kind)) {
+    return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not reach it." });
+  }
   return Promise.resolve(
     request.kind === ACT_KIND.INTEGRATIONS_STATUS
       ? {
@@ -274,6 +280,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
 
 beforeEach(() => {
   standing = "acme/relay";
+  refusing.clear();
   newest = NEWEST_AGENTS;
   told.length = 0;
   installScrollIntoView();
@@ -869,6 +876,63 @@ test("an @ offers the workspace's agents after the task's own, each labelled by 
     ["Sweep flaky tests", "No task"],
   ]);
   assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1" }]);
+});
+
+/** What the open list says after its rows, and the press that reads again. */
+function listNote(container: HTMLElement): { words: string; retry: HTMLButtonElement | null } {
+  const note = container.querySelector(".mention-menu .luke-combobox-note");
+  return {
+    words: note?.textContent ?? "",
+    retry:
+      [...(note?.querySelectorAll("button") ?? [])].find((button) =>
+        (button.textContent ?? "").includes("Retry"),
+      ) ?? null,
+  };
+}
+
+test("an @ whose read of the workspace's agents failed says they could not be read, with Retry, never that none match, and Retry reads them again", async () => {
+  refusing.add(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST);
+  const { container } = await workspaceBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+
+  assert.match(listNote(container).words, /Agents could not be read\./u);
+  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+  assert.deepEqual(agentsListed(container), [["Wire the desktop", "This task"]]);
+
+  refusing.clear();
+  const { retry } = listNote(container);
+  act(() => (retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(listNote(container).words, "");
+  assert.deepEqual(agentsListed(container), [
+    ["Wire the desktop", "This task"],
+    ["Bill by seat", "Billing"],
+    ["Sweep flaky tests", "No task"],
+  ]);
+});
+
+test("an @ whose read of the repository's files was refused ends its reading, says they could not be read, and Retry reads them again", async () => {
+  refusing.add(ACT_KIND.TASKS_TREE);
+  const { container } = await box(planPage([]));
+
+  typeInComposer(container, "Follow @roll");
+  await settle();
+
+  const failed = listNote(container);
+  assert.match(failed.words, /The repository's files could not be read\./u);
+  assert.doesNotMatch(failed.words, /Reading/u);
+  assert.equal(container.querySelector(".mention-menu .luke-combobox-empty"), null);
+  assert.deepEqual(listed(container), ["Rollout"]);
+
+  refusing.clear();
+  act(() => (failed.retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(listNote(container).words, "");
+  assert.deepEqual(listed(container), ["rollout-store.ts", "Rollout"]);
 });
 
 test("a word typed after @ finds an agent of another task by its task's name, and an archived one, read then and marked archived", async () => {
