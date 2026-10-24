@@ -278,7 +278,7 @@ async function drawnTab(input: {
     buttons,
     /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
-      const words = container.querySelector<HTMLElement>("[data-ended] .agent-end-words");
+      const words = container.querySelector<HTMLElement>("[data-ended] :is(.agent-end-words, .luke-failure-note-words)");
       const row = words?.closest<HTMLElement>(".agent-end-row") ?? null;
       return row === null ? null : { row, presses: buttons(row) };
     },
@@ -353,6 +353,11 @@ test("a failed turn's end line names no price, even from a service that sent the
   assert.match(line.textContent ?? "", /Failed: /);
   assert.doesNotMatch(line.textContent ?? "", /\$/);
   assert.ok(line.querySelector("[data-failed]"), "the line still tells of a failure");
+  assert.match(
+    line.querySelector('[role="alert"]')?.textContent ?? "",
+    /^Failed: /,
+    "and says it as an alert",
+  );
 
   const chip =
     tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
@@ -474,9 +479,9 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
   assert.equal(tab.lines("Now add the dark variant.").length, 1);
   const [line] = tab.lines("Now add the dark variant.");
   assert.match(
-    line?.querySelector("[data-undelivered]")?.textContent ?? "",
+    line?.querySelector('[data-undelivered] [role="alert"]')?.textContent ?? "",
     /^Not delivered$/,
-    "the line says it did not go",
+    "the line says it did not go, as an alert",
   );
   const [button] = tab.buttons(note);
   assert.ok(button, "the note's remedy continues the agent");

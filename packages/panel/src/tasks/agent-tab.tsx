@@ -27,6 +27,7 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
@@ -85,7 +86,6 @@ import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import {
   AgentCallControls,
@@ -1464,9 +1464,9 @@ export function AgentMessage({
 
 /**
  * The line a transcript ends on once its turn was stopped or failed: a
- * failure's mark and its words in the danger ink; a stop's words quiet.
- * A turn failed on the reader's own refused key offers its API keys after
- * them.
+ * failure is a `FailureNote`; a stop's words are quiet. A turn failed on
+ * the reader's own refused key offers its API keys after the words, inside
+ * the note.
  */
 function AgentEndLine({
   ended,
@@ -1477,28 +1477,33 @@ function AgentEndLine({
   endReason: FailureReason | undefined;
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
-  const mark = ended.failed ? stateEndMark(GLYPH_STATE.FAILED, false) : null;
   // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
       ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words })
       : undefined;
+  const remedyButton =
+    remedy === undefined ? null : (
+      <span className="agent-end-remedy">
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
+          {remedy}
+        </Button>
+      </span>
+    );
+  if (ended.failed) {
+    return (
+      <div className="agent-end-line" data-ended="" data-failed="">
+        <FailureNote>
+          {ended.words}
+          {remedyButton}
+        </FailureNote>
+      </div>
+    );
+  }
   return (
-    <p
-      className="agent-end-line"
-      data-ended=""
-      data-failed={ended.failed ? "" : undefined}
-      aria-live="polite"
-    >
-      {mark}
+    <p className="agent-end-line" data-ended="" aria-live="polite">
       <span className="agent-end-words">{ended.words}</span>
-      {remedy === undefined ? null : (
-        <span className="agent-end-remedy">
-          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
-            {remedy}
-          </Button>
-        </span>
-      )}
+      {remedyButton}
     </p>
   );
 }

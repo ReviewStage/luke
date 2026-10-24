@@ -984,6 +984,12 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
   act(() => row.click());
   const body = container.querySelector('[data-call-id="call-connection_execute"]')?.textContent;
   assert.ok(body?.includes("Linear stopped answering."), "its error is read under it");
+  assert.equal(
+    container.querySelector('[data-call-id="call-connection_execute"] [role="alert"]')
+      ?.textContent,
+    "Linear stopped answering.",
+    "and announced as an alert",
+  );
   assert.ok(
     container.querySelector('[data-call-id="call-linear_remote"]') !== null,
     "the call it ran keeps its row too",

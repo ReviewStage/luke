@@ -197,7 +197,10 @@ test("a spawned subagent is drawn as a subagent's row on the model and effort it
     errorText: "interrupted",
   }).container;
   assert.ok(interrupted.querySelector("[data-subagent-row]"));
-  assert.equal(interrupted.querySelector(".subagent-error")?.textContent, "interrupted");
+  assert.equal(
+    interrupted.querySelector(".subagent-row [role='alert']")?.textContent,
+    "interrupted",
+  );
 });
 
 test("a command that failed says its exit code, and one still running draws its row from its input alone", () => {

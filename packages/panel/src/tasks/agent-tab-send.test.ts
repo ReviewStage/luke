@@ -256,6 +256,7 @@ test("a message refused after the developer wrote on stays where it went, marked
   const [line] = tab.lines("Rebase on main");
   assert.ok(line, "the refused words stay on their line");
   const mark = line.querySelector("[data-unsent]") ?? assert.fail("marked as not sent");
+  assert.equal(mark.querySelector('[role="alert"]')?.textContent, "Not sentRetry", "as an alert");
   const retry = mark.querySelector("button") ?? assert.fail("with a Retry of its own");
   await act(async () => retry.click());
   await settle();
