@@ -280,12 +280,15 @@ function agentTiles(doors: MentionDoors): AgentTiles | undefined {
 /** The mark a mention's chip leads with: its thing's (`thing-mark.tsx`), as a link to the same thing leads with it. */
 function MentionGlyph({
   mention,
+  target,
   name,
   doors,
   known,
   standing,
 }: {
   mention: Mention;
+  /** Its link's target as written, whose workspace a person is drawn as of. */
+  target: string;
   /** The name the chip calls it by, which a person not among the members read is drawn by. */
   name: string;
   doors: MentionDoors;
@@ -296,6 +299,7 @@ function MentionGlyph({
     name,
     known,
     where: { taskId: doors.taskId, workspace: doors.place.workspace },
+    workspace: readLink(target)?.workspace ?? doors.place.workspace,
     tiles: agentTiles(doors),
     standing,
   });
@@ -360,6 +364,7 @@ function MentionCard({
         glyph={
           <MentionGlyph
             mention={mention}
+            target={target}
             name={name}
             doors={doors}
             known={known}
@@ -545,6 +550,7 @@ function MentionChip({
       glyph={
         <MentionGlyph
           mention={mention}
+          target={target}
           name={name}
           doors={doors}
           known={known}
@@ -667,6 +673,7 @@ function PlaceGlyph({
     name,
     known,
     where: { taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID, workspace },
+    workspace,
     tiles: agentTiles(doors),
     standing: undefined,
   });

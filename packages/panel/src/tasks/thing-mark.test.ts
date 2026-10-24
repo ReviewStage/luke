@@ -27,10 +27,13 @@ import { OpenLinkProvider } from "./use-open-link.js";
  * the thing was written: a person named by a mention and by a Luke link to
  * their page wears the same face, and a pull request or a GitHub issue
  * GitHub answered nothing for wears its kind's glyph, never GitHub's mark
- * as a page of any site's would. Synthetic workspace and people.
+ * as a page of any site's would. A person linked under another workspace
+ * wears the face that workspace's members draw, as their card does.
+ * Synthetic workspaces and people.
  */
 
 const SAM = "user-sam";
+const KAI = "user-kai";
 const HOME = "https://tryluke.dev/acme";
 
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint.
@@ -45,15 +48,23 @@ const ACME: Workspace = {
   memberCount: 2,
 };
 
+const BETA: Workspace = { ...ACME, id: "workspace-beta", name: "Beta", slug: "beta" };
+
 const MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-const STATE: AppStateSnapshot = signedInAs({
-  id: SAM,
-  email: "sam@example.com",
-  name: "Sam Okafor",
-});
+/** Beta's members, Kai among them, whom Acme does not list. */
+const BETA_MEMBERS: readonly WorkspaceMember[] = [
+  ...MEMBERS,
+  { userId: KAI, name: "Kai Lee", email: "kai@example.com", role: WORKSPACE_ROLE.MEMBER },
+];
+
+/** Main's document, the reader in Acme and Beta. */
+const STATE: AppStateSnapshot = (() => {
+  const snapshot = signedInAs({ id: SAM, email: "sam@example.com", name: "Sam Okafor" });
+  return { ...snapshot, tasks: { ...snapshot.tasks, workspaces: [ACME, BETA] } };
+})();
 
 let root: Root | undefined;
 
@@ -73,7 +84,10 @@ async function drawn(text: string): Promise<HTMLElement> {
     act: (request: AnyAct): Promise<FakeActAnswer> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
+          ? {
+              status: FAKE_ANSWER.DONE,
+              value: request.payload.workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS,
+            }
           : { status: FAKE_ANSWER.DONE, value: undefined },
       ),
   });
@@ -125,4 +139,12 @@ test("a pull request and a GitHub issue GitHub answered nothing for wear their k
     marks(container).map(([, mark]) => mark?.getAttribute("class")),
     ["lucide lucide-git-pull-request", "lucide lucide-circle-dot"],
   );
+});
+
+test("a person linked under another workspace wears the face that workspace's members draw, not one grayed as having left the words' workspace", async () => {
+  const container = await drawn(`https://tryluke.dev/beta/person/${KAI}#about`);
+  const [[, mark] = []] = marks(container);
+
+  assert.equal(mark?.getAttribute("data-kind"), "person");
+  assert.equal(mark?.getAttribute("data-left"), null);
 });

@@ -20,6 +20,7 @@ import { useAutomation } from "../automation-directory.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { usePerson } from "../member-directory.js";
 import { APP_SLICE, APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
+import { WorkspaceDirectory } from "./chip-cards.js";
 import { providerOf } from "./coding-agent-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { InboxItemChipGlyph } from "./inbox-item-chip.js";
@@ -57,6 +58,8 @@ export interface ThingMarkAt {
   readonly known: KnownNames;
   /** Where the chip stands, whose workspace an agent on no task is found in. */
   readonly where: ChipWhere;
+  /** The slug of the workspace the link was written under, whose members a person is drawn as. */
+  readonly workspace: string;
   /** The tiles of one plan's agents, as the place drawing the chip holds them; none where it holds none. */
   readonly tiles: AgentTiles | undefined;
   /** What its provider answered for the page it names; none for any other thing, or while unread. */
@@ -139,10 +142,36 @@ function AgentThingMark({
   );
 }
 
-/** A person as the workspace's members around the chip draw them: their picture, their initials where they have none, or grayed where they left. */
-function PersonMark({ userId, name }: { userId: string; name: string }): React.JSX.Element {
+/** A person as the members around the mark draw them: their picture, their initials where they have none, or grayed where they left. */
+function PersonFace({ userId, name }: { userId: string; name: string }): React.JSX.Element {
   const person = usePerson({ userId, name });
   return <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />;
+}
+
+/**
+ * A person's face as the workspace their link names holds them, as their
+ * card reads them (`PersonChipCard`), so the chip and its card agree on
+ * whether they left; the members around the chip where the account holds no
+ * such workspace.
+ */
+function PersonMark({
+  userId,
+  name,
+  workspace,
+}: {
+  userId: string;
+  name: string;
+  workspace: string;
+}): React.JSX.Element {
+  const named = useAppSlice(workspacesAtom)?.find(
+    (each) => each.slug === workspace || each.id === workspace,
+  );
+  const face = <PersonFace userId={userId} name={name} />;
+  return named === undefined ? (
+    face
+  ) : (
+    <WorkspaceDirectory workspace={named}>{face}</WorkspaceDirectory>
+  );
 }
 
 /** An automation's clock tile, wearing how its newest run went where the window reads the automation, and at rest where it does not. */
@@ -214,7 +243,9 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.AUTOMATION]: AUTOMATION_MARK,
   [THING_KIND.AUTOMATION_RUN]: AUTOMATION_MARK,
   [THING_KIND.SETTINGS]: () => <GLYPH.SETTINGS />,
-  [THING_KIND.PERSON]: (person, at) => <PersonMark userId={person.userId} name={at.name} />,
+  [THING_KIND.PERSON]: (person, at) => (
+    <PersonMark userId={person.userId} name={at.name} workspace={at.workspace} />
+  ),
   [THING_KIND.CHAT]: () => <MessagesSquareIcon aria-hidden="true" />,
   [THING_KIND.ADMIN]: () => <ShieldUserIcon aria-hidden="true" />,
   [THING_KIND.FILE]: (file) => <FileTypeIcon name={fileName(file.path)} />,
