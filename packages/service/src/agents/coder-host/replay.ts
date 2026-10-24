@@ -21,6 +21,7 @@ import {
   REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
+  REPLAY_VALUE_FORM,
   type Replay,
   type ReplayStep,
   type ReplaySummary,
@@ -270,20 +271,36 @@ function wordsOf(value: UnparsedWireValue): string {
   return isWireString(value) ? value : (JSON.stringify(value) ?? "");
 }
 
-/** One call as a step: its line, where it stood, and its input and its output whole, its result or its error, none while it ran. */
+/** How `wordsOf` spells a value, so a reader parses only what was JSON and keeps a text that merely looks like it. */
+function formOf(value: UnparsedWireValue) {
+  return isWireString(value) ? REPLAY_VALUE_FORM.TEXT : REPLAY_VALUE_FORM.JSON;
+}
+
+/** One call as a step: its line, the tool it called, where it stood, and its input and its output whole, its result or its error, none while it ran. */
 function callStep(part: StoredToolPart): ReplayStep {
   // SAFETY: a stored part's input is the JSON the row carried, and it is only said, never read into.
-  const input = wordsOf(part.input as UnparsedWireValue);
-  const summary = callEntry(part);
+  const given = part.input as UnparsedWireValue;
+  const call = {
+    summary: callEntry(part),
+    tool: part.type.slice("tool-".length),
+    input: wordsOf(given),
+    inputForm: formOf(given),
+  };
   if (part.state === "output-available") {
     // SAFETY: a stored part's output is the JSON the row carried, and it is only said, never read into.
-    const output = wordsOf(part.output as UnparsedWireValue);
-    return toolStep({ summary, state: REPLAY_TOOL_STATE.DONE, input, output });
+    const answer = part.output as UnparsedWireValue;
+    const output = wordsOf(answer);
+    return toolStep({ ...call, state: REPLAY_TOOL_STATE.DONE, output, outputForm: formOf(answer) });
   }
   if (part.state === "output-error") {
-    return toolStep({ summary, state: REPLAY_TOOL_STATE.FAILED, input, output: part.errorText });
+    return toolStep({
+      ...call,
+      state: REPLAY_TOOL_STATE.FAILED,
+      output: part.errorText,
+      outputForm: REPLAY_VALUE_FORM.TEXT,
+    });
   }
-  return toolStep({ summary, state: REPLAY_TOOL_STATE.RUNNING, input });
+  return toolStep({ ...call, state: REPLAY_TOOL_STATE.RUNNING });
 }
 
 /** Who sent a line, as the replay's marker names them: a member with their account, or the kind of sender, the developer where the row kept none. */
@@ -324,17 +341,19 @@ function senderName(sent: LineSent | undefined): string {
   }
 }
 
-/** A line sent to the agent as a step, under who sent it, by name and as the marker names them. */
+/** A line sent to the agent as a step, under who sent it, by name and as the marker names them, and when it was sent where that is known. */
 function lineStep(
   speaker: string,
   sender: NonNullable<ReplayStep["sender"]>,
   words: string,
+  sentAt: Date | undefined,
 ): ReplayStep {
   return {
     kind: REPLAY_STEP_KIND.LINE,
     summary: `${speaker}: ${cutLine(words, REPLAY_BOUNDS.SUMMARY_CHARS)}`,
     words,
     sender,
+    ...(sentAt === undefined ? undefined : { at: sentAt.getTime() }),
   };
 }
 
@@ -350,7 +369,7 @@ function rowSteps(record: StoredMessageRecord, sent: LineSent | undefined): read
     });
     return words.length === 0
       ? []
-      : [lineStep(senderName(sent), senderOf(sent), words.join("\n\n"))];
+      : [lineStep(senderName(sent), senderOf(sent), words.join("\n\n"), record.placedAt)];
   }
   if (role !== MESSAGE_ROLE.ASSISTANT) return [];
   return parts.flatMap((part): readonly ReplayStep[] => {
@@ -382,19 +401,20 @@ interface HandedBrief {
  * because a heading in prose cannot be told from one that opens a note,
  * and the brief whole is what that agent was asked.
  */
-function briefOf(handed: string): HandedBrief {
+function briefOf(handed: string, sentAt: Date | undefined): HandedBrief {
   const read = firstMessageParts(handed);
-  const note = read.note === undefined ? undefined : noteStep(read.note.heading, read.note.text);
+  const note =
+    read.note === undefined ? undefined : noteStep(read.note.heading, read.note.text, sentAt);
   return { brief: read.brief, carried: read.replay, note };
 }
 
-/** The note a source was handed as the step it opens on. */
-function noteStep(heading: StartNoteHeading, text: string): ReplayStep {
+/** The note a source was handed as the step it opens on, sent when its first message was. */
+function noteStep(heading: StartNoteHeading, text: string, sentAt: Date | undefined): ReplayStep {
   const sender =
     heading === START_NOTE_HEADING.AGENT
       ? { kind: REPLAY_SENDER.AGENT }
       : { kind: REPLAY_SENDER.DEVELOPER };
-  return lineStep(NOTE_SPEAKER.get(heading) ?? REPLAY_WORDS.DEVELOPER, sender, text);
+  return lineStep(NOTE_SPEAKER.get(heading) ?? REPLAY_WORDS.DEVELOPER, sender, text, sentAt);
 }
 
 /** A file the source's prompt carried, as a Start attaches one again; nothing where eve kept no bytes of it. */
@@ -1103,7 +1123,9 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const own = transcriptSteps(records, senders, from.messageId);
   if (own === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const handed = briefOf(source.prompt ?? source.planSnapshot ?? "");
+  // Note that the source's first row, a line, is its first message, which its note was a part of.
+  const opened = records[0]?.message.role === MESSAGE_ROLE.USER ? records[0].placedAt : undefined;
+  const handed = briefOf(source.prompt ?? source.planSnapshot ?? "", opened);
   const mine = handed.note === undefined ? own : [handed.note, ...own];
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
