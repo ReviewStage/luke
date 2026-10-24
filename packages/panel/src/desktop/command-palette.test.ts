@@ -3204,3 +3204,90 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
     ],
   );
 });
+
+test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", () => {
+  const places = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(places);
+  act(() => places.render(createElement(OffersPlaces)));
+  paletteOverTask()(DOCUMENT_TASK);
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
+  chooseFilter("Commands");
+
+  const listed = rows();
+  const task = [
+    `Copy link to task · ${DOCUMENT_TASK.name}`,
+    "Mark as unread",
+    "Pin task",
+    "Version history",
+  ];
+  assert.deepEqual(listed.slice(0, task.length), task);
+  const goTo = listed.findIndex((row) => row.startsWith("Go to "));
+  const showBoard = listed.indexOf("Show board");
+  const window = listed.indexOf("Show my tasks");
+  assert.ok(showBoard >= task.length && showBoard < goTo, "the task's Show rows come before Go to");
+  assert.ok(goTo < window, "Go to comes before the window's own commands");
+  assert.ok(
+    listed.slice(goTo, window).every((row) => row.startsWith("Go to ")),
+    "the places stand together",
+  );
+});
+
+test("with files open or shown and nothing typed, Files lists them first, the rest of the repository after", async () => {
+  const shown = "src/invites/accept.ts";
+  const opened = "src/members/invite.ts";
+  const showing: TaskCodeShowing = {
+    callId: "c",
+    turnId: "t",
+    shownAt: 1_000,
+    code: {
+      ref: { path: shown, startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+    },
+  };
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Teammate invitations",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+    sidePanel: {
+      ...base.sidePanel,
+      files: [{ path: opened, range: undefined, opened: 1, browsedOn: "plan-1" }],
+    },
+    shownCode: [showing],
+  });
+  const tree = ["README.md", "package.json", "src/index.ts", shown, opened];
+  openPalette(tasks, () =>
+    Promise.resolve({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: tree.map((name) => ({ name, kind: TASK_TREE_ENTRY.FILE })),
+        truncated: false,
+      },
+    }),
+  );
+  chooseFilter("Files");
+  await act(async () => undefined);
+
+  assert.deepEqual(rows(), [
+    "invite.ts · src/members",
+    "accept.ts · src/invites",
+    "README.md",
+    "package.json",
+    "index.ts · src",
+  ]);
+});
