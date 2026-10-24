@@ -40,8 +40,8 @@ import {
   useMinute,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
+import { ArrowUpRightIcon, GLYPH, LinkIcon, RotateCcwIcon } from "@luke/ui/icons";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
-import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -248,7 +248,7 @@ function RevisionRow({
     [
       ...(onOpenSections === undefined
         ? []
-        : [{ label: SECTIONS_LABEL, icon: <FileDiffIcon />, onSelect: onOpenSections }]),
+        : [{ label: SECTIONS_LABEL, icon: <GLYPH.SECTION />, onSelect: onOpenSections }]),
       ...(source === undefined ? [] : [sourceItem(source)]),
       ...(onCopyLink === undefined
         ? []

@@ -76,6 +76,14 @@ import {
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
+  CheckIcon,
+  CircleCheckIcon,
+  GLYPH,
+  MessageSquareIcon,
+  MessageSquarePlusIcon,
+  RotateCcwIcon,
+} from "@luke/ui/icons";
+import {
   marginTops,
   openThread,
   PENDING_THREAD,
@@ -87,14 +95,6 @@ import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import {
-  CheckIcon,
-  CircleCheckIcon,
-  MessageSquareIcon,
-  MessageSquarePlusIcon,
-  PencilIcon,
-  RotateCcwIcon,
-} from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -481,7 +481,7 @@ function CommentEntry({
       ? [
           {
             label: COMMENT_WORDS.EDIT,
-            icon: <PencilIcon aria-hidden="true" />,
+            icon: <GLYPH.RENAME />,
             onSelect: () =>
               setEditing(edited.draft.text === "" ? (entry.words ?? "") : edited.draft.text),
           },
