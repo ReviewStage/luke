@@ -91,7 +91,7 @@
    the block inside the `ScrollArea` the document scrolls in. */
 .plan-document-body {
   --accent: var(--voice-luke);
-  padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
+  padding: var(--luke-list-inset) var(--luke-space-2) var(--luke-list-inset);
   -webkit-user-select: text;
   user-select: text;
 }
@@ -150,7 +150,7 @@
   box-sizing: border-box;
   width: 9px;
   height: 9px;
-  margin-left: var(--luke-space-6);
+  margin-left: var(--luke-item-gap);
   border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -173,8 +173,8 @@
 .plan-byline {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-4) var(--luke-space-16);
-  margin: 0 0 var(--luke-space-12);
+  gap: var(--luke-tight-gap) var(--luke-field-gap);
+  margin: 0 0 var(--luke-block-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -187,7 +187,7 @@
    time is drawn whole (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
 @media (pointer: coarse) {
   .plan-byline {
-    row-gap: var(--luke-space-12);
+    row-gap: var(--luke-block-gap);
   }
 
   .plan-byline [data-actor-ref] {
@@ -208,7 +208,7 @@
 
 /* Who last edited the plan template, under its title in the muted meta weight. */
 .plan-edit-note {
-  margin: 0 0 var(--luke-space-12);
+  margin: 0 0 var(--luke-block-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -263,7 +263,7 @@
   height: var(--luke-control-height);
   align-items: center;
   justify-content: flex-end;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   pointer-events: none;
 }
 
@@ -375,7 +375,7 @@
    card's edges, as a menu's pinned foot does. */
 .date-picker-foot {
   margin: 0 calc(-1 * var(--luke-space-16)) calc(-1 * var(--luke-space-8));
-  padding: var(--luke-space-4) var(--luke-space-8) 0;
+  padding: var(--luke-tight-gap) var(--luke-row-inset) 0;
   border-top: 1px solid var(--luke-color-border);
 }
 
@@ -427,7 +427,7 @@
   display: flex;
   height: 22px; /* off-scale: the line's room under "Edited by", which the button overhangs */
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   margin: calc(-1 * var(--luke-space-6)) 0 var(--luke-space-12);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -480,7 +480,7 @@
    while its section is edited, so opening the section does not turn its
    chips into underlined words; its glyph is the read view's alone. */
 .plan-document-text a.plan-mention-link {
-  padding: 0 var(--luke-space-4);
+  padding: 0 var(--luke-tight-gap);
   color: inherit;
   border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
@@ -556,15 +556,15 @@
    picture is an `<img>`, so its own size holds it and the column bounds it.
    Its frame is `@luke/ui`'s Card. */
 .plan-diagram {
-  margin: var(--luke-space-12) 0;
-  padding: var(--luke-space-12) var(--luke-space-16);
+  margin: var(--luke-block-gap) 0;
+  padding: var(--luke-list-inset) var(--luke-card-inset-compact);
 }
 
 .plan-diagram-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--luke-space-8);
+  margin-bottom: var(--luke-control-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
@@ -580,7 +580,7 @@
 .plan-diagram-actions {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* A diagram opens over the window where its column is too narrow to read it
@@ -612,7 +612,7 @@
 
 /* A fence Mermaid refused says so over its code, in the failure's red. */
 .plan-diagram-failed {
-  margin: 0 0 var(--luke-space-8);
+  margin: 0 0 var(--luke-control-gap);
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
 }
@@ -620,7 +620,7 @@
 /* In the editor the fence stays code, and its diagram stands under it,
    out of the text: nothing in it takes the caret or a selection. */
 .plan-diagram-preview {
-  margin-top: var(--luke-space-4);
+  margin-top: var(--luke-tight-gap);
   user-select: none;
 }
 
@@ -631,8 +631,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--luke-space-8);
-  margin: var(--luke-space-6) 0 0;
+  gap: var(--luke-control-gap);
+  margin: var(--luke-item-gap) 0 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -656,7 +656,7 @@
   }
 
   .conversation-log > :not(:last-child) {
-    margin-block-end: var(--luke-space-12);
+    margin-block-end: var(--luke-block-gap);
   }
 
   .conversation-empty {
@@ -665,9 +665,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--luke-space-12);
+    gap: var(--luke-block-gap);
     margin: auto;
-    padding: var(--luke-space-24);
+    padding: var(--luke-card-inset);
     color: var(--luke-color-text-muted);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-body-leading);
@@ -704,7 +704,7 @@
     top: var(--luke-space-8);
     left: 50%;
     max-width: calc(100% - var(--luke-space-32));
-    padding: var(--luke-space-4) var(--luke-space-12);
+    padding: var(--luke-tight-gap) var(--luke-list-inset);
     border-radius: var(--luke-control-radius);
     background: var(--luke-color-well);
     box-shadow:
@@ -725,7 +725,7 @@
     display: flex;
     width: 100%;
     flex-direction: column;
-    gap: var(--luke-space-4);
+    gap: var(--luke-tight-gap);
   }
 
   .transcript-message.is-user {
@@ -758,7 +758,7 @@
   /* Note that the rhythm between a message's blocks weighs nothing, so a
      block's own margin, a quiet line's or a note's, still wins. */
   :where(.message-content > :not(:last-child)) {
-    margin-block: 0 var(--luke-space-8);
+    margin-block: 0 var(--luke-control-gap);
   }
 
   /* A chat notice, a teammate's message the chat steered into an agent's
@@ -773,7 +773,7 @@
 
   .transcript-message:is(.is-user, .is-chat) .message-content {
     width: fit-content;
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
     border-radius: var(--luke-radius-14);
     background: var(--luke-color-fill-strong);
   }
@@ -793,7 +793,7 @@
   }
 
   .status-line[data-worked] {
-    margin-block: var(--luke-space-8) 0;
+    margin-block: var(--luke-control-gap) 0;
   }
 
   /* Only its top margin is cleared, because the conversation's gap below it
@@ -812,7 +812,7 @@
   }
 
   .working-time-after {
-    margin-left: var(--luke-space-6);
+    margin-left: var(--luke-item-gap);
   }
 
   /* How long ago a thread's line says something happened. */
@@ -841,7 +841,7 @@
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   overflow: hidden;
   white-space: nowrap;
 }
@@ -849,7 +849,7 @@
 .replay-steps {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
   outline: none;
 }
 
@@ -859,8 +859,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--luke-space-4) var(--luke-space-12);
-  padding-top: var(--luke-space-8);
+  gap: var(--luke-tight-gap) var(--luke-block-gap);
+  padding-top: var(--luke-row-inset);
   border-top: 1px dashed var(--luke-color-border);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -921,7 +921,7 @@
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
-  padding: var(--luke-space-12) 0 var(--luke-space-8);
+  padding: var(--luke-list-inset) 0 var(--luke-row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
@@ -951,8 +951,8 @@
 .call-marker {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-12) 0 var(--luke-space-8);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-list-inset) 0 var(--luke-row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -978,7 +978,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   white-space: nowrap;
 }
 
@@ -1002,7 +1002,7 @@
 .call-marker-live {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   color: var(--luke-color-complete);
   font-weight: var(--luke-weight-semibold);
 }
@@ -1072,7 +1072,7 @@
   min-width: 0;
   flex: 0 1 auto;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   margin: 0;
   color: var(--luke-color-text-muted);
   white-space: nowrap;
@@ -1093,7 +1093,7 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
 }
 
 .file-view-actions {
@@ -1277,7 +1277,7 @@
 .page-view-versions {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
   margin-right: calc(var(--luke-control-gap) - var(--luke-space-2));
 }
 
@@ -1311,7 +1311,7 @@
    quiet line over it while no page stands to drive, or while a draft waits
    on an address. */
 .cloud-browser-bar {
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 /* Who has the tab, or why a step was refused, in a quiet line under the
@@ -1323,7 +1323,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--luke-control-gap);
-  padding: var(--luke-space-4) var(--column-inset);
+  padding: var(--luke-tight-gap) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -1345,7 +1345,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   pointer-events: none;
 }
 
@@ -1552,11 +1552,11 @@
 .view-settings-group {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .view-settings-group + .view-settings-group {
-  padding-top: var(--luke-space-12);
+  padding-top: var(--luke-list-inset);
   border-top: 1px solid var(--luke-color-border);
 }
 
@@ -1593,7 +1593,7 @@
 
 /* Pierre's own container, which it draws the files into inside the scroller. */
 [data-diff-list-scroller] > :first-child {
-  padding-inline: var(--luke-space-12);
+  padding-inline: var(--luke-list-inset);
 }
 
 /* The sheet of Files changed's keys (files-changed-keys.tsx): its groups
@@ -1705,7 +1705,7 @@
    list (diff-view/index.ts draws it across the file's width). */
 .diff-list-notice {
   margin: 0;
-  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-40);
+  padding: var(--luke-list-inset) var(--luke-list-inset) var(--luke-list-inset) var(--luke-space-40);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -1714,7 +1714,7 @@
    its first hunk, in the list's own small type (agent-changes-tab.tsx). */
 .diff-list-refused {
   margin: 0;
-  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-40);
+  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-tight-gap) var(--luke-space-40);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -1727,8 +1727,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-12);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-card-inset-snug);
   font-family: var(--luke-font-sans);
 }
 
@@ -1752,7 +1752,7 @@
   width: 100%;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 .image-diff-side {
@@ -1761,7 +1761,7 @@
   flex: 1 1 200px;
   flex-direction: column;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   margin: 0;
 }
 
@@ -1788,7 +1788,7 @@
   max-width: 100%;
   flex-direction: column;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 /* The two sides stand in one cell of a grid, as large as the larger, the
@@ -1812,23 +1812,23 @@
   display: flex;
   align-items: center;
   gap: var(--luke-control-gap);
-  padding: var(--luke-space-4) var(--luke-space-6);
+  padding: var(--luke-tight-gap) var(--luke-item-gap);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
 /* Beside Files changed's cards, the search stands where the first card does,
    the room between files above it, so the tree and the list share a top. */
 .file-tab:has(> .diff-list) + .file-tree-pane .file-tree-search {
-  padding-top: var(--luke-space-12);
+  padding-top: var(--luke-list-inset);
 }
 
 .file-tree-notice {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   margin: 0;
-  padding: var(--luke-space-12);
+  padding: var(--luke-card-inset-snug);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -1900,8 +1900,8 @@
 .file-tab-notice {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--luke-space-12);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-row-inset) var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -1920,8 +1920,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--luke-space-4) var(--luke-space-16);
-  padding: var(--luke-space-8) var(--luke-space-12);
+  gap: var(--luke-tight-gap) var(--luke-field-gap);
+  padding: var(--luke-row-inset) var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -1980,14 +1980,14 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   color: var(--luke-color-text);
 }
 
 .changes-comment-state {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
 }
 
@@ -2140,14 +2140,14 @@
 .chapter-brief-body {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-row-inset) var(--column-inset) var(--luke-list-inset);
 }
 
 /* Which model told the chapters, a quiet line over them. */
 .chapters-made-by {
   margin: 0;
-  padding: var(--luke-space-4) var(--luke-space-12);
+  padding: var(--luke-tight-gap) var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -2164,7 +2164,7 @@
 }
 
 .chapter-key-changes > ul {
-  margin-top: var(--luke-space-4);
+  margin-top: var(--luke-tight-gap);
 }
 
 /* A key change's card, `@luke/ui`'s outlined Card: the words take its
@@ -2173,8 +2173,8 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--luke-space-2);
-  padding: var(--luke-space-6) var(--luke-space-8);
+  gap: var(--luke-list-gap);
+  padding: var(--luke-item-gap) var(--luke-row-inset);
 }
 
 .chapter-key-change-words {
@@ -2194,7 +2194,7 @@
   justify-content: space-between;
   gap: var(--luke-control-gap);
   margin: 0;
-  padding: var(--luke-space-8) var(--column-inset);
+  padding: var(--luke-row-inset) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -2216,14 +2216,14 @@
   display: flex;
   height: var(--luke-control-height);
   align-items: center;
-  padding-inline: var(--luke-space-8);
+  padding-inline: var(--luke-row-inset);
 }
 
 .chapters-skeleton-reading {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-12) var(--column-inset);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-list-inset) var(--column-inset);
 }
 
 /* A panel too narrow for the rail beside the chapter floats it over the
@@ -2254,7 +2254,7 @@
   flex: none;
   align-items: center;
   gap: var(--luke-control-gap);
-  padding: var(--luke-space-6) var(--column-inset);
+  padding: var(--luke-item-gap) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -2296,7 +2296,7 @@
   z-index: 1;
   flex: none;
   container: pull-request-header luke-room / inline-size;
-  padding: var(--luke-space-8) var(--column-inset);
+  padding: var(--luke-row-inset) var(--column-inset);
 }
 
 /* The title's row: the pill at the row's inset, the title taking the room
@@ -2308,7 +2308,7 @@
   display: flex;
   min-width: 0;
   align-items: flex-start;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   /* Note that Tab walks a roomy row as it is drawn, the pill before the
      title's pencil, where the browser reads `reading-flow`, as the
      desktop's does; a narrow row is drawn in the markup's order (below). */
@@ -2337,7 +2337,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   margin-inline-start: auto;
 }
 
@@ -2381,7 +2381,7 @@
    so once that view is scrolled it folds to its title's one line, the rest
    back as the view returns to its top (`useHeaderFold`). */
 .desktop-shell[data-room="narrow"] .pull-request-header[data-folded] {
-  padding-block: var(--luke-space-6);
+  padding-block: var(--luke-item-gap);
 }
 
 .desktop-shell[data-room="narrow"]
@@ -2463,7 +2463,7 @@
   align-items: center;
   gap: var(--luke-icon-gap);
   min-width: 0;
-  padding-inline: var(--luke-space-4);
+  padding-inline: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
   white-space: nowrap;
 }
@@ -2518,7 +2518,7 @@
 
 /* What a section holds opens a step under its band. */
 .pull-request-section-body {
-  padding-top: var(--luke-space-4);
+  padding-top: var(--luke-tight-gap);
 }
 
 /* A tab's page (a `DetailPage` at the tabs' inset) opens its own gap under
@@ -2531,7 +2531,7 @@
    content inset, its dismissal at the row's end. */
 .pull-request-write-note {
   flex: 0 0 auto;
-  padding: var(--luke-space-4) var(--column-inset) var(--luke-space-4) var(--content-inset);
+  padding: var(--luke-tight-gap) var(--column-inset) var(--luke-tight-gap) var(--content-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -2557,7 +2557,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* The words grow with what is written from a few lines' height, as a text
@@ -2568,7 +2568,7 @@
   position: relative;
   box-sizing: border-box;
   min-height: calc(3lh + 2 * var(--luke-space-6));
-  padding: var(--luke-space-6) var(--luke-control-inset);
+  padding: var(--luke-item-gap) var(--luke-control-inset);
 }
 
 /* A foot inside the frame (`reply-form.tsx`) reaches the frame's own edge
@@ -2597,7 +2597,7 @@
    rather than as code in a language, as the transcript heads one. */
 .comment-editor-text pre:has(> code.language-suggestion)::before {
   display: block;
-  margin-bottom: var(--luke-space-4);
+  margin-bottom: var(--luke-tight-gap);
   color: var(--luke-color-text);
   content: "Suggested change";
   font-family: var(--luke-font-sans);
@@ -2626,7 +2626,7 @@
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   white-space: nowrap;
 }
 
@@ -2653,7 +2653,7 @@
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 /* Who opened it and when, one phrase after their face. */
@@ -2661,7 +2661,7 @@
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   white-space: nowrap;
 }
 
@@ -2695,7 +2695,7 @@
 .pull-request-reviewers {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
 }
 
 /* A label's colour, leading its item in the label picker. */
@@ -2797,8 +2797,8 @@
    stays within the room the clip leaves. */
 .changes-people.pull-request-people {
   --people-gap: var(--luke-space-16);
-  gap: var(--luke-space-6) var(--people-gap);
-  padding-block: var(--luke-space-6) 0;
+  gap: var(--luke-item-gap) var(--people-gap);
+  padding-block: var(--luke-item-gap) 0;
   padding-inline: 0;
   border-bottom: 0;
   overflow: clip;
@@ -2835,7 +2835,7 @@
   min-width: 0;
   min-height: var(--luke-control-height);
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .merge-chip {
@@ -2850,8 +2850,8 @@
 .pull-request-heading {
   display: flex;
   align-items: baseline;
-  gap: var(--luke-space-6);
-  margin: 0 0 var(--luke-space-6);
+  gap: var(--luke-item-gap);
+  margin: 0 0 var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
@@ -2879,11 +2879,11 @@
 }
 
 .pull-request-skeleton > .luke-skeleton + .luke-skeleton {
-  margin-top: var(--luke-space-6);
+  margin-top: var(--luke-item-gap);
 }
 
 .pull-request-title-row + .pull-request-failure {
-  margin-top: var(--luke-space-6);
+  margin-top: var(--luke-item-gap);
 }
 
 /* A deployment's door to the address it serves, quiet at its row's end. */
@@ -2897,7 +2897,7 @@
 .pull-request-check-lead {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .pull-request-check-glyph {
@@ -2958,15 +2958,15 @@
 }
 
 .pull-request-description-text.plan-document-text > * + * {
-  margin-top: var(--luke-space-16);
+  margin-top: var(--luke-section-gap);
 }
 
 .pull-request-description-text.plan-document-text > :is(h1, h2):first-child {
-  margin-top: var(--luke-space-12);
+  margin-top: var(--luke-block-gap);
 }
 
 .pull-request-description-text.plan-document-text > :is(h3, h4, h5, h6):first-child {
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
 }
 
 .pull-request-description-text :is(ul, ol) {
@@ -2974,7 +2974,7 @@
 }
 
 .pull-request-description-text li + li {
-  margin-top: var(--luke-space-2);
+  margin-top: var(--luke-list-gap);
 }
 
 .pull-request-description-text :not(pre) > code {
@@ -2992,7 +2992,7 @@
 .pull-request-description-text.plan-document-text li[data-checked] {
   display: flex;
   align-items: baseline;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .pull-request-description-text.plan-document-text li[data-checked] > label {
@@ -3004,8 +3004,8 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-6);
-  padding: var(--luke-space-8) var(--boxed-inset);
+  gap: var(--luke-item-gap);
+  padding: var(--luke-row-inset) var(--boxed-inset);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   font-size: var(--luke-type-caption-size);
@@ -3018,7 +3018,7 @@
 }
 
 .pull-request-words li > input[type="checkbox"] {
-  margin: 0 var(--luke-space-6) 0 0;
+  margin: 0 var(--luke-item-gap) 0 0;
   vertical-align: middle;
 }
 
@@ -3088,7 +3088,7 @@
 .diff-thread-chip-row {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .diff-thread-chip-row:not([open], [data-above]) {
@@ -3113,7 +3113,7 @@
 .diff-thread-chip-threads {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* A comment being written on lines of a file (`line-comment.tsx`), under
@@ -3124,9 +3124,9 @@
 .line-comment {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   max-width: 720px;
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-list-inset);
 }
 
 .line-comment-head {
@@ -3193,7 +3193,7 @@
 .annotation-where {
   display: flex;
   min-width: 0;
-  padding: var(--luke-space-4) var(--luke-space-12);
+  padding: var(--luke-tight-gap) var(--luke-list-inset);
   white-space: nowrap;
 }
 
@@ -3209,7 +3209,7 @@
 
 .annotation-where-lines {
   flex: none;
-  margin-inline-start: var(--luke-space-8);
+  margin-inline-start: var(--luke-control-gap);
   color: var(--luke-color-text-muted);
 }
 
@@ -3220,9 +3220,9 @@
   min-width: 0;
   align-items: center;
   gap: var(--annotation-gap);
-  padding-top: var(--luke-space-6);
-  padding-right: var(--luke-space-8);
-  padding-bottom: var(--luke-space-6);
+  padding-top: var(--luke-item-gap);
+  padding-right: var(--luke-row-inset);
+  padding-bottom: var(--luke-item-gap);
   padding-left: var(--annotation-inset);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -3275,7 +3275,7 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
 }
 
@@ -3295,8 +3295,8 @@
    head's face and name. */
 .annotation-card-content {
   padding-top: var(--luke-space-2);
-  padding-right: var(--luke-space-12);
-  padding-bottom: var(--luke-space-12);
+  padding-right: var(--luke-list-inset);
+  padding-bottom: var(--luke-list-inset);
   padding-left: var(--annotation-face-x);
 }
 
@@ -3305,14 +3305,14 @@
   min-width: 0;
   column-gap: var(--annotation-gap);
   grid-template-columns: var(--annotation-face) minmax(0, 1fr);
-  row-gap: var(--luke-space-4);
+  row-gap: var(--luke-tight-gap);
 }
 
 .annotation-comment-words {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   grid-column: 2;
   overflow-wrap: anywhere;
 }
@@ -3332,7 +3332,7 @@
 .pull-request-thread-lines {
   flex: none;
   overflow-y: visible;
-  margin-bottom: var(--luke-space-8);
+  margin-bottom: var(--luke-control-gap);
   border-block: 1px solid var(--luke-color-border);
   background: var(--luke-color-code-ground);
 }
@@ -3344,19 +3344,19 @@
 .pull-request-thread-actions {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--luke-space-12);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-row-inset) var(--luke-list-inset);
   border-top: 1px solid var(--luke-color-border);
 }
 
 /* A narrow card's presses draw closer, at the pane's inset. */
 @container annotation (max-width: 439px) {
   .pull-request-thread-actions {
-    padding-inline: var(--luke-space-8);
+    padding-inline: var(--luke-row-inset);
   }
 
   .pull-request-thread-actions-row {
-    gap: var(--luke-space-4);
+    gap: var(--luke-tight-gap);
   }
 }
 
@@ -3366,7 +3366,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .pull-request-thread-actions-row {
@@ -3381,7 +3381,7 @@
    A pill the reader may press is `@luke/ui`'s compact filter Chip; one they
    may not is a Badge, lit in the ink as a pressed one is. */
 .pull-request-section > .pull-request-reactions {
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
   padding-inline: var(--row-inset);
 }
 
@@ -3403,8 +3403,8 @@
 .pull-request-reaction-choices {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-2);
-  padding: var(--luke-space-4);
+  gap: var(--luke-list-gap);
+  padding: var(--luke-tight-gap);
 }
 
 .pull-request-reaction-emoji {
@@ -3419,7 +3419,7 @@
 .pull-request-comment-box {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .pull-request-comment-foot {
@@ -3429,7 +3429,7 @@
 
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
-  margin: 0 0 var(--luke-space-8);
+  margin: 0 0 var(--luke-control-gap);
   padding-inline: var(--row-inset);
 }
 
@@ -3444,7 +3444,7 @@
 
 .file-tab-snippet-label {
   margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -3469,7 +3469,7 @@
    sideways, so it keeps only the room between it and the lines, and none
    while it is a chip alone, which floats over the end of its line. */
 .whole-file-note {
-  padding: var(--luke-space-6) var(--luke-space-12) var(--luke-space-6) 0;
+  padding: var(--luke-item-gap) var(--luke-list-inset) var(--luke-item-gap) 0;
   white-space: normal;
 }
 
@@ -3525,15 +3525,15 @@
 }
 
 .transcript-heading {
-  margin: var(--luke-space-8) 0 var(--luke-space-4);
+  margin: var(--luke-control-gap) 0 var(--luke-tight-gap);
 }
 
 .transcript-heading:where([data-level="1"], [data-level="2"]) {
-  margin-top: var(--luke-space-12);
+  margin-top: var(--luke-block-gap);
 }
 
 .transcript-list {
-  margin-block: var(--luke-space-4);
+  margin-block: var(--luke-tight-gap);
   padding-left: var(--luke-space-20);
   list-style-type: disc;
 }
@@ -3543,7 +3543,7 @@ ol.transcript-list {
 }
 
 .transcript-list-item {
-  margin-block: var(--luke-space-2);
+  margin-block: var(--luke-list-gap);
 }
 
 .transcript-markdown > :first-child {
@@ -3575,7 +3575,7 @@ ol.transcript-list {
   min-width: 0;
   flex: 1;
   align-items: baseline;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .tool-label {
@@ -3648,7 +3648,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The body under an open line, set in past its icon: `@luke/ui`'s tinted
    card holding what a call sent, a hairline between its blocks. */
 .tool-body {
-  margin: var(--luke-space-4) 0 var(--luke-space-4) var(--transcript-gutter);
+  margin: var(--luke-tight-gap) 0 var(--luke-tight-gap) var(--transcript-gutter);
 }
 
 .tool-body:not([data-bare]) > * + * {
@@ -3659,7 +3659,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .tool-body[data-bare] {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
@@ -3689,7 +3689,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .plan-card-body[data-layout="stack"] {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 /* A model's reasoning (../ai-elements/reasoning.tsx): one line, a call's
@@ -3710,7 +3710,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .reasoning-body {
-  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
+  margin: var(--luke-tight-gap) 0 0 var(--transcript-gutter);
   color: var(--luke-color-text-muted);
 }
 
@@ -3793,7 +3793,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .transcript-table :is(th, td) {
-  padding: var(--luke-space-6) var(--luke-space-12);
+  padding: var(--luke-item-gap) var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
   overflow-wrap: normal;
   text-align: left;
@@ -3837,7 +3837,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .agent-log-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
 }
 
@@ -3852,7 +3852,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 /* The end line's row: the line, then Continue in new agent (or Continue
@@ -3865,7 +3865,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   max-width: 100%;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .conversation-empty > .agent-end-row {
@@ -3876,7 +3876,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    but its last, which the reset below takes, so a failure's press never
    touches the pull request's row under it. */
 .conversation-log > :is(.agent-end, .agent-end-line):not(:last-child) {
-  margin-bottom: var(--luke-space-12);
+  margin-bottom: var(--luke-block-gap);
 }
 
 /* The end line: a failure's mark, its words, then what the turn cost after
@@ -3893,7 +3893,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .agent-end-line > .failed-mark {
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
   vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
 }
 
@@ -3902,7 +3902,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .agent-end-remedy {
-  margin-left: var(--luke-space-8);
+  margin-left: var(--luke-control-gap);
   vertical-align: middle;
 }
 
@@ -3913,7 +3913,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--luke-space-4) var(--luke-space-8);
+  gap: var(--luke-tight-gap) var(--luke-control-gap);
 }
 
 .agent-continue-note {
@@ -3928,7 +3928,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   margin: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -3947,7 +3947,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   min-width: 0;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .agent-continued-item {
@@ -3985,9 +3985,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .agent-turn-foot {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   min-width: 0;
-  margin-top: var(--luke-space-4);
+  margin-top: var(--luke-tight-gap);
 }
 
 .agent-turn-foot > [data-worked] {
@@ -4002,8 +4002,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--luke-space-4);
-  margin: var(--luke-space-2) 0 0;
+  gap: var(--luke-tight-gap);
+  margin: var(--luke-list-gap) 0 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -4028,7 +4028,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    to the line's end by its seat (fork-action.tsx). */
 .draft-fork-dock {
   container: fork-dock / inline-size;
-  padding: 0 var(--luke-space-16) var(--luke-space-8);
+  padding: 0 var(--luke-space-16) var(--luke-row-inset);
 }
 
 .draft-fork-chip {
@@ -4036,8 +4036,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   min-height: 32px;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
-  padding-inline: var(--luke-space-12) var(--luke-space-4);
+  gap: var(--luke-tight-gap);
+  padding-inline: var(--luke-list-inset) var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   white-space: nowrap;
@@ -4113,14 +4113,14 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    on the composer's own inset, so its card and the composer's line up; a
    column or a panel that pads the composer in pads the list in alike. */
 .agent-todos-dock {
-  padding: 0 var(--luke-space-16) var(--luke-space-8);
+  padding: 0 var(--luke-space-16) var(--luke-row-inset);
 }
 
 /* The agent's pull request's row (agent-published.tsx), pinned over the
    composer under the docked to-do list on the same inset, so the row, the
    list, and the composer's card line up. */
 .agent-published-dock {
-  padding: 0 var(--luke-space-16) var(--luke-space-8);
+  padding: 0 var(--luke-space-16) var(--luke-row-inset);
 }
 
 /* The docked list's card (transcript-blocks.tsx's `TranscriptTodosDock`),
@@ -4145,7 +4145,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    row's text column, past the line's inset and icon, and selectable as a
    call's body is; a failure is said under it. */
 .todos-body {
-  margin: var(--luke-space-2) 0 var(--luke-space-4) var(--transcript-gutter);
+  margin: var(--luke-list-gap) 0 var(--luke-tight-gap) var(--transcript-gutter);
   user-select: text;
 }
 
@@ -4248,8 +4248,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: 0 var(--luke-space-16) var(--luke-space-12);
+  gap: var(--luke-control-gap);
+  padding: 0 var(--luke-space-16) var(--luke-list-inset);
 }
 
 /* The box's field (`composer-field.tsx`): its editor in the body type, one
@@ -4274,7 +4274,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   max-height: var(--agent-composer-field-lines);
   overflow-x: hidden;
   overflow-y: auto;
-  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-row-inset);
   background: transparent;
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
@@ -4329,7 +4329,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex: 0 1 auto;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* The composer answers its card's width, not the window's, so it holds in
@@ -4375,7 +4375,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   min-inline-size: 0;
   margin: 0;
   padding: 0;
@@ -4432,7 +4432,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    End call both stay within the card. */
 .luke-composer-foot-bar:has(> .luke-composer-foot-strip + .luke-composer-foot-call) {
   flex-wrap: wrap;
-  row-gap: var(--luke-space-4);
+  row-gap: var(--luke-tight-gap);
 }
 
 .luke-composer-foot-strip:has(+ .luke-composer-foot-call) {
@@ -4451,7 +4451,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   height: var(--luke-space-20);
   align-items: center;
   justify-content: flex-end;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
   overflow: clip;
 }
 
@@ -4488,8 +4488,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .composer-quote {
   display: flex;
   align-items: flex-start;
-  gap: var(--luke-space-8);
-  margin: var(--luke-space-4) 0;
+  gap: var(--luke-control-gap);
+  margin: var(--luke-tight-gap) 0;
   padding-left: 0.8em;
   border-left: 3px solid var(--luke-color-border-strong);
   color: var(--luke-color-text-muted);
@@ -4672,8 +4672,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
+  gap: var(--luke-tight-gap);
+  padding: var(--luke-item-gap) var(--luke-item-gap) var(--luke-item-gap) var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -4682,7 +4682,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
   flex: none;
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
 }
 
 .attachment-viewer-title {
@@ -4693,7 +4693,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .attachment-viewer-size {
   flex: none;
-  margin: 0 auto 0 var(--luke-space-4);
+  margin: 0 auto 0 var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -4710,7 +4710,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .attachment-viewer-note {
   display: flex;
   min-width: 0;
-  margin: 0 auto 0 var(--luke-space-12);
+  margin: 0 auto 0 var(--luke-block-gap);
   overflow: clip;
   overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text-muted);
@@ -4777,8 +4777,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--luke-space-6);
-  padding: var(--luke-space-24);
+  gap: var(--luke-item-gap);
+  padding: var(--luke-card-inset);
   text-align: center;
 }
 
@@ -4790,7 +4790,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .attachment-viewer-other-name {
   max-width: 100%;
-  margin: var(--luke-space-6) 0 0;
+  margin: var(--luke-item-gap) 0 0;
   font-size: var(--luke-type-section-size);
   line-height: var(--luke-type-section-leading);
   font-weight: var(--luke-weight-semibold);
@@ -4798,7 +4798,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .attachment-viewer-other-size {
-  margin: 0 0 var(--luke-space-12);
+  margin: 0 0 var(--luke-block-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -4811,7 +4811,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    `ComposerFrame`, so it stands where the box stood rather than across the
    column. */
 .continued-composer {
-  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
+  padding: var(--luke-row-inset) var(--luke-row-inset) var(--luke-row-inset) var(--luke-list-inset);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -4823,7 +4823,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   overflow: hidden;
   color: var(--luke-color-text-muted);
   white-space: nowrap;
@@ -4894,13 +4894,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The shells' rows, inside the `ScrollArea` that scrolls them. */
 .terminal-shells-rows {
-  padding: var(--luke-space-4);
+  padding: var(--luke-tight-gap);
 }
 
 /* The list's room while no read has listed the shells: the blocks standing
    for them, or the failure, with the foot kept at the list's end. */
 .terminal-shells-wait[data-failed] {
-  padding: var(--luke-space-8) var(--luke-space-12);
+  padding: var(--luke-row-inset) var(--luke-list-inset);
 }
 
 /* What runs in a shell, or where it stands, in the code face. */
@@ -4913,14 +4913,14 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: block;
   width: 6px;
   height: 6px;
-  margin-inline-end: var(--luke-space-12);
+  margin-inline-end: var(--luke-block-gap);
   border-radius: 50%;
   background: var(--luke-color-working);
 }
 
 .terminal-shells-foot {
   display: flex;
-  padding: var(--luke-space-8) var(--luke-space-12);
+  padding: var(--luke-row-inset) var(--luke-list-inset);
   border-top: 1px solid var(--luke-color-border);
   color: var(--luke-color-text);
   font-size: var(--luke-type-caption-size);
@@ -4943,7 +4943,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .terminal-tab-failed {
   margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-8) var(--luke-space-16);
+  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-row-inset) var(--luke-space-16);
   color: var(--luke-color-danger-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
@@ -4958,8 +4958,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex-wrap: wrap;
   min-height: 28px;
   align-items: center;
-  gap: var(--luke-space-2) var(--luke-space-8);
-  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-16);
+  gap: var(--luke-list-gap) var(--luke-control-gap);
+  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-tight-gap) var(--luke-space-16);
   border-bottom: 1px solid var(--luke-color-border);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text-muted);
@@ -4993,7 +4993,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .terminal-bar-end {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   margin-left: auto;
 }
 
@@ -5004,7 +5004,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The action's key, after its words, in the action's own ink. */
 .terminal-bar-key {
   --luke-shortcut-ink: currentColor;
-  margin-inline-start: var(--luke-space-4);
+  margin-inline-start: var(--luke-tight-gap);
 }
 
 /* An agent's mark heading a row (`agent-ref.tsx`'s `AgentMarkRef`), which
@@ -5063,7 +5063,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* A section's heading over its rows, inset as a row's words are, and what
    the list says in its rows' place, centred at a row or two's height. */
 .agent-servers-heading {
-  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
+  padding: var(--luke-row-inset) var(--row-inset) var(--luke-tight-gap);
 }
 
 .agent-servers-heading:first-child {
@@ -5075,7 +5075,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   min-height: 40px;
   align-items: center;
   justify-content: center;
-  padding: var(--luke-space-4) var(--luke-space-12);
+  padding: var(--luke-tight-gap) var(--luke-list-inset);
   text-align: center;
 }
 
@@ -5114,7 +5114,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   margin-left: auto;
 }
 
@@ -5153,7 +5153,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   align-items: center;
   gap: var(--luke-icon-gap);
   height: 40px;
-  padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
+  padding: 0 var(--luke-list-inset) 0 var(--luke-item-gap);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -5231,7 +5231,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   height: 6px;
   overflow: hidden;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
   border-radius: var(--luke-radius-full);
   background: var(--luke-color-fill-strong);
 }
@@ -5396,7 +5396,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   max-width: 280px; /* off-scale: the menu's width at most */
   flex-direction: column;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
 }
 
 .task-issue-link-heading-title {
@@ -5485,7 +5485,7 @@ svg.lucide {
   height: 28px; /* off-scale: a call's line */
   align-items: center;
   gap: var(--luke-icon-gap);
-  padding: 0 var(--luke-space-4);
+  padding: 0 var(--luke-tight-gap);
   border-radius: var(--luke-radius-6);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -5548,8 +5548,8 @@ svg.lucide {
 .transcript-pictures {
   display: flex;
   align-items: flex-start;
-  gap: var(--luke-space-12);
-  margin: var(--luke-space-12) 0;
+  gap: var(--luke-block-gap);
+  margin: var(--luke-block-gap) 0;
 }
 
 .transcript-pictures > .picture-block {
@@ -5569,7 +5569,7 @@ svg.lucide {
    its card of one row, a pull request's or a page's, or the Code tab's card
    of the lines it names, standing apart from the words around it. */
 .lone-link-card {
-  margin: var(--luke-space-12) 0;
+  margin: var(--luke-block-gap) 0;
 }
 
 /* A picture in written words (`picture-block.tsx`): its own block, at its
@@ -5581,7 +5581,7 @@ svg.lucide {
   display: block;
   width: fit-content;
   max-width: 100%;
-  margin: var(--luke-space-12) 0;
+  margin: var(--luke-block-gap) 0;
 }
 
 /* The frame is `@luke/ui`'s Card, hugging the picture. */
@@ -5600,7 +5600,7 @@ svg.lucide {
 
 .picture-caption {
   display: block;
-  margin-top: var(--luke-space-6);
+  margin-top: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   font-size: 0.9em;
   line-height: 1.45;
@@ -5620,9 +5620,9 @@ svg.lucide {
 .picture-missing {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   width: 480px;
-  padding: var(--luke-space-12);
+  padding: var(--luke-card-inset-snug);
   color: var(--luke-color-text-muted);
   cursor: default;
   font-size: 0.92em;
@@ -5655,7 +5655,7 @@ svg.lucide {
   display: block;
   width: fit-content;
   max-width: 100%;
-  margin-top: var(--luke-space-12);
+  margin-top: var(--luke-block-gap);
 }
 
 .editor-picture-drawn > .picture-block {
@@ -5697,7 +5697,7 @@ svg.lucide {
 .picture-describe {
   display: grid;
   width: min(360px, 100%);
-  margin: var(--luke-space-6) 0 var(--luke-space-12);
+  margin: var(--luke-item-gap) 0 var(--luke-block-gap);
 }
 
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
@@ -5710,8 +5710,8 @@ svg.lucide {
 .picture-status {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-6);
-  margin-top: var(--luke-space-6);
+  gap: var(--luke-item-gap);
+  margin-top: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -5719,7 +5719,7 @@ svg.lucide {
 
 .picture-failure {
   display: block;
-  margin-top: var(--luke-space-6);
+  margin-top: var(--luke-item-gap);
 }
 
 /* Several pictures an agent showed at once (`agent-pictures.tsx`): one
@@ -5728,13 +5728,13 @@ svg.lucide {
    thumbnails of one height that wrap, the last drawn saying how many more. */
 .picture-set {
   max-width: 100%;
-  margin: var(--luke-space-12) 0;
+  margin: var(--luke-block-gap) 0;
 }
 
 .picture-set-tiles {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* A tile's room in the row, its shape set where it is drawn; the tile fills it. */
@@ -5784,7 +5784,7 @@ svg.lucide {
 /* The pictures an integration's call answered: the message box's chips,
    set in under the row's words, a picture not kept saying so. */
 .call-pictures {
-  margin: var(--luke-space-2) 0 var(--luke-space-6) var(--transcript-gutter);
+  margin: var(--luke-list-gap) 0 var(--luke-item-gap) var(--transcript-gutter);
 }
 
 /* A version's changes (`version-view.tsx`, `markdown-message.tsx`'s change
@@ -5977,7 +5977,7 @@ svg.lucide {
   display: flex;
   width: var(--comment-card-width);
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* On a phone narrower than a card and the web's gutter, the open thread
@@ -5994,7 +5994,7 @@ svg.lucide {
     16px +
     5px
   ); /* off-scale: under the name, past the actor's 16px mark and its gap */
-  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-8);
+  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-row-inset);
   color: var(--luke-color-text);
   font-size: 13px;
   line-height: 1.5;
@@ -6007,12 +6007,12 @@ svg.lucide {
 }
 
 .comment-card[data-open="true"] {
-  padding-top: var(--luke-space-8);
+  padding-top: var(--luke-row-inset);
 }
 
 .comment-entry {
   position: relative;
-  padding: var(--luke-space-4) 0;
+  padding: var(--luke-tight-gap) 0;
 }
 
 .comment-time {
@@ -6041,8 +6041,8 @@ svg.lucide {
 .comment-replies {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-6);
-  margin: var(--luke-space-2) 0 0 var(--comment-indent);
+  gap: var(--luke-item-gap);
+  margin: var(--luke-list-gap) 0 0 var(--comment-indent);
   color: var(--luke-color-text-muted);
   font-size: 12px;
 }
@@ -6083,7 +6083,7 @@ svg.lucide {
    level with every name above it, what they did in the quiet ink, and the
    time at the row's end. */
 .comment-event {
-  padding: var(--luke-space-4) 0;
+  padding: var(--luke-tight-gap) 0;
 }
 
 .comment-event-words {
@@ -6094,7 +6094,7 @@ svg.lucide {
 }
 
 .comment-note {
-  margin: var(--luke-space-6) 0 0;
+  margin: var(--luke-item-gap) 0 0;
   color: var(--luke-color-danger-text);
   font-size: 12px;
 }
@@ -6102,8 +6102,8 @@ svg.lucide {
 .comment-gone {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-6);
-  margin-bottom: var(--luke-space-4);
+  gap: var(--luke-item-gap);
+  margin-bottom: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
   font-size: 11.5px;
   font-weight: 560;
@@ -6125,8 +6125,8 @@ svg.lucide {
 
 .comment-quote {
   display: -webkit-box;
-  margin: 0 0 var(--luke-space-8);
-  padding-left: var(--luke-space-8);
+  margin: 0 0 var(--luke-control-gap);
+  padding-left: var(--luke-row-inset);
   overflow: hidden;
   border-left: 2px solid var(--comment-mark-edge);
   color: var(--luke-color-text-muted);
@@ -6153,13 +6153,13 @@ svg.lucide {
   --luke-text-area-inset-inline: var(--comment-field-inline);
   --luke-text-area-inset-end: var(--luke-space-2);
   --luke-text-area-least: 36px; /* off-scale: one line and its padding, as the editor stands */
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
 }
 
 /* The agent box's editor as a comment's field, its placeholder and its
    paragraphs at the comment field's padding. */
 .comment-field .agent-composer-placeholder {
-  padding: var(--luke-space-8) var(--comment-field-inline) 0;
+  padding: var(--luke-row-inset) var(--comment-field-inline) 0;
 }
 
 .comment-field .agent-composer-field {
@@ -6172,7 +6172,7 @@ svg.lucide {
 
 .comment-field .agent-composer-input {
   min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
-  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
+  padding: var(--luke-row-inset) var(--comment-field-inline) var(--luke-space-2);
   line-height: 1.45;
 }
 
@@ -6182,7 +6182,7 @@ svg.lucide {
 .comment-field-foot,
 .comment-field .luke-composer-foot {
   --luke-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
-  padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+  padding: var(--luke-space-2) var(--luke-item-gap) var(--luke-item-gap);
 }
 
 .comment-field-foot {
@@ -6190,7 +6190,7 @@ svg.lucide {
   min-height: 26px; /* off-scale: as its tools */
   align-items: center;
   justify-content: space-between;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* A thread's first comment is the card itself (`COMPOSER_LOOK.BARE`): its
@@ -6208,7 +6208,7 @@ svg.lucide {
 
 /* The files a sent comment carries, over its words, level with them. */
 .comment-files {
-  margin: var(--luke-space-4) 0 var(--luke-space-6);
+  margin: var(--luke-tight-gap) 0 var(--luke-item-gap);
 }
 
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
@@ -6233,14 +6233,14 @@ svg.lucide {
 }
 
 .comments-row + .comments-row {
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
 }
 
 /* A call that sent another agent words (`SentCall`): the words whole in
    the body its line folds open, set in to the line's words as a call's
    body is. */
 .tool-sent-block {
-  padding: var(--luke-space-8) var(--luke-space-12);
+  padding: var(--luke-row-inset) var(--luke-list-inset);
 }
 
 .tool-sent-note {
@@ -6253,5 +6253,5 @@ svg.lucide {
    divider, the lines said ahead of it, a replay's card, a step apart as the
    log's own lines are. */
 .agent-log-row > :not(:last-child) {
-  margin-block-end: var(--luke-space-12);
+  margin-block-end: var(--luke-block-gap);
 }
