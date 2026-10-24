@@ -13,7 +13,7 @@ import {
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -631,36 +631,27 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
   assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);
 });
 
-test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
+test("Appearance draws every diff setting in the Diff, Lines, and Text groups, in the order the View options popover draws them", () => {
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
-  const group =
-    [...page.querySelectorAll("section[aria-labelledby]")].find(
-      (each) =>
-        document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent ===
-        "Diffs",
-    ) ?? assert.fail("a Diffs group stands");
-  assert.equal(group.getAttribute("data-search-anchor"), SETTINGS_SECTION.APPEARANCE_DIFFS);
-  assert.deepEqual(
-    [...group.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
-      // A pop-up's name ends with the value it names, which is not the row's.
-      (control) => control.getAttribute("aria-label")?.split(": ")[0],
-    ),
-    [
-      "Line numbers",
-      "Word wrap",
-      "Layout",
-      "Indicators",
-      "Changed words",
-      "Backgrounds",
-      "Dark theme",
-      "Light theme",
-      "Font",
-      "Font size",
-      "Line height",
-      "Ligatures",
-      "Minimize inline comments",
-    ],
-  );
+  const groups = [...page.querySelectorAll("section[aria-labelledby]")].flatMap((each) => {
+    const title = document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent;
+    return title === undefined || title === null
+      ? []
+      : [
+          [
+            title,
+            [...each.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
+              // A pop-up's name ends with the value it names, which is not the row's.
+              (control) => control.getAttribute("aria-label")?.split(": ")[0],
+            ),
+          ],
+        ];
+  });
+  assert.deepEqual(groups, [
+    ["Diff", ["Layout", "Changed words", "Indicators", "Backgrounds"]],
+    ["Lines", ["Word wrap", "Line numbers", "Minimize inline comments"]],
+    ["Text", ["Dark theme", "Light theme", "Font", "Font size", "Line height", "Ligatures"]],
+  ]);
 });
 
 test("a page turned to opens at its top, not where the last page was scrolled", () => {

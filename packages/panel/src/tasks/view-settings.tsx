@@ -1,3 +1,4 @@
+import { DIFF_SETTING_GROUPS, type DiffSettingSection, SETTING_SECTION } from "@luke/settings";
 import {
   DIFF_FONT,
   DIFF_FONT_LABEL,
@@ -25,10 +26,8 @@ import {
   PopoverPanel,
   SETTINGS_ROW_DENSITY,
   SettingsRow,
+  SettingsSection,
   Shortcut,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
   Tooltip,
 } from "@luke/ui";
 import { drawnDark } from "@luke/ui/appearance";
@@ -51,7 +50,8 @@ import {
  *
  * The popover sets what every diff follows (`file-view-settings.ts`), the
  * Files changed view's and a review thread's alike, drawn again as each
- * changes, in three groups under their names: Diff, what a diff marks (its
+ * changes, in the three groups the schema names (`DIFF_SETTING_GROUPS`),
+ * which Settings › Appearance draws as well: Diff, what a diff marks (its
  * layout, its changed words, its indicators, and its backgrounds); Lines,
  * how lines run (wrap, numbers, and minimized comments, with the key that
  * turns them); and Text, how code looks (the syntax theme of the appearance
@@ -168,13 +168,6 @@ function ThemeRow<Id extends string>({
   );
 }
 
-/** What the popover's groups are called, in the order they stand. */
-const GROUP_TITLE = {
-  DIFF: "Diff",
-  LINES: "Lines",
-  TEXT: "Text",
-} as const;
-
 /** The appearance whose syntax theme the Text group shows, which picks the theme to set and never the window's appearance. */
 const APPEARANCE = {
   LIGHT: "light",
@@ -191,25 +184,6 @@ const APPEARANCE_OPTIONS = [
 /** The appearance the window is drawn in now, which the Text group opens on. */
 function currentAppearance(): Appearance {
   return drawnDark() ? APPEARANCE.DARK : APPEARANCE.LIGHT;
-}
-
-/** A group of the popover's rows under its name, set apart from the one before by a rule. */
-function SettingsGroup({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const id = useId();
-  return (
-    <section className="view-settings-group" aria-labelledby={id}>
-      <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.GROUP} id={id}>
-        {title}
-      </Text>
-      {children}
-    </section>
-  );
 }
 
 /** What a View options button sets: a diff's every setting, its layout's room said, or those a File tab's lines follow, its wrap, its numbers, its syntax theme, and its type. */
@@ -358,74 +332,91 @@ function TypeRows(): React.JSX.Element {
   );
 }
 
-/**
- * The popover's rows, every diff setting in its group: Diff, Lines, and
- * Text. Each is changed for every diff as it is set. The Text group shows
- * one appearance's syntax theme at a time, the window's own as it opens,
- * and the other a press away.
- */
-function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
+/** What a diff marks: its layout, its changed words, its indicators, and its backgrounds, where the diff is wide enough to split said under the layout. */
+function DiffRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
     <>
-      <SettingsGroup title={GROUP_TITLE.DIFF}>
-        <SegmentedRow
-          label="Layout"
-          detail={roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT}
-          value={settings.diffLayout}
-          options={LAYOUT_OPTIONS}
-          changed={changed("diffLayout")}
-          onChange={(diffLayout) => change("diffLayout", diffLayout)}
-        />
-        <SelectRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Changed words"
-          value={settings.inlineDiff}
-          options={INLINE_DIFF_OPTIONS}
-          parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
-          changed={changed("inlineDiff")}
-          onChange={(inlineDiff) => change("inlineDiff", inlineDiff)}
-        />
-        <SegmentedRow
-          label="Indicators"
-          value={settings.diffIndicators}
-          options={INDICATOR_OPTIONS}
-          changed={changed("diffIndicators")}
-          onChange={(diffIndicators) => change("diffIndicators", diffIndicators)}
-        />
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Backgrounds"
-          checked={settings.diffBackgrounds}
-          changed={changed("diffBackgrounds")}
-          onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}
-        />
-      </SettingsGroup>
-      <SettingsGroup title={GROUP_TITLE.LINES}>
-        <LinesRows notes />
-      </SettingsGroup>
-      <SettingsGroup title={GROUP_TITLE.TEXT}>
-        <ThemeRows />
-        <TypeRows />
-      </SettingsGroup>
+      <SegmentedRow
+        label="Layout"
+        detail={roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT}
+        value={settings.diffLayout}
+        options={LAYOUT_OPTIONS}
+        changed={changed("diffLayout")}
+        onChange={(diffLayout) => change("diffLayout", diffLayout)}
+      />
+      <SelectRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Changed words"
+        value={settings.inlineDiff}
+        options={INLINE_DIFF_OPTIONS}
+        parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
+        changed={changed("inlineDiff")}
+        onChange={(inlineDiff) => change("inlineDiff", inlineDiff)}
+      />
+      <SegmentedRow
+        label="Indicators"
+        value={settings.diffIndicators}
+        options={INDICATOR_OPTIONS}
+        changed={changed("diffIndicators")}
+        onChange={(diffIndicators) => change("diffIndicators", diffIndicators)}
+      />
+      <SwitchRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Backgrounds"
+        checked={settings.diffBackgrounds}
+        changed={changed("diffBackgrounds")}
+        onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}
+      />
     </>
   );
 }
 
-/** The rows a View settings scope sets: a diff's every setting, or only those its lines follow. */
+/** One group of the schema's (`DIFF_SETTING_GROUPS`), drawn as its rows. */
+function GroupRows({
+  section,
+  scope,
+}: {
+  section: DiffSettingSection;
+  scope: ViewSettingsScope;
+}): React.JSX.Element {
+  const diff = scope.kind === VIEW_SETTINGS_SCOPE.DIFF;
+  switch (section) {
+    case SETTING_SECTION.DIFF:
+      return <DiffRows roomy={diff && scope.roomy} />;
+    case SETTING_SECTION.LINES:
+      return <LinesRows notes={diff || scope.notes} />;
+    case SETTING_SECTION.TEXT:
+      return (
+        <>
+          <ThemeRows />
+          <TypeRows />
+        </>
+      );
+  }
+}
+
+/**
+ * The rows a View settings scope sets, in the groups the schema names and
+ * Settings › Appearance draws as well: a diff's every group, or only those a
+ * File tab's lines follow, so no row sets what the tab does not draw. Each is
+ * changed for every diff as it is set. The Text group shows one appearance's
+ * syntax theme at a time, the window's own as it opens, and the other a
+ * press away.
+ */
 function ViewSettingsRows({ scope }: { scope: ViewSettingsScope }): React.JSX.Element {
-  return scope.kind === VIEW_SETTINGS_SCOPE.DIFF ? (
-    <DiffSettingsRows roomy={scope.roomy} />
-  ) : (
+  const groups =
+    scope.kind === VIEW_SETTINGS_SCOPE.DIFF
+      ? DIFF_SETTING_GROUPS
+      : DIFF_SETTING_GROUPS.filter(({ section }) => section !== SETTING_SECTION.DIFF);
+  return (
     <>
-      <SettingsGroup title={GROUP_TITLE.LINES}>
-        <LinesRows notes={scope.notes} />
-      </SettingsGroup>
-      <SettingsGroup title={GROUP_TITLE.TEXT}>
-        <ThemeRows />
-        <TypeRows />
-      </SettingsGroup>
+      {groups.map(({ section, title }) => (
+        <SettingsSection key={section} title={title}>
+          <GroupRows section={section} scope={scope} />
+        </SettingsSection>
+      ))}
     </>
   );
 }

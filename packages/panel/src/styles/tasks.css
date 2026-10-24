@@ -1564,22 +1564,10 @@
 
 /* The Files changed bar's View settings (view-settings.tsx): the button,
    and under it `@luke/ui`'s popover panel, its rows the settings page's
-   own, in groups under their names, each set apart by a rule, and a foot
-   that opens Settings. */
+   own, in the settings' groups under their names. */
 .view-settings {
   position: relative;
   display: flex;
-}
-
-.view-settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-tight-gap);
-}
-
-.view-settings-group + .view-settings-group {
-  padding-top: var(--luke-list-inset);
-  border-top: 1px solid var(--luke-color-border);
 }
 
 /* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
