@@ -15,7 +15,7 @@ import { CatalogSection } from "../section";
 /**
  * toolbars.tsx -- a workspace's bar with its title and actions; one led by a
  * way back, a tag after its title; one led by a control at the column's own
- * edge; a narrow bar, whose title ends in an ellipsis rather than wrapping;
+ * edge; a narrow bar, whose title fades where cut rather than wrapping;
  * and a place that is not found keeping its bar.
  */
 

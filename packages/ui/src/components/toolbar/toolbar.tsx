@@ -13,8 +13,8 @@
  *   bar lays at its control gap and lets shrink before the actions do.
  * - The heading takes the room left, whether or not it holds a title, so
  *   the actions always end the bar. Its `title` is the page's name, drawn as
- *   its level-one heading on one line that ends in an ellipsis where the bar
- *   cuts it, its hint reading it whole; a title that is more than words (an
+ *   its level-one heading on one line that fades out where the bar cuts it,
+ *   as a row's name does, its hint reading it whole; a title that is more than words (an
  *   editable name, its skeleton block) stands there as given.
  * - `tag` follows the title on its last baseline: a capsule naming the
  *   page's state (an experiment), or a switch of its view.
@@ -36,7 +36,7 @@ import type { ReactNode } from "react";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
-import { ONE_LINE_ELEMENT, ONE_LINE_END, OneLine } from "../one-line/one-line.js";
+import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
 import { TOOLBAR_INSET, ToolbarFrame, type ToolbarInset } from "./toolbar-frame.js";
 
@@ -78,13 +78,12 @@ function said(node: ReactNode): boolean {
   return node !== undefined && node !== null && node !== false && node !== "";
 }
 
-/** The page's name as the bar's heading: words on one line, cut with an ellipsis and read whole by the hint; anything else as given. */
+/** The page's name as the bar's heading: words on one line, fading where cut and read whole by the hint; anything else as given. */
 function ToolbarTitle({ title }: { title: ReactNode }): React.JSX.Element {
   if (typeof title !== "string") return <>{title}</>;
   return (
     <OneLine
       as={ONE_LINE_ELEMENT.H1}
-      end={ONE_LINE_END.ELLIPSIS}
       hint={wholeWordsHint(title)}
       className="luke-toolbar-title desktop-toolbar-title"
     >
