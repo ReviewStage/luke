@@ -4418,7 +4418,8 @@ ul.actor-stack {
    panel, however wide it is drawn, as the document keeps to its own: words
    at the document's measure, the Code feed's cards at code's. Each scroller
    still spans the panel, so its bar stays at the panel's edge, and pads in
-   to the column, never by less than the tab's own inset. An agent's
+   to the column, never by less than the column's text inset
+   (`--content-inset`), so a tab keeps its edge moving between the two. An agent's
    composer and its docked to-do list pad in to the same column as its
    transcript, so the two cards, the chips, and the transcript line up; the
    sticky call headers and the way back to the newest line already keep to
@@ -4430,11 +4431,11 @@ ul.actor-stack {
 .side-panel-content .agent-published-dock,
 .side-panel-content .draft-fork-dock,
 .side-panel-content .agent-tab-foot .agent-composer {
-  padding-inline: max(var(--luke-space-16), var(--reading-room));
+  padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
 .side-panel-content .code-pane .conversation-log {
-  padding-inline: max(var(--luke-space-16), var(--code-reading-room));
+  padding-inline: max(var(--content-inset), var(--code-reading-room));
 }
 
 /* Tabs ------------------------------------------------------------------------ */

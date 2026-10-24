@@ -651,7 +651,7 @@
   }
 
   .conversation-log {
-    padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
+    padding: var(--luke-section-gap) var(--content-inset) var(--luke-space-20);
   }
 
   .conversation-log > :not(:last-child) {
