@@ -163,8 +163,8 @@ interface Wheel {
   frame: number;
 }
 
-/** What a press lands on that is a control of its own rather than the row's face: the act's button, or one of the row's acts. */
-const ROW_CONTROLS = "[data-swipe-act], .luke-list-row-actions";
+/** What a press lands on that is a control of its own rather than the row's face: the act's button, one of the row's acts, or its ⋯. */
+const ROW_CONTROLS = "[data-swipe-act], .luke-list-row-actions, .luke-list-row-more";
 
 /** Whether a release at `offset` acts, against the act line `line` the swipe measured (`actLine`); none where the row has no width. */
 function acts(offset: number, line: number): boolean {
@@ -483,7 +483,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
         if (wheel.current !== undefined) close();
         const current = latest.current.act;
         if (current === undefined || event.button !== 0) return;
-        // Note that a press on the act's button or on the row's own acts is theirs, never a swipe's, so an open row's acts still take their click.
+        // Note that a press on the act's button, the row's own acts, or its ⋯ is theirs, never a swipe's, so an open row's acts still take their click.
         if (event.target instanceof Element && event.target.closest(ROW_CONTROLS) !== null) return;
         press.current = {
           pointerId: event.pointerId,
