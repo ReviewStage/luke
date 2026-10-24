@@ -1,7 +1,7 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, PageToolbar, useMinute } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, Toolbar, useMinute } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
@@ -491,7 +491,7 @@ function InboxShown({
                           : columns.shown !== INBOX_COLUMNS.BOTH
                     }
                   >
-                    <PageToolbar />
+                    <Toolbar />
                     {missing ? (
                       <NotFound
                         thing={NOT_FOUND_THING.INBOX_ITEM}

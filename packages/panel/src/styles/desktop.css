@@ -2255,16 +2255,10 @@ ul.actor-stack {
   padding: 0 var(--column-inset) var(--luke-space-8);
 }
 
-/* Its buttons end as far in from the list's edge as the side panel's toggle
-   stands from the window's. */
-.inbox-tasks-bar {
-  padding-right: var(--column-inset);
-}
-
 /* Split beside the item, the list's bar ends at the item's edge rather than
    the window's, so it keeps its own inset though the side panel's toggle
    stands at the window's top right. */
-.desktop-shell .inbox-view[data-columns="both"] .inbox-tasks-bar {
+.desktop-shell .inbox-view[data-columns="both"] .inbox-tasks > .luke-toolbar {
   padding-right: var(--column-inset);
 }
 
@@ -2280,12 +2274,14 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks-bar,
+  .inbox-tasks
+  > .luke-toolbar,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view
-  .chat-rail-bar {
+  .chat-rail
+  > .luke-toolbar {
   display: grid;
   grid-template-columns:
     minmax(
@@ -2302,13 +2298,15 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks-bar
+  .inbox-tasks
+  > .luke-toolbar
   .desktop-toolbar-heading,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view
-  .chat-rail-bar
+  .chat-rail
+  > .luke-toolbar
   .desktop-toolbar-heading {
   grid-column: 2;
 }
@@ -2318,13 +2316,15 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks-bar
+  .inbox-tasks
+  > .luke-toolbar
   .desktop-toolbar-actions,
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .page-find
   > .chat-view
-  .chat-rail-bar
+  .chat-rail
+  > .luke-toolbar
   .desktop-toolbar-actions {
   grid-column: 3;
   justify-self: end;
@@ -2354,7 +2354,8 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view[data-columns="list"]
-  .inbox-tasks-bar {
+  .inbox-tasks
+  > .luke-toolbar {
   display: flex;
   padding-left: var(--sidebar-toggle-clearance);
 }
@@ -3450,13 +3451,11 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
 }
 
-/* Its buttons end as far in from the rail's edge as the Inbox list's do.
-   The rail is a list's column, never a page's width, so Send feedback draws
+/* The rail is a list's column, never a page's width, so Send feedback draws
    its glyph alone, named still (`FoldingButton`), leaving Chat's title and
    its tag their room. */
-.chat-rail-bar {
+.chat-rail > .luke-toolbar {
   --luke-fold: folded;
-  padding-right: var(--column-inset);
 }
 
 /* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
