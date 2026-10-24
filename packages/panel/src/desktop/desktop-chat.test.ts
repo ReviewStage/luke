@@ -851,6 +851,26 @@ test("an approval's Approve is held until Send sends it, a note with no decision
   );
 });
 
+test("an ask's note and decision are there again when Chat closes and opens again", async () => {
+  const page = mount();
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "go ahead");
+  act(() => pressNamed(card, "Approve").click());
+  reopen();
+
+  const again = openAsk(page, UNIQUE_INDEX);
+  assert.equal(boxWords(again), "go ahead");
+  assert.equal(pressNamed(again, "Approve").getAttribute("aria-pressed"), "true");
+  act(() => sendOf(again).click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (3)");
+  act(() => railRow(page, "teammate-invitations").click());
+  assert.equal(
+    settledAsk(page, 51).querySelector("[data-inbox-note]")?.textContent?.trim(),
+    "go ahead",
+  );
+});
+
 test("a form's text field is the composer's own field, its answer stands in its fields read-only, and the reply in its thread says the same", async () => {
   const page = mount((chat) => ({
     ...chat,

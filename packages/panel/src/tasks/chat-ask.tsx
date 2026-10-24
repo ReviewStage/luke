@@ -28,6 +28,7 @@ import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActorLine, ActorRef } from "../actor-ref.js";
+import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import {
   chatAnsweredAt,
@@ -99,7 +100,11 @@ import { SentWords } from "./skill-chip.js";
  * again taking it off, and the box's Send sends it, lit once the card holds
  * anything; a send that lacks something sends nothing and takes the keyboard
  * there, and Enter on an option or in a field sends as Send does. An
- * acknowledgement's Send reads Got it until a word is written. The note line
+ * acknowledgement's Send reads Got it until a word is written. What the
+ * card holds unsent, its picks and its note, is a draft kept by message at
+ * the ask's revision (`composer-drafts.ts`), so the chat closing, a switch
+ * away, or the card scrolling out finds it as it was; an answer taken lets
+ * it go. The note line
  * takes mentions where the page hands them, and a dictation, but no files,
  * which a chat answer does not carry. Words selected in the card, its
  * title, its blocks, and its options, steps, and fields' names, and
@@ -156,6 +161,31 @@ function focusLacking(box: HTMLElement | null, missing: InboxMissing): void {
   focusMissing(box, missing);
 }
 
+/** A card's draft as the drafts keep it, its note as their words. */
+function keptAskDraft(draft: InboxDraft): Draft {
+  return {
+    text: draft.note,
+    attachments: draft.attachments,
+    choices: draft.choices,
+    values: draft.values,
+    steps: draft.steps,
+    press: draft.press,
+  };
+}
+
+/** A kept draft as the card holds it. */
+function askDraftOf(kept: Draft): InboxDraft {
+  return {
+    ...EMPTY_INBOX_DRAFT,
+    note: kept.text,
+    attachments: kept.attachments,
+    choices: kept.choices,
+    values: kept.values,
+    ...(kept.steps === undefined ? undefined : { steps: kept.steps }),
+    ...(kept.press === undefined ? undefined : { press: kept.press }),
+  };
+}
+
 /**
  * An open card's answer: the ask's controls as the box's body, the note
  * line, and the foot's microphone and Send, as an Inbox item's box draws
@@ -183,7 +213,14 @@ function Answer({
   onAnswer: AskCardProps["onAnswer"];
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<InboxDraft>(EMPTY_INBOX_DRAFT);
+  const kept = useDraft({
+    kind: DRAFT_PLACE.CHAT_ASK,
+    messageId: message.id,
+    revision: ask.revision,
+  });
+  const draft = askDraftOf(kept.draft);
+  const setDraft = (next: InboxDraft | ((was: InboxDraft) => InboxDraft)) =>
+    kept.update((was) => keptAskDraft(typeof next === "function" ? next(askDraftOf(was)) : next));
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const statuses = useIntegrationStatuses();
@@ -220,6 +257,8 @@ function Answer({
       (refused) => {
         setSending(false);
         setRefusal(refused);
+        // Note that an answer taken lets the draft go, and one refused keeps it to send again.
+        if (refused === undefined) kept.update(() => EMPTY_DRAFT);
       },
       (failed: Error) => {
         setSending(false);

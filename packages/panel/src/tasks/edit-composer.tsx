@@ -12,9 +12,17 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Equal } from "effect";
 import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
+import {
+  DRAFT_PLACE,
+  type EditPlace,
+  EMPTY_DRAFT,
+  useDraft,
+  useDraftWriter,
+} from "../composer-drafts.js";
 import { AgentComposer } from "./agent-composer.js";
-import { LinePicturesWatch, useLineAttachments } from "./agent-pictures.js";
+import { type LineAttachment, LinePicturesWatch, useLineAttachments } from "./agent-pictures.js";
 import type { PublishedDoors } from "./agent-published.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -31,8 +39,12 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
  * cost and what its context holds, stays on the foot's box alone. Cancel,
  * or Escape where no list or dictation takes it, closes it and sends
  * nothing; Send hands the words and files on to go in the line's place.
- * Its draft is its own and kept nowhere, so the foot's box keeps whatever
- * it held. Where messages follow the line, Send asks first, as Revert to here
+ * Its draft is its own, kept by agent and line (`composer-drafts.ts`), so
+ * the foot's box keeps whatever it held, and a Cancel, an Escape, or a
+ * switch away keeps what was written, which Edit opens on again; Send lets
+ * it go, and so does writing the line back as it was. The line's files
+ * join the box again as it opens on a draft, but for those it took off,
+ * since a relaunch keeps a draft's words alone. Where messages follow the line, Send asks first, as Revert to here
  * does, since the send drops them and what it drops is gone.
  */
 
@@ -62,6 +74,37 @@ export interface EditComposerDoors {
 
 const noop = () => undefined;
 
+/**
+ * The line's files the box does not hold, each matched to a file of the
+ * box's at most once, so where the line carries one file twice and the
+ * box holds it once, one of the two is the one it does not.
+ */
+function unheld(
+  line: readonly LineAttachment[],
+  files: readonly CodingAgentAttachment[],
+): readonly LineAttachment[] {
+  const free = [...files];
+  return line.filter((each) => {
+    const at = free.findIndex((file) => Equal.equals(file, each.attachment));
+    if (at === -1) return true;
+    free.splice(at, 1);
+    return false;
+  });
+}
+
+/** The box's files with the line's joined after them, but for those already there and those it took off. */
+function joined(
+  files: readonly CodingAgentAttachment[],
+  line: readonly LineAttachment[],
+  dropped: readonly string[],
+): readonly CodingAgentAttachment[] {
+  const joining = unheld(
+    line.filter((each) => !dropped.includes(each.key)),
+    files,
+  ).map((each) => each.attachment);
+  return [...files, ...joining];
+}
+
 export function EditComposer({
   message,
   words,
@@ -74,29 +117,81 @@ export function EditComposer({
 }): ReactNode {
   const [, redraw] = useReducer((count: number) => count + 1, 0);
   const line = useLineAttachments(message);
-  const [draft, setDraft] = useState(words);
+  const place: EditPlace = { kind: DRAFT_PLACE.EDIT, agentId: edit.agentId, messageId: message.id };
+  const kept = useDraft(place).draft;
+  const writer = useDraftWriter();
+  // Note that a draft kept from an earlier Edit is what the box opens on, and the line's files
+  // join it but for those it took off, since a relaunch keeps a draft's words and not its files.
+  const [resumed] = useState(() => kept !== EMPTY_DRAFT);
+  const [draft, setDraft] = useState(() => (resumed ? kept.text : words));
   const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>(() =>
-    line.attachments.map((each) => each.attachment),
+    resumed
+      ? joined(kept.attachments, line.attachments, kept.dropped ?? [])
+      : line.attachments.map((each) => each.attachment),
   );
+  // What the box holds as last drawn, which a change landing before the next draw moves on from.
+  const held = useRef({ text: draft, attachments, dropped: resumed ? (kept.dropped ?? []) : [] });
+  held.current = { ...held.current, text: draft, attachments };
   // Note that each of the line's files joins the box once, as it opens or as its picture lands,
   // so one taken off stays off when a read lands after.
   const offered = useRef(new Set(line.attachments.map((each) => each.key)));
+  // What the box holds is kept, the files of the line it took off named beside it, and let go where it holds the line as it stands.
+  const keep = (text: string, files: readonly CodingAgentAttachment[]) => {
+    const dropped = [
+      ...held.current.dropped.filter((key) => !line.attachments.some((each) => each.key === key)),
+      ...unheld(line.attachments, files)
+        .filter((each) => offered.current.has(each.key))
+        .map((each) => each.key),
+    ];
+    held.current = { text, attachments: files, dropped };
+    const asLine =
+      text === words &&
+      dropped.length === 0 &&
+      Equal.equals(
+        files,
+        line.attachments.map((each) => each.attachment),
+      );
+    writer.update(place, (was) =>
+      asLine
+        ? EMPTY_DRAFT
+        : {
+            ...was,
+            text,
+            attachments: files,
+            dropped: dropped.length === 0 ? undefined : dropped,
+          },
+    );
+  };
+  // A picture that lands joins the box and its draft, as one there as it opened did.
   useEffect(() => {
     const landed = line.attachments.filter((each) => !offered.current.has(each.key));
     if (landed.length === 0) return;
     for (const each of landed) offered.current.add(each.key);
-    setAttachments((held) => [...held, ...landed.map((each) => each.attachment)]);
-  }, [line.attachments]);
+    const files = joined(held.current.attachments, landed, held.current.dropped);
+    setAttachments(files);
+    keep(held.current.text, files);
+  });
+  const send = () => {
+    writer.update(place, () => EMPTY_DRAFT);
+    edit.onSend(draft, attachments);
+  };
   // Note that the send answers at once: the tab takes it in turn behind any send, and says there if it did not go.
   const confirm = useConfirmDialog({ subject: edit.cuts, surfaceOpen: true }, () => {
-    edit.onSend(draft, attachments);
+    send();
     return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
   });
   const composer: AgentComposerControl = {
     draft,
-    setDraft,
+    setDraft: (text) => {
+      setDraft(text);
+      keep(text, held.current.attachments);
+    },
     attachments,
-    setAttachments: (next) => setAttachments(next),
+    setAttachments: (next) => {
+      const files = next(held.current.attachments);
+      setAttachments(files);
+      keep(held.current.text, files);
+    },
     sending: false,
     note: undefined,
     closed: undefined,
@@ -104,7 +199,7 @@ export function EditComposer({
     send: () => {
       if (line.reading) return;
       if (edit.cuts) confirm.ask();
-      else edit.onSend(draft, attachments);
+      else send();
     },
     retry: noop,
     sent: [],
