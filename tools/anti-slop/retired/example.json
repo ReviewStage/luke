@@ -1,0 +1,15 @@
+{
+  "instead": "Nothing: this file is the format's example and retires nothing real. A kind's guard PR adds its own file beside it.",
+  "classes": [
+    { "class": "retired-example", "allow": ["packages/ui/src/components/retired-example/"] },
+    { "class": "retired-example-part-*", "allow": [] }
+  ],
+  "glyphs": [
+    { "glyph": "RetiredExample", "allow": ["packages/ui/src/components/retired-example/"] },
+    { "glyph": "GLYPH.RETIRED_EXAMPLE", "allow": [] }
+  ],
+  "patterns": [
+    { "prop": "retiredExample", "allow": [] },
+    { "import": "retired-example", "allow": ["packages/ui/src/components/retired-example/"] }
+  ]
+}

@@ -3,13 +3,14 @@
   "version": "0.20.0",
   "private": true,
   "type": "module",
-  "description": "The repository's oxlint rules: Effect runtime edges, raw async primitives, node:test, Drizzle writes, and the design system's press and skeleton guards; and the style guard over its CSS and class strings",
+  "description": "The repository's oxlint rules: Effect runtime edges, raw async primitives, node:test, Drizzle writes, and the design system's press and skeleton guards and its retired classes, glyphs and patterns; and the style guard over its CSS and class strings",
   "scripts": {
     "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
     "@oxlint/plugins": "1.79.0",
+    "effect": "catalog:",
     "oxc-parser": "0.152.0"
   },
   "devDependencies": {

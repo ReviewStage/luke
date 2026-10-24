@@ -5,6 +5,13 @@ import { fileURLToPath } from "node:url";
 
 import { type Baseline, baselineProblems, shrunkBaseline } from "./shared/baseline.ts";
 import {
+  RETIRED,
+  RETIRED_KIND,
+  type RetiredPlace,
+  type Retirement,
+  retiredCssPlaces,
+} from "./shared/retired.ts";
+import {
   isWatched,
   STYLE_RULE_IDS,
   STYLE_RULES,
@@ -20,7 +27,9 @@ import {
  * Tailwind class string outside `@luke/ui`'s token sheets and fails on a
  * place a rule refuses beyond its baseline, on a baseline above what a file
  * still holds, and on a comment asking to silence it. `--shrink` lowers
- * each baseline to what the files now hold, and never raises one.
+ * each baseline to what the files now hold, and never raises one. It also
+ * holds `anti-slop/retired`'s classes in every stylesheet's selectors, which
+ * oxlint cannot read, against the CSS rows of each retired file's baseline.
  */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BASELINES = path.join(REPOSITORY_ROOT, "tools", "anti-slop", "style-baselines");
@@ -61,9 +70,18 @@ const found = new Map<StyleRule, Map<string, StyleViolation[]>>(
   STYLE_RULE_IDS.map((rule) => [rule, new Map()]),
 );
 const suppressions: string[] = [];
+const retired = new Map<Retirement, Map<string, RetiredPlace[]>>();
 for (const file of sourceFiles()) {
   const absolute = path.join(REPOSITORY_ROOT, file);
-  if (!isWatched(file) || !existsSync(absolute)) continue;
+  if (!existsSync(absolute)) continue;
+  if (file.endsWith(".css")) {
+    for (const place of retiredCssPlaces(file, readFileSync(absolute, "utf8"))) {
+      const byFile = retired.get(place.retirement) ?? new Map<string, RetiredPlace[]>();
+      byFile.set(file, [...(byFile.get(file) ?? []), place]);
+      retired.set(place.retirement, byFile);
+    }
+  }
+  if (!isWatched(file)) continue;
   const text = readFileSync(absolute, "utf8");
   if (file.endsWith(".css")) {
     for (const line of styleSuppressionLines(text)) suppressions.push(`${file}:${line}`);
@@ -109,6 +127,24 @@ for (const rule of STYLE_RULE_IDS) {
   ]);
   process.stderr.write(
     `error: style-guard/${rule} refuses ${STYLE_RULES[rule].refuses}. How to fix one: packages/ui/README.md's "The style guard".\n${places.join("\n")}\n`,
+  );
+  process.exitCode = 1;
+}
+for (const retirement of RETIRED) {
+  if (retirement.kind !== RETIRED_KIND.CLASS) continue;
+  const byFile = retired.get(retirement) ?? new Map<string, RetiredPlace[]>();
+  const counts = new Map([...byFile].map(([file, list]) => [file, list.length]));
+  const sheets = Object.entries(retirement.baseline).filter(([file]) => file.endsWith(".css"));
+  const problems = baselineProblems(counts, Object.fromEntries(sheets), true);
+  if (problems.length === 0) continue;
+  const places = problems.flatMap(({ file, says, grew }) => [
+    `  ${file}: ${says}`,
+    ...(grew ? (byFile.get(file) ?? []) : []).map(
+      (place) => `    ${file}:${place.line}: ${place.excerpt}`,
+    ),
+  ]);
+  process.stderr.write(
+    `error: anti-slop/retired refuses the class \`${retirement.name}\` (tools/anti-slop/retired/${retirement.file}): ${retirement.instead}\n${places.join("\n")}\n`,
   );
   process.exitCode = 1;
 }
