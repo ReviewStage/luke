@@ -26,7 +26,8 @@ import { standsAt } from "./task-row-parts.js";
  * moves at once: one whose name or status this window has yet to see the
  * view carry (`pendingTasks`), and one this page sent a status, priority,
  * or assignee, until the view carries it or it is refused. A task new to
- * the list stands where it is now, and one gone from it is gone.
+ * the list, or one the filter or the completed window left out, stands
+ * where it is now, and one gone from it is gone.
  */
 
 /** What decides where the page stands its tasks: the workspace listed, the filter, and the display's layout of them. */
@@ -87,7 +88,13 @@ export function useHeldTasks(
           ...each,
           tasks: each.tasks.map((task) => live.get(task.id) ?? task),
         })),
-      placesOf: (_drawn, held) => new Map(placed(held).map((task) => [task.id, task] as const)),
+      // Note that only a task drawn holds its place, so one the filter or the completed window left out comes in where it stands once it is let in.
+      placesOf: (drawn, held) => {
+        const shown = new Set(drawn.flatMap((each) => each.tasks.map((task) => task.id)));
+        return new Map(
+          placed(held).flatMap((task) => (shown.has(task.id) ? [[task.id, task] as const] : [])),
+        );
+      },
     },
   );
   // Note that a standing the view now carries is let go only once its task's new place is held, so it never springs back.

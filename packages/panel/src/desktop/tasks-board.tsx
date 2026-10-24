@@ -536,9 +536,11 @@ function TaskBoardColumnView({
   });
   const { mark, words } = columnHead(column.head, people);
   const value = columnValue(column.head);
-  // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another.
-  const drawn =
-    column.head.kind === TASKS_GROUP.ASSIGNEE && !narrow
+  // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another, and so does a card held under a column that no longer names its assignee.
+  const drawn = (task: TaskSummary) =>
+    column.head.kind === TASKS_GROUP.ASSIGNEE &&
+    !narrow &&
+    column.head.assigneeId === (task.assignee?.userId ?? null)
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
@@ -592,7 +594,7 @@ function TaskBoardColumnView({
                   task={task}
                   workspaceName={workspaceName}
                   narrow={narrow}
-                  properties={drawn}
+                  properties={drawn(task)}
                   waiting={waitingOn.get(task.id) ?? 0}
                   now={now}
                   onOpen={() => onOpen(task)}

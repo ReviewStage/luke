@@ -1150,7 +1150,11 @@ export function TasksList({
                     waiting={waitingOn.get(task.id) ?? 0}
                     now={now}
                     properties={properties}
-                    assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
+                    assigneeHeld={
+                      !narrow &&
+                      group.head.kind === TASKS_GROUP.ASSIGNEE &&
+                      group.head.assigneeId === (task.assignee?.userId ?? null)
+                    }
                     chosen={several !== undefined && selected.has(task.id) ? several : undefined}
                     onOpen={() => tasks.onSelect(task.id)}
                     onStanding={(standing) => setStanding(task, standing)}

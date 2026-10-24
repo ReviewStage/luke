@@ -17,6 +17,7 @@ import {
   TASKS_GROUPING,
   TASKS_ORDER,
   type TasksDisplay,
+  type TasksFilter,
 } from "@luke/ui/tasks-page-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -42,17 +43,19 @@ import { TasksList } from "./tasks-list.js";
  */
 
 const DEAN = "user-dean";
+const CHARLES = "user-charles";
 
 const ACME = {
   id: "workspace-acme",
   name: "Acme",
   role: "owner",
   github: null,
-  memberCount: 1,
+  memberCount: 2,
 } as const satisfies Workspace;
 
 const MEMBERS: readonly WorkspaceMember[] = [
   { userId: DEAN, name: "Dean Stratakos", email: "dean@acme.dev", role: "owner" },
+  { userId: CHARLES, name: "Charles Pan", email: "charles@acme.dev", role: "member" },
 ];
 
 const roots: Root[] = [];
@@ -104,6 +107,7 @@ const TASKS = [
 /** How the page is drawn again: over which tasks, under which display, shown or not, and which tasks wait on a change made here. */
 interface Drawing {
   readonly display?: TasksDisplay;
+  readonly filter?: TasksFilter;
   readonly shown?: boolean;
   readonly pendingTasks?: ReadonlySet<string>;
 }
@@ -136,7 +140,7 @@ async function mountView(
     const frame = {
       toolbar: null,
       chips: null,
-      filter: NO_TASKS_FILTER,
+      filter: drawing.filter ?? NO_TASKS_FILTER,
       display: drawing.display ?? display,
       onDisplay: () => undefined,
       scroll: () => undefined,
@@ -309,3 +313,58 @@ test("on the Columns, a teammate's change holds a card in its column, and the re
   assert.deepEqual(todo(laidOut(container)), ["ACME-39", "ACME-41"]);
   assert.deepEqual(inProgress(laidOut(container)), ["ACME-40", "ACME-42"]);
 });
+
+test("in the List filtered to Todo, a task a teammate brings into Todo comes in, though the rows already drawn hold still", async () => {
+  const todo: TasksFilter = { status: [TASK_STATUS.TODO] };
+  const { container, draw } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
+  draw(TASKS, { filter: todo });
+  assert.deepEqual(laidOut(container), [["Todo", ["ACME-40", "ACME-39", "ACME-41"]]]);
+
+  draw(
+    TASKS.map((each) =>
+      each.number === 42
+        ? { ...each, status: TASK_STATUS.TODO }
+        : each.number === 41
+          ? { ...each, priority: TASK_PRIORITY.URGENT }
+          : each,
+    ),
+    { filter: todo },
+  );
+
+  assert.deepEqual(laidOut(container), [["Todo", ["ACME-40", "ACME-39", "ACME-42", "ACME-41"]]]);
+});
+
+/** Whether the row or the card of the task keyed `key` wears an Assignee chip. */
+function wearsAssignee(page: HTMLElement, key: string): boolean {
+  const holder = [...page.querySelectorAll<HTMLElement>("li")].find(
+    (each) => each.querySelector("[data-task-key]")?.textContent === key,
+  );
+  assert.ok(holder, `${key} stands`);
+  return holder.querySelector('button[aria-label^="Assignee:"]') !== null;
+}
+
+for (const [name, view, display] of [
+  ["List", TasksList, DEFAULT_LIST_DISPLAY],
+  ["Columns", TasksBoard, DEFAULT_BOARD_DISPLAY],
+] as const) {
+  test(`in the ${name} grouped by assignee, a task a teammate reassigns holds its group and wears its new assignee's chip`, async () => {
+    const assigned = TASKS.map((each) => ({
+      ...each,
+      assignee: { userId: DEAN, name: "Dean Stratakos" },
+    }));
+    const byAssignee = { ...display, grouping: TASKS_GROUPING.ASSIGNEE };
+    const { container, draw } = await mountView(view, assigned, byAssignee);
+    const under = (key: string) => laidOut(container).find(([, keys]) => keys.includes(key))?.[0];
+    const deans = under("ACME-41");
+    assert.equal(wearsAssignee(container, "ACME-41"), false, "its group says who already");
+
+    draw(
+      assigned.map((each) =>
+        each.number === 41 ? { ...each, assignee: { userId: CHARLES, name: "Charles Pan" } } : each,
+      ),
+    );
+
+    assert.equal(under("ACME-41"), deans);
+    assert.equal(wearsAssignee(container, "ACME-41"), true);
+  });
+}
