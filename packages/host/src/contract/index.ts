@@ -71,6 +71,7 @@ export {
 } from "./kinds.js";
 export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
 export {
+  type EventPushName,
   PUSH,
   PUSH_GUARD,
   PUSH_METHOD,

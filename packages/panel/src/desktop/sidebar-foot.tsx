@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -62,8 +63,7 @@ import { OfflineMark } from "./offline-mark.js";
  * between them as a small pill while they hold, and take no room while they
  * do not. The menu offers what the menu bar's Help menu offers, by the same
  * commands, with Settings at its head, the ways to reach the people who make
- * Luke under it, and Log out last, which asks first as Settings' Sign out
- * does.
+ * Luke under it, and Sign out last, which asks first as Settings' does.
  */
 
 /** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
@@ -191,7 +191,7 @@ function AccountHeading({
  * The account's menu, in Cursor's order: the reader's own page where the
  * window offers one, then Settings; what the Help menu
  * offers, the changelog before it, and the ways to write to the people who
- * make Luke after it; then Log out, while anyone is signed in to leave.
+ * make Luke after it; then Sign out, while anyone is signed in to leave.
  */
 function accountMenuGroups(
   signedIn: boolean,
@@ -257,13 +257,14 @@ function accountMenuGroups(
       },
     ],
   ];
-  if (signedIn) groups.push([{ label: "Log out", icon: <LogOutIcon />, onSelect: acts.onLogOut }]);
+  if (signedIn)
+    groups.push([{ label: VERB.SIGN_OUT, icon: <LogOutIcon />, onSelect: acts.onLogOut }]);
   return groups;
 }
 
 /**
- * The foot's account button and the menu it raises. Log out asks first, in a
- * dialog over the window, as Settings' Sign out does: getting back
+ * The foot's account button and the menu it raises. Sign out asks first, in a
+ * dialog over the window, as Settings' does: getting back
  * in costs a whole trip through the browser.
  */
 function AccountMenu({
@@ -329,9 +330,9 @@ function AccountMenu({
       <ConfirmDialog
         confirm={logOut}
         question={{
-          title: signedIn ? `Log out of ${account.email}?` : "Log out?",
-          verb: "Log out",
-          running: "Logging out",
+          title: signedIn ? `${VERB.SIGN_OUT} of ${account.email}?` : `${VERB.SIGN_OUT}?`,
+          verb: VERB.SIGN_OUT,
+          running: "Signing out",
           tone: DIALOG_TONE.PRIMARY,
         }}
       />

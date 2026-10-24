@@ -42,7 +42,7 @@
  * none; either way the plan belongs to that workspace from then on.
  */
 
-import type { DatabaseServices } from "@luke/database/core/query";
+import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
@@ -56,8 +56,9 @@ import {
   createTaskCommitted,
   deleteTaskCommitted,
   listTasks,
-  readTask,
   readTaskHeader,
+  readTaskPlan,
+  type StoredTask,
   type TaskHeader,
   updateTaskCommitted,
 } from "@luke/database/models/task-store";
@@ -75,15 +76,15 @@ import {
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import type { Task, TaskAgentStart, TaskStartAnswer } from "@luke/features/task-wire";
-import { Data, Effect, Option } from "effect";
+import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
   eveFor,
-  stoppedForGood,
-  stopsForGood,
+  everyStoppedForGood,
+  everyStopsForGood,
   summaryOf,
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -263,14 +264,24 @@ const startingIssueLinks = /* @__PURE__ */ Effect.fnUntraced(function* (
     input.linearIssueId === undefined
       ? (input.issues ?? [])
       : [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: input.linearIssueId }];
+  // The issues are read together, a few at a time, and the first refused in the order named refuses the start.
+  const reads = yield* Effect.forEach(
+    chosen,
+    (choice) =>
+      Effect.result(
+        Effect.gen(function* () {
+          return choice.provider === TASK_ISSUE_PROVIDER.LINEAR
+            ? yield* linkedLinearIssue(organizationId, choice.id)
+            : yield* startingGitHubIssue(userId, organizationId, repository, choice);
+        }),
+      ),
+    { concurrency: READ_CONCURRENCY },
+  );
   const links = [];
-  for (const choice of chosen) {
-    const read =
-      choice.provider === TASK_ISSUE_PROVIDER.LINEAR
-        ? yield* linkedLinearIssue(organizationId, choice.id)
-        : yield* startingGitHubIssue(userId, organizationId, repository, choice);
-    const relation: TaskIssueRelation | undefined = choice.relation;
-    links.push(relation === undefined ? read : { ...read, relation });
+  for (const [index, read] of reads.entries()) {
+    if (Result.isFailure(read)) return yield* Effect.fail(read.failure);
+    const relation: TaskIssueRelation | undefined = chosen[index]?.relation;
+    links.push(relation === undefined ? read.success : { ...read.success, relation });
   }
   return links;
 });
@@ -292,11 +303,11 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   const task =
     made.value.taskId === null
       ? Option.none()
-      : yield* hostedStoreOrUnavailable(readTask(userId, made.value.taskId));
-  if (Option.isNone(task) || task.value.task.workspaceId !== organizationId) {
+      : yield* hostedStoreOrUnavailable(readTaskPlan(userId, made.value.taskId));
+  if (Option.isNone(task) || task.value.workspaceId !== organizationId) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  return Option.some({ plan: task.value.task, agent: yield* summaryOf(userId, made.value) });
+  return Option.some({ plan: task.value, agent: yield* summaryOf(userId, made.value) });
 });
 
 /**
@@ -326,8 +337,8 @@ const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
  * the task as it was made where it cannot be read again just now.
  */
 const taskAfterStart = (userId: string, task: Task) =>
-  readTask(userId, task.id).pipe(
-    Effect.map((read) => Option.match(read, { onNone: () => task, onSome: (now) => now.task })),
+  readTaskPlan(userId, task.id).pipe(
+    Effect.map(Option.getOrElse(() => task)),
     Effect.catch((failure) => Effect.as(logStoreFailure(failure), task)),
   );
 
@@ -335,17 +346,19 @@ const startedAgentOn = (
   seams: TasksProcedureSeams,
   request: Request,
   userId: string,
-  task: Task,
+  stored: StoredTask,
   agent: TaskAgentStart,
   reached: StartReach | undefined,
-) =>
-  startRequestedAgent(
+) => {
+  const { task } = stored;
+  return startRequestedAgent(
     eveFor<EveTypedTurn>(seams, request, userId),
     userId,
     { taskId: task.id },
     agent,
     undefined,
     reached,
+    stored,
   ).pipe(
     Effect.flatMap((started) =>
       Effect.map(
@@ -375,6 +388,7 @@ const startedAgentOn = (
       }),
     ),
   );
+};
 
 /** What a restore that saved nothing answers, by why; the store out of reach is any other. */
 const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
@@ -451,7 +465,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      const { task, txid } = yield* createTaskCommitted(userId, {
+      const { task: stored, txid } = yield* createTaskCommitted(userId, {
         organizationId,
         ...(input.name === undefined ? undefined : { name: input.name }),
         repository: reached.repository,
@@ -475,12 +489,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       });
       const answer: TaskStartAnswer =
         agent === undefined
-          ? { plan: task }
+          ? { plan: stored.task }
           : yield* startedAgentOn(
               seams,
               request,
               userId,
-              task,
+              stored,
               agent,
               reached.repository === null
                 ? undefined
@@ -497,9 +511,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /** One plan with its saved document. */
     open: plans.open.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
-      const opened = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
+      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(context.userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { plan: opened.value.task };
+      return { plan: opened.value };
     }),
 
     /**
@@ -560,13 +574,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       if (archiving) {
         const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
         // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
-        const ready = yield* Effect.forEach(agents, stopsForGood);
-        if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-        yield* Effect.forEach(
-          agents,
-          (agent) => stoppedForGood(seams, writer, request, userId, agent),
-          { discard: true },
-        );
+        if (!(yield* everyStopsForGood(agents))) {
+          return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+        }
+        yield* everyStoppedForGood(seams, writer, request, userId, agents);
       }
       // Note that the archive stamp is never written, because a task is archived no longer: the request settles the task, or puts it back to work.
       const status =
@@ -634,11 +645,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const agents = yield* hostedStoreOrUnavailable(
         listCodingAgents(userId, taskId, { includeArchived: true }),
       );
-      yield* Effect.forEach(
-        agents,
-        (agent) => stoppedForGood(seams, writer, request, userId, agent),
-        { discard: true },
-      );
+      yield* everyStoppedForGood(seams, writer, request, userId, agents);
       const stopped = new Set(agents.map(({ id }) => id));
       const deleted = yield* hostedStoreOrUnavailable(
         deleteTaskCommitted(userId, taskId, {
