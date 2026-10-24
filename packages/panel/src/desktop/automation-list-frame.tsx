@@ -1,6 +1,7 @@
 import {
   LIST_VARIANT,
   List,
+  ListMotion,
   ListRow,
   SETTINGS_SECTION_FRAME,
   SETTINGS_SKELETON_CONTROL,
@@ -10,7 +11,7 @@ import {
   Skeleton,
   Toolbar,
 } from "@luke/ui";
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback, useRef } from "react";
 
 /**
  * automation-list-frame.tsx -- the Automations list's boxes, which the list and its placeholders both draw.
@@ -66,7 +67,8 @@ export function AutomationsActsSkeleton(): React.JSX.Element {
  * One owner's automations in a card, under its heading where `headed`.
  * Note that a lone owner's card is still a region named by its owner, as a
  * headed one is by its heading, so a reader moving by landmark hears whose
- * automations they are either way.
+ * automations they are either way. Its rows move (`ListMotion`): one made
+ * slides in, one deleted slides out, and the rows under it glide up.
  */
 export function AutomationGroupCard({
   name,
@@ -77,17 +79,26 @@ export function AutomationGroupCard({
   headed: boolean;
   children: ReactNode;
 }): React.JSX.Element {
+  const root = useRef<HTMLElement | null>(null);
+  // Note that the card is a div or a section by whether it is headed, so the motion's root is held by a callback either takes.
+  const hold = useCallback((node: HTMLElement | null) => {
+    root.current = node;
+  }, []);
   const card = (
-    <SettingsSection title={headed ? name : undefined} frame={SETTINGS_SECTION_FRAME.NONE}>
-      <List label={name} variant={LIST_VARIANT.CARD}>
-        {children}
-      </List>
-    </SettingsSection>
+    <ListMotion root={root}>
+      <SettingsSection title={headed ? name : undefined} frame={SETTINGS_SECTION_FRAME.NONE}>
+        <List label={name} variant={LIST_VARIANT.CARD} moves>
+          {children}
+        </List>
+      </SettingsSection>
+    </ListMotion>
   );
   return headed ? (
-    <div className="automation-group">{card}</div>
+    <div ref={hold} className="automation-group">
+      {card}
+    </div>
   ) : (
-    <section className="automation-group" aria-label={name}>
+    <section ref={hold} className="automation-group" aria-label={name}>
       {card}
     </section>
   );

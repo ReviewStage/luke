@@ -1,5 +1,5 @@
 /**
- * automation-words.ts -- an automation's owner and next run in the few words every place naming it says them, the Automations list's row and an automation's card, and what the list says while it is read.
+ * automation-words.ts -- an automation's owner and next run in the few words every place naming it says them, the Automations list's row and an automation's card, what the list says while it is read, and what deleting one asks.
  */
 
 import { AUTOMATION_NEXT, automationNext } from "@luke/features/automation-list-model";
@@ -9,9 +9,21 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { dayAndTimeText, momentText, weekdayAndTimeText } from "@luke/features/time-format";
+import { CONFIRM_LOSS, type DialogQuestion } from "@luke/ui";
 
 /** What the Automations list says to a reader while it is first read, on its page and in the frame standing while the page's code loads. */
 export const READING_AUTOMATIONS = "Reading your automations…";
+
+/** What deleting an automation asks, from its editor's ⋯ and its row's menu alike: what goes, and what stays. */
+export function automationDeleteQuestion(name: string | undefined): DialogQuestion {
+  return {
+    title: `Delete ${name ?? "this automation"}?`,
+    body: "Its schedule stops and its run history goes. Agents its runs started stay.",
+    verb: "Delete",
+    running: "Deleting",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
+  };
+}
 
 /** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
 const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;
