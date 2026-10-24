@@ -75,6 +75,7 @@ import {
   ListRow,
   linesCount,
   PAGE_FRAME,
+  PaneBar,
   ProviderMark,
   SCROLL_FADE,
   SCROLL_FADE_INSET,
@@ -2679,8 +2680,8 @@ function PullRequestTabBody({
                     editing={{ options, refreshing: pullRequestRead.out }}
                   />
                 </header>
-                <div className="pull-request-tabs">
-                  <div className="pull-request-tab-bar">
+                <PaneBar
+                  middle={
                     <ChoiceBar<PullRequestView>
                       label="Pull request"
                       items={tabsOf(parts, published, held, changes, chapters)}
@@ -2690,19 +2691,21 @@ function PullRequestTabBody({
                       fold={tabsFold}
                       panels={ids}
                     />
-                  </div>
-                  {reviewable ? (
-                    <PullRequestReview
-                      writes={review}
-                      pending={pendingReview}
-                      pendingList={
-                        drafts === undefined || drafts.length === 0 ? null : (
-                          <PendingList drafts={drafts} now={now} picture={picture} />
-                        )
-                      }
-                    />
-                  ) : null}
-                </div>
+                  }
+                  actions={
+                    reviewable ? (
+                      <PullRequestReview
+                        writes={review}
+                        pending={pendingReview}
+                        pendingList={
+                          drafts === undefined || drafts.length === 0 ? null : (
+                            <PendingList drafts={drafts} now={now} picture={picture} />
+                          )
+                        }
+                      />
+                    ) : null
+                  }
+                />
                 <Fill
                   className="pull-request-view"
                   role="tabpanel"

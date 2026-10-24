@@ -22,6 +22,7 @@ import {
   ListRow,
   NOTE_LINE_LOOK,
   NoteLine,
+  PaneBar,
   PanePin,
   PlusIcon,
   ScrollArea,
@@ -309,17 +310,19 @@ export function TerminalShells({
       onPointerLeave={float.onPointerLeave}
       onKeyDown={float.onKeyDown}
     >
-      <div className="terminal-shells-head">
-        <span className="terminal-shells-title">Shells</span>
-        <Tooltip label="New shell">
-          <IconButton
-            icon={<PlusIcon />}
-            label="New shell"
-            disabled={listed?.sandbox !== SANDBOX_STATE.RUNNING}
-            onClick={session.onCreate}
-          />
-        </Tooltip>
-      </div>
+      <PaneBar
+        title="Shells"
+        actions={
+          <Tooltip label="New shell">
+            <IconButton
+              icon={<PlusIcon />}
+              label="New shell"
+              disabled={listed?.sandbox !== SANDBOX_STATE.RUNNING}
+              onClick={session.onCreate}
+            />
+          </Tooltip>
+        }
+      />
       {listed === undefined ? (
         <UnlistedShells state={session.state} />
       ) : (

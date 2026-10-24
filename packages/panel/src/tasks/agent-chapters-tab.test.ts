@@ -444,9 +444,9 @@ function railRows(tab: HTMLElement): string[] {
     .map((each) => each.getAttribute("aria-label") ?? "");
 }
 
-/** The chapter shown, by its heading. */
+/** The chapter shown, by the title its bar leads with. */
 function heading(tab: HTMLElement): string {
-  return tab.querySelector(".chapter-head h3")?.textContent ?? "";
+  return tab.querySelector(".chapter-reading .luke-pane-bar-title")?.textContent ?? "";
 }
 
 /** The paths and patches the chapter's list was last handed, the Files changed view's own left out. */
