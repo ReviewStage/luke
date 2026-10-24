@@ -974,6 +974,7 @@ function Invitations({
     setPendingState(next);
   };
   const [email, setEmail] = useState("");
+  const emailField = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const [note, setNote] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -1081,6 +1082,7 @@ function Invitations({
         <div className="workspace-invite">
           <Inline as={LAYOUT_ELEMENT.FORM} justify={JUSTIFY.END} grow growFirst onSubmit={invite}>
             <TextField
+              ref={emailField}
               type={TEXT_FIELD_TYPE.EMAIL}
               required
               label="Email address"
@@ -1089,6 +1091,8 @@ function Invitations({
               spellCheck={false}
               value={email}
               disabled={busy}
+              // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
+              onEscape={() => emailField.current?.blur()}
               onChange={setEmail}
             />
             <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
