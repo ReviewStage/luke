@@ -170,7 +170,7 @@ function ListHead({
       <HistoryButtons history={history} room={room} />
       {exit}
       {/* A label for the list, no heading: the page beside it is named once, by its own header's `h1`. */}
-      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.INHERIT} className="settings-pages-title">
+      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.TITLE} className="settings-pages-title">
         {SETTINGS_LIST}
       </Text>
     </>

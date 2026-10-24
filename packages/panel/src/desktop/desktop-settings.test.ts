@@ -1101,6 +1101,7 @@ test("a wide room keeps the page list's Back row and title and a page's own titl
 
   assert.equal(page.querySelector('header[data-look="phone"]'), null);
   assert.equal(page.querySelector(".settings-pages-title")?.textContent, "Settings");
+  assert.equal(page.querySelector(".settings-pages-title")?.getAttribute("data-variant"), "title");
   assert.equal(shownTitle(page), "Appearance");
   assert.ok(
     [...page.querySelectorAll("button")].some((each) => each.textContent === "Reset to defaults"),

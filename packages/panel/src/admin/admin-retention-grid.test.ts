@@ -78,6 +78,15 @@ test("the grid names its weeks, its cohorts, and each cohort's size", () => {
   expect(page.textContent).not.toContain("No accounts created");
 });
 
+test("the column headings wear the Group role, in the page's own face and case", () => {
+  const page = render(RETENTION);
+
+  const heading = cellsReading(page, "Cohort")[0];
+  expect(heading?.getAttribute("data-variant")).toBe("group");
+  expect(heading?.getAttribute("data-font")).toBe("sans");
+  expect(page.querySelector(".uppercase")).toBeNull();
+});
+
 test("each cell reads its share, and its count on hover", () => {
   const page = render(RETENTION);
 
