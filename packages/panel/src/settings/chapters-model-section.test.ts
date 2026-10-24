@@ -5,6 +5,7 @@ import { CHAPTERS_MODEL, type ChaptersModelId } from "@luke/features/chapters-mo
 import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-chapters-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -51,8 +52,11 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
 }
 
 const roots: Root[] = [];
+let motion: ReturnType<typeof holdExits>;
 
 beforeEach(() => {
+  // jsdom runs no motion, so the Saved tick would be taken the moment it stood.
+  motion = holdExits((element) => element.classList.contains("luke-saved-tick"));
   stored = CHAPTERS_MODEL.HAIKU;
   sent = [];
   failRead = false;
@@ -64,6 +68,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  motion.restore();
 });
 
 async function settle(): Promise<void> {
@@ -86,6 +91,12 @@ async function mount(): Promise<HTMLElement> {
 const written = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.CHAPTERS_MODEL_WRITE ? [request.payload.model] : [],
+  );
+
+/** What stands beside the row's name now: its Saved tick and its Modified word. */
+const marks = (page: HTMLElement) =>
+  [...page.querySelectorAll(".luke-saved-tick, .luke-settings-changed-mark")].map(
+    (each) => each.textContent ?? "",
   );
 
 /** What the group announces now: its alerts and its error lines that say something. */
@@ -112,6 +123,20 @@ test("the member's model is shown among Claude's three, Haiku first, and a press
   assert.deepEqual(alerts(page), []);
 });
 
+test("a write that lands ticks Saved beside the name, and the row says Modified while the model is not the default", async () => {
+  const page = await mount();
+  assert.deepEqual(marks(page), []);
+
+  act(() => segment(segmentedGroup(page, "Chapters model"), "Sonnet 5.5").click());
+  await settle();
+  assert.deepEqual(marks(page), ["Modified", "Saved"]);
+
+  act(() => motion.finish());
+  act(() => segment(segmentedGroup(page, "Chapters model"), "Haiku 5.5").click());
+  await settle();
+  assert.deepEqual(marks(page), ["Saved"]);
+});
+
 test("a write the service refuses is said under the row, the stored model still checked", async () => {
   const page = await mount();
   refuseWrite = true;
@@ -120,6 +145,7 @@ test("a write the service refuses is said under the row, the stored model still 
 
   assert.deepEqual(alerts(page), ["The chapters model could not be saved. Try again."]);
   assert.deepEqual(readSegmented(segmentedGroup(page, "Chapters model")).checked, ["Haiku 5.5"]);
+  assert.deepEqual(marks(page), [], "a refusal ticks nothing");
 });
 
 test("a read that fails says so and reads again on a retry", async () => {

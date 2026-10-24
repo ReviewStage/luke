@@ -2,6 +2,7 @@ import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import {
   type CatalogModel,
+  CODING_AGENT_DEFAULT_CHOICE,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -30,7 +31,7 @@ import {
   TextButton,
   TextLink,
 } from "@luke/ui";
-import { actionRejection } from "@luke/ui/use-setting-write";
+import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
@@ -62,6 +63,7 @@ import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
+import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
 
@@ -96,8 +98,11 @@ import { SwitchRow } from "./switch-row.js";
  * row is one over the two, the whole window the default, saying what it
  * costs past the standard one; a change of model keeps the standard window
  * where the next model offers two. A write is one ask of the service, the rows resting until
- * it answers; Fast is a `SwitchRow` like every other settings switch, so its
- * refusal is said in a toast as the switch flips back, and the other rows' under them all. With no account signed in
+ * it answers; the model, Effort, and Context rows each write through
+ * `useSettingWrite`, so each says its own refusal under it and ticks Saved
+ * once its write lands, and Modified while it differs from a new account's
+ * default. Fast is a `SwitchRow` like every other settings switch, so its
+ * refusal is said in a toast as the switch flips back. With no account signed in
  * there is no default to show, and the page says so.
  *
  * The group is `@luke/ui`'s `SettingsSection`, and Effort and Context each
@@ -184,16 +189,10 @@ function DefaultRows({
   /** Asks the service to keep `choice`, answering whether it did. */
   onChange: (choice: ModelChoice) => Promise<ActionResult>;
 }): React.JSX.Element {
-  // Fast's switch says its own refusal in a toast, and the picker's and the segments' is worded under them all.
-  const [rejection, setRejection] = useState<string>();
-  const run = (next: ModelChoice) => {
-    void onChange(next).then((result) => setRejection(actionRejection(result)));
-  };
-  const runFast = (next: ModelChoice) =>
-    onChange(next).then((result) => {
-      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setRejection(undefined);
-      return result;
-    });
+  // Fast's switch says its own refusal in a toast, and each of the others words its own under its row and ticks Saved when its write lands.
+  const modelWrite = useSettingWrite(onChange);
+  const effortWrite = useSettingWrite(onChange);
+  const contextWrite = useSettingWrite(onChange);
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
   const remedy = useRepositoryRemedy();
@@ -239,6 +238,9 @@ function DefaultRows({
       <PickerRow
         label="Default model"
         detail={note}
+        changed={read.base !== CODING_AGENT_DEFAULT_CHOICE.model}
+        saves={modelWrite.saves}
+        error={modelWrite.rejection}
         value={read.base}
         valueLabel={modelLabel(read.base, models)}
         valueIcon={listed !== undefined ? <HarnessMark provider={listed.provider} /> : null}
@@ -274,7 +276,7 @@ function DefaultRows({
           // A model nothing pays for is never kept as the default: its pick goes to connect it.
           const missing = modelConnectFailure(picked.model);
           if (missing !== undefined) return remedy(missing)?.();
-          run(choiceAt(choiceModelId(picked, read.fast)));
+          modelWrite.run(choiceAt(choiceModelId(picked, read.fast)));
         }}
       />
       {/* No Fast where the plan that pays for the model runs no fast mode. */}
@@ -309,12 +311,20 @@ function DefaultRows({
           onChange={(fast) =>
             base === undefined
               ? Promise.resolve(WRITE_ACCEPTED)
-              : runFast(choiceAt(choiceModelId(base, fast)))
+              : onChange(choiceAt(choiceModelId(base, fast)))
           }
         />
       )}
-      {/* A refusal of any of the rows stands under them all, in the last row's error line. */}
-      <SettingsRow label="Effort" error={windows === undefined ? rejection : undefined}>
+      <SettingsRow
+        label="Effort"
+        adornment={
+          <SettingMarks
+            changed={choice.effort !== CODING_AGENT_DEFAULT_CHOICE.effort}
+            saves={effortWrite.saves}
+          />
+        }
+        error={effortWrite.rejection}
+      >
         {() => (
           <ChoiceBar
             label="Effort"
@@ -323,12 +333,19 @@ function DefaultRows({
             look={CHOICE_BAR_LOOK.SEGMENTED}
             disabled={busy}
             {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT)}
-            onChange={(effort) => run({ ...choice, effort })}
+            onChange={(effort) => effortWrite.run({ ...choice, effort })}
           />
         )}
       </SettingsRow>
       {windows === undefined ? null : (
-        <SettingsRow label="Context" description={longWindowNote(windows)} error={rejection}>
+        <SettingsRow
+          label="Context"
+          adornment={
+            <SettingMarks changed={window !== CONTEXT_WINDOW.LONG} saves={contextWrite.saves} />
+          }
+          description={longWindowNote(windows)}
+          error={contextWrite.rejection}
+        >
           {() => (
             <ChoiceBar
               label="Context"
@@ -339,7 +356,7 @@ function DefaultRows({
               value={window}
               look={CHOICE_BAR_LOOK.SEGMENTED}
               disabled={busy}
-              onChange={(each) => run(choiceOn(models ?? [], choice, each))}
+              onChange={(each) => contextWrite.run(choiceOn(models ?? [], choice, each))}
             />
           )}
         </SettingsRow>
