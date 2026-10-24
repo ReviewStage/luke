@@ -21,6 +21,7 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  SidePanelIcon,
   SpinnerRegion,
   STATUS_TONE,
   Toolbar,
@@ -73,6 +74,7 @@ import {
 } from "./agent-actions.js";
 import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
+import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -84,6 +86,7 @@ import {
 } from "./side-panel.js";
 import { contentActionGroups, useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
+import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
  * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
@@ -159,6 +162,7 @@ function AgentPageBar({
   terminals,
   onClose,
   luke,
+  phone,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -168,6 +172,8 @@ function AgentPageBar({
   onClose: () => void;
   /** Whether the agent is Luke, the account's operator, who is named Luke and is neither renamed, archived, nor deleted from here. */
   luke: boolean;
+  /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
+  phone?: AgentPagePhone | undefined;
 }): React.JSX.Element {
   const label = luke ? LUKE_NAME : agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
@@ -183,45 +189,61 @@ function AgentPageBar({
     ...doors,
   });
   const rename = luke ? undefined : actions.rename;
-  return (
-    <Toolbar
-      title={
-        rename?.editing === true ? (
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="luke-toolbar-title"
-          >
-            <InlineEdit
-              value={rename.asked ?? label}
-              label={NAME_LABEL}
-              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
-              editing
-              onEnd={(edit) => {
-                rename.end(edit.value);
-              }}
-            />
-          </OneLine>
-        ) : (
-          label
-        )
-      }
-      actions={
-        <>
-          <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
-          {menu.drawn === undefined ? null : (
-            <ActionMenu
-              label={moreLabel(ACTIONS_THING)}
-              menu={menu.drawn}
-              groups={groups}
-              onClose={menu.close}
-            />
-          )}
-          {actions.dialog}
-        </>
-      }
-    />
+  const title =
+    rename?.editing === true ? (
+      <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
+        <InlineEdit
+          value={rename.asked ?? label}
+          label={NAME_LABEL}
+          maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+          editing
+          onEnd={(edit) => {
+            rename.end(edit.value);
+          }}
+        />
+      </OneLine>
+    ) : (
+      label
+    );
+  const more = (
+    <>
+      <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={moreLabel(ACTIONS_THING)}
+          menu={menu.drawn}
+          groups={
+            phone?.onShowPanel === undefined
+              ? groups
+              : [
+                  ...groups,
+                  [{ label: SHOW_PANEL, icon: <SidePanelIcon />, onSelect: phone.onShowPanel }],
+                ]
+          }
+          onClose={menu.close}
+        />
+      )}
+      {actions.dialog}
+    </>
   );
+  if (phone !== undefined) {
+    return (
+      <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
+    );
+  }
+  return <Toolbar title={title} actions={more} />;
+}
+
+/** What a phone's way back out of a draft calls the agent, before the agent is read. */
+const AGENT = "Agent";
+
+/** What Show panel is called in a phone's ⋯, where the title bar's toggle is not drawn. */
+const SHOW_PANEL = "Show panel";
+
+/** What a phone's agent page heads itself with (`phone-head.tsx`): its way back, and the panel its ⋯ shows, while it is shut. */
+export interface AgentPagePhone {
+  readonly back: TaskHeadBack;
+  readonly onShowPanel: (() => void) | undefined;
 }
 
 /** The page's mentions, once there are any to hand; until then the box takes an `@` as the letter it is. */
@@ -266,9 +288,12 @@ function useTaskAgentsFollow(
 export function DesktopAgentPage({
   tasks,
   agentId,
+  away,
 }: {
   tasks: TasksControl;
   agentId: string;
+  /** A phone's way back out of the page, to the page it was opened from (`WindowHistory`'s `onLeave`), which heads it as a phone's page (`phone-head.tsx`); none elsewhere. */
+  away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
   const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
@@ -494,9 +519,37 @@ export function DesktopAgentPage({
       pullRequestCard,
     ],
   );
+  // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.
+  const phoneHead: AgentPagePhone | undefined =
+    away === undefined
+      ? undefined
+      : {
+          back:
+            draftShown === undefined
+              ? away
+              : {
+                  label:
+                    agent === undefined
+                      ? AGENT
+                      : luke
+                        ? LUKE_NAME
+                        : agentName(agent, control.models),
+                  onPress: () => setDrafting(undefined),
+                },
+          onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
+        };
   const toolbar =
     agent === undefined ? (
-      <Toolbar />
+      phoneHead === undefined ? (
+        <Toolbar />
+      ) : (
+        <PhoneHead
+          place="agent"
+          start={<PhoneBack back={phoneHead.back} />}
+          title={null}
+          end={null}
+        />
+      )
     ) : (
       <AgentPageBar
         agent={agent}
@@ -505,11 +558,24 @@ export function DesktopAgentPage({
         terminals={terminalDoors}
         onClose={tasks.agentView.onClose}
         luke={luke}
+        phone={phoneHead}
       />
     );
   if (agent === undefined) {
     // A page the service would not hand the reader keeps its bar over the words saying so.
-    if (agents.listMissing) return <NotFound thing={NOT_FOUND_THING.AGENT} bar={{}} />;
+    // On a phone the bar keeps the page's way back, the drawer and the places bar out of reach.
+    if (agents.listMissing) {
+      return (
+        <NotFound
+          thing={NOT_FOUND_THING.AGENT}
+          bar={
+            phoneHead === undefined
+              ? {}
+              : phoneBar({ place: "agent", start: <PhoneBack back={phoneHead.back} />, end: null })
+          }
+        />
+      );
+    }
     return (
       <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
         {toolbar}
@@ -600,6 +666,14 @@ export function DesktopAgentPage({
                           shown={tasks.shown}
                           focused={sideFocused}
                           onOpenTarget={openTarget}
+                          phone={
+                            away === undefined || agent === undefined
+                              ? undefined
+                              : {
+                                  back: luke ? LUKE_NAME : agentName(agent, control.models),
+                                  onBack: sidePanel.onToggle,
+                                }
+                          }
                         />
                       ) : null}
                     </div>

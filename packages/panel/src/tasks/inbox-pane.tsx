@@ -33,6 +33,7 @@ import {
   moreLabel,
   ONE_LINE_END,
   PageToolbar,
+  SidePanelIcon,
   STATUS_TONE,
   Stack,
   SteppedBack,
@@ -54,7 +55,7 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
-import { CheckIcon } from "lucide-react";
+import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
 import {
@@ -65,6 +66,7 @@ import {
 import { useAutomation } from "../automation-directory.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { PhoneHead } from "../desktop/phone-head.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
@@ -839,6 +841,89 @@ function ThreadMessage({
   );
 }
 
+/** No groups over the item's own. */
+const NO_LEAD: readonly MenuAction[][] = [];
+
+/** What a phone's item offers in its ⋯ over the item's own actions, past the bar's buttons it stands for. */
+export interface InboxPanePhone {
+  /** Opens the side panel beside the item, which the title bar's toggle opens elsewhere; none while it is open or where there is none. */
+  readonly onShowPanel: (() => void) | undefined;
+}
+
+/**
+ * What a phone's ⋯ leads with, in place of what the wide bar draws as
+ * buttons and crumbs: the pager's steps, then what the crumbs open, the
+ * item's task or automation and its agent, then the side panel.
+ */
+function phoneItemGroups(
+  holder: InboxHolder,
+  by: ItemAgent,
+  doors: InboxPaneDoors,
+  pager: InboxPager | undefined,
+  phone: InboxPanePhone,
+): MenuAction[][] {
+  const steps: MenuAction[] =
+    pager === undefined || (pager.onPrevious === undefined && pager.onNext === undefined)
+      ? []
+      : [
+          {
+            label: "Previous item",
+            icon: <ChevronUpIcon />,
+            disabled: pager.onPrevious === undefined,
+            onSelect: () => pager.onPrevious?.(),
+            command: APP_COMMAND.PREVIOUS_INBOX_ITEM,
+          },
+          {
+            label: "Next item",
+            icon: <ChevronDownIcon />,
+            disabled: pager.onNext === undefined,
+            onSelect: () => pager.onNext?.(),
+            command: APP_COMMAND.NEXT_INBOX_ITEM,
+          },
+        ];
+  const { onOpenHolder } = doors;
+  const holderItem: MenuAction[] =
+    onOpenHolder === undefined
+      ? []
+      : holder.kind === INBOX_HOLDER.TASK
+        ? [
+            {
+              label: OPEN_TASK,
+              detail: holder.task.name,
+              icon: tabLook({
+                kind: TAB_KIND.PLAN,
+                name: holder.task.name,
+                status: holder.task.status,
+              }).icon,
+              onSelect: onOpenHolder,
+            },
+          ]
+        : [
+            {
+              label: OPEN_AUTOMATION,
+              detail: holder.name,
+              icon: <ZapIcon />,
+              onSelect: onOpenHolder,
+            },
+          ];
+  const agentItem: MenuAction = {
+    label: OPEN_AGENT,
+    detail: by.subject.name,
+    icon: <BotIcon />,
+    onSelect: by.onOpen,
+  };
+  const panel: MenuAction[] =
+    phone.onShowPanel === undefined
+      ? []
+      : [{ label: "Show panel", icon: <SidePanelIcon />, onSelect: phone.onShowPanel }];
+  return [steps, [...holderItem, agentItem], panel].filter((group) => group.length > 0);
+}
+
+/** What a phone's ⋯ calls the crumbs' presses. */
+const OPEN_TASK = "Open task";
+const OPEN_AUTOMATION = "Open automation";
+const OPEN_AGENT = "Open agent";
+
 /** What the pane's ⋯ menu is called, which is its tooltip too. */
 const ITEM_THING = "Item";
 
@@ -856,12 +941,18 @@ function InboxItemMenu({
   shown,
   onMark,
   onClose,
+  lead = NO_LEAD,
+  heading,
 }: {
   holder: InboxHolder;
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
   onClose: InboxCloser | undefined;
+  /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
+  lead?: readonly MenuAction[][];
+  /** Muted over the items, pressed by nothing: where the item stands in the list, on a phone. */
+  heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
   const read: MenuAction | undefined =
@@ -878,6 +969,7 @@ function InboxItemMenu({
   );
   const close = useInboxClose(item, onClose, shown);
   const groups = [
+    ...lead,
     read === undefined ? [] : [read],
     copyLink === undefined ? [] : [copyLink],
     close.action === undefined ? [] : [close.action],
@@ -890,6 +982,7 @@ function InboxItemMenu({
         <ActionMenu
           label={moreLabel(ITEM_THING)}
           menu={menu.drawn}
+          heading={heading}
           groups={groups}
           onClose={menu.close}
         />
@@ -1114,6 +1207,7 @@ export function InboxPane({
   pager,
   next,
   mentions,
+  phone,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1132,6 +1226,13 @@ export function InboxPane({
   next: InboxNext | undefined;
   /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
   mentions?: TaskMentionsValue | undefined;
+  /**
+   * A phone's head (`phone-head.tsx`), where the item stands alone on a
+   * phone: the way back's glyph, the item's title centred, and one ⋯
+   * holding the pager, what the crumbs open, the panel, and the item's own
+   * actions; none elsewhere, where the bar draws its crumbs and buttons.
+   */
+  phone?: InboxPanePhone | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1204,38 +1305,60 @@ export function InboxPane({
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
-      <PageToolbar
-        start={TOOLBAR_INSET.COLUMN}
-        lead={
-          <div className="inbox-item-bar">
-            {onBack === undefined ? null : (
-              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
-            )}
-            <Crumbs
+      {phone !== undefined && onBack !== undefined ? (
+        <PhoneHead
+          place="inbox-item"
+          start={<BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />}
+          title={cardTitle(item.title)}
+          end={
+            <InboxItemMenu
+              key={item.id}
               holder={holder}
-              by={by}
-              doors={doors}
-              title={cardTitle(item.title)}
-              titleShown={headingAway}
+              item={item}
+              shown={!hidden}
+              onMark={doors.onMark}
+              onClose={doors.onClose}
+              lead={phoneItemGroups(holder, by, doors, pager, phone)}
+              heading={
+                pager?.count === undefined ? undefined : `${pager.count.at} of ${pager.count.total}`
+              }
             />
-            {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
-            <div className="luke-toolbar-actions inbox-item-actions">
-              {pager === undefined ||
-              (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
-                <InboxPagerControls pager={pager} />
+          }
+        />
+      ) : (
+        <PageToolbar
+          start={TOOLBAR_INSET.COLUMN}
+          lead={
+            <div className="inbox-item-bar">
+              {onBack === undefined ? null : (
+                <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
               )}
-              <InboxItemMenu
-                key={item.id}
+              <Crumbs
                 holder={holder}
-                item={item}
-                shown={!hidden}
-                onMark={doors.onMark}
-                onClose={doors.onClose}
+                by={by}
+                doors={doors}
+                title={cardTitle(item.title)}
+                titleShown={headingAway}
               />
+              {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
+              <div className="luke-toolbar-actions inbox-item-actions">
+                {pager === undefined ||
+                (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
+                  <InboxPagerControls pager={pager} />
+                )}
+                <InboxItemMenu
+                  key={item.id}
+                  holder={holder}
+                  item={item}
+                  shown={!hidden}
+                  onMark={doors.onMark}
+                  onClose={doors.onClose}
+                />
+              </div>
             </div>
-          </div>
-        }
-      />
+          }
+        />
+      )}
       <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation subject={item.id} list={board}>

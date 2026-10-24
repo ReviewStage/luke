@@ -32,6 +32,7 @@ import {
   Button,
   CHIP_WIDTH,
   FormField,
+  IconButton,
   matchingRows,
   POPOVER_ALIGN,
   Spinner,
@@ -39,6 +40,8 @@ import {
   TextField,
   TOOLBAR_INSET,
   Toolbar,
+  Tooltip,
+  TrashIcon,
 } from "@luke/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -51,6 +54,7 @@ import {
   useDraft,
   useDraftWriter,
 } from "../composer-drafts.js";
+import { PhoneHead } from "../desktop/phone-head.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { Picker } from "../settings/picker-row.js";
 import { undoToast, useToast } from "../toast.js";
@@ -126,6 +130,8 @@ export interface InboxComposeProps {
   readonly onDiscard: () => void;
   /** Opens New thread again, as Discard's Undo does. */
   readonly onRestore: () => void;
+  /** Whether a phone heads the pane (`phone-head.tsx`): the way back's glyph, the title centred, and Discard's glyph. */
+  readonly phone?: boolean | undefined;
 }
 
 /** The agents To may name: those not archived, since none of them hears a thread. */
@@ -330,6 +336,7 @@ function ComposeCard({
   onStarted,
   onDiscard,
   onRestore,
+  phone = false,
   composeTo,
   draft,
   update,
@@ -431,20 +438,42 @@ function ComposeCard({
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
-      <Toolbar
-        start={TOOLBAR_INSET.COLUMN}
-        lead={
-          onBack === undefined ? null : (
-            <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />
-          )
-        }
-        title={NEW_THREAD}
-        actions={
-          <Button variant={BUTTON_VARIANT.QUIET} onClick={discard} disabled={sending}>
-            {DISCARD}
-          </Button>
-        }
-      />
+      {phone ? (
+        <PhoneHead
+          place="new-thread"
+          start={
+            onBack === undefined ? null : (
+              <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />
+            )
+          }
+          title={NEW_THREAD}
+          end={
+            <Tooltip label={DISCARD}>
+              <IconButton
+                icon={<TrashIcon />}
+                label={DISCARD}
+                onClick={discard}
+                disabled={sending}
+              />
+            </Tooltip>
+          }
+        />
+      ) : (
+        <Toolbar
+          start={TOOLBAR_INSET.COLUMN}
+          lead={
+            onBack === undefined ? null : (
+              <BackButton label={INBOX} place={INBOX_PLACE} onBack={onBack} />
+            )
+          }
+          title={NEW_THREAD}
+          actions={
+            <Button variant={BUTTON_VARIANT.QUIET} onClick={discard} disabled={sending}>
+              {DISCARD}
+            </Button>
+          }
+        />
+      )}
       <div className="desktop-inbox inbox-compose">
         <div className="inbox-compose-head">
           <div className="inbox-compose-row">

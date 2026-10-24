@@ -158,12 +158,14 @@ async function drawnTab(
   return container;
 }
 
-/** What the tab draws, top to bottom: each of the developer's lines by its id, each fold's line, and each call by its id. */
+/** What the tab draws, top to bottom: each of the developer's lines by its id, at either side, each fold's line, and each call by its id. */
 function drawnOrder(container: HTMLElement): readonly string[] {
   return [
-    ...container.querySelectorAll(".is-user, [data-turn-fold] > summary, [data-call-id]"),
+    ...container.querySelectorAll(
+      ":is(.is-user, .is-chat), [data-turn-fold] > summary, [data-call-id]",
+    ),
   ].map((element) => {
-    if (element.classList.contains("is-user"))
+    if (element.matches(".is-user, .is-chat"))
       return `line: ${element.getAttribute("data-message-id")}`;
     if (element.matches("summary")) return `fold: ${element.textContent}`;
     return `call: ${element.getAttribute("data-call-id")}`;
@@ -222,4 +224,22 @@ test("a line from a service that kept no place for it stands where the order put
   const container = await drawnTab([TASK, older, journal(true)], CODING_AGENT_STATUS.COMPLETED);
 
   assert.deepEqual(drawnOrder(container), ["line: task", "line: github", "fold: 3 tool calls"]);
+});
+
+test("a line GitHub sent stands at the column's left, the other side's, while the developer's own stands at the right", async () => {
+  const container = await drawnTab(
+    [TASK, GITHUB_LINE, journal(true)],
+    CODING_AGENT_STATUS.COMPLETED,
+  );
+  const github = container.querySelector<HTMLElement>('[data-message-id="github"]');
+  assert.ok(github);
+  assert.ok(github.classList.contains("is-chat"), "GitHub's line stands at the left");
+  assert.equal(github.classList.contains("is-user"), false);
+  assert.equal(
+    github.querySelector(".luke-message-line")?.getAttribute("data-align"),
+    "start",
+    "the line under it starts at its left edge",
+  );
+  const task = container.querySelector<HTMLElement>('[data-message-id="task"]');
+  assert.ok(task?.classList.contains("is-user"), "the developer's own line stands at the right");
 });

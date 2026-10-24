@@ -187,7 +187,7 @@ test("under a finger a switch row's whole body is its label's press, and a butto
     createElement(SwitchRow, {
       label: "Video calls",
       detail: createElement(TextButton, {
-        tone: TEXT_BUTTON_TONE.LINK,
+        tone: TEXT_BUTTON_TONE.ACCENT,
         onClick: ignore,
         children: "Send feedback",
       }),

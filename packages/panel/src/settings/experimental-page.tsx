@@ -76,7 +76,7 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
       detail={
         <>
           {`${entry.detail} `}
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openFeedback(entry.key)}>
+          <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => openFeedback(entry.key)}>
             Send feedback
           </TextButton>
         </>

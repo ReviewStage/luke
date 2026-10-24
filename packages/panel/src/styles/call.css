@@ -92,7 +92,7 @@ html.call-window #root {
   );
   left: calc(var(--luke-space-16) + env(safe-area-inset-left, 0px));
   max-width: calc(
-    100vw -
+    var(--luke-stage-width) -
     2 *
     var(--luke-space-16) -
     env(safe-area-inset-left, 0px) -

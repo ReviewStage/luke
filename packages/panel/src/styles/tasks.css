@@ -4163,6 +4163,14 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   margin-left: auto;
 }
 
+/* The docked list's body keeps to under a third of what is seen and scrolls
+   past it, so a long list, over a composer, leaves the transcript its room
+   in a short window. */
+[data-todos-dock] .todo-items {
+  max-height: calc(var(--luke-stage-height) * 0.3);
+  overflow-y: auto;
+}
+
 /* One write of the list, as a call's row opens onto it: set bare at the
    row's text column, past the line's inset and icon, and selectable as a
    call's body is; a failure is said under it. */
@@ -4278,9 +4286,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    line to eight and then scrolling, with no space between its paragraphs,
    as a textarea's lines stand, and the placeholder the field draws at the
    editor's own insets while the words are empty, dimmed with the editor
-   while the box is held. */
+   while the box is held. In every room it stops growing short of two fifths
+   of what is seen (`--luke-stage-height`), so a short window, a laptop's
+   with a dock, is not filled by its composer; a narrow room's keyboard
+   takes a smaller share (desktop.css). */
 .agent-composer-field {
   position: relative;
+  --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.4);
   --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
   --agent-composer-field-lines: calc(
     8 *
@@ -4293,7 +4305,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   box-sizing: border-box;
   width: 100%;
   min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
-  max-height: var(--agent-composer-field-lines);
+  max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
   overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--luke-space-16) var(--luke-row-inset);
@@ -4676,19 +4688,19 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .attachment-viewer[data-view="text"] {
-  width: min(880px, 100vw - 2 * var(--luke-space-24));
+  width: min(880px, var(--luke-stage-width) - 2 * var(--luke-space-24));
   height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
 /* A picture opened at its own pixels, a diagram on a phone, is shown in
    the whole of the dimmed window, so as much of it as fits is in sight. */
 .attachment-viewer[data-view="image"][data-opening="own-pixels"] {
-  width: calc(100vw - 2 * var(--luke-space-24));
+  width: calc(var(--luke-stage-width) - 2 * var(--luke-space-24));
   height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer[data-view="other"] {
-  width: min(400px, 100vw - 2 * var(--luke-space-24));
+  width: min(400px, var(--luke-stage-width) - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer-header {

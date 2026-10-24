@@ -79,6 +79,7 @@ test("the commands only the desktop's window can carry out stand on the desktop 
     APP_COMMAND.FULL_SCREEN,
     APP_COMMAND.MINIMIZE,
     APP_COMMAND.CLOSE_WINDOW,
+    APP_COMMAND.RELOAD,
   ] as const;
   for (const command of WINDOW_COMMANDS) {
     assert.equal(shortcutShown(command, {}, [HOST_CAPABILITY.DESKTOP_APP]), true, command);

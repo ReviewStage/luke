@@ -455,7 +455,7 @@ function SkillRow({
             )}
           </Stack>
         </Checkbox>
-        <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => context.files.onView(candidate)}>
+        <TextButton onClick={() => context.files.onView(candidate)}>
           {viewWords(candidate, context.files)}
         </TextButton>
       </Inline>

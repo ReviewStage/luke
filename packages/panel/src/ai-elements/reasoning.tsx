@@ -5,7 +5,7 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
-  useDisclosureBodyDrawn,
+  useDisclosurePreviewShown,
 } from "@luke/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -48,7 +48,7 @@ export interface ReasoningTriggerProps {
 
 /** The one line a folded reasoning shows. */
 export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): ReactNode {
-  const drawn = useDisclosureBodyDrawn();
+  const previewed = useDisclosurePreviewShown(true);
   return (
     <LineSummary brightens>
       <GlyphSlot ink={GLYPH_INK.INHERIT}>
@@ -61,7 +61,7 @@ export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): React
         className="reasoning-preview"
       >
         <span className="reasoning-label">{REASONING_LINE}</span>
-        {drawn || preview === "" ? null : ` ${preview}`}
+        {previewed && preview !== "" ? ` ${preview}` : null}
       </Text>
     </LineSummary>
   );

@@ -219,7 +219,7 @@ async function drawnFor(
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const drawn = [...container.querySelectorAll(".is-user")];
+  const drawn = [...container.querySelectorAll(".is-user, .is-chat")];
   assert.equal(drawn.length, messages.length);
   return drawn;
 }
@@ -340,6 +340,18 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   );
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: SENDER_TASK, agentId: SENDER_ID }]);
   fakeAppBridge({});
+});
+
+test("a line Luke, another agent, or GitHub sent stands at the column's left, while the reader's own, a teammate's, and an automation's stand at the right", async () => {
+  const drawn = await drawnFor(DEAN.userId);
+  const side = (id: string) =>
+    drawn[MESSAGES.findIndex((message) => message.id === id)]?.classList.contains("is-chat")
+      ? "left"
+      : "right";
+  assert.deepEqual(
+    ["luke", "agent", "reviewer", "review-bot", "dean", "charles", "automation"].map(side),
+    ["left", "left", "left", "left", "right", "right", "right"],
+  );
 });
 
 test("a sent message keeps its bubble on top, with its Copy, who sent it, and when on the line under it, the time at the right", async () => {

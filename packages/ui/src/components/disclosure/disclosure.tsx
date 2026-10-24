@@ -123,6 +123,18 @@ export function useDisclosureBodyDrawn(): boolean {
 }
 
 /**
+ * Whether a summary's preview of its body shows: always where the body does
+ * not say it, as a command's description, and otherwise only while the body
+ * is not drawn (`useDisclosureBodyDrawn`), so an opened fold never says the
+ * same words twice. Note that the preview lands and leaves at once, because
+ * words that faded would move the line's cut while the body opens under it.
+ */
+export function useDisclosurePreviewShown(inBody: boolean): boolean {
+  const drawn = useDisclosureBodyDrawn();
+  return !(inBody && drawn);
+}
+
+/**
  * A fold's state and the props for the `details` it is drawn on, for a
  * surface that draws its own summary and body inside `DisclosureScope`;
  * open as `control` says where its holder keeps it.
