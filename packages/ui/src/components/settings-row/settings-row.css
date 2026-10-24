@@ -1,7 +1,9 @@
 /* settings-row.css -- a setting's words and its controls on one line, the
    words taking what room the controls leave and wrapping in it, and the
-   controls dropping below the words to the row's end once the row is
-   narrower than 380px, a leading mark staying beside the words. A compact
+   controls staying on the name's line once the row is narrower than 380px,
+   the name fading where it is cut, and dropping below the words only where
+   the words would be left too little room, a leading mark staying beside
+   the words. A compact
    row stands bare, at a menu row's height, and keeps its controls beside
    its words at any width. A list row stands in the card as a card's row
    does, shorter and with its label at body weight, a line of a reference
@@ -156,19 +158,58 @@
 
   /* A container query cannot read a custom property, so the contract's
      width is written here (`tokens/profiles.css`); a range rather than a
-     379px maximum, so a fractional width under 380px stacks too. */
+     379px maximum, so a fractional width under 380px stays narrow too.
+     Note that a narrow row keeps its end (a status, Reconnect, a ⋯) on the
+     name's line and gives the name way, fading it where it is cut as a
+     list row's is, so only the description grows the row taller; the end
+     drops below the words, to the row's end, only where the words could
+     not keep a legible stretch of their own beside it. */
   /* off-scale: 380px, where a row's control and words stop fitting on one line (tokens/profiles.css) */
   @container luke-settings-row (width < 380px) {
     .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
       .luke-settings-row-line {
-      flex-direction: column;
-      align-items: stretch;
-      gap: var(--luke-space-8);
+      flex-wrap: wrap;
+      gap: var(--luke-space-8) var(--luke-space-12);
     }
 
     .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
       .luke-settings-row-subject {
-      flex-basis: auto;
+      flex-basis: calc(
+        var(--luke-settings-row-words-inset) +
+        var(--luke-space-96) +
+        var(--luke-space-24)
+      );
+    }
+
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-controls {
+      flex-shrink: 0;
+      margin-inline-start: auto;
+    }
+
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-title {
+      flex-wrap: nowrap;
+      column-gap: 0;
+    }
+
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-title
+      > :not(.luke-settings-row-label) {
+      flex: none;
+    }
+
+    .luke-settings-row:not([data-density="compact"], [data-labels-control="true"])
+      .luke-settings-row-label:not(:has(input, textarea)) {
+      display: block;
+      min-width: 0;
+      /* Note that the fade stands in padding, because a name that fits ends
+         before it and keeps its last letter whole, and one cut short ends
+         inside it. */
+      padding-inline-end: var(--luke-label-fade);
+      overflow: hidden;
+      white-space: nowrap;
+      mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
     }
   }
 

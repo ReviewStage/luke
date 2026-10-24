@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
@@ -234,4 +236,34 @@ test("a press on a switch row's words sets its switch, as a press on the switch 
     act(() => words.click());
     expect(control.getAttribute("aria-checked")).toBe("false");
   }
+});
+
+/** The body of the rule block that opens with `prelude`, braces matched, from the row's stylesheet. */
+function blockOf(prelude: string): string {
+  const css = readFileSync(join(import.meta.dirname, "settings-row.css"), "utf8");
+  const start = css.indexOf(prelude);
+  if (start === -1) throw new Error(`no ${prelude} in the row's stylesheet`);
+  let depth = 0;
+  for (let at = css.indexOf("{", start); at < css.length; at += 1) {
+    if (css[at] === "{") depth += 1;
+    if (css[at] === "}") depth -= 1;
+    if (depth === 0) return css.slice(css.indexOf("{", start) + 1, at);
+  }
+  throw new Error(`${prelude} is never closed`);
+}
+
+// jsdom lays nothing out, so what a phone's width does to a row's head is read from the rules the
+// browser applies there; the picture of it is the polish capture's `settings-integrations` at 390.
+test("under 380px a row's end stays on the name's line and wraps below it only where it cannot fit, never stacking", () => {
+  const narrow = blockOf("@container luke-settings-row (width < 380px)");
+  expect(narrow).not.toMatch(/flex-direction:\s*column/);
+  expect(narrow).toMatch(/\.luke-settings-row-line\s*\{[^}]*flex-wrap:\s*wrap/);
+});
+
+test("under 380px a name is cut to one line and fades where it is cut, while the description still wraps", () => {
+  const narrow = blockOf("@container luke-settings-row (width < 380px)");
+  const label = /\.luke-settings-row-label:not\([^{]*\{([^}]*)\}/.exec(narrow)?.[1] ?? "";
+  expect(label).toMatch(/white-space:\s*nowrap/);
+  expect(label).toMatch(/mask-image:\s*linear-gradient/);
+  expect(narrow).not.toMatch(/\.luke-settings-row-description[^{]*\{[^}]*nowrap/);
 });
