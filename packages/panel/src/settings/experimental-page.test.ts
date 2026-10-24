@@ -195,7 +195,7 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
   assert.equal(group.getAttribute("aria-label"), "Avatar");
   assert.equal(
     wordsOf(group, "aria-describedby"),
-    "Who Luke appears as on video. A new choice shows the next time video starts.",
+    "Who Luke appears as on video. A new choice shows the next time video starts. Kept on this Mac.",
   );
   const faces = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(
