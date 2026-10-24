@@ -167,6 +167,17 @@ test("in a transcript a listed task's key is its chip saying the key, which open
   ]);
 });
 
+test("a mention labelled with one task's key that links another says the task it opens, by its name", async () => {
+  const other = task(STAGE, 422, "").id;
+  const container = await drawn(
+    createElement(TranscriptWords, {
+      text: `See [@STAG-421](https://tryluke.dev/stage/plan/${other}).`,
+    }),
+  );
+
+  assert.deepEqual(chips(container), [[MENTION_KIND.TASK, "Task ID chips"]]);
+});
+
 test("a key alone on its line of an Inbox item's document is its chip in the paragraph, not a link's card", async () => {
   const container = await drawn(
     createElement(TranscriptWords, { text: "Next up:\n\nSTAG-422\n", asDocument: true }),

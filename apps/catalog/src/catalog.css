@@ -471,7 +471,7 @@ body {
   gap: var(--luke-control-gap);
 }
 
-.catalog-settings-key > .luke-text-field {
+.catalog-settings-key > [data-slot="input"] {
   flex: 1 1 var(--luke-select-field-width);
 }
 
@@ -775,7 +775,7 @@ body {
   text-transform: none;
 }
 
-.catalog-width .luke-text-field {
+.catalog-width [data-slot="input"] {
   inline-size: 10ch; /* four digits and the spinner, at either profile's size */
 }
 

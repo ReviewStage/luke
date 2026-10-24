@@ -1,5 +1,5 @@
 /**
- * vercel-sandbox-api.test.ts -- what a failed call of Vercel Sandbox's REST API says of itself, against a scripted fake of it: the call, its status, and Vercel's error or the cause's; and a detached command's start and stdin tried again on a passing refusal alone; and a detached command's exit read as Vercel answers it, a plain read naming none until a read that waits has seen it.
+ * vercel-sandbox-api.test.ts -- what a failed call of Vercel Sandbox's REST API says of itself, against a scripted fake of it: the call, its status, and Vercel's error or the cause's; and a detached command's start tried again only on a refusal that says it never ran, and its stdin on any passing refusal; and a detached command's exit read as Vercel answers it, a plain read naming none until a read that waits has seen it.
  */
 
 import assert from "node:assert/strict";
@@ -220,6 +220,23 @@ it.effect("a start Vercel refused outright answers at once, though a try after w
     assert.equal(failure.status, 400);
     assert.equal(failure.call, SANDBOX_CALL.CMD);
   }),
+);
+
+it.effect(
+  "a start whose gateway lost the answer is not tried again, since the command may already run",
+  () =>
+    Effect.gen(function* () {
+      for (const status of [502, 504]) {
+        const api = yield* apiOver(answering(refusedWith(status), started));
+        const starting = yield* Effect.forkChild(
+          Effect.flip(api.start(SESSION, { command: "bash", args: [], sudo: true })),
+        );
+        yield* TestClock.adjust(Duration.seconds(5));
+        const failure = yield* Fiber.join(starting);
+        assert.equal(failure.status, status);
+        assert.equal(failure.call, SANDBOX_CALL.CMD);
+      }
+    }),
 );
 
 it.effect("a passing refusal that outlasts the tries answers its last status", () =>

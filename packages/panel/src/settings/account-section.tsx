@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -146,7 +147,7 @@ export function AccountSection({
         >
           {() => (
             <Button variant={BUTTON_VARIANT.OUTLINE} disabled={busy} onClick={signOut.ask}>
-              Sign out
+              {VERB.SIGN_OUT}
             </Button>
           )}
         </SettingsRow>
@@ -164,8 +165,8 @@ export function AccountSection({
       <ConfirmDialog
         confirm={signOut}
         question={{
-          title: `Sign out of ${account.email}?`,
-          verb: "Sign out",
+          title: `${VERB.SIGN_OUT} of ${account.email}?`,
+          verb: VERB.SIGN_OUT,
           running: "Signing out",
           tone: DIALOG_TONE.PRIMARY,
         }}

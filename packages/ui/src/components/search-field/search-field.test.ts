@@ -174,11 +174,12 @@ test("a tally says none found, how many, or which of how many", () => {
   assert.deepEqual(
     [
       said({ count: 0 }),
+      said({ count: 1 }),
       said({ count: 4 }),
       said({ count: 500, more: true }),
       said({ count: 4, at: 0 }),
     ],
-    ["No results", "4 results", "500+ results", "1 of 4"],
+    ["No results", "1 result", "4 results", "500+ results", "1 of 4"],
   );
 });
 

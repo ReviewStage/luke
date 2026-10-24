@@ -55,16 +55,6 @@ const voiceViewAtom: Atom.Atom<VoiceView> = Atom.map(
   (voice) => voice?.view ?? IDLE_VOICE_VIEW,
 );
 
-/**
- * What was said on the standing call so far, as the document holds it
- * beside the view, which tells its one reader as a line grows and the view's
- * readers not at all; none for no call.
- */
-const callTranscriptAtom: Atom.Atom<VoiceCallTranscript | undefined> = Atom.map(
-  APP_SLICE.VOICE,
-  (voice) => voice?.callTranscript,
-);
-
 /** Luke's avatar on the call as main holds it, which tells its readers only as the avatar moves, not as the words do. */
 const voiceAvatarAtom: Atom.Atom<AvatarState> = Atom.map(
   APP_SLICE.VOICE,
@@ -191,5 +181,5 @@ export function useVoiceAvatar(): AvatarState {
 
 /** What was said on the standing call so far, which its agent's tab's live transcript draws; none for no call. */
 export function useCallTranscript(): VoiceCallTranscript | undefined {
-  return useAppSlice(callTranscriptAtom);
+  return useAppSlice(APP_SLICE.CALL_TRANSCRIPT);
 }

@@ -37,6 +37,8 @@
  * after it below, as Claude Code and Cursor draw a message sent mid-turn.
  */
 
+import { countWords } from "./words.js";
+
 /** The kinds of call a row can be, across both tabs. */
 export const CALL_KIND = {
   COMMAND: "command",
@@ -399,10 +401,6 @@ export type TurnRow<B> =
       readonly failed: boolean;
     };
 
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 /** What a lead's blocks hold, as its fold's line counts them. */
 interface Held {
   readonly calls: number;
@@ -414,10 +412,12 @@ interface Held {
 /** What a finished turn's folded lead says it holds. */
 function foldedSummary({ calls, subagents, codingAgents, messages }: Held): string {
   const line = [
-    ...(calls > 0 ? [plural(calls, "tool call", "tool calls")] : []),
-    ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
-    ...(codingAgents > 0 ? [plural(codingAgents, "coding agent", "coding agents")] : []),
-    ...(messages > 0 ? [plural(messages, "message", "messages")] : []),
+    ...(calls > 0 ? [countWords(calls, { one: "tool call", many: "tool calls" })] : []),
+    ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
+    ...(codingAgents > 0
+      ? [countWords(codingAgents, { one: "coding agent", many: "coding agents" })]
+      : []),
+    ...(messages > 0 ? [countWords(messages, { one: "message", many: "messages" })] : []),
   ];
   return line.join(", ");
 }
@@ -426,8 +426,8 @@ function foldedSummary({ calls, subagents, codingAgents, messages }: Held): stri
 function groupSummary({ calls, subagents, codingAgents }: Held): string {
   const tools = calls + codingAgents;
   const said = [
-    ...(tools > 0 ? [plural(tools, "tool called", "tools called")] : []),
-    ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
+    ...(tools > 0 ? [countWords(tools, { one: "tool called", many: "tools called" })] : []),
+    ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
   ];
   return said.join(", ");
 }

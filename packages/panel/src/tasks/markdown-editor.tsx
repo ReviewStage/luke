@@ -76,8 +76,10 @@ interface MarkdownEditorMentions {
   readonly doors: MentionDoors;
   /** What the `@` list offers but the document's own words, which the editor reads as they stand. */
   readonly source: Omit<MentionSource, "text">;
-  /** A mention's target named again where an edit moved the section it names; none where the document's sections are named by no mention. */
-  readonly retarget?: ((target: string, change: HeadingsChange) => string | undefined) | undefined;
+  /** A mention named again, its target and its name, where an edit renamed or moved the section it names; none where the document's sections are named by no mention. */
+  readonly retarget?:
+    | ((target: string, change: HeadingsChange) => MentionNode | undefined)
+    | undefined;
 }
 
 /** What a document hands its editor: its text, the doors it hears it through, and what it opts into. */

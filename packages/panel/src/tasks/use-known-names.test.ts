@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { stateWith } from "../testing/app-state.js";
+import { deliveryOf, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { useKnownNames, useTaskKeyTargets } from "./use-known-names.js";
 
@@ -68,7 +68,8 @@ async function twoReaders(first: AppStateSnapshot): Promise<{
 }> {
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   fakeAppBridge({
-    onAppState: (listener) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
@@ -150,7 +151,8 @@ test("the tasks' keys are handed again for a delivery that moves no key, and ane
   });
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   fakeAppBridge({
-    onAppState: (listener) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
