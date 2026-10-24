@@ -29,6 +29,7 @@ import {
   ChoiceBar,
   DIALOG_SIZE,
   Dialog,
+  ErrorState,
   FILE_TEXT_EXTENT,
   FileText,
   FormField,
@@ -83,7 +84,9 @@ import {
   type PulledSkill,
   pastedAtOnce,
   pastedLine,
+  previewFailureLine,
   previewLine,
+  previewRetries,
   previewSourceLine,
   problemsLine,
   pulledLine,
@@ -672,6 +675,8 @@ export function AddSkillDialog({
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [read, setRead] = useState<ReadonlyMap<string, FileRead>>(new Map());
   const [installing, setInstalling] = useState(false);
+  // Note that Retry asks again by changing this, which the preview's effect reads.
+  const [attempt, setAttempt] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Note that only a change that came at once folds the box, so a skill typed by hand keeps its box while the writer pauses.
   const pasted = useRef(false);
@@ -691,8 +696,10 @@ export function AddSkillDialog({
           : undefined,
       )
       .catch(() => undefined)
-      .then((view) => {
-        if (!current || view === undefined) return;
+      .then((answer) => {
+        if (!current) return;
+        // Note that a call with no answer is a failed preview, so the line under the box stops reading.
+        const view = answer ?? { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
         setPreviewed({ text, view });
         if ("failure" in view) return;
         setTicks(initialTicks(view));
@@ -709,7 +716,7 @@ export function AddSkillDialog({
     return () => {
       current = false;
     };
-  }, [act, asks, pause, text, workspace.id]);
+  }, [act, asks, attempt, pause, text, workspace.id]);
 
   const view = asks && previewed?.text === text ? previewed.view : undefined;
   const preview = view === undefined || "failure" in view ? undefined : view;
@@ -721,12 +728,17 @@ export function AddSkillDialog({
     .flatMap((group) => group.skills)
     .filter((each) => installable(each, scope))
     .map((each) => each.name);
+  const failed = view !== undefined && "failure" in view ? view : undefined;
   const line =
     view === undefined
       ? pastedLine(paste)
       : "failure" in view
-        ? { text: failureLine(view), tone: STATUS_TONE.ATTENTION }
+        ? { text: previewFailureLine(view), tone: STATUS_TONE.ATTENTION }
         : previewLine(view);
+  const retry = () => {
+    setPreviewed(undefined);
+    setAttempt((was) => was + 1);
+  };
   const request = installRequest({
     workspaceId: workspace.id,
     text,
@@ -809,6 +821,7 @@ export function AddSkillDialog({
       title={addSkillTitle(screen, preview)}
       size={DIALOG_SIZE.WIDE}
       busy={installing}
+      holding={text.trim() !== ""}
       onDismiss={onClose}
       actionsStart={
         scopes.length > 1 ? (
@@ -875,7 +888,11 @@ export function AddSkillDialog({
             )}
           </FormField>
         )}
-        {folded || line === undefined ? null : <DetectedText line={line} />}
+        {folded || line === undefined ? null : failed !== undefined && previewRetries(failed) ? (
+          <ErrorState onRetry={retry}>{line.text}</ErrorState>
+        ) : (
+          <DetectedText line={line} />
+        )}
         {screen === ADD_SKILL_SCREEN.BROWSE ? (
           <BrowseHead
             count={skills.length}

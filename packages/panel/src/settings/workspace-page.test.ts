@@ -2532,3 +2532,64 @@ test("a repository's Save is named Saving while its command is sent, and Save ag
   assert.deepEqual(during, ["Saving", "true"]);
   assert.deepEqual([save.getAttribute("aria-label"), save.getAttribute("aria-busy")], [null, null]);
 });
+
+/**
+ * Presses Escape in `field` with the caret in it, and reports what the window's own
+ * Escape would see: whether the press arrived marked taken, which it passes by.
+ */
+function escapeIn(field: HTMLInputElement): { taken: boolean } {
+  const seen = { taken: false };
+  const listen = (event: KeyboardEvent) => {
+    seen.taken = event.defaultPrevented;
+  };
+  window.addEventListener("keydown", listen);
+  act(() => field.focus());
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  window.removeEventListener("keydown", listen);
+  return seen;
+}
+
+test("Escape in the invite email field lets go of it, its words kept, and the window never takes it to leave Settings", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const address =
+    page.querySelector<HTMLInputElement>(".workspace-invite form input") ??
+    assert.fail("no address field");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      address,
+      "alan@example.com",
+    );
+    address.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  const seen = escapeIn(address);
+
+  assert.equal(seen.taken, true, "the window's Escape passes a taken press by");
+  assert.notEqual(document.activeElement, address, "the caret is let go");
+  assert.equal(address.value, "alan@example.com");
+});
+
+test("Escape in a repository's run command field lets go of it, its words kept, and the window never takes it to leave Settings", async () => {
+  githubRepositories = ["acme/app"];
+  const { page } = await mount(ACME);
+  const command =
+    page.querySelector<HTMLInputElement>('input[aria-label="acme/app run command"]') ??
+    assert.fail("no command field");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      command,
+      "pnpm dev",
+    );
+    command.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  const seen = escapeIn(command);
+
+  assert.equal(seen.taken, true, "the window's Escape passes a taken press by");
+  assert.notEqual(document.activeElement, command, "the caret is let go");
+  assert.equal(command.value, "pnpm dev");
+});
