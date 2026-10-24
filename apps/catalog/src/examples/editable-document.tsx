@@ -7,6 +7,7 @@ import {
   EDITABLE_HEADING_LEAVE,
   EditableBlock,
   EditableHeading,
+  PageHeader,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -23,7 +24,7 @@ const SECTIONS = [
 ];
 
 function EditableDocument(): React.JSX.Element {
-  const title = useRef<HTMLDivElement | null>(null);
+  const title = useRef<HTMLElement | null>(null);
   const titleBlock = useRef<HTMLDivElement | null>(null);
   const [heard, setHeard] = useState("Nothing opened yet");
   // The words are the heading's own once drawn, as a plan's title's are.
@@ -41,14 +42,17 @@ function EditableDocument(): React.JSX.Element {
             entry
             onOpen={() => title.current?.focus()}
           >
-            <EditableHeading
-              ref={title}
-              label="Task name"
-              level={1}
-              onLeave={(way) => {
-                if (way === EDITABLE_HEADING_LEAVE.BACK) titleBlock.current?.focus();
-                else setHeard("Left the title for the text");
-              }}
+            <PageHeader
+              title={
+                <EditableHeading
+                  ref={title}
+                  label="Task name"
+                  onLeave={(way) => {
+                    if (way === EDITABLE_HEADING_LEAVE.BACK) titleBlock.current?.focus();
+                    else setHeard("Left the title for the text");
+                  }}
+                />
+              }
             />
           </EditableBlock>
           {SECTIONS.map((section) => (

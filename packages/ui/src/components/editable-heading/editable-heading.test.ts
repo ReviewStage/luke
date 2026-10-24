@@ -38,7 +38,6 @@ function drawHeading(left: EditableHeadingLeave[]): HTMLElement {
     root.render(
       createElement(EditableHeading, {
         label: "Task name",
-        level: 1,
         onLeave: (way) => left.push(way),
       }),
     ),
