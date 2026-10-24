@@ -357,7 +357,7 @@ test("a Sign out that fails keeps the dialog up saying so, and the account still
 
   await act(async () => dialogButton("Sign out").click());
 
-  assert.match(dialog()?.querySelector('[role="alert"]')?.textContent ?? "", /could not log out/u);
+  assert.match(dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "", /could not log out/u);
 });
 
 test("signed out, the account says so and its menu names no one and offers no Sign out", async () => {
