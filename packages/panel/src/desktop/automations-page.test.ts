@@ -2376,7 +2376,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
 });
 
-/** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
+/** What each row's glyph draws, in order: Sentry's or GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
     if (row.querySelector(".integration-mark-sentry") !== null) return "sentry";
@@ -2389,7 +2389,7 @@ function glyphs(rows: readonly Element[]): string[] {
   });
 }
 
-test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play, while each automation's row leads with its clock tile whatever fires it", async () => {
+test("each automation's row and each run wear what fires it: a schedule's clock, GitHub's or Sentry's mark, a webhook's hook, or Run now's play", async () => {
   standing = [
     SWEEP,
     automation(7, {
@@ -2401,15 +2401,20 @@ test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook
       trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
       webhookUrl: "https://tryluke.dev/api/automations/8/webhook",
     }),
+    SENTRY_ALERTS,
   ];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(
-    automationRows(list).map(
-      (row) => row.querySelector('.actor-mark[data-kind="automation"]') !== null,
-    ),
-    [true, true, true],
+  const tiles = automationRows(list).map((row) =>
+    row.querySelector('.actor-mark[data-kind="automation"]'),
   );
+  assert.ok(tiles.every((tile) => tile !== null));
+  assert.deepEqual(glyphs(tiles.filter((tile) => tile !== null)), [
+    "clock",
+    "github",
+    "webhook",
+    "sentry",
+  ]);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -3373,8 +3378,10 @@ test("a Sentry automation's runs wear Sentry's mark, its row says its event and 
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   assert.ok(
-    rowOf(list, "Fix Sentry errors").querySelector('.actor-mark[data-kind="automation"]'),
-    "the row leads with its clock tile, Sentry's mark left to its runs",
+    rowOf(list, "Fix Sentry errors").querySelector(
+      '.actor-mark[data-kind="automation"] .integration-mark-sentry',
+    ),
+    "the row's tile wears Sentry's mark",
   );
   assert.ok(
     says(rowOf(list, "Fix Sentry errors"), "When an alert fires in Sentry · web, api · error"),

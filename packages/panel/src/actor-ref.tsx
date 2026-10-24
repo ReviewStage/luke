@@ -14,6 +14,7 @@ import {
   Avatar,
   type AvatarSize,
   type CommentAuthor,
+  FiringGlyph,
   GAP,
   HoverCard,
   HoverCardHead,
@@ -202,6 +203,12 @@ function SomeoneDisc({ glyph, size }: { glyph: ReactNode; size: ActorSize }): Re
   return <Avatar name="" glyph={glyph} size={AVATAR_OF_SIZE[size]} decorative />;
 }
 
+/** An automation's glyph on its square: what fires it, GitHub's or Sentry's mark among them, or the clock where only its name is known, wearing where its newest run stands. */
+function automationGlyph(actor: ActorOf<typeof ACTOR_KIND.AUTOMATION>): React.JSX.Element {
+  const glyph = actor.trigger === undefined ? <ClockIcon /> : <FiringGlyph of={actor.trigger} />;
+  return <StateGlyph glyph={glyph} state={GLYPH_OF_STATE[actor.state]} />;
+}
+
 /** What stands on an actor's circle or square, at its size. */
 function Face({
   actor,
@@ -237,7 +244,7 @@ function Face({
       return (
         <GlyphSquare
           name={actorName(actor)}
-          glyph={<StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />}
+          glyph={automationGlyph(actor)}
           size={size}
           tiled={tiled}
         />
@@ -311,7 +318,7 @@ export function commentAuthor(actor: Actor): CommentAuthor {
       return {
         name: actorName(actor),
         shape: AVATAR_SHAPE.SQUARE,
-        glyph: <StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />,
+        glyph: automationGlyph(actor),
       };
     case ACTOR_KIND.GITHUB:
       return actor.bot
@@ -652,18 +659,19 @@ const ACTOR_STATE_OF_RUN = {
   [AUTOMATION_RUN_STANDING.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<AutomationRunStanding, ActorState>;
 
-/** An automation as its tile draws it: its clock, wearing where its newest run stands, under its name. */
+/** An automation as its tile draws it: the glyph of what fires it, wearing where its newest run stands, under its name. */
 export function automationActor(automation: AutomationSummary): Actor {
   return {
     kind: ACTOR_KIND.AUTOMATION,
     automationId: automation.id,
     name: automation.name,
     state: ACTOR_STATE_OF_RUN[automationRunStanding(automation.lastRun)],
+    trigger: automation.trigger,
   };
 }
 
 /**
- * An automation's card: its clock, its name over what fires it, whose it
+ * An automation's card: the glyph of what fires it, its name over those words, whose it
  * is at the corner, when it runs next, and how its last run went. Note
  * that it offers no way to the automation's page under a rule, because
  * the name it hangs from opens that page on a press; hung from a control
