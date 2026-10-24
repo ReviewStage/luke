@@ -174,6 +174,7 @@ interface PlaywrightLocator {
   click(options: Record<string, unknown>): Promise<void>;
   hover(options: Record<string, unknown>): Promise<void>;
   waitFor(options: Record<string, unknown>): Promise<void>;
+  isVisible(): Promise<boolean>;
   screenshot(options: Record<string, unknown>): Promise<unknown>;
 }
 interface PlaywrightPage {
@@ -333,7 +334,19 @@ async function runStep(page: PlaywrightPage, step: Step): Promise<string | undef
   }
 }
 
-/** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. */
+/** Floats the sidebar open where the window has folded it away, which its toggle offers as "Show sidebar" and only then; a pinned sidebar offers "Hide sidebar", so nothing is pressed. */
+async function showSidebar(page: PlaywrightPage, problems: string[]): Promise<void> {
+  const toggle = page.getByRole("button", { name: "Show sidebar", exact: true }).first();
+  if (!(await toggle.isVisible())) return;
+  const problem = await runStep(page, {
+    kind: STEP.CLICK,
+    role: "button",
+    name: "Show sidebar",
+  });
+  if (problem !== undefined) problems.push(problem);
+}
+
+/** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. A scene that steps into the sidebar has it shown first, except on a phone, whose drawer its own steps open. */
 async function stageScene(
   page: PlaywrightPage,
   scene: Scene,
@@ -348,6 +361,7 @@ async function stageScene(
   } catch {
     problems.push("still reading when shot");
   }
+  if (scene.sidebar === true && !phone) await showSidebar(page, problems);
   for (const step of (phone ? scene.phoneSteps : undefined) ?? scene.steps ?? []) {
     const problem = await runStep(page, step);
     if (problem !== undefined) problems.push(problem);
