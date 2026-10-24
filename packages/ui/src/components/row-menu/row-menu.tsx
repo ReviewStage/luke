@@ -20,7 +20,7 @@ import { showDetailsFrom } from "../tooltip/hint.js";
  * `ListRow` does (`ListRowMenu`), so it opens them by the same three doors:
  * its ⋯ (`more`), a right-click or a touch's long press anywhere on it, and
  * the menu key or ⇧F10 pressed on it or any control inside it. Where the
- * row's control hangs a hover card, the menu offers Show details, which
+ * row's own control hangs a hover card, the menu offers Show details, which
  * opens that card with focus inside it, as ⌥↓ on the control does, so what
  * the card holds is reached without a pointer. The owner
  * spreads `props` on the box that is the row, draws `more` where its ⋯
@@ -115,14 +115,11 @@ export function useRowMenu(
         {...state.trigger()}
       />
     ) : null;
-  // Note that the card is looked for from the row's control first, because the ⋯ that opened the menu stands beside it rather than in it.
+  // Note that the card is the row's own control's, looked for from it first, because the ⋯ that opened the menu stands beside it rather than in it.
   const details =
     state.drawn === undefined
       ? undefined
-      : (showDetailsFrom(opener?.current) ??
-        showDetailsFrom(
-          state.drawn.opener.closest<HTMLElement>("[data-row-menu]") ?? state.drawn.opener,
-        ));
+      : (showDetailsFrom(opener?.current) ?? showDetailsFrom(state.drawn.opener));
   const popup: ReactNode =
     live !== undefined && state.drawn !== undefined ? (
       <Menu

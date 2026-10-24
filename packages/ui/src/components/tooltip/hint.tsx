@@ -331,17 +331,14 @@ export function commandKeyshortcuts(command: KeyedCommand): string {
 
 /**
  * The way to open, and enter, the card of the control `from` stands for, as
- * Show details in its menu does: the control itself or one it stands in,
- * or the first inside it, as a row's box holds its press. Nothing where no
- * card hangs there.
+ * Show details in its menu does: the control itself, or one it stands in.
+ * Note that a control inside it, as a creator's face on a task's row, is
+ * never asked, because its card is of another thing than the row. Nothing
+ * where no card hangs there.
  */
 export function showDetailsFrom(from: HTMLElement | null | undefined): (() => void) | undefined {
   for (let each = from ?? null; each !== null; each = each.parentElement) {
     const door = cardDoors.get(each);
-    if (door !== undefined) return door;
-  }
-  for (const inside of from?.querySelectorAll<HTMLElement>("*") ?? []) {
-    const door = cardDoors.get(inside);
     if (door !== undefined) return door;
   }
   return undefined;

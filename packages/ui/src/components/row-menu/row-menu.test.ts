@@ -14,7 +14,8 @@ import { type ListRowMenu, useRowMenu } from "./row-menu.js";
  * in it. None is offered where the row has no acts or is unavailable.
  * Where the row's press hangs a hover card, the menu offers Show details,
  * which opens the card with focus inside it, and Escape hands focus back to
- * the press; a row hanging no card offers no Show details.
+ * the press; a row whose press hangs no card offers no Show details, even
+ * where a chip in it hangs one, since that card is of another thing.
  */
 
 declare global {
@@ -208,6 +209,40 @@ test("a row whose press hangs a card offers Show details, before its last group,
 
 test("a row hanging no card offers no Show details", () => {
   draw(createElement(MenuCard, { menu: MENU }));
+  act(() => buttonNamed("Card actions").click());
+  expect(menuItems()).toEqual(["Rename"]);
+});
+
+/** A card whose press hangs no card, holding a chip that hangs one, as a task's row holds its creator's face. */
+function ChipCardedMenuCard(): React.JSX.Element {
+  const press = useRef<HTMLButtonElement | null>(null);
+  const row = useRowMenu(MENU, { opener: press });
+  return createElement(
+    "div",
+    null,
+    createElement(Card, {
+      ...row.props,
+      children: [
+        createElement("button", { key: "press", type: "button", ref: press }, "Press"),
+        createElement(Tooltip, {
+          key: "chip",
+          label: "Sam",
+          card: createElement("p", null, "Sam Rivera"),
+          children: createElement(
+            "button",
+            { type: "button", "aria-describedby": undefined },
+            "Sam",
+          ),
+        }),
+        row.more(),
+      ],
+    }),
+    row.popup,
+  );
+}
+
+test("a row whose press hangs no card offers no Show details for a chip in it that hangs one", () => {
+  draw(createElement(ChipCardedMenuCard));
   act(() => buttonNamed("Card actions").click());
   expect(menuItems()).toEqual(["Rename"]);
 });
