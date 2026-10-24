@@ -13,15 +13,16 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { ToastHost } from "../toast.js";
 import { isUnread } from "./inbox-model.js";
 import { useSettledItems } from "./inbox-settling.js";
-import { type InboxReadMarks, useInboxReadMarks } from "./use-inbox-read-marks.js";
+import { type InboxReadMarks, type MarkSaying, useInboxReadMarks } from "./use-inbox-read-marks.js";
 
 /**
  * use-inbox-read-marks.test.ts -- the Inbox's read marks flip a dot at once
@@ -116,7 +117,7 @@ function marks(first: readonly InboxItem[]) {
       workspaceId: TASK.workspaceId,
     });
     drawn = useSettledItems(items);
-    return null;
+    return createElement(Fragment, null, createElement(ToastHost));
   }
   root = createRoot(document.createElement("div"));
   const registry = AtomRegistry.make();
@@ -129,10 +130,15 @@ function marks(first: readonly InboxItem[]) {
     read,
     /** Each item's dot as the hook draws it. */
     dots: () => drawn.map((each) => [each.id, isUnread(each)]),
-    mark: (target: InboxItem, unread: boolean) =>
+    mark: (target: InboxItem, unread: boolean, saying?: MarkSaying) =>
       act(() => {
-        void held().onMark(target, unread);
+        void held().onMark(target, unread, saying);
       }),
+    /** What each toast standing says, leaving out those on their way out. */
+    toasts: () =>
+      [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+        (words) => words.textContent ?? "",
+      ),
     markAll: (items: readonly InboxItem[]) => act(() => held().onMarkAll(items)),
   };
 }
@@ -191,6 +197,7 @@ test("a mark the service refused is let go, and Mark all as read refused lets it
     [X, false],
     [Y, true],
   ]);
+  assert.deepEqual(hook.toasts(), ["Could not mark 1 item unread"]);
   hook.markAll([item(X, false), item(Y, true)]);
   await settle();
   assert.deepEqual(hook.dots(), [
@@ -202,6 +209,16 @@ test("a mark the service refused is let go, and Mark all as read refused lets it
     [X, false],
     [Y, true],
   ]);
+  assert.deepEqual(hook.toasts(), ["Could not mark 1 item unread", "Could not mark 1 item read"]);
+});
+
+test("a refused mark from a caller that says the refusal itself toasts nothing, and still answers false", async () => {
+  const hook = marks([item(X, false)]);
+  hook.mark(item(X, false), true, { quiet: true });
+  await settle();
+  await hook.sent[0]?.answer(true);
+  assert.deepEqual(hook.dots(), [[X, false]]);
+  assert.deepEqual(hook.toasts(), []);
 });
 
 test("two opposite marks out at once stand as the latest made, though the held read lands the earlier one's write before the later one goes", async () => {

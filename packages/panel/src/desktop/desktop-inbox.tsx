@@ -445,7 +445,7 @@ function InboxShown({
                       />
                     }
                     onChoose={open}
-                    onMark={(listed, unread) => markItem(listed.item, unread)}
+                    onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
                     onClose={closeItem}
                   />
                 )}

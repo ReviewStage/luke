@@ -1,5 +1,4 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { countWords, TERM } from "@luke/features/words";
 import {
   ConfirmDialog,
   INSET,
@@ -16,6 +15,7 @@ import { COMMAND_PLACE, commandWords, PANEL_COMMAND } from "../command-items.js"
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { closeAllQuestion, closedNote, type InboxCloser } from "./inbox-close.js";
 import { type InboxListed, isUnread } from "./inbox-model.js";
+import { type MarkSaying, markedNote } from "./use-inbox-read-marks.js";
 
 /**
  * inbox-selection.tsx -- the bar over the Inbox's list while items of it are chosen: Mark as read, Mark as unread, and Resolve, each for every item chosen at once.
@@ -38,13 +38,12 @@ import { type InboxListed, isUnread } from "./inbox-model.js";
 /** What the bar's Resolve says. */
 const RESOLVE = "Resolve";
 
-/** What one toast says of read marks given to several items: how many the service took, and how many not. */
-function markedNote(unread: boolean, landed: number, refused: number): string {
-  const state = unread ? "unread" : "read";
-  if (landed === 0) return `Could not mark ${countWords(refused, TERM.INBOX_ITEM)} ${state}`;
-  const kept = `${countWords(landed, TERM.INBOX_ITEM)} marked ${state}`;
-  return refused === 0 ? kept : `${kept}, ${refused} could not be`;
-}
+/** Marks one listed item read or unread, answering whether the service took it. */
+export type InboxListMark = (
+  listed: InboxListed,
+  unread: boolean,
+  saying?: MarkSaying,
+) => Promise<boolean>;
 
 /**
  * The bar over the Inbox's list holding the items `listed`, chosen there;
@@ -66,7 +65,7 @@ export function InboxSelectionBar({
   shown: boolean;
   onClear: () => void;
   /** Marks one item read or unread, answering whether the service took it; none where the list offers no mark. */
-  onMark?: ((listed: InboxListed, unread: boolean) => Promise<boolean>) | undefined;
+  onMark?: InboxListMark | undefined;
   /** Closes one open item without an answer; none where the list offers no close. */
   onClose?: InboxCloser | undefined;
 }): React.JSX.Element {
@@ -99,21 +98,23 @@ export function InboxSelectionBar({
   // Note that each item's mark goes on its own, there being no act marking several, and one toast answers them all once each did.
   const markAll = (marking: readonly InboxListed[], unread: boolean, undoable: boolean) => {
     if (onMark === undefined || marking.length === 0) return;
-    void Promise.all(marking.map((entry) => onMark(entry, unread))).then((taken) => {
-      const landed = marking.filter((_, at) => taken[at] === true);
-      const refused = marking.length - landed.length;
-      if (undoable && landed.length > 0) {
-        const note = markedNote(unread, landed.length, refused);
-        toast(undoToast(note, () => markAll(landed, !unread, false)));
-        return;
-      }
-      if (refused === 0) return;
-      toast({
-        words: markedNote(unread, landed.length, refused),
-        tone: STATUS_TONE.DANGER,
-        hold: TOAST_HOLD.FAILED,
-      });
-    });
+    void Promise.all(marking.map((entry) => onMark(entry, unread, { quiet: true }))).then(
+      (taken) => {
+        const landed = marking.filter((_, at) => taken[at] === true);
+        const refused = marking.length - landed.length;
+        if (undoable && landed.length > 0) {
+          const note = markedNote(unread, landed.length, refused);
+          toast(undoToast(note, () => markAll(landed, !unread, false)));
+          return;
+        }
+        if (refused === 0) return;
+        toast({
+          words: markedNote(unread, landed.length, refused),
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+        });
+      },
+    );
   };
 
   const unread = listed.filter(({ item }) => isUnread(item));
