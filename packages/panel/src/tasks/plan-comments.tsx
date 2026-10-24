@@ -128,6 +128,7 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
+import { useBusyPress } from "../settings/busy-press.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
@@ -218,12 +219,15 @@ const COMMENT_WORDS = {
   ADD: "Add a comment",
   REPLY: "Reply",
   RESOLVE: "Resolve",
+  RESOLVING: "Resolving",
   REOPEN: "Reopen",
+  REOPENING: "Reopening",
   THING: "Comment",
   EDIT: "Edit",
   DELETE: "Delete",
   DELETE_THREAD: "Delete thread",
   SAVE: "Save",
+  SAVING: "Saving",
   CANCEL: "Cancel",
   GONE: "Original content deleted",
   RESOLVED_IT: "resolved this",
@@ -497,6 +501,13 @@ function CommentEntry({
       : []),
   ];
   const settle = first && openThread(thread);
+  // Note that the check is busy from its press until the service answers, so a slow answer is seen working, and a refusal is the thread's note to say.
+  const settling = useBusyPress(() =>
+    doors.control.act(thread.id, {
+      action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
+    }),
+  );
+  const [saving, setSaving] = useState(false);
   // The reader's own words take a date changed from its chip, as their editor would, saved as an edit of the comment.
   const openDate = useWordsDatePicker();
   const latestWords = useRef(entry.words);
@@ -536,13 +547,16 @@ function CommentEntry({
       deleting.ask();
       return;
     }
+    if (saving) return;
+    setSaving(true);
     void doors.control
       .act(thread.id, { action: PLAN_COMMENT_ACTION.EDIT, entry: entry.id, words })
       .then((done) => {
         if (!done) return;
         setEditing(undefined);
         edited.update(() => EMPTY_DRAFT);
-      });
+      })
+      .finally(() => setSaving(false));
   };
   return (
     <div className="comment-entry" data-entry={entry.id}>
@@ -566,11 +580,9 @@ function CommentEntry({
                     size={BUTTON_SIZE.COMPACT}
                     icon={settle ? <CheckIcon /> : <RotateCcwIcon />}
                     label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
-                    onClick={() =>
-                      void doors.control.act(thread.id, {
-                        action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
-                      })
-                    }
+                    busy={settling.busy}
+                    busyLabel={settle ? COMMENT_WORDS.RESOLVING : COMMENT_WORDS.REOPENING}
+                    onClick={settling.onPress}
                   />
                 </Tooltip>
               ) : null}
@@ -614,7 +626,12 @@ function CommentEntry({
             />
             <div className="comment-field-foot">
               <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
-              <Button variant={BUTTON_VARIANT.PRIMARY} onClick={save}>
+              <Button
+                variant={BUTTON_VARIANT.PRIMARY}
+                busy={saving}
+                busyLabel={COMMENT_WORDS.SAVING}
+                onClick={save}
+              >
                 {COMMENT_WORDS.SAVE}
               </Button>
             </div>
