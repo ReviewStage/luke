@@ -56,6 +56,7 @@
     "./plan-comments": "./src/plan-comments.js",
     "./use-disclosure": "./src/use-disclosure.js",
     "./testing/held-exits": "./src/testing/held-exits.js",
+    "./testing/selectable-list": "./src/testing/selectable-list.js",
     "./use-clipped": "./src/use-clipped.js",
     "./visible-viewport": "./src/visible-viewport.js",
     "./tasks-model": "./src/tasks-model.js",

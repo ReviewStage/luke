@@ -99,13 +99,13 @@ import {
   FailureNote,
   Fill,
   FoldingButton,
+  GAP,
   IconButton,
+  Inline,
   MoreButton,
   matchingRows,
   moreLabel,
-  OneLine,
   PAGE_FRAME,
-  PageToolbar,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -128,23 +128,23 @@ import {
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
-  TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
   TextField,
+  Toolbar,
+  type ToolbarPickUp,
   Tooltip,
   useConfirmDialog,
   useMenu,
-  wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
-import { ChevronRightIcon, HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import {
   type ReactNode,
   type Ref,
@@ -786,11 +786,11 @@ const SCHEDULED_ROWS = {
   ],
 } as const satisfies Record<string, readonly SettingsRowSkeletonShape[]>;
 
-/** The automation's tile before its crumb, at an actor mark's inline size (`avatar.css`). */
-const SKELETON_CRUMB_MARK = "16px";
+/** The automation's tile before its name, at an actor mark's inline size (`avatar.css`). */
+const SKELETON_TITLE_MARK = "16px";
 
-/** How wide a placeholder page's name, and the crumb naming it, stand. */
-const SKELETON_NAME = { TITLE: "40%", CRUMB: "120px" } as const;
+/** How wide a placeholder page's name stands. */
+const SKELETON_NAME = { TITLE: "160px" } as const;
 
 /** How wide the placeholder toolbar's worded acts stand: where the draft stands, Run now, and Save. */
 const SKELETON_ACTS = { STATUS: "34px", RUN_NOW: "100px", SAVE: "56px" } as const;
@@ -803,6 +803,29 @@ const READING_AUTOMATION = "Reading the automation…";
 
 /** What a new automation's page is called until it is made. */
 const NEW_AUTOMATION = "New automation";
+
+/** The place above the editor, which its toolbar's first crumb names and goes back to. */
+const AUTOMATIONS_PLACE = "Automations";
+
+/** The page's title: the automation's tile beside its name, the page's one `h1`. */
+function EditorTitle({
+  automation,
+}: {
+  automation: AutomationSummary | undefined;
+}): React.JSX.Element {
+  return (
+    <Inline gap={GAP.CONTROL}>
+      <ActorMark
+        actor={
+          automation === undefined
+            ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
+            : automationActor(automation)
+        }
+      />
+      {automation === undefined ? NEW_AUTOMATION : automation.name}
+    </Inline>
+  );
+}
 
 /** What the editor's ⋯ is called. */
 const ACTIONS_THING = "Automation";
@@ -838,58 +861,33 @@ function AutomationActions({
   );
 }
 
-/** The crumb naming the automation, fading out at its end where the toolbar is narrow, the pointer reading `hint` whole. */
-function Crumb({
-  hint,
-  children,
-}: {
-  hint?: ReturnType<typeof wholeWordsHint> | undefined;
-  children: ReactNode;
-}): React.JSX.Element {
-  return (
-    <OneLine className="automation-crumb" hint={hint}>
-      {children}
-    </OneLine>
-  );
-}
-
-/** The crumb naming the automation by its name. */
-function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
-  return <Crumb hint={wholeWordsHint(name)}>{name}</Crumb>;
-}
-
 /**
- * The editor's toolbar: the crumbs back to the list, ending in `crumb`, and
- * `tag` after them, with the page's acts at its end. Its own width, which a
- * container query reads, folds its acts' words before they crowd its crumbs.
+ * The editor's toolbar: the crumb back to the list leading it, the
+ * automation's name after it once the page's header has scrolled away
+ * (`pickUp`), and `tag` after that, with the page's acts at its end. Its own
+ * width, which a container query reads, folds its acts' words before they
+ * crowd its crumbs.
  */
 function EditorToolbarFrame({
-  crumb,
+  pickUp,
   tag,
   onBack,
   children,
 }: {
-  crumb: ReactNode;
+  pickUp: ToolbarPickUp;
   tag?: ReactNode;
   onBack: () => void;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <PageToolbar
-      lead={
-        <div className="automation-toolbar">
-          <div className="luke-toolbar-heading">
-            <nav className="automation-crumbs" aria-label="Path">
-              <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
-              <ChevronRightIcon aria-hidden="true" />
-              {crumb}
-            </nav>
-            {tag}
-          </div>
-          <div className="luke-toolbar-actions">{children}</div>
-        </div>
-      }
-    />
+    <div className="automation-toolbar">
+      <Toolbar
+        trail={[{ label: AUTOMATIONS_PLACE, icon: <ZapIcon />, onPress: onBack }]}
+        pickUp={pickUp}
+        tag={tag}
+        actions={children}
+      />
+    </div>
   );
 }
 
@@ -916,6 +914,7 @@ const RUNS_LABEL = "Runs";
 /** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
 function EditorToolbar({
   automation,
+  pickUp,
   codeReview,
   dirty,
   saving,
@@ -930,6 +929,8 @@ function EditorToolbar({
   narrow,
 }: {
   automation: AutomationSummary | undefined;
+  /** The page's name as the bar picks it up from the header. */
+  pickUp: ToolbarPickUp;
   /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
   codeReview: boolean;
   dirty: boolean;
@@ -958,18 +959,7 @@ function EditorToolbar({
           : "Saved";
   return (
     <EditorToolbarFrame
-      crumb={
-        <>
-          <ActorMark
-            actor={
-              automation === undefined
-                ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
-                : automationActor(automation)
-            }
-          />
-          <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
-        </>
-      }
+      pickUp={pickUp}
       tag={codeReview ? <ExperimentTag narrow={narrow} /> : null}
       onBack={onBack}
     >
@@ -2050,6 +2040,7 @@ function AutomationPageFrame({
   screenRef,
   layoutRef,
   hidden,
+  title,
   toolbar,
   setup,
   beside,
@@ -2059,17 +2050,21 @@ function AutomationPageFrame({
   layoutRef?: RefObject<HTMLDivElement | null> | undefined;
   /** Whether the setup's screen is hidden, as a narrow room hides it while its runs stand. */
   hidden?: boolean | undefined;
-  toolbar: ReactNode;
+  /** The setup's header: the page's one `h1`. */
+  title: ReactNode;
+  /** The window's bar over the setup and what stands beside it, handed the name it picks up from the header once that has scrolled away. */
+  toolbar: (pickUp: ToolbarPickUp) => ReactNode;
   setup: ReactNode;
   beside: ReactNode;
   children?: ReactNode;
 }): React.JSX.Element {
+  const [pickUp, setPickUp] = useState<ToolbarPickUp>({ name: "", shown: false });
   return (
     <Fill ref={screenRef} className="automations-view">
       <Fill className="automation-editor-screen" hidden={hidden}>
-        {toolbar}
+        {toolbar(pickUp)}
         <div ref={layoutRef} className="automation-editor-layout">
-          <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
+          <DetailPage frame={PAGE_FRAME.PAGE} title={title} onPickUp={setPickUp}>
             {setup}
           </DetailPage>
           {beside}
@@ -2115,7 +2110,7 @@ function PromptSkeleton(): React.JSX.Element {
 
 /**
  * The setup while the automation is read, as a scheduled one on a new agent
- * stands: its name in the title's type, then each group under its heading,
+ * stands: its name's field, then each group under its heading,
  * Sharing where the workspace is shared, its rows' words and controls as
  * blocks, and the prompt's field, so the editor lands where they stood.
  */
@@ -2123,9 +2118,7 @@ function EditorSkeleton({ offersOwner }: { offersOwner: boolean }): React.JSX.El
   return (
     <SkeletonRegion label={READING_AUTOMATION}>
       <AutomationSetup>
-        <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.DIV}>
-          <Skeleton width={SKELETON_NAME.TITLE} />
-        </Text>
+        <Skeleton shape={SKELETON_SHAPE.CONTROL} />
         <AutomationForm>
           {offersOwner ? (
             <SettingsSection title={EDITOR_SECTION.SHARING}>
@@ -2186,21 +2179,17 @@ export function AutomationPageSkeleton({
   const runsPanel = useRunsPanel();
   return (
     <AutomationPageFrame
-      toolbar={
-        <EditorToolbarFrame
-          crumb={
-            <>
-              <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_CRUMB_MARK} />
-              <Crumb>
-                <Skeleton width={SKELETON_NAME.CRUMB} />
-              </Crumb>
-            </>
-          }
-          onBack={onBack}
-        >
+      title={
+        <Inline gap={GAP.CONTROL}>
+          <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_TITLE_MARK} />
+          <Skeleton width={SKELETON_NAME.TITLE} />
+        </Inline>
+      }
+      toolbar={(pickUp) => (
+        <EditorToolbarFrame pickUp={pickUp} onBack={onBack}>
           <EditorActsSkeleton />
         </EditorToolbarFrame>
-      }
+      )}
       setup={<EditorSkeleton offersOwner={offersOwner} />}
       beside={
         room === SHELL_ROOM.NARROW ? null : (
@@ -2445,9 +2434,11 @@ export function AutomationEditor({
       screenRef={screen}
       layoutRef={editorLayout}
       hidden={hidden.list}
-      toolbar={
+      title={<EditorTitle automation={automation} />}
+      toolbar={(pickUp) => (
         <EditorToolbar
           automation={automation}
+          pickUp={pickUp}
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
@@ -2465,13 +2456,12 @@ export function AutomationEditor({
           }}
           narrow={narrow}
         />
-      }
+      )}
       setup={
         <AutomationSetup>
           <TextField
             ref={nameField}
             label="Automation name"
-            size={TEXT_FIELD_SIZE.TITLE}
             placeholder="Untitled automation"
             value={draft.name}
             onEscape={() => nameField.current?.blur()}

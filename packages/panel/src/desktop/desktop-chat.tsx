@@ -9,13 +9,11 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
-  BackIcon,
+  BackButton,
   BUTTON_SIZE,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FoldingButton,
-  type FoldingButtonHint,
   GROUP_SURFACE,
   GroupHeader,
   IconButton,
@@ -315,15 +313,8 @@ const SHOW_ARCHIVED = "Show archived channels";
 /** What a task channel's menu opens its task with. */
 const OPEN_TASK = "Open task";
 
-/**
- * The way back's pill, which says where it goes and names Back's chord
- * whether its word is folded away or not, as the Inbox's way back does.
- */
-const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label="Back to chat" command={APP_COMMAND.BACK}>
-    {children}
-  </Tooltip>
-);
+/** Where the way back from a place to the rail leads, as its hint names it. */
+const CHAT_RAIL_PLACE = "chat";
 
 /**
  * How the rail groups the tasks' channels: as the reader's sidebar groups
@@ -1062,9 +1053,7 @@ function ChatView({
   );
   const lead = useMemo(
     () =>
-      single ? (
-        <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={onList} hint={BackHint} />
-      ) : undefined,
+      single ? <BackButton label={CHAT_LIST} place={CHAT_RAIL_PLACE} onBack={onList} /> : undefined,
     [single, onList],
   );
   if (read === undefined || view.failed || rail === undefined || groups === undefined) {

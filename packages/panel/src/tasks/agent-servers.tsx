@@ -12,7 +12,7 @@ import {
 } from "@luke/features/integration-wire";
 import {
   AnchoredPopover,
-  ArrowLeftIcon,
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -26,6 +26,7 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  NO_BACK_KEY,
   OneLine,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
@@ -155,10 +156,9 @@ const SEARCH = {
   TOOLS: "Tools",
 } as const;
 
-/** What a server's page says where its filter matches nothing, and how its back button is named. */
+/** What a server's page says where its filter matches nothing. */
 const PAGE = {
   NONE: "No tools match",
-  BACK: "Back to MCP servers",
 } as const;
 
 /**
@@ -747,9 +747,12 @@ function ServersPopover({
     return (
       <>
         <div className="agent-servers-page-head">
-          <Tooltip label={PAGE.BACK}>
-            <IconButton icon={<ArrowLeftIcon />} label={PAGE.BACK} keepFocus onClick={back} />
-          </Tooltip>
+          <BackButton
+            label={SERVERS_LABEL}
+            place={SERVERS_LABEL}
+            command={NO_BACK_KEY}
+            onBack={back}
+          />
           <ProviderMark provider={row.provider} size={PROVIDER_MARK_SIZE.ICON} />
           <ServerPageTitle name={row.name} />
           <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>

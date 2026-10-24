@@ -16,13 +16,12 @@ import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText, sinceText } from "@luke/features/time-format";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import {
-  BackIcon,
+  BackButton,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  FoldingButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
@@ -373,7 +372,7 @@ export function AutomationRunsScreen({
       <PageToolbar
         lead={
           <div className="automation-runs-back">
-            <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
+            <BackButton label={name} place={name} onBack={onBack} />
           </div>
         }
       />

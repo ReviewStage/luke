@@ -1136,9 +1136,14 @@ function isOn(name: string): boolean {
   return switchNamed(name).getAttribute("aria-checked") === "true";
 }
 
-/** The crumbs' words, in order. */
+/** The toolbar's crumbs' words, in order. */
 function crumbs(page: HTMLElement): string {
-  return page.querySelector(".automation-crumbs")?.textContent ?? "";
+  return page.querySelector(".automation-toolbar nav")?.textContent ?? "";
+}
+
+/** The page's headings: an automation's page has one, its name. */
+function headings(page: HTMLElement): string[] {
+  return [...page.querySelectorAll("h1")].map((each) => each.textContent?.trim() ?? "");
 }
 
 test("an automation's whole row is its press: its owner and its next run open it too, and its switch only switches it", async () => {
@@ -1174,7 +1179,7 @@ test("an automation's whole row is its press: its owner and its next run open it
   assert.ok(changes.length > 0, "and switches it");
 });
 
-test("a row opens its automation's page, under crumbs naming it, with what it was saved as", async () => {
+test("a row opens its automation's page, headed by its name, with a crumb back to the list, and what it was saved as", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
 
@@ -1184,23 +1189,31 @@ test("a row opens its automation's page, under crumbs naming it, with what it wa
   await settle();
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  assert.equal(crumbs(page), "AutomationsNightly flaky-test sweep");
+  assert.deepEqual(headings(page), [SWEEP.name], "the page has one h1, the automation's name");
   assert.ok(
-    page.querySelector('.automation-crumbs .actor-mark[data-kind="automation"]'),
+    page.querySelector('h1 .actor-mark[data-kind="automation"]'),
     "the clock tile stands before the name",
   );
+  assert.equal(crumbs(page), "Automations", "the toolbar leads with the way back, not the name");
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
     SWEEP.name,
   );
   assert.equal(picked(page, "Owner"), "Acme");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+  act(() => button("Automations").click());
+  assert.deepEqual(
+    places.at(-1),
+    { kind: AUTOMATIONS_PAGE.LIST },
+    "its crumb goes back to the list",
+  );
 });
 
 test("a new automation is created only once it is named and told its task, and then stands as its own page", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.equal(crumbs(page), "AutomationsNew automation");
+  assert.deepEqual(headings(page), ["New automation"]);
+  assert.equal(crumbs(page), "Automations");
 
   act(() => button("Create").click());
   await settle();
@@ -1234,7 +1247,7 @@ test("a new automation is created only once it is named and told its task, and t
     repositories: ["acme/ledger"],
   });
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.equal(crumbs(page), "AutomationsMorning triage");
+  assert.deepEqual(headings(page), ["Morning triage"]);
 });
 
 test("a new automation whose answer lands after a list pushed before it was made still stands as its own page", async () => {
@@ -1253,7 +1266,7 @@ test("a new automation whose answer lands after a list pushed before it was made
   await settle();
 
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.equal(crumbs(page), "AutomationsMorning triage");
+  assert.deepEqual(headings(page), ["Morning triage"]);
 });
 
 test("an edit says it is unsaved and saves only what moved", async () => {
@@ -1418,7 +1431,7 @@ test("who owns an automation is the editor's first setting, and nowhere else on 
   assert.equal(formGroups(page)[0], "Sharing");
   assert.equal(picked(page, "Owner"), "Acme");
   assert.equal(page.querySelector(".automation-editor .automation-owner"), null);
-  assert.equal(page.querySelector(".automation-crumbs .automation-owner"), null);
+  assert.equal(page.querySelector("h1 .automation-owner"), null);
 });
 
 test("the Owner picker draws Personal by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
@@ -1735,18 +1748,6 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   } finally {
     wide.remove();
   }
-});
-
-test("the crumb naming an automation, cut short by its toolbar, reads whole on the pointer, and drawn whole raises nothing", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  const crumb = page.querySelector(".automation-crumb") ?? assert.fail("no crumb");
-
-  assert.equal(pillOver(crumb), undefined);
-  Object.defineProperty(crumb, "scrollWidth", { configurable: true, value: 240 });
-  Object.defineProperty(crumb, "clientWidth", { configurable: true, value: 60 });
-  act(() => relayout());
-  assert.equal(pillOver(crumb), SWEEP.name);
 });
 
 test("a Run now still out is named by what it is doing and refuses another press", async () => {
