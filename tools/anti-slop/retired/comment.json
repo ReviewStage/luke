@@ -1,0 +1,17 @@
+{
+  "instead": "Draw a comment's head with Comment, and the line under a message with MessageLine, both from @luke/ui.",
+  "classes": [
+    { "class": "inbox-comment-head", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "inbox-comment-name", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "inbox-comment-when", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "chat-byline-name", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "comment-head", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "comment-head-end", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "changes-comment-time", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "annotation-comment-face", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "annotation-comment-meta", "allow": ["packages/ui/src/components/comment/"] },
+    { "class": "message-meta", "allow": ["packages/ui/src/components/message/"] },
+    { "class": "message-sender", "allow": ["packages/ui/src/components/message/"] },
+    { "class": "message-sent-at", "allow": ["packages/ui/src/components/message/"] }
+  ]
+}

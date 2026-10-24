@@ -1,5 +1,5 @@
 /**
- * message.tsx -- one turn of a conversation, and the bar of actions on it, shown while the pointer or the keyboard is on the turn and, on a screen with no hover, once the turn is tapped.
+ * message.tsx -- one turn of a conversation, and the bar of actions in the line under it, shown while the pointer or the keyboard is on the turn and, on a screen with no hover, once the turn is tapped.
  *
  * A transcript of hundreds of turns would be a column of buttons if every
  * turn's actions stood at rest, so a `MessageActions` bar inside a
@@ -14,7 +14,6 @@
  */
 
 import { type HTMLAttributes, type ReactNode, useState } from "react";
-import { MENU_SURFACE_FLOW, MenuSurface } from "../menu/menu-surface.js";
 
 /** What a tap may land on in a turn that is a control of its own, which a tap works rather than showing the turn's actions. */
 const OWN_CONTROL =
@@ -22,15 +21,6 @@ const OWN_CONTROL =
 
 /** The media query a screen with no hover answers, the one message.css shows a tapped turn's actions under. */
 const NO_HOVER = "(hover: none)";
-
-/** Where a turn's actions stand: floated on a card over its corner, or set in the line under it. */
-export const MESSAGE_ACTIONS_PLACEMENT = {
-  FLOATING: "floating",
-  INLINE: "inline",
-} as const;
-
-export type MessageActionsPlacement =
-  (typeof MESSAGE_ACTIONS_PLACEMENT)[keyof typeof MESSAGE_ACTIONS_PLACEMENT];
 
 /**
  * One turn, holding its words and its actions. `className` is the caller's
@@ -67,33 +57,10 @@ export function MessageFrame({
 }
 
 /**
- * The actions on a turn: floated at its top right corner on the toolbar's
- * card (`MenuSurface`'s `TOOLBAR` flow), as a comment's toolbar is, so a
- * turn takes no room for a bar nobody is looking at, or set inline in the
- * line under it beside who sent it. Hidden, the bar takes no pointer, so
- * the words under it stay selectable.
+ * The actions on a turn, set in the line under it (`MessageLine`) after who
+ * sent it and when. Hidden, the bar takes no pointer, so the words above it
+ * stay selectable.
  */
-export function MessageActions({
-  placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
-  children,
-}: {
-  placement?: MessageActionsPlacement;
-  children?: ReactNode;
-}): React.JSX.Element {
-  if (placement === MESSAGE_ACTIONS_PLACEMENT.FLOATING) {
-    return (
-      <MenuSurface
-        flow={MENU_SURFACE_FLOW.TOOLBAR}
-        className="luke-message-actions"
-        data-placement={placement}
-      >
-        {children}
-      </MenuSurface>
-    );
-  }
-  return (
-    <div className="luke-message-actions" data-placement={placement}>
-      {children}
-    </div>
-  );
+export function MessageActions({ children }: { children?: ReactNode }): React.JSX.Element {
+  return <div className="luke-message-actions">{children}</div>;
 }

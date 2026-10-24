@@ -23,7 +23,6 @@ import {
   DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
-  MESSAGE_ACTIONS_PLACEMENT,
   ONE_LINE_ELEMENT,
   OneLine,
   TEXT_BUTTON_TONE,
@@ -785,9 +784,7 @@ function RowActions({
   if (words === "" && extra === undefined) return undefined;
   return (
     <span className="chat-byline-action">
-      {words === "" ? null : (
-        <CopyMessageAction words={words} placement={MESSAGE_ACTIONS_PLACEMENT.INLINE} />
-      )}
+      {words === "" ? null : <CopyMessageAction words={words} />}
       {extra}
     </span>
   );
