@@ -52,10 +52,10 @@ import {
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
+import { commandScore } from "@luke/ui/command";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
-import { defaultFilter } from "cmdk";
 import * as Atom from "effect/reactivity/Atom";
 import {
   AppWindowIcon,
@@ -101,7 +101,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * highlighted row as its mention, and Escape closes the list until the caret
  * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
- * as ⌘K scores them (cmdk's own filter), files and folders first, each
+ * as ⌘K scores them (`commandScore`), files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
  * Once the words run past a space and nothing matches them, the list
  * stands aside, since they are the developer's own words rather than a
@@ -774,7 +774,7 @@ function keyed(row: MentionRow, query: string): boolean {
 function best(rows: readonly MentionRow[], query: string, most: number): readonly MentionRow[] {
   if (query.trim() === "") return rows.slice(0, most);
   return rows
-    .map((row) => ({ row, score: keyed(row, query) ? KEY_SCORE : defaultFilter(row.terms, query) }))
+    .map((row) => ({ row, score: keyed(row, query) ? KEY_SCORE : commandScore(row.terms, query) }))
     .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, most)
