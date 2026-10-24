@@ -25,8 +25,9 @@
  * Show details in the control's row menu (`showDetailsFrom`), opens it at
  * once, or takes the one already showing on the control's focus, as a
  * non-modal popover with focus inside it, so Tab walks its buttons and
- * links; Escape takes it down and hands focus back to the control, and focus
- * leaving it for anywhere else takes it down. One tooltip
+ * links; Escape takes it down and hands focus back to the control, one card
+ * at a time where a card hangs from a control on another, and focus leaving
+ * it for anywhere else takes it down. One tooltip
  * stands in the window at a time: the next to show takes a lingering card
  * down at once, unless its control stands on that card, as a person named
  * on an agent's card is, when its card hangs over the one beneath, which
@@ -664,7 +665,9 @@ export function Tooltip({
     const key = (event: KeyboardEvent) => {
       const stood = latest();
       if (stood?.entered === true) {
-        if (event.key !== "Escape") return;
+        // Note that a card stacked over this one, hung from a control on it, takes Escape first, so the press steps back one card at a time.
+        const at = standing.findIndex((each) => each.id === id);
+        if (event.key !== "Escape" || at < standing.length - 1) return;
         event.preventDefault();
         hide();
         return;

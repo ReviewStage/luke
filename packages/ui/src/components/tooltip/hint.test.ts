@@ -32,7 +32,8 @@ import { Tooltip } from "./hint.js";
  * is Ctrl, opens it with focus on its first button, Tab walks its buttons
  * with the card still standing, and Escape takes it down and hands focus
  * back to the control, the window's layered Escape left alone; a card
- * already showing on the control's focus is entered the same way.
+ * already showing on the control's focus is entered the same way. A card
+ * entered from a control on another card steps back one card per Escape.
  */
 
 const roots: Root[] = [];
@@ -678,4 +679,36 @@ test("a card already showing on a control's keyboard focus is entered by ⌥↓,
   } finally {
     delete document.documentElement.dataset.keyboard;
   }
+});
+
+test("a card entered from a control on another entered card goes alone on Escape, focus back on that control, and the next Escape takes the outer card", () => {
+  const inner = createElement(Tooltip, {
+    label: "Sweep",
+    card: createElement("button", { type: "button" }, "Open automation"),
+    children: createElement(Button, { onClick: () => undefined, children: "Sweep" }),
+  });
+  const outer = createElement(Tooltip, {
+    label: "Agent",
+    card: createElement(Fragment, null, createElement("p", { key: "by" }, "Started by"), inner),
+    children: createElement(Button, { onClick: () => undefined, children: "Agent" }),
+  });
+  const control = mount(outer).querySelector("button") ?? assert.fail("drawn");
+  act(() => control.focus());
+
+  keyDown(control, SHOW_DETAILS);
+  const sweep = focused() ?? assert.fail("focus is somewhere");
+  assert.equal(sweep.textContent, "Sweep", "focus is on the outer card's control");
+  keyDown(sweep, SHOW_DETAILS);
+  const cardsStanding = () =>
+    [...document.querySelectorAll(".luke-tooltip-card:not([data-leaving])")].length;
+  assert.equal(cardsStanding(), 2, "the inner card hangs over the outer");
+  assert.equal(focused()?.textContent, "Open automation");
+
+  keyDown(focused() ?? assert.fail("focus is somewhere"), { key: "Escape", code: "Escape" });
+  assert.equal(cardsStanding(), 1, "only the inner card goes");
+  assert.ok(focused() === sweep, "focus is back on the control the inner card hangs from");
+
+  keyDown(sweep, { key: "Escape", code: "Escape" });
+  assert.equal(cardsStanding(), 0);
+  assert.ok(focused() === control, "focus is back on the outer card's control");
 });
