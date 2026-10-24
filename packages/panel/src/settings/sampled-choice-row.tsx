@@ -47,7 +47,7 @@ import {
 } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { SettingMarks } from "./marks.js";
 import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
@@ -149,6 +149,11 @@ function SampledChoiceDialog({
 }): React.JSX.Element {
   const [picked, setPicked] = useState(value);
   const player = useSamplePlayer();
+  // Note that a clip stops as the card is put away, not as its fade ends, because the card stays drawn through the fade.
+  const { stop } = player;
+  useEffect(() => {
+    if (!open) stop();
+  }, [open, stop]);
   const pickedRow = useRef<HTMLButtonElement | null>(null);
   const hear = (token: string) => {
     const sample = options.find((option) => option.value === token)?.sample;
