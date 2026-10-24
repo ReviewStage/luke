@@ -2193,6 +2193,27 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
   assert.equal(aboveWords(), "in-gapwas-3");
 });
 
+test("a header's row is named by its file's status and path, its path's copy standing beside it", async () => {
+  files = [
+    changed("src/seats.ts"),
+    changed("src/plan.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/old/plan.ts",
+    }),
+  ];
+  await drawTab();
+  const row = (path: string) =>
+    header(path).querySelector<HTMLElement>("summary") ?? assert.fail(`${path}'s row stands`);
+  assert.equal(row("src/seats.ts").getAttribute("aria-label"), "Modified src/seats.ts");
+  assert.equal(
+    row("src/plan.ts").getAttribute("aria-label"),
+    "Renamed src/old/plan.ts to src/plan.ts",
+  );
+  for (const path of ["src/seats.ts", "src/plan.ts"]) {
+    assert.equal(row(path).querySelector("button"), null, `no control stands in ${path}'s row`);
+  }
+});
+
 test("a header copies the path it names on a press, the path a file moved from apart from the one it moved to", async () => {
   files = [
     changed("src/seats.ts"),

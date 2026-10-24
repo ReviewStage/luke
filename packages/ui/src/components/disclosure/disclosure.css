@@ -12,8 +12,9 @@
   }
 
   /* A card, clipped to its corners so its head's hover fill follows them and
-     a ring inside it is drawn inside its control, in the caption's type. */
-  .luke-disclosure[data-look="card"] {
+     a ring inside it is drawn inside its control, in the caption's type; a
+     card whose head holds controls is its frame, so they stand inside it. */
+  :is(.luke-disclosure, .luke-disclosure-frame)[data-look="card"] {
     --luke-focus-ring-offset: var(--luke-focus-ring-inset);
     overflow: clip;
     border: 1px solid var(--luke-color-border);
@@ -140,10 +141,152 @@
     flex: none;
   }
 
-  /* A control's seat in a summary (`DisclosureAction`), which keeps its
-     presses and draws no box, so the control is laid out as the summary's. */
-  .luke-disclosure-action {
-    display: contents;
+  /* A head with controls of its own (`DisclosureFrame`): one row of the
+     controls before the summary, the summary, and the controls after it,
+     the `details` laid into the frame by subgrid so its summary takes the
+     middle cell and its body the row under all three. Note that a closed
+     body's box is the platform's, hidden and no height, so a closed fold is
+     the row alone. */
+  .luke-disclosure-frame {
+    --luke-disclosure-gap: var(--luke-icon-gap);
+    --luke-disclosure-inset-start: 0px;
+    --luke-disclosure-inset-end: 0px;
+    display: grid;
+    min-width: 0;
+    align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    isolation: isolate;
+  }
+
+  .luke-disclosure-frame[data-fill="actions"] {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .luke-disclosure-frame > details {
+    display: grid;
+    min-width: 0;
+    align-self: stretch;
+    grid-column: 1 / -1;
+    grid-row: 1 / -1;
+    grid-template-columns: subgrid;
+    grid-template-rows: subgrid;
+  }
+
+  .luke-disclosure-frame > details > summary {
+    min-width: 0;
+    align-self: stretch;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .luke-disclosure-frame > details::details-content {
+    min-width: 0;
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .luke-disclosure-lead,
+  .luke-disclosure-actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    align-self: stretch;
+    gap: var(--luke-disclosure-gap);
+    grid-row: 1;
+  }
+
+  .luke-disclosure-lead {
+    padding-inline: var(--luke-disclosure-inset-start) var(--luke-disclosure-gap);
+    grid-column: 1;
+  }
+
+  .luke-disclosure-actions {
+    padding-inline: var(--luke-disclosure-gap) var(--luke-disclosure-inset-end);
+    grid-column: 3;
+  }
+
+  /* The row's inset, a summary's own at each end, goes to the cell standing
+     at that end, and the summary meets the cell at the row's gap. */
+  .luke-disclosure-frame:has(> details > .luke-disclosure-summary:not([data-look])) {
+    --luke-disclosure-inset-start: var(--luke-space-4);
+    --luke-disclosure-inset-end: var(--luke-space-4);
+  }
+
+  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="head"]) {
+    --luke-disclosure-inset-start: var(--luke-space-12);
+    --luke-disclosure-inset-end: var(--luke-space-12);
+  }
+
+  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="row"]) {
+    --luke-disclosure-gap: var(--luke-space-8);
+    --luke-disclosure-inset-start: var(--luke-space-4);
+    --luke-disclosure-inset-end: var(--luke-space-12);
+    color: var(--luke-color-text);
+    white-space: nowrap;
+  }
+
+  .luke-disclosure-frame:has(> .luke-disclosure-lead)
+    > details
+    > .luke-disclosure-summary:not(:where([data-look="transcript"])) {
+    padding-inline-start: 0;
+  }
+
+  .luke-disclosure-frame:has(> .luke-disclosure-actions)
+    > details
+    > .luke-disclosure-summary:not(:where([data-look="transcript"])) {
+    padding-inline-end: 0;
+  }
+
+  /* The row's fill under the pointer, across the cells and the summary
+     alike, as one row wears it; a transcript's line leaves its fill to its
+     fold's skin. The rule under an open file row is the frame's too. */
+  .luke-disclosure-frame::before {
+    z-index: -1;
+    align-self: stretch;
+    border-radius: var(--luke-control-radius);
+    content: "";
+    grid-column: 1 / -1;
+    grid-row: 1;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="row"])::before {
+    border-radius: 0;
+  }
+
+  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="head"])::before {
+    border-radius: 0;
+  }
+
+  .luke-disclosure-frame
+    > details
+    > .luke-disclosure-summary:not(:where([data-look="transcript"])):hover {
+    background: none;
+  }
+
+  /* Note that each of these selectors holds no comma inside its brackets,
+     because the touch-density test reads a rule's selectors by its commas. */
+  .luke-disclosure-frame:has(
+    > details > .luke-disclosure-summary:not([data-look="transcript"]):hover
+  )::before {
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-disclosure-frame:has(
+    > details > .luke-disclosure-summary:not([data-look="transcript"])
+  ):has(> :not(details):hover)::before {
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-disclosure-frame:has(
+    > details > .luke-disclosure-summary[data-look="row"][aria-expanded="true"]
+  ) {
+    box-shadow: inset 0 -1px 0 var(--luke-color-border);
+  }
+
+  .luke-disclosure-frame > details > .luke-disclosure-summary[data-look="row"] {
+    border-bottom: none;
   }
 
   .luke-disclosure-turn {

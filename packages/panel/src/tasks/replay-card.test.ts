@@ -194,7 +194,7 @@ function headOf(container: Element): string {
 
 /** The line under the replay card as a reader reads it: whom it names, if anyone, and the moment its time stands for. */
 function cardMeta(container: Element) {
-  const meta = container.querySelector("[data-replay-card] ~ .luke-message-line");
+  const meta = container.querySelector(":has(> [data-replay-card]) ~ .luke-message-line");
   assert.ok(meta !== null);
   return {
     sender:
@@ -265,7 +265,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.ok(!container.textContent?.includes("Note from the developer"));
 
   // The source's chip opens its tab, and leaves the card folded.
-  press(container.querySelector("[data-replay-card] > summary [data-actor-ref]"));
+  press(container.querySelector("[data-replay-card] ~ .luke-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
   assert.equal(container.querySelector("[data-replay-step]"), null);
 });
@@ -390,9 +390,11 @@ test("on an agent's own page, which lists no source, the card names the source a
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
   // The read named the source's model, so its chip wears its harness's mark rather than the empty box of none known.
-  const mark = container.querySelector("[data-replay-card] > summary .actor-mark svg");
+  const mark = container.querySelector(
+    "[data-replay-card] ~ .luke-disclosure-actions .actor-mark svg",
+  );
   assert.ok((mark?.childElementCount ?? 0) > 0);
-  press(container.querySelector("[data-replay-card] > summary [data-actor-ref]"));
+  press(container.querySelector("[data-replay-card] ~ .luke-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, []);
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: SOURCE.id }]);
 });
@@ -497,7 +499,7 @@ test("the line under the card says when the reader's own agent was started, nami
     at: new Date(SENT_AT).toISOString(),
   });
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] ~ .luke-message-line")?.textContent ?? "",
+    container.querySelector(":has(> [data-replay-card]) ~ .luke-message-line")?.textContent ?? "",
     /You|·/u,
   );
 });
@@ -520,8 +522,9 @@ test("the line under the card names a teammate who started the agent by their fa
     at: new Date(SENT_AT).toISOString(),
   });
   assert.match(
-    container.querySelector("[data-replay-card] ~ .luke-message-line .luke-message-line-time")
-      ?.textContent ?? "",
+    container.querySelector(
+      ":has(> [data-replay-card]) ~ .luke-message-line .luke-message-line-time",
+    )?.textContent ?? "",
     /^·/u,
   );
 });

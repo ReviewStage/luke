@@ -2445,8 +2445,8 @@
    (`.checkpoint-log`), because the fade begins beneath that band: taller,
    it would slice what passes under its foot, and shorter, it would fade
    its own. The whole row presses as a `DisclosureSummary` does: the chevron
-   leading at its inset, the row filled under the pointer, and what it holds
-   at its end keeping their own presses. */
+   leading at its inset and the row filled under the pointer; what stands at
+   its end stands beside it (`DisclosureFrame`), on the same band. */
 .pull-request-section-fold > .luke-disclosure-summary,
 .pull-request-page .pull-request-comment-box > .pull-request-heading {
   position: sticky;
@@ -2476,8 +2476,8 @@
    control's height and corner, drawn inside the band rather than on it, so
    the band stays opaque to its corners while what scrolls passes under it.
    Note that it sits under the row's words, the band being a stacking
-   context of its own, and lights only while the pointer is on the row
-   rather than on what stands at its end. */
+   context of its own, and lights only while the pointer is on the row,
+   since what stands at its end stands beside it. */
 .pull-request-section-fold > .luke-disclosure-summary::before {
   position: absolute;
   z-index: -1;
@@ -2487,8 +2487,7 @@
   transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
-.pull-request-section-fold
-  > .luke-disclosure-summary:hover:not(:has(.pull-request-section-end:hover))::before {
+.pull-request-section-fold > .luke-disclosure-summary:hover::before {
   background: var(--luke-color-fill-strong);
 }
 
@@ -2499,10 +2498,21 @@
   transition: color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
-.pull-request-section-fold
-  > .luke-disclosure-summary:hover:not(:has(.pull-request-section-end:hover))
-  > .pull-request-heading {
+.pull-request-section-fold > .luke-disclosure-summary:hover > .pull-request-heading {
   color: var(--luke-color-text);
+}
+
+/* The cell beside the heading's row holding what stands at its end, on
+   the band and held with it. */
+.pull-request-section > .luke-disclosure-frame > .luke-disclosure-actions {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  height: var(--luke-scroll-band);
+  align-self: start;
+  padding-inline-end: var(--luke-tight-gap);
+  background: var(--luke-color-well);
 }
 
 /* What the heading holds at its end, Hide resolved and Hide bots on the
@@ -3223,8 +3233,21 @@
   transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
-.annotation-card-fold > .luke-disclosure-summary:hover {
+/* The head's fill reaches the ⋯ beside it (`DisclosureFrame`), which
+   stands at the head's inset. */
+.annotation-card
+.luke-disclosure-frame:has(> .annotation-card-fold > .luke-disclosure-summary:hover)::before {
+  border-radius: 0;
   background: var(--luke-color-fill-hover);
+}
+
+.annotation-card .luke-disclosure-frame:has(> :not(details):hover)::before {
+  border-radius: 0;
+  background: var(--luke-color-fill-hover);
+}
+
+.annotation-card .luke-disclosure-frame > .luke-disclosure-actions {
+  padding-inline-end: var(--luke-row-inset);
 }
 
 .annotation-card-turn {
@@ -3277,7 +3300,7 @@
   height: var(--luke-space-12);
 }
 
-/* The ⋯ stands at the head's end. */
+/* The ⋯ stands at the head's end, beside it. */
 .annotation-card-end {
   display: flex;
   flex: none;

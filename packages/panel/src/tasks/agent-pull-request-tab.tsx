@@ -59,8 +59,8 @@ import {
   DETAIL_PAGE_INSET,
   DetailPage,
   DISCLOSURE_SUMMARY,
-  DisclosureAction,
   DisclosureChevron,
+  DisclosureFrame,
   DisclosureSummary,
   EmptyState,
   ErrorState,
@@ -130,7 +130,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef, BotBadge, commentAuthor } from "../actor-ref.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -609,18 +609,23 @@ function Section({
   }
   return (
     <section className="pull-request-section" aria-label={title}>
-      <Fold className="pull-request-section-fold" open={fold.open} onOpenChange={fold.onOpenChange}>
-        <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
-          <DisclosureChevron />
-          {heading}
-          {end === undefined ? null : (
-            <DisclosureAction>
-              <span className="pull-request-section-end">{end}</span>
-            </DisclosureAction>
-          )}
-        </DisclosureSummary>
-        <FoldBody className="pull-request-section-body">{children}</FoldBody>
-      </Fold>
+      <DisclosureFrame
+        actions={
+          end === undefined ? undefined : <span className="pull-request-section-end">{end}</span>
+        }
+      >
+        <Fold
+          className="pull-request-section-fold"
+          open={fold.open}
+          onOpenChange={fold.onOpenChange}
+        >
+          <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
+            <DisclosureChevron />
+            {heading}
+          </DisclosureSummary>
+          <FoldBody className="pull-request-section-body">{children}</FoldBody>
+        </Fold>
+      </DisclosureFrame>
     </section>
   );
 }
@@ -991,14 +996,12 @@ function ThreadMenu({
   if (actions.length === 0) return null;
   const label = moreLabel(THREAD_REVEAL_WORDS.THING);
   return (
-    <DisclosureAction>
-      <span className="pull-request-thread-menu">
-        <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
-        {menu.drawn === undefined ? null : (
-          <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
-        )}
-      </span>
-    </DisclosureAction>
+    <span className="pull-request-thread-menu">
+      <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+      )}
+    </span>
   );
 }
 
@@ -1093,11 +1096,12 @@ function useThreadHead(thread: ReviewThread, now: number, pending: boolean) {
         ? PULL_REQUEST_WORDS.THREAD
         : `${PULL_REQUEST_WORDS.THREAD} ${PULL_REQUEST_WORDS.BY} ${actorName(writer)}`,
     face: writer === undefined ? null : <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
+    // Note that the name is words alone, a bot's badge after it, because the head is the card's summary, which holds no control.
     name:
       writer === undefined ? null : (
-        <DisclosureAction>
-          <ActorRef actor={writer} nameOnly />
-        </DisclosureAction>
+        <span>
+          {actorName(writer)} <BotBadge actor={writer} />
+        </span>
       ),
     time:
       first === undefined ? undefined : (

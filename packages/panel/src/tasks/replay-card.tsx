@@ -8,7 +8,6 @@ import {
   Button,
   DISCLOSURE_BODY,
   Disclosure,
-  DisclosureAction,
   DisclosureBody,
   DisclosureSummary,
   Inline,
@@ -443,21 +442,30 @@ export function ReplayCard({
   const summary = summaryLine(replay);
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin">
-      <Plan data-replay-card="" aria-label={replayVerb(replay)}>
+      <Plan
+        data-replay-card=""
+        aria-label={replayVerb(replay)}
+        actions={
+          <span className="agent-origin-chip">
+            <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} faceOnly />
+          </span>
+        }
+      >
         <PlanHeader>
           <PlanIcon>
             <SplitIcon />
           </PlanIcon>
-          {/* Note that the head's words are a tree, the source's chip among them, so they are watched rather than handed in. */}
-          <OneLine className="replay-card-title">
+          {/* Note that the head names the source in words, its chip standing beside the head, because the head is the card's summary, which holds no control. */}
+          <OneLine
+            className="replay-card-title"
+            words={`${replayVerb(replay)} ${name} · ${replayCount(replay)}`}
+          >
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {replayVerb(replay)}{" "}
             </Text>
-            <DisclosureAction>
-              <span className="agent-origin-chip">
-                <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} />
-              </span>
-            </DisclosureAction>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
+              {name}
+            </Text>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {" "}
               · {replayCount(replay)}

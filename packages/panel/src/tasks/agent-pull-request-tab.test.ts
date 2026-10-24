@@ -1504,11 +1504,11 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
   );
 });
 
-/** The chip of the Conversation's filter named as given, at the end of the Conversation's heading. */
+/** The chip of the Conversation's filter named as given, beside the end of the Conversation's heading. */
 function filter(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>(
-      `section[aria-label="Conversation"] .pull-request-section-fold > summary .pull-request-filter button[aria-label="${name}"]`,
+      `section[aria-label="Conversation"] > .luke-disclosure-frame > .luke-disclosure-actions .pull-request-filter button[aria-label="${name}"]`,
     ) ?? assert.fail(`the conversation offers ${name}`)
   );
 }
@@ -1517,8 +1517,15 @@ function filter(tab: HTMLElement, name: string): HTMLButtonElement {
 function sectionHead(tab: HTMLElement, name: string): HTMLElement {
   return (
     tab.querySelector<HTMLElement>(
-      `section[aria-label="${name}"] > details.pull-request-section-fold > summary`,
+      `section[aria-label="${name}"] > .luke-disclosure-frame > details.pull-request-section-fold > summary`,
     ) ?? assert.fail(`the ${name} folds under its heading`)
+  );
+}
+
+/** What stands at the end of a section's heading, beside it rather than in it; none where nothing does. */
+function sectionEnd(tab: HTMLElement, name: string): HTMLElement | null {
+  return tab.querySelector<HTMLElement>(
+    `section[aria-label="${name}"] > .luke-disclosure-frame > .luke-disclosure-actions > .pull-request-section-end`,
   );
 }
 
@@ -1743,18 +1750,19 @@ test("the Conversation scrolls in a box whose fade begins beneath a band, each s
       `${name}'s body follows its band`,
     );
   }
-  assert.deepEqual(words(sectionHead(tab, "Conversation"), ".pull-request-section-end button"), [
-    "Hide resolved0",
-    "Hide bots0",
-  ]);
-  for (const chip of sectionHead(tab, "Conversation").querySelectorAll<HTMLElement>(
-    ".pull-request-section-end button",
-  )) {
+  const end = sectionEnd(tab, "Conversation") ?? assert.fail("the Conversation's heading ends");
+  assert.deepEqual(words(end, "button"), ["Hide resolved0", "Hide bots0"]);
+  assert.equal(
+    sectionHead(tab, "Conversation").querySelector("button"),
+    null,
+    "the filters stand beside the heading, no part of what names it",
+  );
+  for (const chip of end.querySelectorAll<HTMLElement>("button")) {
     // Drawn as the tasks board's view filter in its toolbar: a filter chip at the control's size, never a reaction's compact pill.
     assert.equal(chip.dataset.look, "filter");
     assert.equal(chip.dataset.size, undefined, `${chip.textContent} stands at the control's size`);
   }
-  assert.equal(sectionHead(tab, "Description").querySelector(".pull-request-section-end"), null);
+  assert.equal(sectionEnd(tab, "Description"), null);
   assert.equal(tab.querySelector(".pull-request-filters"), null, "no row of filters stands");
 });
 
@@ -5691,10 +5699,13 @@ test("every review thread's head leads with its chevron and ends with its ⋯, i
       head.firstElementChild?.querySelector(".luke-disclosure-turn"),
       `on ${where}, the chevron leads the head`,
     );
-    assert.ok(
-      head.lastElementChild?.querySelector(".pull-request-thread-menu"),
-      `on ${where}, the ⋯ ends it`,
-    );
+    const menu =
+      head
+        .closest(".luke-disclosure-frame")
+        ?.lastElementChild?.querySelector(".pull-request-thread-menu") ??
+      assert.fail(`on ${where}, the ⋯ ends the head's row`);
+    assert.equal(head.contains(menu), false, `on ${where}, the ⋯ stands beside the head`);
+    assert.equal(head.querySelector("button"), null, `on ${where}, no control stands in the head`);
     assert.equal(head.getAttribute("aria-expanded"), "true");
     act(() => head.click());
     assert.equal(head.getAttribute("aria-expanded"), "false", `on ${where}, the row folds it`);

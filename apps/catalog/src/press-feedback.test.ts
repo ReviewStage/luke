@@ -74,8 +74,9 @@ const PULSE = "data-pulse";
 const NO_PRESS = [
   // A dialog's backdrop, whose click asks it to close; a busy one nudges instead (`dialog.tsx`).
   "dialog.luke-dialog",
-  // A fold's action stands in its summary only to keep its own press from folding it.
-  ".luke-disclosure-action",
+  // A fold head's cells beside its summary, whose bare ground hands a press to the summary, which answers it.
+  ".luke-disclosure-lead",
+  ".luke-disclosure-actions",
   // A portal's fence only keeps what the controls it holds took from the tree around it (`portal-fence.tsx`).
   ".luke-portal-fence",
   // A document's block, whose press puts a caret in its words to edit them, as a document editor does (`editable-block.tsx`).

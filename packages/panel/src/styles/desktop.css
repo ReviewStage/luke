@@ -1545,8 +1545,9 @@ ul.actor-stack {
    naming who sent it and when, its card across the message's whole measure,
    so it lines up with a long sent message's left edge rather than a width of
    its own: the measure is the sent message's (`Message`'s `is-user`), and a
-   card folded or open spans all of it. */
-.agent-origin > :is([data-task-card], [data-replay-card]) {
+   card folded or open spans all of it, the frame around a card whose head
+   holds a control beside it among them. */
+.agent-origin > :is([data-task-card], [data-replay-card], :has(> [data-replay-card])) {
   width: 100%;
 }
 

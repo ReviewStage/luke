@@ -2,18 +2,20 @@ import {
   BoardIcon,
   CircleCheckIcon,
   DISCLOSURE_BODY,
+  DISCLOSURE_FILL,
   DISCLOSURE_LOOK,
   DISCLOSURE_SUMMARY,
   Disclosure,
-  DisclosureAction,
   DisclosureBody,
   DisclosureChevron,
+  DisclosureFrame,
   DisclosureSummary,
   FoldChevronIcon,
   IconButton,
   MoreButton,
   Stack,
   Text,
+  TextButton,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -23,22 +25,24 @@ import { CatalogSection } from "../section";
  * disclosures.tsx -- a fold closed and open, its body indented under the
  * summary's words or flush with the row, a fold whose holder keeps its
  * state, a summary long enough to wrap in a pane narrower than its words,
- * a summary holding a control that is pressed without folding it, a
- * chip at the end of its row counting the threads it folds, a fold
- * drawn as a card, its chevron leading its head or ending it, and a
- * transcript's line, bare, which the skin around its fold draws.
+ * a head holding a control beside its summary, pressed without folding
+ * it, a chip at the end of its row counting the threads it folds, a fold
+ * drawn as a card, its chevron leading its head or ending it, a ⋯ beside
+ * its head, and a transcript's line, bare, which the skin around its fold
+ * draws.
  */
 
-/** A fold whose summary ends with a ⋯ in its action slot, which counts its presses rather than folding the row. */
+/** A fold whose head ends with a ⋯ beside its summary, which counts its presses rather than folding the row. */
 function ActionDisclosure(): React.JSX.Element {
   const [presses, setPresses] = useState(0);
   return (
-    <Disclosure>
+    <Disclosure
+      actions={
+        <MoreButton thing="Review thread" onClick={() => setPresses((count) => count + 1)} />
+      }
+    >
       <DisclosureSummary>
         <span>Review thread · ⋯ pressed {presses}×</span>
-        <DisclosureAction>
-          <MoreButton thing="Review thread" onClick={() => setPresses((count) => count + 1)} />
-        </DisclosureAction>
       </DisclosureSummary>
       <DisclosureBody>
         <Text>Pressing the ⋯ leaves this fold as it stood; the rest of the row folds it.</Text>
@@ -47,22 +51,32 @@ function ActionDisclosure(): React.JSX.Element {
   );
 }
 
-/** A fold that is only its row, as a file's header: its own chevron button among its controls, a rule under it while open. */
+/** A fold that is only its row, as a file's header: its own chevron button leading it beside its summary, its letter the summary, and its path, which copies itself, standing after it and taking the row's room; a rule under it while open. */
 function RowDisclosure(): React.JSX.Element {
   const [open, setOpen] = useState(true);
+  const [copies, setCopies] = useState(0);
   return (
-    <Disclosure open={open} onOpenChange={setOpen}>
-      <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
-        <DisclosureAction>
-          <IconButton
-            icon={<FoldChevronIcon />}
-            label={open ? "Collapse file" : "Expand file"}
-            onClick={() => setOpen(!open)}
-          />
-        </DisclosureAction>
-        <span>src/seats.ts</span>
-      </DisclosureSummary>
-    </Disclosure>
+    <DisclosureFrame
+      fill={DISCLOSURE_FILL.ACTIONS}
+      lead={
+        <IconButton
+          icon={<FoldChevronIcon />}
+          label={open ? "Collapse file" : "Expand file"}
+          onClick={() => setOpen(!open)}
+        />
+      }
+      actions={
+        <TextButton onClick={() => setCopies((count) => count + 1)}>
+          src/seats.ts · copied {copies}×
+        </TextButton>
+      }
+    >
+      <Disclosure open={open} onOpenChange={setOpen}>
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
+          <span>M</span>
+        </DisclosureSummary>
+      </Disclosure>
+    </DisclosureFrame>
   );
 }
 
@@ -143,7 +157,7 @@ function Disclosures(): React.JSX.Element {
           <HeldDisclosure />
         </div>
       </CatalogSection>
-      <CatalogSection id="disclosure-action" title="Control in the summary">
+      <CatalogSection id="disclosure-action" title="Control beside the summary">
         <div className="catalog-frame">
           <ActionDisclosure />
         </div>
@@ -179,6 +193,18 @@ function Disclosures(): React.JSX.Element {
               <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
                 <Text>Write the failing test</Text>
                 <Text>Refresh on wake</Text>
+              </DisclosureBody>
+            </Disclosure>
+            <Disclosure
+              look={DISCLOSURE_LOOK.CARD}
+              actions={<MoreButton thing="Forked from Wire the start" />}
+            >
+              <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
+                <DisclosureChevron />
+                <span>Forked from Wire the start · 38 steps</span>
+              </DisclosureSummary>
+              <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
+                <Text>What this agent was handed of the source's work, as it was sent.</Text>
               </DisclosureBody>
             </Disclosure>
           </Stack>
