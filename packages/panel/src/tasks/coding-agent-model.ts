@@ -719,13 +719,13 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
     return {
       reason: FAILURE_REASON.GITHUB_TOKEN,
-      text: `Your GitHub token can't access ${unreached.repository}.`,
+      text: `Your GitHub token can't access ${unreached.repository}. Ask its owner to give your GitHub account access.`,
     };
   }
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH) {
     return {
       reason: FAILURE_REASON.GITHUB_TOKEN,
-      text: `Your GitHub token can't push to ${unreached.repository}.`,
+      text: `Your GitHub token can't push to ${unreached.repository}. Ask its owner to give your GitHub account write access.`,
     };
   }
   if (unreached === undefined || taskId === null) {
