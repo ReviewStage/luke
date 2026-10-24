@@ -7,6 +7,8 @@ import {
   type Crumb,
   Fill,
   MenuSurface,
+  NOTE_LINE_LOOK,
+  NoteLine,
   POPOVER_SIDE,
   RectFloat,
 } from "@luke/ui";
@@ -180,9 +182,9 @@ function CrumbTree({
         }}
       >
         {module === undefined ? (
-          <p className="file-crumb-notice">
+          <NoteLine look={NOTE_LINE_LOOK.LIST}>
             {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
-          </p>
+          </NoteLine>
         ) : (
           <Fill className="file-tree-host" ref={host} />
         )}

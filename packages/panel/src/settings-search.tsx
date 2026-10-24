@@ -43,6 +43,8 @@ import {
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
+  NOTE_LINE_LOOK,
+  NoteLine,
   SearchField,
   Shortcut,
   Stack,
@@ -629,9 +631,9 @@ export function SettingsSearchResults({
 }): React.JSX.Element {
   if (search.matched === 0) {
     return (
-      <p className="sidebar-note" role="status">
+      <NoteLine look={NOTE_LINE_LOOK.ROWS} status>
         No results
-      </p>
+      </NoteLine>
     );
   }
   return (
