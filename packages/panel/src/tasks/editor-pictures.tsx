@@ -20,8 +20,8 @@ import {
   TextField,
   useFilePicker,
 } from "@luke/ui";
+import { CaptionsIcon, GLYPH, Maximize2Icon, TextCursorInputIcon } from "@luke/ui/icons";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
-import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
@@ -333,7 +333,7 @@ function KeptPicture({
       : []),
     {
       label: TOOL.DELETE,
-      icon: <Trash2Icon aria-hidden="true" />,
+      icon: <GLYPH.DELETE />,
       run: doors.remove,
       danger: true,
     },
