@@ -637,7 +637,9 @@ const SENTRY_UNREAD: SentryOffer = {
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const { act } = useAct();
-  const { read } = useSentryRead(workspaceId);
+  const sentry = useSentryRead(workspaceId).read;
+  // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable.
+  const read = sentry !== undefined && "sentry" in sentry ? sentry.sentry : undefined;
   const [installing, setInstalling] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const onInstall = () => {
