@@ -20,7 +20,7 @@
     "discarded-effect": "node --max-old-space-size=4096 scripts/discarded-effect.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",
-    "lint": "biome lint . && pnpm oxlint && node tools/anti-slop/press-guard-check.ts",
+    "lint": "biome lint . && pnpm oxlint && node tools/anti-slop/press-guard-check.ts && node tools/anti-slop/style-guard.ts",
     "lint:fix": "biome check --write .",
     "oxlint": "./scripts/oxlint.sh",
     "package": "pnpm --filter @luke/desktop package",
