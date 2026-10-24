@@ -101,7 +101,7 @@ import { ServerCard } from "./server-card.js";
  * to sign in there and then, as Settings does: the row waits on it with a
  * ring after its name, its line said only to a reader and in its title,
  * then Reopen and Cancel, and becomes the switch once the sign-in settles,
- * or says it failed or did not finish and offers Try again
+ * or says it failed or did not finish and offers Retry
  * (`../integration-sign-in.ts`). Pressing a connected server turns the popover into
  * its page, in place: back, its name, its switch, a filter, and its tools
  * in alphabetical order, each one line of its title, its name, the badge
@@ -127,7 +127,7 @@ import { ServerCard } from "./server-card.js";
  * server's, and otherwise closes the popover, and stops there so the panel behind stays open; a
  * second press of the button, and focus leaving it for another part of the
  * window, close it too. The button, the back, a row's switch and its
- * Connect, Reopen, Cancel, Try again or Retry are `@luke/ui`'s, each pressed
+ * Connect, Reopen, Cancel or Retry are `@luke/ui`'s, each pressed
  * without taking the focus from the field.
  */
 
@@ -161,6 +161,14 @@ const SEARCH = {
 const PAGE = {
   NONE: "No tools match",
 } as const;
+
+/** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
+const WORKING_ACT = {
+  CONNECT: "connect",
+  CANCEL: "cancel",
+} as const;
+
+type WorkingAct = (typeof WORKING_ACT)[keyof typeof WORKING_ACT];
 
 /**
  * A pointer's press that leaves the focus in the field, so the keys the
@@ -390,7 +398,9 @@ function ServersPopover({
   const list = useRef<HTMLDivElement>(null);
   const rowsId = useId();
   const rows = useServerRows(statuses, servers.disabled);
-  const [connecting, setConnecting] = useState<string | undefined>(undefined);
+  const [working, setWorking] = useState<{ server: string; act: WorkingAct } | undefined>(
+    undefined,
+  );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
   const [opened, setOpened] = useState<string | undefined>(undefined);
@@ -443,14 +453,14 @@ function ServersPopover({
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (server: string) => {
-    setConnecting(server);
-    void grant.begin(server).then(() => setConnecting(undefined));
+    setWorking({ server, act: WORKING_ACT.CONNECT });
+    void grant.begin(server).then(() => setWorking(undefined));
   };
 
   /** A sign-in waited on, ended here; a Cancel the service refused leaves it waiting, to press again. */
   const cancel = (server: string) => {
-    setConnecting(server);
-    void statuses.cancelSignIn(server).then(() => setConnecting(undefined));
+    setWorking({ server, act: WORKING_ACT.CANCEL });
+    void statuses.cancelSignIn(server).then(() => setWorking(undefined));
   };
 
   const open = (row: ServerRow, search = "") => {
@@ -490,7 +500,7 @@ function ServersPopover({
     if (opensTools(row)) {
       return open(row, found.tools.some((hit) => hit.row === row) ? query : "");
     }
-    // Note that Enter on a sign-in under way reopens it, its first press, as Try again begins it again.
+    // Note that Enter on a sign-in under way reopens it, its first press, as Retry begins it again.
     if (
       row.kind === SERVER_ROW.CONNECT ||
       row.kind === SERVER_ROW.RECONNECT ||
@@ -555,6 +565,12 @@ function ServersPopover({
     else onClose();
   };
 
+  /** A row's button while its server waits on an act: busy if it started that act, off if the other did. */
+  const workingOn = (server: string, mine: WorkingAct, busyLabel: string) => {
+    if (working?.server !== server) return {};
+    return working.act === mine ? { busy: true, busyLabel } : { disabled: true };
+  };
+
   const end = (row: ServerRow): React.JSX.Element | null => {
     switch (row.kind) {
       case SERVER_ROW.SWITCH:
@@ -565,7 +581,7 @@ function ServersPopover({
           <Button
             variant={BUTTON_VARIANT.QUIET}
             keepFocus
-            disabled={connecting === row.connection}
+            {...workingOn(row.connection, WORKING_ACT.CONNECT, "Connecting")}
             onClick={(event) => {
               event.stopPropagation();
               connect(row.connection);
@@ -580,7 +596,7 @@ function ServersPopover({
             <Button
               variant={BUTTON_VARIANT.QUIET}
               keepFocus
-              disabled={connecting === row.connection}
+              {...workingOn(row.connection, WORKING_ACT.CONNECT, "Reopening the sign-in")}
               onClick={(event) => {
                 event.stopPropagation();
                 connect(row.connection);
@@ -591,7 +607,7 @@ function ServersPopover({
             <Button
               variant={BUTTON_VARIANT.QUIET}
               keepFocus
-              disabled={connecting === row.connection}
+              {...workingOn(row.connection, WORKING_ACT.CANCEL, "Canceling the sign-in")}
               onClick={(event) => {
                 event.stopPropagation();
                 cancel(row.connection);
@@ -606,7 +622,7 @@ function ServersPopover({
           <Button
             variant={BUTTON_VARIANT.QUIET}
             keepFocus
-            disabled={connecting === row.connection}
+            {...workingOn(row.connection, WORKING_ACT.CONNECT, "Connecting")}
             onClick={(event) => {
               event.stopPropagation();
               connect(row.connection);

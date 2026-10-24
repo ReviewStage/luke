@@ -74,7 +74,7 @@ type ServerRowKind = (typeof SERVER_ROW)[keyof typeof SERVER_ROW];
 export const SERVER_ACTION = {
   CONNECT: "Connect",
   RECONNECT: "Reconnect",
-  RETRY: "Try again",
+  RETRY: "Retry",
 } as const;
 
 /** What the popover and its button are called. */

@@ -80,7 +80,7 @@ export const SIGN_IN_GRACE = Duration.seconds(10);
 export const SIGN_IN_ACTION = {
   CANCEL: "Cancel",
   REOPEN: "Reopen",
-  TRY_AGAIN: "Try again",
+  TRY_AGAIN: "Retry",
 } as const;
 
 /** One read of where a provider stands, as a sign-in hears it. */

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { IntegrationTool } from "@luke/features/integration-health";
+import { SIGN_IN } from "@luke/features/integration-sign-in";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -177,6 +178,18 @@ function serverPress(container: HTMLElement, name: string): HTMLElement | undefi
     [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")]
       .find((row) => row.textContent?.includes(name))
       ?.querySelector<HTMLElement>("button") ?? undefined
+  );
+}
+
+/** The button saying `words` on the home's row whose name holds `name`. */
+function serverButton(container: HTMLElement, name: string, words: string): HTMLButtonElement {
+  const row = [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")].find((each) =>
+    each.textContent?.includes(name),
+  );
+  return (
+    [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+      (button) => button.textContent === words,
+    ) ?? assert.fail(`no ${words} on ${name}`)
   );
 }
 
@@ -579,6 +592,88 @@ test("a server that is not connected hangs its card too, though its press is no 
     container.querySelectorAll(".agent-servers-list .luke-list-row-chevron").length,
     2,
     "only the two servers with tools say they open a page",
+  );
+});
+
+/** The words on each button standing on `name`'s row, with whether it is busy or off. */
+function buttonsOf(container: HTMLElement, name: string) {
+  const row = [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")].find((each) =>
+    each.textContent?.includes(name),
+  );
+  // Note that the row's own press holds its name; what stands beside it is the row's buttons.
+  const beside = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
+    (button) => button.querySelector(".agent-servers-name") === null,
+  );
+  return beside.map((button) => ({
+    words: button.textContent,
+    busy: button.getAttribute("aria-busy") === "true",
+    off: button.disabled,
+  }));
+}
+
+test("a Connect shows it is working until the browser has been sent to sign in", async () => {
+  const connect = Promise.withResolvers<{ opened: true }>();
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_TOOLS]: () => Promise.resolve({ tools: [] }),
+    [ACT_KIND.INTEGRATIONS_CONNECT]: () => connect.promise,
+  });
+  const { container } = await opened();
+  assert.deepEqual(buttonsOf(container, "Mercury"), [
+    { words: "Connect", busy: false, off: false },
+  ]);
+
+  await act(async () => serverButton(container, "Mercury", "Connect").click());
+
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ busy, off }) => [busy, off]),
+    [[true, false]],
+  );
+  await act(async () => connect.resolve({ opened: true }));
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ busy }) => busy),
+    [false],
+  );
+});
+
+test("a Cancel shows it is working while Reopen waits, and a sign-in that failed offers Retry", async () => {
+  const cancel = Promise.withResolvers<boolean>();
+  const waiting = { kind: SIGN_IN.WAITING, since: 1, deadline: 1000, seenPending: true } as const;
+  const failed = { kind: SIGN_IN.FAILED, since: 2 } as const;
+  const { container } = await opened({
+    ...statuses,
+    signInOf: (server) => (server === INTEGRATION_PROVIDER.MERCURY ? waiting : undefined),
+    cancelSignIn: () => cancel.promise,
+  });
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ words }) => words),
+    ["Reopen", "Cancel"],
+  );
+
+  await act(async () => serverButton(container, "Mercury", "Cancel").click());
+
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ words, busy, off }) => [words, busy, off]),
+    [
+      ["Reopen", false, true],
+      ["Cancel", true, false],
+    ],
+  );
+  await act(async () => cancel.resolve(true));
+  assert.deepEqual(
+    buttonsOf(container, "Mercury").map(({ busy, off }) => [busy, off]),
+    [
+      [false, false],
+      [false, false],
+    ],
+  );
+
+  const { container: after } = await opened({
+    ...statuses,
+    signInOf: (server) => (server === INTEGRATION_PROVIDER.MERCURY ? failed : undefined),
+  });
+  assert.deepEqual(
+    buttonsOf(after, "Mercury").map(({ words }) => words),
+    ["Retry"],
   );
 });
 
