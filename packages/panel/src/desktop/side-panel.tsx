@@ -818,6 +818,72 @@ export function panelEntries(input: {
   return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
+/**
+ * What a holder's panel offers by its "+" rules (`panelEntries`): the kinds
+ * `offeredPanelKinds` lets it, each file Luke showed on the task, each of
+ * the task's agents' pull requests, the plan's pages, a terminal for each
+ * agent where the platform runs them and the panel is not the Inbox's, and
+ * a new Browser tab in each agent's cloud browser, the one viewed first,
+ * on a task's own panel while the experiment is on. The panel's "+" and
+ * ⌘K's "This task" both ask here, so neither offers what the other does
+ * not.
+ */
+export function panelOffers(input: {
+  holder: SidePanelHolder;
+  taskId: string;
+  panel: SidePanelControl;
+  agents: CodingAgentsControl;
+  shownCode: readonly TaskCodeShowing[];
+  pages: readonly PageLine[];
+  /** Whether the task's page draws its Chat. */
+  chat: boolean;
+  /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
+  onNewTerminal: ((agentId: string) => void) | undefined;
+  /** Whether the Browser tab experiment is on. */
+  browsers: boolean;
+  /** The agent whose browser a new tab is offered in first: the one the panel or the column shows. */
+  viewedAgent: string | undefined;
+  plan: PlanStanding | undefined;
+  cards: PanelCards;
+}): AddEntry[] {
+  const { holder, taskId, panel, agents, shownCode, onNewTerminal, cards } = input;
+  const changes = panel.changes.filter((each) =>
+    drawsChanges(each, { taskAgents: agents.heldIds }),
+  );
+  const ownerOf = (agentId: string): CloudBrowserOwner => {
+    const subject = agentSubject(agents, agentId, cards.held, false);
+    return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
+  };
+  const cloudOffers: readonly CloudBrowserOffer[] =
+    !input.browsers || holder !== SIDE_PANEL_HOLDER.TASK
+      ? []
+      : [...(agents.agents ?? [])]
+          .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
+          .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
+  return panelEntries({
+    panel,
+    kinds: offeredPanelKinds(holder, {
+      inbox: inboxOffered(agents, panel),
+      chat: input.chat,
+      code: shownCode.length > 0,
+    }),
+    files: shownFiles(shownCode),
+    changes: changesOffers(agents, changes),
+    pages: input.pages,
+    // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
+    ...(onNewTerminal === undefined || holder === SIDE_PANEL_HOLDER.INBOX
+      ? undefined
+      : { terminals: { offers: terminalOffers(agents, panel), onNew: onNewTerminal } }),
+    browsers: {
+      agents: cloudOffers,
+      onAgent: (agentId: string) =>
+        panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
+    },
+    plan: input.plan,
+    cards,
+  });
+}
+
 /** A tab's card as a hover hangs it (`tab-card.tsx`): none for a kind that hangs none, when the hover hangs its hint. */
 function hungCard(subject: CardSubject): ReactNode {
   return tabCard(subject) ?? undefined;
@@ -2476,18 +2542,6 @@ export function SidePanel({
   };
   // The "+" offers a new tab in each of the task's coding agents' cloud browsers, the one viewed first.
   const viewedAgent = shownAgent ?? (panel.tab === undefined ? undefined : agentOfTab(panel.tab));
-  const cloudOffers: readonly CloudBrowserOffer[] = !cloudListing
-    ? []
-    : [...(agents.agents ?? [])]
-        .sort((a, b) => Number(b.id === viewedAgent) - Number(a.id === viewedAgent))
-        .map((agent) => {
-          const subject = agentSubject(agents, agent.id, drawnTranscripts, false);
-          return {
-            agentId: agent.id,
-            agent,
-            owner: { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> },
-          };
-        });
   const cloudDrafts = {
     onOpened: (draftId: string, opened: AgentBrowserTab) => {
       discardCloudDraft(taskId, draftId);
@@ -2526,30 +2580,19 @@ export function SidePanel({
   const openTerminal = useOpenTerminal(panel, noFocusMove);
   // A Pull request tab's Run opens the agent's branch on this Mac in this panel, which already holds the keys.
   const macTerminalDoors = useAgentTerminalDoors(panel, repository, noFocusMove);
-  const offers = panelEntries({
+  const offers = panelOffers({
+    holder,
+    taskId,
     panel,
-    kinds: offeredPanelKinds(holder, {
-      inbox: inboxOffered(agents, panel),
-      chat: chat !== undefined,
-      code: (shownCode?.length ?? 0) > 0,
-    }),
-    files: offered,
-    changes: changesOffers(agents, changes),
+    agents,
+    shownCode: shownCode ?? [],
     pages: taskPages,
-    // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
-    ...(!terminalsHere
-      ? undefined
-      : {
-          terminals: {
-            offers: terminalOffers(agents, panel),
-            onNew: (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW),
-          },
-        }),
-    browsers: {
-      agents: cloudOffers,
-      onAgent: (agentId: string) =>
-        panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
-    },
+    chat: chat !== undefined,
+    onNewTerminal: terminalsHere
+      ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
+      : undefined,
+    browsers: browserOn,
+    viewedAgent,
     plan: task,
     cards: {
       agents,

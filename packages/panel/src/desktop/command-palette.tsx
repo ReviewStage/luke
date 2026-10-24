@@ -60,9 +60,15 @@ import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@luke/features/words";
+import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import type { ExperimentChoices, HostCapability } from "@luke/settings";
+import {
+  EXPERIMENT,
+  type ExperimentChoices,
+  HOST_CAPABILITY,
+  type HostCapability,
+} from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
   APP_COMMAND,
@@ -114,9 +120,10 @@ import {
   type TaskRow,
   taskRow,
 } from "@luke/ui/task-list-model";
-import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@luke/ui/tasks-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
+  isValidElement,
   type ReactNode,
   useDeferredValue,
   useEffect,
@@ -125,6 +132,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useAct } from "../act.js";
 import { AssigneeFaceMark } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -132,7 +140,13 @@ import {
   useAppCommand,
   useOverlayHold,
 } from "../app-commands.js";
-import { COMMAND_PLACE, commandWords, PANEL_COMMAND, panelCommandOf } from "../command-items.js";
+import {
+  COMMAND_PLACE,
+  commandWords,
+  PANEL_COMMAND,
+  type PanelCommand,
+  panelCommandOf,
+} from "../command-items.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { memberRows } from "../member-rows.js";
 import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
@@ -156,8 +170,9 @@ import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-mod
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { TaskKey } from "../tasks/task-standing.js";
+import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel.js";
@@ -168,18 +183,20 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
-import { useExperimentChoices } from "../use-app-state.js";
+import { useCapability, useExperiment, useExperimentChoices } from "../use-app-state.js";
+import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { strandedHome } from "./move-task-dialog.js";
 import {
-  changesOffers,
+  ADD_SECTION,
   inboxOffered,
   offeredPanelKinds,
-  panelEntries,
+  panelOffers,
   SIDE_PANEL_HOLDER,
 } from "./side-panel.js";
+import type { AddEntry } from "./strip-tabs.js";
 import { taskOf } from "./task-actions.js";
 import { homeTaskCardOf, TaskRowMark } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
@@ -230,6 +247,12 @@ const KIND_ROWS = {
 
 /** The first row's id: rows are known by their place in the list, from one. */
 const FIRST_ROW = "1";
+
+/** No Archive asked of ⌘K yet, of any agent. */
+const NO_ARCHIVE_ASKS = { agentId: "", asked: 0 };
+
+/** Nothing to move: a terminal opened from ⌘K stands in the side panel, as one opened from the panel's "+" does. */
+const noFocusMove = (): void => undefined;
 
 /** The group Ask Luke stands alone in, above every kind's, under no heading. */
 const ASK_LUKE_GROUP = "ask-luke";
@@ -744,18 +767,45 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
   show();
 }
 
+/** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals, and whether the Browser tab experiment is on. */
+interface PanelOfferDoors {
+  readonly onNewTerminal: ((agentId: string) => void) | undefined;
+  readonly browsers: boolean;
+}
+
+/**
+ * An offer as ⌘K lists it: as it stands, or, for the "+"'s new Browser tab
+ * on a task with several agents, whose submenu ⌘K cannot open, one row for
+ * each agent's browser, named by the agent as the submenu's choice is.
+ */
+function paletteEntries(entry: AddEntry): readonly AddEntry[] {
+  const { submenu, ...row } = entry.row;
+  if (submenu === undefined) return [entry];
+  return submenu.rows.map((choice) => ({
+    row: { ...row, detail: choice.label, terms: [row.label, choice.label] },
+    endMark: isValidElement(choice.end) ? choice.end : undefined,
+    card: choice.card,
+    onPick: () => submenu.onPick(choice.id),
+  }));
+}
+
 /**
  * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
- * then its agents' Changes tabs, as the side panel's "+" lists them, then
- * its archived agents (`archivedAgentRows`), each in its row's look and
- * words, found by its row's words, and beside the task's name; none while
- * no task is open. An agent opens as its notification's click opens it, the
- * Inbox the same way, and a Changes tab as the "+" opens it, the version history
- * giving way to each, so none opens behind what covers it.
+ * then what the side panel's "+" offers past its kinds, by its own rules
+ * (`panelOffers`): the files Luke showed, the agents' Pull request tabs, the
+ * plan's pages, a terminal for each agent, and a new Browser tab in each
+ * agent's browser; then its archived agents (`archivedAgentRows`), each in
+ * its row's look and words, found by its row's words, and beside the task's
+ * name; none while no task is open. The "+"'s kinds stand under Commands as
+ * Show board and the rest (`panelTabRows`). An agent opens as its
+ * notification's click opens it, the Inbox the same way, and the panel's
+ * places as the "+" opens them, the version history giving way to each, so
+ * none opens behind what covers it.
  */
 function agentRows(
   tasks: TasksControl,
   chatOn: boolean,
+  doors: PanelOfferDoors,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
@@ -767,32 +817,64 @@ function agentRows(
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
-  // Note that the plan's Changes open in its own panel, and in the Inbox's
-  // beside an item of the plan, which draws its pull requests.
-  const subagents = opensTaskItems(tasks)
-    ? panelEntries({
+  // Note that the plan's places open in its own panel, and in the Inbox's
+  // beside an item of the plan, whose panel is the Inbox's.
+  const holder = holdsTaskPanel(tasks) ? SIDE_PANEL_HOLDER.TASK : SIDE_PANEL_HOLDER.INBOX;
+  // Note that the Inbox's panel reads the chosen item's pages on its own and draws no code shown (`desktop-inbox.tsx`), so its "+" offers no shown file.
+  const inboxHeld = holder === SIDE_PANEL_HOLDER.INBOX;
+  const shownCode = inboxHeld ? [] : (tasks.shownCode ?? []);
+  const pages = (inboxHeld ? tasks.inboxView.pages : tasks.pages) ?? [];
+  const places = opensTaskItems(tasks)
+    ? panelOffers({
+        holder,
+        taskId,
         panel: tasks.sidePanel,
-        kinds: [],
-        files: [],
-        changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
-      }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
+        agents: tasks.agents,
+        shownCode,
+        pages,
+        chat: chatOn && tasks.chatView.available,
+        onNewTerminal: doors.onNewTerminal,
+        browsers: doors.browsers,
+        viewedAgent: undefined,
+        plan: openPlanStanding(tasks),
+        cards: {
+          agents: tasks.agents,
+          held: NOTHING_HELD,
+          shown: shownCode,
+          repository: tasks.tasks.find((task) => task.id === taskId)?.repository ?? null,
+          pagePlace: { taskId },
+          shownAgent: undefined,
+          onOpenAgent: (agentId) => show(() => tasks.onShowAgent(taskId, agentId)),
+        },
+      })
+        .filter((entry) => entry.row.section !== undefined)
+        .flatMap(paletteEntries)
+        .map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
-  const entries = [...inbox, ...chat, ...agents, ...subagents];
-  const standing = entries.map(({ row, endMark, onPick, agent }) => ({
-    icon: row.icon,
-    label: row.label,
-    detail: [row.detail, taskName].filter((word) => word !== undefined).join(" · ") || undefined,
-    endMark,
-    card:
-      agent === undefined ? undefined : (
-        <AgentCard
-          subject={agentSubject(tasks.agents, agent.id, NOTHING_HELD, false)}
-          models={tasks.agents.models}
-        />
-      ),
-    terms: [...(row.terms ?? [row.label]), ...(taskName === undefined ? [] : [taskName])],
-    onChoose: () => show(onPick),
-  }));
+  const entries: readonly AddEntry[] = [...inbox, ...chat, ...agents, ...places];
+  const standing = entries.map(({ row, endMark, card, onPick, agent }) => {
+    // Note that a terminal's row is named by its agent, as under the "+"'s Terminal heading, which ⌘K draws none of, so the row says it.
+    const heading = row.section === ADD_SECTION.TERMINAL ? row.section : undefined;
+    const detail = typeof row.detail === "string" ? row.detail : undefined;
+    const named = [heading, taskName].filter((word) => word !== undefined);
+    return {
+      icon: row.icon,
+      label: row.label,
+      detail:
+        [heading, detail, taskName].filter((word) => word !== undefined).join(" · ") || undefined,
+      endMark,
+      card:
+        card ??
+        (agent === undefined ? undefined : (
+          <AgentCard
+            subject={agentSubject(tasks.agents, agent.id, NOTHING_HELD, false)}
+            models={tasks.agents.models}
+          />
+        )),
+      terms: [...(row.terms ?? [row.label]), ...named],
+      onChoose: () => show(onPick),
+    };
+  });
   return [...standing, ...archivedAgentRows(tasks, taskName, show)];
 }
 
@@ -1046,7 +1128,8 @@ function panelTabRows(
       inboxOffered(tasks.agents, tasks.sidePanel) ||
       tasks.listed.inbox.some((waiting) => waiting.taskId === tasks.activeTaskId),
     chat: chatOn && tasks.chatView.available,
-    code: true,
+    // Note that this is the "+"'s own input, though only an agent's page holds Code to it: a task's panel offers Code either way.
+    code: (tasks.shownCode?.length ?? 0) > 0,
   });
   return kinds.map((tab) => {
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
@@ -1166,6 +1249,101 @@ function agentPinRows(
       onChoose: () => choose(() => tasks.onPinAgent(agent.id, !pinned)),
     },
   ];
+}
+
+/**
+ * The plan on screen's own commands, as its ⋯ menu offers them
+ * (`task-actions.tsx`'s `taskActionGroups`): Version history, Cancel task
+ * on a task not already canceled, Change repository, and Open on GitHub
+ * where it has a repository; each runs what its menu item runs. None while
+ * no plan is looked at. Note that Copy link, Mark as read, Pin, Mark done,
+ * and Permanently delete are rows of their own, and that Rename is not
+ * offered, because the plan's ⋯ has no door ⌘K can reach.
+ */
+function taskCommandRows(
+  tasks: TasksControl,
+  reads: ReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
+  if (task === undefined) return [];
+  const commands: readonly { item: PanelCommand; run: () => void }[] = [
+    { item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) },
+    ...(settleOffered(task, SETTLED_STATUS.CANCELED)
+      ? [
+          {
+            item: PANEL_COMMAND.CANCEL_TASK,
+            run: () => tasks.onSettleTasks([task.id], SETTLED_STATUS.CANCELED),
+          },
+        ]
+      : []),
+    { item: PANEL_COMMAND.CHANGE_REPOSITORY, run: () => tasks.onChangeRepository(task.id) },
+    ...(task.repository === null
+      ? []
+      : [{ item: PANEL_COMMAND.OPEN_ON_GITHUB, run: () => tasks.onOpenOnGitHub(task.id) }]),
+  ];
+  return commands.map(({ item, run }) => {
+    const label = commandWords(item, COMMAND_PLACE.PALETTE);
+    return { icon: item.icon, label, terms: [label], onChoose: () => choose(run) };
+  });
+}
+
+/** The agent on no task whose page stands, archived or not; none while no agent's page stands, or while Luke's does, who is not archived. */
+function openAgentOf(tasks: TasksControl): TasklessAgent | undefined {
+  const { agentId } = tasks.agentView;
+  const { standing, archived } = tasks.listedAgents;
+  return [...standing, ...archived].find((each) => each.id === agentId);
+}
+
+/**
+ * Archive agent for the agent whose page stands, or Unarchive agent once it
+ * is archived, as its ⋯ offers them; none while no agent's page stands. A
+ * choice asks `OpenAgentArchive`, which runs the menu's own item.
+ */
+function agentArchiveRows(
+  agent: TasklessAgent | undefined,
+  ask: (agentId: string) => void,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  if (agent === undefined) return [];
+  const item =
+    agent.archivedAt === undefined ? PANEL_COMMAND.ARCHIVE_AGENT : PANEL_COMMAND.UNARCHIVE_AGENT;
+  const label = commandWords(item, COMMAND_PLACE.PALETTE);
+  return [{ icon: item.icon, label, terms: [label], onChoose: () => choose(() => ask(agent.id)) }];
+}
+
+/**
+ * The open agent's Archive or Unarchive, run as its ⋯ runs them
+ * (`agent-archive.tsx`) each time ⌘K asks, and the question Archive asks
+ * through while a teammate's agent works, drawn while the window stands.
+ * Note that it is keyed by the agent, so an ask for one is never run on
+ * another.
+ */
+function OpenAgentArchive({
+  agent,
+  agents,
+  shown,
+  asked,
+}: {
+  agent: TasklessAgent;
+  agents: CodingAgentsControl;
+  shown: boolean;
+  /** How many times ⌘K asked for this agent, each new one run once. */
+  asked: number;
+}): React.JSX.Element {
+  const { act } = useAct();
+  // Note that the agent is read again by its own id before a teammate's is archived, as its sidebar row reads it.
+  const control = { ...agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
+  const archive = useAgentArchive(agent, control, shown);
+  const unarchive = useAgentUnarchive(agent.id, control);
+  const action = agent.archivedAt === undefined ? archive.action : unarchive;
+  const answered = useRef(asked);
+  useEffect(() => {
+    if (asked === answered.current) return;
+    answered.current = asked;
+    action.onSelect();
+  });
+  return archive.dialog;
 }
 
 /** Every Settings page this platform offers, in the sidebar's order, under its own glyph and name. */
@@ -1598,7 +1776,22 @@ export function CommandPalette({
   const { members } = membersRead;
   const reads = useReadMarks();
   const agentReads = useAgentReadMarks();
+  // The open agent's Archive, asked of `OpenAgentArchive` by the agent it was chosen for.
+  const openAgent = openAgentOf(listedTasks);
+  const [archiveAsks, setArchiveAsks] = useState<{ agentId: string; asked: number }>(
+    NO_ARCHIVE_ASKS,
+  );
+  const askArchive = (agentId: string) =>
+    setArchiveAsks((was) => ({ agentId, asked: was.agentId === agentId ? was.asked + 1 : 1 }));
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
+  // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
+  const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
+  const offerDoors: PanelOfferDoors = {
+    onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
+      ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
+      : undefined,
+    browsers: useExperiment(EXPERIMENT.BROWSER),
+  };
   const taskId = tasks.activeTaskId;
   const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;
   // The files held are the open task's repository's, or none of its.
@@ -1662,7 +1855,7 @@ export function CommandPalette({
           )
         : [],
     ],
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, chatOn, onTasks)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, chatOn, offerDoors, onTasks)],
     [PALETTE_FILTER.INBOX]: () => [
       inboxAsked
         ? inboxRows(inboxSearch.items, {
@@ -1689,6 +1882,8 @@ export function CommandPalette({
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(listedTasks, choose),
+        ...taskCommandRows(tasks, reads, choose),
+        ...agentArchiveRows(openAgent, askArchive, choose),
       ].map((row) => ({ ...row, loose: true })),
     ],
     [PALETTE_FILTER.SETTINGS]: () => [
@@ -1778,23 +1973,34 @@ export function CommandPalette({
   );
 
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={setOpen}
-      label="Command palette"
-      placeholder={filterPlaceholder(filter)}
-      groups={stood.current}
-      filter={COMMAND_FILTER.NONE}
-      query={query}
-      onQueryChange={setQuery}
-      selected={selected}
-      onSelectedChange={setSelected}
-      // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
-      empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
-      band={<PaletteFilters filter={filter} onFilter={changeFilter} />}
-      foot={<PaletteFooter typed={query !== ""} runs={runs} />}
-      onKeyDown={keyDown}
-      inputRef={keystrokes}
-    />
+    <>
+      <CommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        label="Command palette"
+        placeholder={filterPlaceholder(filter)}
+        groups={stood.current}
+        filter={COMMAND_FILTER.NONE}
+        query={query}
+        onQueryChange={setQuery}
+        selected={selected}
+        onSelectedChange={setSelected}
+        // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
+        empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
+        band={<PaletteFilters filter={filter} onFilter={changeFilter} />}
+        foot={<PaletteFooter typed={query !== ""} runs={runs} />}
+        onKeyDown={keyDown}
+        inputRef={keystrokes}
+      />
+      {openAgent === undefined ? null : (
+        <OpenAgentArchive
+          key={openAgent.id}
+          agent={openAgent}
+          agents={tasks.agents}
+          shown={tasks.shown}
+          asked={archiveAsks.agentId === openAgent.id ? archiveAsks.asked : 0}
+        />
+      )}
+    </>
   );
 }
