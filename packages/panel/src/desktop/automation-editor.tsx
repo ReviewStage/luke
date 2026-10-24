@@ -154,11 +154,11 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import { GLYPH } from "@luke/ui/icons";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
-import { GLYPH } from "@luke/ui/icons";
 import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
 import {
   type ReactNode,
@@ -194,7 +194,7 @@ import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-panel.js";
-import { automationOwnerName } from "./automation-words.js";
+import { automationDeleteQuestion, automationOwnerName } from "./automation-words.js";
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
@@ -2715,13 +2715,7 @@ export function AutomationEditor({
       <ConfirmDialog
         open
         confirm={deletion}
-        question={{
-          title: `Delete ${automation?.name ?? "this automation"}?`,
-          body: "Its schedule stops and its run history goes. Agents its runs started stay.",
-          verb: "Delete",
-          running: "Deleting",
-          loss: CONFIRM_LOSS.IRREVERSIBLE,
-        }}
+        question={automationDeleteQuestion(automation?.name)}
       />
     </AutomationPageFrame>
   );

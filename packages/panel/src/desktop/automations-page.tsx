@@ -30,7 +30,6 @@ import {
   Button,
   CardPress,
   COLLECTION_STATE,
-  CONFIRM_LOSS,
   CollectionPage,
   type CollectionState,
   ConfirmDialog,
@@ -91,6 +90,7 @@ import {
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import {
+  automationDeleteQuestion,
   automationNarrowLine,
   automationNextText,
   automationOwnerName,
@@ -127,9 +127,6 @@ const ROW_THING = "Automation";
 
 /** What the list is called, and a phone's way back from an automation's page names it. */
 const AUTOMATIONS = "Automations";
-
-/** What a row's Delete asks, as the editor's Delete asks it. */
-const DELETE_BODY = "Its schedule stops and its run history goes. Agents its runs started stay.";
 
 /** Why a row's Delete did not land, as its question goes on saying until it is tried again or let go. */
 const DELETE_REFUSAL_WORDS = {
@@ -624,13 +621,7 @@ function ListPage({
       <ConfirmDialog
         open
         confirm={deletion.confirm}
-        question={{
-          title: `Delete ${deletion.asked?.name ?? "this automation"}?`,
-          body: DELETE_BODY,
-          verb: "Delete",
-          running: "Deleting",
-          loss: CONFIRM_LOSS.IRREVERSIBLE,
-        }}
+        question={automationDeleteQuestion(deletion.asked?.name)}
       />
     </CollectionPage>
   );

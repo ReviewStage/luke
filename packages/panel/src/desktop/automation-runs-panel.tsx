@@ -260,16 +260,16 @@ function RunsBody({
           <ListMotion root={body}>
             <List label="Runs" density={LIST_DENSITY.COMPACT} moves>
               {runs.runs.map((run) => (
-              <RunRow
-                key={run.id}
-                run={run}
-                keyHolder={mine ? undefined : CREATOR}
-                automationId={automationId}
-                linked={run.id === linkedRun}
-                now={now}
-                onOpenAgent={onOpenAgent}
-              />
-            ))}
+                <RunRow
+                  key={run.id}
+                  run={run}
+                  keyHolder={mine ? undefined : CREATOR}
+                  automationId={automationId}
+                  linked={run.id === linkedRun}
+                  now={now}
+                  onOpenAgent={onOpenAgent}
+                />
+              ))}
             </List>
           </ListMotion>
         )}
