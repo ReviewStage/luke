@@ -47,6 +47,7 @@ import {
   taskAgentsOfLiveRows,
   taskListLiveRowsSchema,
   taskListOfLiveRows,
+  taskPullRequestsOfLiveRows,
 } from "@luke/features/task-list-live";
 import { PLAN_ACTOR, TASK_STATUS } from "@luke/features/task-wire";
 import {
@@ -430,6 +431,40 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           ],
         );
         assert.deepEqual((yield* liveListOf(outsider, NOW)).plans, []);
+      }),
+  );
+
+  it.effect(
+    "a plan's row names its first few pull requests and counts them all, and every one stands beside the list in the row's order",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        const { queued: _, ...published } = PUBLISHED;
+        const numbers = [41, 42, 43, 44, 45];
+        for (const [index, number] of numbers.entries()) {
+          const agent = yield* openAgent(owner, { taskId: plan.id }, (index + 1) * 60_000);
+          yield* recordCodingAgentPublished(owner, agent.id, {
+            ...published,
+            number,
+            url: `https://github.com/acme/relay/pull/${number}`,
+          });
+        }
+
+        const rows = yield* liveRowsOf(owner);
+        const row = taskListOfLiveRows(rows, NOW).plans.find((each) => each.id === plan.id);
+        const every = taskPullRequestsOfLiveRows(rows).find((each) => each.taskId === plan.id);
+        assert.equal(row?.agents?.pullRequestTotal, 5);
+        assert.deepEqual(
+          every?.pullRequests.map((each) => each.number),
+          [41, 42, 43, 44, 45],
+          "every pull request, the newest agent's first",
+        );
+        assert.deepEqual(
+          row?.agents?.pullRequests,
+          every?.pullRequests.slice(0, 3),
+          "the row names the first few of them",
+        );
       }),
   );
 

@@ -11,6 +11,7 @@ import {
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
+  HoverCardScroll,
   Inline,
   PinIcon,
   TooltipCard,
@@ -24,12 +25,24 @@ import { CatalogSection } from "../section";
  * hover-cards.tsx -- the words of a card hung in a pill's place: a head with
  * its glyph, line, and corner; notes wrapped and on one line faded at its
  * end; quieter rows under the name, one a press and one text; and a rule
- * before the rows it lists, counting what it leaves out, each row a button
- * the pointer crosses onto the card to press. Each card shows once the pointer rests on
+ * before the rows it lists, every one, scrolling and fading past a few rather
+ * than counting the rest, each row a button the pointer crosses onto the
+ * card to press, and a long body that is no list scrolling the same way. Each card shows once the pointer rests on
  * its control or the keyboard reaches it, and stands while the pointer is on
  * the control, on the card, or between them: the catalog's own stand-in for
  * the linger an app gives its cards.
  */
+
+/** More agents than a card's list has height for, so the example scrolls. */
+const CATALOG_AGENTS = [
+  "Billing after downgrade",
+  "Rate limit search",
+  "Fix Safari login",
+  "Onboarding checklist",
+  "Self-hosting guide",
+  "Migrate auth SDK",
+  "Old onboarding copy",
+] as const;
 
 /** Whether the point `x`, `y` stands within the box spanning both rectangles, the gap between them included. */
 function withinBoth(x: number, y: number, one: DOMRect, other: DOMRect): boolean {
@@ -172,7 +185,8 @@ function HoverCards(): React.JSX.Element {
                   label="Created by Sam Rivera · 3d ago"
                 />
                 <HoverCardRule />
-                <HoverCardList label="Agents" more="2 more">
+                {/* Note that the list holds more rows than its height, so it scrolls and fades rather than counting the rest. */}
+                <HoverCardList label="Agents">
                   <li>
                     <HoverCardRow
                       glyph={<DocumentIcon />}
@@ -188,7 +202,31 @@ function HoverCards(): React.JSX.Element {
                       onPress={() => undefined}
                     />
                   </li>
+                  {CATALOG_AGENTS.map((name) => (
+                    <li key={name}>
+                      <HoverCardRow
+                        glyph={<DocumentIcon />}
+                        label={name}
+                        onPress={() => undefined}
+                      />
+                    </li>
+                  ))}
                 </HoverCardList>
+              </HoverCard>
+            }
+          />
+          <Carded
+            label="Long body"
+            card={
+              <HoverCard>
+                <HoverCardHead glyph={<PinIcon />} name="Linear" sub="7 tools" />
+                <HoverCardRule />
+                {/* Note that a body that is no list, as a server's tools are, scrolls and fades as a list does. */}
+                <HoverCardScroll>
+                  {CATALOG_AGENTS.map((name) => (
+                    <HoverCardRow key={name} glyph={<DocumentIcon />} label={name} />
+                  ))}
+                </HoverCardScroll>
               </HoverCard>
             }
           />

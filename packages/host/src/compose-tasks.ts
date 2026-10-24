@@ -807,11 +807,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             ),
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: kernel.now,
-      publish: ({ list, taskAgents }) => {
+      publish: ({ list, taskAgents, taskPullRequests }) => {
         write({
           tasks: list.plans,
           tasklessAgents: list.planlessAgents ?? [],
           taskAgents,
+          taskPullRequests,
           listStatus: TASKS_READ.READY,
           live: HOST_LIVE.LIVE,
         });

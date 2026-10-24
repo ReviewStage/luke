@@ -2311,6 +2311,13 @@ export function pullRequestStateWord(
 /** What the row says of an open pull request GitHub's merge queue holds, as its tab's pill says it. */
 const QUEUED_LABEL = "Queued";
 
+/** Where a pull request stands in one word, as its card heads it: Queued for an open one the merge queue holds, else its state's label. */
+export function pullRequestStateLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+): string {
+  return pullRequestStateWord(pullRequest) ?? PULL_REQUEST_STATE_LABEL[pullRequest.state];
+}
+
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(
   pullRequest: Pick<CodingAgentPullRequest, "number" | "state">,

@@ -38,8 +38,7 @@ import {
  * own colour beside its name (`@luke/ui`'s `Badge` swatch), rather than its
  * colour on its words, because GitHub lets a label be any colour, a dark one
  * among them, which the card's words could not be read in; and a card names
- * its first six labels and counts the rest, so a pull request with many keeps a card short enough to stand in
- * the window.
+ * every label, wrapping, counting none.
  */
 
 /** How a line of the card says a moment, at its start and after an author. */
@@ -51,9 +50,6 @@ const MOMENT_WORDS = {
 
 /** What parts the pieces of a card's line. */
 const SEPARATOR = " · ";
-
-/** The most labels a card names, so one with many stays a card's height; the rest are counted in a last pill. */
-const MAX_LABELS = 6;
 
 /** The first line: where it stands, and the lines it adds and removes across the files it changes. */
 function SizeNote({
@@ -192,16 +188,11 @@ export function PullRequestCardNotes({
           className="card-labels"
           aria-label="Labels"
         >
-          {labels.slice(0, MAX_LABELS).map((label) => (
+          {labels.map((label) => (
             <li key={label.name}>
               <Badge swatch={label.color}>{label.name}</Badge>
             </li>
           ))}
-          {labels.length > MAX_LABELS ? (
-            <li>
-              <Badge>{`+${labels.length - MAX_LABELS}`}</Badge>
-            </li>
-          ) : null}
         </Inline>
       )}
       <CountsNote comments={comments} commits={commits} />

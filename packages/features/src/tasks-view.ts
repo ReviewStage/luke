@@ -63,6 +63,7 @@ import {
   taskFileTextSchema,
   taskFileWindowSchema,
   taskPrioritySchema,
+  taskPullRequestsSchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
@@ -268,6 +269,12 @@ export const tasksViewSchema = EffectSchema.Struct({
    * reads in place of listing each plan's agents again on a clock.
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
+  /**
+   * Every pull request of each plan that has one, uncapped, as its row names
+   * the first few: present only while the list is followed live, when the
+   * Tasks page's cards name each one rather than a count of the rest.
+   */
+  taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
   listStatus: tasksReadSchema,
   /** Whether what the host follows live is current (`HOST_LIVE`); absent before the list's follow first says, which reads as live. */
   live: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(HOST_LIVE))),

@@ -20,11 +20,10 @@ import {
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
+  HoverCardScroll,
   INLINE_REF_LOOK,
   InlineRef,
   LAYOUT_ELEMENT,
-  SCROLL_SIZE,
-  ScrollArea,
   Stack,
   TEXT_BUTTON_LINES,
   TextButton,
@@ -889,19 +888,17 @@ function MoreFaces({
   const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
   const card = (
     <HoverCard data-actor-card="more">
-      <div className="actor-more">
-        <ScrollArea size={SCROLL_SIZE.CONTENT}>
-          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
-            {actors.map((actor, index) => (
-              // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
-              <li key={index} className="actor-more-row">
-                <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
-                <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
-              </li>
-            ))}
-          </Stack>
-        </ScrollArea>
-      </div>
+      <HoverCardScroll>
+        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
+          {actors.map((actor, index) => (
+            // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
+            <li key={index} className="actor-more-row">
+              <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
+              <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
+            </li>
+          ))}
+        </Stack>
+      </HoverCardScroll>
     </HoverCard>
   );
   return (
