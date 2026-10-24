@@ -42,6 +42,7 @@ export * from "./components/editable-heading/editable-heading.js";
 export * from "./components/empty-state/empty-state.js";
 export * from "./components/error-state/error-state.js";
 export * from "./components/facts/facts.js";
+export * from "./components/failure-note/failure-note.js";
 export * from "./components/file-picker/file-picker.js";
 export * from "./components/file-text/file-text.js";
 export * from "./components/folding-button/folding-button.js";
