@@ -684,9 +684,9 @@ export function useCodingAgents(input: {
   const [pressed, setPressed] = useState<{ taskId: string; starting: StartingAgent } | undefined>(
     undefined,
   );
-  // The agent a Start made on a task whose list was not read as it landed, which stands among its agents until the list is.
+  // The agents Starts made on a task whose list was not read as they landed, which stand among its agents until the list is.
   const [unlisted, setUnlisted] = useState<
-    { taskId: string; agent: CodingAgentSummary } | undefined
+    { taskId: string; agents: readonly CodingAgentSummary[] } | undefined
   >(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
   const continues = useRef(new Map<string, PendingContinue>());
@@ -720,17 +720,16 @@ export function useCodingAgents(input: {
     [listedAgents, taskId],
   );
   const shown = held ?? listedHere;
-  // Note that an agent a Start made before the list was read stands beside what is shown, whatever
-  // the followed task list carries yet, so its tab never leaves between the answer and the list.
+  // Note that the agents Starts made before the list was read stand beside what is shown, whatever
+  // the followed task list carries yet, so their tabs never leave between the answer and the list.
   const landedHere =
-    read === undefined && unlisted?.taskId === taskId ? unlisted?.agent : undefined;
-  const standing = useMemo(
-    () =>
-      landedHere === undefined || shown?.some((agent) => agent.id === landedHere.id) === true
-        ? shown
-        : [...(shown ?? []), landedHere],
-    [shown, landedHere],
-  );
+    read === undefined && unlisted?.taskId === taskId ? unlisted?.agents : undefined;
+  const standing = useMemo(() => {
+    const missing = landedHere?.filter(
+      (landed) => shown?.some((agent) => agent.id === landed.id) !== true,
+    );
+    return missing === undefined || missing.length === 0 ? shown : [...(shown ?? []), ...missing];
+  }, [shown, landedHere]);
   const agents = useMemo(
     () => standing?.filter((agent) => agent.archivedAt === undefined),
     [standing],
@@ -886,7 +885,10 @@ export function useCodingAgents(input: {
     joined(on, agent);
     latest.current.onStarted(agent.id);
     if (listedNow.current) return;
-    setUnlisted({ taskId: on, agent });
+    setUnlisted((was) => ({
+      taskId: on,
+      agents: [...(was?.taskId === on ? was.agents : []), agent],
+    }));
     readAgain();
   };
 
