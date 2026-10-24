@@ -719,7 +719,7 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
     return {
       reason: FAILURE_REASON.GITHUB_TOKEN,
-      text: `Your GitHub token can't access ${unreached.repository}. Ask its owner to give your GitHub account access.`,
+      text: `Your GitHub token can't access ${unreached.repository}. Check the repository still exists under that name, or ask its owner to give your GitHub account access.`,
     };
   }
   if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH) {
