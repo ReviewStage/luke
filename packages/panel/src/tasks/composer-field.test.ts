@@ -3,8 +3,9 @@
 import assert from "node:assert/strict";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
+import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import type { PlanEditorModule } from "../plan-editor/contract.js";
 import { planEditor } from "../plan-editor/index.js";
 import {
@@ -13,6 +14,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
+import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles } from "../testing/side-bundles.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -91,4 +93,41 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
   typeInComposer(container, "Hello");
   assert.equal(composerEditor(container).textContent, "Hello");
   assert.equal(container.querySelector(".agent-composer-placeholder"), null);
+});
+
+test("a key pressed in the box is timed under the message box's keystroke span, how long it waited and nothing of the key", async () => {
+  const spans: PanelSpan[] = [];
+  const uninstall = installPanelSpanRecorder((span) => spans.push(span));
+  reportEventTiming();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const bundles = sideBundles({ planEditor: () => Promise.resolve(planEditor) });
+  await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
+  await settle();
+
+  keyPressed(composerEditor(container), {
+    startTime: 500,
+    processingStart: 530,
+    processingEnd: 610,
+    duration: 136,
+  });
+  uninstall();
+  vi.unstubAllGlobals();
+
+  assert.deepEqual(
+    spans.map((span) => ({
+      name: span.name,
+      waited: span.endedAt - span.startedAt,
+      measured: span.attributes(),
+    })),
+    [
+      {
+        name: PANEL_SPAN.KEYSTROKE_COMPOSER,
+        waited: 136,
+        measured: { "keystroke.input_delay_ms": 30, "keystroke.processing_ms": 80 },
+      },
+    ],
+  );
 });

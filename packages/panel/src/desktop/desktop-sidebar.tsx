@@ -119,7 +119,7 @@ import {
   ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -134,6 +134,12 @@ import {
   type NavigationHistory,
   sameHistoryPage,
 } from "../navigation-history.js";
+import {
+  endWindowSpan,
+  leaveWindowSpan,
+  PANEL_SPAN,
+  PANEL_SPAN_ATTRIBUTE,
+} from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -1551,6 +1557,25 @@ function NewTaskButton({
 }
 
 /**
+ * Times the window's first usable screen: its start to the sidebar's first
+ * task list read answered, saying how many tasks it listed. A window whose
+ * first read fails is left untimed rather than timed through the
+ * developer's Retry. Note that a window opening signed out is not left,
+ * because every window opens so until the account's session is restored.
+ */
+function useFirstUsableSpan(tasks: TasksControl): void {
+  const { listRead, listFailed } = tasks;
+  const listed = tasks.listed.tasks.length;
+  useEffect(() => {
+    if (listFailed) leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE);
+    else if (listRead)
+      endWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE, () => ({
+        [PANEL_SPAN_ATTRIBUTE.TASK_COUNT]: listed,
+      }));
+  }, [listRead, listFailed, listed]);
+}
+
+/**
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
  * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
@@ -1605,6 +1630,7 @@ function SidebarColumn({
   const narrow = room === SHELL_ROOM.NARROW;
   const coarse = useCoarsePointer();
   const overlay = useFloatingSidebar(sidebar);
+  useFirstUsableSpan(tasks);
   const body = useRef<HTMLDivElement>(null);
   // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
   const roving = useRovingKeys<HTMLDivElement>();

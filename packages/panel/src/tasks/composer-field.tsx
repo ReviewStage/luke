@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useEditedLinksHost } from "../link-menu.js";
+import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -46,7 +47,9 @@ import { useSelectionToolbar } from "./selection-toolbar.js";
  * (`./selection-toolbar.tsx`), which stands aside while a list the box
  * opened stands, as its `aria-expanded` says. The field's
  * look is its own (`.agent-composer-input`, tasks.css), in the body type,
- * and unrecorded (`ph-no-capture`), the same in both boxes.
+ * and unrecorded (`ph-no-capture`), the same in both boxes. Each key pressed
+ * in it is timed to the paint after it, how long and nothing of the key
+ * (`../panel-spans.ts`), the same in every box.
  */
 
 /** The editor's class, and the inert field's before it mounts. */
@@ -170,12 +173,14 @@ export function ComposerField({
   const host = useRef<HTMLDivElement>(null);
   // A link in the draft opens, from its right-click, where the box stands.
   const editedLinks = useEditedLinksHost();
+  const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMPOSER);
   const roomHost = useCallback(
     (element: HTMLDivElement | null) => {
       room.current = element;
       editedLinks(element);
+      keystrokes(element);
     },
-    [room, editedLinks],
+    [room, editedLinks, keystrokes],
   );
   const [chips, setChips] = useState<readonly DrawnChip[]>([]);
   const toolbar = useSelectionToolbar({
