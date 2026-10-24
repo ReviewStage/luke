@@ -13,8 +13,14 @@
    a name below built from them (docs/DESIGN.md). */
 
 :root {
-  /* A top row and its hairline, its middle level with the title bar's. */
-  --desktop-bar-height: calc(2 * var(--title-bar-middle) + 1px);
+  /* How far in from the window's frame the work's sheet stands. */
+  --sheet-gap: var(--luke-space-8);
+  /* Half a top row: how far below its top its middle sits, a control's
+     half and the room above it. The desktop profile sets it by the traffic
+     lights (desktop.css). */
+  --bar-middle: calc(var(--luke-control-height) / 2 + var(--luke-space-8));
+  /* A top row and its hairline, one height in every column. */
+  --desktop-bar-height: calc(2 * var(--bar-middle) + 1px);
   /* A column's edge to the rows and controls it holds: the sidebar's rows, a
      top row's first and last control, Settings' page list. */
   --column-inset: var(--luke-space-12);
@@ -29,12 +35,12 @@
   --sidebar-width-default: 264px;
   --sidebar-width: var(--sidebar-width-default);
   /* The title bar's row, where its own buttons stand: the height its middle
-     sits at, which every top row is twice as tall as, and where its first
-     button starts. With no window chrome beside it (the web profile) the row
-     is as tall as a control and the toolbar's padding make it, and its
-     buttons stand at the window's edge, as in full screen; the desktop
-     profile sets both by the traffic lights (desktop.css). */
-  --title-bar-middle: calc(var(--luke-control-height) / 2 + var(--luke-space-8));
+     sits at, level with the middle of the sheet's top row a gap down the
+     window, and where its first button starts. With no window chrome beside
+     it (the web profile) its buttons stand at the window's edge, as in full
+     screen; the desktop profile starts them past the traffic lights
+     (desktop.css). */
+  --title-bar-middle: calc(var(--sheet-gap) + var(--bar-middle));
   --title-bar-left: var(--column-inset);
   /* Where the work column's toolbar starts its tab while the sidebar is
      folded: clear of where the title bar starts and both buttons there, by a
@@ -59,6 +65,15 @@
 
 [data-luke-profile="desktop"] .desktop-drag-strip {
   -webkit-app-region: drag;
+}
+
+/* A column standing on the frame beside the sheet heads itself with the
+   sheet's gap and top row together, so what it holds starts level with the
+   sheet's hairline, clear of the title bar's buttons over it. */
+.desktop-shell:not([data-room="narrow"])
+  :is(.desktop-sidebar, .settings-pages, .version-log, .admin-sections)
+  > .desktop-drag-strip {
+  height: calc(var(--sheet-gap) + var(--desktop-bar-height));
 }
 
 .desktop-shell {
@@ -90,7 +105,6 @@
    soft and its edge a hairline and a soft shadow. A narrow room shows one
    column at a time and keeps it full bleed. */
 .desktop-shell {
-  --sheet-gap: var(--luke-space-8);
   --sheet-radius: var(--luke-radius-14);
 
   background: var(--luke-color-sidebar);
@@ -136,19 +150,6 @@
     0 16px 40px -20px var(--luke-color-shadow);
 }
 
-/* Inside the sheet a top row is shorter by the gap above it and the same
-   below its middle, so its middle stays level with the traffic lights and
-   the title bar's buttons, which stand on the window rather than the sheet,
-   instead of a gap below them. Its controls are centred in it rather than
-   padded, so the shorter row still holds them. */
-.desktop-shell:not([data-room="narrow"]) > .desktop-main {
-  --desktop-bar-height: calc(2 * (var(--title-bar-middle) - var(--sheet-gap)) + 1px);
-}
-
-.desktop-shell:not([data-room="narrow"]) > .desktop-main :is(.desktop-toolbar, .side-panel-bar) {
-  padding-block: 0;
-}
-
 /* With the sidebar folded there is no frame beside the sheet to set it off,
    so it fills the window, which already rounds its corners, rather than
    standing a gap in from them as a second, nested window would. */
@@ -157,6 +158,20 @@
   --sheet-radius: 0px;
 
   box-shadow: none;
+}
+
+/* Folded, or in a narrow room, the work column's top row stands at the
+   window's own top rather than a gap down it, so the title bar's middle
+   comes up to the row's own. The desktop's traffic lights cannot follow it
+   (desktop.css), so there the row grows instead, twice as tall as their
+   middle stands, and its controls stay centred on them with no dead band
+   above the row. */
+.desktop-shell:is([data-sidebar-collapsed="true"], [data-room="narrow"]) {
+  --title-bar-middle: var(--bar-middle);
+}
+
+.desktop-shell:is([data-sidebar-collapsed="true"], [data-room="narrow"]) > .desktop-main {
+  --desktop-bar-height: calc(2 * var(--title-bar-middle) + 1px);
 }
 
 /* The side panel's well reaches the sheet's right edge, and its top and
