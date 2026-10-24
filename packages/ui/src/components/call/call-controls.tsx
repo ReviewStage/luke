@@ -218,28 +218,68 @@ export function CallLive(props: CallLiveProps): React.JSX.Element {
 }
 
 /**
- * Video off or Video on: one round button whose glyph says whether the
- * video is up, as a mute's says whether it is on, and whose name says what
- * the press will do. It is named on hover by the system's own hint, since
- * the floating window is too small to hold a tooltip; over a video tile its
- * disc is the round ground itself, never a square inside a circle.
+ * Where Video on or off stands, which sets its shape and how it is named on
+ * hover. Over a call's video it is round, its disc the round ground itself,
+ * and named by the system's own hint, since the floating window is too small
+ * to hold a tooltip. In an agent's composer row it is square beside the
+ * row's square mutes, and named by the app's tooltip as they are.
+ */
+export const VIDEO_TOGGLE_LOOK = {
+  CALL: "call",
+  COMPOSER_ROW: "composer-row",
+} as const;
+
+export type VideoToggleLook = (typeof VIDEO_TOGGLE_LOOK)[keyof typeof VIDEO_TOGGLE_LOOK];
+
+/** How each look names the toggle on hover: the system's own hint, or the app's tooltip. */
+const VIDEO_TOGGLE_HINT = {
+  SYSTEM: "system",
+  TOOLTIP: "tooltip",
+} as const;
+
+/** Each look's shape and hint. */
+const VIDEO_TOGGLE_LOOKS = {
+  [VIDEO_TOGGLE_LOOK.CALL]: { shape: BUTTON_SHAPE.ROUND, hint: VIDEO_TOGGLE_HINT.SYSTEM },
+  [VIDEO_TOGGLE_LOOK.COMPOSER_ROW]: {
+    shape: BUTTON_SHAPE.SQUARE,
+    hint: VIDEO_TOGGLE_HINT.TOOLTIP,
+  },
+} as const satisfies Record<
+  VideoToggleLook,
+  { shape: ButtonShape; hint: (typeof VIDEO_TOGGLE_HINT)[keyof typeof VIDEO_TOGGLE_HINT] }
+>;
+
+/**
+ * Video off or Video on: one button whose glyph says whether the video is
+ * up, as a mute's says whether it is on, and whose name says what the press
+ * will do. Its `look` says where it stands (`VIDEO_TOGGLE_LOOK`): round and
+ * named by the system's hint on a call, or square and named by a tooltip in
+ * an agent's composer row.
  */
 export function VideoToggle({
   on,
   onSetVideo,
+  look = VIDEO_TOGGLE_LOOK.CALL,
 }: {
   on: boolean;
   onSetVideo: (on: boolean) => void;
+  look?: VideoToggleLook | undefined;
 }): React.JSX.Element {
   const label = on ? CALL_CONTROL_LABEL.VIDEO_OFF : CALL_CONTROL_LABEL.VIDEO_ON;
-  return (
+  const { shape, hint } = VIDEO_TOGGLE_LOOKS[look];
+  const toggle = (
+    <IconButton
+      icon={on ? <VideoIcon /> : <VideoOffIcon />}
+      label={label}
+      shape={shape}
+      onClick={() => onSetVideo(!on)}
+    />
+  );
+  return hint === VIDEO_TOGGLE_HINT.TOOLTIP ? (
+    <Tooltip label={label}>{toggle}</Tooltip>
+  ) : (
     <span className="luke-call-video-toggle" title={label}>
-      <IconButton
-        icon={on ? <VideoIcon /> : <VideoOffIcon />}
-        label={label}
-        shape={BUTTON_SHAPE.ROUND}
-        onClick={() => onSetVideo(!on)}
-      />
+      {toggle}
     </span>
   );
 }

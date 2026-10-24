@@ -1,5 +1,5 @@
 /**
- * call-controls.tsx -- a call's bar at a card's width and at its narrowest, while Luke works and with the microphone muted; each mute round and square, Video on and off, the one red End call; a box's call status connecting, live, muted, and ending; and Luke's video tile connecting and as a still face on a card, and ended with why in a frame at the picture's own aspect, since a card never draws an ended tile.
+ * call-controls.tsx -- a call's bar at a card's width and at its narrowest, while Luke works and with the microphone muted; each mute round and square, Video on and off on a call and in a composer's row, the one red End call; a box's call status connecting, live, muted, and ending; and Luke's video tile connecting and as a still face on a card, and ended with why in a frame at the picture's own aspect, since a card never draws an ended tile.
  */
 
 import {
@@ -17,7 +17,9 @@ import {
   GAP,
   Inline,
   Stack,
+  VIDEO_TOGGLE_LOOK,
   VideoToggle,
+  type VideoToggleLook,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
 import {
@@ -77,10 +79,10 @@ function OwnedMute({
   );
 }
 
-/** Video on or off, toggling. */
-function OwnedVideo(): React.JSX.Element {
+/** Video on or off, toggling, at the look given. */
+function OwnedVideo({ look }: { look: VideoToggleLook }): React.JSX.Element {
   const [on, setOn] = useState(true);
-  return <VideoToggle on={on} onSetVideo={setOn} />;
+  return <VideoToggle on={on} onSetVideo={setOn} look={look} />;
 }
 
 /** A tile at `fit`, in a box as wide as a card's inside or as a frame at a square picture's aspect. */
@@ -118,13 +120,17 @@ function CallControls(): React.JSX.Element {
           <OwnedBar status={WORKING} width={200} />
         </Stack>
       </CatalogSection>
-      <CatalogSection id="call-controls" title="Mutes round and square, Video, and End call">
+      <CatalogSection
+        id="call-controls"
+        title="Mutes round and square, Video round and square, and End call"
+      >
         <Inline gap={GAP.CONTROL}>
           <OwnedMute device={CALL_DEVICE.SPEAKER} shape={BUTTON_SHAPE.ROUND} />
           <OwnedMute device={CALL_DEVICE.MICROPHONE} shape={BUTTON_SHAPE.ROUND} />
           <OwnedMute device={CALL_DEVICE.SPEAKER} shape={BUTTON_SHAPE.SQUARE} />
           <OwnedMute device={CALL_DEVICE.MICROPHONE} shape={BUTTON_SHAPE.SQUARE} />
-          <OwnedVideo />
+          <OwnedVideo look={VIDEO_TOGGLE_LOOK.CALL} />
+          <OwnedVideo look={VIDEO_TOGGLE_LOOK.COMPOSER_ROW} />
           <EndCallButton onPress={stay} />
         </Inline>
       </CatalogSection>

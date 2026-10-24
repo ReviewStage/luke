@@ -2,7 +2,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import {
   BUTTON_SHAPE,
-  CALL_CONTROL_LABEL,
   CALL_DEVICE,
   CALL_STAGE,
   CallLive,
@@ -11,8 +10,8 @@ import {
   EndCallButton,
   IconButton,
   Tooltip,
-  VideoIcon,
-  VideoOffIcon,
+  VIDEO_TOGGLE_LOOK,
+  VideoToggle,
   WaveformIcon,
 } from "@luke/ui";
 import { callStatus, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/tasks-model";
@@ -130,22 +129,17 @@ function useCallButton(agentId: string) {
 
 /**
  * Video on or off in the composer's row, wherever video is offered on the
- * call: its glyph says whether the video is up, as the mutes' say whether
- * they are on, and its name what the press will do.
+ * call: the call's own toggle, square beside the row's mutes.
  */
 function CallVideoButton({ agentId }: { agentId: string }): React.JSX.Element | null {
   const { status, onSetVideo } = useAgentCallVideo(agentId);
   if (status === undefined) return null;
-  const on = status !== AVATAR_STATUS.OFF;
-  const label = on ? CALL_CONTROL_LABEL.VIDEO_OFF : CALL_CONTROL_LABEL.VIDEO_ON;
   return (
-    <Tooltip label={label}>
-      <IconButton
-        icon={on ? <VideoIcon /> : <VideoOffIcon />}
-        label={label}
-        onClick={() => onSetVideo(!on)}
-      />
-    </Tooltip>
+    <VideoToggle
+      on={status !== AVATAR_STATUS.OFF}
+      onSetVideo={onSetVideo}
+      look={VIDEO_TOGGLE_LOOK.COMPOSER_ROW}
+    />
   );
 }
 
