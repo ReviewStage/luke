@@ -172,6 +172,8 @@ let beforeAddable = false;
 let tokenRepositories: WorkspaceTokenRepository[] = [];
 /** While set, the token repositories' read waits on it before answering what it read. */
 let tokenReadHeld: Promise<void> | undefined;
+/** Whether the token repositories' read is refused rather than answered. */
+let tokenReadFails = false;
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -406,7 +408,10 @@ function answer(request: Asked): Promise<Answered> {
       const read = tokenRepositories;
       const held = tokenReadHeld;
       tokenReadHeld = undefined;
-      return (held ?? Promise.resolve()).then(() => done(read));
+      return (held ?? Promise.resolve()).then(
+        (): FakeActAnswer =>
+          tokenReadFails ? { status: FAKE_ANSWER.REFUSED, reason: "Could not read." } : done(read),
+      );
     }
     case ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET: {
       const { repository, added } = request.payload;
@@ -530,6 +535,7 @@ beforeEach(() => {
   beforeAddable = false;
   tokenRepositories = [];
   tokenReadHeld = undefined;
+  tokenReadFails = false;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
   peopleStreams = [];
@@ -1833,6 +1839,32 @@ test("Add repository draws each repository as the repository chip's menu does, b
     "https://github.com/side-org.png?size=32",
   );
   assert.equal(document.querySelectorAll('[role="option"]').length, 1);
+});
+
+test("the token repositories say Reading while they are read, and a refused read says so with Retry, neither drawn as a workspace with none", async () => {
+  tokenRepositories = [];
+  tokenReadFails = true;
+  let release: () => void = () => undefined;
+  tokenReadHeld = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+  const reading = page.textContent?.includes("Reading token repositories");
+  release();
+  await settle();
+  const failed = page.textContent?.includes("The token repositories could not be read.");
+  tokenReadFails = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+
+  assert.equal(reading, true, "a read still out says Reading");
+  assert.equal(failed, true, "a refused read says so");
+  assert.doesNotMatch(page.textContent ?? "", /Reading token|token repositories could not/u);
+  assert.deepEqual(
+    integrationRows(page).map(([name]) => name),
+    ["GitHub", "acme-org", "acme-labs"],
+    "the retry read a workspace with none",
+  );
 });
 
 test("a token repositories read that lands after an add does not take back what the add answered", async () => {

@@ -2,12 +2,15 @@ import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepository,
 } from "@luke/features/github-repositories-wire";
+import { noMatchWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   Badge,
   BUTTON_VARIANT,
   Button,
+  ErrorState,
   SETTINGS_ROW_INDENT,
+  SettingsLine,
   SettingsRow,
   SettingsRowMark,
 } from "@luke/ui";
@@ -33,7 +36,9 @@ import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
  * as the menu opens from the addable the repository picker's listing
  * answers beside its own, each drawn as the repository chip's menu draws one
  * (`repository-row.tsx`); a pick adds it, and the service answers the list
- * as it then stands.
+ * as it then stands. The list is read, still being read, or refused: while
+ * it is read the rows say Reading, and refused they say so with Retry,
+ * neither drawn as a workspace with none.
  */
 
 /** The words the rows and the menu say: labels and facts alone. */
@@ -43,15 +48,31 @@ const WORDS = {
   REMOVE: "Remove",
   REMOVING: "Removing",
   SEARCH: "Search repositories",
-  NO_MATCH: "No repositories match",
+  NO_MATCH: noMatchWords(TERM.REPOSITORY),
   NONE: "No repositories",
-  READING: "Loading repositories",
-  NOT_READ: "The repositories could not be read.",
+  READING: readingWords(TERM.REPOSITORY.many),
+  NOT_READ: readFailedWords("the repositories"),
+  ROWS_READING: readingWords("token repositories"),
+  ROWS_NOT_READ: readFailedWords("the token repositories"),
 } as const;
+
+/** Where the workspace's list of token repositories stands: still being read, refused, or read, empty or not. */
+export const TOKEN_REPOSITORIES_READ = {
+  READING: "reading",
+  FAILED: "failed",
+  READY: "ready",
+} as const;
+
+export type TokenRepositoriesRead =
+  (typeof TOKEN_REPOSITORIES_READ)[keyof typeof TOKEN_REPOSITORIES_READ];
 
 /** The workspace's token repositories as last read, and the change that moves them. */
 export interface TokenRepositories {
+  /** Whether `listed` is still being read or was refused, in which case it stands for nothing. */
+  readonly read: TokenRepositoriesRead;
   readonly listed: readonly WorkspaceTokenRepository[];
+  /** Reads the list again after a failure. */
+  readonly retry: () => void;
   /** Adds or removes one, answering what the service refused with, or nothing where it took it. */
   readonly change: (repository: string, added: boolean) => Promise<string | undefined>;
 }
@@ -60,35 +81,44 @@ export interface TokenRepositories {
 export function useTokenRepositories(workspaceId: string): TokenRepositories {
   const { act } = useAct();
   const [listed, setListed] = useState<readonly WorkspaceTokenRepository[]>([]);
+  const [read, setRead] = useState<TokenRepositoriesRead>(TOKEN_REPOSITORIES_READ.READING);
+  const [attempt, setAttempt] = useState(0);
   // Whether a change has answered since the read began, whose list is newer than the read's.
   const changed = useRef(false);
   useEffect(() => {
     let live = true;
     changed.current = false;
-    // A read that fails lists none, as a workspace with none does: the list holds no state of its own to lose.
+    setRead(TOKEN_REPOSITORIES_READ.READING);
+    // Note that a read that fails says so rather than listing none, because a workspace with none is a list read.
     act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, { workspaceId }).then(
-      (read) => {
-        if (live && !changed.current) setListed(read);
+      (answer) => {
+        if (!live || changed.current) return;
+        setListed(answer);
+        setRead(TOKEN_REPOSITORIES_READ.READY);
       },
-      () => undefined,
+      () => {
+        if (live && !changed.current) setRead(TOKEN_REPOSITORIES_READ.FAILED);
+      },
     );
     return () => {
       live = false;
     };
-  }, [act, workspaceId]);
+  }, [act, workspaceId, attempt]);
+  const retry = useCallback(() => setAttempt((count) => count + 1), []);
   const change = useCallback(
     (repository: string, added: boolean) =>
       act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, { workspaceId, repository, added }).then(
         (now) => {
           changed.current = true;
           setListed(now);
+          setRead(TOKEN_REPOSITORIES_READ.READY);
           return undefined;
         },
         (refused: Error) => refused.message,
       ),
     [act, workspaceId],
   );
-  return { listed, change };
+  return { read, listed, retry, change };
 }
 
 /** The repositories the reader's own token may push to that the workspace lists nowhere yet; nothing while unread, and why where the read failed. */
@@ -256,6 +286,20 @@ export function TokenRepositoryRows({
 }: {
   repositories: TokenRepositories;
 }): React.JSX.Element {
+  if (repositories.read === TOKEN_REPOSITORIES_READ.READING) {
+    return (
+      <SettingsLine>
+        <span role="status">{WORDS.ROWS_READING}</span>
+      </SettingsLine>
+    );
+  }
+  if (repositories.read === TOKEN_REPOSITORIES_READ.FAILED) {
+    return (
+      <SettingsLine>
+        <ErrorState onRetry={repositories.retry}>{WORDS.ROWS_NOT_READ}</ErrorState>
+      </SettingsLine>
+    );
+  }
   return (
     <>
       {repositories.listed.map((repository) => (

@@ -131,6 +131,8 @@ export function SettingsPanel({
           signedIn={signedIn}
           workspace={workspace ? shownWorkspace(workspace) : undefined}
           readerId={signedIn ? account.id : undefined}
+          workspacesFailed={workspace?.listFailed ?? false}
+          onRetryWorkspaces={workspace?.onRetryList}
         />
       ) : null}
 
