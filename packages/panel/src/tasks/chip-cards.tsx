@@ -307,7 +307,9 @@ function TaskPageChipCard({
   if (tasks?.activeTaskId !== taskId) {
     return <ReadTaskPageChipCard taskId={taskId} pageId={pageId} wait={wait} />;
   }
-  const page = tasks.pages?.find((each) => each.id === pageId);
+  // Note that the open plan's pages may land after the plan itself, and a page is unread only once they have.
+  if (tasks.pages === undefined) return wait.reading;
+  const page = tasks.pages.find((each) => each.id === pageId);
   if (page === undefined) return wait.fallback;
   return <PageCard place={{ taskId }} page={page} />;
 }

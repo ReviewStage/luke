@@ -148,15 +148,27 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   assert.deepEqual(cardOn(head), [PATH, NOTE]);
 });
 
-test("a code card's head hangs the file's card naming the repository it is read in, as a mention's chip of it does", () => {
-  const head = mount([]).querySelector(".side-panel .code-card [data-file-ref]");
-  assert.ok(head, "the code card names the file");
-  restOn(head);
-
-  assert.equal(
-    document.querySelector(".luke-tooltip-card [data-file-card] .luke-hover-card-sub")?.textContent,
-    TASK.repository,
+test("a code card's head hangs the file's card naming the repository its lines were read from, the task's or another", () => {
+  const shared: TaskCodeShowing = {
+    ...SHOWING,
+    callId: "d",
+    code: { ...SHOWING.code, repository: "acme/shared" },
+  };
+  const heads = mount([], [SHOWING, shared]).querySelectorAll(
+    ".side-panel .code-card [data-file-ref]",
   );
+
+  const named = [...heads].map((head) => {
+    restOn(head);
+    const sub = document.querySelector(
+      ".luke-tooltip-card [data-file-card] .luke-hover-card-sub",
+    )?.textContent;
+    act(() => {
+      head.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+    return sub;
+  });
+  assert.deepEqual(named.toSorted(), ["acme/relay", "acme/shared"]);
 });
 
 test("a code card's head says its lines as Lines 3–5, and a press on it opens the file on those lines at the commit Luke read them at", () => {

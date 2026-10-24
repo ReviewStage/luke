@@ -106,17 +106,21 @@ export function FileCard({
  */
 export function FileRef({
   codeRef,
+  repository: named,
   note,
   onOpen,
 }: {
   codeRef: CodeRef;
+  /** The repository the lines were read from, where the place knows it; the task's where it does not. */
+  repository?: string | undefined;
   /** Luke's note on the lines, which the card says; none where the place knows none. */
   note: string | undefined;
   /** Shows the file's tab on the reference's lines; none where the file cannot be opened from here. */
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
-  // Note that a file named in place is of the task's repository, which its card names as a mention's does.
-  const repository = useTaskMentions()?.repository ?? undefined;
+  // Note that a file named with no repository of its own is of the task's, which its card names as a mention's does.
+  const task = useTaskMentions()?.repository ?? undefined;
+  const repository = named ?? task;
   return (
     <InlineRef
       look={INLINE_REF_LOOK.LINK}

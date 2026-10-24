@@ -343,10 +343,14 @@ const PAGE: TaskMentionsValue = {
 };
 
 /** The words drawn as a transcript draws them on a plan's page, the plan's own unless another is given, in a window holding `STATE`. */
-async function drawn(text: string, page: TaskMentionsValue = PAGE): Promise<HTMLElement> {
+async function drawn(
+  text: string,
+  page: TaskMentionsValue = PAGE,
+  state: AppStateSnapshot = STATE,
+): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(STATE),
+    requestAppState: () => Promise.resolve(state),
   });
   fakeActPort({
     ...inboxes.procedures,
@@ -541,6 +545,18 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
   assert.equal(read.sub, "Shown by Luke");
+});
+
+test("a page's chip of the open plan whose pages are still to land hangs the one reading state, never that it can't be read", async () => {
+  const { pages: _landing, ...opening } = STATE.tasks;
+  const container = await drawn(
+    mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "Unfurl", PLACE),
+    PAGE,
+    { ...STATE, tasks: opening },
+  );
+
+  const card = await cardOf(chipsOf(container)[0]);
+  assert.deepEqual([card.card, card.name, card.notes], ["data-chip-card-reading", "Unfurl", []]);
 });
 
 test("a chip of a page an agent on no task showed hangs the same card as a plan's page, read as it is first hung: its title, its version and the agent that showed it, and when it moved, over its preview; one the agent's pages hold not, or of an agent the reader cannot reach, says it can't be read", async () => {
