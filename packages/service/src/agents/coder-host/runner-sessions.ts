@@ -111,6 +111,12 @@ import type { UserContent } from "ai";
 import { Clock, Context, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
+import {
+  recordServerEvent,
+  type SERVER_AGENT_HARNESS,
+  SERVER_EVENT,
+  SERVER_HANDOFF_PATH,
+} from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
   AgentSandboxImage,
@@ -230,6 +236,8 @@ interface HarnessAhead {
 export interface RunnerHarness<E extends { readonly _tag: string }> {
   /** How the log and a message's unsupported attachment name it. */
   readonly name: string;
+  /** Which harness it is, as a counted hand-off names it (`SERVER_EVENT.AGENT_HANDOFF`). */
+  readonly runtime: (typeof SERVER_AGENT_HARNESS)[keyof typeof SERVER_AGENT_HARNESS];
   /** What a session id it mints begins with, before a fresh UUID. */
   readonly sessionPrefix: string;
   /** The credential a launch starts with, read afresh for every launch. */
@@ -1226,12 +1234,9 @@ export const runnerSessions = <
      * what it has, and one from before fingerprints were tagged is never
      * read as stale.
      */
-    const staleWarm = (agent: CodingAgent, runner: TaggedRunner) =>
+    const staleWarm = (agent: CodingAgent, runner: TaggedRunner, turnRunning: boolean) =>
       Effect.gen(function* () {
-        if (runner.fingerprint === undefined) return false;
-        const { conversationId } = agent;
-        const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
-        if (turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status)) return false;
+        if (runner.fingerprint === undefined || turnRunning) return false;
         const credential = yield* harness.launch(agent);
         const now = launchFingerprint(credential, yield* options.integrations(agent));
         return now !== runner.fingerprint;
@@ -1257,12 +1262,32 @@ export const runnerSessions = <
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
+        // Where the agent's turns stand as the message arrives, counted with how it reached the runner.
+        const { conversationId } = agent;
+        const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
+        const turnRunning = turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status);
+        const handedAt = yield* Clock.currentTimeMillis;
+        const handed = (path: (typeof SERVER_HANDOFF_PATH)[keyof typeof SERVER_HANDOFF_PATH]) =>
+          recordServerEvent(SERVER_EVENT.AGENT_HANDOFF, userId, {
+            harness: harness.runtime,
+            path,
+            turn_running: turnRunning,
+            ...(turnRunning || turn?.settledAt == null
+              ? {}
+              : {
+                  idle_seconds: Math.max(
+                    0,
+                    Math.round((handedAt - turn.settledAt.getTime()) / 1_000),
+                  ),
+                }),
+          });
         const running = runnerInSession(found.value);
         if (running !== undefined) {
           // A warm runner launched with what has changed since is ended, and the message relaunches it.
-          if (yield* staleWarm(agent, running)) {
+          if (yield* staleWarm(agent, running, turnRunning)) {
             yield* api.kill(running.sandboxSessionId, running.commandId);
             yield* relaunched(sessionId, agent, found.value.name, running.sandboxSessionId, sent);
+            yield* handed(SERVER_HANDOFF_PATH.RELAUNCHED);
             return accepted;
           }
           // The harness's lines (the agent's model and effort as they stand) go ahead of the message,
@@ -1312,11 +1337,13 @@ export const runnerSessions = <
                 `A ${harness.name} runner's credential renewal outlasted its bound and was given up`,
               );
             }
+            yield* handed(SERVER_HANDOFF_PATH.WARM);
             return accepted;
           }
         }
         // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
+        const wasUp = found.value.status === SANDBOX_STATUS.RUNNING;
         yield* capSandboxTimeout(api, found.value);
         const resumed = yield* Effect.result(api.resume(found.value.name));
         if (Result.isFailure(resumed)) {
@@ -1339,11 +1366,13 @@ export const runnerSessions = <
                 ),
               ),
             );
+          yield* handed(SERVER_HANDOFF_PATH.FRESH);
           return accepted;
         }
         const resumedSession = resumed.success.currentSessionId;
         if (resumedSession === undefined) return yield* new SandboxUnavailable({});
         yield* relaunched(sessionId, agent, found.value.name, resumedSession, sent);
+        yield* handed(wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED);
         return accepted;
       });
 
