@@ -849,7 +849,7 @@ test("a conflict over a teammate's words names them on its note and its button, 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
 });
 
-test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them over Luke's", async () => {
+test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Luke's", async () => {
   const lukes = `${BODY}Luke's.\n`;
   const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: true };
   const lukesNote = "Luke changed this section while you were editing.";
@@ -870,7 +870,7 @@ test("words left waiting on a conflict are kept and said, and the toast's Keep m
   act(() => newestToastAction()?.click());
   await settle();
 
-  assert.deepEqual(sent.at(-1), { document: { base: lukes, value: `${BODY}Mine.\n` } });
+  assert.deepEqual(sent.at(-1), { document: { base: lukes, value: `${lukes}Mine.\n` } });
   assert.equal(newestToastSays(), undefined);
   render(DOCUMENT_TASK);
   await settle();

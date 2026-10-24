@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
+import { applyDocumentEdit, PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import {
   DOCUMENT_EDITOR_STATE,
   type DocumentEditor,
   editorAnswered,
   editorCloseAsked,
   editorCloses,
+  editorKeptMine,
   editorLeft,
   editorOpened,
   editorRebased,
@@ -16,6 +17,7 @@ import {
   leavingSave,
   pendingSave,
 } from "./plan-edit-model.js";
+import { TASK_BOUNDS } from "./task-wire.js";
 import { TASK_CALL_FAILURE } from "./tasks-view.js";
 
 const TEXT = "# Context\n\nOnly an admin can add a member.\n";
@@ -109,4 +111,101 @@ test("an editor left tries a failed save once more, sends nothing over a conflic
   assert.equal(editorLeft(conflicted)?.draft, `${TEXT}Mine.\n`);
   assert.equal(editorLeft(failed)?.draft, `${TEXT}Mine.\n`);
   assert.equal(editorLeft(editorAnswered(out, { saved: true })), undefined);
+});
+
+const SECTIONS = [
+  "# Context",
+  "",
+  "Only an admin can add a member.",
+  "",
+  "# Steps",
+  "",
+  "Send the invite.",
+  "",
+].join("\n");
+
+/** An editor whose save of `mine` met `theirs`, the text another writer saved from the same base meanwhile. */
+function conflictedOver(mine: string, theirs: string): DocumentEditor {
+  const typed = editorTyped(editorOpened(SECTIONS), mine);
+  return editorAnswered(editorSent(typed, saved(typed)), { conflict: { current: theirs } });
+}
+
+/** The text the service holds once it takes the editor's next save over `current`. */
+function storedAfter(editor: DocumentEditor, current: string): string {
+  const outcome = applyDocumentEdit(current, saved(editor));
+  assert.ok("applied" in outcome, "the save lands");
+  return outcome.applied;
+}
+
+test("Keep mine over a writer who changed another section saves both changes", () => {
+  const mine = SECTIONS.replace("add a member.", "add a member, by email.");
+  const theirs = SECTIONS.replace("Send the invite.", "Send the invite.\nWait for the reply.");
+
+  const kept = editorKeptMine(conflictedOver(mine, theirs));
+
+  assert.equal(
+    storedAfter(kept, theirs),
+    SECTIONS.replace("add a member.", "add a member, by email.").replace(
+      "Send the invite.",
+      "Send the invite.\nWait for the reply.",
+    ),
+  );
+});
+
+test("Keep mine where both writers changed the same line saves mine there and theirs elsewhere", () => {
+  const mine = SECTIONS.replace("Only an admin", "Only an owner");
+  const theirs = SECTIONS.replace("Only an admin", "Any member").replace(
+    "Send the invite.",
+    "Send the invite today.",
+  );
+
+  const kept = editorKeptMine(conflictedOver(mine, theirs));
+
+  assert.equal(
+    storedAfter(kept, theirs),
+    SECTIONS.replace("Only an admin", "Only an owner").replace(
+      "Send the invite.",
+      "Send the invite today.",
+    ),
+  );
+});
+
+test("Keep mine where both writers added a line at the same place keeps both lines, once where they match", () => {
+  const theirs = `${SECTIONS}Luke's point.\n`;
+
+  const both = editorKeptMine(conflictedOver(`${SECTIONS}My point.\n`, theirs));
+  const same = editorKeptMine(conflictedOver(theirs, theirs));
+
+  assert.equal(storedAfter(both, theirs), `${SECTIONS}Luke's point.\nMy point.\n`);
+  assert.equal(pendingSave(same), undefined);
+});
+
+test("Keep mine sends no comment anchors where the other writer's lines moved the words, and keeps them where they did not", () => {
+  const thread = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
+  const anchors = { anchors: [{ thread, from: 13, to: 33 }], carried: [thread] };
+  const mine = SECTIONS.replace("add a member.", "add a member, by email.");
+  const theirs = SECTIONS.replace("# Context", "# Who can join");
+  const typed = editorTyped(editorOpened(SECTIONS), mine, anchors);
+  const out = editorSent(typed, saved(typed));
+
+  const moved = editorKeptMine(editorAnswered(out, { conflict: { current: theirs } }));
+  const unmoved = editorKeptMine(editorAnswered(out, { conflict: { current: SECTIONS } }));
+
+  assert.equal(saved(moved).comments, undefined);
+  assert.deepEqual(saved(unmoved).comments, anchors);
+});
+
+test("Keep mine whose merge runs past the bound says so and holds the editor open with the merged words", () => {
+  const room = TASK_BOUNDS.MAX_BODY_CHARS - SECTIONS.length;
+  const mine = SECTIONS.replace("add a member.", `add a member.${"m".repeat(room)}`);
+  const theirs = SECTIONS.replace("Send the invite.", "Send the invite now.");
+
+  const kept = editorCloseAsked(editorKeptMine(conflictedOver(mine, theirs)));
+
+  assert.deepEqual(kept.state, {
+    kind: DOCUMENT_EDITOR_STATE.FAILED,
+    note: "Not saved: the plan is too long.",
+  });
+  assert.ok(kept.draft.includes("Send the invite now."));
+  assert.equal(editorCloses(kept), false);
 });

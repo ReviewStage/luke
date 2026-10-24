@@ -1,3 +1,4 @@
+import { diffArrays } from "diff";
 import { Schema } from "effect";
 import type { PlanCommentAnchors } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, type PlanEditRequest, type PlanEditValue } from "./plan-edit.js";
@@ -16,7 +17,8 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer, type TasksEditFailure } from "
  * words. One save is out at a time; words typed while it is out are saved
  * once it answers. A conflict holds the editor open with the developer's
  * words, naming who wrote what the text holds now, until they keep theirs,
- * which saves them over it, or take the other writer's, which closes the
+ * which lays their change over the other writer's, theirs standing only where
+ * the two changed the same lines, or take the other writer's, which closes the
  * editor on those. A save that failed keeps the
  * words and waits: it is tried again when the developer asks or types on,
  * never on its own, so a service that keeps refusing is not asked again and
@@ -74,6 +76,102 @@ function tooLong(text: string): boolean {
 }
 
 const isText = Schema.is(Schema.String);
+
+/** One change of a text from the base: the base's lines from `from` to `to` replaced by `lines`, the developer's or the other writer's. */
+interface LineChange {
+  readonly from: number;
+  readonly to: number;
+  readonly lines: readonly string[];
+  readonly mine: boolean;
+}
+
+/** A text's changes from the base, line by line, as jsdiff finds them, a run of lines struck and written in taken as one change. */
+function lineChanges(base: string[], text: string, mine: boolean): LineChange[] {
+  const changes: LineChange[] = [];
+  let at = 0;
+  for (const part of diffArrays(base, text.split("\n"))) {
+    const last = changes.at(-1);
+    const changed = part.added || part.removed;
+    // Note that a part following a change with no line kept between them is part of that change.
+    const joins = changed && last !== undefined && last.to === at;
+    if (joins) changes.pop();
+    const change = joins ? last : { from: at, to: at, lines: [], mine };
+    if (part.added) changes.push({ ...change, lines: [...change.lines, ...part.value] });
+    if (part.removed) changes.push({ ...change, to: at + part.count });
+    if (!part.added) at += part.count;
+  }
+  return changes;
+}
+
+/** Changes in the base's order, a line written in before the change to the line it stands at, the other writer's before the developer's. */
+function byPlace(a: LineChange, b: LineChange): number {
+  const aWrites = a.from === a.to ? 0 : 1;
+  const bWrites = b.from === b.to ? 0 : 1;
+  return a.from - b.from || aWrites - bWrites || Number(a.mine) - Number(b.mine);
+}
+
+/**
+ * The changes of one place both writers may have changed: each's where only
+ * one did; where both wrote lines in at one place, both, the other writer's
+ * first, or one where they wrote the same; and the developer's alone where
+ * the two changed the same lines.
+ */
+function settledChanges(place: readonly LineChange[]): readonly LineChange[] {
+  const mine = place.filter((change) => change.mine);
+  const theirs = place.filter((change) => !change.mine);
+  if (mine.length === 0 || theirs.length === 0) return place;
+  if (!place.every((change) => change.from === change.to)) return mine;
+  const same = mine[0]?.lines.join("\n") === theirs[0]?.lines.join("\n");
+  return same ? mine : [...theirs, ...mine];
+}
+
+/**
+ * Changes in the base's order cut into the places they change, where a
+ * change touching lines of the place before it, or writing lines in where
+ * that place only wrote lines in, joins it, so a run of changes overlapping
+ * one another is settled whole.
+ */
+function placesOf(changes: readonly LineChange[]): (readonly LineChange[])[] {
+  const places: LineChange[][] = [];
+  let from = 0;
+  let to = -1;
+  for (const change of changes) {
+    const place = places.at(-1);
+    const insertsHere = from === to && change.from === to && change.to === to;
+    if (place !== undefined && (change.from < to || insertsHere)) place.push(change);
+    else {
+      places.push([change]);
+      from = change.from;
+    }
+    to = Math.max(to, change.to);
+  }
+  return places;
+}
+
+/**
+ * The developer's change from `base` to `mine` laid over the other writer's
+ * from `base` to `theirs`, line by line: each change stands where the other
+ * writer left its lines alone, and the developer's where both changed the
+ * same lines.
+ */
+function keptOver(base: string, mine: string, theirs: string): string {
+  const lines = base.split("\n");
+  const changes = [...lineChanges(lines, theirs, false), ...lineChanges(lines, mine, true)];
+  const merged: string[] = [];
+  let at = 0;
+  for (const place of placesOf(changes.sort(byPlace))) {
+    for (const change of settledChanges(place)) {
+      merged.push(...lines.slice(at, change.from), ...change.lines);
+      at = change.to;
+    }
+    // Note that the other writer's lines a place dropped stand as the base held them.
+    const to = Math.max(at, ...place.map((change) => change.to));
+    merged.push(...lines.slice(at, to));
+    at = to;
+  }
+  merged.push(...lines.slice(at));
+  return merged.join("\n");
+}
 
 /** The text a conflict answered, which a document's conflict always is; the base kept where it is not. */
 function currentOr(base: string, current: PlanEditValue): string {
@@ -177,11 +275,23 @@ export function editorLeft(editor: DocumentEditor): DocumentEditor | undefined {
   return { ...rest, closing: false };
 }
 
-/** The developer keeps their words over the other writer's: what the text holds now becomes the base, so the next save sets theirs. */
+/**
+ * The developer keeps their words over the other writer's: their change is
+ * laid over what the text holds now, which becomes the base, so the next save
+ * sets their words where the two changed the same lines and leaves the other
+ * writer's standing everywhere else. Note that the comment anchors the editor
+ * last reported are dropped where the words moved, since they stand in the
+ * developer's words alone; the service carries every thread over the save
+ * until the editor reports them again.
+ */
 export function editorKeptMine(editor: DocumentEditor): DocumentEditor {
   if (editor.state.kind !== DOCUMENT_EDITOR_STATE.CONFLICT) return editor;
   const base = editor.state.current;
-  return { ...editor, base, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } };
+  const draft = keptOver(editor.base, editor.draft, base);
+  const { anchors: _anchors, ...rest } = editor;
+  const kept = draft === editor.draft ? editor : rest;
+  // Note that two changes each within the bound may merge past it, which says so and holds the editor open.
+  return editorTyped({ ...kept, base, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } }, draft);
 }
 
 /** The developer takes the other writer's words: the editor holds them and closes, with nothing to save. */
