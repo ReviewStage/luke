@@ -408,11 +408,14 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
 
 /** The popover: its title and ×, then the rows (`PopoverPanel`). */
 function ViewSettingsPopover({
+  open,
   id,
   scope,
   onClose,
   onLeave,
 }: {
+  /** Whether it stands; closed, it fades out. */
+  open: boolean;
   id: string;
   scope: ViewSettingsScope;
   /** Closes the popover and hands the keyboard back to the button. */
@@ -422,6 +425,7 @@ function ViewSettingsPopover({
 }): React.JSX.Element {
   return (
     <PopoverPanel
+      open={open}
       id={id}
       title={VIEW_SETTINGS_LABEL}
       closeLabel="Close"
@@ -468,18 +472,17 @@ export function ViewSettingsButton({ scope }: { scope: ViewSettingsScope }): Rea
           onClick={() => setOpen(!open)}
         />
       </Tooltip>
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <ViewSettingsPopover
-            id={popoverId}
-            scope={scope}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
-      ) : null}
+      <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
+        <ViewSettingsPopover
+          open={open}
+          id={popoverId}
+          scope={scope}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
+      </AnchoredPopover>
     </div>
   );
 }

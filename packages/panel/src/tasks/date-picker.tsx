@@ -425,12 +425,17 @@ function TimeField({
  * under the start's; with no time the two dates share a row.
  */
 function DatePickerPanel({
+  open,
   date,
   onClose,
+  onExited,
 }: {
+  /** Whether it stands; closed, it fades out, then tells its owner it is gone. */
+  open: boolean;
   date: DateSpan | undefined;
   onClose: (picked: DatePicked) => void;
-}): React.JSX.Element {
+  onExited: () => void;
+}): React.JSX.Element | null {
   const now = useMinute();
   // Note that the zone is kept beside its state too, because the picker closes reading it in the same event that may change it.
   const chosenZone = useRef(readerZone());
@@ -496,6 +501,10 @@ function DatePickerPanel({
   useEffect(() => {
     turning.current = false;
   }, [page]);
+  // Note that the zones' menu, which takes no `open`, goes at once as the picker closes from it, so it is gone as soon as it is closed.
+  useEffect(() => {
+    if (!open && page === DATE_PICKER_PAGE.ZONE) onExited();
+  }, [open, page, onExited]);
   const zones = useMemo(
     () => (page === DATE_PICKER_PAGE.ZONE ? zoneRows(zone, now) : []),
     [page, zone, now],
@@ -549,6 +558,7 @@ function DatePickerPanel({
   );
 
   if (page === DATE_PICKER_PAGE.ZONE) {
+    if (!open) return null;
     return (
       <SearchableMenu
         id={zoneMenuId}
@@ -572,13 +582,15 @@ function DatePickerPanel({
   }
 
   return (
-    <AnchoredPopover align={POPOVER_ALIGN.START} width={DATE_PICKER_WIDTH}>
+    <AnchoredPopover open={open} align={POPOVER_ALIGN.START} width={DATE_PICKER_WIDTH}>
       <PopoverPanel
+        open={open}
         title={WORDS.TITLE}
         closeLabel={WORDS.CLOSE}
         initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
         onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
         onLeave={leave}
+        onExited={onExited}
       >
         <Stack gap={GAP.TIGHT}>
           {timed ? (
@@ -677,8 +689,14 @@ function sameBox(a: AnchorBox, b: AnchorBox): boolean {
  * the last.
  */
 export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
+  // Note that an opening is kept past its close, `standing` false, until its picker has faded out, so the card leaves as the other popovers do.
   const [opened, setOpened] = useState<
-    | { readonly opening: DatePickerOpening; readonly box: AnchorBox; readonly key: number }
+    | {
+        readonly opening: DatePickerOpening;
+        readonly box: AnchorBox;
+        readonly key: number;
+        readonly standing: boolean;
+      }
     | undefined
   >(undefined);
   const counted = useRef(0);
@@ -686,10 +704,10 @@ export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
     const placed = room.current?.getBoundingClientRect();
     if (placed === undefined) return;
     counted.current += 1;
-    setOpened({ opening, box: boxIn(placed, opening.at), key: counted.current });
+    setOpened({ opening, box: boxIn(placed, opening.at), key: counted.current, standing: true });
   };
   // A chip's place is read again as anything scrolls or the window resizes, so the picker stays hung from it as a box scrolls its words.
-  const at = opened?.opening.at;
+  const at = opened?.standing === true ? opened.opening.at : undefined;
   useLayoutEffect(() => {
     if (!(at instanceof Element)) return;
     const follow = () => {
@@ -710,11 +728,15 @@ export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
       <div className="date-picker-anchor" style={opened.box}>
         <DatePickerPanel
           key={opened.key}
+          open={opened.standing}
           date={opened.opening.date}
           onClose={(picked) => {
-            setOpened(undefined);
+            setOpened((was) => (was?.key === opened.key ? { ...was, standing: false } : was));
             opened.opening.onClose(picked);
           }}
+          onExited={() =>
+            setOpened((was) => (was?.key === opened.key && !was.standing ? undefined : was))
+          }
         />
       </div>
     );

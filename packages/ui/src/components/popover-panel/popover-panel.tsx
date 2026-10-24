@@ -37,7 +37,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * has run (`useDisclosure`); reduced motion and a capture run, which zero
  * the tokens, take it away at once. An owner that has yet to pass `open`
  * mounts the panel to open it and unmounts it to close it, which goes at
- * once.
+ * once. An owner whose body holds state or reads data while it is drawn
+ * hears `onExited` once the panel is gone, and takes the body out then.
  */
 
 /**
@@ -119,6 +120,7 @@ export function PopoverPanel({
   initialFocus,
   onDismiss,
   onLeave,
+  onExited,
   onKeyDown,
   children,
 }: {
@@ -139,6 +141,8 @@ export function PopoverPanel({
   onDismiss: () => void;
   /** Focus left the panel for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
+  /** Its fade has run and it is gone, which an owner whose body holds state or reads data lets go of it on. */
+  onExited?: (() => void) | undefined;
   /** Its own keys, heard after Escape. */
   onKeyDown?: ((event: React.KeyboardEvent<HTMLDivElement>) => void) | undefined;
   children: React.ReactNode;
@@ -157,6 +161,17 @@ export function PopoverPanel({
   useEffect(() => {
     if (open) (initialFocus?.current ?? panel.current)?.focus({ preventScroll: true });
   }, [open, initialFocus]);
+
+  // Note that the owner hears it gone only once the panel has stood, because one that never opened has left nothing to let go of.
+  const stood = useRef(false);
+  useEffect(() => {
+    if (mounted) {
+      stood.current = true;
+    } else if (stood.current) {
+      stood.current = false;
+      onExited?.();
+    }
+  }, [mounted, onExited]);
 
   // Note that reduced motion and a capture run take the panel away in the
   // render that closes it, rather than once its fade is found to run none.
