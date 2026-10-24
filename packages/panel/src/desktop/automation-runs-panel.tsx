@@ -12,7 +12,7 @@ import {
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText, sinceText } from "@luke/features/time-format";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import {

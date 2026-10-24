@@ -19,7 +19,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
 import {
   type CodeRef,

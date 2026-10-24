@@ -4608,6 +4608,65 @@ it.effect(
 );
 
 it.effect(
+  "a teammate's change to the open task's status, assignee, and repository reaches its document as the live list carries it, its body and last save kept",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const realtime = fakeRealtime();
+      const { call, last, openTask } = yield* subject(fakeService([invites]), {
+        openLive: realtime.open,
+      });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.listSubscribed;
+      realtime.deliverPart("plans", [rowOfTask(invites)]);
+      realtime.deliverPart("agents", []);
+      realtime.deliverPart("issues", []);
+      yield* realtime.settled;
+      yield* openTask(INVITES);
+      const standing = () => {
+        const open = last()?.document.task;
+        return [
+          open?.status,
+          open?.assignee,
+          open?.repository,
+          open?.document.body,
+          open?.updatedAt,
+        ];
+      };
+
+      realtime.deliverPart("plans", [
+        {
+          ...rowOfTask(invites),
+          status: TASK_STATUS.IN_PROGRESS,
+          assigneeId: ADA.userId,
+          assigneeName: ADA.name,
+          repository: "acme/relay",
+          updatedAt: 20,
+        },
+      ]);
+      yield* realtime.settled;
+      assert.deepEqual(standing(), [
+        TASK_STATUS.IN_PROGRESS,
+        { userId: ADA.userId, name: ADA.name },
+        "acme/relay",
+        "# Teammate invitations",
+        10,
+      ]);
+
+      // A row that names no assignee is a task assigned to no one.
+      realtime.deliverPart("plans", [{ ...rowOfTask(invites), status: TASK_STATUS.DONE }]);
+      yield* realtime.settled;
+      assert.deepEqual(standing(), [
+        TASK_STATUS.DONE,
+        undefined,
+        null,
+        "# Teammate invitations",
+        10,
+      ]);
+    }),
+);
+
+it.effect(
   "a workspace's people are followed over Realtime while a window follows them, each change told in the held read's order, and let go on unfollow or a sign-out",
   () =>
     Effect.gen(function* () {

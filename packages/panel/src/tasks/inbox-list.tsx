@@ -1,4 +1,4 @@
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {

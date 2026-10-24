@@ -28,7 +28,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";

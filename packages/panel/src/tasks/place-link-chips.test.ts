@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -278,8 +278,7 @@ test("an agent's chip the window holds wears its harness's mark, on another task
   const worn = agentChips.map((chip) => {
     const onChip = chip.querySelector(".luke-inline-ref-glyph .luke-harness-mark") !== null;
     restOn(chip);
-    const onCard =
-      document.querySelector(".luke-tooltip-card [data-mention-card] .luke-harness-mark") !== null;
+    const onCard = document.querySelector(".luke-tooltip-card .luke-harness-mark") !== null;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });

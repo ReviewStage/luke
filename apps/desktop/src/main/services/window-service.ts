@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
-import type { ReadLink } from "@luke/features/luke-link";
+import type { ReadLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import type {
   AgentEndToast,
@@ -193,6 +193,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     followResponsiveness: (window) => {
       void run(followResponsiveness(window, reportUnresponsivePanel));
     },
+    onRendererGone: (reason) => config.report(`Panel renderer gone: ${reason}`),
   });
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({

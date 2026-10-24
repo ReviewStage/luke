@@ -7,7 +7,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

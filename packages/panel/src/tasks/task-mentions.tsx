@@ -16,7 +16,7 @@ import {
 import { useAct } from "../act.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
-import { agentActor, agentTabLabel } from "./coding-agent-model.js";
+import { agentActor, agentName } from "./coding-agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type {
   MentionAgentsReader,
@@ -192,7 +192,7 @@ export function mentionablePullRequests(
     const pullRequest = agents.pullRequests.get(agent.id);
     if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
     offered.add(pullRequest.url);
-    return [{ ...pullRequest, agent: agentTabLabel(agent, agents.models) }];
+    return [{ ...pullRequest, agent: agentName(agent, agents.models) }];
   });
 }
 
@@ -202,7 +202,7 @@ export function mentionableAgent(
   names: ReadonlyMap<string, string>,
   models: readonly CatalogModel[] | undefined,
 ): MentionableAgent {
-  const name = agentTabLabel(agent, models);
+  const name = agentName(agent, models);
   return {
     id: agent.id,
     name,

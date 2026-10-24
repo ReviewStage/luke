@@ -55,7 +55,7 @@ import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
-import { rendererRuntime } from "./renderer-runtime.js";
+import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
 const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
@@ -394,6 +394,15 @@ const toastLifeAtom = Atom.keepAlive(
     }),
   ),
 );
+
+/**
+ * Shows a toast from outside React, on the window's own registry, the one its
+ * root provides: for a press whose answer lands after its handler returned
+ * (`act.ts`'s `pressAct`).
+ */
+export function showToast(notice: ToastNotice): void {
+  rendererRegistry.set(toastLifeAtom, { kind: TOAST_STEP.SHOW, notice });
+}
 
 /** Shows a toast; the same function on every render. */
 export function useToast(): (notice: ToastNotice) => void {

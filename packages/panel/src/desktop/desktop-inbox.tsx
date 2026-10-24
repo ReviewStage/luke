@@ -15,7 +15,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
 import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
@@ -446,7 +446,21 @@ function InboxShown({
                 )}
                 {compose.on ? (
                   <InboxCompose
+                    // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
+                    key={listedWorkspace?.id}
                     hidden={columns.shown === INBOX_COLUMNS.LIST}
+                    workspace={
+                      listedWorkspace === undefined
+                        ? undefined
+                        : {
+                            workspace: listedWorkspace.slug ?? listedWorkspace.id,
+                            workspaceId: listedWorkspace.id,
+                          }
+                    }
+                    repositoryOf={(id) =>
+                      tasks.tasks.find((each) => each.id === id)?.repository ?? null
+                    }
+                    onShowMention={tasks.onShowMention}
                     onBack={columns.onBack}
                     readAgents={readWorkspaceAgents}
                     to={chosen?.item.agentId}
@@ -463,6 +477,7 @@ function InboxShown({
                       });
                     }}
                     onDiscard={compose.onEnd}
+                    onRestore={() => onCompose?.()}
                   />
                 ) : chosen === undefined ? (
                   <section
@@ -653,7 +668,7 @@ function InboxSidePanel({
       <TaskMentions value={mentions}>
         <AgentPane
           call={calls}
-          label={agent === undefined ? undefined : agentTabLabel(agent, agents.models)}
+          label={agent === undefined ? undefined : agentName(agent, agents.models)}
           tabbed={false}
           tab={{ agent: agentId }}
           agents={agents}

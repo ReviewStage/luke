@@ -1,3 +1,5 @@
+import { MENTION_SIGIL, mentionMarkdownLink } from "@luke/features/link-grammar";
+import { mentionLinksIn, mentionName } from "@luke/features/mention-link";
 import { type Editor, type JSONContent, Node } from "@tiptap/core";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
@@ -14,29 +16,19 @@ import type { MentionDrawer, MentionNode, MentionNodeDoors } from "./contract.js
  * is the panel's (`drawMention`), handed the doors that name the node anew
  * or take it out (a date's picker). Read from markdown, a link whose words
  * start with `@` becomes the node, its formatting, if its label had any,
- * left behind; written back, it is the link again, `[@name](target)`, its
- * label's brackets and backslashes escaped. Nothing here knows what a
- * target names.
+ * left behind; written back, it is the link again, `[@name](target)`,
+ * written and read as every link is (`@luke/features/link-grammar`).
+ * Nothing here knows what a target names.
  */
 
 export const MENTION_NODE = "mention";
-
-/** What marks a link's words as a mention's. */
-const MENTION_SIGIL = "@";
-
-/** The characters a markdown link's label must escape to stay one label. */
-const LABEL_SPECIAL = /[[\]\\]/gu;
 
 /** The link mark's name, as StarterKit spells it. */
 const LINK_MARK = "link";
 
 /** A mention as markdown writes it. */
 export function mentionLink(mention: MentionNode): string {
-  const label = `${MENTION_SIGIL}${mention.name}`.replace(
-    LABEL_SPECIAL,
-    (special) => `\\${special}`,
-  );
-  return `[${label}](${mention.target})`;
+  return mentionMarkdownLink(mention.name, mention.target);
 }
 
 /**
@@ -168,18 +160,12 @@ export interface MentionToken {
   readonly mention: MentionNode;
 }
 
-/** A link whose label starts with `@`: the label's words, its escapes kept, and a target with no space or parenthesis in it. */
-const MENTION_LINK = /\[@((?:\\[[\]\\]|[^[\]\\\n])+)\]\(([^\s()]+)\)/gu;
-
-/** A label's escaped character, read back. */
-const LABEL_ESCAPE = /\\([[\]\\])/gu;
-
-/** Every mention written in plain words, in order, as the composer reads a message laid in whole: a restored draft or a paste. */
+/** Every mention written in plain words, in order, outside code, as the composer reads a message laid in whole: a restored draft or a paste. */
 export function mentionTokens(text: string): readonly MentionToken[] {
-  return [...text.matchAll(MENTION_LINK)].map((match) => ({
-    start: match.index,
-    end: match.index + match[0].length,
-    mention: { name: (match[1] ?? "").replace(LABEL_ESCAPE, "$1"), target: match[2] ?? "" },
+  return mentionLinksIn(text).map(({ start, end, label, target }) => ({
+    start,
+    end,
+    mention: { name: mentionName(label), target },
   }));
 }
 

@@ -66,7 +66,7 @@ import {
   type IntegrationProvider,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
 import { dayAndTimeText, timeZoneNames } from "@luke/features/time-format";

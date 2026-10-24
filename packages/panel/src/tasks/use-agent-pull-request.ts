@@ -6,8 +6,11 @@ import type {
   CodingAgentStatus,
   CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { keepIdentity } from "@luke/wire";
+import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model.js";
 
 /**
@@ -25,6 +28,9 @@ import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model.js"
  * The task keeps every answer beside its agents (`useTaskPullRequests`), so
  * the side panel's "+", the task's summary, and ⌘K offer an agent's Changes
  * tab exactly while it has a pull request, its tab open or not.
+ *
+ * An open Pull request tab also follows the line the task list pushes of its
+ * pull request (`usePushedLineMoved`), reading again as that line moves.
  */
 
 /** How one read is asked: the agent, answered as the view hears it. */
@@ -215,4 +221,62 @@ export function useTaskPullRequests(
   }, [agents, read]);
 
   return { pullRequests: held.taskId === taskId ? held.pullRequests : NO_PULL_REQUESTS, read };
+}
+
+/**
+ * The line the task list holds of the pull request at `url`, as the service
+ * last pushed it, on whichever task names it; none where no task does. The
+ * document keeps a line's identity while it does not move, so its reader is
+ * drawn again only as it does.
+ */
+const pushedLineAtom = Atom.family((url: string) =>
+  Atom.map(APP_SLICE.TASKS, (tasks): TaskPullRequestLine | undefined => {
+    for (const task of tasks?.tasks ?? []) {
+      const line = task.agents?.pullRequests.find((each) => each.url === url);
+      if (line !== undefined) return line;
+    }
+    return undefined;
+  }),
+);
+
+/** No pull request is known yet, whose line no task holds. */
+const NO_URL = "";
+
+/** Whether two pushes of one pull request's line say the same of where it stands: open or not, its checks, and the merge queue. */
+function samePushed(was: TaskPullRequestLine, now: TaskPullRequestLine): boolean {
+  return was.state === now.state && was.checks === now.checks && was.queued === now.queued;
+}
+
+/**
+ * Runs `reread` as the pushed line of the pull request at `url` moves, its
+ * state, checks, or place in the merge queue, or its leaving the list, so an open tab draws what
+ * GitHub says now rather than what it read as it was first shown. The first
+ * line seen is where the tab's own reads started from, and asks nothing; a
+ * line that moved while the tab was out of sight asks once it is shown
+ * again. Note that it follows the push rather than a clock, because the
+ * service keeps its answer a short while and a read sooner would only
+ * repeat it.
+ */
+export function usePushedLineMoved(
+  url: string | undefined,
+  shown: boolean,
+  reread: () => void,
+): void {
+  const line = useAppSlice(pushedLineAtom(url ?? NO_URL));
+  const latest = useRef(reread);
+  latest.current = reread;
+  // The line as the tab last read on it.
+  const seen = useRef<TaskPullRequestLine | undefined>(undefined);
+
+  useEffect(() => {
+    if (!shown) return;
+    const was = seen.current;
+    seen.current = line;
+    // Note that a line gone from the list moved too, because the list holds
+    // only a few, the open first, so a pull request that merged can fall out
+    // of it as it merges.
+    if (was === undefined || was.url !== url) return;
+    if (line !== undefined && samePushed(was, line)) return;
+    latest.current();
+  }, [shown, line, url]);
 }

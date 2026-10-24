@@ -87,7 +87,7 @@ export type TabSubject =
   | { readonly kind: typeof TAB_KIND.DRAFT }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
-      /** Its tab's label (`agentTabLabel`), or what a pin last called it; the word for an agent where none is known. */
+      /** Its tab's label (`agentName`), or what a pin last called it; the word for an agent where none is known. */
       readonly name: string | undefined;
       readonly agent: AgentStanding | undefined;
       /** Whether a call into the agent is in progress, which its glyph wears as the live mark. */

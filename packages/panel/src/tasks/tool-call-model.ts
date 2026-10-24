@@ -719,6 +719,8 @@ function knownToolView(
         input: input === undefined ? textBlock("") : jsonBlock(input),
         output: output === undefined ? undefined : jsonBlock(output),
       };
+    case AGENT_TOOL.OPEN_PULL_REQUEST:
+      return openedPullRequestView(input, output);
     case AGENT_TOOL.SHOW_IMAGE:
       return {
         kind: CALL_KIND.SHOW_IMAGE,
@@ -747,6 +749,41 @@ function knownToolView(
     default:
       return undefined;
   }
+}
+
+/** What a refused pull request's line says in place of its verb, since it opened none. */
+const PULL_REQUEST_REFUSED = "Could not open pull request";
+
+/** A pull request's answer as its body draws it: its JSON where it opened one, the words of its reason where it was refused. */
+function pullRequestAnswer(
+  output: WireValue | undefined,
+  reason: string | undefined,
+): ToolBlock | undefined {
+  if (output === undefined) return undefined;
+  return reason === undefined ? jsonBlock(output) : textBlock(reason);
+}
+
+/**
+ * An opened pull request's row: its number and the title the agent gave it,
+ * the number from the answer once GitHub has given one. Note that a refused
+ * call, which answers a reason and no number, says it opened none, and its
+ * answer is drawn as the text of its reason, which is where the refusal is
+ * read.
+ */
+function openedPullRequestView(
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const title = stringAt(input, "title") ?? "";
+  const reason = stringAt(output, "reason");
+  const number = isRecord(output) && isWireNumber(output.number) ? output.number : undefined;
+  return {
+    kind: CALL_KIND.OPEN_PULL_REQUEST,
+    subject: number === undefined ? title : `#${number} ${title}`,
+    ...(reason === undefined ? undefined : { description: PULL_REQUEST_REFUSED }),
+    input: input === undefined ? textBlock("") : jsonBlock(input),
+    output: pullRequestAnswer(output, reason),
+  };
 }
 
 /** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any, said as a code card says them. */
@@ -1065,6 +1102,8 @@ export const TOOL_TARGET = {
   CHAT: "chat",
   /** Another task of the workspace, opened on its plan as the sidebar opens it. */
   TASK: "task",
+  /** A pull request the agent opened, its Pull request tab where the window has one and GitHub's page otherwise; its row opens it through the link opener (`useOpenLink`), as a link to the pull request does, so no window's `onOpenTarget` is asked for it. */
+  PULL_REQUEST: "pull-request",
 } as const;
 
 export type ToolTarget =
@@ -1075,7 +1114,8 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
   | { readonly kind: typeof TOOL_TARGET.INBOX }
   | { readonly kind: typeof TOOL_TARGET.CHAT }
-  | { readonly kind: typeof TOOL_TARGET.TASK; readonly task: string };
+  | { readonly kind: typeof TOOL_TARGET.TASK; readonly task: string }
+  | { readonly kind: typeof TOOL_TARGET.PULL_REQUEST; readonly url: string };
 
 /** What the hover over a row says it opens, by its target's kind. */
 export const TARGET_HINT = {
@@ -1087,6 +1127,7 @@ export const TARGET_HINT = {
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.CHAT]: "Open the task's chat",
   [TOOL_TARGET.TASK]: "Open the task",
+  [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",
 } as const satisfies Record<ToolTarget["kind"], string>;
 
 /** A call as its target is read from it: the tool, the call's id, and its input and answer. */
@@ -1166,6 +1207,12 @@ function readPage(call: TargetedCall): ToolTarget | undefined {
   return own ? shownPage(call) : undefined;
 }
 
+/** The pull request an open answered, by the address it gave. */
+function openedPullRequest(call: TargetedCall): ToolTarget | undefined {
+  const url = stringAt(call.output, "url");
+  return url === undefined ? undefined : { kind: TOOL_TARGET.PULL_REQUEST, url };
+}
+
 /** The lines `show_code` put on screen, as a reference a File tab lights. */
 function shownCode(call: TargetedCall): ToolTarget | undefined {
   const path = stringAt(call.input, "path");
@@ -1214,6 +1261,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.EDIT_PLAN, () => TASK_TARGET],
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
+  [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.WITHDRAW_ASK, () => INBOX_TARGET],
   [RETIRED_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],

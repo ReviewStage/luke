@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace } from "./luke-link.js";
+import { LINK_PLACE, type LinkPlace } from "./link-grammar.js";
 import { UNTITLED_TASK_NAME } from "./task-wire.js";
 import { NOTHING_SAID, thingName, thingOfPlace } from "./thing-kind.js";
 

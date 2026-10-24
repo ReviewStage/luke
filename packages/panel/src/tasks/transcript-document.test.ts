@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";

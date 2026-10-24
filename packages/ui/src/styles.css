@@ -19,8 +19,6 @@
 @import "./components/nav-item/nav-item.css";
 @import "./components/bar-item/bar-item.css";
 @import "./components/text/text.css";
-@import "./components/text-button/text-button.css";
-@import "./components/line-button/line-button.css";
 @import "./components/text-link/text-link.css";
 @import "./components/page-thumb/page-thumb.css";
 @import "./components/picture-tile/picture-tile.css";
@@ -41,7 +39,6 @@
 @import "./components/file-text/file-text.css";
 @import "./chart/chart.css";
 @import "./components/virtual-rows/virtual-rows.css";
-@import "./components/folding-button/folding-button.css";
 @import "./components/chip/chip.css";
 @import "./components/collection-page/collection-page.css";
 @import "./components/combobox/combobox.css";
@@ -62,7 +59,6 @@
 @import "./components/progress/progress.css";
 @import "./components/resize-corner/resize-corner.css";
 @import "./components/rolling-number/rolling-number.css";
-@import "./components/slider/slider.css";
 @import "./components/prose/prose.css";
 @import "./marks/harness-mark.css";
 @import "./marks/provider-mark.css";

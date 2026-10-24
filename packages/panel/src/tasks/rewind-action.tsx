@@ -16,8 +16,9 @@ import type { EditComposerDoors } from "./edit-composer.js";
  * An agent's tab hands its messages what a rewind takes (`RewindProvider`):
  * Edit opens a line for writing again in its own place, in the agent's own
  * message box (`edit-composer.tsx`), leaving the foot's box as it is, and its Send takes the agent
- * back to just before it, so the new words go in its place; Revert to here, asked
- * first since what it drops is gone, takes the agent back to just after a
+ * back to just before it, so the new words go in its place, asked first where
+ * anything follows the line, since what it drops is gone; Revert to here, asked
+ * first for the same reason, takes the agent back to just after a
  * reply, dropping the developer's next line and everything after it. Only a
  * line that opened a turn is written again, and a reply is reverted to only
  * where such a line follows it, since a line a turn took in while it ran sits
@@ -62,13 +63,15 @@ interface RewindDoors {
     attachments: readonly CodingAgentAttachment[],
   ) => void;
   /** What the line's box is drawn with beside the tab's own box, read as it opens, so the doors stand as they were while the tab's props change. */
-  readonly editor: () => Omit<EditComposerDoors, "onCancel" | "onSend">;
+  readonly editor: () => Omit<EditComposerDoors, "cuts" | "onCancel" | "onSend">;
   /** Takes the agent back to just before the line named, sending nothing. */
   readonly onRevert: (lineId: string) => void;
   /** The line a reply's Revert to here drops from, by the reply's id: the developer's next line that opened a turn; none where none follows it. */
   readonly revertsAt: ReadonlyMap<string, string>;
   /** The lines Edit writes again, by their ids: the developer's lines that opened a turn. */
   readonly editable: ReadonlySet<string>;
+  /** The messages something follows, by their ids, so the send of a line written again drops them and asks first. */
+  readonly followed: ReadonlySet<string>;
 }
 
 const RewindContext = createContext<RewindDoors | undefined>(undefined);
@@ -97,14 +100,23 @@ function writtenByPerson(message: CodingAgentMessage): boolean {
  * reply, the next line that opened a turn, whoever sent it, which its Revert
  * to here drops from. Note that a plan the agent was handed is drawn as its
  * card, which offers no Edit, so only a first line drawn as a bubble is
- * written again.
+ * written again. Every message but the last is followed by one, which a
+ * rewind to just before it drops, and so is the last while lines sent and not
+ * yet read back (`pending`) stand after it, since the rewind drops those too.
  */
-export function rewindPoints(messages: readonly CodingAgentMessage[]): {
+export function rewindPoints(
+  messages: readonly CodingAgentMessage[],
+  pending: boolean,
+): {
   readonly editable: ReadonlySet<string>;
   readonly revertsAt: ReadonlyMap<string, string>;
+  readonly followed: ReadonlySet<string>;
 } {
   const editable = new Set<string>();
   const revertsAt = new Map<string, string>();
+  const followed = new Set(
+    (pending ? messages : messages.slice(0, -1)).map((message) => message.id),
+  );
   let next: string | undefined;
   // Read from the end, so each reply finds the opening line nearest after it.
   for (let at = messages.length - 1; at >= 0; at -= 1) {
@@ -118,7 +130,7 @@ export function rewindPoints(messages: readonly CodingAgentMessage[]): {
       revertsAt.set(message.id, next);
     }
   }
-  return { editable, revertsAt };
+  return { editable, revertsAt, followed };
 }
 
 /** Hands an agent's messages what a rewind takes. */
@@ -178,6 +190,7 @@ export function useMessageEdit(messageId: string): EditComposerDoors | undefined
   return {
     ...doors.editor(),
     onCancel: doors.onCancelEdit,
+    cuts: doors.followed.has(messageId),
     onSend: (words, attachments) => doors.onSendEdit(messageId, words, attachments),
   };
 }

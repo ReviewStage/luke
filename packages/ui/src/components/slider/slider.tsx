@@ -1,12 +1,17 @@
+import { cn } from "../../cn.js";
+import { Slider as ShadcnSlider } from "../../shadcn/slider.js";
+
 /**
- * slider.tsx -- a native range input, one thumb along a track, for a value
- * chosen between two ends: how far a swipe or a fade has gone, or where a
- * video stands in its run.
+ * slider.tsx -- one thumb along a track, for a value chosen between two
+ * ends: how far a swipe or a fade has gone, or where a video stands in its
+ * run.
  *
- * It is the browser's own range input, so the arrow, Home, End, and Page keys
- * and the slider role and value reading come with it. A `label` names it. It
- * stands at a comfortable length, or fills the room its row gives it
- * (`SLIDER_LENGTH.FILL`), as a video's scrubber does between its buttons.
+ * It is shadcn/ui's Base UI slider (`../../shadcn/slider.tsx`), drawn in the
+ * switch's inks, whose thumb holds a native range input, so the arrow,
+ * Home, End, and Page keys and the slider role and value reading come with
+ * it. A `label` names it. It stands at a comfortable length, as long as the
+ * room allows, or fills the room its row gives it (`SLIDER_LENGTH.FILL`),
+ * as a video's scrubber does between its buttons.
  */
 
 /** How long a slider stands: at a comfortable length, or across the room its row gives it. */
@@ -16,6 +21,12 @@ export const SLIDER_LENGTH = {
 } as const;
 
 export type SliderLength = (typeof SLIDER_LENGTH)[keyof typeof SLIDER_LENGTH];
+
+/** Each length's box: an off-scale comfortable length the room may cut short, or the row's room. */
+const LENGTH = {
+  comfortable: "data-horizontal:w-[min(320px,100%)]",
+  fill: "flex-[1_1_auto] data-horizontal:w-auto min-w-0",
+} as const satisfies Record<SliderLength, string>;
 
 /** A range at `value` between `min` and `max`, named by `label`, told of each change. */
 export function Slider({
@@ -42,17 +53,16 @@ export function Slider({
   valueText?: string | undefined;
 }): React.JSX.Element {
   return (
-    <input
-      type="range"
-      className="luke-slider"
+    <ShadcnSlider
+      className={cn("luke-slider", LENGTH[length])}
       data-length={length}
       min={min}
       max={max}
       step={step}
       value={value}
-      aria-label={label}
-      aria-valuetext={valueText}
-      onChange={(event) => onChange(Number(event.target.value))}
+      thumbLabel={label}
+      thumbValueText={valueText}
+      onValueChange={(next) => onChange(typeof next === "number" ? next : (next[0] ?? min))}
     />
   );
 }

@@ -18,7 +18,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
-import { agentStillWriting, agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName, agentStillWriting } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -130,7 +130,7 @@ export function useAgentArchive(
     dialog: (
       <ConfirmDialog
         confirm={confirm}
-        question={archiveQuestion(agentTabLabel(agent, agents.models))}
+        question={archiveQuestion(agentName(agent, agents.models))}
       />
     ),
   };
