@@ -19,7 +19,6 @@ import {
   Dialog,
   DialogActions,
   FootQuestion,
-  GAP,
   Inline,
   JUSTIFY,
   LAYOUT_ELEMENT,
