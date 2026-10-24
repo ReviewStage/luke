@@ -314,16 +314,21 @@ export function lineSender(
   }
 }
 
+/** The kinds of sender whose lines are the other side's words: Luke from a call, and GitHub. */
+const RECEIVED_SENDERS: ReadonlySet<string> = new Set([
+  CODING_AGENT_SENDER.LUKE,
+  CODING_AGENT_SENDER.GITHUB,
+]);
+
 /**
  * Whether one of the developer's lines is the other side's words, drawn at
- * the column's left as a chat notice is: GitHub's and another coding agent's,
- * which nobody on the developer's side wrote. A person's, Luke's from a call,
- * and an automation's speak for the developer and stand at the right.
+ * the column's left as a chat notice is: Luke's from a call, GitHub's, and
+ * another coding agent's. A person's and an automation's, which runs on its
+ * creator's behalf, stand at the right.
  */
 export function receivedLine(sentBy: CodingAgentSender | undefined): boolean {
-  return (
-    sentBy !== undefined && (sentBy.agent === true || sentBy.kind === CODING_AGENT_SENDER.GITHUB)
-  );
+  if (sentBy === undefined) return false;
+  return sentBy.agent === true || (sentBy.kind !== undefined && RECEIVED_SENDERS.has(sentBy.kind));
 }
 
 /** The parts of the line a transcript ends on: its words, and whether it tells of a failure, which is drawn as one. */

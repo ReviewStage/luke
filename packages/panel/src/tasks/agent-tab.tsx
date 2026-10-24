@@ -1348,7 +1348,7 @@ export function AgentMessage({
         </Message>
       );
     }
-    // A line GitHub or another agent sent is the other side's, so it stands at the left as a chat notice does.
+    // A line Luke, GitHub, or another agent sent is the other side's, so it stands at the left as a chat notice does.
     const received = receivedLine(message.sentBy);
     return (
       <Message

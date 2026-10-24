@@ -342,15 +342,15 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   fakeAppBridge({});
 });
 
-test("a line another agent or GitHub sent stands at the column's left, while the reader's own, a teammate's, Luke's, and an automation's stand at the right", async () => {
+test("a line Luke, another agent, or GitHub sent stands at the column's left, while the reader's own, a teammate's, and an automation's stand at the right", async () => {
   const drawn = await drawnFor(DEAN.userId);
   const side = (id: string) =>
     drawn[MESSAGES.findIndex((message) => message.id === id)]?.classList.contains("is-chat")
       ? "left"
       : "right";
   assert.deepEqual(
-    ["agent", "reviewer", "review-bot", "dean", "charles", "luke", "automation"].map(side),
-    ["left", "left", "left", "right", "right", "right", "right"],
+    ["luke", "agent", "reviewer", "review-bot", "dean", "charles", "automation"].map(side),
+    ["left", "left", "left", "left", "right", "right", "right"],
   );
 });
 
