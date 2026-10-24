@@ -237,7 +237,7 @@ function DefaultRows({
   return (
     <>
       <PickerRow
-        label="Model"
+        label="Default model"
         detail={note}
         value={read.base}
         valueLabel={modelLabel(read.base, models)}

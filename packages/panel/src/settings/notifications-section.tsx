@@ -1,4 +1,5 @@
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
@@ -94,21 +95,23 @@ export function NotificationsSection({
   return (
     <SettingsSection>
       <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.NOTIFICATIONS} view={view} writes={writes} />
-      <SettingsRow
-        label="Test notification"
-        description={
-          <>
-            {words.when}
-            {control.status === NOTIFICATIONS_STATUS.ON ? (
-              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} block>
-                {words.on}
-              </SettingsRowStateLine>
-            ) : null}
-          </>
-        }
-      >
-        {() => <SendTestNotification control={control} />}
-      </SettingsRow>
+      <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.TEST_NOTIFICATION)}>
+        <SettingsRow
+          label="Test notification"
+          description={
+            <>
+              {words.when}
+              {control.status === NOTIFICATIONS_STATUS.ON ? (
+                <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} block>
+                  {words.on}
+                </SettingsRowStateLine>
+              ) : null}
+            </>
+          }
+        >
+          {() => <SendTestNotification control={control} />}
+        </SettingsRow>
+      </div>
       {/* Note that the refusal's row is its line alone, with no name of its
           own, because the test row above already names what it is about. */}
       {control.status === NOTIFICATIONS_STATUS.OFF ? (

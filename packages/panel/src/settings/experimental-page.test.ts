@@ -113,7 +113,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(chat, "Chat has a switch");
   assert.equal(chat.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Luke, your operator"));
+  assert.ok(page.textContent?.startsWith("Memory"));
 
   await act(async () => chat.click());
   assert.deepEqual(sent, [{ experiment: EXPERIMENT.CHAT, on: false }]);
@@ -129,13 +129,13 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.MEMORY,
     EXPERIMENT.OPERATOR,
     EXPERIMENT.INBOX_FIRST,
     EXPERIMENT.CODE_REVIEW,
     EXPERIMENT.BROWSER,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
-    EXPERIMENT.MEMORY,
   ]);
 });
 
@@ -180,13 +180,13 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ),
   );
   assert.deepEqual(cards, [
+    ["Memory"],
     ["Luke, your operator"],
     ["Inbox-first sidebar"],
     ["Code review"],
     ["Browser tab"],
     ["Chat"],
     ["Video calls", "Avatar"],
-    ["Memory"],
   ]);
 
   // Every face stands open, with no menu to open first: one radio group, Atlas chosen at first.
