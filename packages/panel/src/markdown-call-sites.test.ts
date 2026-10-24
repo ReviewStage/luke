@@ -17,7 +17,7 @@ import { markdownHtmlParserLanded } from "./testing/markdown.js";
  * markdown-call-sites.test.ts -- every place the panel draws Markdown draws
  * representative words to the byte as recorded, each with the props its
  * place hands the renderer (`@luke/ui/markdown`): a plan's section, one
- * being typed, a version's changes, a comment, a file's note, a caption, a
+ * being typed, a version's changes, a comment, a file's note, a
  * tool's description, a transcript's reply as it streams and once settled,
  * a typed message, an Inbox item, and a pull request's description as
  * GitHub rendered it. The drawings are held in
@@ -127,7 +127,6 @@ const CALL_SITES: Record<string, (words: string) => ReactElement> = {
       link: chip,
       openLink: opens,
     }),
-  caption: (words) => createElement(MarkdownMessage, { words, className: "voice-notice-text" }),
   toolDescription: (words) =>
     createElement(MarkdownMessage, { words, className: "integration-tool-description-whole" }),
   transcript: (words) => createElement(TranscriptWords, { text: words }),

@@ -148,7 +148,6 @@ async function mountEveryTab(
           createElement(DesktopTasks, {
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
-            notice: undefined,
             tasks: control,
           }),
         ),

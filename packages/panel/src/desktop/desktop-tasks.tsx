@@ -34,7 +34,6 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
@@ -515,20 +514,17 @@ function shownTabGroups(shown: ShownTab | undefined): MenuAction[][] {
  * While the task is read, its strip holds one tab-shaped skeleton where the
  * plan's tab will stand, so the row does not move when the task is drawn,
  * and no name is guessed before the read says it; a task that could not be
- * drawn has no tab at all. The voice's notice line, handed in while the
- * task is drawn, rides the foot of the call's agent's tab.
+ * drawn has no tab at all.
  */
 function PlanDocument({
   tasks,
   looks,
-  notice,
   summary,
   room,
   away,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
-  notice: React.ReactNode;
   summary: SummaryPin;
   room: ShellRoom;
   away: TaskHeadBack;
@@ -1212,24 +1208,22 @@ function PlanDocument({
                                 </AgentColumn>
                               ) : null
                             ) : (
-                              <CallNotice.Provider value={notice}>
-                                <AgentPane
-                                  call={calls}
-                                  label={mainTabLabel(tab, agents)}
-                                  tabbed
-                                  tab={tab}
-                                  agents={agents}
-                                  shown={tasks.shown && !sidePanel.fullScreen}
-                                  views={views}
-                                  onOpenDelegation={openDelegationDoor}
-                                  onOpenPullRequest={openPullRequestDoor}
-                                  onOpenTarget={openTargetDoor}
-                                  cards={cards}
-                                  chat={chat}
-                                  onFork={forkDoor}
-                                  onContinue={continueDoor}
-                                />
-                              </CallNotice.Provider>
+                              <AgentPane
+                                call={calls}
+                                label={mainTabLabel(tab, agents)}
+                                tabbed
+                                tab={tab}
+                                agents={agents}
+                                shown={tasks.shown && !sidePanel.fullScreen}
+                                views={views}
+                                onOpenDelegation={openDelegationDoor}
+                                onOpenPullRequest={openPullRequestDoor}
+                                onOpenTarget={openTargetDoor}
+                                cards={cards}
+                                chat={chat}
+                                onFork={forkDoor}
+                                onContinue={continueDoor}
+                              />
                             )}
                           </FindScope>
                           <TaskSummary
@@ -1345,7 +1339,6 @@ function StartingTaskPage({
 export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
-  notice,
   summary,
   room = SHELL_ROOM.WIDE,
   away,
@@ -1353,8 +1346,6 @@ export const DesktopTasks = memo(function DesktopTasks({
   tasks: TasksControl;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: TaskLooks;
-  /** The voice's notice line, while it rides the foot of the open task's call. */
-  notice?: React.ReactNode;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
   /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
@@ -1383,7 +1374,6 @@ export const DesktopTasks = memo(function DesktopTasks({
           <PlanDocument
             tasks={tasks}
             looks={looks}
-            notice={notice}
             summary={summary}
             room={room}
             away={away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen }}
