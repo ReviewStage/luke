@@ -59,6 +59,8 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -653,6 +655,31 @@ function PanelPage(): React.JSX.Element {
     tasks: { ...tasksControl({}), sidePanel },
     agentId: AGENT_ID,
   });
+}
+
+/** The agent's page in a phone's room, over the window's own side panel, which stands only full screen. */
+function PhonePanelPage(): React.JSX.Element {
+  const agents = [AGENT_ID];
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: {} },
+    agents,
+    [],
+    [],
+    [],
+    agents,
+    SHELL_ROOM.NARROW,
+  );
+  drawnPanel = sidePanel;
+  return createElement(
+    ShellRoomContext.Provider,
+    { value: SHELL_ROOM.NARROW },
+    createElement(DesktopAgentPage, {
+      tasks: { ...tasksControl({}), sidePanel },
+      agentId: AGENT_ID,
+      away: { label: "Inbox", onPress: () => undefined },
+    }),
+  );
 }
 
 test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Board, Code, or Call", async () => {
@@ -1837,9 +1864,8 @@ test("Run in the header of a Pull request tab opened by its number runs that pul
 });
 
 /** Runs the agent's pushed branch on this Mac from the Pull request tab's header, which shows the run's Mac terminal tab. */
-async function runOnThisMac(): Promise<void> {
-  takeDownTerminal = standTerminalDocument();
-  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+/** The agent has pushed a branch, which its pull request tab reads. */
+function pushBranch(): void {
   published = {
     repository: "acme/relay",
     branch: "luke/flaky-sweep",
@@ -1854,6 +1880,12 @@ async function runOnThisMac(): Promise<void> {
       changedFiles: 1,
     },
   };
+}
+
+async function runOnThisMac(): Promise<void> {
+  takeDownTerminal = standTerminalDocument();
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  pushBranch();
   const container = await mountPanelPage();
   await settle();
   const row =
@@ -1933,6 +1965,36 @@ test("closing a Mac terminal's tab while its run is going asks first, and Cancel
   await settle();
   await questionStanding().press("Close");
   assert.ok(!isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the answer closes the tab");
+});
+
+test("on a phone, Close in the panel header asks first while the run is going, as the strip's × does", async () => {
+  takeDownTerminal = standTerminalDocument();
+  pushBranch();
+  localStorage.clear();
+  installScrollIntoView();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PhonePanelPage))));
+  await settle();
+  act(() => drawnPanel?.onChoose({ macTerminal: AGENT_ID, repository: "acme/relay", asked: 1 }));
+  await settle();
+  await postRunPort();
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "the Mac terminal is shown");
+
+  const more =
+    container.querySelector<HTMLButtonElement>('[aria-label="Panel actions"]') ??
+    assert.fail("the panel's header has a ⋯");
+  act(() => more.click());
+  const close = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
+    each.textContent?.startsWith("Close"),
+  );
+  assert.ok(close, "the ⋯ offers Close");
+  act(() => close.click());
+  await settle();
+
+  assert.match(questionStanding().words, /Close this terminal\?/u);
+  assert.ok(isMacTerminalTab(drawnPanel?.tab ?? SIDE_PANEL_TAB.PLAN), "nothing is closed unasked");
 });
 
 test("closing a Mac terminal's tab once its run has ended asks nothing", async () => {

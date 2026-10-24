@@ -1236,6 +1236,7 @@ function PanelTabs({
   actionsSlot,
   handed,
   onOpenAgent,
+  onCloseMacTerminal,
   shownAgent,
   inbox,
   inboxDrafted,
@@ -1278,6 +1279,8 @@ function PanelTabs({
   handed: HandedTabActions | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
+  /** Closes a Mac terminal's tab, asking first while its run is going. */
+  onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
   /** The task's Inbox as its board reads, whose items waiting on the developer its tab counts and its card says; none beside anything but a task's page. */
@@ -1290,12 +1293,6 @@ function PanelTabs({
   wiring: PanelWiring | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  // A Mac terminal closed while its run is going asks first, since closing it ends what runs there.
-  const closingMacTerminal = useRef<MacTerminalStripTab | undefined>(undefined);
-  const closeMacTerminal = useConfirmDialog({ subject: true, surfaceOpen: true }, () => {
-    if (closingMacTerminal.current !== undefined) panel.onClose(closingMacTerminal.current);
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
   const kinds = stripTabs({
     panel,
     unread,
@@ -1311,14 +1308,7 @@ function PanelTabs({
     held,
     copied,
     onOpenAgent,
-    onCloseMacTerminal: (tab) => {
-      if (!macTerminalGoing(tab.macTerminal)) {
-        panel.onClose(tab);
-        return;
-      }
-      closingMacTerminal.current = tab;
-      closeMacTerminal.ask();
-    },
+    onCloseMacTerminal,
     shownAgent,
     pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
@@ -1410,9 +1400,32 @@ function PanelTabs({
         answers={keys}
         onAnswered={panel.onNewTabAnswered}
       />
-      <ConfirmDialog open confirm={closeMacTerminal} question={MAC_TERMINAL_CLOSE_QUESTION} />
     </PanelTabsRow>
   );
+}
+
+/**
+ * What closes a Mac terminal's tab, asking first while its run is going,
+ * since closing it ends what runs there: every way of closing one (its ×,
+ * ⌘W, its menu, a phone's header) goes through `close`, and `question` is
+ * drawn once by the panel.
+ */
+function useMacTerminalClose(panel: SidePanelControl) {
+  const closing = useRef<MacTerminalStripTab | undefined>(undefined);
+  const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () => {
+    if (closing.current !== undefined) panel.onClose(closing.current);
+    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+  });
+  const close = (tab: MacTerminalStripTab) => {
+    if (!macTerminalGoing(tab.macTerminal)) {
+      panel.onClose(tab);
+      return;
+    }
+    closing.current = tab;
+    confirm.ask();
+  };
+  const question = <ConfirmDialog open confirm={confirm} question={MAC_TERMINAL_CLOSE_QUESTION} />;
+  return { close, question };
 }
 
 /**
@@ -2650,6 +2663,7 @@ export function SidePanel({
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
+  const macTerminalClose = useMacTerminalClose(panel);
 
   return (
     <PanelFrame
@@ -2668,7 +2682,11 @@ export function SidePanel({
             listing={listing}
             shown={ownShown}
             onList={() => setOwnListed(true)}
-            onCloseShown={tab === undefined ? undefined : () => panel.onClose(tab)}
+            onCloseShown={
+              tab === undefined
+                ? undefined
+                : () => (isMacTerminalTab(tab) ? macTerminalClose.close(tab) : panel.onClose(tab))
+            }
           />
         ) : undefined
       }
@@ -2694,6 +2712,7 @@ export function SidePanel({
           actionsSlot={actionsSlot}
           handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
+          onCloseMacTerminal={macTerminalClose.close}
           shownAgent={shownAgent}
           inbox={inbox?.board}
           inboxDrafted={inbox?.drafted ?? false}
@@ -2808,6 +2827,7 @@ export function SidePanel({
           </div>
         </FindScope>
       )}
+      {macTerminalClose.question}
     </PanelFrame>
   );
 }
