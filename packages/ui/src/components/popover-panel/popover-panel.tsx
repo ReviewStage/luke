@@ -4,11 +4,14 @@ import {
   type PointerEventHandler,
   type ReactElement,
   type RefObject,
+  useCallback,
   useEffect,
   useId,
   useRef,
 } from "react";
 import { CloseIcon } from "../../face/glyphs.js";
+import { motionHeld } from "../../motion-timing.js";
+import { useDisclosure } from "../../use-disclosure.js";
 import { IconButton } from "../button/button.js";
 import { Tooltip } from "../tooltip/hint.js";
 
@@ -27,6 +30,14 @@ import { Tooltip } from "../tooltip/hint.js";
  * button that opened it among them. A card's height is bounded by the room
  * its side of the button leaves (`--luke-popover-room`), and it scrolls
  * within; a menu scrolls its own list.
+ *
+ * Whether it stands is its owner's (`open`). As `open` falls it fades out
+ * on the exit token, drawn, inert, and in its ending state
+ * (`data-ending-style`, as Base UI marks a popup leaving) until the fade
+ * has run (`useDisclosure`); reduced motion and a capture run, which zero
+ * the tokens, take it away at once. An owner that has yet to pass `open`
+ * mounts the panel to open it and unmounts it to close it, which goes at
+ * once.
  */
 
 /**
@@ -37,12 +48,13 @@ import { Tooltip } from "../tooltip/hint.js";
  * squeezing what it holds. A card stands its sections apart in one column
  * at the caption's type, never taller than the room its side of the button
  * leaves and scrolling within it; a menu's content runs edge to edge, its
- * own rows carrying the inset, and scrolls its own list. Its head stands the
+ * own rows carrying the inset, and scrolls its own list. It fades out as a
+ * menu does, taking no press while it goes. Its head stands the
  * title and the ×, which its own inset pulls out to the edge so its glyph,
  * not its square, lines up with the card's content.
  */
 const PANEL = [
-  "luke-popover-panel flex flex-col rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in focus-visible:outline-none *:shrink-0",
+  "luke-popover-panel flex flex-col rounded-menu border border-border-strong bg-popover text-popover-foreground shadow-menu animate-menu-in focus-visible:outline-none *:shrink-0 data-ending-style:pointer-events-none data-ending-style:animate-menu-leave",
   "data-[look=card]:max-h-popover-room data-[look=card]:gap-block-gap data-[look=card]:overflow-x-hidden data-[look=card]:overflow-y-auto data-[look=card]:overscroll-contain data-[look=card]:p-card-inset-snug data-[look=card]:text-caption",
 ].join(" ");
 const HEAD = "-mr-2 flex items-center justify-between gap-control-gap";
@@ -95,9 +107,10 @@ function inside(box: HTMLElement, target: EventTarget | null): boolean {
  * The panel itself. Note that it takes the focus in an effect rather than
  * through `autoFocus`, because the control it hands focus to is its owner's,
  * named by a ref that may stand empty (a field not drawn), when the panel
- * takes it instead.
+ * takes it instead; and that it takes it each time it opens.
  */
 export function PopoverPanel({
+  open = true,
   id,
   title,
   look = POPOVER_PANEL_LOOK.CARD,
@@ -109,6 +122,8 @@ export function PopoverPanel({
   onKeyDown,
   children,
 }: {
+  /** Whether it stands; falling, it fades out before it goes. Open while mounted where it is left out. */
+  open?: boolean | undefined;
   /** Its id, which the button that opens it names as what it controls. */
   id?: string | undefined;
   /** What it is called, drawn at a card's head and read as its name. */
@@ -127,13 +142,25 @@ export function PopoverPanel({
   /** Its own keys, heard after Escape. */
   onKeyDown?: ((event: React.KeyboardEvent<HTMLDivElement>) => void) | undefined;
   children: React.ReactNode;
-}): React.JSX.Element {
-  const panel = useRef<HTMLDivElement>(null);
+}): React.JSX.Element | null {
+  const panel = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
+  const { mounted, leaving, ref: held } = useDisclosure(open);
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      panel.current = node;
+      held(node);
+    },
+    [held],
+  );
 
   useEffect(() => {
-    (initialFocus?.current ?? panel.current)?.focus({ preventScroll: true });
-  }, [initialFocus]);
+    if (open) (initialFocus?.current ?? panel.current)?.focus({ preventScroll: true });
+  }, [open, initialFocus]);
+
+  // Note that reduced motion and a capture run take the panel away in the
+  // render that closes it, rather than once its fade is found to run none.
+  if (!mounted || (leaving && motionHeld())) return null;
 
   const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape" && !event.nativeEvent.isComposing) {
@@ -146,15 +173,19 @@ export function PopoverPanel({
 
   return (
     <div
-      ref={panel}
+      ref={drawn}
       id={id}
       className={PANEL}
       data-look={look}
+      data-ending-style={leaving ? "" : undefined}
+      inert={leaving}
       role="dialog"
       aria-labelledby={titleId}
       tabIndex={-1}
       onKeyDown={onKey}
       onBlur={(event) => {
+        // A panel on its way out has closed already, so focus leaving it is no news.
+        if (leaving) return;
         if (panel.current !== null && !inside(panel.current, event.relatedTarget)) {
           onLeave(event.relatedTarget);
         }
