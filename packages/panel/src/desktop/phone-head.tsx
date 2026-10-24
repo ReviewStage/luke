@@ -1,4 +1,12 @@
-import { dropBelow, MoreButton, moreLabel, useMenu } from "@luke/ui";
+import {
+  dropBelow,
+  MoreButton,
+  moreLabel,
+  TOOLBAR_INSET,
+  TOOLBAR_LOOK,
+  Toolbar,
+  useMenu,
+} from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 
@@ -10,8 +18,8 @@ import { ActionMenu, type MenuEntry } from "./action-menu.js";
  * thing the page is for, such as New task, in the start corner; one ⋯ in the
  * end corner holding everything else the page offers; and the title of what
  * is on screen between them. The corners are one control wide each, so the
- * title's centre is the row's, and it truncates between them
- * (`.phone-head` in desktop.css).
+ * title's centre is the row's, and it truncates between them (`Toolbar`'s
+ * phone look).
  *
  * A menu the page already drops from a button of its own, its View options
  * or its Filter, is kept whole rather than folded into the ⋯: the ⋯ offers
@@ -72,11 +80,15 @@ export function PhoneHead({
   end: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <header className={`desktop-toolbar phone-head ${place}-head`}>
-      <div className="phone-head-start">{start}</div>
-      <div className="desktop-toolbar-heading">{title}</div>
-      <div className="desktop-toolbar-actions">{end}</div>
-    </header>
+    <Toolbar
+      look={TOOLBAR_LOOK.PHONE}
+      place={place}
+      start={TOOLBAR_INSET.COLUMN}
+      end={TOOLBAR_INSET.COLUMN}
+      lead={start}
+      title={title}
+      actions={end}
+    />
   );
 }
 

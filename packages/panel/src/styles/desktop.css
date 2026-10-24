@@ -4758,7 +4758,7 @@ ul.actor-stack {
    tab pinned in view. */
 .desktop-shell[data-room="narrow"]
 :is(
-  .desktop-task-main .desktop-toolbar:has(> .main-tabs),
+  .desktop-task-main .desktop-toolbar:has(> .desktop-toolbar-heading > .main-tabs),
   .side-panel-bar:has(> .side-panel-tabs)
 ) {
   --bar-start: var(--sidebar-toggle-clearance);
@@ -4770,7 +4770,7 @@ ul.actor-stack {
 
 .desktop-shell[data-room="narrow"]
   :is(.desktop-task-main .desktop-toolbar, .side-panel-bar)
-  > :is(.main-tabs, .side-panel-tabs) {
+  > :is(.desktop-toolbar-heading:has(> .main-tabs), .side-panel-tabs) {
   order: 1;
   flex: 0 0 calc(100% + var(--bar-start) + var(--bar-end) - 2 * var(--column-inset));
   margin-right: calc(var(--column-inset) - var(--bar-end));
@@ -4779,41 +4779,20 @@ ul.actor-stack {
 
 .desktop-shell[data-room="narrow"]
   :is(.desktop-task-main .desktop-toolbar, .side-panel-bar)
-  > :is(.main-tabs, .side-panel-tabs)
+  > :is(.desktop-toolbar-heading:has(> .main-tabs), .side-panel-tabs)
   + * {
   min-height: var(--luke-control-height);
   margin-left: auto;
 }
 
-/* A phone's page header (`phone-head.tsx`), a task's and each place's: one
-   control in its start corner, one ⋯ in its end corner, and the title of
-   what is on screen centred between them, truncating. The corners are one
-   control wide each, so the title's centre is the row's. It stands in the
-   title bar's buttons' place, which a phone's task and places do not draw,
-   so it starts at the column's inset. Under a task's, the column's bar starts
-   and ends at the column's own inset, and the side panel draws no bar at
-   all, the row standing for it. */
-.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.phone-head {
-  display: grid;
-  grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
+/* A phone's page header (`phone-head.tsx`, `Toolbar`'s phone look) stands in
+   the title bar's buttons' place, which a phone's task and places do not
+   draw, so it starts at the column's inset. Under a task's, the column's bar
+   starts and ends at the column's own inset, and the side panel draws no bar
+   at all, the row standing for it. */
+.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar[data-look="phone"] {
   padding-right: var(--column-inset);
   padding-left: var(--column-inset);
-}
-
-.phone-head > .desktop-toolbar-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-space-8);
-}
-
-.phone-head > .desktop-toolbar-heading > .desktop-toolbar-title {
-  min-width: 0;
-}
-
-.phone-head > .desktop-toolbar-actions {
-  justify-content: flex-end;
 }
 
 .desktop-shell[data-room="narrow"] .task-head ~ .desktop-task .desktop-task-main .desktop-toolbar {

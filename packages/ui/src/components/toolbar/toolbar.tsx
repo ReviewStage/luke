@@ -35,6 +35,10 @@
  * folded sidebar's toggle, the side panel's), the shell moves that edge
  * clear of them.
  *
+ * A phone's bar (`TOOLBAR_LOOK.PHONE`) lays the same slots as one control a
+ * corner, its title centred between them, and is named by the place it
+ * heads (`place`).
+ *
  * A place the window cannot show keeps its bar (`NotFound`), so a link to
  * something gone still leaves its way back and the window's drag handle
  * where every page has them, and says so in the room under it.
@@ -46,9 +50,15 @@ import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
 import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
-import { TOOLBAR_INSET, ToolbarFrame, type ToolbarInset } from "./toolbar-frame.js";
+import {
+  TOOLBAR_INSET,
+  TOOLBAR_LOOK,
+  ToolbarFrame,
+  type ToolbarInset,
+  type ToolbarLook,
+} from "./toolbar-frame.js";
 
-export { TOOLBAR_INSET, type ToolbarInset };
+export { TOOLBAR_INSET, TOOLBAR_LOOK, type ToolbarInset, type ToolbarLook };
 
 /** What the not-found state calls the thing it could not show. */
 export const NOT_FOUND_THING = {
@@ -89,6 +99,10 @@ export interface ToolbarProps {
   readonly start?: ToolbarInset | undefined;
   /** How far in the bar's last thing stands: where its column's words end, where none is named. */
   readonly end?: ToolbarInset | undefined;
+  /** How the slots are laid: the window's, or a phone's one control a corner with the title centred; the window's where none is named. */
+  readonly look?: ToolbarLook | undefined;
+  /** What the bar heads (`task`), which names it to the page's own rules and its tests as `task-head`. */
+  readonly place?: string | undefined;
 }
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -137,9 +151,11 @@ export function Toolbar({
   actions,
   start,
   end,
+  look,
+  place,
 }: ToolbarProps): React.JSX.Element {
   return (
-    <ToolbarFrame start={start} end={end}>
+    <ToolbarFrame start={start} end={end} look={look} place={place}>
       {said(lead) ? <div className="luke-toolbar-lead">{lead}</div> : null}
       <div className="luke-toolbar-heading desktop-toolbar-heading">
         {said(title) ? (

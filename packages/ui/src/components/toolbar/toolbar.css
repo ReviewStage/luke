@@ -88,6 +88,33 @@
     gap: var(--luke-control-gap);
   }
 
+  /* A phone's look: one control in each corner, one control wide, and the
+     title centred between them, cut where it meets them. Each part stands
+     in its own column, so a corner left empty leaves the title centred. */
+  .luke-toolbar[data-look="phone"] {
+    display: grid;
+    grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
+  }
+
+  .luke-toolbar[data-look="phone"] > .luke-toolbar-heading {
+    display: flex;
+    grid-column: 2;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-8);
+  }
+
+  .luke-toolbar[data-look="phone"]
+    > .luke-toolbar-heading
+    > :is(.luke-toolbar-title, .desktop-toolbar-title) {
+    min-width: 0;
+  }
+
+  .luke-toolbar[data-look="phone"] > .luke-toolbar-actions {
+    grid-column: 3;
+    justify-content: flex-end;
+  }
+
   /* A document's name, picked up from its header once that has scrolled
      away: it stands where a title would, arriving over the quick duration
      with a short rise on the spring, and leaving as a fade over the exit,

@@ -12,11 +12,12 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
-  PageToolbar,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   STATUS_TONE,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
@@ -307,9 +308,10 @@ function VersionPageFrame({
 }): React.JSX.Element {
   return (
     <>
-      <PageToolbar
+      <Toolbar
         lead={lead}
-        heading={
+        start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
+        title={
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
@@ -318,7 +320,7 @@ function VersionPageFrame({
             {title}
           </OneLine>
         }
-        actions={actions ?? null}
+        actions={actions}
       />
       <Fill className="desktop-document">
         <DocumentScroll>{children}</DocumentScroll>

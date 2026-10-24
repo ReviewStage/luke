@@ -23,18 +23,41 @@ export const TOOLBAR_INSET = {
 
 export type ToolbarInset = (typeof TOOLBAR_INSET)[keyof typeof TOOLBAR_INSET];
 
+/** How a bar lays its slots. */
+export const TOOLBAR_LOOK = {
+  /** The window's bar: its lead, its heading taking the room left, and its actions at the end. */
+  WINDOW: "window",
+  /** A phone's: one control a corner and the title centred between them, however wide each corner's control. */
+  PHONE: "phone",
+} as const;
+
+export type ToolbarLook = (typeof TOOLBAR_LOOK)[keyof typeof TOOLBAR_LOOK];
+
 /** The bar's banner, inset at each edge as named, holding `children` as they are laid. */
 export function ToolbarFrame({
   start = TOOLBAR_INSET.PAGE,
   end = TOOLBAR_INSET.PAGE,
+  look = TOOLBAR_LOOK.WINDOW,
+  place,
   children,
 }: {
   start?: ToolbarInset | undefined;
   end?: ToolbarInset | undefined;
+  look?: ToolbarLook | undefined;
+  place?: string | undefined;
   children?: ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="luke-toolbar desktop-toolbar" data-start={start} data-end={end}>
+    <header
+      className={
+        place === undefined
+          ? "luke-toolbar desktop-toolbar"
+          : `luke-toolbar desktop-toolbar ${place}-head`
+      }
+      data-start={start}
+      data-end={end}
+      data-look={look}
+    >
       {children}
     </header>
   );
