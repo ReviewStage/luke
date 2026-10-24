@@ -73,6 +73,8 @@
   --luke-color-well: light-dark(#f7f7f8, #121214);
   /* The code on screen, in the ground of GitHub's own themes. */
   --luke-color-code-ground: light-dark(#fff, #0d1117);
+  /* The code's own words, where its highlighter left a run uncoloured: GitHub's too. */
+  --luke-color-code-text: light-dark(#1f2328, #e6edf3);
   --luke-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
   --luke-color-fill-strong: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.09));
   --luke-color-fill-selected: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.2));
@@ -197,6 +199,7 @@
   --luke-color-sidebar-ink: rgba(0, 0, 0, 0.68);
   --luke-color-well: oklch(0.97 0 0);
   --luke-color-code-ground: #fff;
+  --luke-color-code-text: #1f2328;
   /* The site had one fill, its muted ground; a control's states need a
      step each past it, the desktop's light steps, so a chosen segment or a
      pressed button reads apart from one merely hovered. */
@@ -301,6 +304,7 @@
   --luke-color-sidebar-ink: rgba(255, 255, 255, 0.7);
   --luke-color-well: #0e0f12;
   --luke-color-code-ground: #0d1117;
+  --luke-color-code-text: #e6edf3;
   --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
   --luke-color-fill-strong: rgba(255, 255, 255, 0.09);
   --luke-color-fill-selected: rgba(255, 255, 255, 0.2);

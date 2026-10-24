@@ -26,6 +26,7 @@ export function MoreButton({
   thing,
   size,
   disabled,
+  tabbable,
   ref,
   onClick,
   "aria-haspopup": hasPopup,
@@ -37,6 +38,8 @@ export function MoreButton({
   size?: ButtonSize | undefined;
   /** Whether its menu is unavailable now, as a thing being deleted offers none. */
   disabled?: boolean | undefined;
+  /** Whether it is a Tab stop; false leaves it to the pointer, where a neighbour holds the one stop. */
+  tabbable?: boolean | undefined;
   /** Handed the button, which a right-click's menu hands focus back to. */
   ref?: Ref<HTMLButtonElement> | undefined;
   /** Opens or closes the menu (`useMenu`'s `trigger()`). */
@@ -55,6 +58,7 @@ export function MoreButton({
         label={label}
         {...(size === undefined ? {} : { size })}
         disabled={disabled}
+        tabbable={tabbable}
         onClick={onClick}
         aria-haspopup={hasPopup}
         aria-expanded={expanded}

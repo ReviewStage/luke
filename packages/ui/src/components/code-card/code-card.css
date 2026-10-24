@@ -1,0 +1,67 @@
+/* code-card.css -- CodeCard (`code-card.tsx`): a header in the caption's
+   type naming the lines, its Copy at the end; the lines in mono on the
+   code's own ground, whole and scrolling sideways inside the card, each run
+   in the host's colour for the appearance it stands in; and, under a cut
+   block, the line offering the rest. */
+
+@layer components {
+  .luke-code-card {
+    margin: 0;
+  }
+
+  .luke-code-card-header {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-control-gap);
+    padding-left: var(--luke-list-inset);
+    border-bottom: 1px solid var(--luke-color-border);
+    background: var(--luke-color-fill-hover);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* The title holds to one line, fading where the header cuts it (`one-line.css`). */
+  .luke-code-card-title {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    font-family: var(--luke-font-mono);
+  }
+
+  .luke-code-card-body {
+    margin: 0;
+    padding: var(--luke-row-inset) var(--luke-list-inset);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    color: var(--luke-color-code-text);
+    font-family: var(--luke-font-mono);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-reading-leading);
+    overflow-wrap: normal;
+    tab-size: 2;
+    white-space: pre;
+  }
+
+  .luke-code-card-body > code {
+    font: inherit;
+  }
+
+  /* A run the host coloured, in its colour for the appearance it stands in. */
+  .luke-code-card-body span {
+    color: light-dark(
+      var(--luke-code-run-light, var(--luke-color-code-text)),
+      var(--luke-code-run-dark, var(--luke-color-code-text))
+    );
+  }
+
+  .luke-code-card-foot {
+    padding: var(--luke-tight-gap) var(--luke-list-inset);
+    border-top: 1px solid var(--luke-color-border);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+}

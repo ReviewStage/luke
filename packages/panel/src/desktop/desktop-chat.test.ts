@@ -1662,9 +1662,11 @@ test("on a phone the rail's Experimental tag is the experiment's glyph alone, st
     [...page.querySelectorAll(".chat-rail-head button")].map((each) =>
       each.getAttribute("aria-label"),
     ),
-    ["New channel", "More"],
+    ["New channel", "Chat actions"],
   );
-  act(() => page.querySelector<HTMLButtonElement>('.chat-rail-head [aria-label="More"]')?.click());
+  act(() =>
+    page.querySelector<HTMLButtonElement>('.chat-rail-head [aria-label="Chat actions"]')?.click(),
+  );
   assert.deepEqual(
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
@@ -2253,7 +2255,7 @@ test("a group's ⋯ and a right-click on its header offer Mark all as read, whic
   const launch = rightClick(railHead(page, "Launch"));
   assert.equal(menuItem(launch, "Mark all as read").disabled, true);
   const ellipsis = railHead(page, "Pinned").querySelector<HTMLButtonElement>(
-    'button[aria-label="Actions for Pinned"]',
+    'button[aria-label="Pinned actions"]',
   );
   assert.ok(ellipsis, "the group's header offers its actions");
   act(() => ellipsis.click());
