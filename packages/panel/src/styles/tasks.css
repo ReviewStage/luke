@@ -3248,10 +3248,12 @@
 /* The head's fill reaches the ⋯ beside it (`DisclosureFrame`), which
    stands at the head's inset. */
 .annotation-card
-.luke-disclosure-frame:has(
-  > .annotation-card-fold > .luke-disclosure-summary:hover,
-  > .luke-disclosure-actions:hover
-)::before {
+.luke-disclosure-frame:has(> .annotation-card-fold > .luke-disclosure-summary:hover)::before {
+  border-radius: 0;
+  background: var(--luke-color-fill-hover);
+}
+
+.annotation-card .luke-disclosure-frame:has(> :not(details):hover)::before {
   border-radius: 0;
   background: var(--luke-color-fill-hover);
 }

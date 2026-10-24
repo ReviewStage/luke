@@ -251,9 +251,11 @@
     transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
-  .luke-disclosure-frame:has(
-    > details > .luke-disclosure-summary:is([data-look="row"], [data-look="head"])
-  )::before {
+  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="row"])::before {
+    border-radius: 0;
+  }
+
+  .luke-disclosure-frame:has(> details > .luke-disclosure-summary[data-look="head"])::before {
     border-radius: 0;
   }
 
@@ -263,13 +265,17 @@
     background: none;
   }
 
+  /* Note that each of these selectors holds no comma inside its brackets,
+     because the touch-density test reads a rule's selectors by its commas. */
+  .luke-disclosure-frame:has(
+    > details > .luke-disclosure-summary:not([data-look="transcript"]):hover
+  )::before {
+    background: var(--luke-color-fill-strong);
+  }
+
   .luke-disclosure-frame:has(
     > details > .luke-disclosure-summary:not([data-look="transcript"])
-  ):has(
-    > details > summary:hover,
-    > .luke-disclosure-lead:hover,
-    > .luke-disclosure-actions:hover
-  )::before {
+  ):has(> :not(details):hover)::before {
     background: var(--luke-color-fill-strong);
   }
 
