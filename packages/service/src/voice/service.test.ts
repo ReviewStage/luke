@@ -279,6 +279,68 @@ test("a caller who saved no OpenAI key is refused as missing one, and nothing is
   assert.deepEqual(context.record.registered, []);
 });
 
+/** OpenAI's own words for a refused create, which no frame or log line may repeat. */
+const OPENAI_REFUSAL_WORDS = "Incorrect API key provided: sk-test-****-key.";
+
+test("a saved key OpenAI refuses as no key of its own is answered as refused, with none of OpenAI's words", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.openAi.createStatus = 401;
+  context.openAi.createRefusal = {
+    error: {
+      message: OPENAI_REFUSAL_WORDS,
+      type: "invalid_request_error",
+      code: "invalid_api_key",
+    },
+  };
+
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, createFrame());
+  const answer = await opened.reader.next();
+  assert.equal(hostedError(record(answer)), HOSTED_API_ERROR.OPENAI_KEY_REFUSED);
+  assert.equal((await opened.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  const said = [answer, ...context.log.map((entry) => JSON.stringify(entry))].join("\n");
+  assert.ok(!said.includes(OPENAI_REFUSAL_WORDS) && !said.includes(API_KEY));
+  assert.deepEqual(context.record.registered, []);
+});
+
+test("a saved key whose OpenAI account is out of credit is answered as unfunded, and a plain rate limit still as a throttle", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.openAi.createStatus = 429;
+  context.openAi.createRefusal = {
+    error: {
+      message: OPENAI_REFUSAL_WORDS,
+      type: "insufficient_quota",
+      code: "insufficient_quota",
+    },
+  };
+
+  const unfunded = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+  });
+  assert.ok("reader" in unfunded);
+  await send(unfunded.reader.socket, createFrame());
+  const answer = await unfunded.reader.next();
+  assert.equal(hostedError(record(answer)), HOSTED_API_ERROR.OPENAI_KEY_UNFUNDED);
+  assert.ok(!answer.includes(OPENAI_REFUSAL_WORDS));
+
+  context.openAi.createRefusal = {
+    error: { message: "Rate limit reached.", type: "requests", code: "rate_limit_exceeded" },
+  };
+  const throttled = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+  });
+  assert.ok("reader" in throttled);
+  await send(throttled.reader.socket, createFrame());
+  assert.equal(
+    hostedError(record(await throttled.reader.next())),
+    HOSTED_API_ERROR.UPSTREAM_THROTTLED,
+  );
+  assert.deepEqual(context.record.registered, []);
+});
+
 test("a session is authorized, counted, created, registered to its account, attached, and answered in that order", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());

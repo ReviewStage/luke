@@ -108,6 +108,10 @@ export const VOICE_FAILURE = {
   MICROPHONE_REFUSED: "microphone-refused",
   /** A call runs on the account's own OpenAI key, and none is saved. */
   OPENAI_KEY_MISSING: "openai-key-missing",
+  /** OpenAI refused the saved key, as it does a revoked or deleted one. */
+  OPENAI_KEY_REFUSED: "openai-key-refused",
+  /** The saved key's OpenAI account has no credit left. */
+  OPENAI_KEY_UNFUNDED: "openai-key-unfunded",
   /** No credential of the agent's starter pays for a call into it. */
   AGENT_KEY_MISSING: "agent-key-missing",
   /** The agent runs on Claude or Codex, which takes no call yet. */
@@ -124,6 +128,8 @@ export const VOICE_REMEDY = {
   ADD_OPENAI_KEY: "add-openai-key",
   /** System Settings, where the microphone is allowed. */
   ALLOW_MICROPHONE: "allow-microphone",
+  /** OpenAI's billing page, where the key's account is given credit. */
+  ADD_OPENAI_CREDIT: "add-openai-credit",
 } as const;
 
 export type VoiceRemedy = (typeof VOICE_REMEDY)[keyof typeof VOICE_REMEDY];
@@ -147,6 +153,14 @@ export const VOICE_FAILURE_WORDS = {
     words: "Luke could not start the call. A call runs on your OpenAI key, and none is saved.",
     remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
   },
+  [VOICE_FAILURE.OPENAI_KEY_REFUSED]: {
+    words: "Luke could not start the call. OpenAI refused your key, which may have been revoked.",
+    remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
+  },
+  [VOICE_FAILURE.OPENAI_KEY_UNFUNDED]: {
+    words: "Luke could not start the call. Your OpenAI account is out of credit.",
+    remedy: VOICE_REMEDY.ADD_OPENAI_CREDIT,
+  },
   [VOICE_FAILURE.AGENT_KEY_MISSING]: {
     words: "Connect an API key in Settings to call this agent.",
   },
@@ -162,6 +176,7 @@ export const VOICE_FAILURE_WORDS = {
 export const VOICE_REMEDY_LABEL = {
   [VOICE_REMEDY.ADD_OPENAI_KEY]: "Add an OpenAI key",
   [VOICE_REMEDY.ALLOW_MICROPHONE]: "Open System Settings",
+  [VOICE_REMEDY.ADD_OPENAI_CREDIT]: "Add OpenAI credit",
 } as const satisfies Record<VoiceRemedy, string>;
 
 const VOICE_FAILURES: ReadonlySet<string> = new Set(Object.values(VOICE_FAILURE));
