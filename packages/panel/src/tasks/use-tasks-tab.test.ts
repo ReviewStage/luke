@@ -3489,6 +3489,58 @@ test("closing a draft holding words lets it go at once, and its toast's Undo ope
   assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), [], "nothing is started");
 });
 
+test("a draft closed with words whose place a fork has taken since is laid into that fork by Undo, the fork kept", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().agents.draft, "the task holds a draft");
+  });
+  const closed = tab.control().agents.draft;
+  assert.ok(closed);
+  act(() => tab.control().agents.onDraftChange({ prompt: "Fix login." }));
+  act(() => {
+    tab.control().mainTabs.onClose({ draft: closed.id });
+    tab.control().agents.onDiscardDraft(closed.id);
+  });
+  await settle();
+  const fork = { agentId: AGENT_ID, opening: "Ship the invite email." };
+  act(() => {
+    tab.control().agents.onForkDraft(fork);
+  });
+  act(() => tab.control().agents.onDraftChange({ prompt: "Keep its tests." }));
+
+  act(() => _undoButton().click());
+  await settle();
+  const draft = tab.control().agents.draft;
+  assert.equal(draft?.prompt, "Keep its tests.\n\nFix login.");
+  assert.deepEqual(draft?.fork, fork, "the fork written since is kept");
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: draft?.id }, "and its tab is shown");
+});
+
+test("a closed draft's Undo is withdrawn as its task is left", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().agents.draft, "the task holds a draft");
+  });
+  const closed = tab.control().agents.draft;
+  assert.ok(closed);
+  act(() => tab.control().agents.onDraftChange({ prompt: "Fix login." }));
+  act(() => tab.control().agents.onDiscardDraft(closed.id));
+  await settle();
+  assert.equal(newestToastSays(), "Draft closedUndo");
+
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  await settle();
+  assert.notEqual(newestToastSays(), "Draft closedUndo");
+});
+
 test("a task with no agent opens its new agent's draft with a hidden side panel left hidden", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },

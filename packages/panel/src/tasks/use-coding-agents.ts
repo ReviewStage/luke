@@ -43,7 +43,7 @@ import {
 } from "../composer-drafts.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, UNDO_LABEL, useToast, useWithdrawToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
   type AgentRun,
@@ -499,19 +499,40 @@ interface ClosedDraft {
   readonly words: Pick<Draft, "text" | "attachments">;
 }
 
-/** The draft as it would be let go, kept for its Undo, or nothing where it holds no words or files. */
-function closedDraft(on: string, draft: AgentDraft): ClosedDraft | undefined {
-  if (draft.prompt === "" && draft.attachments.length === 0) return undefined;
+/** What a draft holds beside its words and files, as the drafts hold it. */
+function choicesOf(draft: AgentDraft): DraftChoices {
   const { id, choice, disabledServers, fork, refused } = draft;
   return {
+    id,
+    choice,
+    disabledServers,
+    ...forkOf(fork),
+    ...(refused === undefined ? undefined : { refused }),
+  };
+}
+
+/** Whether a draft holds no words or files. */
+function holdsNoWords(draft: AgentDraft): boolean {
+  return draft.prompt === "" && draft.attachments.length === 0;
+}
+
+/** Whether a draft holds nothing at all: no words or files, no fork, and its chips as they open. */
+function holdsNothing(draft: AgentDraft): boolean {
+  return (
+    holdsNoWords(draft) &&
+    draft.fork === undefined &&
+    draft.choice === undefined &&
+    draft.disabledServers.length === 0 &&
+    draft.refused === undefined
+  );
+}
+
+/** The draft as it would be let go, kept for its Undo, or nothing where it holds no words or files. */
+function closedDraft(on: string, draft: AgentDraft): ClosedDraft | undefined {
+  if (holdsNoWords(draft)) return undefined;
+  return {
     on,
-    choices: {
-      id,
-      choice,
-      disabledServers,
-      ...forkOf(fork),
-      ...(refused === undefined ? undefined : { refused }),
-    },
+    choices: choicesOf(draft),
     words: { text: draft.prompt, attachments: draft.attachments },
   };
 }
@@ -1168,31 +1189,48 @@ export function useCodingAgents(input: {
       startsOn === undefined || draft?.id !== draftId ? undefined : closedDraft(startsOn, draft);
     letGo(draftId);
     if (closed === undefined) return;
+    undoable.current = closed.choices.id;
     toast({
       words: DRAFT_CLOSED,
       tone: STATUS_TONE.COMPLETE,
+      subject: closed.choices.id,
       action: { label: UNDO_LABEL, onPress: () => restoreNow.current(closed) },
     });
   };
 
-  // Note that a draft the open plan opened since in the closed one's place,
-  // as a column left with no tab opens one, gives way to it, its words and
-  // files laid in after the closed one's, so nothing written in either is lost.
+  // The closed draft whose Undo stands, withdrawn as the plan it was closed on leaves.
+  const undoable = useRef<string | undefined>(undefined);
+  const withdrawToast = useWithdrawToast();
+  useEffect(
+    () => () => {
+      if (undoable.current !== undefined) withdrawToast(undoable.current);
+      undoable.current = undefined;
+    },
+    [startsOn, withdrawToast],
+  );
+
+  // Note that Undo stands only while the plan the draft was closed on is
+  // open, so the draft standing in its place now is one this hook reads. A
+  // blank one, as a column left with no tab opens, gives way to the draft
+  // closed; one holding words, files, a fork, or chips of its own keeps them,
+  // the closed draft's words and files laid in after its own, under a key of
+  // its own, as a continue's are, since that is another request.
   const restoreDraft = (closed: ClosedDraft) => {
     const { on, choices, words } = closed;
-    const standing = on === startsOn && draft?.id !== choices.id ? draft : undefined;
-    if (standing !== undefined) {
-      writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === standing.id);
+    if (on !== startsOn) return;
+    undoable.current = undefined;
+    const standing = draft?.id === choices.id ? undefined : draft;
+    const keeps = standing !== undefined && !holdsNothing(standing);
+    const id = keeps ? mintKey() : choices.id;
+    if (keeps) {
+      moveWords(on, id, standing.fork, words);
+      withDraft(on, { ...choicesOf(standing), id });
+    } else {
+      if (standing !== undefined) letGo(standing.id);
+      writer.update(wordsPlace(on, id, choices.fork), (was) => ({ ...was, ...words }));
+      withDraft(on, choices);
     }
-    const text = [words.text, standing?.prompt ?? ""].filter((each) => each !== "").join("\n\n");
-    const attachments = [...words.attachments, ...(standing?.attachments ?? [])];
-    writer.update(wordsPlace(on, choices.id, choices.fork), (was) => ({
-      ...was,
-      text,
-      attachments,
-    }));
-    withDraft(on, choices);
-    latest.current.onDraftRestored?.(on, choices.id);
+    latest.current.onDraftRestored?.(on, id);
   };
   const restoreNow = useRef(restoreDraft);
   restoreNow.current = restoreDraft;
