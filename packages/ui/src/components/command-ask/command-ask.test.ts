@@ -45,6 +45,7 @@ function asked(): Record<"once" | "always" | "deny", number> {
   act(() =>
     root.render(
       createElement(CommandAsk, {
+        open: true,
         command: COMMAND,
         onAllowOnce: () => {
           heard.once += 1;

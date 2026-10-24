@@ -15,6 +15,7 @@ import {
   SearchableMenu,
   Spinner,
 } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -78,6 +79,8 @@ function Hung({
   held: Held;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  // Note that the menu is held drawn through its fade, as a panel owner does, so it fades out in place.
+  const drawn = useDisclosure(open);
   const [chosen, setChosen] = useState<string | undefined>("acme/app");
   const [effort, setEffort] = useState("high");
   const menuId = useId();
@@ -99,8 +102,10 @@ function Hung({
       >
         {label}
       </Button>
-      {open && (
+      {drawn.mounted && (
         <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
           id={menuId}
           label="Repository"
           placeholder="Search repositories"

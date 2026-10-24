@@ -235,7 +235,7 @@ export function EditComposer({
           </Button>
         )}
       />
-      <ConfirmDialog confirm={confirm} question={SEND_QUESTION} />
+      <ConfirmDialog open confirm={confirm} question={SEND_QUESTION} />
     </>
   );
 }

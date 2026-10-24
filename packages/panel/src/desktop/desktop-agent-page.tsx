@@ -605,6 +605,7 @@ export function DesktopAgentPage({
                     </div>
                     {/* The second call's question, which a Call press here asks over another agent's call. */}
                     <ConfirmDialog
+                      open
                       confirm={tasks.secondCall.confirm}
                       question={tasks.secondCall.question}
                     />

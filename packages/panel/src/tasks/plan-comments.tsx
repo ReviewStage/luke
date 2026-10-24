@@ -603,6 +603,7 @@ function CommentEntry({
               )}
             </div>
             <ConfirmDialog
+              open
               confirm={deleting}
               question={first ? DELETE_THREAD_QUESTION : DELETE_QUESTION}
             />

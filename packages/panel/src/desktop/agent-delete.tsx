@@ -60,6 +60,7 @@ export function useAgentDelete(
     action: { ...commandAction(PANEL_COMMAND.DELETE_AGENT, confirm.ask, false), danger: true },
     dialog: (
       <ConfirmDialog
+        open
         confirm={confirm}
         question={deleteQuestion(agentName(agent, agents.models), agent.archivedAt !== undefined)}
       />

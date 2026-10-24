@@ -96,7 +96,11 @@ function CommandDialogExample(): React.JSX.Element {
   return (
     <>
       <CatalogSection id="command-dialog-palette" title="A palette, its groups, keys and notes">
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setPalette(true)}>
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          aria-haspopup="dialog"
+          onClick={() => setPalette(true)}
+        >
           Open the palette
         </Button>
         <CommandDialog
@@ -109,7 +113,11 @@ function CommandDialogExample(): React.JSX.Element {
         />
       </CatalogSection>
       <CatalogSection id="command-dialog-reading" title="Still reading its rows">
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setReading(true)}>
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          aria-haspopup="dialog"
+          onClick={() => setReading(true)}
+        >
           Open while reading
         </Button>
         <CommandDialog

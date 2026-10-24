@@ -217,6 +217,6 @@ export function useInboxClose(
       closer === undefined || !open
         ? undefined
         : { label: CLOSE_ITEM_LABEL, icon: <CircleSlashIcon />, onSelect: ask },
-    dialog: <ConfirmDialog confirm={confirm} question={closeQuestion(item)} />,
+    dialog: <ConfirmDialog open confirm={confirm} question={closeQuestion(item)} />,
   };
 }

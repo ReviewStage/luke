@@ -118,6 +118,7 @@ function AccountFoot({
         />
       )}
       <ConfirmDialog
+        open
         confirm={logOut}
         question={{
           title: `${VERB.SIGN_OUT} of ${account.email}?`,

@@ -528,7 +528,7 @@ export function MergeControl({
     <span className="merge-control">
       {face === undefined ? null : <MergeChip face={face} sentence={sentenceOf(pullRequest)} />}
       {drawn}
-      <ConfirmDialog confirm={confirm} question={DEQUEUE_QUESTION} />
+      <ConfirmDialog open confirm={confirm} question={DEQUEUE_QUESTION} />
     </span>
   );
 }

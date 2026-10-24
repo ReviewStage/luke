@@ -35,9 +35,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * on the exit token, drawn, inert, and in its ending state
  * (`data-ending-style`, as Base UI marks a popup leaving) until the fade
  * has run (`useDisclosure`); reduced motion and a capture run, which zero
- * the tokens, take it away at once. An owner that has yet to pass `open`
- * mounts the panel to open it and unmounts it to close it, which goes at
- * once. An owner whose body holds state or reads data while it is drawn
+ * the tokens, take it away at once. An owner always passes `open`: one that
+ * mounts the panel to open it and unmounts it to close it passes `true`,
+ * and it goes at once. An owner whose body holds state or reads data while it is drawn
  * hears `onExited` once the panel is gone, and takes the body out then.
  */
 
@@ -111,7 +111,7 @@ function inside(box: HTMLElement, target: EventTarget | null): boolean {
  * takes it instead; and that it takes it each time it opens.
  */
 export function PopoverPanel({
-  open = true,
+  open,
   id,
   title,
   look = POPOVER_PANEL_LOOK.CARD,
@@ -124,8 +124,8 @@ export function PopoverPanel({
   onKeyDown,
   children,
 }: {
-  /** Whether it stands; falling, it fades out before it goes. Open while mounted where it is left out. */
-  open?: boolean | undefined;
+  /** Whether it stands; falling, it fades out before it goes. */
+  open: boolean;
   /** Its id, which the button that opens it names as what it controls. */
   id?: string | undefined;
   /** What it is called, drawn at a card's head and read as its name. */

@@ -328,6 +328,7 @@ function AccountMenu({
         />
       )}
       <ConfirmDialog
+        open
         confirm={logOut}
         question={{
           title: signedIn ? `${VERB.SIGN_OUT} of ${account.email}?` : `${VERB.SIGN_OUT}?`,

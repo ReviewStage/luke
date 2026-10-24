@@ -325,7 +325,7 @@ export function PullRequestReview({
           }}
         />
       </AnchoredPopover>
-      <ConfirmDialog confirm={discarding} question={DISCARD_QUESTION} />
+      <ConfirmDialog open confirm={discarding} question={DISCARD_QUESTION} />
     </div>
   );
 }

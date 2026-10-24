@@ -292,9 +292,12 @@ export function AttachmentViewer({
 
   // Note that the card takes focus rather than a button, as Quick Look's
   // does, so no ring stands on a control nobody chose; Tab goes on to the
-  // buttons from there.
+  // buttons from there. It stands while it is mounted (`open`), because its
+  // exit is the flight back into its tile (`close`, through `expand`), which
+  // its owner unmounts it after.
   return (
     <Dialog
+      open
       size={DIALOG_SIZE.MEDIA}
       labelledBy={titleId}
       onDismiss={close}

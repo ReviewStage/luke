@@ -697,6 +697,7 @@ export function SearchableMenu(props: {
 
   return (
     <AnchoredPopover
+      open={!leaving}
       align={props.align}
       bounds={props.bounds}
       width={props.width ?? POPOVER_WIDTH.REGULAR}

@@ -372,7 +372,7 @@ function TemplateDocument({
           }}
         />
       </TemplateFrame>
-      <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
+      <ConfirmDialog open confirm={reset} question={RESET_QUESTION} />
     </>
   );
 }

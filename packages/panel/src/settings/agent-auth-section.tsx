@@ -591,6 +591,7 @@ function ClaudeTokenPanel({
         </Stack>
       ) : null}
       <ConfirmDialog
+        open
         confirm={removal}
         question={{
           title: "Disconnect your Claude plan?",
@@ -754,6 +755,7 @@ function ChatGptPanel({
         </Text>
       ) : null}
       <ConfirmDialog
+        open
         confirm={removal}
         question={{
           title: "Disconnect your ChatGPT plan?",
@@ -915,6 +917,7 @@ function ApiKeyPanel({
         />
       )}
       <ConfirmDialog
+        open
         confirm={removal}
         question={{
           title: `Remove your ${name} API key?`,

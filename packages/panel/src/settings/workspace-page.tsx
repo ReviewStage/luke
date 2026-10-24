@@ -551,6 +551,7 @@ function MemberRow({
         }}
       />
       <ConfirmDialog
+        open
         confirm={remove}
         question={{
           title: `Remove ${member.name} from this workspace?`,
@@ -561,6 +562,7 @@ function MemberRow({
         }}
       />
       <ConfirmDialog
+        open
         confirm={makeOwner}
         question={{
           title: `Make ${member.name} the owner of ${workspace.name}?`,
@@ -658,6 +660,7 @@ function MemberLeave({
         )}
       </SettingsRow>
       <ConfirmDialog
+        open
         confirm={leave}
         question={{
           title: `Leave ${workspace.name}?`,
@@ -798,6 +801,7 @@ function OwnerLeave({
       </SettingsRow>
       {heir === undefined ? null : (
         <ConfirmDialog
+          open
           confirm={transfer}
           gate={workspace.name}
           question={{
@@ -1199,6 +1203,7 @@ function Invitations({
         />
       ))}
       <ConfirmDialog
+        open
         confirm={cancellation}
         question={{
           title: "Cancel invitation?",
@@ -1472,6 +1477,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
         }}
       />
       <ConfirmDialog
+        open
         confirm={disconnect}
         question={{
           title: `Disconnect Linear from ${workspace.name}?`,
@@ -1603,6 +1609,7 @@ function ManagedSentry({
         }}
       />
       <ConfirmDialog
+        open
         confirm={disconnect}
         question={{
           title: `Disconnect Sentry from ${workspace.name}?`,
@@ -1824,6 +1831,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         }}
       />
       <ConfirmDialog
+        open
         confirm={remove}
         question={{
           title: `Remove ${workspace.name}'s photo?`,

@@ -63,6 +63,7 @@ function ConfirmOwner({ shown }: OwnerProps): ReactElement {
   return owned(
     confirm.ask,
     createElement(ConfirmDialog, {
+      open: true,
       confirm,
       question: {
         title: "Delete plan?",

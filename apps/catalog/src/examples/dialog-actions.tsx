@@ -39,17 +39,16 @@ function Asking({
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={() => setOpen(true)}>
         {label}
       </Button>
-      {open ? (
-        <Dialog
-          title={title}
-          onDismiss={close}
-          actions={
-            <DialogActions onCancel={close} act={{ verb, tone, running: verb, onPress: close }} />
-          }
-        >
-          <Text tone={TEXT_TONE.MUTED}>Its answers stand at the card's foot.</Text>
-        </Dialog>
-      ) : null}
+      <Dialog
+        open={open}
+        title={title}
+        onDismiss={close}
+        actions={
+          <DialogActions onCancel={close} act={{ verb, tone, running: verb, onPress: close }} />
+        }
+      >
+        <Text tone={TEXT_TONE.MUTED}>Its answers stand at the card's foot.</Text>
+      </Dialog>
     </>
   );
 }
@@ -63,11 +62,14 @@ function Showing(): React.JSX.Element {
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={() => setOpen(true)}>
         Show secret…
       </Button>
-      {open ? (
-        <Dialog title="Webhook secret" onDismiss={close} actions={<DialogActions onDone={close} />}>
-          <Text tone={TEXT_TONE.MUTED}>Copy it now. It is not shown again.</Text>
-        </Dialog>
-      ) : null}
+      <Dialog
+        open={open}
+        title="Webhook secret"
+        onDismiss={close}
+        actions={<DialogActions onDone={close} />}
+      >
+        <Text tone={TEXT_TONE.MUTED}>Copy it now. It is not shown again.</Text>
+      </Dialog>
     </>
   );
 }

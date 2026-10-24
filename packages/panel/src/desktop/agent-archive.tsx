@@ -154,6 +154,7 @@ export function useAgentArchive(
     ),
     dialog: (
       <ConfirmDialog
+        open
         confirm={confirm}
         question={archiveQuestion(agentName(agent, agents.models))}
       />

@@ -1365,7 +1365,7 @@ export const DesktopTasks = memo(function DesktopTasks({
   // The second call's question stands over either page: a Talk press on a
   // task's page asks it, and so does a task started from the New task dialog.
   const secondCall = (
-    <ConfirmDialog confirm={tasks.secondCall.confirm} question={tasks.secondCall.question} />
+    <ConfirmDialog open confirm={tasks.secondCall.confirm} question={tasks.secondCall.question} />
   );
   // A task New task is starting with its agent stands as its page until the start answers.
   if (tasks.starting !== undefined) {

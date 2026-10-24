@@ -375,6 +375,7 @@ function SkillRowView({
         </div>
       </Tooltip>
       <ConfirmDialog
+        open
         confirm={removal}
         question={{
           title: `Remove ${skill.name}?`,
@@ -385,6 +386,7 @@ function SkillRowView({
         }}
       />
       <ConfirmDialog
+        open
         confirm={sharing}
         question={{
           ...shareQuestion(skill.name, workspace),

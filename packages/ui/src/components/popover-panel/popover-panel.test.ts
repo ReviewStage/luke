@@ -58,6 +58,7 @@ function Stage({
     null,
     createElement("button", { type: "button" }, "Outside"),
     createElement(PopoverPanel, {
+      open: true,
       id: "panel",
       title: "Diff settings",
       look,

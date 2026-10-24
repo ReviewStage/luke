@@ -284,6 +284,7 @@ function TokenRepositoryRow({
         }
       </SettingsRow>
       <ConfirmDialog
+        open
         confirm={removal}
         question={{
           title: `Remove ${repository.fullName}?`,
