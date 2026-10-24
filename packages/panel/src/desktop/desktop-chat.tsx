@@ -17,11 +17,13 @@ import {
   GROUP_SURFACE,
   GroupHeader,
   IconButton,
+  joinRefs,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   List,
+  ListMotion,
   ListRow,
   MoreButton,
   moreLabel,
@@ -546,7 +548,7 @@ function topicActionGroups(channel: ChatChannel, dialogs: ChannelDialogs): MenuA
     return [
       [
         {
-          label: "Unarchive channel",
+          label: "Unarchive",
           icon: <UnarchiveIcon />,
           onSelect: () => dialogs.askArchive(channel),
         },
@@ -554,10 +556,10 @@ function topicActionGroups(channel: ChatChannel, dialogs: ChannelDialogs): MenuA
     ];
   }
   return [
-    [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
+    [{ label: "Edit", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
     [
       {
-        label: "Archive channel",
+        label: "Archive",
         icon: <ArchiveIcon />,
         onSelect: () => dialogs.askArchive(channel),
       },
@@ -763,7 +765,7 @@ function RailRows({
   row: (each: ChatRailRow) => React.JSX.Element;
 }): React.JSX.Element {
   return (
-    <List label={name} density={LIST_DENSITY.DENSE} joinsWalk>
+    <List label={name} density={LIST_DENSITY.DENSE} joinsWalk moves>
       {rows.map(row)}
     </List>
   );
@@ -1033,6 +1035,9 @@ function ChatView({
   });
   // The rail's places, For you and every group's, are one Tab stop that ↑↓ walk.
   const railKeys = useRovingKeys<HTMLDivElement>();
+  // Note that the rail's body is the root its rows' motion plays under, so a direct message that gets a message glides to the top.
+  const railBody = useRef<HTMLDivElement | null>(null);
+  const railBodyRef = useMemo(() => joinRefs(railBody, railKeys.ref), [railKeys.ref]);
   // Note that the window's Chat stands on no task's page, so a task's channel is handed its task's mentions here.
   const taskDoors = useTaskDoors(tasks, true);
   const mentionPlace = useMemo(() => mentionPlaceOf(tasks.workspace), [tasks.workspace]);
@@ -1148,27 +1153,29 @@ function ChatView({
           )}
         />
         <ScrollArea fade={SCROLL_FADE.START}>
-          <div className="chat-rail-body" {...railKeys}>
-            <List label="For you" density={LIST_DENSITY.DENSE} joinsWalk>
-              <PlaceRow
-                mark={<AtSignIcon />}
-                title="For you"
-                preview={needsYouWords(rail.forYou)}
-                at={undefined}
-                unread={false}
-                needsYou={rail.forYou > 0}
-                current={view.place.kind === CHAT_PLACE.FOR_YOU}
-                card={undefined}
-                end={undefined}
-                groups={forYouGroups}
-                shown={view.open}
-                onRead={undefined}
-                onChoose={() => view.onChoose(FOR_YOU)}
-              />
-            </List>
-            {groups.lead.map(group)}
-            {groups.tasks.map(group)}
-            {groups.trail.map(group)}
+          <div className="chat-rail-body" {...railKeys} ref={railBodyRef}>
+            <ListMotion root={railBody}>
+              <List label="For you" density={LIST_DENSITY.DENSE} joinsWalk>
+                <PlaceRow
+                  mark={<AtSignIcon />}
+                  title="For you"
+                  preview={needsYouWords(rail.forYou)}
+                  at={undefined}
+                  unread={false}
+                  needsYou={rail.forYou > 0}
+                  current={view.place.kind === CHAT_PLACE.FOR_YOU}
+                  card={undefined}
+                  end={undefined}
+                  groups={forYouGroups}
+                  shown={view.open}
+                  onRead={undefined}
+                  onChoose={() => view.onChoose(FOR_YOU)}
+                />
+              </List>
+              {groups.lead.map(group)}
+              {groups.tasks.map(group)}
+              {groups.trail.map(group)}
+            </ListMotion>
           </div>
         </ScrollArea>
         {single ? null : <ResizeEdge edge={edge} />}

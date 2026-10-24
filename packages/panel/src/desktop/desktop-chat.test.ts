@@ -37,7 +37,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ChatComposer, type ChatComposerMentions } from "../tasks/chat-composer.js";
@@ -67,6 +67,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { onSideBundles } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopChat, TaskChatTab } from "./desktop-chat.js";
@@ -1549,7 +1550,7 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   assert.ok(actions, "a topic's head offers its actions");
   act(() => actions.click());
   const archive = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (item) => item.textContent === "Archive channel",
+    (item) => item.textContent === "Archive",
   );
   act(() => archive?.click());
   // Archiving reaches everyone in the channel but can be undone, so it asks in the accent, not red.
@@ -1575,7 +1576,7 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   act(() => railRow(page, "release-train").click());
   assert.deepEqual(
     rightClick(railRow(page, "release-train")).map((each) => each.textContent),
-    ["Unarchive channel"],
+    ["Unarchive"],
     "an archived topic's menu unarchives it",
   );
   act(() => {
@@ -1649,12 +1650,7 @@ test("every channel's head ends on its menu: Mark as read and Copy link for each
   act(() => railRow(page, "Maria Chen").click());
   assert.deepEqual(channelMenu(page), ["Mark as read (off)", "Copy link"]);
   act(() => railRow(page, "members-schema").click());
-  assert.deepEqual(channelMenu(page), [
-    "Mark as read (off)",
-    "Copy link",
-    "Edit channel",
-    "Archive channel",
-  ]);
+  assert.deepEqual(channelMenu(page), ["Mark as read (off)", "Copy link", "Edit", "Archive"]);
 });
 
 test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag, View options, New channel, and Send feedback; Mark all as read takes every unread dot off", () => {
@@ -2279,7 +2275,7 @@ test("rested on, a task's row hangs its task's card, an agent's direct message i
 test("a row's right-click offers Mark as read while something waits unread in it, and Copy link; a topic's edits and archives it too; Mark as read takes its dot away", () => {
   const page = mountRail();
   const topic = rightClick(railRow(page, "members-schema")).map((each) => each.textContent);
-  assert.deepEqual(topic, ["Copy link", "Edit channel", "Archive channel"]);
+  assert.deepEqual(topic, ["Copy link", "Edit", "Archive"]);
   const offered = rightClick(railRow(page, "teammate-invitations"));
   assert.deepEqual(
     offered.map((each) => each.textContent),
@@ -3053,4 +3049,49 @@ test("the rail's places stand in named lists, For you alone in its own and every
     lists.some(([name, places]) => name === "Channels" && (places as string[]).includes("general")),
     "the channels stand in a list of their own",
   );
+});
+
+/** How tall a row is drawn, in the layout given. */
+const RAIL_ROW = 40;
+
+/** Each row of the rail standing under the rows before it, as a layout would; jsdom lays nothing out. */
+function layRailInOrder(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const rows = [...(this.closest(".chat-rail-body")?.querySelectorAll("li") ?? [])];
+    const top = this.matches("li") ? rows.indexOf(this) * RAIL_ROW : 0;
+    return {
+      top,
+      bottom: top + RAIL_ROW,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: RAIL_ROW,
+    } as DOMRect;
+  });
+}
+
+test("a direct message that gets a message glides up to the top of its group", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const page = mount();
+  layRailInOrder();
+  const direct = () => rail(page).slice(rail(page).indexOf("# Direct messages") + 1);
+  assert.deepEqual(direct(), ["Add teammate invitations", "Invite emails", "Maria Chen"]);
+
+  act(() => railRow(page, "Maria Chen").click());
+  const box = boxNamed(page, "Message Maria Chen");
+  typeInComposer(box, "Hello Maria");
+  pressInComposer(box, "Enter");
+  await settle();
+
+  // The message made it her most recent, so her row stands first.
+  assert.deepEqual(
+    direct().map((name) => name.replace("▸ ", "")),
+    ["Maria Chen", "Add teammate invitations", "Invite emails"],
+  );
+  const row = railRow(page, "Maria Chen").closest("li");
+  const glide = motions.played.find((each) => each.element === row);
+  assert.deepEqual(glide?.keyframes[0], { transform: `translate(0px, ${RAIL_ROW * 2}px)` });
 });
