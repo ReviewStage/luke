@@ -267,6 +267,7 @@ const TREE_STAND_IN: FileTreeModule = {
       search: nothing,
       only: nothing,
       within: nothing,
+      relist: nothing,
       mark: nothing,
       unmount: nothing,
     };

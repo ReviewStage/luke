@@ -1,7 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
+import { noMatchWords, readingWords, TERM } from "@luke/features/words";
 import {
   cssCustomProperties,
+  FailureNote,
   Fill,
   IconButton,
   NOTE_LINE_LOOK,
@@ -18,7 +20,15 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
-import type { FileMark, FileTreeHandle, FolderEntry, ReadFolder } from "../file-tree/contract.js";
+import {
+  type FileMark,
+  type FileTreeHandle,
+  type FileTreeModule,
+  type FolderEntry,
+  type ReadFolder,
+  TREE_STANDING,
+  type TreeStanding,
+} from "../file-tree/contract.js";
 import type { PaneOver } from "./file-view.js";
 import { entriesOf } from "./folder-listings.js";
 
@@ -36,7 +46,9 @@ import { entriesOf } from "./folder-listings.js";
  * the first time the field is used, or over the folders listed so far where
  * that read did not land or was cut short, as the empty field then says; and a filter, which shows only the files
  * Luke showed on the task; ⌘F anywhere in the pane takes the caret to the
- * field. Every name here is the repository's, so the pane is left out of the
+ * field. The tree draws rows alone, so where it stands is said here, in its
+ * place or under it (`FileTreeStage`), which a crumb's tree says the same
+ * way. Every name here is the repository's, so the pane is left out of the
  * screen recording (`ph-no-capture`).
  *
  * Beside its tab the pane is a box of its own, which slides as the panel
@@ -66,6 +78,71 @@ const SEARCH_SCOPE = {
 } as const;
 
 type SearchScope = (typeof SEARCH_SCOPE)[keyof typeof SEARCH_SCOPE];
+
+/** What a tree says in its place while its files are read or a search matches none, and under its rows once a folder was cut short. */
+const TREE_WORDS = {
+  READING: readingWords(TERM.FILE.many),
+  NO_MATCH: noMatchWords(TERM.FILE),
+  CUT_SHORT: "Some folders hold more than the tree lists. Open them on GitHub to see the rest.",
+} as const;
+
+/** Where a tree stands before its bundle has told it anything: its root being read. */
+export const TREE_READING: TreeStanding = { kind: TREE_STANDING.READING };
+
+/**
+ * The host a tree is mounted in, with where it stands said around it: its
+ * bundle or its root being read, why either could not be, with Retry where
+ * listing again may help, or that a search matches nothing, each in the
+ * tree's place; and once a folder was listed short of whole, that line under
+ * its rows. Note that the host stays mounted, hidden while the words stand
+ * in its place, because the tree drawn in it outlives every standing.
+ */
+export function FileTreeStage({
+  module,
+  missed,
+  host,
+  standing,
+  onRetry,
+}: {
+  /** The tree's bundle once it landed; none while it loads or where it could not. */
+  module: FileTreeModule | undefined;
+  /** Whether the bundle could not be loaded. */
+  missed: boolean;
+  host: React.Ref<HTMLElement>;
+  standing: TreeStanding;
+  /** Lists the root again, where it could not be listed. */
+  onRetry: () => void;
+}): React.JSX.Element {
+  if (module === undefined) {
+    return missed ? (
+      <NoteLine look={NOTE_LINE_LOOK.LIST}>{TREE_LOAD_FAILED}</NoteLine>
+    ) : (
+      <NoteLine look={NOTE_LINE_LOOK.LIST} status>
+        {TREE_WORDS.READING}
+      </NoteLine>
+    );
+  }
+  const drawn = standing.kind === TREE_STANDING.DRAWN;
+  return (
+    <>
+      {standing.kind === TREE_STANDING.READING ? (
+        <NoteLine look={NOTE_LINE_LOOK.LIST} status>
+          {TREE_WORDS.READING}
+        </NoteLine>
+      ) : null}
+      {standing.kind === TREE_STANDING.FAILED ? (
+        <FailureNote onRetry={standing.retry ? onRetry : undefined}>{standing.notice}</FailureNote>
+      ) : null}
+      {standing.kind === TREE_STANDING.NO_MATCH ? (
+        <NoteLine look={NOTE_LINE_LOOK.LIST}>{TREE_WORDS.NO_MATCH}</NoteLine>
+      ) : null}
+      <Fill className="file-tree-host" ref={host} hidden={!drawn} />
+      {"cut" in standing && standing.cut ? (
+        <NoteLine look={NOTE_LINE_LOOK.LIST}>{TREE_WORDS.CUT_SHORT}</NoteLine>
+      ) : null}
+    </>
+  );
+}
 
 /** The pane's search field over the tree: Escape clears what is typed, then lets go of the caret, or, in a tree floating over its tab, puts the tree away. */
 function TreeSearch({
@@ -151,6 +228,7 @@ function FileTreeBody({
   const setQuery = search?.onQuery ?? setOwnQuery;
   const [onlyShown, setOnlyShown] = useState(false);
   const [scope, setScope] = useState<SearchScope>(SEARCH_SCOPE.UNREAD);
+  const [standing, setStanding] = useState<TreeStanding>(TREE_READING);
   const everything = useRef<readonly FolderEntry[] | undefined>(undefined);
   const narrowed =
     only ?? (onlyShown && shown !== undefined && shown.length > 0 ? shown : undefined);
@@ -164,6 +242,7 @@ function FileTreeBody({
     if (module === undefined || element === null) return undefined;
     const mounted = module.mount(element, {
       readFolder: (path) => latest.current.listFolder(path),
+      onStanding: setStanding,
       onOpen: (path, newTab) => latest.current.onOpen(path, newTab),
       onViewed: (path) => latest.current.onViewed?.(path),
     });
@@ -257,13 +336,13 @@ function FileTreeBody({
           </Tooltip>
         )}
       </search>
-      {module === undefined ? (
-        <NoteLine look={NOTE_LINE_LOOK.LIST}>
-          {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
-        </NoteLine>
-      ) : (
-        <Fill className="file-tree-host" ref={host} />
-      )}
+      <FileTreeStage
+        module={module}
+        missed={AsyncResult.isFailure(loaded)}
+        host={host}
+        standing={standing}
+        onRetry={() => handle.current?.relist()}
+      />
     </Fill>
   );
 }

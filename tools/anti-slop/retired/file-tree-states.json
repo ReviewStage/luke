@@ -1,0 +1,8 @@
+{
+  "instead": "Say where the file tree stands from its React host, with NoteLine and FailureNote from @luke/ui, whose Retry is the one retry button.",
+  "classes": [
+    { "class": "toolbar-button", "allow": [] },
+    { "class": "file-tree-notice", "allow": [] },
+    { "class": "file-tree-cut", "allow": [] }
+  ]
+}

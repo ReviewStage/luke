@@ -4,14 +4,16 @@ import {
   type FileTreeRowDecorationRenderer,
   getBuiltInSpriteSheet,
 } from "@pierre/trees";
-import type {
-  FileMark,
-  FileTreeHandle,
-  FileTreeModule,
-  FileTreeProps,
-  FileTypeIcon,
-  ReadFolder,
-  RevealOptions,
+import {
+  type FileMark,
+  type FileTreeHandle,
+  type FileTreeModule,
+  type FileTreeProps,
+  type FileTypeIcon,
+  type ReadFolder,
+  type RevealOptions,
+  TREE_STANDING,
+  type TreeStanding,
 } from "./contract.js";
 import {
   browseFolders,
@@ -28,9 +30,11 @@ import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
  * An entry of the renderer's build (`scripts/build.mjs`), imported by the
  * first File tab that shows its tree (`../bundle-loader.ts`), so the bundle every window parses
  * never carries Pierre, nor anything of the tree's own drawing. The root is
- * listed first, and the tab's words for why it could not be stand in the
- * tree's place, with the offer to list it again where that may help.
- * Pierre then draws the tree in a shadow root of its own, virtualised, so a
+ * listed first. The bundle draws rows and no words: where the tree stands,
+ * its root being read, not listed and why, drawn, a folder in it cut short,
+ * or a search matching nothing, is told to the tab (`onStanding`), which
+ * says it with `@luke/ui`'s lines, and its Retry lists the root again
+ * (`relist`). Pierre then draws the tree in a shadow root of its own, virtualised, so a
  * folder of thousands of entries draws only the rows in view; the panel's
  * look reaches it through the `--trees-*` properties the host element sets
  * (`styles/tasks.css`), which a shadow root inherits.
@@ -91,28 +95,6 @@ const FILE_ICON = {
 /** The key that presses the Viewed toggle of the row the tree's keyboard stands on, as the list's V marks its file. */
 const VIEWED_KEY = "v";
 
-/** What the pane says while the root is listed. */
-const READING = "Reading the files…";
-
-/** What stands in the tree's place while a search matches nothing. */
-const NO_MATCH = "No files match.";
-
-/** What stands under the tree once a folder in it was listed short of whole. */
-const CUT_SHORT =
-  "Some folders hold more than the tree lists. Open them on GitHub to see the rest.";
-
-/**
- * The retry's turning arrow, Lucide's `RotateCw` as `retry-button.tsx` draws
- * it. Note that its paths are written out here, because this bundle carries
- * no React and so cannot draw Lucide's component.
- */
-const RETRY_GLYPH_PATHS = [
-  "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8",
-  "M21 3v5h-5",
-] as const;
-
-const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-
 /** The row element a press landed in, through the tree's shadow root. */
 function pressedRow(event: Event): HTMLElement | undefined {
   return event
@@ -121,43 +103,6 @@ function pressedRow(event: Event): HTMLElement | undefined {
       (target): target is HTMLElement =>
         target instanceof HTMLElement && target.dataset.type === ROW.TYPE,
     );
-}
-
-/** The retry's glyph, stroked in the button's colour like every Lucide glyph in the window. */
-function retryGlyph(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NAMESPACE, "svg");
-  svg.setAttribute("class", "lucide");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  for (const d of RETRY_GLYPH_PATHS) {
-    const path = document.createElementNS(SVG_NAMESPACE, "path");
-    path.setAttribute("d", d);
-    svg.append(path);
-  }
-  return svg;
-}
-
-/** The words standing in the tree's place, with a button that lists again where `retry` is given. */
-function notice(text: string, retry: (() => void) | undefined): HTMLElement {
-  const box = document.createElement("div");
-  box.className = "file-tree-notice";
-  const words = document.createElement("p");
-  words.className = "m-0";
-  words.textContent = text;
-  box.append(words);
-  if (retry === undefined) return box;
-  box.setAttribute("role", "alert");
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "toolbar-button";
-  button.append(retryGlyph(), "Retry");
-  button.addEventListener("click", retry);
-  box.append(button);
-  return box;
 }
 
 /** One of the trees the pane shows, and the element it draws in, which is hidden while the other stands. */
@@ -192,6 +137,15 @@ function entriesOf(read: ReadFolder, onCut: () => void) {
       if (listed.truncated) onCut();
       return listed.entries;
     });
+}
+
+/** Whether two standings say the same, so the tab is told only of a change. */
+function sameStanding(told: TreeStanding, standing: TreeStanding): boolean {
+  if (told.kind !== standing.kind) return false;
+  if (told.kind === TREE_STANDING.FAILED && standing.kind === TREE_STANDING.FAILED)
+    return told.notice === standing.notice && told.retry === standing.retry;
+  if ("cut" in told && "cut" in standing) return told.cut === standing.cut;
+  return true;
 }
 
 const iconResolver = createFileTreeIconResolver(TREE_LOOK.icons);
@@ -235,10 +189,18 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   let taken = false;
   // The reveal asked before the tree is drawn.
   let waiting: { path: string; options: RevealOptions } | undefined;
-  const empty = notice(NO_MATCH, undefined);
-  // Note that the line saying a folder was cut short is added once, under the tree.
-  const cut = notice(CUT_SHORT, undefined);
-  cut.classList.add("file-tree-cut");
+  // Whether the root is being listed, and whether a folder was listed short of whole.
+  let listing = false;
+  let cut = false;
+  let told: TreeStanding | undefined;
+
+  // The tab hears where the tree stands only when that changes, so a
+  // search over folders still landing tells it nothing new row by row.
+  const tell = (standing: TreeStanding) => {
+    if (told !== undefined && sameStanding(told, standing)) return;
+    told = standing;
+    props.onStanding(standing);
+  };
 
   // Each file's row ends as its mark says; a folder's says nothing more.
   const decorate: FileTreeRowDecorationRenderer = ({ item }) =>
@@ -262,7 +224,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   const framed = (view: View): View => {
     if (marked !== undefined) markAlone(view.tree, marked, false);
     view.tree.setGitStatus(marks);
-    empty.before(view.frame);
+    host.append(view.frame);
     dress(view.tree);
     return view;
   };
@@ -274,14 +236,13 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     for (const each of [browse, shown, whole]) {
       if (each !== undefined) each.frame.hidden = each !== view || matchless;
     }
-    empty.hidden = !matchless;
+    tell({ kind: matchless ? TREE_STANDING.NO_MATCH : TREE_STANDING.DRAWN, cut });
   };
 
   const draw = () => {
     browse = viewOf([], "closed", decorate);
     browse.tree.setGitStatus(marks);
-    empty.hidden = true;
-    host.replaceChildren(browse.frame, empty);
+    host.replaceChildren(browse.frame);
     dress(browse.tree);
     // Note that a search stands over folders still being listed, so whether
     // it matches anything is asked again as each listing lands.
@@ -293,7 +254,8 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     browser = browseFolders(
       browse.tree,
       entriesOf(props.readFolder, () => {
-        if (!cut.isConnected) host.append(cut);
+        cut = true;
+        present();
       }),
     );
     if (waiting !== undefined) browser.reveal(waiting.path, waiting.options).catch(() => undefined);
@@ -302,11 +264,14 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   };
 
   const list = () => {
-    host.replaceChildren(notice(READING, undefined));
+    listing = true;
+    host.replaceChildren();
+    tell({ kind: TREE_STANDING.READING });
     props.readFolder("").then((root) => {
+      listing = false;
       if (taken) return;
       if ("notice" in root)
-        host.replaceChildren(notice(root.notice, root.retry ? list : undefined));
+        tell({ kind: TREE_STANDING.FAILED, notice: root.notice, retry: root.retry });
       else draw();
     });
   };
@@ -391,6 +356,10 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
         view.tree.setComposition(view.tree.getComposition());
         dress(view.tree);
       }
+    },
+    relist: () => {
+      if (browse !== undefined || listing || taken) return;
+      list();
     },
     unmount: () => {
       taken = true;

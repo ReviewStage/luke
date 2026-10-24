@@ -224,6 +224,7 @@ const treeStandIn: FileTreeModule = {
       search: nothing,
       only: nothing,
       within: nothing,
+      relist: nothing,
       mark: (marks) => treeMarks.push(marks),
       unmount: nothing,
     };
