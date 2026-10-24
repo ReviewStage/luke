@@ -11,6 +11,7 @@ import {
 } from "@luke/features/date-mention";
 import { encodeMention, MENTION_KIND, type MentionPlace } from "@luke/features/mention-link";
 import {
+  ALIGN,
   AnchoredPopover,
   BUTTON_VARIANT,
   Button,
@@ -19,6 +20,8 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  type FieldControl,
+  FormField,
   GAP,
   Inline,
   type MenuRow,
@@ -61,10 +64,14 @@ import { SwitchRow } from "../settings/switch-row.js";
  * to bottom it holds a field for each end's date, as Notion's does, each
  * read as an `@` word is read (`dateOfWords`, so `next fri 3pm` works) as
  * Enter or leaving the field takes it, and beside each, while Include
- * time is on, the end's time; the month the date's start falls in
- * (`@luke/ui`'s `Calendar`); End date, after which the next pick sets the
- * range's end; Include time; while it is on, Time zone, the zone the times
- * are read in; and Clear.
+ * time is on, the end's time. Each end stands under its name, Start or End,
+ * as a form's field does (`@luke/ui`'s `FormField`), and words that name no
+ * date are kept, the field marked, with a line under it saying what to
+ * write, so the field says so in words and not by its shake alone, which
+ * reduced motion holds still. Under the fields stand the month the date's
+ * start falls in (`@luke/ui`'s `Calendar`); End date, after which the next
+ * pick sets the range's end; Include time; while it is on, Time zone, the
+ * zone the times are read in; and Clear.
  *
  * Time zone opens on the reader's own zone, and its field turns the card to
  * a page of every zone the runtime knows, searched as the window's other
@@ -154,6 +161,8 @@ const WORDS = {
   /** The date fields', named apart from the End date switch. */
   START_DATE: "Start",
   END_DATE: "End",
+  /** Under a date field whose words name no date; its example a fixed day, so the words never read the clock. */
+  UNREAD: "Write a date, such as Oct 24.",
   END: "End date",
   TIME: "Include time",
   ZONE: "Time zone",
@@ -522,14 +531,13 @@ function DatePickerPanel({
     setMonth(next.day.slice(0, 7));
     return true;
   };
-  const dateField = (which: DateEnd, moment: DateWallMoment) => {
+  const dateField = (which: DateEnd, moment: DateWallMoment, control: FieldControl) => {
     const typing = draft.typing?.end === which ? draft.typing : undefined;
     return (
       <TextField
         ref={which === DATE_END.START ? field : undefined}
-        label={which === DATE_END.START ? WORDS.START_DATE : WORDS.END_DATE}
+        field={control}
         value={typing?.words ?? dayWords(moment)}
-        invalid={typing?.invalid === true}
         spellCheck={false}
         onChange={(words) =>
           update({ ...latest.current, typing: { end: which, words, invalid: false } })
@@ -543,6 +551,24 @@ function DatePickerPanel({
       />
     );
   };
+  // Each end under its label, its time beside its date while Include time is on, and under both the line saying its words named no date.
+  const endField = (which: DateEnd, moment: DateWallMoment) => (
+    <FormField
+      label={which === DATE_END.START ? WORDS.START_DATE : WORDS.END_DATE}
+      error={draft.typing?.end === which && draft.typing.invalid ? WORDS.UNREAD : undefined}
+    >
+      {(control) =>
+        timed ? (
+          <Inline gap={GAP.CONTROL} wrap={false}>
+            {dateField(which, moment, control)}
+            {timeField(which, moment)}
+          </Inline>
+        ) : (
+          dateField(which, moment, control)
+        )
+      }
+    </FormField>
+  );
   const timeField = (which: DateEnd, moment: DateWallMoment) => (
     <TimeField
       label={which === DATE_END.START ? WORDS.START_TIME : WORDS.END_TIME}
@@ -595,21 +621,13 @@ function DatePickerPanel({
         <Stack gap={GAP.TIGHT}>
           {timed ? (
             <>
-              <Inline gap={GAP.CONTROL} wrap={false}>
-                {dateField(DATE_END.START, start)}
-                {timeField(DATE_END.START, start)}
-              </Inline>
-              {end === undefined ? null : (
-                <Inline gap={GAP.CONTROL} wrap={false}>
-                  {dateField(DATE_END.END, end)}
-                  {timeField(DATE_END.END, end)}
-                </Inline>
-              )}
+              {endField(DATE_END.START, start)}
+              {end === undefined ? null : endField(DATE_END.END, end)}
             </>
           ) : (
-            <Inline gap={GAP.CONTROL} wrap={false}>
-              {dateField(DATE_END.START, start)}
-              {end === undefined ? null : dateField(DATE_END.END, end)}
+            <Inline gap={GAP.CONTROL} align={ALIGN.START} wrap={false}>
+              {endField(DATE_END.START, start)}
+              {end === undefined ? null : endField(DATE_END.END, end)}
             </Inline>
           )}
         </Stack>
