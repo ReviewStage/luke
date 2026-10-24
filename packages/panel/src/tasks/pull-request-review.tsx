@@ -3,6 +3,7 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   AnchoredPopover,
   BUTTON_VARIANT,
@@ -69,7 +70,7 @@ const REVIEW_WORDS = {
 /** What Discard asks before it throws the member's pending review away. */
 const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard your pending review?",
-  body: "This deletes every pending comment you added to it. This can't be undone.",
+  body: `This deletes every pending comment you added to it. ${IRREVERSIBLE_WORDS}`,
   verb: "Discard review",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,

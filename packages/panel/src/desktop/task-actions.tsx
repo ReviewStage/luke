@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
@@ -391,7 +392,7 @@ function TaskMenuFooter({
  * all of it.
  */
 function deleteQuestion(name: string, settled: boolean): DialogQuestion {
-  const lost = `“${name}” and its board and transcript will be deleted. This can’t be undone.`;
+  const lost = `“${name}” and its board and transcript will be deleted. ${IRREVERSIBLE_WORDS}`;
   return {
     title: "Permanently delete task?",
     body: settled ? lost : `${lost} To keep it out of the way instead, mark it done.`,

@@ -53,6 +53,9 @@ export const FIELD_WORDS = {
   HIDE: "Hide",
 } as const;
 
+/** The one line a confirm closes with when its act cannot be undone, written once so no screen spells it its own way. */
+export const IRREVERSIBLE_WORDS = "This cannot be undone.";
+
 /** How English counts: "one" for 1, "other" for 0, 2, and 1.5. */
 const PLURAL = new Intl.PluralRules("en-US");
 

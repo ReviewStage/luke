@@ -4446,7 +4446,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
       refused?.querySelector(".luke-hover-card-name")?.textContent,
       refused?.querySelector(".luke-hover-card-note")?.textContent,
     ],
-    ["Their ledger", "Luke can't read this page."],
+    ["Their ledger", "Luke cannot read this page."],
   );
 });
 

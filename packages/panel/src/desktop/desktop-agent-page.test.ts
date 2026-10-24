@@ -2102,7 +2102,7 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   assert.equal(title?.textContent, "Permanently delete agent?");
   assert.match(
     body?.textContent ?? "",
-    /and its transcript will be deleted\. This can’t be undone\. To keep it out of the way instead, archive it\.$/u,
+    /and its transcript will be deleted\. This cannot be undone\. To keep it out of the way instead, archive it\.$/u,
   );
   assert.equal(
     document.activeElement,
