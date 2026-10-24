@@ -92,6 +92,11 @@ export function readingWords(things: string): string {
   return `Reading ${things}`;
 }
 
+/** What a way back says of where it leads, the place named as it stands mid-sentence: "Back to chat", "Back to MCP servers". */
+export function backToWords(place: string): string {
+  return `Back to ${place}`;
+}
+
 /** What a search or filter that found nothing says: "No tasks match". */
 export function noMatchWords(noun: Noun): string {
   return `No ${noun.many} match`;

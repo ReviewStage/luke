@@ -9,13 +9,19 @@
  * bar), and its slots stand in one order, each drawn only where it says
  * something:
  *
- * - `lead` stands first: a way back, crumbs, or a tab strip, controls the
- *   bar lays at its control gap and lets shrink before the actions do.
+ * - `lead` stands first: a way back (`BackButton`) or a tab strip, controls
+ *   the bar lays at its control gap and lets shrink before the actions do.
  * - The heading takes the room left, whether or not it holds a title, so
  *   the actions always end the bar. Its `title` is the page's name, drawn as
  *   its level-one heading on one line that fades out where the bar cuts it,
  *   as a row's name does, its hint reading it whole; a title that is more than words (an
  *   editable name, its skeleton block) stands there as given.
+ * - Where the page has a parent, the caller hands its `trail`, the places
+ *   above it outermost first, and the bar leads its heading with them as
+ *   crumbs (`Breadcrumbs`), each a press back to its place, the page's
+ *   `title` last as words that are no press, said to be the page the
+ *   reader stands on. A place that wears its glyph is the trail's folding
+ *   way back, whose words fold away as the bar's acts do.
  * - `tag` follows the title on its last baseline: a capsule naming the
  *   page's state (an experiment), or a switch of its view.
  * - `actions` end the bar, at the control gap.
@@ -46,6 +52,7 @@
 
 import type { ReactNode } from "react";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
+import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/breadcrumbs.js";
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
 import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
@@ -75,6 +82,17 @@ export type NotFoundThing = (typeof NOT_FOUND_THING)[keyof typeof NOT_FOUND_THIN
 /** The not-found state's title, the same for every thing. */
 const NOT_FOUND_TITLE = "Not found";
 
+/** The name of a trail's landmark. */
+const TRAIL_LABEL = "Path";
+
+/** A place above the page in its trail: its name, the glyph it wears where it wears one, and the press back to it. */
+export interface ToolbarPlace {
+  readonly label: string;
+  /** The place's own glyph, which makes it the trail's folding way back; words alone where none is given. */
+  readonly icon?: ReactNode;
+  readonly onPress: () => void;
+}
+
 /** A document's name as the bar picks it up from the page's header: shown only once the header has scrolled away. */
 export interface ToolbarPickUp {
   /** The header's title in words; none draws nothing. */
@@ -85,10 +103,12 @@ export interface ToolbarPickUp {
 
 /** What a workspace's bar holds, each slot drawn only where it says something. */
 export interface ToolbarProps {
-  /** What stands first: a way back, crumbs, or a tab strip. */
+  /** What stands first: a way back (`BackButton`) or a tab strip. */
   readonly lead?: ReactNode;
   /** The page's name, drawn as its heading on one line; a node that is more than words stands as given. */
   readonly title?: ReactNode;
+  /** The places above the page, outermost first, which lead its heading as crumbs with the `title` last; read only where the title is words. */
+  readonly trail?: readonly ToolbarPlace[] | undefined;
   /** A document's name, shown in the title's place once its header has scrolled away; read only where there is no `title`. */
   readonly pickUp?: ToolbarPickUp | undefined;
   /** After the title, on its last baseline: a capsule naming the page's state, or a switch of its view. */
@@ -124,6 +144,31 @@ function ToolbarTitle({ title }: { title: ReactNode }): React.JSX.Element {
   );
 }
 
+/** A place of the trail as a crumb: the folding way back where it wears a glyph, a quiet pill where it does not. */
+function placeCrumb(place: ToolbarPlace): Crumb {
+  const onPress = () => place.onPress();
+  return place.icon === undefined
+    ? { label: place.label, onPress }
+    : { label: place.label, icon: place.icon, onPress };
+}
+
+/** The page's trail: the places above it, then its own name last, words that are no press, said to be the current page. */
+function ToolbarTrail({
+  trail,
+  title,
+}: {
+  trail: readonly ToolbarPlace[];
+  title: string;
+}): React.JSX.Element {
+  return (
+    <Breadcrumbs
+      label={TRAIL_LABEL}
+      variant={BREADCRUMBS_VARIANT.TITLE}
+      crumbs={[...trail.map(placeCrumb), { label: title, current: true }]}
+    />
+  );
+}
+
 /** The name the bar picks up from a document's header: words on one line, there to fade in and out, hidden from a reader until shown. */
 function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Element {
   return (
@@ -146,6 +191,7 @@ function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Eleme
 export function Toolbar({
   lead,
   title,
+  trail,
   pickUp,
   tag,
   actions,
@@ -158,7 +204,9 @@ export function Toolbar({
     <ToolbarFrame start={start} end={end} look={look} place={place}>
       {said(lead) ? <div className="luke-toolbar-lead">{lead}</div> : null}
       <div className="luke-toolbar-heading desktop-toolbar-heading">
-        {said(title) ? (
+        {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
+          <ToolbarTrail trail={trail} title={title} />
+        ) : said(title) ? (
           <ToolbarTitle title={title} />
         ) : pickUp !== undefined && pickUp.name !== "" ? (
           <ToolbarPickedUp pickUp={pickUp} />

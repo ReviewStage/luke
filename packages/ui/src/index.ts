@@ -6,6 +6,7 @@ export * from "./components/auth-page/auth-mark.js";
 export * from "./components/auth-page/auth-page.js";
 export * from "./components/auth-page/social-sign-in.js";
 export * from "./components/avatar/avatar.js";
+export * from "./components/back-button/back-button.js";
 export * from "./components/badge/badge.js";
 export * from "./components/banner/banner.js";
 export * from "./components/bar-item/bar-item.js";
