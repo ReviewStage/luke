@@ -435,7 +435,7 @@ export function WorkspacesScreen({
           <WorkspacesSections
             list={list}
             rows={rows}
-            searched={tokens.length > 0}
+            searched={tokens.length > 0 || list.search !== undefined}
             onOpenAccount={onOpenAccount}
           />,
         ),

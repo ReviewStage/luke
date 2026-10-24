@@ -278,7 +278,7 @@ export function UsersScreen({
           <UsersSections
             list={list}
             rows={rows}
-            searched={tokens.length > 0}
+            searched={tokens.length > 0 || list.search !== undefined}
             windowDays={windowDays}
             onOpenAccount={onOpenAccount}
             onToggleFavorite={toggleFavorite}

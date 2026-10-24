@@ -195,7 +195,7 @@ test("a search no account answers says so in the table's place", async () => {
   type(searchBox(page), "nobody");
 
   expect(page.querySelector("table")).toBeNull();
-  expect(page.textContent).toContain("No account matches.");
+  expect(page.textContent).toContain("No accounts match");
   expect(page.textContent).toContain("0 of 2 accounts");
   expect(searchBox(page).value).toBe("nobody");
 });
@@ -217,7 +217,7 @@ test("a miss among a truncated roster's loaded rows still says search reads ever
 
   type(searchBox(page), "nobody");
 
-  expect(page.textContent).toContain("No account matches.");
+  expect(page.textContent).toContain("No accounts match");
   expect(page.textContent).toContain(
     "Only the 2 most recently active accounts are listed. Search reads every account.",
   );
@@ -257,7 +257,7 @@ test("under the roster, the sign-in methods count every account, whatever the se
 test("a search that finds nobody still shows how every kept account signs in", async () => {
   const page = await openUsers(roster({ search: "nobody", total: 0, rows: [] }));
 
-  expect(page.textContent).toContain("No account matches.");
+  expect(page.textContent).toContain("No accounts match");
   expect(page.textContent).toContain("Linked sign-in methods");
   expect(page.textContent).toContain("GitHubGoogle");
 });

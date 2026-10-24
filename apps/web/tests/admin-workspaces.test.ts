@@ -168,7 +168,7 @@ test("typing narrows the loaded workspaces at once, and a miss says so", async (
 
   type(page, "nobody");
   expect(page.querySelector("table")).toBeNull();
-  expect(page.textContent).toContain("No workspace matches.");
+  expect(page.textContent).toContain("No workspaces match");
   // The headline counts stand whatever the search narrows.
   expect(page.textContent).toContain("Shared workspaces20");
 });
