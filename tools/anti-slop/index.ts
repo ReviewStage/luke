@@ -5,6 +5,7 @@ import { enforceDeleteWithWhereRule } from "./rules/enforce-delete-with-where.ts
 import { enforceUpdateWithWhereRule } from "./rules/enforce-update-with-where.ts";
 import { noAwaitDrizzleStatementRule } from "./rules/no-await-drizzle-statement.ts";
 import { noDocumentPressListenerRule } from "./rules/no-document-press-listener.ts";
+import { noHandWrittenLiveRegionRule } from "./rules/no-hand-written-live-region.ts";
 import { noLucideOutsideDoorRule } from "./rules/no-lucide-outside-door.ts";
 import { noNodeTestRule } from "./rules/no-node-test.ts";
 import { noOpenPageFromButtonRule } from "./rules/no-open-page-from-button.ts";
@@ -30,6 +31,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "enforce-update-with-where": enforceUpdateWithWhereRule,
     "no-await-drizzle-statement": noAwaitDrizzleStatementRule,
     "no-document-press-listener": noDocumentPressListenerRule,
+    "no-hand-written-live-region": noHandWrittenLiveRegionRule,
     "no-lucide-outside-door": noLucideOutsideDoorRule,
     "no-node-test": noNodeTestRule,
     "no-open-page-from-button": noOpenPageFromButtonRule,

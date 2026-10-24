@@ -262,6 +262,12 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   refused (`anti-slop/no-raw-heading-outside-ui`): draw it with `Text`,
   `as={TEXT_ELEMENT.H2}` for the outline and a type role (`TEXT_VARIANT.GROUP`,
   `SECTION`, `DIALOG`, `TITLE`) for the look, so no sheet sets a heading's font.
+- **Words read aloud go through `announce`.** Outside this package an
+  intrinsic `role="status"`, `role="alert"`, `role="log"` or `aria-live` is
+  refused (`anti-slop/no-hand-written-live-region`): say it with
+  `announce(ANNOUNCE.POLITE | ANNOUNCE.ALERT, words)` and the one `Announcer`.
+  The blocks that stand in the page keep their roles here: `ErrorState`,
+  `FailureNote`, `EmptyState`, `NoteLine`, the toast stack and the announcer.
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
   `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
