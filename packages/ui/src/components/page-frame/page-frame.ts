@@ -32,7 +32,7 @@ export type PageWidth = (typeof PAGE_WIDTH)[keyof typeof PAGE_WIDTH];
 
 /** A page headed by its own title, the acts at its end. */
 type HeadedByPage = {
-  frame?: typeof PAGE_FRAME.PAGE;
+  frame: typeof PAGE_FRAME.PAGE;
   /** What the page shows, which names it. */
   title: ReactNode;
   description?: ReactNode;

@@ -7,6 +7,7 @@ import {
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { CONFIRM_LOSS } from "@luke/ui";
 import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
@@ -94,6 +95,7 @@ function versionHistoryControl(
     onList: ignore,
     onStand: ignore,
     onRetry: ignore,
+    onRetryVersion: ignore,
     onLoadEarlier: () => Promise.resolve(false),
     onRestore: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     ...overrides,
@@ -140,6 +142,7 @@ export function codingAgentsControl(
     listMissing: false,
     onRetryList: ignore,
     models: undefined,
+    modelsFailed: false,
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
@@ -343,7 +346,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
         run: ignore,
         standing: false,
       },
-      question: { title: "", body: "", verb: "", running: "" },
+      question: { title: "", body: "", verb: "", running: "", loss: CONFIRM_LOSS.IRREVERSIBLE },
     },
     inbox: [],
     inboxShown: null,
@@ -432,6 +435,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       repositoriesIn: () => NO_REPOSITORIES,
       start: () => Promise.resolve(undefined),
       models: undefined,
+      modelsFailed: false,
       readModels: ignore,
       readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
       onClose: ignore,

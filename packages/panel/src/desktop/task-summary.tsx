@@ -5,21 +5,23 @@ import {
   CARD_PADDING,
   CARD_SHADOW,
   Card,
-  type ContextMenuProps,
   GAP,
   IconButton,
   LAYOUT_ELEMENT,
   LIST_DENSITY,
   List,
   ListRow,
+  type ListRowMenu,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
   Stack,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
-  useMenu,
+  usePressAway,
 } from "@luke/ui";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { sameTab } from "@luke/ui/tab-strip-model";
@@ -44,7 +46,8 @@ import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { ActionMenu } from "./action-menu.js";
+import { keptFlag, keptKey, useKept } from "../use-kept.js";
+import { rowMenu } from "./action-menu.js";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
 import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
@@ -65,7 +68,7 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * file tree's own: its type's coloured icon, height, and type size. A row
  * opens what it names exactly as its "+" row does: a kind or a
  * file opens the side panel on its tab, and an agent chooses its tab in the
- * column. An agent's row offers Archive agent on a right-click, and the
+ * column. An agent's row offers Archive on a right-click, and the
  * agents archived are folded under Archived at the foot of Coding agents
  * (`agent-archive.tsx`).
  *
@@ -98,11 +101,11 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  */
 
 /**
- * The storage key the pin is kept under. Note that a `false` kept from when
- * unpinning hid the summary now reads collapsed, the nearest thing to hidden
- * the summary still has.
+ * The pin is kept on this Mac, pinned where none was. Note that a `false`
+ * kept from when unpinning hid the summary now reads collapsed, the nearest
+ * thing to hidden the summary still has.
  */
-const SUMMARY_PINNED_KEY = "luke.summary-pinned";
+const KEPT = { PINNED: keptKey("luke.summary-pinned", keptFlag) } as const;
 
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
@@ -173,35 +176,18 @@ export interface SummaryPin {
   onMeasured: (wide: boolean) => void;
 }
 
-/** The kept pin, or pinned where there is none or storage refuses the read. */
-function readPinned(): boolean {
-  try {
-    return window.localStorage.getItem(SUMMARY_PINNED_KEY) !== "false";
-  } catch {
-    return true;
-  }
-}
-
 /**
  * The pin, kept across launches. A fixture run starts pinned and keeps
  * nothing, so its frames never wear a developer's own choice.
  */
 export function useSummaryPin(fixtureMode: boolean): SummaryPin {
-  const [kept, setKept] = useState(readPinned);
+  const [kept, , changeKept] = useKept(KEPT.PINNED, true);
   const [staged, setStaged] = useState(true);
   const [wide, setWide] = useState(true);
   const onToggle = useCallback(
-    () => (fixtureMode ? setStaged : setKept)((was) => !was),
-    [fixtureMode],
+    () => (fixtureMode ? setStaged : changeKept)((was) => !was),
+    [fixtureMode, changeKept],
   );
-  // A write that fails costs only the preference, so it is not worth a word on screen.
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SUMMARY_PINNED_KEY, String(kept));
-    } catch {
-      // The summary keeps working on the pin it holds.
-    }
-  }, [kept]);
   const pinned = fixtureMode ? staged : kept;
   // The same pin across draws while none of it moves, so the column it is handed to is not drawn again for a new one.
   return useMemo(() => ({ pinned, onToggle, wide, onMeasured: setWide }), [pinned, onToggle, wide]);
@@ -423,7 +409,7 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
     inboxHolds || sidePanel.tabs.includes(SIDE_PANEL_TAB.INBOX)
-      ? [inboxEntry(() => sidePanel.onChoose(SIDE_PANEL_TAB.INBOX), inbox.open.length)]
+      ? [inboxEntry(() => sidePanel.onChoose(SIDE_PANEL_TAB.INBOX), inbox.waiting.length)]
       : [];
   // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
   const commented = openComments !== undefined && openComments > 0;
@@ -523,11 +509,11 @@ export function summaryHolds(
 function SummaryRow({
   entry,
   onPick,
-  contextMenu,
+  menu,
 }: {
   entry: SummaryEntry;
   onPick: () => void;
-  contextMenu?: ContextMenuProps | undefined;
+  menu?: ListRowMenu | undefined;
 }) {
   return (
     <RowHintOptions card={entry.card} cardBeside>
@@ -538,13 +524,16 @@ function SummaryRow({
         meta={entry.endMark}
         hint={entry.card === undefined ? undefined : { Hint: RowHint, label: entry.row.label }}
         onPress={onPick}
-        contextMenu={contextMenu}
+        menu={menu}
       />
     </RowHintOptions>
   );
 }
 
-/** An agent's row, whose right-click offers Copy link and Archive agent, asking first while the agent still works. */
+/** What an agent's row is, naming its ⋯ and menu "Agent actions". */
+const AGENT_THING = "Agent";
+
+/** An agent's row, whose ⋯, right-click and menu key offer Copy link and Archive, asking first while the agent still works. */
 function AgentSummaryRow({
   entry,
   agent,
@@ -559,19 +548,18 @@ function AgentSummaryRow({
   onPick: () => void;
 }) {
   const archive = useAgentArchive(agent, agents, shown);
-  const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   return (
     <>
-      <SummaryRow entry={entry} onPick={onPick} contextMenu={menu.contextMenu()} />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label="Agent actions"
-          menu={menu.drawn}
-          groups={copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]]}
-          onClose={menu.close}
-        />
-      )}
+      <SummaryRow
+        entry={entry}
+        onPick={onPick}
+        menu={rowMenu(
+          AGENT_THING,
+          copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]],
+          shown,
+        )}
+      />
       {archive.dialog}
     </>
   );
@@ -609,7 +597,9 @@ function SummaryList({
     <>
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="task-summary-section">
-          <p className="section-heading">{heading}</p>
+          <Text variant={TEXT_VARIANT.GROUP} className="section-heading">
+            {heading}
+          </Text>
           <List label={heading} density={LIST_DENSITY.DENSE}>
             {entries.map((entry) => {
               const onPick = () => {
@@ -688,13 +678,16 @@ function SummaryCard({
     // The toolbar's opener is a box around its button, which takes the focus back.
     (opener?.querySelector<HTMLElement>("button") ?? opener)?.focus({ preventScroll: true });
   }, [from, onDismiss]);
+  // A press on a control that hangs the card, or on what the card opened, is that control's to answer.
+  usePressAway(card, () => undefined, {
+    onPressAway: leaving ? undefined : onDismiss,
+    holds: (target) =>
+      !(target instanceof Element) ||
+      target.closest(OPENER) !== null ||
+      target.closest(OPENED_FROM_CARD) !== null,
+  });
   useEffect(() => {
     if (leaving) return;
-    const press = (event: PointerEvent) => {
-      const { target } = event;
-      if (!(target instanceof Element) || card.current?.contains(target)) return;
-      if (target.closest(OPENER) === null && target.closest(OPENED_FROM_CARD) === null) onDismiss();
-    };
     // Note that the window's own Escape mutes a call or steps back a layer
     // (app.tsx), so the card keeps the press, as a menu does, before it is
     // heard there.
@@ -708,13 +701,9 @@ function SummaryCard({
       event.stopPropagation();
       collapse();
     };
-    window.addEventListener("pointerdown", press, true);
     window.addEventListener("keydown", key, true);
-    return () => {
-      window.removeEventListener("pointerdown", press, true);
-      window.removeEventListener("keydown", key, true);
-    };
-  }, [collapse, onDismiss, leaving]);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [collapse, leaving]);
   return (
     <Card
       look={CARD_LOOK.RAISED}

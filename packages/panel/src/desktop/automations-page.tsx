@@ -14,12 +14,14 @@ import {
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
+import { momentText } from "@luke/features/time-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CardPress,
@@ -33,36 +35,38 @@ import {
   FoldingButton,
   ListRow,
   NO_CONTEXT_MENU,
+  NOT_FOUND_THING,
+  NotFound,
   OneLine,
   PAGE_FRAME,
-  PageToolbar,
   RowHint,
   RowHintOptions,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TOOLBAR_INSET,
+  Toolbar,
+  type ToolbarProps,
   Tooltip,
-  useMenu,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
-import { momentText } from "@luke/ui/time-format";
 import { BotIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
-import { ActionMenu } from "./action-menu.js";
+import { rowMenu } from "./action-menu.js";
 import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
 import {
   AutomationGroupCard,
@@ -104,8 +108,8 @@ import { useAutomations } from "./use-automations.js";
  * from it goes back to the list.
  */
 
-/** What an automation's row's right-click menu is called. */
-const ROW_ACTIONS = "Automation actions";
+/** What an automation's row is, which names its ⋯ and its menu. */
+const ROW_THING = "Automation";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
@@ -191,12 +195,9 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
-  const menu = useMenu(true);
-  const press = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const item = useRef<HTMLElement | null>(null);
   const hold = useCallback((node: HTMLElement | null) => {
-    press.current = node;
     item.current = node?.parentElement ?? null;
   }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
@@ -205,86 +206,76 @@ function AutomationRow({
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
   return (
-    <>
-      <RowHintOptions
-        card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
-        cardBeside
-        cardRegion={item}
-      >
-        <ListRow
-          ref={hold}
-          leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
-          title={
-            <span className="automation-row-name" data-enabled={String(automation.enabled)}>
-              {automation.name}
-            </span>
-          }
-          description={
-            narrow ? (
-              <>
-                {hiddenWorking}
-                {stateEndMark(state, true)}
-                {automationNarrowLine(automation, trigger, now)}
-              </>
-            ) : (
-              trigger
-            )
-          }
-          meta={
-            narrow ? undefined : (
-              <AutomationRowMeta
-                lead={hiddenWorking}
-                owner={
-                  <OwnerCell
-                    owner={automationOwner(automation)}
-                    mine={automation.mine === true}
-                    workspace={workspace}
-                  />
-                }
-                next={
-                  <>
-                    {stateEndMark(state, true)}
-                    <Tooltip
-                      label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-                    >
-                      <Text
-                        as={TEXT_ELEMENT.SPAN}
-                        variant={TEXT_VARIANT.INHERIT}
-                        truncate
-                        className="automation-row-when"
-                      >
-                        {automationNextText(automation, now)}
-                      </Text>
-                    </Tooltip>
-                  </>
-                }
-              />
-            )
-          }
-          actions={
-            <Switch
-              checked={automation.enabled}
-              label={
-                automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+    <RowHintOptions
+      card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
+      cardBeside
+      cardRegion={item}
+    >
+      <ListRow
+        ref={hold}
+        leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
+        title={
+          <span className="automation-row-name" data-enabled={String(automation.enabled)}>
+            {automation.name}
+          </span>
+        }
+        description={
+          narrow ? (
+            <>
+              {hiddenWorking}
+              {stateEndMark(state, true)}
+              {automationNarrowLine(automation, trigger, now)}
+            </>
+          ) : (
+            trigger
+          )
+        }
+        meta={
+          narrow ? undefined : (
+            <AutomationRowMeta
+              lead={hiddenWorking}
+              owner={
+                <OwnerCell
+                  owner={automationOwner(automation)}
+                  mine={automation.mine === true}
+                  workspace={workspace}
+                />
               }
-              onChange={(enabled) => onToggle(enabled)}
-              {...NO_CONTEXT_MENU}
+              next={
+                <>
+                  {stateEndMark(state, true)}
+                  <Tooltip
+                    label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
+                  >
+                    <Text
+                      as={TEXT_ELEMENT.SPAN}
+                      variant={TEXT_VARIANT.INHERIT}
+                      truncate
+                      className="automation-row-when"
+                    >
+                      {automationNextText(automation, now)}
+                    </Text>
+                  </Tooltip>
+                </>
+              }
             />
-          }
-          hint={{ Hint: RowHint, label: automation.name }}
-          onPress={onOpen}
-          contextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
-        />
-      </RowHintOptions>
-      {menu.drawn === undefined || copyLink === undefined ? null : (
-        <ActionMenu
-          label={ROW_ACTIONS}
-          menu={menu.drawn}
-          groups={[[copyLink]]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+          )
+        }
+        actions={
+          <Switch
+            checked={automation.enabled}
+            label={
+              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+            }
+            onChange={(enabled) => onToggle(enabled)}
+            {...NO_CONTEXT_MENU}
+          />
+        }
+        hint={{ Hint: RowHint, label: automation.name }}
+        onPress={onOpen}
+        menu={copyLink === undefined ? undefined : rowMenu(ROW_THING, [[copyLink]])}
+      />
+    </RowHintOptions>
   );
 }
 
@@ -415,7 +406,7 @@ function ListPage({
     toggle(automation.id, enabled).then((answer) => {
       const refusal = toggleRefusal(answer, enabled);
       if (refusal !== undefined) {
-        toast({ words: refusal, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: refusal, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     });
   };
@@ -488,6 +479,25 @@ function ListPage({
   );
 }
 
+/** What the way back to the list is called, and where it leads as its hint names it. */
+const AUTOMATIONS_PLACE = "Automations";
+const AUTOMATIONS_PLACE_NAME = "automations";
+
+/** The bar of an automation's page that has no automation to show: its way back to the list, at the column's edge. */
+function backBar(onBack: () => void): ToolbarProps {
+  return {
+    lead: (
+      <BackButton
+        label={AUTOMATIONS_PLACE}
+        place={AUTOMATIONS_PLACE_NAME}
+        command={APP_COMMAND.EXIT_AUTOMATIONS}
+        onBack={onBack}
+      />
+    ),
+    start: TOOLBAR_INSET.COLUMN,
+  };
+}
+
 /** One automation's page that has no automation to show: its way back over `children`, which say why. */
 function AutomationAbsentPage({
   onBack,
@@ -501,15 +511,7 @@ function AutomationAbsentPage({
     <DetailPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Automation"
-      toolbar={
-        <PageToolbar
-          heading={
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          }
-        />
-      }
+      toolbar={<Toolbar {...backBar(onBack)} />}
     >
       {children}
     </DetailPage>
@@ -537,11 +539,8 @@ function UnreadPage({
 
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
-  return (
-    <AutomationAbsentPage onBack={onBack}>
-      <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
-    </AutomationAbsentPage>
-  );
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return <NotFound thing={NOT_FOUND_THING.AUTOMATION} bar={backBar(onBack)} />;
 }
 
 /** One automation's page opened before the list is first read: the editor's own frame as quiet blocks (`AutomationPageSkeleton`), and its way back. */

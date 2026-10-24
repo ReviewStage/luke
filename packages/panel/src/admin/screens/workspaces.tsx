@@ -8,10 +8,10 @@ import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-
 import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
+import { formatDate } from "@luke/features/time-format";
 import {
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   COLLECTION_STATE,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -20,13 +20,14 @@ import {
   GAP,
   Inline,
   SearchField,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useEffect, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
@@ -74,21 +75,16 @@ type WorkspaceColumnKey = (typeof WORKSPACE_COLUMN)[keyof typeof WORKSPACE_COLUM
 
 /** The tone each installation status is drawn in: working, held, or gone. */
 const INSTALLATION_TONE = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: BADGE_TONE.COMPLETE,
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: BADGE_TONE.ATTENTION,
-  [GITHUB_INSTALLATION_STATUS.DELETED]: BADGE_TONE.NEUTRAL,
-} as const satisfies Record<AdminWorkspaceInstallation["status"], BadgeTone>;
+  [GITHUB_INSTALLATION_STATUS.ACTIVE]: STATUS_TONE.COMPLETE,
+  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: STATUS_TONE.ATTENTION,
+  [GITHUB_INSTALLATION_STATUS.DELETED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<AdminWorkspaceInstallation["status"], StatusTone>;
 
 const INSTALLATION_LABEL = {
   [GITHUB_INSTALLATION_STATUS.ACTIVE]: "Active",
   [GITHUB_INSTALLATION_STATUS.SUSPENDED]: "Suspended",
   [GITHUB_INSTALLATION_STATUS.DELETED]: "Uninstalled",
 } as const satisfies Record<AdminWorkspaceInstallation["status"], string>;
-
-/** A share drawn as a whole percent, or a dash where there was nothing to share out. */
-function formatShare(share: number | null): string {
-  return share === null ? "—" : `${Math.round(share * 100)}%`;
-}
 
 function InstallationsCell({
   installations,
@@ -137,8 +133,8 @@ function IntegrationsCell({
           key={integration.provider}
           tone={
             integration.status === INTEGRATION_ROW_STATUS.EXPIRED
-              ? BADGE_TONE.ATTENTION
-              : BADGE_TONE.NEUTRAL
+              ? STATUS_TONE.ATTENTION
+              : STATUS_TONE.NEUTRAL
           }
         >
           {integration.status === INTEGRATION_ROW_STATUS.EXPIRED
@@ -172,7 +168,7 @@ function workspaceColumns(
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
             {row.name}
           </Text>
-          {row.personal ? <Badge tone={BADGE_TONE.NEUTRAL}>Personal</Badge> : null}
+          {row.personal ? <Badge tone={STATUS_TONE.NEUTRAL}>Personal</Badge> : null}
         </Inline>
       ),
     },
@@ -218,13 +214,13 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
     label: () => "Active this week",
     value: ({ summary }) => formatCount(summary.sharedActiveWeek),
     hint: ({ summary }) =>
-      `${formatShare(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
+      `${formatPercent(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
     title: () => "A task or coding agent started, or a plan revised, in the last 7 UTC days",
   },
   {
     key: "invites",
     label: () => "Invites accepted",
-    value: ({ summary }) => formatShare(summary.invitations.acceptanceRate),
+    value: ({ summary }) => formatPercent(summary.invitations.acceptanceRate),
     hint: ({ summary }) =>
       `${formatCount(summary.invitations.pending)} pending · ${formatCount(summary.invitations.expired)} expired`,
     title: ({ summary }) =>
@@ -233,7 +229,7 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
   {
     key: "github",
     label: () => "With GitHub installed",
-    value: ({ summary }) => formatShare(summary.github.activeShare),
+    value: ({ summary }) => formatPercent(summary.github.activeShare),
     hint: ({ summary }) => `${formatCount(summary.github.sharedWithSuspended)} suspended`,
     title: ({ summary }) =>
       `${formatCount(summary.github.sharedWithActive)} shared workspaces with an active installation`,

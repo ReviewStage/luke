@@ -16,14 +16,17 @@ import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { TaskIssueLinks } from "./task-issue-links.js";
 
 /**
@@ -162,22 +165,27 @@ async function mount(options: {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(TaskIssueLinks, {
-          taskId: TASK_ID,
-          workspaceId: WORKSPACE_ID,
-          repository: "acme/web",
-          linearIn: () => undefined,
-          githubIn: () =>
-            options.github === false
-              ? undefined
-              : () =>
-                  Promise.resolve({
-                    issues: [
-                      pick(312, "Login fails on Safari 18", "I_kwDOweb312"),
-                      pick(301, "Chart tooltips unreadable", "I_kwDOweb301"),
-                    ],
-                  }),
-        }),
+        createElement(
+          Fragment,
+          null,
+          createElement(TaskIssueLinks, {
+            taskId: TASK_ID,
+            workspaceId: WORKSPACE_ID,
+            repository: "acme/web",
+            linearIn: () => undefined,
+            githubIn: () =>
+              options.github === false
+                ? undefined
+                : () =>
+                    Promise.resolve({
+                      issues: [
+                        pick(312, "Login fails on Safari 18", "I_kwDOweb312"),
+                        pick(301, "Chart tooltips unreadable", "I_kwDOweb301"),
+                      ],
+                    }),
+          }),
+          createElement(ToastHost),
+        ),
       ),
     ),
   );
@@ -235,6 +243,18 @@ test("each link is drawn with its key, title, live state, and keyword, and its m
   assert.deepEqual(opened, ["https://github.com/acme/web/issues/312"]);
 });
 
+test("a chip hangs its issue's card while the pointer rests on it: its title, repository key, state, and keyword", async () => {
+  const { container } = await mount({ links: [SAFARI] });
+
+  restOn(container.querySelector(".task-issue-link button") ?? assert.fail("the chip"));
+  const card = document.querySelector("[data-issue-card]");
+
+  assert.match(card?.textContent ?? "", /Login fails on Safari 18/);
+  assert.match(card?.textContent ?? "", /acme\/web#312 · Not planned/);
+  assert.match(card?.textContent ?? "", /Closes: Merging closes the issue/);
+  assert.ok(card?.querySelector("[data-issue-mark]"), "the issue's live mark leads the card");
+});
+
 test("a keyword switched and an issue unlinked from a chip's menu reach the host for that link, and the chips follow", async () => {
   const { container, sent } = await mount({ links: [SAFARI, ENG] });
 
@@ -253,6 +273,88 @@ test("a keyword switched and an issue unlinked from a chip's menu reach the host
   assert.deepEqual(
     rows(container).map(({ key, keyword }) => [key, keyword]),
     [["#312", "Part of"]],
+  );
+});
+
+test("an issue unlinked asks nothing and offers Undo, which links the same issue again under its keyword", async () => {
+  const { container, sent } = await mount({ links: [SAFARI, ENG] });
+
+  choose(container, 1, "Unlink");
+  await settle();
+  const says = newestToastSays();
+  const unlinked = rows(container).map(({ key }) => key);
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing is asked");
+  assert.match(says ?? "", /Issue unlinked/u);
+  assert.deepEqual(unlinked, ["#312"]);
+  assert.deepEqual(sent.slice(1, 3), [
+    [ACT_KIND.TASK_ISSUES_UNLINK, { taskId: TASK_ID, linkId: ENG.id }],
+    [
+      ACT_KIND.TASK_ISSUES_LINK,
+      {
+        taskId: TASK_ID,
+        issue: {
+          provider: TASK_ISSUE_PROVIDER.LINEAR,
+          id: ENG.externalId,
+          relation: TASK_ISSUE_RELATION.PART_OF,
+        },
+      },
+    ],
+  ]);
+});
+
+test("an issue its provider did not answer asks before it is unlinked, in red, since Undo could not link it again", async () => {
+  const { standing: _, ...unread } = ENG;
+  const { container, sent } = await mount({ links: [SAFARI, unread] });
+
+  choose(container, 1, "Unlink");
+  await settle();
+  const asked = sent.some(([kind]) => kind === ACT_KIND.TASK_ISSUES_UNLINK);
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+  const answer =
+    [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Unlink",
+    ) ?? assert.fail("no Unlink in the question");
+  const variant = answer.getAttribute("data-variant");
+  await act(async () => answer.click());
+  await settle();
+
+  assert.equal(asked, false, "nothing is sent while it asks");
+  assert.equal(variant, "danger");
+  assert.deepEqual(sent.slice(1), [
+    [ACT_KIND.TASK_ISSUES_UNLINK, { taskId: TASK_ID, linkId: ENG.id }],
+  ]);
+  assert.equal(newestToastAction(), undefined, "no Undo is offered");
+});
+
+test("a red Unlink the service refuses keeps its question up saying why, and the issue stays linked", async () => {
+  const { standing: _, ...unread } = ENG;
+  const { container } = await mount({
+    links: [SAFARI, unread],
+    answers: { [ACT_KIND.TASK_ISSUES_UNLINK]: { failure: TASK_CALL_FAILURE.UNANSWERED } },
+  });
+
+  choose(container, 1, "Unlink");
+  await settle();
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+  const answer =
+    [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Unlink",
+    ) ?? assert.fail("no Unlink in the question");
+  await act(async () => answer.click());
+  await settle();
+
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /Luke didn't answer\. Try again\./u,
+  );
+  assert.deepEqual(
+    rows(container).map(({ key }) => key),
+    ["#312", "ENG-455"],
   );
 });
 
@@ -341,9 +443,9 @@ test("a first read that did not land says so in the row's place, and Try again r
     links: [SAFARI],
     reads: [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { issues: [SAFARI] }],
   });
-  const said = container.querySelector('[role="alert"]')?.firstChild?.textContent;
+  const said = container.querySelector('[role="alert"] .luke-failure-note-words')?.textContent;
 
-  press([...container.querySelectorAll("button")].find((each) => each.textContent === "Try again"));
+  press([...container.querySelectorAll("button")].find((each) => each.textContent === "Retry"));
   await settle();
 
   assert.equal(said, "Luke didn't answer. Try again.");
@@ -397,75 +499,4 @@ test("on a phone the chips wrap rather than run past the page, each cutting its 
   } finally {
     laid.remove();
   }
-});
-
-/** Link issue's menu at its own width, an issue's title with its key and state after it. */
-const LINK_MENU_WIDTH = 420;
-
-/**
- * Where Link issue's menu stands once the chip stands `left` pixels in from
- * the left edge of a window `width` wide, 90px wide itself: the edge it
- * hangs from, and its left and right edges as the stylesheet draws them from
- * that edge, its inset, and its width capped to the widest it may stand.
- * jsdom lays nothing out, so the chip's place and the menu's width are
- * answered as the window would lay them.
- */
-async function linkMenuAt(left: number, width = 390) {
-  vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
-  vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return this.classList.contains("searchable-menu") ? LINK_MENU_WIDTH : 0;
-  });
-  const { container } = await mount({ links: [SAFARI] });
-  const chip =
-    [...container.querySelectorAll<HTMLElement>("button")].find(
-      (each) => each.textContent === "Link issue",
-    ) ?? assert.fail("Link issue stands");
-  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(left, 100, 90, 28));
-  press(chip);
-  await settle();
-  const box = chip.closest<HTMLElement>(".issue-picker-chip") ?? assert.fail("the picker's box");
-  const widest = Number.parseFloat(box.style.getPropertyValue("--settings-picker-width-max"));
-  const inset = Number.parseFloat(box.style.getPropertyValue("--settings-picker-inset"));
-  const drawn = Math.min(LINK_MENU_WIDTH, widest);
-  const start = box.dataset.align === "end" ? left + 90 - inset - drawn : left + inset;
-  return { align: box.dataset.align, start, end: start + drawn, drawn };
-}
-
-test("Link issue near the window's right edge hangs its menu from its trailing edge, inside the window", async () => {
-  const menu = await linkMenuAt(290);
-  assert.equal(menu.align, "end");
-  assert.ok(
-    menu.start >= 0 && menu.end <= 390,
-    `the menu stands from ${menu.start} to ${menu.end}`,
-  );
-  assert.ok(menu.drawn >= 280, `the menu stands ${menu.drawn}px wide`);
-});
-
-test("Link issue near the row's start hangs its menu from its leading edge, inside the window", async () => {
-  const menu = await linkMenuAt(16);
-  assert.equal(menu.align, "start");
-  assert.ok(
-    menu.start >= 0 && menu.end <= 390,
-    `the menu stands from ${menu.start} to ${menu.end}`,
-  );
-});
-
-test("Link issue with too little room on either side pushes its menu back over the chip, whole and inside the window", async () => {
-  const menu = await linkMenuAt(320, 600);
-  assert.equal(menu.align, "end");
-  assert.equal(menu.drawn, LINK_MENU_WIDTH);
-  assert.ok(
-    menu.start >= 0 && menu.end <= 600,
-    `the menu stands from ${menu.start} to ${menu.end}`,
-  );
-});
-
-test("Link issue with room for the whole menu after it hangs it from its leading edge, though there is more before it", async () => {
-  const menu = await linkMenuAt(560, 1000);
-  assert.equal(menu.align, "start");
-  assert.equal(menu.start, 560);
-  assert.equal(menu.drawn, LINK_MENU_WIDTH);
 });

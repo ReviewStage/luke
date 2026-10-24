@@ -12,14 +12,11 @@ import {
 } from "@luke/features/integration-tool-model";
 import {
   ALIGN,
-  ArrowLeftIcon,
-  BADGE_TONE,
+  BackButton,
   Badge,
-  type BadgeTone,
   FILL_ELEMENT,
   Fill,
   GAP,
-  IconButton,
   Inline,
   LAYOUT_ELEMENT,
   LIST_DENSITY,
@@ -27,13 +24,16 @@ import {
   List,
   ListRow,
   type ListRowHint,
+  NO_BACK_KEY,
   ONE_LINE_ELEMENT,
   OneLine,
   ScrollArea,
+  STATUS_TONE,
+  type StatusTone,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Tooltip,
 } from "@luke/ui";
 import { cloneElement, createContext, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message.js";
@@ -50,8 +50,8 @@ import { Highlighted } from "./search-field.js";
  * search landed on are marked. One row is the owner's current one, drawn
  * highlighted, and a press on a row opens it; where the owner keeps the
  * keys in a field of its own, as the MCP popover's filter does, a press
- * keeps the focus there (`keepFocus`), and otherwise the current row is
- * the list's one stop for Tab, as a listbox's is. Where the owner opens
+ * keeps the focus there (`keepFocus`), and otherwise the list is one stop
+ * for Tab that ↑↓ walk (`List`), the owner following the focus. Where the owner opens
  * nothing, as a server's hover card does (`tasks/server-card.tsx`), each
  * row is its words alone, with no press and no chevron.
  *
@@ -100,15 +100,15 @@ function ToolBadge({ tool }: { tool: IntegrationTool }): React.JSX.Element | nul
   const badge = toolBadge(tool.annotations);
   if (badge === undefined) return null;
   return (
-    <Badge tone={badge === TOOL_BADGE.DESTRUCTIVE ? BADGE_TONE.DANGER : BADGE_TONE.NEUTRAL}>
+    <Badge tone={badge === TOOL_BADGE.DESTRUCTIVE ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL}>
       {badge}
     </Badge>
   );
 }
 
 /** The tone a hint is said in: the danger tone for what destroys, the quiet one for the rest. */
-function hintTone(hint: ToolHint): BadgeTone {
-  return hint === TOOL_HINT.DESTRUCTIVE ? BADGE_TONE.DANGER : BADGE_TONE.NEUTRAL;
+function hintTone(hint: ToolHint): StatusTone {
+  return hint === TOOL_HINT.DESTRUCTIVE ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL;
 }
 
 /** Whether a tool's name stands beside its title, which it does only where the title is not the name. */
@@ -134,7 +134,7 @@ export function IntegrationToolList({
   tools: readonly IntegrationTool[];
   /** The words a search asks for, marked where they landed. */
   tokens: readonly string[];
-  /** The name of the row drawn highlighted, and the list's one Tab stop. */
+  /** The name of the row drawn highlighted. */
   current: string | undefined;
   /** The id a row is drawn with, so an owner can find it. */
   idOf?: (tool: IntegrationTool) => string;
@@ -189,7 +189,7 @@ export function IntegrationToolList({
               current={isCurrent ? LIST_ROW_CURRENT.ITEM : undefined}
               chevron={onOpen !== undefined}
               keepFocus={keepFocus}
-              tabbable={keepFocus || isCurrent}
+              tabbable={keepFocus ? true : undefined}
               onPress={onOpen === undefined ? undefined : () => onOpen(tool)}
               onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
               hint={
@@ -211,12 +211,12 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
   if (tool.parameters === undefined) return null;
   return (
     <section className="integration-tool-parameters" aria-label="Parameters">
-      <h3 className="integration-tool-section">
+      <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.GROUP} className="integration-tool-section">
         {"Parameters"}
         <span className="integration-tool-section-count">
           {tool.parameters.length === 0 ? "none" : tool.parameters.length}
         </span>
-      </h3>
+      </Text>
       {tool.parameters.length === 0 ? null : (
         <dl className="integration-tool-parameter-list">
           {requiredFirst(tool.parameters).map((parameter) => (
@@ -279,7 +279,7 @@ export function IntegrationToolDetail({
   server,
   tool,
   tokens,
-  backLabel,
+  backPlace,
   onBack,
   keepFocus,
   bodyRef,
@@ -290,8 +290,8 @@ export function IntegrationToolDetail({
   tool: IntegrationTool;
   /** The words a search asks for, marked where they landed in what it does. */
   tokens: readonly string[];
-  /** What the back is named, where the owner offers one; it stands only where both are given. */
-  backLabel?: string;
+  /** The place the back leads to, as a sentence names it ("Linear tools"), where the owner offers one; it stands only where both are given. */
+  backPlace?: string;
   onBack?: () => void;
   /** Whether a pointer's press on the back leaves the focus where it is, in a field of the owner's. */
   keepFocus?: boolean;
@@ -305,15 +305,14 @@ export function IntegrationToolDetail({
   return (
     <Fill as={FILL_ELEMENT.ARTICLE} className="integration-tool-detail" aria-label={title}>
       <header className="integration-tool-detail-head">
-        {onBack !== undefined && backLabel !== undefined ? (
-          <Tooltip label={backLabel}>
-            <IconButton
-              icon={<ArrowLeftIcon />}
-              label={backLabel}
-              keepFocus={keepFocus}
-              onClick={onBack}
-            />
-          </Tooltip>
+        {onBack !== undefined && backPlace !== undefined ? (
+          <BackButton
+            label={backPlace}
+            place={backPlace}
+            command={NO_BACK_KEY}
+            keepFocus={keepFocus}
+            onBack={onBack}
+          />
         ) : null}
         <OneLine
           as={ONE_LINE_ELEMENT.H2}
@@ -355,7 +354,7 @@ export function IntegrationToolDetail({
             </Inline>
           ) : null}
           {tool.description === "" ? (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               No description.
             </Text>
           ) : (

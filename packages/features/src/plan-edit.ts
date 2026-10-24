@@ -1,7 +1,7 @@
 import { applyPatch, structuredPatch } from "diff";
 import { Schema as EffectSchema } from "effect";
 import { planCommentAnchorsSchema } from "./plan-comment-wire.js";
-import { TASK_BOUNDS, taskSchema } from "./task-wire.js";
+import { planLastEditSchema, TASK_BOUNDS, taskSchema } from "./task-wire.js";
 
 /**
  * plan-edit.ts -- the developer's own edit of a plan's text: what the window sends, what the service answers, and how the edit is taken into the text.
@@ -16,7 +16,8 @@ import { TASK_BOUNDS, taskSchema } from "./task-wire.js";
  * point Luke wrote in another section meanwhile survives the developer's edit
  * and the edit survives the point. A patch that does not apply is a conflict,
  * answered with what the text holds now, and nothing is changed: the
- * developer chooses whether their text stands.
+ * developer chooses whether their text stands. The conflict names who last
+ * wrote the text it met, so the editor can say whose words those are.
  *
  * Note that `plan` keeps the wire's legacy spelling of a task, because a
  * released desktop sends and reads them; they are renamed with the wire in a
@@ -50,18 +51,26 @@ export const planEditValueSchema = DOCUMENT_TEXT;
 
 export type PlanEditValue = typeof planEditValueSchema.Type;
 
+/**
+ * A conflict as an edit answers it: the text as it stands now, and who last
+ * wrote it, the plan's newest revision as its "Edited by" line reads it; a
+ * service from before writers were answered names nobody.
+ */
+export const planEditConflictSchema = EffectSchema.Struct({
+  current: planEditValueSchema,
+  by: EffectSchema.optionalKey(planLastEditSchema),
+});
+
 /** Why an edit saved nothing that is the developer's to change. */
 export const PLAN_EDIT_REFUSAL = {
   /** The plan with the edit would be longer than a plan may be. */
   TOO_LONG: "too-long",
 } as const;
 
-/** What an edit answers: the plan as saved, the text as it now stands where the edit conflicts with it, or why it was refused. */
+/** What an edit answers: the plan as saved, the text as it now stands and who wrote it where the edit conflicts with it, or why it was refused. */
 export const planEditAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ plan: taskSchema }),
-  EffectSchema.Struct({
-    conflict: EffectSchema.Struct({ current: planEditValueSchema }),
-  }),
+  EffectSchema.Struct({ conflict: planEditConflictSchema }),
   EffectSchema.Struct({ refused: EffectSchema.Literals(Object.values(PLAN_EDIT_REFUSAL)) }),
 ]);
 

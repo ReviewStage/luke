@@ -34,6 +34,25 @@ export function enterSends(press: EnterPress): boolean {
   return press.metaKey || press.ctrlKey || !coarsePointer();
 }
 
+/**
+ * Whether a press is the send of a box that sends on ⌘ or Ctrl with Enter and
+ * lets a bare Enter add a line, as every pull request and review box does:
+ * ⌘↩ on a Mac, Ctrl+↩ elsewhere. Note that both are read on every platform,
+ * because a Mac's keyboard has a Ctrl and another's attached to it a Meta key,
+ * and neither is a chord that does anything else in a box.
+ */
+export function modEnterSends(press: Pick<EnterPress, "key" | "metaKey" | "ctrlKey">): boolean {
+  return press.key === "Enter" && (press.metaKey || press.ctrlKey);
+}
+
+/** Whether a press is the send of a box whose `submit` key is given: Enter as `enterSends` reads it, or ⌘ or Ctrl with Enter as `modEnterSends` does. */
+export function submitSends(
+  press: EnterPress,
+  submit: TextAreaSubmit = TEXT_AREA_SUBMIT.ENTER,
+): boolean {
+  return submit === TEXT_AREA_SUBMIT.MOD_ENTER ? modEnterSends(press) : enterSends(press);
+}
+
 /** The return key's label as the pointer stands now. */
 export function enterKeyHint(): EnterKeyHint {
   return coarsePointer() ? ENTER_KEY_HINT.NEW_LINE : ENTER_KEY_HINT.SEND;

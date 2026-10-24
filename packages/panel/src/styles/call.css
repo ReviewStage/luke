@@ -20,8 +20,8 @@ html.call-window #root {
 /* On the ground of what floats over the window, as a toast is, so the card
    reads as the same kind of thing wherever it stands. It rises in on the
    spring and leaves on the exit's beat, as a toast does. What it holds is
-   the call bar itself (desktop.css), drawn as the plan's page draws it, so
-   the card adds no look of its own to the call. */
+   the call bar itself (`@luke/ui`'s `CallBar`), so the card adds no look
+   of its own to the call. */
 .call-card {
   display: flex;
   box-sizing: border-box;
@@ -112,7 +112,7 @@ html.call-window #root {
    nor leaves, and its shadow keeps within the room the window leaves it. The
    whole card is what the window is dragged by, wherever it is held. Note
    that the bar inside it must stay wider than the bar's stacking query
-   (desktop.css's `@container call-bar`), because the window's height is
+   (`@luke/ui`'s `@container luke-call-bar`), because the window's height is
    fixed and a stacked bar would not fit it. */
 .call-card[data-surface="window"] {
   width: 248px;
@@ -130,9 +130,8 @@ html.call-window #root {
    in `call-window-presence.ts`), so the two must move together. 125px is
    16:9 at the card's 222px inside. The tile is held by too, as the rest of
    the card is, and its Video off answers its own press. */
-.call-card[data-surface="window"] .call-video-tile {
-  height: 125px;
-  aspect-ratio: auto;
+.call-card[data-surface="window"] {
+  --luke-call-video-height: 125px;
 }
 
 /* The plan's name, and the way back to it beside the name. */
@@ -140,7 +139,7 @@ html.call-window #root {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .call-card-title {
@@ -157,200 +156,14 @@ html.call-window #root {
   display: flex;
 }
 
-/* Moved under a still pointer, the buttons, and the hints the video toggle
-   and the way back carry around their buttons, take no hover until the
-   pointer itself moves (`window-pointer.ts`). */
-html.call-window[data-pointer-stale="true"]
-  .call-card
-  :is(button, .call-video-toggle, .call-card-return) {
+/* Moved under a still pointer, the buttons, and the system's hints the
+   video toggle and the way back carry around their buttons, take no hover
+   until the pointer itself moves (`window-pointer.ts`). */
+html.call-window[data-pointer-stale="true"] .call-card :is(button, [title]) {
   pointer-events: none;
 }
 
 /* Its buttons each answer one press; the rest of the card drags the window. */
 [data-luke-profile="desktop"] .call-card[data-surface="window"] button {
   -webkit-app-region: no-drag;
-}
-
-/* The tile on the card, over the plan's name: the card's own
-   width at 16:9, so it grows the card by a picture and no more, on a
-   smaller corner inside the card's, with no margin of its own beside the
-   card's gap. The picture and the controls under it are one card, so it
-   reads as the call card grown into a picture rather than a second one. */
-.call-card .call-video-tile {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--luke-radius-8);
-}
-
-/* At this size the still face makes room for what the tile says, and
-   Video off keeps closer to the corner. */
-.call-card .call-video-face {
-  width: 40px;
-  height: 40px;
-}
-
-.call-card .call-video-controls {
-  right: var(--luke-space-4);
-  bottom: var(--luke-space-4);
-}
-
-/* The video tile (`call/call-video-tile.tsx`): Luke's avatar, on the
-   card's ground, border, and corner, so the tile reads as the call card
-   grown into a picture. Its size is the surface's: 16:9 on the call card,
-   and the frame an agent's tab draws it in (desktop.css). Note that its
-   least height is zero rather than its content's, which a box with a
-   ratio takes by default unless it scrolls, so the picture inside never
-   holds it taller than its surface gives it. The fill's layer is the
-   tile's own, so it stands over the tile's ground and under the picture. */
-.call-video-tile {
-  position: relative;
-  flex: none;
-  overflow: clip;
-  box-sizing: border-box;
-  min-height: 0;
-  isolation: isolate;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-overlay);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-  container-type: inline-size;
-}
-
-/* The avatar's picture whole, never cut, at the tile's height where the
-   tile is wider than the picture. */
-.call-video-frame {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-/* What the picture leaves of a wider tile: the same video, filling the
-   tile, blurred and dimmed under the picture, so the bands at its sides
-   read as the avatar's own room rather than as bars. Scaled past the
-   tile, so the blur's soft edge falls outside the corner. */
-.call-video-fill {
-  position: absolute;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-  inset: 0;
-  object-fit: cover;
-  filter: blur(24px) brightness(0.6);
-  pointer-events: none;
-  scale: 1.2;
-}
-
-/* Luke's face where there is no video to draw: the still frame a fixture
-   run captures, and what stands in front of the wait while the tile
-   connects or once it has ended. */
-.call-video-still {
-  display: flex;
-  height: 100%;
-  box-sizing: border-box;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8);
-}
-
-.call-video-face {
-  display: block;
-  width: 56px;
-  height: 56px;
-}
-
-/* The wait for the picture (`AvatarWaiting`), over the tile's whole ground
-   while it connects and over the video until its first frame, on the
-   tile's own ground so no empty or black frame shows through: the
-   skeleton block breathes where the picture will stand, at the tile's own
-   corner, and the face and what it waits on stand in front of it. Once the
-   first frame is drawn the wait fades out over the pane's motion, the
-   picture under it showing through as it goes, and then leaves the
-   reader; its loops hold still under the picture rather than run unseen. */
-.call-video-waiting {
-  position: absolute;
-  inset: 0;
-  background: var(--luke-color-overlay);
-  transition:
-    opacity var(--luke-duration-pane) var(--luke-motion-pane),
-    visibility 0s linear var(--luke-duration-pane);
-}
-
-.call-video-waiting[data-gone="true"] {
-  --luke-loop-motion: paused;
-  --luke-face-motion: paused;
-  opacity: 0;
-  visibility: hidden;
-}
-
-.call-video-ground-skeleton {
-  position: absolute;
-  inset: 0;
-}
-
-/* What the tile says: the wait's dots before Connecting video, or Video
-   ended, in the caption's muted voice and on one line. */
-.call-video-note {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  white-space: nowrap;
-}
-
-/* Restart video, labelled where the tile has room and round where it has
-   not, one of the two drawn at a time; each no taller than its button. */
-.call-video-restart {
-  display: flex;
-}
-
-.call-video-restart[data-room="narrow"] {
-  display: none;
-}
-
-/* A tile too narrow for words beside the face, as an agent's video at its
-   first 120px or smaller, keeps the face, the wait's dots, and a round
-   Restart video, and its words for a reader, so nothing it draws is cut. */
-@container (width < 168px) {
-  .call-video-note-words {
-    position: absolute;
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .call-video-restart[data-room="wide"] {
-    display: none;
-  }
-
-  .call-video-restart[data-room="narrow"] {
-    display: flex;
-  }
-}
-
-/* Video off, in the tile's bottom-right corner over whatever it draws, on
-   the card's ground so it reads over any frame of video. The ground is the
-   round button's own disc, with no ring of its own around it. */
-.call-video-controls {
-  position: absolute;
-  right: var(--luke-space-8);
-  bottom: var(--luke-space-8);
-  display: flex;
-  align-items: center;
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-overlay);
-}
-
-/* Video off or on, named by the system's hint its wrapper carries, and
-   no taller than its button. */
-.call-video-toggle {
-  display: flex;
 }

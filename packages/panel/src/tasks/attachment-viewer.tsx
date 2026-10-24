@@ -9,7 +9,9 @@ import {
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import {
   Button,
+  ButtonLink,
   CloseIcon,
+  CopyButton,
   DIALOG_SIZE,
   Dialog,
   IconButton,
@@ -17,6 +19,9 @@ import {
   type ImageOpening,
   type ImageZoom,
   OneLine,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
   useImageZoom,
   usePictureExpand,
@@ -32,8 +37,9 @@ import {
   ZoomOutIcon,
 } from "lucide-react";
 import { useId, useState } from "react";
-import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { copyImageThroughShell, copyThroughShell } from "../copy-feedback.js";
 import { FileTypeIcon } from "./file-type-icon.js";
+import { linkPressOf } from "./use-open-link.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
@@ -71,12 +77,16 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
 const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
   NEXT: "Next file",
-  COPY: "Copy text",
-  COPY_IMAGE: "Copy image",
   ZOOM_OUT: "Zoom out",
   ZOOM_IN: "Zoom in",
   DOWNLOAD: "Download",
   CLOSE: "Close",
+} as const;
+
+/** What the header's two Copy buttons copy, which `CopyButton` names ("Copy text"). */
+const COPY_WHAT = {
+  TEXT: "text",
+  IMAGE: "image",
 } as const;
 
 /** The bare keys a picture's zoom buttons name in their hints, which `@luke/ui`'s `useImageZoom` answers. */
@@ -88,11 +98,39 @@ const ZOOM_CHORD = {
 /** No notes on a file of a message. */
 const NO_NOTES: readonly WholeFileNote[] = [];
 
-/** One more thing the viewer's picture or video may be given to: its button's words and glyph, and what a press does with the file shown. */
-export interface ViewerAction {
+/**
+ * One more thing the viewer's picture or video may be given to: its button's
+ * words and glyph, and what a press does with the file shown, an act of the
+ * window's (`onPress`), or opening a page outside it, which it draws as the
+ * link it is (`address`, the page the file shown goes to, if it has one, and
+ * `onOpen`, which opens it through the window's link-open act).
+ */
+export type ViewerAction = {
   readonly label: string;
   readonly icon: React.ReactNode;
-  readonly onPress: (file: FileChip) => void;
+} & (
+  | { readonly onPress: (file: FileChip) => void; readonly address?: undefined }
+  | {
+      readonly address: (file: FileChip) => string | undefined;
+      readonly onOpen: (address: string) => void;
+      readonly onPress?: undefined;
+    }
+);
+
+/** The viewer's action that opens a page, drawn as a link to it; nothing for a file with no page to open. */
+function ViewerLink({
+  action,
+  address,
+}: {
+  action: Extract<ViewerAction, { onOpen: unknown }>;
+  address: string | undefined;
+}): React.JSX.Element | null {
+  if (address === undefined) return null;
+  return (
+    <ButtonLink icon={action.icon} href={address} onClick={linkPressOf(action.onOpen, address)}>
+      {action.label}
+    </ButtonLink>
+  );
 }
 
 /** Saves the file where the system's download asks, under its own name. */
@@ -103,38 +141,20 @@ function download(file: FileChip): void {
   link.click();
 }
 
-/** Copy for a text file's words, answered on its glyph as every copy button is. */
+/** Copy for a text file's words, `@luke/ui`'s one Copy. */
 function CopyTextButton({ text }: { text: string }): React.JSX.Element {
-  const { state, copy } = useCopyFeedback();
-  return (
-    <Tooltip label={copyHint(state, VIEWER_LABEL.COPY)}>
-      <IconButton
-        icon={<CopyGlyph state={state} />}
-        label={VIEWER_LABEL.COPY}
-        onClick={() => copy(text)}
-      />
-    </Tooltip>
-  );
+  return <CopyButton text={text} what={COPY_WHAT.TEXT} copy={copyThroughShell} />;
 }
 
 /**
- * Copy for a picture, put on the clipboard as a copy from Preview puts one,
- * answered on its glyph as every copy button is. Note that the answer is
- * shown only beside the picture it was for, because the button stands
- * while the files are walked and a copy may land after the next is shown.
+ * Copy for a picture, put on the clipboard as a copy from Preview puts one;
+ * its button's text is the picture's address. Note that it is keyed by that
+ * address, because the button stands while the files are walked: a copy
+ * answered after the next picture is shown lands nowhere, and the next
+ * starts at rest.
  */
 function CopyImageButton({ url }: { url: string }): React.JSX.Element {
-  const { state: copyState, answeredImage, copyImage } = useCopyFeedback();
-  const state: CopyState = answeredImage === url ? copyState : "idle";
-  return (
-    <Tooltip label={copyHint(state, VIEWER_LABEL.COPY_IMAGE)}>
-      <IconButton
-        icon={<CopyGlyph state={state} />}
-        label={VIEWER_LABEL.COPY_IMAGE}
-        onClick={() => copyImage(url)}
-      />
-    </Tooltip>
-  );
+  return <CopyButton key={url} text={url} what={COPY_WHAT.IMAGE} copy={copyImageThroughShell} />;
 }
 
 /** One of the header's icon buttons, its name its hint, beside the key that does the same where there is one. */
@@ -272,9 +292,12 @@ export function AttachmentViewer({
 
   // Note that the card takes focus rather than a button, as Quick Look's
   // does, so no ring stands on a control nobody chose; Tab goes on to the
-  // buttons from there.
+  // buttons from there. It stands while it is mounted (`open`), because its
+  // exit is the flight back into its tile (`close`, through `expand`), which
+  // its owner unmounts it after.
   return (
     <Dialog
+      open
       size={DIALOG_SIZE.MEDIA}
       labelledBy={titleId}
       onDismiss={close}
@@ -288,9 +311,14 @@ export function AttachmentViewer({
       >
         <header className="attachment-viewer-header">
           <FileTypeIcon name={file.name} />
-          <h2 id={titleId} className="attachment-viewer-title">
+          <Text
+            as={TEXT_ELEMENT.H2}
+            variant={TEXT_VARIANT.SECTION}
+            id={titleId}
+            className="attachment-viewer-title"
+          >
             <OneLine>{file.name}</OneLine>
-          </h2>
+          </Text>
           <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
           {note === undefined || note === null ? null : (
             <span className="attachment-viewer-note">{note}</span>
@@ -330,10 +358,12 @@ export function AttachmentViewer({
               />
             </>
           ) : null}
-          {action === undefined || !(image || video) ? null : (
+          {action === undefined || !(image || video) ? null : action.address === undefined ? (
             <Button icon={action.icon} onClick={() => action.onPress(file)}>
               {action.label}
             </Button>
+          ) : (
+            <ViewerLink action={action} address={action.address(file)} />
           )}
           <HeaderButton
             label={VIEWER_LABEL.DOWNLOAD}

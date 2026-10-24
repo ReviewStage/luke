@@ -1,6 +1,7 @@
-import type { ComponentPropsWithRef, ReactNode } from "react";
+import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import type { StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 
@@ -30,7 +31,10 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  * where it leads with none, its face staying the chip's own, as a pull
  * request's state is; stand at a width its place shares (`width`); and draw its mark
  * alone where its place has no room for its words (`iconOnly`), its words
- * still read as its name. A removable chip (`onRemove`) is no button of its
+ * still read as its name. A chip that opens a page (`href`) is a link in the
+ * same face, so it is found, copied and opened as any link is; a window that
+ * opens addresses through its own door stops the browser's follow in
+ * `onClick`. A removable chip (`onRemove`) is no button of its
  * own: it names what stands, a filter applied, a mention or a label added to
  * a field, and ends in a × named for what lifting it does, which its caller
  * answers at once, so what it named is gone on the press. It springs in as
@@ -56,6 +60,15 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  * they name code (`mono`, a branch). A leading mark, a
  * glyph or a picture, stands at the control's glyph size. It takes no class
  * or style: its outer layout is its container's.
+ *
+ * It is drawn in Tailwind utilities over the shared theme, worked out here
+ * from its options, so each look's rest, hover, open, and pressed faces are
+ * the only ones it wears. Note that it stands on no shadcn/ui base: the
+ * vendored badge (`../../shadcn/badge.tsx`) is a caption's capsule that
+ * takes no press, whose every class a chip's control box would override,
+ * and a chip's press must stay its own button's. `chip.css` keeps what
+ * utilities cannot say: a tone's dot, which turns on what the chip holds
+ * (`:has()`), the motions, and the fades.
  */
 
 /** The looks a chip comes in, by the place it stands. */
@@ -75,17 +88,6 @@ export const CHIP_SIZE = {
 } as const;
 
 export type ChipSize = (typeof CHIP_SIZE)[keyof typeof CHIP_SIZE];
-
-/** Where the thing a chip names stands, in the state palette `Badge` says it in. */
-export const CHIP_TONE = {
-  NEUTRAL: "neutral",
-  ATTENTION: "attention",
-  COMPLETE: "complete",
-  MERGED: "merged",
-  DANGER: "danger",
-} as const;
-
-export type ChipTone = (typeof CHIP_TONE)[keyof typeof CHIP_TONE];
 
 /**
  * How wide a chip stands: its words' own width; the field column a settings
@@ -134,7 +136,7 @@ function keptEnd(name: string): string {
 interface ChipFace {
   look: ChipLook;
   /** Where the thing it names stands; the look's own ink where none is named. */
-  tone?: ChipTone | undefined;
+  tone?: StatusTone | undefined;
   /** How wide it stands; its words' own width where none is named. */
   width?: ChipWidth | undefined;
   /** How big it is; the control's own size where none is named. */
@@ -151,7 +153,19 @@ type ButtonChipProps = ChipFace & {
   busy?: boolean | undefined;
   onRemove?: never;
   motionKey?: never;
+  href?: never;
 } & Omit<ComponentPropsWithRef<"button">, "type" | "style" | "className" | "aria-busy">;
+
+/** A chip that is a link: its face, and the address a press goes to. */
+type LinkChipProps = ChipFace & {
+  href: string;
+  /** Called as the press leaves, before the browser follows the link; `preventDefault` leaves the following to the caller. */
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  chevron?: never;
+  busy?: never;
+  onRemove?: never;
+  motionKey?: never;
+} & Omit<ComponentPropsWithRef<"a">, "style" | "className" | "href" | "onClick">;
 
 /** A chip naming what stands, ended by the × that lifts it. */
 type RemovableChipProps = ChipFace & {
@@ -161,10 +175,154 @@ type RemovableChipProps = ChipFace & {
   removeLabel: string;
   /** The key a `ListMotion` around its row follows it by, which plays its arrival and its exit. */
   motionKey?: string | undefined;
+  href?: never;
   children: ReactNode;
 };
 
-export type ChipProps = ButtonChipProps | RemovableChipProps;
+export type ChipProps = ButtonChipProps | LinkChipProps | RemovableChipProps;
+
+/** What every chip draws: a control's box, its words at the label's type, and the group its parts answer. */
+const CHIP_BASE =
+  "luke-chip group/chip m-0 inline-flex max-w-full items-center border font-body no-underline whitespace-nowrap transition-[background-color,color] duration-(--luke-duration-hover) ease-plain";
+
+/**
+ * Each look's face at rest and under the pointer, while its menu is open,
+ * and pressed. Note that hover is a plain `:hover`, as it always was, rather
+ * than Tailwind's hover-capable one, and that a press outranks the hover it
+ * lands on by its longer selector.
+ */
+const LOOK_FACE = {
+  [CHIP_LOOK.TOOLBAR]:
+    "border-transparent bg-transparent text-body-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-fill-selected [&:hover:not(:disabled,[aria-disabled=true])]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground active:not-disabled:not-aria-disabled:bg-fill-pressed",
+  [CHIP_LOOK.FIELD]:
+    "border-border bg-transparent text-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-fill-selected aria-expanded:bg-fill-selected active:not-disabled:not-aria-disabled:bg-fill-pressed",
+  [CHIP_LOOK.PILL]:
+    "border-chip-edge bg-chip text-muted-foreground in-data-[luke-profile=web]:text-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-chip-hover [&:hover:not(:disabled,[aria-disabled=true])]:text-foreground aria-expanded:bg-chip-hover aria-expanded:text-foreground",
+  [CHIP_LOOK.FILTER]:
+    "border-chip-edge bg-chip text-muted-foreground [&:hover:not(:disabled,[aria-disabled=true],[aria-pressed=true])]:bg-chip-hover [&:hover:not(:disabled,[aria-disabled=true],[aria-pressed=true])]:text-foreground aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-ink-foreground",
+} as const satisfies Record<ChipLook, string>;
+
+/** A removable filter's face: chosen, inside the strong hairline, lighting under the pointer as any filter does. */
+const REMOVABLE_FILTER_FACE =
+  "border-chip-edge-strong bg-chip-selected text-foreground [&:hover]:bg-chip-hover";
+
+/** A toned chip's face, whatever its look: the chip's own inside its hairline, its words in the text's ink, lighting as a pill does. */
+const TONED_FACE = "border-chip-edge bg-chip text-foreground";
+
+/** A toned chip lighting under the pointer, and while its menu is open. */
+const TONED_HOVER =
+  "[&:hover:not(:disabled,[aria-disabled=true])]:bg-chip-hover aria-expanded:bg-chip-hover";
+
+/** A toned chip lighting while its menu is open alone, a removable one but a filter taking no hover. */
+const TONED_OPEN = "aria-expanded:bg-chip-hover";
+
+/** A toned toolbar chip or field still darkening under a press, as its look does. */
+const TONED_PRESS = "active:not-disabled:not-aria-disabled:bg-fill-pressed";
+
+/** A look's corner where no tone or removal redraws it. */
+const LOOK_CORNER = {
+  [CHIP_LOOK.TOOLBAR]: "rounded-control",
+  [CHIP_LOOK.FIELD]: "rounded-control",
+  [CHIP_LOOK.PILL]: "rounded-full",
+  [CHIP_LOOK.FILTER]: "rounded-full",
+} as const satisfies Record<ChipLook, string>;
+
+/** A look's side room inside its box. */
+const LOOK_INSET = {
+  [CHIP_LOOK.TOOLBAR]: "px-chip-inset",
+  [CHIP_LOOK.FIELD]: "ps-chip-inset-wide pe-chip-inset",
+  [CHIP_LOOK.PILL]: "ps-chip-inset pe-chip-inset-wide",
+  [CHIP_LOOK.FILTER]: "px-chip-inset-wide",
+} as const satisfies Record<ChipLook, string>;
+
+/** A removable chip's side room: its look's start, and its × near the end. */
+const REMOVABLE_INSET = {
+  [CHIP_LOOK.TOOLBAR]: "ps-chip-inset pe-chip-tight",
+  [CHIP_LOOK.FIELD]: "ps-chip-inset-wide pe-chip-tight",
+  [CHIP_LOOK.PILL]: "ps-chip-inset pe-chip-tight",
+  [CHIP_LOOK.FILTER]: "ps-chip-inset-wide pe-chip-tight",
+} as const satisfies Record<ChipLook, string>;
+
+/** Each width a place shares; a chip at its words' own may still shrink to nothing. */
+const WIDTH_BOX = {
+  [CHIP_WIDTH.AUTO]: "",
+  [CHIP_WIDTH.FIELD]: "w-chip-field",
+  [CHIP_WIDTH.MIN_FIELD]: "min-w-chip-min-field",
+  [CHIP_WIDTH.FIXED]: "w-chip-field-half",
+} as const satisfies Record<ChipWidth, string>;
+
+/** The face inside a chip, holding all it draws, so an unavailable chip fades it once. */
+const FACE_BASE =
+  "luke-chip-face inline-flex min-w-0 items-center gap-[inherit] [&>:is(svg,img)]:flex-none [&>svg.settings-chevron]:size-chip-chevron [&>svg.settings-chevron]:text-muted-foreground";
+
+/** What every chip draws, as one class list, worked out from its options. */
+function chipClasses(
+  { look, tone, width = CHIP_WIDTH.AUTO, size = CHIP_SIZE.CONTROL, iconOnly = false }: ChipFace,
+  removable: boolean,
+  busy: boolean,
+): string {
+  const compact = size === CHIP_SIZE.COMPACT;
+  const toned = tone !== undefined;
+  const filterish = look === CHIP_LOOK.FILTER;
+  const face = toned
+    ? [
+        TONED_FACE,
+        removable && !filterish ? TONED_OPEN : TONED_HOVER,
+        look === CHIP_LOOK.TOOLBAR || look === CHIP_LOOK.FIELD ? TONED_PRESS : "",
+      ]
+    : [removable && filterish ? REMOVABLE_FILTER_FACE : LOOK_FACE[look]];
+  // Note that the side room is the last of look, removal, mark alone, and compact to name it, as each narrows the one before.
+  const inset = compact
+    ? look === CHIP_LOOK.PILL
+      ? "px-chip-compact-inset"
+      : iconOnly
+        ? "p-0"
+        : "px-chip-inset"
+    : iconOnly
+      ? "px-chip-inset"
+      : removable
+        ? REMOVABLE_INSET[look]
+        : LOOK_INSET[look];
+  return [
+    CHIP_BASE,
+    LOOK_CORNER[look],
+    ...face,
+    inset,
+    look === CHIP_LOOK.FIELD ? "justify-start" : "justify-center",
+    width === CHIP_WIDTH.MIN_FIELD ? "" : "min-w-0",
+    WIDTH_BOX[width],
+    compact
+      ? "h-chip-compact gap-chip-tight text-caption leading-caption"
+      : `h-control text-label ${removable ? "gap-chip-tight" : "gap-icon-gap"}`,
+    !compact ? "font-label" : look === CHIP_LOOK.PILL ? "font-tag" : "font-caption",
+    compact && iconOnly ? "flex-none aspect-square" : "flex-initial",
+    busy
+      ? "cursor-progress"
+      : removable
+        ? "cursor-default"
+        : "cursor-pointer in-data-[luke-profile=desktop]:cursor-default",
+  ]
+    .filter((part) => part !== "")
+    .join(" ");
+}
+
+/** The face's own classes: its glyphs at the chip's size, its field's chevron at the far end, faded while the chip is unavailable. */
+function faceClasses(
+  { look, size = CHIP_SIZE.CONTROL, iconOnly = false }: ChipFace,
+  busy: boolean,
+): string {
+  const smallGlyphs = look === CHIP_LOOK.PILL && size === CHIP_SIZE.COMPACT;
+  return [
+    FACE_BASE,
+    smallGlyphs ? "[&>:is(svg,img)]:size-chip-chevron" : "[&>:is(svg,img)]:size-control-icon",
+    look === CHIP_LOOK.FIELD ? "flex-1 [&>.settings-chevron]:ml-auto" : "flex-initial",
+    iconOnly ? "[&>.settings-chevron]:hidden" : "",
+    // Note that a busy chip's face pulses whole rather than standing faded, so only an idle one fades.
+    busy ? "" : "group-disabled/chip:opacity-disabled group-aria-disabled/chip:opacity-disabled",
+  ]
+    .filter((part) => part !== "")
+    .join(" ");
+}
 
 /** The attributes a chip's face options draw as, on the button or the removable chip's box alike. */
 function faceAttributes({
@@ -183,6 +341,10 @@ function faceAttributes({
   };
 }
 
+/** The × ending a removable chip: a round press inside its capsule, lighting under the pointer. */
+const REMOVE =
+  "luke-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
+
 /** A removable chip: its face, then a × named for what it lifts. */
 function RemovableChip({
   onRemove,
@@ -193,15 +355,15 @@ function RemovableChip({
 }: RemovableChipProps): React.JSX.Element {
   return (
     <span
-      className="luke-chip"
+      className={chipClasses(face, true, false)}
       data-removable="true"
       {...faceAttributes(face)}
       {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
     >
-      <span className="luke-chip-face">{children}</span>
+      <span className={faceClasses(face, false)}>{children}</span>
       <button
         type="button"
-        className="luke-chip-remove"
+        className={REMOVE}
         aria-label={removeLabel}
         onClick={pulseOnPress(onRemove)}
       >
@@ -211,21 +373,49 @@ function RemovableChip({
   );
 }
 
-/** A chip: a button in the look of its place, or a removable chip where `onRemove` is given. */
+/** A chip that is a link, in the look of its place. */
+function LinkChip({
+  look,
+  tone,
+  width,
+  size,
+  iconOnly,
+  href,
+  onClick,
+  children,
+  ...anchor
+}: LinkChipProps): React.JSX.Element {
+  return (
+    <a
+      {...anchor}
+      className={chipClasses({ look, tone, width, size, iconOnly }, false, false)}
+      {...faceAttributes({ look, tone, width, size, iconOnly })}
+      href={href}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.FACE)}
+    >
+      <span className={faceClasses({ look, size, iconOnly }, false)} {...PRESS_FACE}>
+        {children}
+      </span>
+    </a>
+  );
+}
+
+/** A chip: a button in the look of its place, a link where `href` is given, or a removable chip where `onRemove` is given. */
 export function Chip(props: ChipProps): React.JSX.Element {
   if (props.onRemove !== undefined) return <RemovableChip {...props} />;
+  if (props.href !== undefined) return <LinkChip {...props} />;
   const { look, tone, width, size, iconOnly, chevron = false, busy, children, ...button } = props;
   return (
     <button
       type="button"
       {...button}
-      className="luke-chip"
+      className={chipClasses({ look, tone, width, size, iconOnly }, false, busy === true)}
       aria-busy={busy === true ? true : undefined}
       {...faceAttributes({ look, tone, width, size, iconOnly })}
       // Note that a busy chip's face is already moving, as its wait, so a press plays nothing over it.
       onClick={busy === true ? button.onClick : pulseOnPress(button.onClick, PRESS_PULSE.FACE)}
     >
-      <span className="luke-chip-face" {...PRESS_FACE}>
+      <span className={faceClasses({ look, size, iconOnly }, busy === true)} {...PRESS_FACE}>
         {children}
         {chevron ? <ChevronDownIcon /> : null}
       </span>
@@ -246,6 +436,10 @@ type ChipNameProps = {
     }
 );
 
+/** A chip's words on one line, and, drawn as its mark alone, read and drawn nowhere; a field's lead and fill it. */
+const NAME =
+  "luke-chip-name overflow-hidden whitespace-nowrap group-data-[look=field]/chip:flex-1 group-data-[look=field]/chip:text-left group-data-[icon-only=true]/chip:absolute group-data-[icon-only=true]/chip:-m-px group-data-[icon-only=true]/chip:size-px group-data-[icon-only=true]/chip:[clip-path:inset(50%)]";
+
 /**
  * A chip's words, cut short rather than pushing past the row it stands in:
  * fading out at their end, or cut in their middle at an ellipsis, which says
@@ -258,7 +452,13 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
   return (
     <span
       ref={measured}
-      className="luke-chip-name"
+      className={[
+        NAME,
+        props.mono === true ? "font-mono text-caption leading-[inherit]" : "",
+        kept === "" ? "" : "inline-flex min-w-0",
+      ]
+        .filter((part) => part !== "")
+        .join(" ")}
       data-mono={props.mono === true ? "true" : undefined}
       data-cut={kept === "" ? undefined : CHIP_CUT.MIDDLE}
       data-overflow={String(clipped)}
@@ -267,7 +467,9 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
         props.children
       ) : (
         <>
-          <span className="luke-chip-name-start">{props.children.slice(0, -kept.length)}</span>
+          <span className="luke-chip-name-start min-w-0 overflow-hidden whitespace-pre">
+            {props.children.slice(0, -kept.length)}
+          </span>
           <span className="luke-chip-name-end">{kept}</span>
         </>
       )}
@@ -277,14 +479,17 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
 
 /**
  * The quiet count after a chip's words, what a filter would leave out: in the
- * subtle ink at fixed figures, and on a pressed filter stepped back from the
- * ground's colour its words are in, rather than the subtle ink it would
+ * muted ink at fixed figures, and on a pressed filter stepped back from the
+ * ground's colour its words are in, rather than the muted ink it would
  * vanish into there. A reader hears the count where the chip's name or its
  * description says it, so it is hidden from them here.
  */
 export function ChipCount({ children }: { children: string }): React.JSX.Element {
   return (
-    <span className="luke-chip-count" aria-hidden="true">
+    <span
+      className="luke-chip-count text-muted-foreground tabular-nums group-aria-pressed/chip:text-chip-count-pressed"
+      aria-hidden="true"
+    >
       {children}
     </span>
   );

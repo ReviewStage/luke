@@ -22,7 +22,7 @@ import { attachment } from "../../schemas/attachment.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, plansOf } from "../../testing/index.js";
 import { writeAccountPreferences } from "../account-store.js";
 import {
   agentMembersOf,
@@ -2651,5 +2651,18 @@ it.layer(getTestDB())("the chat store's keyed member reads and the chat's stamp"
         yield* moves("Chat turned off");
         assert.deepEqual(yield* workspaceChatStamp(stranger, ada), Option.none());
       }),
+  );
+});
+
+it.layer(getTestDB())("the asks waiting on an account", (it) => {
+  it.effect("the asks waiting on an account are found through the index of the open asks", () =>
+    Effect.gen(function* () {
+      const userId = `user-${randomUUID()}`;
+      const [waiting] = yield* plansOf(waitingOn(userId));
+      const [stamps] = yield* plansOf(waitingStamps(userId));
+
+      assert.match(waiting?.plan ?? "", /chat_message_organization_ask_status/);
+      assert.match(stamps?.plan ?? "", /chat_message_organization_ask_status/);
+    }),
   );
 });

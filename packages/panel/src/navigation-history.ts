@@ -76,7 +76,7 @@
  * as that step is (`WindowHistory`'s `away` and `onLeave`).
  */
 
-import { linkOf, type ReadLink } from "@luke/features/luke-link";
+import { linkOf, type ReadLink } from "@luke/features/link-grammar";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { CHAT_PLACE, type ChatPlace } from "@luke/ui/chat-model";
 import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";

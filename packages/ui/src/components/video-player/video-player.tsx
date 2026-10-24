@@ -1,4 +1,5 @@
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
+import { playheadText } from "@luke/features/time-format";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   ExitFullScreenIcon,
@@ -57,8 +58,8 @@ const VIDEO_LABEL = {
   EXIT_FULL_SCREEN: "Exit full screen",
 } as const;
 
-/** The seconds in a minute, for how far a video has run. */
-const MINUTE_S = 60;
+/** The milliseconds in a second, for the player's playhead in the one clock a recording is told in. */
+const MS_PER_SECOND = 1_000;
 
 /** How finely the scrubber moves, in seconds. */
 const SEEK_STEP_S = 0.1;
@@ -104,12 +105,6 @@ export function dataUrlMediaType(dataUrl: string): string {
 /** Whether a `data:` URL a picture read answered holds a video, played rather than drawn. */
 export function isVideoDataUrl(dataUrl: string): boolean {
   return dataUrlMediaType(dataUrl) === CONVERSATION_MEDIA_TYPE.WEBM;
-}
-
-/** How far a video has run, as a player says it: minutes and two-digit seconds. */
-function runningTime(seconds: number): string {
-  const whole = Math.floor(seconds);
-  return `${String(Math.floor(whole / MINUTE_S))}:${String(whole % MINUTE_S).padStart(2, "0")}`;
 }
 
 /**
@@ -223,7 +218,7 @@ function VideoBar({
   onExpand: (() => void) | undefined;
   onFullScreen: () => void;
 }): React.JSX.Element {
-  const time = `${runningTime(playback.at)} / ${runningTime(playback.duration)}`;
+  const time = `${playheadText(playback.at * MS_PER_SECOND)} / ${playheadText(playback.duration * MS_PER_SECOND)}`;
   return (
     <span className="luke-video-player-bar">
       <BarButton
@@ -307,7 +302,9 @@ export function VideoPlayer({
       tabIndex={-1}
       role="group"
       aria-label={VIDEO_LABEL.PLAYER}
-      onKeyDown={(event) => playerKey(event, video.current)}
+      // Note that the player hears a key before the control it lands on, because the scrubber's
+      // slider steps on an arrow itself and stands down only for a key already taken.
+      onKeyDownCapture={(event) => playerKey(event, video.current)}
     >
       {url === undefined ? null : (
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.

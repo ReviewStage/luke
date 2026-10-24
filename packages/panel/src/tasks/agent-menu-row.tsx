@@ -2,7 +2,7 @@
  * agent-menu-row.tsx -- one workspace agent as every agent menu of the panel draws its row.
  *
  * A row leads with the agent's tab glyph, which gives way to the working
- * mark while it works, and is named as its tab is (`agentTabLabel`). Its
+ * mark while it works, and is named as its tab is (`agentName`). Its
  * detail is its task, as the `@` menu says it: This task for the task the
  * menu is open on, another task by its name, or No task, and Archived after
  * it for an archived agent; a task named as the agent is said nowhere, since
@@ -15,12 +15,12 @@
  */
 
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { MenuRow } from "@luke/ui";
 import { ACTOR_KIND, type EditReader, teammateCreator } from "@luke/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
-import type { MenuRow } from "../searchable-menu.js";
 import { AgentCard, AgentHoverCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { agentTabLabel } from "./coding-agent-model.js";
+import { agentName } from "./coding-agent-model.js";
 import type { MentionableAgent } from "./mention-picker.js";
 import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-agent-card.js";
 import { agentEndMark, TAB_KIND, tabLook } from "./tab-look.js";
@@ -139,7 +139,7 @@ export function useAgentRowPlace(taskId?: string): AgentRowPlace {
 /** One workspace agent as an agent menu's row: its tab's glyph and name, its task, its starter's face and failed mark, and its card. */
 export function agentMenuRow(agent: MentionableAgent, place: AgentRowPlace): MenuRow {
   const { summary } = agent;
-  const label = summary === undefined ? agent.name : agentTabLabel(summary, place.models);
+  const label = summary === undefined ? agent.name : agentName(summary, place.models);
   const icon =
     summary === undefined ? (
       <ActorMark actor={agent.actor} />

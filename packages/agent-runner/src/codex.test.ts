@@ -419,6 +419,37 @@ it.effect(
     }),
 );
 
+it.effect(
+  "keeps a warm launch up past its completed turn, posting IDLE, and ends it as idled on Luke's retire",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const { spawned, write, run } = yield* launch([WORKFLOW], luke);
+      yield* write({ ...CONFIG, warm: true });
+      yield* write(message("The probe's first turn.", LINE.FIRST));
+      yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
+      for (let step = 0; step < 5_000; step += 1) {
+        if (kinds(luke.applied).includes(RUNNER_EVENT.IDLE)) break;
+        yield* Effect.yieldNow;
+      }
+      assert.equal(run.pollUnsafe(), undefined, "the launch stays up past its turn");
+
+      yield* write({ type: INPUT_LINE.RETIRE });
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
+      assert.deepEqual(spawned[0]?.unexpected, []);
+      assert.deepEqual(kinds(luke.applied).slice(-3), [
+        "turn/completed",
+        RUNNER_EVENT.IDLE,
+        RUNNER_EVENT.END,
+      ]);
+      assert.deepEqual(luke.applied.at(-1)?.message, {
+        type: RUNNER_EVENT.END,
+        reason: RUNNER_END.IDLED,
+      });
+    }),
+);
+
 it.effect("interrupts the running turn on a stop and ends the launch as stopped", () =>
   Effect.gen(function* () {
     const luke = fakeLuke("sleep 600");

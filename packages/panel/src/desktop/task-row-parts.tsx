@@ -11,7 +11,6 @@ import {
   type TaskSummary,
 } from "@luke/features/task-wire";
 import {
-  BADGE_TONE,
   Badge,
   CHIP_LOOK,
   CHIP_SIZE,
@@ -19,6 +18,7 @@ import {
   type ChipLook,
   ChipName,
   dropBelowStart,
+  STATUS_TONE,
   TaskPriorityMark,
   TaskStatusMark,
   Tooltip,
@@ -40,11 +40,11 @@ import {
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import { useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 import { MorePullRequestsCard, PullRequestCard, TaskAgentsCard } from "./task-part-cards.js";
 
@@ -118,7 +118,7 @@ export function useStandingDoor(
     }
     void tasks.onSetTaskStanding(task.id, standing).then((kept) => {
       if (kept) onKept?.();
-      else toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      else toast({ words: UNCHANGED_LINE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
   };
 }
@@ -285,7 +285,7 @@ export function StatusChip({
 export function WaitingBadge({ count }: { count: number }): React.JSX.Element | null {
   if (count === 0) return null;
   return (
-    <Badge tone={BADGE_TONE.ATTENTION}>
+    <Badge tone={STATUS_TONE.ATTENTION}>
       {`${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
     </Badge>
   );
@@ -380,22 +380,38 @@ export function TaskWorkMarks({
       ) : null}
       {shown.map((pullRequest) => {
         const { url } = pullRequest;
+        const face = (
+          <>
+            <PullRequestMark pullRequest={pullRequest} />
+            <ChipName>{pullRequestNumberLabel(pullRequest)}</ChipName>
+          </>
+        );
+        const marks = {
+          "data-task-work": "pull-request",
+          "data-pull-request-state": pullRequestMarkState(pullRequest),
+        };
+        // Note that a pull request is a link to its page, opened as a link to it is elsewhere; one from a service before it sent its page opens the task.
         return (
           <Tooltip
             key={url ?? pullRequest.number}
             label={pullRequest.title}
             card={<PullRequestCard pullRequest={pullRequest} />}
           >
-            <Chip
-              look={chip}
-              size={CHIP_SIZE.COMPACT}
-              data-task-work="pull-request"
-              data-pull-request-state={pullRequestMarkState(pullRequest)}
-              onClick={url === undefined ? onOpen : () => openLink(url)}
-            >
-              <PullRequestMark pullRequest={pullRequest} />
-              <ChipName>{pullRequestNumberLabel(pullRequest)}</ChipName>
-            </Chip>
+            {url === undefined ? (
+              <Chip look={chip} size={CHIP_SIZE.COMPACT} {...marks} onClick={onOpen}>
+                {face}
+              </Chip>
+            ) : (
+              <Chip
+                look={chip}
+                size={CHIP_SIZE.COMPACT}
+                {...marks}
+                href={url}
+                onClick={linkPressOf(openLink, url)}
+              >
+                {face}
+              </Chip>
+            )}
           </Tooltip>
         );
       })}

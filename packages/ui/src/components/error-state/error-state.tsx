@@ -13,7 +13,9 @@
  *
  * Only where it stands differs. Among rows, in a card, or under a
  * transcript it is a row of its own at a caption's size, laid out as a row
- * is: the glyph where a row's glyph stands, the sentence where a row's words
+ * is (`ROWS` stands it at a sidebar's or a list pane's rows' inset by a
+ * margin of its own, as `NoteLine`'s `ROWS` does, a little short of the
+ * row's end so Retry's glyph stands under the head's buttons'): the glyph where a row's glyph stands, the sentence where a row's words
  * stand, and Retry at the row's end, where a row's own buttons stand. Where
  * the row is narrow, a sidebar's or a list pane's, Retry is its glyph alone,
  * still named Retry, so the sentence keeps the room.
@@ -32,7 +34,10 @@
  * beside it. Alone in a region it would have filled, a tab or a page, it is that region's empty state (`EmptyState`):
  * the glyph large and faint over the sentence, and Retry under it, standing
  * a little above the room's middle. The container places it and lends it no
- * colour of its own.
+ * colour of its own. Where trying the read again cannot mend it, because
+ * what failed is the drawing of the place itself (`ErrorBoundary`), Reload
+ * stands there in Retry's place, with Retry's glyph, and draws the place
+ * again from the start.
  *
  * A row that is itself the press, a list's foot such as "Show older
  * versions" turned failure, cannot hold a Retry button of its own, so it
@@ -43,13 +48,15 @@
  */
 
 import type { ReactNode } from "react";
-import { AlertIcon, CloseIcon, RetryIcon } from "../../face/glyphs.js";
+import { CloseIcon } from "../../face/glyphs.js";
+import { AlertIcon, RetryIcon } from "../../icons/lucide-glyphs.js";
 import { BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { EmptyState } from "../empty-state/empty-state.js";
 
-/** Where a failure stands: among the rows it failed to draw, alone in the region it would have filled, or on one line of a toolbar. */
+/** Where a failure stands: among the rows it failed to draw, at a list's rows' inset among them, alone in the region it would have filled, or on one line of a toolbar. */
 export const ERROR_STATE_PLACEMENT = {
   INLINE: "inline",
+  ROWS: "rows",
   CENTRED: "centred",
   TOOLBAR: "toolbar",
 } as const;
@@ -77,19 +84,23 @@ interface LineActions {
 /** Where a failure stands, with what it says and the presses it may offer there. */
 type Placed =
   | (LineActions & {
-      placement?: typeof ERROR_STATE_PLACEMENT.INLINE;
+      placement?: typeof ERROR_STATE_PLACEMENT.INLINE | typeof ERROR_STATE_PLACEMENT.ROWS;
       /** What did not land, as "The inbox could not be read." */
       children: ReactNode;
+      onReload?: undefined;
     })
   | (LineActions & {
       placement: typeof ERROR_STATE_PLACEMENT.TOOLBAR;
       /** What did not land, words alone, since a sentence cut short is said whole as its hint. */
       children: string;
+      onReload?: undefined;
     })
   | {
       placement: typeof ERROR_STATE_PLACEMENT.CENTRED;
       /** The way out of the place the failure left empty, under Retry. */
       exit?: ErrorStateRemedy | undefined;
+      /** Reload's press, drawn in Retry's place, which draws the place again from the start. */
+      onReload?: (() => void) | undefined;
       children: ReactNode;
       remedy?: undefined;
       onRemove?: undefined;
@@ -98,6 +109,7 @@ type Placed =
 
 const WORDS = {
   RETRY: "Retry",
+  RELOAD: "Reload",
   REMOVE: "Remove",
   DISMISS: "Dismiss",
 } as const;
@@ -106,7 +118,8 @@ const WORDS = {
  * A failure's sentence, `children`, and, where `onRetry` is given, the
  * Retry that tries again, said together as an alert and drawn at
  * `placement`; among rows, with the remedy, Remove, and Dismiss where each
- * is given.
+ * is given; alone in its region, with Reload in Retry's place where
+ * `onReload` is given.
  */
 export function ErrorState(
   props: {
@@ -114,18 +127,20 @@ export function ErrorState(
     onRetry?: (() => void) | undefined;
   } & Placed,
 ): React.JSX.Element {
-  const { onRetry, remedy, onRemove, onDismiss, children } = props;
+  const { onRetry, onReload, remedy, onRemove, onDismiss, children } = props;
   const placement = props.placement ?? ERROR_STATE_PLACEMENT.INLINE;
   if (placement === ERROR_STATE_PLACEMENT.CENTRED) {
+    const again =
+      onReload === undefined
+        ? onRetry === undefined
+          ? undefined
+          : { label: WORDS.RETRY, onClick: onRetry }
+        : { label: WORDS.RELOAD, onClick: onReload };
     return (
       <EmptyState
         icon={<AlertIcon />}
         alert
-        action={
-          onRetry === undefined
-            ? undefined
-            : { label: WORDS.RETRY, icon: <RetryIcon />, turns: true, onClick: onRetry }
-        }
+        action={again === undefined ? undefined : { ...again, icon: <RetryIcon />, turns: true }}
         secondary={props.placement === ERROR_STATE_PLACEMENT.CENTRED ? props.exit : undefined}
       >
         {children}

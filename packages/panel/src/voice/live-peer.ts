@@ -105,18 +105,22 @@ export interface LivePeer {
 
 export const LIVE_PEER_OUTCOME = {
   OPENED: "opened",
-  /** The host created no session for the offer, or the browser could not build the peer or set the answer. */
+  /**
+   * The host created no session for the offer, or the browser could not build
+   * the peer or set the answer. It carries no words: the browser's own text
+   * can quote the offer, and the call says this failure by its key alone.
+   */
   FAILED: "failed",
 } as const;
 
 export type LivePeerOpening =
   | { outcome: typeof LIVE_PEER_OUTCOME.OPENED; peer: LivePeer }
-  | { outcome: typeof LIVE_PEER_OUTCOME.FAILED; message: string };
+  | { outcome: typeof LIVE_PEER_OUTCOME.FAILED };
 
-const SESSION_REFUSED_MESSAGE = "Luke could not open a voice session.";
+type LivePeerFailed = typeof LIVE_PEER_OUTCOME.FAILED;
 
-const messageOf = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
+/** Whatever the browser threw, dropped for the outcome alone. */
+const failed = (): LivePeerFailed => LIVE_PEER_OUTCOME.FAILED;
 
 /**
  * Gathering, under its bound: a wait the deadline reaches first is
@@ -177,9 +181,9 @@ const acquireDevice = (
  * does.
  */
 export const acquireLivePeer = /* @__PURE__ */ Effect.fn("desktop/acquireLivePeer")(
-  function* (seams: LivePeerSeams): Effect.fn.Return<LivePeerOpening, string, Scope.Scope> {
+  function* (seams: LivePeerSeams): Effect.fn.Return<LivePeerOpening, LivePeerFailed, Scope.Scope> {
     const connection = yield* Effect.acquireRelease(
-      Effect.try({ try: () => seams.createPeerConnection(), catch: messageOf }),
+      Effect.try({ try: () => seams.createPeerConnection(), catch: failed }),
       (connection) => Effect.sync(() => connection.close()),
     );
     connection.ontrack = (event) => {
@@ -187,7 +191,7 @@ export const acquireLivePeer = /* @__PURE__ */ Effect.fn("desktop/acquireLivePee
       seams.onRemoteStream(stream);
     };
     const silence = yield* Effect.acquireRelease(
-      Effect.try({ try: () => seams.createSilence(), catch: messageOf }),
+      Effect.try({ try: () => seams.createSilence(), catch: failed }),
       (silence) => Effect.sync(() => silence.release()),
     );
     const microphoneStream = yield* acquireDevice(seams);
@@ -200,31 +204,31 @@ export const acquireLivePeer = /* @__PURE__ */ Effect.fn("desktop/acquireLivePee
         }
         return connection.addTrack(silence.track, silence.stream);
       },
-      catch: messageOf,
+      catch: failed,
     });
     const channel = yield* Effect.try({
       try: () => connection.createDataChannel(LIVE_EVENTS_CHANNEL_LABEL),
-      catch: messageOf,
+      catch: failed,
     });
     const offer = yield* Effect.tryPromise({
       try: () => connection.createOffer(),
-      catch: messageOf,
+      catch: failed,
     });
     yield* Effect.tryPromise({
       try: () => connection.setLocalDescription(offer),
-      catch: messageOf,
+      catch: failed,
     });
     yield* gatherIce(connection);
     const sdp = connection.localDescription?.sdp;
-    if (!sdp) return yield* Effect.fail("the peer produced no local description");
+    if (!sdp) return yield* Effect.fail(failed());
     const created = yield* Effect.tryPromise({
       try: () => seams.createSession(sdp),
-      catch: messageOf,
+      catch: failed,
     });
-    if (!created) return yield* Effect.fail(SESSION_REFUSED_MESSAGE);
+    if (!created) return yield* Effect.fail(failed());
     yield* Effect.tryPromise({
       try: () => connection.setRemoteDescription({ type: "answer", sdp: created.sdpAnswer }),
-      catch: messageOf,
+      catch: failed,
     });
     return {
       outcome: LIVE_PEER_OUTCOME.OPENED,
@@ -240,8 +244,8 @@ export const acquireLivePeer = /* @__PURE__ */ Effect.fn("desktop/acquireLivePee
       },
     } satisfies LivePeerOpening;
   },
-  Effect.catch((message) =>
-    Effect.succeed({ outcome: LIVE_PEER_OUTCOME.FAILED, message } satisfies LivePeerOpening),
+  Effect.catch(() =>
+    Effect.succeed({ outcome: LIVE_PEER_OUTCOME.FAILED } satisfies LivePeerOpening),
   ),
 );
 

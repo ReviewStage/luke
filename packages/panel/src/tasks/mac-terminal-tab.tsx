@@ -4,13 +4,13 @@ import {
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { BUTTON_SIZE, BUTTON_VARIANT, Button, FILL_FLOW, Fill, OneLine } from "@luke/ui";
+import { BUTTON_SIZE, BUTTON_VARIANT, Button, FILL_FLOW, Fill, PaneBar } from "@luke/ui";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { PlayIcon, SquareIcon, TerminalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { toastActFailure, useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
@@ -201,7 +201,13 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     const ran = lastRuns.get(agentId);
     if (ran !== undefined) ran.stopped = true;
     setStanding({ kind: "stopping" });
-    act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).catch(() => undefined);
+    act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).catch((refused: unknown) => {
+      // Note that a refused stop leaves the run going, so the tab says it is still running, unless the run has ended meanwhile.
+      stopAsked.current = false;
+      if (ran !== undefined) ran.stopped = false;
+      setStanding((now) => (now.kind === "stopping" ? { kind: "running" } : now));
+      toastActFailure(refused);
+    });
   };
   const openInTerminal = () => {
     // Note that a refusal is written on the screen, so a press that opened nothing says why.
@@ -212,46 +218,48 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
 
   return (
     <Fill className="terminal-tab file-view ph-no-capture">
-      <header className="file-view-bar">
-        <span className="terminal-tab-title">
-          <OneLine className="terminal-tab-agent">{repository}</OneLine>
+      <PaneBar
+        title={repository}
+        detail={
           <span className="terminal-tab-standing">
             {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
           </span>
-        </span>
-        <div className="file-view-actions">
-          <Button
-            icon={<TerminalIcon aria-hidden />}
-            label="Open in Terminal"
-            size={BUTTON_SIZE.COMPACT}
-            disabled={branch === undefined || standing.kind === "starting"}
-            onClick={openInTerminal}
-          >
-            Open in Terminal
-          </Button>
-          {running ? (
+        }
+        actions={
+          <>
             <Button
-              icon={<SquareIcon aria-hidden />}
-              variant={BUTTON_VARIANT.DANGER_OUTLINE}
+              icon={<TerminalIcon aria-hidden />}
+              label="Open in Terminal"
               size={BUTTON_SIZE.COMPACT}
-              disabled={standing.kind === "stopping"}
-              onClick={stop}
+              disabled={branch === undefined || standing.kind === "starting"}
+              onClick={openInTerminal}
             >
-              Stop
+              Open in Terminal
             </Button>
-          ) : (
-            <Button
-              icon={<PlayIcon aria-hidden />}
-              variant={BUTTON_VARIANT.PRIMARY}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={standing.kind === "starting"}
-              onClick={() => setPresses((count) => count + 1)}
-            >
-              Run
-            </Button>
-          )}
-        </div>
-      </header>
+            {running ? (
+              <Button
+                icon={<SquareIcon aria-hidden />}
+                variant={BUTTON_VARIANT.DANGER_OUTLINE}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={standing.kind === "stopping"}
+                onClick={stop}
+              >
+                Stop
+              </Button>
+            ) : (
+              <Button
+                icon={<PlayIcon aria-hidden />}
+                variant={BUTTON_VARIANT.PRIMARY}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={standing.kind === "starting"}
+                onClick={() => setPresses((count) => count + 1)}
+              >
+                Run
+              </Button>
+            )}
+          </>
+        }
+      />
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body">
         <div className="terminal-tab-host">
           {AsyncResult.isFailure(loaded) ? (

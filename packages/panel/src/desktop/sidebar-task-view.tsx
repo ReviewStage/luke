@@ -5,10 +5,7 @@ import {
   Chip,
   ChipName,
   dropBelowStart,
-  FoldingSearch,
   IconButton,
-  NAV_ITEM_VARIANT,
-  NavItem,
   TaskStatusMark,
   TextButton,
   Tooltip,
@@ -32,16 +29,14 @@ import {
   SlidersHorizontalIcon,
   UserCheckIcon,
   UserIcon,
-  UsersIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
+import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import type { CountNoun } from "./sidebar-group-header.js";
 import type { TaskListViewControl } from "./task-list-view.js";
 
 /**
@@ -75,63 +70,6 @@ const STATUS_FILTER = "Show statuses";
 /** The menu the status filter's button and the hidden tasks' line both open. */
 type StatusFilterMenu = ReturnType<typeof useMenu>;
 
-/**
- * A section's head: its name, which folds the section where it may be
- * folded, and what stands at its end. Where the section is searched
- * (`search`), a magnifier after the name unfolds a field over it
- * (`FoldingSearch`), the end's buttons standing still as it opens and
- * folds, so a press on one lands though the press folded the field.
- */
-export function SidebarSectionHead({
-  name,
-  search,
-  folded,
-  count,
-  noun,
-  onToggle,
-  children,
-}: {
-  name: string;
-  /** The search a magnifier after the name unfolds over it, where the section is searched. */
-  search?: { label: string; value: string; onChange: (value: string) => void } | undefined;
-  /** Whether the section is folded, where its head folds it. */
-  folded?: boolean;
-  /** How many rows a folded section holds, shown after its name while folded. */
-  count?: number;
-  /** What the count is read as, one and many. */
-  noun?: CountNoun;
-  onToggle?: () => void;
-  /** The head's buttons at its end. */
-  children?: ReactNode;
-}): React.JSX.Element {
-  const named =
-    onToggle === undefined ? (
-      <span className="sidebar-section-head-name">{name}</span>
-    ) : (
-      <NavItem
-        variant={NAV_ITEM_VARIANT.HEAD}
-        expanded={folded !== true}
-        count={
-          folded === true && count !== undefined
-            ? {
-                value: count,
-                noun: noun === undefined ? undefined : count === 1 ? noun.one : noun.many,
-              }
-            : undefined
-        }
-        onClick={onToggle}
-      >
-        {name}
-      </NavItem>
-    );
-  return (
-    <div className="sidebar-section-head">
-      {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}
-      {children}
-    </div>
-  );
-}
-
 /** Who the list is filtered to, as the window draws them: a member as read, else as a listed task names them, else someone. */
 function filteredActor(
   createdBy: string,
@@ -143,13 +81,6 @@ function filteredActor(
   const named = tasks.find((task) => task.createdBy?.userId === createdBy);
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
-
-/** The row standing last in a people menu while the members are read, which nothing picks. */
-const READING_MEMBERS: MenuAction = {
-  label: "Reading members…",
-  disabled: true,
-  onSelect: () => undefined,
-};
 
 /** Assigned to's and Created by's choices, as every filter by person offers them: Anyone, Me, then each other member, the account id filtered to checked, and while the members are read a row saying so. */
 function memberFilter(
@@ -175,7 +106,7 @@ function memberFilter(
             : filter.userId,
       ),
   });
-  return [...people, ...(reader.membersReading ? [READING_MEMBERS] : [])];
+  return [...people, ...memberReadNotice(reader)];
 }
 
 /** The menu's choices: how the list groups, Assignee and Creator only where the workspace is shared, how it orders, and who the tasks it lists are assigned to and who created them, where shared. */
@@ -208,8 +139,7 @@ function viewEntries(
   return [
     [
       {
-        label: "Group by",
-        icon: <ListIcon />,
+        ...commandHead(PANEL_COMMAND.GROUP_BY),
         items: [
           grouping("Repository", <FolderGitIcon />, TASK_GROUPING.REPOSITORY),
           ...(shared
@@ -222,8 +152,7 @@ function viewEntries(
         ],
       },
       {
-        label: "Order by",
-        icon: <ClockIcon />,
+        ...commandHead(PANEL_COMMAND.ORDER_BY),
         items: [
           order("Last updated", <ClockIcon />, TASK_ORDER.UPDATED),
           order("Created", <CalendarPlusIcon />, TASK_ORDER.CREATED),
@@ -235,13 +164,11 @@ function viewEntries(
       ? [
           [
             {
-              label: "Assigned to",
-              icon: <UserCheckIcon />,
+              ...commandHead(PANEL_COMMAND.ASSIGNED_TO),
               items: memberFilter(view.assignedTo, control.onAssignedTo, reader),
             },
             {
-              label: "Created by",
-              icon: <UsersIcon />,
+              ...commandHead(PANEL_COMMAND.CREATED_BY),
               items: memberFilter(view.createdBy, control.onCreatedBy, reader),
             },
           ],

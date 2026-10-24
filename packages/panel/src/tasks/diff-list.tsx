@@ -9,6 +9,7 @@ import {
   ScrollArea,
   TooltipPill,
   useHintRest,
+  usePressAway,
 } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
@@ -432,17 +433,9 @@ export function PierreDiffList({
   });
 
   // A press anywhere but on the offer lets it go; one in the list the bundle tells of itself.
-  const offered = offer !== undefined;
-  useEffect(() => {
-    if (!offered) return undefined;
-    const press = (event: PointerEvent) => {
-      if (!(event.target instanceof Node) || offerBox.current?.contains(event.target) !== true) {
-        setOffer(undefined);
-      }
-    };
-    document.addEventListener("pointerdown", press, true);
-    return () => document.removeEventListener("pointerdown", press, true);
-  }, [offered]);
+  usePressAway(offerBox, () => undefined, {
+    onPressAway: offer === undefined ? undefined : () => setOffer(undefined),
+  });
 
   if (AsyncResult.isFailure(loaded)) {
     return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;

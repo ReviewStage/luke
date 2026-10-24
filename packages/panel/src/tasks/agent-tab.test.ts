@@ -13,6 +13,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
+import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { CHAT_PLACE, type ChatPlace, chatNames } from "@luke/ui/chat-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
@@ -521,6 +522,54 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", undefined, true]);
 });
 
+test("in an agent's transcript, a call that folds open in place still hangs its agent's tab's card from the agent's chip", () => {
+  const cards = taskCards({
+    agents: codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] }),
+    held: NOTHING_HELD,
+    chosen: () => false,
+    shownCode: [],
+    pages: undefined,
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const message = assistant([
+    toolPart(
+      "message_coding_agent",
+      { agentId: "agent-7", text: "Rebase on main" },
+      { status: "rejected", reason: "The agent has ended." },
+    ),
+  ]);
+  act(() =>
+    root.render(
+      createElement(AgentMessage, {
+        message,
+        plan: false,
+        lead: AGENT_LEAD,
+        moving: false,
+        delegation: {
+          models: [],
+          onOpen: () => undefined,
+          onOpenTarget: () => undefined,
+          cards: cards.agent("agent-1"),
+        },
+      }),
+    ),
+  );
+  // A call run alone is folded under its own line, which a press opens.
+  act(() => container.querySelector<HTMLElement>("[data-turn-fold] > summary")?.click());
+  const chip = container.querySelector<HTMLElement>(
+    '[data-call-id="call-message_coding_agent"] summary [data-tool-agent-ref]',
+  );
+
+  // Note that the chip is words, not a control, so the pointer is how it is reached.
+  restOn(chip ?? assert.fail("the call's agent chip"));
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
+});
+
 test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that opens the agent on a row that folds what was sent and is no target of its own on a row that opens it", () => {
   const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({
@@ -903,7 +952,7 @@ test("a call of an integration's tool is one row wearing the integration's mark,
   assert.equal(container.querySelector("[data-turn-fold] > summary")?.textContent, "1 tool called");
   const row = container.querySelector<HTMLElement>('[data-call-id="call-linear_remote"] summary');
   assert.ok(row, "the call's row is a fold's line");
-  assert.match(row.textContent ?? "", /^Used\s*list_issues/u);
+  assert.match(row.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);
   assert.equal(
     row.querySelector("svg")?.outerHTML,
     renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.LINEAR })),
@@ -920,7 +969,8 @@ test("a connection_execute with no integration's call under it keeps its own row
   assert.ok(execute);
   const { container } = drawn(assistant([execute]), true);
   const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
-  assert.match(row?.textContent ?? "", /^Used\s*connection_execute/u);
+  // Note that it names the tool and the connection its own input names.
+  assert.match(row?.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);
 });
 
 test("a connection_execute that failed keeps its own row beside the call it ran, so its error is read", () => {
@@ -935,6 +985,13 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
   act(() => row.click());
   const body = container.querySelector('[data-call-id="call-connection_execute"]')?.textContent;
   assert.ok(body?.includes("Linear stopped answering."), "its error is read under it");
+  assert.equal(
+    container.querySelector(
+      '[data-call-id="call-connection_execute"] [data-tool-output] [role="alert"]',
+    )?.textContent,
+    "Linear stopped answering.",
+    "and announced as an alert",
+  );
   assert.ok(
     container.querySelector('[data-call-id="call-linear_remote"]') !== null,
     "the call it ran keeps its row too",
@@ -1004,9 +1061,12 @@ test("a line a chat notice wrote draws as its sender's bubble at the left, the l
   assert.equal(bubble.dataset.messageId, "notice", "a link to the line finds its bubble");
   assert.ok(bubble.classList.contains("is-chat"), "it stands at the left");
   assert.equal(container.querySelector(".is-user"), null);
-  const meta = bubble.querySelector(".message-meta");
+  const meta = bubble.querySelector(".luke-message-line");
   assert.match(meta?.querySelector("[data-actor-ref]")?.textContent ?? "", /Invite emails/u);
-  assert.ok(meta?.querySelector(".message-sent-at time"), "the line says when it was posted");
+  assert.ok(
+    meta?.querySelector(".luke-message-line-time time"),
+    "the line says when it was posted",
+  );
   assert.equal(
     /teammate-invitations|m 43/u.test(meta?.textContent ?? ""),
     false,
@@ -1021,6 +1081,52 @@ test("a line a chat notice wrote draws as its sender's bubble at the left, the l
   assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: channelOf(43) }]);
 });
 
+/** What a message's line under it holds, in the order it reads, by part. */
+function lineParts(line: Element | null): readonly string[] {
+  assert.ok(line, "the message has a line under it");
+  return [...line.children].map((part) => {
+    if (part.matches(".luke-message-line-sender")) return "sender";
+    if (part.matches(".luke-message-line-time")) return "time";
+    if (part.matches(".luke-message-actions")) return "actions";
+    return assert.fail(`an unplaced part: ${part.className}`);
+  });
+}
+
+test("the line under an agent's message and under a chat notice read in the same order: who sent it, when, then its actions", () => {
+  const sent: CodingAgentMessage = {
+    id: "sent",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Rerun the spec on WebKit." }],
+    sentAt: new Date(2026, 9, 14, 15, 42).getTime(),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message: sent,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: { models: [] },
+          sender: { kind: ACTOR_KIND.LUKE },
+        }),
+      ),
+    ),
+  );
+  const underMessage = lineParts(container.querySelector(".is-user > .luke-message-line"));
+  const notice = noticeDrawn(true).container.querySelector(
+    "[data-chat-notice] > .luke-message-line",
+  );
+
+  assert.deepEqual(underMessage, ["sender", "time", "actions"]);
+  assert.deepEqual(lineParts(notice), underMessage);
+});
+
 test("a notice a person posted names them by their own chip, which hangs their card, as an agent's names it by its own", () => {
   const { container } = noticeDrawn(true, true, {
     ...NOTICE,
@@ -1029,7 +1135,9 @@ test("a notice a person posted names them by their own chip, which hangs their c
   });
   const bubble = container.querySelector<HTMLElement>("[data-chat-notice]");
   assert.ok(bubble, "the notice draws as a bubble");
-  const person = bubble.querySelector('.message-sender [data-actor-ref][data-kind="person"]');
+  const person = bubble.querySelector(
+    '.luke-message-line-sender [data-actor-ref][data-kind="person"]',
+  );
   assert.match(person?.textContent ?? "", /Maria Chen/u);
 });
 
@@ -1097,7 +1205,10 @@ test("a notice another coding agent posted names it by its own chip in the handl
     null,
     "no bare handle stands for the agent",
   );
-  assert.match(bubble.querySelector(".message-sender")?.textContent ?? "", /Invite expiry/u);
+  assert.match(
+    bubble.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    /Invite expiry/u,
+  );
   assert.equal(
     bubble.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Are you changing the memberships columns?",

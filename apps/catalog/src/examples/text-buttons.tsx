@@ -47,7 +47,7 @@ function TextButtons(): React.JSX.Element {
         </Text>
       </CatalogSection>
       <CatalogSection id="text-buttons-link" title="Link, an act nothing else says is pressable">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           Draws the video tile beside the call.{" "}
           <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={pressed}>
             Send feedback

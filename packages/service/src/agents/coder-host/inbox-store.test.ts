@@ -44,17 +44,15 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
-  INBOX_BLOCK,
+  INBOX_ASK_STATUS,
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
-  type InboxImageBlock,
-  type InboxPost,
+  type InboxItem,
 } from "@luke/features/inbox-wire";
 import {
   accountInboxLiveRowSchemas,
@@ -74,19 +72,20 @@ import {
   accountInboxTasks,
   accountWaitingItems,
   accountWaitingStamps,
+  acknowledgeInboxItem,
   answerInboxAsk,
-  answerInboxItem,
   closeInboxItem,
   closeInboxItemAsMember,
+  INBOX_ASK_ANSWER,
   INBOX_MESSAGE_OUTCOME,
   type InboxAgent,
   type InboxFile,
+  type InboxItemWritten,
   markInboxItemRead,
   markInboxItemUnread,
   markInboxRead,
   memberAgentInboxItems,
   memberAgentInboxLiveStatements,
-  postInboxItem,
   postInboxMessage,
   postInboxThread,
   readInboxAttachment,
@@ -144,15 +143,65 @@ const openAgentIn = Effect.gen(function* () {
 
 const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
 
-const SETTINGS: InboxPost = {
+/** A post as the agent's tool hands one to the store. */
+type InboxThreadPost = Parameters<typeof postInboxThread>[1];
+
+/** A post that asks the developer to do something by hand, and waits on no word back. */
+const SETTINGS = {
   key: "branch-protection",
   title: "Require a review on main",
-  response: { type: INBOX_RESPONSE.TODO },
+  body: "Turn on a required review for `main` in the repository's settings.",
+  ask: { type: INBOX_ASK.DO, steps: [] },
   needsReply: false,
-};
+} as const satisfies InboxThreadPost;
 
-/** The reply a task takes: done. */
-const DONE = { reply: INBOX_REPLY.DONE } as const;
+/** A post that asks nothing: a notice, which waits on the developer's nod alone. */
+const NOTICE = {
+  key: "heads-up",
+  title: "Main is protected now",
+  body: "Pushes to `main` need a review from here on.",
+} as const satisfies InboxThreadPost;
+
+/** The agent's post written, the item it stands as. */
+const post = (agent: InboxAgent, write: InboxThreadPost = SETTINGS) =>
+  Effect.map(postInboxThread(agent, write), Result.getOrThrow);
+
+/** The message whose ask the item holds open, by id; none where it holds none open. */
+const openAskOf = (item: Pick<InboxItem, "thread">) =>
+  item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
+
+/**
+ * A member's Done on the ask the item, as it was last shown to them, holds
+ * open, under the key given: the item as the answer leaves it, with the
+ * transaction it was taken in; nothing where the answer was not taken.
+ */
+const answerDone = (
+  userId: string,
+  item: Pick<InboxItem, "id" | "thread">,
+  clientKey: string = randomUUID(),
+  files?: readonly CodingAgentAttachment[],
+) =>
+  Effect.map(
+    answerInboxAsk(userId, item.id, {
+      answers: { ask: openAskOf(item), reply: INBOX_REPLY.DONE },
+      text: "",
+      clientKey,
+      files,
+    }),
+    Option.flatMap(({ item: answered, outcome, txid }) =>
+      outcome === INBOX_ASK_ANSWER.TAKEN
+        ? Option.some<InboxItemWritten>(txid === undefined ? answered : { ...answered, txid })
+        : Option.none(),
+    ),
+  );
+
+/** The member's messages on an item's thread, oldest first: the agent's left out. */
+const memberMessages = (item: Pick<InboxItem, "thread">) =>
+  (item.thread ?? []).filter((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER);
+
+/** The member's message on an item's thread that carries an answer. */
+const answeringOf = (item: Pick<InboxItem, "thread">) =>
+  item.thread?.find((message) => message.answers !== undefined);
 
 /** A file as an answer carries it: its name, its type, and its bytes in base64. */
 const attached = (
@@ -280,14 +329,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
         yield* joinWorkspace(workspaceId, teammate);
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
-        const open = yield* postInboxItem(agent, { ...SETTINGS, key: "open" });
-        assert.ok(Result.isSuccess(open));
-        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "closed" })));
+        const posted = yield* post(agent);
+        const open = yield* post(agent, { ...SETTINGS, key: "open" });
+        yield* post(agent, { ...SETTINGS, key: "closed" });
         assert.ok(
           Option.isSome(
-            yield* answerInboxItem(teammate, posted.success.id, 1, DONE, randomUUID(), [
+            yield* answerDone(teammate, posted, randomUUID(), [
               attached("first.txt", "text/plain", TRACE),
               attached("second.txt", "text/plain", TRACE),
             ]),
@@ -295,9 +342,10 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "closed", "Not needed after all")));
         // The teammate's message on the open item, with a file, leaves it read for them and unread for its starter.
+        yield* TestClock.adjust(Duration.seconds(1));
         assert.ok(
           Option.isSome(
-            yield* postInboxMessage(teammate, open.success.id, {
+            yield* postInboxMessage(teammate, open.id, {
               text: "Here is the trace.",
               clientKey: randomUUID(),
               files: [attached("trace.txt", "text/plain", TRACE)],
@@ -327,17 +375,21 @@ it.layer(getTestDB())("the inbox store", (it) => {
           );
         }
         const read = yield* taskInboxItems(teammate, agent.taskId ?? "");
-        const openOf = (items: typeof read) => items.find((item) => item.id === open.success.id);
+        const openOf = (items: typeof read) => items.find((item) => item.id === open.id);
         assert.equal(openOf(read)?.unread, false, "the teammate wrote on it last");
         assert.equal(openOf(yield* taskInboxItems(agent.userId, agent.taskId ?? ""))?.unread, true);
         assert.deepEqual(
-          openOf(read)?.messages?.map((message) => [message.text, message.files?.length]),
-          [["Here is the trace.", 1]],
+          openOf(read)?.thread?.map((message) => [message.text, message.files?.length]),
+          [
+            [SETTINGS.body, undefined],
+            ["Here is the trace.", 1],
+          ],
         );
-        assert.deepEqual(
-          read.find((item) => item.id === posted.success.id)?.answerFiles?.map((file) => file.name),
-          ["first.txt", "second.txt"],
-        );
+        const answered = read.find((item) => item.id === posted.id);
+        assert.deepEqual(answered && answeringOf(answered)?.files?.map((file) => file.name), [
+          "first.txt",
+          "second.txt",
+        ]);
         assert.deepEqual(read.map((item) => item.status).toSorted(), [
           INBOX_STATUS.ANSWERED,
           INBOX_STATUS.CLOSED,
@@ -357,14 +409,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
         yield* joinWorkspace(onTask.workspaceId, teammate);
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
-        const first = yield* postInboxItem(onTask.agent, SETTINGS);
-        assert.ok(Result.isSuccess(first));
-        assert.ok(
-          Result.isSuccess(yield* postInboxItem(onTask.agent, { ...SETTINGS, key: "second" })),
-        );
-        assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
+        const first = yield* post(onTask.agent);
+        yield* post(onTask.agent, { ...SETTINGS, key: "second" });
+        yield* post(taskless);
         // Read by the agent's starter and not by the teammate, so the two read it apart.
-        assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.success.id));
+        assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.id));
         // A second task of the starter's holding an item, settled, which the Inbox lists like any other.
         const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
         const shelvedAgent = yield* createCodingAgent(onTask.agent.userId, {
@@ -377,18 +426,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
           prompt: null,
         });
         assert.ok(Option.isSome(shelvedAgent));
-        assert.ok(
-          Result.isSuccess(
-            yield* postInboxItem(
-              {
-                userId: onTask.agent.userId,
-                taskId: shelved.id,
-                agentId: shelvedAgent.value.agent.id,
-              },
-              SETTINGS,
-            ),
-          ),
-        );
+        yield* post({
+          userId: onTask.agent.userId,
+          taskId: shelved.id,
+          agentId: shelvedAgent.value.agent.id,
+        });
         yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
 
         // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
@@ -473,7 +515,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.equal(read.items.length + (read.planless?.length ?? 0), 4);
         const unreadOf = (answer: typeof read) =>
-          answer.items.find((item) => item.id === first.success.id)?.unread;
+          answer.items.find((item) => item.id === first.id)?.unread;
         assert.equal(unreadOf(read), true, "the teammate has not read it");
         assert.equal(unreadOf(yield* accountInboxPast(owner, INBOX_CURSOR_START)), false);
         // Every change in a test lands at one instant, so the asks stand before the notices.
@@ -610,8 +652,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         yield* joinWorkspace(workspaceId, teammate);
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
+        const posted = yield* post(agent);
 
         const theirs = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         const others = yield* accountInboxPast(outsider, INBOX_CURSOR_START);
@@ -624,7 +665,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
             entry.repository,
             entry.workspaceId,
           ]),
-          [[posted.success.id, automationId, "Flaky-test sweep", "acme/relay", workspaceId]],
+          [[posted.id, automationId, "Flaky-test sweep", "acme/relay", workspaceId]],
         );
         assert.deepEqual(
           theirs.automations?.map((group) => [group.automationId, group.items]),
@@ -635,7 +676,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           [agent.userId],
           "the teammate's read names who started the agent, whom it asks",
         );
-        assert.ok(!theirs.items.some((entry) => entry.id === posted.success.id));
+        assert.ok(!theirs.items.some((entry) => entry.id === posted.id));
         assert.deepEqual([others.planless, others.automations], [[], []]);
 
         // Made personal, the automation's runs stay the workspace's, and which automation it is its creator's.
@@ -653,7 +694,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
             entry.automationId,
             entry.automationName,
           ]),
-          [[posted.success.id, null, null]],
+          [[posted.id, null, null]],
         );
         assert.deepEqual(
           teammateRead.automations?.map((group) => [group.automationId, group.items]),
@@ -676,17 +717,16 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
 
-        const posted = yield* postInboxItem(agent, SETTINGS);
+        const posted = yield* post(agent);
 
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
+        const { id } = posted;
         assert.ok(Option.isNone(yield* readInboxItem(outsider, id)));
-        assert.ok(Option.isNone(yield* answerInboxItem(outsider, id, 1, DONE, randomUUID())));
+        assert.ok(Option.isNone(yield* answerDone(outsider, posted)));
         assert.equal(
           Option.getOrThrow(yield* readInboxItem(teammate, id)).item.agentId,
           agent.agentId,
         );
-        const answered = yield* answerInboxItem(teammate, id, 1, DONE, randomUUID());
+        const answered = yield* answerDone(teammate, posted);
         assert.equal(Option.getOrUndefined(answered)?.status, INBOX_STATUS.ANSWERED);
       }),
   );
@@ -698,12 +738,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const { agent, workspaceId } = yield* openTasklessAgent;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
+        const posted = yield* post(agent);
+        const { id } = posted;
         const key = randomUUID();
 
-        const answered = Option.getOrThrow(yield* answerInboxItem(teammate, id, 1, DONE, key));
+        const answered = Option.getOrThrow(yield* answerDone(teammate, posted, key));
         assert.deepEqual(answered.answeredBy, { userId: teammate, name: "Test User" });
         assert.equal(answered.startedBy?.userId, agent.userId, "the item names whose agent asks");
         for (const reader of [agent.userId, teammate]) {
@@ -714,51 +753,50 @@ it.layer(getTestDB())("the inbox store", (it) => {
 
         const withdrawn = Option.getOrThrow(yield* withdrawInboxAnswer(teammate, id, key));
         assert.equal(withdrawn.answeredBy, undefined);
-        yield* answerInboxItem(agent.userId, id, withdrawn.revision, DONE, randomUUID());
-        const askedAgain = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(askedAgain));
-        assert.equal(askedAgain.success.answeredBy, undefined);
+        assert.ok(Option.isSome(yield* answerDone(agent.userId, withdrawn)));
+        const askedAgain = yield* post(agent);
+        assert.equal(askedAgain.answeredBy, undefined);
       }),
   );
 
   it.effect(
-    "an answer's files are kept beside the item in the order attached, named by name and type, and served as their bytes to every member and nobody else; an answer not taken keeps none",
+    "an answer's files are kept on the message that carries it in the order attached, named by name and type, and served as their bytes to every member and nobody else; an answer not taken keeps none",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
         const teammate = yield* openUser;
         const outsider = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
+        const posted = yield* post(agent);
+        const { id } = posted;
         const files = [
           attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
           attached("after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG, SHOT),
         ];
 
-        const stale = yield* answerInboxItem(teammate, id, 2, DONE, randomUUID(), files);
-        assert.ok(Option.isNone(stale));
+        const elsewhere = { ...posted, thread: [] };
+        assert.ok(Option.isNone(yield* answerDone(teammate, elsewhere, randomUUID(), files)));
         assert.equal(
-          Option.getOrThrow(yield* readInboxItem(teammate, id)).item.answerFiles,
+          answeringOf(Option.getOrThrow(yield* readInboxItem(teammate, id)).item),
           undefined,
         );
 
         const answered = Option.getOrThrow(
-          yield* answerInboxItem(teammate, id, 1, DONE, randomUUID(), files),
+          yield* answerDone(teammate, posted, randomUUID(), files),
         );
+        const kept = answeringOf(answered)?.files;
         assert.deepEqual(
-          answered.answerFiles?.map((file) => [file.name, file.mediaType]),
+          kept?.map((file) => [file.name, file.mediaType]),
           [
             ["trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
             ["after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG],
           ],
         );
-        const [trace, shot] = answered.answerFiles ?? [];
+        const [trace, shot] = kept ?? [];
         assert.ok(trace && shot);
         for (const reader of [agent.userId, teammate]) {
           const read = Option.getOrThrow(yield* readInboxItem(reader, id)).item;
-          assert.deepEqual(read.answerFiles, answered.answerFiles);
+          assert.deepEqual(answeringOf(read)?.files, kept);
           const found = yield* readInboxAttachment(reader, id, trace.attachmentId);
           const served: InboxFile = Option.getOrThrow(found);
           assert.equal(served.contentType, CODING_AGENT_ATTACHMENT_TYPE.TEXT);
@@ -773,72 +811,63 @@ it.layer(getTestDB())("the inbox store", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
+        const posted = yield* post(agent);
         // Past the picture bound, inside a PDF's.
         const spec = new Uint8Array(2_000_000).fill(0x25);
-        const answered = yield* answerInboxItem(
-          agent.userId,
-          posted.success.id,
-          1,
-          DONE,
-          randomUUID(),
-          [attached("spec.pdf", CODING_AGENT_ATTACHMENT_TYPE.PDF, spec)],
-        );
-        const [file] = Option.getOrThrow(answered).answerFiles ?? [];
+        const answered = yield* answerDone(agent.userId, posted, randomUUID(), [
+          attached("spec.pdf", CODING_AGENT_ATTACHMENT_TYPE.PDF, spec),
+        ]);
+        const [file] = answeringOf(Option.getOrThrow(answered))?.files ?? [];
         assert.ok(file);
-        const served = yield* readInboxAttachment(
-          agent.userId,
-          posted.success.id,
-          file.attachmentId,
-        );
+        const served = yield* readInboxAttachment(agent.userId, posted.id, file.attachmentId);
         assert.equal(Option.getOrThrow(served).bytes.byteLength, spec.byteLength);
       }),
   );
 
   it.effect(
-    "an answer taken back deletes the answer's files and keeps the item's pictures, and a post that opens the item again clears its answer's files while the message that answered keeps them on the thread",
+    "an answer taken back deletes the message that carried it with its files and keeps the agent's pictures, and a post that opens the item again leaves the message that answered with its files on the thread",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        const withPicture: InboxPost = {
-          ...SETTINGS,
-          blocks: [{ type: INBOX_BLOCK.IMAGE, path: "shots/rule.png", alt: "The branch rule" }],
-        };
-        const posted = yield* postInboxItem(agent, withPicture, [
-          { contentType: INBOX_IMAGE_TYPE.PNG, bytes: SHOT },
-        ]);
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
-        const picture = posted.success.blocks.find(
-          (block): block is InboxImageBlock => block.type === INBOX_BLOCK.IMAGE,
+        const posted = yield* Effect.map(
+          postInboxThread(
+            agent,
+            { ...SETTINGS, body: "Like this:\n\n![The branch rule](shots/rule.png)" },
+            [
+              {
+                path: "shots/rule.png",
+                name: "rule.png",
+                contentType: INBOX_IMAGE_TYPE.PNG,
+                bytes: SHOT,
+              },
+            ],
+          ),
+          Result.getOrThrow,
         );
+        const { id } = posted;
+        const picture = posted.thread?.[0]?.files?.[0];
         assert.ok(picture);
         const files = [attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE)];
-        const fileOf = (item: { readonly answerFiles?: readonly { attachmentId: string }[] }) =>
-          item.answerFiles?.[0]?.attachmentId ?? "";
+        const fileOf = (item: Pick<InboxItem, "thread">) =>
+          answeringOf(item)?.files?.[0]?.attachmentId ?? "";
 
         const key = randomUUID();
-        const first = Option.getOrThrow(
-          yield* answerInboxItem(agent.userId, id, 1, DONE, key, files),
-        );
+        const first = Option.getOrThrow(yield* answerDone(agent.userId, posted, key, files));
         const withdrawn = Option.getOrThrow(yield* withdrawInboxAnswer(agent.userId, id, key));
-        assert.equal(withdrawn.answerFiles, undefined);
+        assert.equal(answeringOf(withdrawn), undefined);
         assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, fileOf(first))));
         assert.ok(
           Option.isSome(yield* readInboxAttachment(agent.userId, id, picture.attachmentId)),
-          "taking an answer back keeps the item's picture",
+          "taking an answer back keeps the agent's picture",
         );
 
         const second = Option.getOrThrow(
-          yield* answerInboxItem(agent.userId, id, withdrawn.revision, DONE, randomUUID(), files),
+          yield* answerDone(agent.userId, withdrawn, randomUUID(), files),
         );
-        const askedAgain = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(askedAgain));
-        assert.equal(askedAgain.success.answerFiles, undefined);
-        const answering = askedAgain.success.thread?.find((message) => message.answers);
+        const askedAgain = yield* post(agent);
+        assert.equal(askedAgain.status, INBOX_STATUS.OPEN);
         assert.deepEqual(
-          answering?.files?.map((file) => file.attachmentId),
+          answeringOf(askedAgain)?.files?.map((file) => file.attachmentId),
           [fileOf(second)],
           "the message that answered keeps its files on the thread",
         );
@@ -851,8 +880,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
+        const posted = yield* post(agent);
         const destination = yield* openWorkspace(agent.userId);
 
         yield* updateTask(agent.userId, agent.taskId, { organizationId: destination });
@@ -870,7 +898,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           db
             .select({ organizationId: inboxItem.organizationId })
             .from(inboxItem)
-            .where(eq(inboxItem.id, posted.success.id)),
+            .where(eq(inboxItem.id, posted.id)),
         );
         assert.deepEqual(agents, [{ organizationId: destination }]);
         assert.deepEqual(items, [{ organizationId: destination }]);
@@ -882,8 +910,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
+        const posted = yield* post(agent);
 
         const [agentRow] = yield* Database.use((db) =>
           db
@@ -898,7 +925,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           db
             .select({ organizationId: inboxItem.organizationId })
             .from(inboxItem)
-            .where(eq(inboxItem.id, posted.success.id)),
+            .where(eq(inboxItem.id, posted.id)),
         );
 
         assert.deepEqual(agentRow, { organizationId: workspaceId, repositories: ["acme/relay"] });
@@ -907,25 +934,22 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "an answer is taken only at the revision it names and only while the item is open, withdrawn only under its own key, and another account's finds nothing",
+    "an answer is taken only while the item is open, withdrawn only under its own key, and another account's finds nothing",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const other = yield* openUser;
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
-        const done = { reply: INBOX_REPLY.DONE } as const;
-        assert.ok(Option.isNone(yield* answerInboxItem(other, id, 1, done, randomUUID())));
-        assert.ok(Option.isNone(yield* answerInboxItem(agent.userId, id, 2, done, randomUUID())));
+        const posted = yield* post(agent);
+        const { id } = posted;
+        assert.ok(Option.isNone(yield* answerDone(other, posted)));
         const key = randomUUID();
-        assert.ok(Option.isSome(yield* answerInboxItem(agent.userId, id, 1, done, key)));
+        assert.ok(Option.isSome(yield* answerDone(agent.userId, posted, key)));
         assert.ok(Option.isNone(yield* withdrawInboxAnswer(agent.userId, id, randomUUID())));
-        const reopened = yield* withdrawInboxAnswer(agent.userId, id, key);
-        assert.equal(Option.getOrUndefined(reopened)?.status, INBOX_STATUS.OPEN);
+        const reopened = Option.getOrThrow(yield* withdrawInboxAnswer(agent.userId, id, key));
+        assert.equal(reopened.status, INBOX_STATUS.OPEN);
         yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
         assert.ok(
-          Option.isNone(yield* answerInboxItem(agent.userId, id, 2, done, randomUUID())),
+          Option.isNone(yield* answerDone(agent.userId, reopened)),
           "a closed item takes no answer",
         );
         assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
@@ -940,9 +964,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const teammate = yield* openUser;
         const stranger = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
+        const posted = yield* post(agent);
+        const { id } = posted;
 
         assert.ok(Option.isNone(yield* closeInboxItemAsMember(stranger, id, 1, randomUUID())));
         assert.ok(Option.isNone(yield* closeInboxItemAsMember(teammate, id, 2, randomUUID())));
@@ -953,7 +976,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.equal(closed?.closedReason, undefined);
         assert.equal(closed?.unread, false, "the member's own close leaves it read for them");
         assert.ok(
-          Option.isNone(yield* answerInboxItem(agent.userId, id, 1, DONE, randomUUID())),
+          Option.isNone(yield* answerDone(agent.userId, posted)),
           "a closed item takes no answer",
         );
         assert.ok(Option.isNone(yield* closeInboxItemAsMember(agent.userId, id, 1, randomUUID())));
@@ -974,10 +997,9 @@ it.layer(getTestDB())("the inbox store", (it) => {
           INBOX_STATUS.OPEN,
         );
         yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
-        const again = yield* postInboxItem(agent, { ...SETTINGS, title: "Require two reviews" });
-        assert.ok(Result.isSuccess(again));
-        assert.equal(again.success.status, INBOX_STATUS.OPEN);
-        assert.equal(again.success.closedBy, undefined);
+        const again = yield* post(agent, { ...SETTINGS, title: "Require two reviews" });
+        assert.equal(again.status, INBOX_STATUS.OPEN);
+        assert.equal(again.closedBy, undefined);
       }),
   );
 
@@ -989,10 +1011,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const teammate = yield* openUser;
         const stranger = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
-        const done = { reply: INBOX_REPLY.DONE } as const;
+        const posted = yield* post(agent);
+        const { id } = posted;
 
         assert.deepEqual(
           (yield* taskInboxItems(teammate, agent.taskId)).map((each) => each.id),
@@ -1001,7 +1021,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Option.isSome(yield* readInboxItem(teammate, id)));
         const key = randomUUID();
         assert.equal(
-          Option.getOrUndefined(yield* answerInboxItem(teammate, id, 1, done, key))?.status,
+          Option.getOrUndefined(yield* answerDone(teammate, posted, key))?.status,
           INBOX_STATUS.ANSWERED,
         );
         assert.equal(
@@ -1009,12 +1029,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
           INBOX_STATUS.OPEN,
         );
 
-        const posted2 = yield* postInboxItem(agent, { ...SETTINGS, key: "still-open" });
-        assert.ok(Result.isSuccess(posted2));
+        const posted2 = yield* post(agent, { ...SETTINGS, key: "still-open" });
         // The first item stands open again since its answer was withdrawn.
         assert.deepEqual(
           (yield* accountWaitingItems(teammate)).map((each) => each.id).sort(),
-          [id, posted2.success.id].sort(),
+          [id, posted2.id].sort(),
         );
         assert.deepEqual(
           (yield* accountWaitingItems(teammate)).map((each) => each.startedBy),
@@ -1030,7 +1049,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
 
         assert.deepEqual(yield* taskInboxItems(stranger, agent.taskId), []);
         assert.ok(Option.isNone(yield* readInboxItem(stranger, id)));
-        assert.ok(Option.isNone(yield* answerInboxItem(stranger, id, 1, done, randomUUID())));
+        assert.ok(Option.isNone(yield* answerDone(stranger, posted)));
       }),
   );
   it.effect(
@@ -1041,12 +1060,9 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const teammate = yield* openUser;
         const outsider = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const open = yield* postInboxItem(agent, SETTINGS);
-        const settled = yield* postInboxItem(agent, { ...SETTINGS, key: "settled" });
-        assert.ok(Result.isSuccess(open) && Result.isSuccess(settled));
-        const answered = Option.getOrThrow(
-          yield* answerInboxItem(agent.userId, settled.success.id, 1, DONE, randomUUID()),
-        );
+        const open = yield* post(agent);
+        const settled = yield* post(agent, { ...SETTINGS, key: "settled" });
+        const answered = Option.getOrThrow(yield* answerDone(agent.userId, settled));
         const before = yield* taskInboxPast(agent.userId, agent.taskId, INBOX_CURSOR_START);
         const write = (userId: string, itemId: string, text: string) =>
           Effect.gen(function* () {
@@ -1054,15 +1070,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
             return yield* postInboxMessage(userId, itemId, { text, clientKey: randomUUID() });
           });
 
-        assert.ok(Option.isNone(yield* write(outsider, open.success.id, "Not my workspace.")));
-        yield* write(
-          agent.userId,
-          open.success.id,
-          "Is [@main](https://github.com/acme/relay) it?",
-        );
-        const onOpen = Option.getOrThrow(yield* write(teammate, open.success.id, "Main, yes."));
+        assert.ok(Option.isNone(yield* write(outsider, open.id, "Not my workspace.")));
+        yield* write(agent.userId, open.id, "Is [@main](https://github.com/acme/relay) it?");
+        const onOpen = Option.getOrThrow(yield* write(teammate, open.id, "Main, yes."));
         const onSettled = Option.getOrThrow(
-          yield* write(teammate, settled.success.id, "One more thing on this."),
+          yield* write(teammate, settled.id, "One more thing on this."),
         );
 
         assert.deepEqual(
@@ -1070,7 +1082,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           [INBOX_MESSAGE_OUTCOME.WRITTEN, INBOX_MESSAGE_OUTCOME.WRITTEN],
         );
         assert.deepEqual(
-          onOpen.item.messages?.map((message) => [
+          memberMessages(onOpen.item).map((message) => [
             message.author,
             message.member?.userId,
             message.text,
@@ -1086,24 +1098,24 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         assert.deepEqual(
           [onOpen.item.status, onOpen.item.revision],
-          [INBOX_STATUS.OPEN, open.success.revision],
+          [INBOX_STATUS.OPEN, open.revision],
         );
         assert.deepEqual(
           [
             onSettled.item.status,
             onSettled.item.revision,
-            onSettled.item.answer,
+            answeringOf(onSettled.item),
             onSettled.item.answeredBy,
           ],
-          [answered.status, answered.revision, answered.answer, answered.answeredBy],
+          [answered.status, answered.revision, answeringOf(answered), answered.answeredBy],
         );
         assert.ok(onSettled.item.updatedAt > answered.updatedAt, "the message moves the item");
-        assert.equal(onSettled.item.updatedAt, onSettled.item.messages?.[0]?.createdAt);
-        const byStarter = yield* readInboxItem(agent.userId, settled.success.id);
-        const byTeammate = yield* readInboxItem(teammate, settled.success.id);
+        assert.equal(onSettled.item.updatedAt, onSettled.item.thread?.at(-1)?.createdAt);
+        const byStarter = yield* readInboxItem(agent.userId, settled.id);
+        const byTeammate = yield* readInboxItem(teammate, settled.id);
         assert.deepEqual(
-          [byStarter, byTeammate].map((read) => Option.getOrThrow(read).item.messages),
-          [onSettled.item.messages, onSettled.item.messages],
+          [byStarter, byTeammate].map((read) => Option.getOrThrow(read).item.thread),
+          [onSettled.item.thread, onSettled.item.thread],
         );
         const after = yield* taskInboxPast(agent.userId, agent.taskId, INBOX_CURSOR_START);
         assert.notEqual(after.cursor, before.cursor, "a holder of the cursor before hears it");
@@ -1116,9 +1128,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(posted));
-        const { id } = posted.success;
+        const { id } = yield* post(agent);
         const files = [
           attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
           attached("after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG, SHOT),
@@ -1151,7 +1161,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         assert.deepEqual(again.item, first.item, "a repeat writes nothing and moves nothing");
         assert.deepEqual(reused.item, first.item, "a key reused writes nothing either");
-        const [message] = first.item.messages ?? [];
+        const [message] = memberMessages(first.item);
         assert.deepEqual(
           message?.files?.map((file) => [file.name, file.mediaType]),
           [
@@ -1164,18 +1174,14 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const served = yield* readInboxAttachment(agent.userId, id, trace.attachmentId);
         assert.deepEqual(new Uint8Array(Option.getOrThrow(served).bytes), TRACE);
 
-        const askedAgain = yield* postInboxItem(agent, {
-          ...SETTINGS,
-          title: "Require two reviews",
-        });
-        assert.ok(Result.isSuccess(askedAgain));
-        assert.deepEqual(askedAgain.success.messages, first.item.messages);
+        const askedAgain = yield* post(agent, { ...SETTINGS, title: "Require two reviews" });
+        assert.deepEqual(memberMessages(askedAgain), memberMessages(first.item));
         assert.ok(Option.isSome(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
 
         yield* withdrawInboxMessage(agent.userId, id, key);
-        assert.equal(
-          Option.getOrThrow(yield* readInboxItem(agent.userId, id)).item.messages,
-          undefined,
+        assert.deepEqual(
+          memberMessages(Option.getOrThrow(yield* readInboxItem(agent.userId, id)).item),
+          [],
         );
         assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
       }),
@@ -1185,11 +1191,10 @@ it.layer(getTestDB())("the inbox store", (it) => {
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
-        const posted = yield* postInboxItem(agent, SETTINGS);
-        const closing = yield* postInboxItem(agent, { ...SETTINGS, key: "closing" });
-        assert.ok(Result.isSuccess(posted) && Result.isSuccess(closing));
-        const { id } = posted.success;
-        assert.equal(posted.success.settledAt, undefined, "an open item is not settled");
+        const posted = yield* post(agent);
+        yield* post(agent, { ...SETTINGS, key: "closing" });
+        const { id } = posted;
+        assert.equal(posted.settledAt, undefined, "an open item is not settled");
         const say = (itemId: string) =>
           Effect.gen(function* () {
             yield* TestClock.adjust(Duration.seconds(1));
@@ -1201,9 +1206,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           });
 
         yield* TestClock.adjust(Duration.seconds(1));
-        const answered = Option.getOrThrow(
-          yield* answerInboxItem(agent.userId, id, 1, DONE, randomUUID()),
-        );
+        const answered = Option.getOrThrow(yield* answerDone(agent.userId, posted));
         const messaged = yield* say(id);
         assert.equal(answered.settledAt, answered.updatedAt);
         assert.equal(messaged.settledAt, answered.settledAt, "a message leaves when it settled");
@@ -1221,9 +1224,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const second = yield* say(closed.id);
         assert.deepEqual([first.settledAt, second.settledAt], [closed.updatedAt, closed.updatedAt]);
 
-        const reopened = yield* postInboxItem(agent, SETTINGS);
-        assert.ok(Result.isSuccess(reopened));
-        assert.equal(reopened.success.settledAt, undefined);
+        const reopened = yield* post(agent);
+        assert.equal(reopened.settledAt, undefined);
         assert.equal(
           (yield* say(id)).settledAt,
           undefined,
@@ -1237,12 +1239,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
 const unreadFor = (reader: string, itemId: string) =>
   Effect.map(readInboxItem(reader, itemId), (found) => Option.getOrThrow(found).item.unread);
 
+/** An agent's item posted under the key given. */
+const postedItem = (agent: InboxAgent, key: string) => post(agent, { ...SETTINGS, key });
+
 /** An agent's item posted under the key given, its id. */
 const postedId = (agent: InboxAgent, key: string) =>
-  Effect.map(postInboxItem(agent, { ...SETTINGS, key }), (posted) => {
-    assert.ok(Result.isSuccess(posted));
-    return posted.success.id;
-  });
+  Effect.map(postedItem(agent, key), (posted) => posted.id);
 
 it.layer(getTestDB())("an inbox item's read state", (it) => {
   it.effect(
@@ -1252,7 +1254,8 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const { agent, workspaceId } = yield* openAgentIn;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const id = yield* postedId(agent, SETTINGS.key);
+        const posted = yield* postedItem(agent, SETTINGS.key);
+        const { id } = posted;
 
         assert.deepEqual(
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
@@ -1286,8 +1289,8 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         // Each change after the read makes it unread again: the agent's reply, a teammate's answer, a close, a post under its key.
         const changes = [
           replyInboxItem(agent, SETTINGS.key, "Still needed."),
-          answerInboxItem(teammate, id, 1, DONE, randomUUID()),
-          postInboxItem(agent, SETTINGS),
+          answerDone(teammate, posted),
+          post(agent),
           closeInboxItem(agent, SETTINGS.key, "Done another way."),
         ];
         for (const change of changes) {
@@ -1307,13 +1310,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const { agent, workspaceId } = yield* openAgentIn;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const id = yield* postedId(agent, SETTINGS.key);
+        const posted = yield* postedItem(agent, SETTINGS.key);
+        const { id } = posted;
         yield* markInboxItemRead(agent.userId, id);
         yield* TestClock.adjust(Duration.seconds(1));
 
-        const answered = Option.getOrThrow(
-          yield* answerInboxItem(teammate, id, 1, DONE, randomUUID()),
-        );
+        const answered = Option.getOrThrow(yield* answerDone(teammate, posted));
         assert.equal(answered.unread, false, "the answer comes back read for its answerer");
         assert.deepEqual(
           [yield* unreadFor(teammate, id), yield* unreadFor(agent.userId, id)],
@@ -1394,8 +1396,9 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         const elsewhere = yield* openTasklessAgent;
         yield* joinWorkspace(elsewhere.workspaceId, agent.userId);
         const open = yield* postedId(agent, "open");
-        const settled = yield* postedId(agent, "settled");
-        yield* answerInboxItem(teammate, settled, 1, DONE, randomUUID());
+        const settledItem = yield* postedItem(agent, "settled");
+        const settled = settledItem.id;
+        assert.ok(Option.isSome(yield* answerDone(teammate, settledItem)));
         const marked = yield* postedId(agent, "marked");
         yield* markInboxItemRead(agent.userId, marked);
         yield* markInboxItemUnread(agent.userId, marked);
@@ -1556,20 +1559,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
 
         // The owner's open ask and open notice, both unread, are theirs to do.
         yield* postedId(agent, "ask");
-        assert.ok(
-          Result.isSuccess(
-            yield* postInboxItem(agent, {
-              ...SETTINGS,
-              key: "notice",
-              response: { type: INBOX_RESPONSE.NONE },
-            }),
-          ),
-        );
+        yield* post(agent, { ...NOTICE, key: "notice" });
         // A thread they answered, which its agent writes on again, and one they answered and read, which is done.
-        const followed = yield* postedId(agent, "followed");
-        const seen = yield* postedId(agent, "seen");
-        for (const id of [followed, seen]) {
-          assert.ok(Option.isSome(yield* answerInboxItem(owner, id, 1, DONE, randomUUID())));
+        const followedItem = yield* postedItem(agent, "followed");
+        const followed = followedItem.id;
+        for (const item of [followedItem, yield* postedItem(agent, "seen")]) {
+          assert.ok(Option.isSome(yield* answerDone(owner, item)));
         }
         yield* TestClock.adjust(Duration.seconds(1));
         assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "One more thing.")));
@@ -1641,11 +1636,8 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
               revision: 1,
               version: INBOX_WIRE_VERSION,
               title: `Settled ${step}`,
-              blocks: [],
-              response: { type: INBOX_RESPONSE.TODO },
               needsReply: false,
               status: INBOX_STATUS.ANSWERED,
-              answer: DONE,
               postedAt: at(step),
               settledAt: at(step),
               updatedAt: at(step),
@@ -1679,12 +1671,10 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
         const { agent, workspaceId } = yield* openAgentIn;
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        const answeredId = yield* postedId(agent, "answered");
+        const answering = yield* postedItem(agent, "answered");
         const closedId = yield* postedId(agent, "closed");
 
-        const answered = Option.getOrThrow(
-          yield* answerInboxItem(teammate, answeredId, 1, DONE, randomUUID()),
-        );
+        const answered = Option.getOrThrow(yield* answerDone(teammate, answering));
         const closed = Option.getOrThrow(
           yield* closeInboxItemAsMember(teammate, closedId, 1, randomUUID()),
         );
@@ -1694,6 +1684,64 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
         assert.ok(
           Option.isNone(yield* closeInboxItemAsMember(teammate, closedId, 1, randomUUID())),
           "a close that finds the item settled writes nothing, so nothing is waited for",
+        );
+      }),
+  );
+
+  it.effect(
+    "a nod settles an open notice at the revision shown, under its key, once, naming who gave it; a nod at a revision the agent moved on from, under a key a message holds, or on an item holding an ask open takes nothing, and one withdrawn leaves the notice waiting again",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const first = yield* post(agent, NOTICE);
+        // The agent posts the notice again, which moves its revision on.
+        const notice = yield* post(agent, NOTICE);
+        assert.notEqual(notice.revision, first.revision);
+        const asking = yield* post(agent);
+        const nod = (userId: string, item: InboxItem, key: string = randomUUID()) =>
+          acknowledgeInboxItem(userId, item.id, item.revision, key);
+
+        assert.ok(Option.isNone(yield* nod(teammate, first)), "a stale revision takes no nod");
+        assert.ok(Option.isNone(yield* nod(outsider, notice)), "an outsider reaches no item");
+        assert.ok(Option.isNone(yield* nod(teammate, asking)), "an open ask takes no nod");
+        const messageKey = randomUUID();
+        yield* postInboxMessage(teammate, notice.id, { text: "Noted.", clientKey: messageKey });
+        assert.ok(
+          Option.isNone(yield* nod(teammate, notice, messageKey)),
+          "a key a message holds names the message",
+        );
+        assert.deepEqual(
+          [notice, asking].map((item) => item.status),
+          [INBOX_STATUS.OPEN, INBOX_STATUS.OPEN],
+        );
+        assert.equal(
+          Option.getOrThrow(yield* readInboxItem(teammate, asking.id)).item.status,
+          INBOX_STATUS.OPEN,
+        );
+
+        const key = randomUUID();
+        const nodded = Option.getOrThrow(yield* nod(teammate, notice, key));
+        assert.equal(nodded.status, INBOX_STATUS.ANSWERED);
+        assert.deepEqual(nodded.answeredBy, { userId: teammate, name: "Test User" });
+        assert.equal(nodded.unread, false, "the member's own nod leaves it read for them");
+        assert.match(nodded.txid ?? "", /^\d+$/u);
+        assert.ok(Option.isNone(yield* nod(teammate, notice, key)), "the same nod is taken once");
+        assert.ok(Option.isNone(yield* nod(agent.userId, notice)), "a settled notice takes none");
+        const read = Option.getOrThrow(yield* readInboxItem(agent.userId, notice.id)).item;
+        assert.deepEqual(
+          [read.status, read.answeredBy?.userId, read.unread],
+          [INBOX_STATUS.ANSWERED, teammate, true],
+        );
+
+        const withdrawn = Option.getOrThrow(yield* withdrawInboxAnswer(teammate, notice.id, key));
+        assert.deepEqual([withdrawn.status, withdrawn.answeredBy], [INBOX_STATUS.OPEN, undefined]);
+        assert.equal(
+          Option.getOrUndefined(yield* nod(agent.userId, withdrawn))?.status,
+          INBOX_STATUS.ANSWERED,
         );
       }),
   );
@@ -1721,9 +1769,7 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
             repository: null,
           }),
         ).agent;
-        const posted = Result.getOrThrow(
-          yield* postInboxItem({ userId: owner, taskId: null, agentId: operator.id }, SETTINGS),
-        );
+        const posted = yield* post({ userId: owner, taskId: null, agentId: operator.id });
         const stampIds = (userId: string) =>
           Effect.map(accountWaitingStamps(userId), (stamps) => stamps.map((stamp) => stamp.id));
 
@@ -1740,9 +1786,7 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
             Option.isNone(
               yield* closeInboxItemAsMember(teammate, posted.id, posted.revision, randomUUID()),
             ),
-            Option.isNone(
-              yield* answerInboxItem(teammate, posted.id, posted.revision, DONE, randomUUID()),
-            ),
+            Option.isNone(yield* answerDone(teammate, posted)),
           ],
           [true, false, true, true, true],
         );
@@ -1750,11 +1794,7 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
         assert.ok((yield* stampIds(owner)).includes(posted.id));
         const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));
         assert.equal(read.item.status, INBOX_STATUS.OPEN, "nothing the teammate tried landed");
-        assert.ok(
-          Option.isSome(
-            yield* answerInboxItem(owner, posted.id, posted.revision, DONE, randomUUID()),
-          ),
-        );
+        assert.ok(Option.isSome(yield* answerDone(owner, posted)));
       }),
   );
 });
@@ -1860,9 +1900,10 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
         yield* updateTask(owner, taskId, { assigneeId: null });
-        const itemId = yield* postedId(agent, "settled");
+        const settled = yield* postedItem(agent, "settled");
+        const itemId = settled.id;
         // The owner's answer leaves it read for them and unread for the teammate.
-        assert.ok(Option.isSome(yield* answerInboxItem(owner, itemId, 1, DONE, randomUUID())));
+        assert.ok(Option.isSome(yield* answerDone(owner, settled)));
         const counted = (readerId: string) =>
           Effect.map(accountWaitingStamps(readerId), (stamps) =>
             stamps.some((stamp) => stamp.id === itemId),

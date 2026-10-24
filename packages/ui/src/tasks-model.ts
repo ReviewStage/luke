@@ -4,6 +4,7 @@ import {
   type LinearIssueSummary,
   linearIssueIdentifierIn,
 } from "@luke/features/linear-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
@@ -22,6 +23,7 @@ import {
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/tasks-view";
+import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
@@ -143,18 +145,9 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
-/** The characters a markdown link's label escapes to stay one label. */
-const LABEL_SPECIAL = /[[\]\\]/gu;
-
-/** The characters a markdown link's target encodes so it ends where it should. */
-const TARGET_SPECIAL = /[()]/gu;
-
 /** One issue as the app writes a link to it: its key and title over its own address. */
 function issueMention(issue: Pick<LinearIssueSummary, "identifier" | "title" | "url">): string {
-  const name = `${issue.identifier} ${issue.title.trim()}`.trim();
-  const label = `@${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
-  const target = issue.url.replace(TARGET_SPECIAL, (special) => (special === "(" ? "%28" : "%29"));
-  return `[${label}](${target})`;
+  return mentionMarkdownLink(`${issue.identifier} ${issue.title.trim()}`.trim(), issue.url);
 }
 
 /**
@@ -400,13 +393,13 @@ function standingStatus(task: Pick<TaskSummary, "status">): TaskStatus {
 }
 
 /**
- * What settling tasks at a status asks of each, and what its Undo asks: the
+ * What setting tasks at a status asks of each, and what its Undo asks: the
  * status each stood at before. A task already there is left out of both,
  * since the press changes nothing about it.
  */
 export function settleChanges(
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
-  status: SettledStatus,
+  status: TaskStatus,
 ): { readonly asked: readonly StatusChange[]; readonly undo: readonly StatusChange[] } {
   const moved = tasks.filter((task) => standingStatus(task) !== status);
   return {
@@ -420,35 +413,53 @@ export function settleOffered(task: Pick<TaskSummary, "status">, status: Settled
   return standingStatus(task) !== status;
 }
 
-/** What the toasts say of tasks settled at each status: one, several, and the refusals. */
-const SETTLE_NOTES = {
-  [SETTLED_STATUS.DONE]: {
+/** What the toasts say of tasks set at each status: one, several, and the refusals. */
+const STATUS_NOTES = {
+  [TASK_STATUS.BACKLOG]: {
+    one: "Moved to Backlog",
+    many: "tasks moved to Backlog",
+    failedOne: "The task could not be moved to Backlog. Try again.",
+    failedMany: "The tasks could not be moved to Backlog. Try again.",
+  },
+  [TASK_STATUS.TODO]: {
+    one: "Moved to Todo",
+    many: "tasks moved to Todo",
+    failedOne: "The task could not be moved to Todo. Try again.",
+    failedMany: "The tasks could not be moved to Todo. Try again.",
+  },
+  [TASK_STATUS.IN_PROGRESS]: {
+    one: "Moved to In progress",
+    many: "tasks moved to In progress",
+    failedOne: "The task could not be moved to In progress. Try again.",
+    failedMany: "The tasks could not be moved to In progress. Try again.",
+  },
+  [TASK_STATUS.DONE]: {
     one: "Marked done",
     many: "tasks marked done",
     failedOne: "The task could not be marked done. Try again.",
     failedMany: "The tasks could not be marked done. Try again.",
   },
-  [SETTLED_STATUS.CANCELED]: {
+  [TASK_STATUS.CANCELED]: {
     one: "Task canceled",
     many: "tasks canceled",
     failedOne: "The task could not be canceled. Try again.",
     failedMany: "The tasks could not be canceled. Try again.",
   },
-} as const satisfies Record<SettledStatus, Record<string, string>>;
+} as const satisfies Record<TaskStatus, Record<string, string>>;
 
 /**
- * What the toast says once tasks were settled at a status, by how many the
- * service kept and how many it refused; one task says "Marked done".
+ * What the toast says once tasks were set at a status, by how many the
+ * service kept and how many it refused; one task done says "Marked done".
  */
-export function settledNote(status: SettledStatus, landed: number, refused: number): string {
-  const notes = SETTLE_NOTES[status];
+export function settledNote(status: TaskStatus, landed: number, refused: number): string {
+  const notes = STATUS_NOTES[status];
   const kept = landed === 1 ? notes.one : `${landed} ${notes.many}`;
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
-/** What the toast says when the service refused every task a press settled. */
-export function settleFailedNote(status: SettledStatus, refused: number): string {
-  const notes = SETTLE_NOTES[status];
+/** What the toast says when the service refused every task a press set at a status. */
+export function settleFailedNote(status: TaskStatus, refused: number): string {
+  const notes = STATUS_NOTES[status];
   return refused === 1 ? notes.failedOne : notes.failedMany;
 }
 
@@ -574,13 +585,13 @@ export function unsettledStatuses(statuses: PendingStatuses, view: TasksView): P
 }
 
 /**
- * What an Undo of settling tasks at a status still puts back: only the tasks
+ * What an Undo of setting tasks at a status still puts back: only the tasks
  * that still stand there, since one given another status since was chosen
  * anew and an Undo must not take that choice back.
  */
 export function undoStillDue(
   undo: readonly StatusChange[],
-  settled: SettledStatus,
+  settled: TaskStatus,
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
 ): readonly StatusChange[] {
   return undo.filter(({ taskId }) => {
@@ -776,7 +787,7 @@ const STATUS_WORD = {
   [LIVE_STATUS.LISTENING]: "Listening",
   [LIVE_STATUS.SPEAKING]: "Luke speaking",
   [LIVE_STATUS.CLOSING]: "Closing",
-  [LIVE_STATUS.FAILED]: undefined,
+  [LIVE_STATUS.FAILED]: "Call failed",
 } as const satisfies Record<LiveStatus, string | undefined>;
 
 /** The voice's word for each of its waits the service names, in place of the call's own. */
@@ -894,7 +905,9 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * A call runs on the account's own OpenAI key, so an account known to have
  * none is sent to save one before anything else, even the microphone, which
  * is worth asking for only once a call can run; a call of the agent's own
- * still standing keeps its mute.
+ * still standing keeps its mute. A voice window given up on runs no call for
+ * the rest of the run, so the button says that, and how to get voice back,
+ * in place of a press that would reach nothing.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
@@ -909,9 +922,15 @@ export function microphoneButton(input: {
   voiceStatus: LiveStatus;
   /** Whether the account is known to have no OpenAI API key; unknown is not missing. */
   openAiKeyMissing?: boolean;
+  /** Whether the voice window was given up on for this run, so no call can run until Luke is reopened. */
+  voiceLost?: boolean;
 }): MicrophoneButton {
   if (!input.voiceAvailable) {
     return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE, muted: false };
+  }
+  if (input.voiceLost === true) {
+    const { words } = VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST];
+    return { press: MICROPHONE_PRESS.NONE, label: words, muted: false };
   }
   const ownCall = input.call?.agentId === input.agentId;
   const ownCallStands = ownCall && (input.listening || CALL_STANDING.has(input.voiceStatus));

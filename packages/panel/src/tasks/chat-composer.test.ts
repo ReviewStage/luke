@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHAT_BOUNDS } from "@luke/features/chat-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -13,6 +15,7 @@ import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
@@ -277,21 +280,6 @@ test("Escape leaves the box, and its field says what it asks for to assistive te
   assert.equal(boxWords(box), "never mind");
 });
 
-/** Words pasted into the box's editor as the clipboard hands them. */
-function pasteInComposer(box: HTMLElement, words: string): void {
-  const event = new Event("paste", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "clipboardData", {
-    value: {
-      files: [],
-      types: ["text/plain"],
-      getData: (type: string) => (type === "text/plain" ? words : ""),
-    },
-  });
-  act(() => {
-    composerEditor(box).dispatchEvent(event);
-  });
-}
-
 test("a plan's address pasted whole is drawn as its chip and posted as its link under the chat's workspace", async () => {
   const { container, draw } = page("acme");
   const sent: string[] = [];
@@ -362,5 +350,59 @@ test("a quote handed to a box whose editor still loads is laid in once the edito
       (quote) => quote.textContent,
     ),
     ["Happy to wait"],
+  );
+});
+
+test("the box's foot says a cut paste's note and the counter from four fifths of the cap, until the words change", () => {
+  const { container, draw } = page();
+  draw([{ channelId: GENERAL, label: "Message #general", onSend: taken }]);
+  const box = boxNamed(container, "Message #general");
+  const cap = CHAT_BOUNDS.MAX_TEXT_CHARS;
+  // Both stand in the one foot every message box shares (`ComposerFoot`), inside the card.
+  const note = () =>
+    box.querySelector(".luke-composer-foot > .luke-composer-foot-note")?.textContent;
+  const counter = () => box.querySelector(".luke-composer-foot .luke-length-counter")?.textContent;
+  assert.equal(counter(), undefined);
+
+  pasteInComposer(box, "x".repeat(cap + 100));
+  assert.equal(boxWords(box).length, cap);
+  assert.equal(note()?.includes(pasteCutWords(cap)), true);
+  assert.equal(counter(), `${cap}/${cap}`);
+
+  const editor = composerEditor(box).editor;
+  assert.ok(editor);
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
+});
+
+test("a paste that is cut says so over the note a refused file left, and leaves a refused post's Retry standing", async () => {
+  const { container, draw } = page();
+  const held = heldSend();
+  draw([{ channelId: GENERAL, label: "Message #general", onSend: held.onSend }]);
+  const box = boxNamed(container, "Message #general");
+  const cap = CHAT_BOUNDS.MAX_TEXT_CHARS;
+  const note = () => box.querySelector(".luke-composer-foot-note")?.textContent;
+
+  const drop = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, "dataTransfer", {
+    value: { types: ["Files"], files: [new File(["x"], "spec.pdf", { type: "application/pdf" })] },
+  });
+  act(() => box.dispatchEvent(drop));
+  assert.equal(note(), "spec.pdf can't be attached. Attach images.");
+
+  pasteInComposer(box, "x".repeat(cap + 100));
+  assert.equal(note(), pasteCutWords(cap));
+
+  pressInComposer(box, "Enter");
+  await settle();
+  await held.answer("no network");
+  assert.equal(note()?.includes("no network"), true, "the refused post is said with its Retry");
+  pasteInComposer(box, "more");
+  assert.equal(
+    note()?.includes("no network"),
+    true,
+    "a paste into the full box leaves it standing",
   );
 });

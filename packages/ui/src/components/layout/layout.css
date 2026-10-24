@@ -51,11 +51,11 @@
   }
 
   [data-gap="tight"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-space-4);
+    gap: var(--luke-tight-gap);
   }
 
   [data-gap="item"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-space-6);
+    gap: var(--luke-item-gap);
   }
 
   [data-gap="icon"]:is(.luke-stack, .luke-inline) {
@@ -71,11 +71,15 @@
   }
 
   [data-gap="block"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-space-12);
+    gap: var(--luke-block-gap);
   }
 
   [data-gap="section"]:is(.luke-stack, .luke-inline) {
     gap: var(--luke-section-gap);
+  }
+
+  [data-gap="page"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-page-section-gap);
   }
 
   [data-align="start"]:is(.luke-stack, .luke-inline) {
@@ -115,11 +119,11 @@
   }
 
   [data-inset="column"]:is(.luke-stack, .luke-inline) {
-    padding: var(--luke-space-12);
+    padding: var(--luke-list-inset);
   }
 
   [data-inset="block"]:is(.luke-stack, .luke-inline) {
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
   }
 
   /* A Fill takes the room its column leaves and may give way to nothing in

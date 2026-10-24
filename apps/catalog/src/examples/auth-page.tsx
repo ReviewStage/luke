@@ -38,18 +38,8 @@ function Face(): React.JSX.Element {
 function ProviderChoices(): React.JSX.Element {
   return (
     <>
-      <ProviderButton
-        provider={MARK_PROVIDER.GOOGLE}
-        name="Google"
-        pendingLabel="Opening Google"
-        onPress={() => undefined}
-      />
-      <ProviderButton
-        provider={MARK_PROVIDER.GITHUB}
-        name="GitHub"
-        pendingLabel="Opening GitHub"
-        onPress={() => undefined}
-      />
+      <ProviderButton provider={MARK_PROVIDER.GOOGLE} name="Google" onPress={() => undefined} />
+      <ProviderButton provider={MARK_PROVIDER.GITHUB} name="GitHub" onPress={() => undefined} />
     </>
   );
 }

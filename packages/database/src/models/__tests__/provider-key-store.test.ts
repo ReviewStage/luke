@@ -12,6 +12,7 @@ import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   ensureChatGptHostId,
+  listAccountProviderKeyRows,
   listEveryProviderKeyRow,
   listProviderKeyRows,
   removeProviderKey,
@@ -52,6 +53,46 @@ const shown = (
 ) => rows.map((row) => [row.provider, row.kind, row.sealedKey, row.status]);
 
 it.layer(getTestDB())("the provider key store", (it) => {
+  it.effect(
+    "an account's keys of every kind are read together in the providers' order, and no other account's among them",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other } = yield* openAccounts;
+        const { ANTHROPIC, OPENAI } = PROVIDER_KEY_PROVIDER;
+        const { API_KEY, CHATGPT_OAUTH, CLAUDE_SETUP_TOKEN } = PROVIDER_KEY_KIND;
+        const { UNVERIFIED, VERIFIED } = PROVIDER_KEY_STATUS;
+        yield* saveProviderKey(
+          owner,
+          OPENAI,
+          CHATGPT_OAUTH,
+          sealed("plan"),
+          "…a",
+          null,
+          new Date(1),
+        );
+        yield* saveProviderKey(owner, ANTHROPIC, API_KEY, sealed("key"), "…b", null, new Date(2));
+        yield* saveProviderKey(
+          owner,
+          ANTHROPIC,
+          CLAUDE_SETUP_TOKEN,
+          sealed("token"),
+          "…c",
+          null,
+          new Date(3),
+        );
+        yield* saveProviderKey(other, OPENAI, API_KEY, sealed("theirs"), "…d", null, new Date(4));
+
+        assert.deepEqual(shown(yield* listAccountProviderKeyRows(owner)), [
+          [ANTHROPIC, API_KEY, "key", VERIFIED],
+          [ANTHROPIC, CLAUDE_SETUP_TOKEN, "token", UNVERIFIED],
+          [OPENAI, CHATGPT_OAUTH, "plan", UNVERIFIED],
+        ]);
+        assert.deepEqual(shown(yield* listAccountProviderKeyRows(other)), [
+          [OPENAI, API_KEY, "theirs", VERIFIED],
+        ]);
+      }),
+  );
+
   it.effect(
     "a setup-token is kept unverified as its own kind, read and replaced by its kind, and no other account reads it",
     () =>

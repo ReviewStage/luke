@@ -158,6 +158,7 @@ const WAITING: readonly AppInboxTask[] = [
 async function mountPage(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
+  overrides: NonNullable<Parameters<typeof tasksControl>[0]> = {},
 ): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -181,6 +182,7 @@ async function mountPage(
       },
       onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
       onWriteSections: (writes) => written.push(writes),
+      ...overrides,
     });
     root.render(
       onRegistry(
@@ -240,6 +242,27 @@ test("the List puts the pins first, then the rest by status from the work under 
   ]);
 });
 
+test("a refresh that failed after the tasks were read keeps the rows drawn under Could not refresh and Retry, where a first read that failed draws the error alone", async () => {
+  let retried = 0;
+  const onRetryList = () => {
+    retried += 1;
+  };
+  const page = await mountPage(TASKS, SHELL_ROOM.WIDE, { listFailed: true, onRetryList });
+
+  assert.equal(groups(page).length, 4, "the rows stand");
+  const note = page.querySelector('[role="alert"]');
+  assert.match(note?.textContent ?? "", /Could not refresh/u);
+  const retry = [...(note?.querySelectorAll("button") ?? [])].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+
+  const first = await mountPage([], SHELL_ROOM.WIDE, { listFailed: true, listRead: false });
+  assert.equal(groups(first).length, 0);
+  assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
+});
+
 test("a row says how many of its task's Inbox threads wait on the reader", async () => {
   const page = await mountPage();
 
@@ -285,16 +308,16 @@ function closeMenus(): void {
   }
 }
 
-test("Show completed stands Done with a line counting the tasks finished before its window, which shows them all, kept on this Mac", async () => {
+test("Show completed stands Done with a foot counting the tasks finished before its window, which shows them all, kept on this Mac", async () => {
   const page = await mountPage();
   openOptions(page, "View options");
   choose("Show completed", "Past week");
   closeMenus();
   assert.deepEqual(groups(page).at(-1), ["Done", []]);
   const older = [...page.querySelectorAll<HTMLButtonElement>(".tasks-list-group button")].find(
-    (button) => button.textContent === "+ 1 older",
+    (button) => button.textContent === "Show 1 more",
   );
-  act(() => (older ?? assert.fail("no older line under Done")).click());
+  act(() => (older ?? assert.fail("no Show more line under Done")).click());
   assert.deepEqual(groups(page).at(-1), ["Done", ["ACME-35"]]);
 
   act(() => {
@@ -450,6 +473,21 @@ test("grouped by priority, the pins not leading, the List runs from the most pre
   assert.equal(page.querySelector(".tasks-list [data-cell='repository']"), null);
 });
 
+test("the title is the bar's heading with the List | Board switch after it, and Filter and View options end the bar", async () => {
+  const page = await mountPage();
+
+  const bar = page.querySelector("header") ?? assert.fail("no bar");
+  const [heading, actions] = [...bar.children];
+  assert.equal(bar.children.length, 2, "a heading and the acts, with no box of the page's own");
+  assert.equal(heading?.querySelector("h1")?.textContent, "Tasks");
+  assert.equal(
+    heading?.querySelector('[role="radiogroup"]')?.getAttribute("aria-label"),
+    "Tasks view",
+  );
+  assert.ok(actions?.querySelector('button[aria-label="Filter"]'), "Filter ends the bar");
+  assert.ok(actions?.querySelector('button[aria-label="View options"]'), "View options end it");
+});
+
 test("the switch beside the title shows the Board, kept on this Mac", async () => {
   const page = await mountPage();
   act(() => buttonNamed(page, "Board").click());
@@ -467,12 +505,12 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   const page = await mountPage(TASKS, SHELL_ROOM.NARROW);
   assert.deepEqual(
     [...page.querySelectorAll(".tasks-head button")].map((each) => each.getAttribute("aria-label")),
-    ["New task", "More"],
+    ["New task", "Task list actions"],
   );
   assert.equal(page.querySelector(".tasks-head h1")?.textContent, "Tasks");
   assert.equal(page.querySelector('[role="radiogroup"]'), null, "no List | Board bar in the head");
 
-  openOptions(page, "More");
+  openOptions(page, "Task list actions");
   choose("Filter");
   choose("Priority", "High", "Urgent");
   closeMenus();
@@ -483,7 +521,7 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   );
   assert.match(page.textContent ?? "", /Priority: Urgent, High/);
 
-  openOptions(page, "More");
+  openOptions(page, "Task list actions");
   choose("View options");
   assert.ok(
     document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
@@ -491,7 +529,7 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   );
   closeMenus();
 
-  openOptions(page, "More");
+  openOptions(page, "Task list actions");
   choose("Board");
   assert.ok(page.querySelector("[data-task-column]"), "the Board's columns stand");
   assert.equal(
@@ -571,6 +609,31 @@ test("a row's Priority chip sends the priority picked, and its Status chip the s
   assert.deepEqual(opened, [], "a pick opens no task");
 });
 
+/** The words of the menu items standing open now. */
+function menuLabels(): (string | null)[] {
+  return [
+    ...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label'),
+  ].map((label) => label.textContent);
+}
+
+/** A row's ⋯, named for what a row's thing is. */
+function rowMore(page: HTMLElement, key: string): HTMLButtonElement {
+  const more = rowOf(page, key).querySelector<HTMLButtonElement>(
+    "button[aria-label='Task actions']",
+  );
+  assert.ok(more, `the row of ${key} offers its ⋯`);
+  return more;
+}
+
+/** Presses `name` on `target` as the keyboard does. */
+function pressKey(target: HTMLElement, name: string, shiftKey = false): void {
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, shiftKey, bubbles: true, cancelable: true }),
+    );
+  });
+}
+
 test("a right-click on a row drops the task's own menu, and its ⋯ the same", async () => {
   const page = await mountPage();
   act(() => {
@@ -578,20 +641,38 @@ test("a right-click on a row drops the task's own menu, and its ⋯ the same", a
       .querySelector("button")
       ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   });
-  const labels = () =>
-    [...document.querySelectorAll('[role="menu"]:not([data-leaving]) .luke-menu-item-label')].map(
-      (label) => label.textContent,
-    );
-  assert.ok(labels().includes("Rename"), "the menu offers Rename");
+  assert.ok(menuLabels().includes("Rename"), "the menu offers Rename");
   closeMenus();
 
-  const more = rowOf(page, "ACME-40").querySelector<HTMLButtonElement>(
-    "button[aria-label='Actions for Billing after downgrade']",
-  );
-  assert.ok(more, "the row offers its ⋯");
-  act(() => more.click());
-  assert.ok(labels().includes("Rename"), "the ⋯ drops the same menu");
+  act(() => rowMore(page, "ACME-40").click());
+  assert.ok(menuLabels().includes("Rename"), "the ⋯ drops the same menu");
   assert.deepEqual(opened, []);
+});
+
+test("a row's ⋯ is a control a keyboard reaches, described by the row's name, and the menu key on the row or the ⋯ opens the same menu", async () => {
+  const page = await mountPage();
+  const more = rowMore(page, "ACME-40");
+  const row = rowOf(page, "ACME-40");
+  assert.ok(row.hasAttribute("data-row-menu"), "the row marks itself for its ⋯ to come in on");
+  assert.notEqual(more.tabIndex, -1, "the ⋯ takes a Tab stop");
+  act(() => more.focus());
+  assert.equal(document.activeElement, more, "the ⋯ takes the focus the keyboard gives it");
+  const name = more.getAttribute("aria-describedby");
+  assert.equal(
+    name === null ? null : document.getElementById(name)?.textContent?.startsWith("Billing"),
+    true,
+    "a reader hears which task's ⋯ it is",
+  );
+
+  const press = row.querySelector<HTMLElement>("button");
+  assert.ok(press);
+  pressKey(press, "ContextMenu");
+  assert.ok(menuLabels().includes("Rename"), "the menu key on the row's press opens it");
+  closeMenus();
+
+  pressKey(more, "F10", true);
+  assert.ok(menuLabels().includes("Rename"), "⇧F10 on its ⋯ opens it too");
+  assert.deepEqual(opened, [], "no door opens the task");
 });
 
 test("a row draws the pull requests its agents opened, each its mark and its number", async () => {
@@ -674,21 +755,133 @@ test("a group's head folds it, its count still standing, and the fold is kept on
     const head = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
       (group) => group.getAttribute("aria-label") === "Todo",
     );
-    const button = head?.querySelector<HTMLButtonElement>(".tasks-list-head button");
+    const button = head?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
     assert.ok(button, "Todo's head folds it");
     return button;
   };
+
+  // Note that a wide page counts a group open and folded alike, never only under the pointer.
+  const count = () => fold().querySelector(".luke-group-header-count");
+  assert.equal(count()?.getAttribute("data-shown"), "always");
 
   act(() => fold().click());
   assert.deepEqual(groups(page)[2], ["Todo", []]);
   assert.equal(fold().getAttribute("aria-expanded"), "false");
   assert.match(fold().textContent ?? "", /2/);
+  assert.equal(count()?.getAttribute("data-shown"), "always");
 
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   const again = await mountPage();
   assert.deepEqual(groups(again)[2], ["Todo", []], "the fold is kept");
+});
+
+/** The press of the row of the task keyed `key`. */
+function pressOf(page: HTMLElement, key: string): HTMLElement {
+  const press = rowOf(page, key).querySelector<HTMLElement>("[data-card-press]");
+  assert.ok(press, `the row of ${key} has a press`);
+  return press;
+}
+
+/** The keys of the rows Tab stops on, in the order drawn. */
+function tabStops(page: HTMLElement): string[] {
+  return [...page.querySelectorAll<HTMLElement>(".tasks-list-group li")]
+    .filter((row) => row.querySelector<HTMLElement>("[data-card-press]")?.tabIndex === 0)
+    .map((row) => row.querySelector("[data-task-key]")?.textContent ?? "");
+}
+
+/** The key of the row whose press holds the keyboard, if one does. */
+function focusedKey(page: HTMLElement): string | undefined {
+  const row = document.activeElement?.closest(".tasks-list-group li");
+  return row === null || !page.contains(row ?? null)
+    ? undefined
+    : (row?.querySelector("[data-task-key]")?.textContent ?? undefined);
+}
+
+/** Presses `key` where the keyboard stands, with `held` modifiers. */
+function pressHere(key: string, held: KeyboardEventInit = {}): void {
+  const target = document.activeElement ?? document.body;
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...held }),
+    );
+  });
+}
+
+test("the List's rows are one Tab stop, across every group, that ↓ walks, End ends and the walk wraps, the stop following the row last focused", async () => {
+  const page = await mountPage();
+  assert.deepEqual(tabStops(page), ["ACME-44"], "Tab lands on the first row alone");
+
+  act(() => pressOf(page, "ACME-44").focus());
+  pressHere("ArrowDown");
+  pressHere("ArrowDown");
+  assert.equal(focusedKey(page), "ACME-40", "↓↓ goes two rows on, from Pinned into Todo");
+  assert.deepEqual(tabStops(page), ["ACME-40"], "Tab comes back to the row left");
+
+  pressHere("End");
+  assert.equal(focusedKey(page), "ACME-36");
+  pressHere("ArrowDown");
+  assert.equal(focusedKey(page), "ACME-44", "the walk wraps past the last row");
+  pressHere("ArrowUp");
+  assert.equal(focusedKey(page), "ACME-36");
+  pressHere("Home");
+  assert.equal(focusedKey(page), "ACME-44");
+});
+
+test("↓ passes over a folded group's rows, and a key held with ⌘ is left to the app's own shortcuts", async () => {
+  const page = await mountPage();
+  const todo = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
+    (group) => group.getAttribute("aria-label") === "Todo",
+  );
+  const fold = todo?.querySelector<HTMLButtonElement>(".luke-group-header-head button");
+  assert.ok(fold, "Todo's head folds it");
+  act(() => fold.click());
+
+  act(() => pressOf(page, "ACME-42").focus());
+  pressHere("ArrowDown");
+  assert.equal(focusedKey(page), "ACME-36", "In progress steps straight to Backlog");
+  pressHere("ArrowUp", { metaKey: true });
+  assert.equal(focusedKey(page), "ACME-36", "⌘↑ walks nowhere");
+});
+
+/** The page's one scroller, which holds the List's rows or the Board's columns. */
+function scroller(page: HTMLElement): HTMLElement {
+  const found = page.querySelector<HTMLElement>(".luke-collection-page-scroll");
+  assert.ok(found, "the page scrolls");
+  return found;
+}
+
+/** Scrolls the page's scroller as a reader's wheel does. */
+function scrollTo(page: HTMLElement, position: { scrollTop?: number; scrollLeft?: number }): void {
+  const at = scroller(page);
+  act(() => {
+    Object.assign(at, position);
+    at.dispatchEvent(new Event("scroll"));
+  });
+}
+
+test("leaving the Tasks page scrolled and coming back stands each view where it was left, the Board's its own, and a refresh moves nothing", async () => {
+  const page = await mountPage();
+  scrollTo(page, { scrollTop: 320 });
+  act(() => buttonNamed(page, "Board").click());
+  assert.equal(scroller(page).scrollTop, 0, "the Board starts at its own place, not the List's");
+  scrollTo(page, { scrollLeft: 150 });
+  act(() => buttonNamed(page, "List").click());
+  assert.equal(scroller(page).scrollTop, 320, "the List is put back where it was left");
+
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  const again = await mountPage();
+  assert.equal(scroller(again).scrollTop, 320, "the page opened again stands where it was left");
+
+  scrollTo(again, { scrollTop: 40 });
+  listWorkspace(ACME);
+  assert.equal(scroller(again).scrollTop, 40, "a refresh leaves the reader where they are");
+
+  act(() => buttonNamed(again, "Board").click());
+  assert.equal(scroller(again).scrollLeft, 150, "the Board is put back where it was left");
 });
 
 /**
@@ -1013,6 +1206,29 @@ test("the Filter's Repository names each repository as the repository chip does,
   assert.deepEqual(offered, ["acme", "beta"]);
 });
 
+test("the Filter's Repository rows each hang the repository's card, its name with its owner under it", async () => {
+  const page = await mountPage([
+    ...TASKS,
+    { ...task(50, "Docs for web", TASK_STATUS.TODO, TASK_PRIORITY.NONE), repository: "beta/web" },
+  ]);
+
+  openOptions(page, "Filter");
+  choose("Repository");
+  const row = [
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
+  ].find((item) => item.querySelector(".luke-menu-item-detail")?.textContent === "beta");
+  restOn(row ?? assert.fail("the Filter offers beta/web"));
+  const card = document.querySelector(".luke-tooltip-card [data-repository-card]");
+
+  assert.deepEqual(
+    [
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      card?.querySelector(".luke-hover-card-sub")?.textContent,
+    ],
+    ["web", "beta"],
+  );
+});
+
 test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card, and your own chip says You", async () => {
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
@@ -1062,6 +1278,44 @@ test("the Filter's Assignee and Creator list the members as every people menu do
   choose("Assignee", "Dean Stratakos");
   closeMenus();
   assert.match(page.textContent ?? "", /Assignee: You/, "the reader's own chip says You");
+});
+
+test("the Filter's Assignee says the members could not be read, with Retry, in the people's place, and Retry reads them again and leaves the menu standing", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      reads += 1;
+      return reads === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(MEMBERS);
+    },
+  });
+  const page = await mountPage();
+  listWorkspace({ ...ACME, memberCount: 2 });
+  await act(async () => undefined);
+  const labels = () =>
+    [
+      ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
+        .at(-1)
+        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+    ].map((item) => [
+      item.querySelector(".luke-menu-item-label")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+    ]);
+
+  openOptions(page, "Filter");
+  choose("Assignee");
+  const failed = labels();
+  await act(async () => choose("Members could not be read."));
+
+  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
+  assert.ok(
+    failed.every(([label]) => label !== "Reading members…"),
+    "a failed read is no reading",
+  );
+  assert.ok(
+    labels().some(([label]) => label === "Dean Stratakos"),
+    "the members are listed once read again, in the menu that stayed",
+  );
+  assert.ok(labels().every(([label]) => label !== "Members could not be read."));
 });
 
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {

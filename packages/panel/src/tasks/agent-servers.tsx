@@ -12,7 +12,7 @@ import {
 } from "@luke/features/integration-wire";
 import {
   AnchoredPopover,
-  ArrowLeftIcon,
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -26,6 +26,7 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  NO_BACK_KEY,
   OneLine,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
@@ -155,10 +156,9 @@ const SEARCH = {
   TOOLS: "Tools",
 } as const;
 
-/** What a server's page says where its filter matches nothing, and how its back button is named. */
+/** What a server's page says where its filter matches nothing. */
 const PAGE = {
   NONE: "No tools match",
-  BACK: "Back to MCP servers",
 } as const;
 
 /**
@@ -313,7 +313,7 @@ function SearchRow({
 function ServersNote({ words }: { words: string }): React.JSX.Element {
   return (
     <div className="agent-servers-note">
-      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
     </div>
@@ -324,7 +324,7 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
 function ServersHeading({ words }: { words: string }): React.JSX.Element {
   return (
     <div className="agent-servers-heading" aria-hidden="true">
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
     </div>
@@ -355,12 +355,16 @@ const PointerHighlight: ListRowHint = ({ label, children }) => {
 };
 
 function ServersPopover({
+  open: standing,
   id,
   servers,
   statuses,
   onClose,
   onLeave,
+  onExited,
 }: {
+  /** Whether it stands; closed, it fades out, then tells its owner it is gone. */
+  open: boolean;
   id: string;
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
@@ -368,6 +372,7 @@ function ServersPopover({
   onClose: () => void;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -742,9 +747,12 @@ function ServersPopover({
     return (
       <>
         <div className="agent-servers-page-head">
-          <Tooltip label={PAGE.BACK}>
-            <IconButton icon={<ArrowLeftIcon />} label={PAGE.BACK} keepFocus onClick={back} />
-          </Tooltip>
+          <BackButton
+            label={SERVERS_LABEL}
+            place={SERVERS_LABEL}
+            command={NO_BACK_KEY}
+            onBack={back}
+          />
           <ProviderMark provider={row.provider} size={PROVIDER_MARK_SIZE.ICON} />
           <ServerPageTitle name={row.name} />
           <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>
@@ -789,7 +797,7 @@ function ServersPopover({
         server={row.name}
         tool={shown}
         tokens={pageTokens}
-        backLabel={`Back to ${row.name} tools`}
+        backPlace={`${row.name} tools`}
         onBack={closeTool}
         keepFocus
         bodyRef={toolBody}
@@ -800,6 +808,7 @@ function ServersPopover({
 
   return (
     <PopoverPanel
+      open={standing}
       id={id}
       look={POPOVER_PANEL_LOOK.MENU}
       title={
@@ -811,6 +820,7 @@ function ServersPopover({
       }
       onDismiss={dismiss}
       onLeave={onLeave}
+      onExited={onExited}
     >
       {/* Note that the searchable menu's own class rides a box drawn as its
           contents, because its rows' highlight is that menu's. */}
@@ -864,6 +874,9 @@ export function AgentServersButton({
   const popoverId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  // Note that the popover is drawn from its opening until its fade has run, and no longer, because its search, its page and its reads of every server's tools are its own and start afresh each time it opens.
+  const [drawn, setDrawn] = useState(open);
+  if (open && !drawn) setDrawn(true);
 
   // Note that we hand focus back to the button, as a menu returns it to its
   // trigger, because closing takes the focused popover away with it.
@@ -900,9 +913,10 @@ export function AgentServersButton({
           {face}
         </Chip>
       )}
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
+      <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
+        {drawn ? (
           <ServersPopover
+            open={open}
             id={popoverId}
             servers={servers}
             statuses={statuses}
@@ -912,9 +926,10 @@ export function AgentServersButton({
               if (!document.hasFocus()) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
+            onExited={() => setDrawn(false)}
           />
-        </AnchoredPopover>
-      ) : null}
+        ) : null}
+      </AnchoredPopover>
     </div>
   );
 }

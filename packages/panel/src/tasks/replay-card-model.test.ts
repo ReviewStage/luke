@@ -257,6 +257,16 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
   assert.equal(used.kind === STEP_VIEW.CALL && used.call, CALL_KIND.OTHER);
 });
 
+test("an opened pull request's step is drawn as the pull request's row, as the service says it", () => {
+  const opened = stepView({
+    kind: REPLAY_STEP_KIND.TOOL,
+    summary: "Opened pull request: feat(billing): export invoices",
+    words: 'Input: {"title":"feat(billing): export invoices"}\nResult: {"number":4951}',
+  });
+  assert.equal(opened.kind === STEP_VIEW.CALL && opened.call, CALL_KIND.OPEN_PULL_REQUEST);
+  assert.equal(opened.kind === STEP_VIEW.CALL && opened.subject, "feat(billing): export invoices");
+});
+
 test("a line's step is drawn as a sent message under its sender, and the agent's words as its words whole", () => {
   assert.deepEqual(
     stepView({

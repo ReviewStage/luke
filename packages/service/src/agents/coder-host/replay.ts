@@ -40,8 +40,9 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { isVideoType } from "@luke/features/conversation-picture-wire";
-import { agentGivenName } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { CALL_KIND, CALL_WORDS as ROW_CALL_WORDS } from "@luke/features/turn-rows";
 import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import {
@@ -157,6 +158,11 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CLAUDE_CODE_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   [CODEX_TOOL.COMMAND_EXECUTION, { verb: "Ran", key: "command" }],
   [CODEX_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  // Note that its verb is the transcript's own, which the replay card reads back as the pull request's line.
+  [
+    CODER_TOOL.OPEN_PULL_REQUEST,
+    { verb: ROW_CALL_WORDS[CALL_KIND.OPEN_PULL_REQUEST].verb, key: "title" },
+  ],
 ]);
 
 /** The tools that edit the one file their input names: eve's own, and Claude Code's. */
@@ -550,9 +556,9 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** An agent as the preamble names it: Luke for an operator, else its title, or its model where it has none, and its id. */
-function agentName(agent: CodingAgent): string {
-  return `"${agentGivenName(agent) ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
+/** An agent as the preamble names it: as its tab does (`agentName`), and its id. */
+function agentNamedWithId(agent: CodingAgent): string {
+  return `"${agentName(agent)}" (agent id ${agent.id})`;
 }
 
 /** A pull request as it follows the branch it is from; nothing where there is none. */
@@ -623,7 +629,7 @@ interface CarriedWork {
 function carriedWhere(carried: CarriedWork): string {
   const { agent, copiedBranch } = carried;
   const named =
-    agent === undefined ? "another coding agent" : `the coding agent ${agentName(agent)}`;
+    agent === undefined ? "another coding agent" : `the coding agent ${agentNamedWithId(agent)}`;
   const lead = `It never made a branch of its own: it took up the work of ${named}`;
   const branch = agent?.branch ?? null;
   const own =
@@ -670,7 +676,7 @@ function whereOf(
         ? ` Its own branch was \`${source.branch}\`${pull}.`
         : taken === undefined || taken.branch === null
           ? ""
-          : ` It made no branch of its own; the coding agent it took up, ${agentName(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
+          : ` It made no branch of its own; the coding agent it took up, ${agentNamedWithId(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
     if (inPullRequest && source.branch !== null) {
       return (
         `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}.` +
@@ -721,7 +727,7 @@ function preambleOf(
   unkept: readonly string[],
   inPullRequest: boolean,
 ): string {
-  const name = agentName(source);
+  const name = agentNamedWithId(source);
   const lead = forked.at
     ? `You are a fork of the coding agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
     : `You continue the work of the coding agent ${name}, which stopped before it was done.`;

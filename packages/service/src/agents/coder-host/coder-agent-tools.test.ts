@@ -57,6 +57,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CHANNEL_KIND, CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
@@ -194,6 +195,8 @@ const AGENT_CHOICE = {
   effort: "high",
   repository: RELAY_FULL_NAME,
 } as const;
+/** The name an untitled agent on that model goes by, as its tab names it. */
+const AGENT_CHOICE_NAME = "Opus 5.5";
 const NOTE = "I renamed InviteToken to InvitationToken on main; rebase before you push.";
 const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
@@ -314,7 +317,7 @@ async function claimed(
   return {
     ...target,
     id: started.value.agent.id,
-    name: started.value.agent.title ?? started.value.agent.model,
+    name: started.value.agent.title ?? AGENT_CHOICE_NAME,
     sessionId: session,
   };
 }
@@ -804,10 +807,10 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, tasks.invitations);
-  // The agent is answered with the mention its starter names it by, its model while it has no title.
+  // The agent is answered with the mention its starter names it by, its model's name while it has no title.
   assert.equal(
     started.agent.mention,
-    `[@${stored.title ?? stored.model}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
@@ -2676,7 +2679,7 @@ test("a direct message and stop_agent reach a teammate's Claude Code agent throu
     userId: agents.teammates.userId,
     conversationId: started.value.agent.conversationId,
     id: started.value.agent.id,
-    name: started.value.agent.title ?? started.value.agent.model,
+    name: started.value.agent.title ?? AGENT_CHOICE_NAME,
     sessionId: `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`,
   };
   assert.equal(
@@ -3724,7 +3727,19 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const member = agents.caller.userId;
-  const second = await agentOn(member, tasks.invitations);
+  // Started by an automation's run, it has no title yet, and its tab names it by its automation.
+  const second = await claimed(member, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    automationOrigin: {
+      name: "Invite sweep",
+      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      prompt: "Sweep expired invites.",
+    },
+  });
   const ask = (agent: StartedAgent, taskId: string, key: string, title: string) =>
     database.run(
       postInboxThread(
@@ -3754,11 +3769,7 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
   const asks = Array.isArray(listed.asks) ? listed.asks : [];
   const byKey = new Map(asks.flatMap((each) => (isRecord(each) ? [[each.key, each]] : [])));
-  assert.deepEqual([...byKey.keys()].sort(), [
-    "deploy-region",
-    "preview-live",
-    "token-expiry",
-  ]);
+  assert.deepEqual([...byKey.keys()].sort(), ["deploy-region", "preview-live", "token-expiry"]);
   const notice = byKey.get("preview-live");
   assert.ok(isRecord(notice));
   assert.deepEqual([notice.ask, notice.words], [null, "It deployed to iad1."]);
@@ -3767,6 +3778,14 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   assert.equal(deploy.agent.id, agents.caller.id);
   assert.equal(deploy.ask, INBOX_ASK.DECIDE);
   assert.deepEqual(deploy.task, { id: tasks.invitations, name: "Teammate invitations" });
+  // Note that the agent is named as its tab names it, by its automation, never by its model's id.
+  const expiry = byKey.get("token-expiry");
+  assert.ok(isRecord(expiry) && isRecord(expiry.agent));
+  assert.equal(expiry.agent.name, "Invite sweep");
+  assert.ok(
+    String(expiry.agent.mention).startsWith("[@Invite sweep]("),
+    String(expiry.agent.mention),
+  );
 
   assert.ok(kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }).has(CODER_TOOL.LIST_OPEN_ASKS));
   assert.ok(!kindToolsOf({ kind: CODING_AGENT_KIND.CODER }).has(CODER_TOOL.LIST_OPEN_ASKS));

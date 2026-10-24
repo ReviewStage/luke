@@ -15,7 +15,7 @@ import type {
   RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
@@ -27,6 +27,7 @@ import {
   type CodeRef,
   type Task,
   type TaskStanding,
+  type TaskStatus,
   type TaskSummary,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
@@ -34,7 +35,6 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
-  type TasksRevisionsAnswer,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -49,7 +49,13 @@ import {
 import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import {
+  CONFIRM_LOSS,
+  type DialogConfirm,
+  type DialogQuestion,
+  STATUS_TONE,
+  useConfirmDialog,
+} from "@luke/ui";
 import { callTaskName } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
@@ -109,7 +115,6 @@ import {
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
-  type SettledStatus,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
@@ -139,6 +144,7 @@ import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
@@ -149,9 +155,9 @@ import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-span
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
-import { useStandingCall, voiceViewNow } from "../use-voice-view.js";
+import { useStandingCall, voiceLostNow, voiceViewNow } from "../use-voice-view.js";
 import type { AgentCallPlace, AgentCallPress } from "./agent-call.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
@@ -164,9 +170,9 @@ import {
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
+  agentName,
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
-  agentTabLabel,
   choiceRequest,
   openingLineOf,
   type SentLine,
@@ -832,7 +838,9 @@ export interface TasksControl {
     ) => Promise<string | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
-    /** Reads the models now, for the chip's name and its menu opening. */
+    /** Whether the last read of the models did not land. */
+    modelsFailed: boolean;
+    /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
     readDefault: () => Promise<CodingAgentDefaultAnswer>;
@@ -884,12 +892,13 @@ export interface TasksControl {
    */
   onMarkTask: (taskId: string, mark: TaskMark) => void;
   /**
-   * Sets one task or several at Done or Canceled, as Mark done, Cancel task,
-   * and a group's Mark tasks done ask: each drawn there at once, and one
-   * toast for them all once the service answered, whose Undo puts back the
-   * status each stood at. A task already there is left as it stands.
+   * Sets one task or several at a status, as Mark done, Cancel task, a
+   * group's Mark tasks done, and the Tasks page's selection ask: each drawn
+   * there at once, and one toast for them all once the service answered,
+   * naming how many it refused, whose Undo puts back the status each stood
+   * at. A task already there is left as it stands.
    */
-  onSettleTasks: (taskIds: readonly string[], status: SettledStatus) => void;
+  onSettleTasks: (taskIds: readonly string[], status: TaskStatus) => void;
   /** The repositories the account pinned in the sidebar, newest pinned first, whose groups stand above the rest. */
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
@@ -1167,7 +1176,7 @@ function secondCallQuestion(taskName: string): DialogQuestion {
     body: "What was said on that call stays in its agent's transcript.",
     verb: "Start new call",
     running: "Starting",
-    tone: DIALOG_TONE.PRIMARY,
+    loss: CONFIRM_LOSS.REVERSIBLE,
   };
 }
 
@@ -1570,10 +1579,14 @@ export function useTasksTab(input: {
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
+    listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
+      ? tasks.taskAgents
+      : undefined,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
+    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
   });
   // An Untitled task takes its first agent's title on the service, and the
@@ -1747,7 +1760,7 @@ export function useTasksTab(input: {
   const pinLabels = useMemo(
     () => ({
       agents: new Map(
-        (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
+        (agents.agents ?? []).map((agent) => [agent.id, agentName(agent, agents.models)]),
       ),
       pullRequests: new Map(
         [...agents.pullRequests].map(([agentId, pullRequest]) => [
@@ -2055,7 +2068,7 @@ export function useTasksTab(input: {
         };
         toast({
           words: switchedNote(target.name),
-          tone: TOAST_TONE.DONE,
+          tone: STATUS_TONE.COMPLETE,
           action: { label: backNote(from.name), onPress: back },
         });
       });
@@ -2073,11 +2086,11 @@ export function useTasksTab(input: {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
     if (deleted) {
-      toast({ words: TASK_DELETED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      toast({ words: TASK_DELETED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     }
     if (!shownNow.current) {
-      toast({ words: DELETE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: DELETE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     }
     return DELETE_REFUSED;
   };
@@ -2121,7 +2134,7 @@ export function useTasksTab(input: {
           );
           toast({
             words: MARK_FAILED_NOTES[mark],
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         }
@@ -2146,7 +2159,7 @@ export function useTasksTab(input: {
         );
         toast({
           words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });
       });
@@ -2193,7 +2206,7 @@ export function useTasksTab(input: {
       );
       toast({
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
-        tone: TOAST_TONE.FAILED,
+        tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
       });
     });
@@ -2249,7 +2262,7 @@ export function useTasksTab(input: {
     Promise.all(asked).then((answers) => {
       if (!answers.includes(false)) return;
       putBack?.();
-      toast({ words: PIN_MOVE_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: PIN_MOVE_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
   };
 
@@ -2276,7 +2289,7 @@ export function useTasksTab(input: {
         if (changed === false) {
           toast({
             words: SECTION_WRITE_FAILED_NOTE,
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         }
@@ -2325,11 +2338,11 @@ export function useTasksTab(input: {
     });
   };
 
-  // Tasks settled by one press answer with one toast rather than one each,
-  // so its Undo puts back the status of every task the service kept, and
-  // says so only where the service refuses that too. The open task stays
-  // open, since a task done or canceled is still read and worked on.
-  const settleTasks = (taskIds: readonly string[], status: SettledStatus) => {
+  // Tasks set at a status by one press answer with one toast rather than
+  // one each, so its Undo puts back the status of every task the service
+  // kept, and says so only where the service refuses that too. The open
+  // task stays open, since a task done or canceled is still read and worked on.
+  const settleTasks = (taskIds: readonly string[], status: TaskStatus) => {
     if (fixture !== undefined) return;
     const { asked, undo } = settleChanges(standingTasksOf(taskIds), status);
     if (asked.length === 0) return;
@@ -2340,34 +2353,30 @@ export function useTasksTab(input: {
       if (landed.length === 0) {
         toast({
           words: settleFailedNote(status, refused),
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });
         return;
       }
-      toast({
-        words: settledNote(status, landed.length, refused),
-        tone: TOAST_TONE.DONE,
-        action: {
-          label: UNDO_LABEL,
-          onPress: () =>
-            restoreNow.current(
-              undo.filter(
-                ({ taskId }) =>
-                  landed.includes(taskId) &&
-                  statusChoices.current.get(taskId) === choices.get(taskId),
-              ),
-              status,
+      toast(
+        undoToast(settledNote(status, landed.length, refused), () =>
+          restoreNow.current(
+            undo.filter(
+              ({ taskId }) =>
+                landed.includes(taskId) &&
+                statusChoices.current.get(taskId) === choices.get(taskId),
             ),
-        },
-      });
+            status,
+          ),
+        ),
+      );
     });
   };
   // Note that an Undo puts back only the tasks given no status since its
   // press, here or still in flight, and still at the status it undoes, so a
   // status chosen since, on the Board, the task's chip, or another Mac,
   // stands.
-  const restoreStatuses = (changes: readonly StatusChange[], settled: SettledStatus) => {
+  const restoreStatuses = (changes: readonly StatusChange[], settled: TaskStatus) => {
     const due = undoStillDue(
       changes,
       settled,
@@ -2378,7 +2387,7 @@ export function useTasksTab(input: {
       if (refused === 0) return;
       toast({
         words: STATUS_RESTORE_FAILED_NOTE,
-        tone: TOAST_TONE.FAILED,
+        tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
       });
     });
@@ -2537,6 +2546,7 @@ export function useTasksTab(input: {
       call: now.call,
       voiceStatus: now.voiceStatus,
       openAiKeyMissing,
+      voiceLost: voiceLostNow(),
     });
     if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys();
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
@@ -2663,7 +2673,7 @@ export function useTasksTab(input: {
     return act(kind).then(
       () => true,
       (refused: Error) => {
-        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: refused.message, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         return false;
       },
     );
@@ -2732,7 +2742,7 @@ export function useTasksTab(input: {
           return true;
         }
         if (told?.quiet !== true) {
-          toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+          toast({ words: MOVE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         }
         return false;
       });
@@ -2770,24 +2780,9 @@ export function useTasksTab(input: {
           taskId,
           ...(before === undefined ? undefined : { before }),
         }),
-      followNewest: (taskId, take) => {
-        let live = true;
-        let stream: AsyncIteratorObject<TasksRevisionsAnswer> | undefined;
-        act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId })
-          .then(async (opened) => {
-            stream = opened;
-            if (!live) {
-              await opened.return?.(undefined);
-              return;
-            }
-            for await (const answer of opened) if (live) take(answer);
-          })
-          .catch(() => undefined);
-        return () => {
-          live = false;
-          void stream?.return?.(undefined);
-        };
-      },
+      // A follow that broke is opened again, so the newest page never stops moving for good.
+      followNewest: (taskId, take) =>
+        streamFrom(() => act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }), take),
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
@@ -3826,6 +3821,7 @@ export function useTasksTab(input: {
       repositoriesIn,
       start: steadyStartTask,
       models: agents.models,
+      modelsFailed: agents.modelsFailed,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),

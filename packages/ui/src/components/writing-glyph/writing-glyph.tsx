@@ -20,7 +20,7 @@ import {
   StrikethroughIcon,
   TextBlockIcon,
   TodoListIcon,
-} from "../../face/glyphs.js";
+} from "../../icons/lucide-glyphs.js";
 
 /**
  * writing-glyph.tsx -- the glyph of each writing action, a mark or a block, as the format toolbar, Turn into, and the `/` menu all draw it.

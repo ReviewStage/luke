@@ -38,8 +38,8 @@ function drawnAt(width: number): HTMLElement {
 
 /** The blocks at each end of the card's foot. */
 function footOf(card: HTMLElement) {
-  const ends = ["prompt-input-tools", "agent-composer-actions"].map((name) => {
-    const end = card.querySelector(`.prompt-input-footer > .${name}`);
+  const ends = ["luke-composer-foot-tools", "luke-composer-foot-end"].map((name) => {
+    const end = card.querySelector(`.luke-composer-foot-bar > .${name}`);
     assert.ok(end, `the foot holds its .${name}`);
     return [...end.querySelectorAll<HTMLElement>(".luke-skeleton")];
   });

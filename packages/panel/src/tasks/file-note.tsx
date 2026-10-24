@@ -1,17 +1,17 @@
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import {
   DisclosureAction,
   GLYPH_INK,
   GlyphSlot,
-  IconButton,
+  MoreButton,
+  moreLabel,
   Time,
-  Tooltip,
   useMenu,
   useMinute,
   WingFace,
 } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
-import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
+import { MessagesSquareIcon } from "lucide-react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -47,7 +47,7 @@ const UNNAMED_AUTHOR = "Agent";
 
 /** What a note's ⋯ is called, and what it offers. */
 const NOTE_WORDS = {
-  MENU: "Note actions",
+  THING: "Note",
   VIEW_CONVERSATION: "View in conversation",
 } as const;
 
@@ -97,12 +97,10 @@ function NoteMenu({ place }: { place: LinkPlace | undefined }): React.JSX.Elemen
   return (
     <DisclosureAction>
       <span className="file-note-menu">
-        <Tooltip label={NOTE_WORDS.MENU}>
-          <IconButton icon={<EllipsisIcon />} label={NOTE_WORDS.MENU} {...menu.trigger()} />
-        </Tooltip>
+        <MoreButton thing={NOTE_WORDS.THING} {...menu.trigger()} />
         {menu.drawn === undefined ? null : (
           <ActionMenu
-            label={NOTE_WORDS.MENU}
+            label={moreLabel(NOTE_WORDS.THING)}
             menu={menu.drawn}
             groups={[actions]}
             onClose={menu.close}

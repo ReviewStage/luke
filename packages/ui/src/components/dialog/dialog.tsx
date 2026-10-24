@@ -1,10 +1,21 @@
 import type { DialogRoot } from "@base-ui/react/dialog";
-import { type Ref, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import {
+  type Ref,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { motionHeld } from "../../motion-timing.js";
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
+import { trappedTab } from "../../trapped-tab.js";
+import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
-import { useStagedFocus } from "./staged-focus.js";
+import { useHeldFocus } from "./held-focus.js";
 
 /**
  * dialog.tsx -- the window dimmed under one card that holds the keyboard
@@ -24,8 +35,8 @@ import { useStagedFocus } from "./staged-focus.js";
  * It is drawn by shadcn/ui's Base UI dialog (`../../shadcn/dialog.tsx`),
  * trapping focus, which hears Escape (never while an input method composes)
  * and a press that begins and ends on the dimmed window, and keeps a dialog
- * opened over another the one Escape reaches. It stands open for as long as
- * it is mounted, so what Base UI hears as a dismissal is handed to the
+ * opened over another the one Escape reaches. Whether it stands is its
+ * owner's (`open`), so what Base UI hears as a dismissal is handed to the
  * dialog's own `dismiss`, which decides whether the card goes; Tab's own
  * move among the card's controls, and handing focus back to what opened the
  * card, stay the dialog's. Its portal stands its card a render after the
@@ -33,15 +44,21 @@ import { useStagedFocus } from "./staged-focus.js";
  * picker's row scrolled into view), never from an effect of the dialog's
  * owner as it opens.
  *
- * The dialog stands only while it is open, so mounting it is opening and
- * unmounting it is closing, however it came to close. Asked away while it
+ * The dialog stands while it is `open`, and as `open` falls the card and its
+ * dimmed window fade out on the exit token, drawn and taking no press until
+ * the fade has run, focus handed back to what opened the card as the fade
+ * begins. Reduced motion and a capture run, which zero the tokens, take it
+ * away at once. An owner whose card holds state or reads data while it is
+ * drawn hears `onExited` once the card is gone, and takes it out then. An
+ * owner always passes `open`: one that mounts the dialog to open it and
+ * unmounts it to close it passes `true`, and its card goes at once. Asked away while it
  * is at work, by Escape or the dimmed window, the card swells for a moment,
  * so the press is answered even though the owner keeps it open. A dialog
  * whose act was refused shakes its card once as the refusal lands, so the
  * failure reads before its words are read. A dialog holding a draft, words
  * written and not yet sent, answers the first Escape or press on the dimmed
  * window with the same swell and stays, its draft as it was, and is put away
- * by the next one; a reader is told so, since a card that stays is otherwise a press gone nowhere. The card is the
+ * by the next one; a reader is told so through the window's `Announcer`, since a card that stays is otherwise a press gone nowhere. The card is the
  * profile's dialog card, its inset and its corners, at a question's
  * measure, wider for a note being written, or fitted edge to edge to a file
  * shown; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
@@ -53,7 +70,8 @@ import { useStagedFocus } from "./staged-focus.js";
  * width so a short verb is not a smaller target than Cancel beside it, with a
  * tool of the dialog's own (attaching a screenshot) at the foot's start where
  * it has one. What it holds between them is the part that gives way and
- * scrolls, so its title and its answers stay on screen however short the
+ * scrolls (a `min-h-0` middle of the card, with the head and the foot outside
+ * it), so its title and its answers stay on screen however short the
  * window is. A picture's card opened from its tile grows from the tile
  * and goes back into it (`expand`), in place of the fade and rise every other
  * card opens with. A dialog whose head is more than words (a picture's bar, a title
@@ -81,21 +99,6 @@ export const DIALOG_SIZE = {
 } as const;
 
 export type DialogSize = (typeof DIALOG_SIZE)[keyof typeof DIALOG_SIZE];
-
-/**
- * What Tab may land on inside the card: its enabled controls and links, and
- * anything else given a place in the Tab order. Note that one taken out of
- * that order, as a menu's rows are, is dropped by its `tabIndex` rather than
- * here, because any negative value takes it out.
- */
-const FOCUSABLE = [
-  "a[href]",
-  "button:not([disabled])",
-  "textarea:not([disabled])",
-  "select:not([disabled])",
-  "input:not([disabled]):not([hidden])",
-  "[tabindex]:not(:disabled)",
-].join(", ");
 
 /** What names the card: the title drawn at its head, or the id of a head the dialog draws itself. */
 type DialogName =
@@ -145,12 +148,31 @@ const CARD_LOOK = [
 const FOOT = "flex min-w-0 shrink-0 items-center gap-dialog-action-gap mt-3";
 const ACTIONS = "ml-auto flex shrink-0 gap-dialog-action-gap [&>.luke-button]:min-w-dialog-action";
 
+/**
+ * The middle: what the card holds between its head and its foot, the one part
+ * that gives way and scrolls, laid out as the card is (a column at the card's
+ * own gap) so what it holds keeps the spacing it had as the card's children.
+ * Note that it clips what it holds, so it draws a control's ring inside the
+ * control, as a `Card` does, rather than clipped at the edge; that a
+ * picture's card (`media`) is fitted edge to edge and draws its own head and
+ * scroller, so its middle lays nothing out; and that a composer's card
+ * does not scroll its middle, because its chips hang lists (the repository's,
+ * the `@` menu) past the card's inner edges, which a scroller would clip and
+ * a picker would take for its room (`roomAround`). Its middle still gives
+ * way to the card's height, as `.new-task` did standing in the card itself,
+ * so its field yields to a short window (`desktop.css`) and its foot stays.
+ */
+const MIDDLE =
+  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=composer]:overflow-visible";
+
 /** What a reader is told when a draft holds the card back. */
 const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
 
 /** What a dialog is told: who names it, whether it is at work, where focus lands, and how it is put away. */
 export type DialogProps = DialogName & {
   ref?: Ref<DialogHandle> | undefined;
+  /** Whether the card stands; falling, it fades out before it goes. */
+  open: boolean;
   role?: DialogRole | undefined;
   /** How wide the card stands, a question's measure unless asked. */
   size?: DialogSize | undefined;
@@ -166,6 +188,8 @@ export type DialogProps = DialogName & {
   initialFocus?: React.RefObject<HTMLElement | null> | undefined;
   /** Escape or a press on the dimmed window: the dialog decides what putting it away costs. */
   onDismiss: () => void;
+  /** Its fade has run and it is gone, which an owner whose card holds state or reads data lets go of it on. */
+  onExited?: (() => void) | undefined;
   /** The dialog's own keys, heard after Tab and Escape and never while an input method composes. */
   onKeyDown?: ((event: React.KeyboardEvent<HTMLDivElement>) => void) | undefined;
   /** What the dimmed window does with a drag, for a dialog that takes files dropped anywhere on it. */
@@ -182,39 +206,6 @@ export type DialogProps = DialogName & {
   expand?: PictureExpand | undefined;
   children: React.ReactNode;
 };
-
-/** Whether `first` comes before `second` in the document's order. */
-function precedes(first: Node, second: Node): boolean {
-  return (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-}
-
-/** The move Tab makes from the focused element, kept to the card's own controls. */
-function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
-  const card = event.currentTarget;
-  const controls = [...card.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (control) => control.tabIndex >= 0,
-  );
-  const focused = document.activeElement;
-  const at = focused instanceof HTMLElement ? controls.indexOf(focused) : -1;
-  // Note that a focus inside the card off its controls, a picker's list that
-  // holds the keyboard, moves to the control beside it in the card's order,
-  // because counting it as off the controls would send it to an end instead.
-  if (at === -1 && focused !== null && focused !== card && card.contains(focused)) {
-    const beside = event.shiftKey
-      ? controls.findLast((control) => precedes(control, focused))
-      : controls.find((control) => precedes(focused, control));
-    event.preventDefault();
-    (beside ?? (event.shiftKey ? controls.at(-1) : controls[0]))?.focus();
-    return;
-  }
-  // Note that the ends wrap and a focus off the controls (the card itself,
-  // while the dialog is at work) comes back onto them, because past either
-  // end the browser's own move would leave the card for the window behind it.
-  const wraps = event.shiftKey ? at <= 0 : at === -1 || at === controls.length - 1;
-  if (!wraps) return;
-  event.preventDefault();
-  (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
-}
 
 /** What the card plays as it answers: a swell for a dismissal it holds back, a shake for an act refused. */
 const CARD_ANSWER = {
@@ -246,21 +237,34 @@ function useRefusalShake(card: React.RefObject<HTMLDivElement | null>, refused: 
   }, [card, refused]);
 }
 
+/** Hands focus back to `invoker` and forgets it, unless it has left the window meanwhile. */
+function handBack(invoker: React.RefObject<HTMLElement | null>): void {
+  const back = invoker.current;
+  invoker.current = null;
+  if (back?.isConnected) back.focus({ preventScroll: true });
+}
+
 /**
  * Remembers what held focus as the dialog opened and hands focus back to it
- * as the dialog closes, unless it has left the window meanwhile.
+ * as the dialog closes, as its fade begins or as it is unmounted, unless it
+ * has left the window meanwhile.
  *
  * Note that the invoker is read in a layout effect, because the card's own
  * focus lands in a later effect, and once it has, the control that opened
- * the card no longer holds it.
+ * the card no longer holds it; and that a close through `open` hands focus
+ * back in an effect, after Base UI's own have let go of the card's trap,
+ * which would otherwise take focus back into the card on its way out.
  */
-function useInvokerFocus(): void {
+function useInvokerFocus(open: boolean): void {
+  const invoker = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return () => {
-      if (invoker?.isConnected) invoker.focus({ preventScroll: true });
-    };
-  }, []);
+    if (!open) return;
+    invoker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, [open]);
+  useEffect(() => {
+    if (!open) handBack(invoker);
+  }, [open]);
+  useLayoutEffect(() => () => handBack(invoker), []);
 }
 
 /**
@@ -273,6 +277,7 @@ function useInvokerFocus(): void {
  */
 export function Dialog({
   ref,
+  open,
   role = DIALOG_ROLE.DIALOG,
   size = DIALOG_SIZE.CONFIRM,
   title,
@@ -283,6 +288,7 @@ export function Dialog({
   holding = false,
   initialFocus,
   onDismiss,
+  onExited,
   onKeyDown,
   dropTarget,
   dropping = false,
@@ -290,7 +296,7 @@ export function Dialog({
   actionsStart,
   expand,
   children,
-}: DialogProps): React.JSX.Element {
+}: DialogProps): React.JSX.Element | null {
   const card = useRef<HTMLDivElement | null>(null);
   // Note that the card stands a render after the dialog mounts, because
   // Base UI's portal makes its node first, so what reaches the card waits
@@ -298,13 +304,20 @@ export function Dialog({
   const [drawn, setDrawn] = useState(false);
   const titleId = useId();
   // Whether a draft has already held the card back once, which the next
-  // dismissal goes through.
+  // dismissal goes through; a card opened again holds its draft afresh.
   const [held, setHeld] = useState(false);
-  if (held && !holding) setHeld(false);
+  if (held && (!holding || !open)) setHeld(false);
+  // What the held draft's notice said, taken back once the card closes or goes, which ends what it told.
+  const heldSaid = useRef<Retire>(() => undefined);
+  useEffect(() => {
+    if (!open) heldSaid.current();
+  }, [open]);
+  useEffect(() => () => heldSaid.current(), []);
 
-  useInvokerFocus();
-  useStagedFocus<HTMLElement>(initialFocus ?? card, drawn && !busy);
-  useStagedFocus(card, drawn && busy);
+  useInvokerFocus(open);
+  // Note that a card on its way out holds no focus, which has gone back to what opened it.
+  useHeldFocus<HTMLElement>(initialFocus ?? card, open && drawn && !busy);
+  useHeldFocus(card, open && drawn && busy);
   useRefusalShake(card, refused);
   // Note that this runs before the card's first paint, so its own entrance
   // is stood down before a frame of it is drawn.
@@ -325,11 +338,34 @@ export function Dialog({
     if (holding && !held) {
       setHeld(true);
       nudge(card.current);
+      heldSaid.current = announce(ANNOUNCE.POLITE, HELD_NOTICE);
       return;
     }
     onDismiss();
   };
   useImperativeHandle(ref, () => ({ dismiss }));
+
+  // Note that the owner hears it gone only once the card has stood, because
+  // one that never opened has left nothing to let go of.
+  const stood = useRef(false);
+  useEffect(() => {
+    if (open) stood.current = true;
+  }, [open]);
+  const exited = () => {
+    if (!stood.current) return;
+    stood.current = false;
+    onExited?.();
+  };
+  // Note that a card taken away in the render that closes it is heard here,
+  // because Base UI never sees it leave.
+  useEffect(() => {
+    if (!open && motionHeld()) exited();
+  });
+
+  // Note that reduced motion and a capture run take the card away in the
+  // render that closes it, rather than a frame later once Base UI finds no
+  // fade to wait on.
+  if (!open && motionHeld()) return null;
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // Note that no key pressed in the card goes on to the window. A button's
@@ -350,13 +386,16 @@ export function Dialog({
 
   return (
     <ShadcnDialog
-      open
+      open={open}
       // Note that the card traps focus without locking the page's scroll,
       // as it always has: the dimmed window already takes every press
       // outside the card, and a lock would shift a page with a scrollbar.
       modal="trap-focus"
       onOpenChange={(open, details) => {
         if (!open && DISMISSAL.has(details.reason)) dismiss();
+      }}
+      onOpenChangeComplete={(done) => {
+        if (!done) exited();
       }}
     >
       <DialogContent
@@ -375,8 +414,8 @@ export function Dialog({
         tabIndex={-1}
         initialFocus={() => (busy ? card.current : (initialFocus?.current ?? card.current))}
         // Note that focus goes back to what opened the card through
-        // `useInvokerFocus`, because the card closes by being unmounted, which
-        // a close of Base UI's own never sees.
+        // `useInvokerFocus`, because a card its owner unmounts closes with no
+        // close of Base UI's own to hand it back.
         finalFocus={false}
         onKeyDown={keyDown}
         viewport={{
@@ -393,12 +432,9 @@ export function Dialog({
             {title}
           </Text>
         )}
-        {children}
-        {holding ? (
-          <span className="luke-visually-hidden" role="status">
-            {held ? HELD_NOTICE : ""}
-          </span>
-        ) : null}
+        <div data-slot="dialog-body" data-size={size} className={MIDDLE}>
+          {children}
+        </div>
         {actions === undefined && actionsStart === undefined ? null : (
           <div className={FOOT}>
             {actionsStart}

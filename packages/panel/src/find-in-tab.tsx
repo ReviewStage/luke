@@ -6,11 +6,13 @@ import {
   IconButton,
   MENU_SURFACE_FLOW,
   MenuSurface,
+  motionHeld,
   SearchField,
   Tooltip,
   useDisclosureFinding,
 } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -104,12 +106,6 @@ export type FindSubject =
   | { readonly task: string; readonly tab: StripTab }
   | { readonly agent: string }
   | { readonly page: FindPage; readonly at?: string | undefined };
-
-/** The bar standing open: what it was opened over, and how many times ⌘F has summoned it there. */
-interface OpenBar {
-  readonly subject: FindSubject;
-  readonly summons: number;
-}
 
 /** A find's matches as its bar reads them, and the step through them. */
 interface FindMatches {
@@ -261,6 +257,8 @@ function FindBar({
   onQuery,
   tally,
   summons,
+  leaving,
+  surface,
   onStep,
   onClose,
 }: {
@@ -268,6 +266,9 @@ function FindBar({
   onQuery: (query: string) => void;
   tally: FindTally;
   summons: number;
+  /** The bar is on its way out: fading, inert, and keeping what it last said. */
+  leaving: boolean;
+  surface: (element: HTMLElement | null) => void;
   onStep: (step: FindStep) => void;
   onClose: () => void;
 }): React.JSX.Element {
@@ -278,8 +279,10 @@ function FindBar({
   }, [summons]);
   return (
     <MenuSurface
+      ref={surface}
       className="find-bar"
       flow={MENU_SURFACE_FLOW.ROW}
+      leaving={leaving}
       role="search"
       aria-label="Find"
       {...{ [FIND_SKIP_ATTRIBUTE]: "" }}
@@ -370,7 +373,9 @@ export function FindScope({
 }): React.JSX.Element {
   const [root, setRoot] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
-  const [bar, setBar] = useState<OpenBar | undefined>(undefined);
+  // Where the bar stands open, and how many times ⌘F has summoned it.
+  const [bar, setBar] = useState<FindSubject | undefined>(undefined);
+  const [summons, setSummons] = useState(0);
   const back = useRef<HTMLElement | null>(null);
   // Note that the bar is let go as the tab changes, rather than left to
   // stand for a tab no longer shown, which a return would draw again.
@@ -379,12 +384,16 @@ export function FindScope({
     setShown(subject);
     setBar(undefined);
   }
-  const open = bar !== undefined && sameSubject(bar.subject, subject);
+  const open = bar !== undefined && sameSubject(bar, subject);
+  // Note that the bar is held drawn through its exit, saying what it last said, since the matches it tallies go with the query it closes on.
+  const drawn = useDisclosure(open);
   // A tab that hands a source of its own finds in its words, never the DOM's.
   const [source, setSource] = useState<FindSource | undefined>(undefined);
   const domMatches = useFindMatches(source === undefined ? root : null, open ? query : "");
   const sourceMatches = useSourceMatches(source, open ? query : "");
   const { tally, step } = source === undefined ? domMatches : sourceMatches;
+  const [tallied, setTallied] = useState(tally);
+  if (open && tallied !== tally) setTallied(tally);
 
   const summon = () => {
     if (root === null) return;
@@ -394,7 +403,8 @@ export function FindScope({
     // opened, since a second ⌘F finds it in the bar's own field.
     const focused = document.activeElement;
     if (!open) back.current = focused instanceof HTMLElement ? focused : null;
-    setBar({ subject, summons: (bar?.summons ?? 0) + 1 });
+    setBar(subject);
+    setSummons((count) => count + 1);
   };
   const close = () => {
     setBar(undefined);
@@ -427,16 +437,18 @@ export function FindScope({
       className={className === undefined ? "find-scope" : `${className} find-scope`}
       {...props}
     >
-      {open ? (
+      {!drawn.mounted || (drawn.leaving && motionHeld()) ? null : (
         <FindBar
           query={query}
           onQuery={setQuery}
-          tally={tally}
-          summons={bar.summons}
+          tally={tallied}
+          summons={summons}
+          leaving={drawn.leaving}
+          surface={drawn.ref}
           onStep={step}
           onClose={close}
         />
-      ) : null}
+      )}
       <FindScopeContext.Provider value={doors}>
         <DisclosureFind finding={open}>{children}</DisclosureFind>
       </FindScopeContext.Provider>

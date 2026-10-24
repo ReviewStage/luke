@@ -43,7 +43,7 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
-import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import { agentName, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
@@ -51,11 +51,13 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@luke/features/models-wire";
+import { formatCompact, formatUsd } from "@luke/features/number-format";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
+import { dayAndTimeText } from "@luke/features/time-format";
 import {
   ROW_PART,
   type RowReading,
@@ -63,6 +65,7 @@ import {
   type TurnRow,
   turnRows,
 } from "@luke/features/turn-rows";
+import { andList, readFailedWords } from "@luke/features/words";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
@@ -74,7 +77,6 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { dayAndTimeText } from "@luke/ui/time-format";
 import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
@@ -95,6 +97,7 @@ import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js
 import { drawnCall } from "./native-tool-calls.js";
 import {
   changesSidebar,
+  plainWords,
   remoteCallOf,
   TOOL_TARGET,
   todosView,
@@ -118,25 +121,6 @@ import {
 /** The words that separate the parts of a line. */
 const LINE_SEPARATOR = " · ";
 
-/** How many tokens are a thousand and a million, as the compact count spells them. */
-const THOUSAND = 1_000;
-const MILLION = 1_000_000;
-
-/** The least dollars drawn as an amount; under it the cost reads as less than a cent. */
-const LEAST_CENTS = 0.005;
-
-/** A count of tokens compact enough for a line: 812, 12.3k, 1.2M. */
-export function compactCount(count: number): string {
-  if (count >= MILLION) return `${(count / MILLION).toFixed(1)}M`;
-  if (count >= THOUSAND) return `${(count / THOUSAND).toFixed(1)}k`;
-  return String(count);
-}
-
-/** Dollars as a line draws them: to the cent, and under a cent "<$0.01". */
-function dollars(costUsd: number): string {
-  return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
-}
-
 /** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
 const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
   [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude plan",
@@ -154,10 +138,10 @@ const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
  */
 export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
-  const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
+  const tokens = `${formatCompact(usage.inputTokens + usage.outputTokens)} tokens`;
   const paid =
     (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
-    (usage.costUsd === undefined ? undefined : dollars(usage.costUsd));
+    (usage.costUsd === undefined ? undefined : formatUsd(usage.costUsd));
   return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
 }
 
@@ -729,6 +713,22 @@ function unreachedFailure(
       authorizeUrl: unreached.authorizeUrl,
     };
   }
+  // The member's token is theirs to add or replace in Settings, so each of its cases carries that remedy and needs no task.
+  if (unreached?.reason === REPOSITORY_UNREACHED.NO_TOKEN) {
+    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "No GitHub token saved." };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_NO_ACCESS) {
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: `Your GitHub token can't access ${unreached.repository}. Check the repository still exists under that name, or ask its owner to give your GitHub account access.`,
+    };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH) {
+    return {
+      reason: FAILURE_REASON.GITHUB_TOKEN,
+      text: `Your GitHub token can't push to ${unreached.repository}. Ask its owner to give your GitHub account write access.`,
+    };
+  }
   if (unreached === undefined || taskId === null) {
     return callFailure(SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
   }
@@ -768,12 +768,6 @@ function unreachedFailure(
         taskId: taskId,
         workspace: unreached.workspace,
       };
-    case REPOSITORY_UNREACHED.NO_TOKEN:
-      return callFailure("No GitHub token saved.");
-    case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
-      return callFailure(`Your GitHub token can't access ${repository}.`);
-    case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
-      return callFailure(`Your GitHub token can't push to ${repository}.`);
   }
 }
 
@@ -871,7 +865,7 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
  * process's notifications so neither is ever named two ways
  * (`@luke/features/model-label`).
  */
-export { agentTabLabel, modelLabel };
+export { agentName, modelLabel };
 
 /**
  * The provider whose harness runs a model, read from its catalog id, whose
@@ -975,6 +969,9 @@ function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[]
     )
     .map((each) => each.model);
 }
+
+/** What the model menu and Settings say where the catalog could not be read. */
+export const MODELS_READ_FAILED = readFailedWords("the models");
 
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";
@@ -1092,13 +1089,13 @@ function choiceDetail(effort: string, fast: boolean, standardTokens?: number): s
 /** The word the menu's pinned row and the settings row say for the context window. */
 export const CONTEXT_WORD = "Context";
 
-/** The tenth of a million a window's size in millions is cut to. */
-const TENTH_OF_A_MILLION = MILLION / 10;
+/** The steps a window's size is cut down to before it is said: a thousand below a million, a tenth of a million from it. */
+const WINDOW_CUT = { THOUSAND: 1_000, TENTH_OF_A_MILLION: 100_000, MILLION: 1_000_000 } as const;
 
-/** A window's size as a choice says it, cut to the thousand or the tenth of a million below: 272K, 1M for 1,050,000. */
+/** A window's size as a choice says it, cut to the thousand or the tenth of a million below, not rounded: 272K, 1M for 1,050,000. */
 export function windowLabel(tokens: number): string {
-  if (tokens >= MILLION) return `${Math.floor(tokens / TENTH_OF_A_MILLION) / 10}M`;
-  return `${Math.floor(tokens / THOUSAND)}K`;
+  const step = tokens >= WINDOW_CUT.MILLION ? WINDOW_CUT.TENTH_OF_A_MILLION : WINDOW_CUT.THOUSAND;
+  return formatCompact(Math.floor(tokens / step) * step);
 }
 
 /** The two windows the model offers, or nothing for a model with one, or one the catalog does not offer now. */
@@ -1162,7 +1159,7 @@ export function longWindowNote(windows: ContextWindows): string {
     parts.push(`${factorLabel(windows.longInputPriceFactor)} for input`);
   if (windows.longOutputPriceFactor !== undefined)
     parts.push(`${factorLabel(windows.longOutputPriceFactor)} for output`);
-  return parts.length === 0 ? `${past} more.` : `${past} ${parts.join(" and ")}.`;
+  return parts.length === 0 ? `${past} more.` : `${past} ${andList(parts)}.`;
 }
 
 /** A choice as the words it is drawn in: the base model's name, and the detail drawn dimmed after it. */
@@ -2097,6 +2094,41 @@ export function messageWords(message: CodingAgentMessage): string {
     .join("\n\n");
 }
 
+/** How many words a reply's lead holds at most, where its first sentence runs on. */
+const REPLY_LEAD_WORDS = 24;
+
+/** A sentence's end: its stop, then a space or the end of the words. */
+const SENTENCE_END = /[.!?](?=\s|$)/u;
+
+/**
+ * What a turn that finished replied, as a reader hears it: its newest
+ * reply's last stretch of words, after the turn's last call, cut to its
+ * first sentence, or to its first words where that runs on. Nothing where
+ * there is no reply, no words follow its last call, as a turn that ended on
+ * a call, or it is an operator's quiet reply (`quiet`), which leaves its
+ * member nothing to read.
+ */
+export function finishedReplyLead(
+  messages: readonly CodingAgentMessage[],
+  quiet: boolean,
+): { readonly messageId: string; readonly lead: string } | undefined {
+  const reply = messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+  if (reply === undefined) return undefined;
+  if (quiet && isQuietReply(reply)) return undefined;
+  // Note that only words after the turn's last call are its reply, because words before it were the turn under way.
+  const parts = agentParts(reply);
+  const lastCall = parts.findLastIndex((part) => part.kind === AGENT_PART.TOOL);
+  const last = parts.slice(lastCall + 1).findLast((part) => part.kind === AGENT_PART.TEXT);
+  const words = last?.kind === AGENT_PART.TEXT ? plainWords(last.text) : "";
+  if (words === "") return undefined;
+  const end = SENTENCE_END.exec(words);
+  const sentence = end === null ? words : words.slice(0, end.index + 1);
+  const cut = sentence.split(/\s+/u);
+  const lead =
+    cut.length <= REPLY_LEAD_WORDS ? sentence : `${cut.slice(0, REPLY_LEAD_WORDS).join(" ")}…`;
+  return { messageId: reply.id, lead };
+}
+
 /** Where a line the developer sent stands, before the service's row for it lands. */
 export const SENT_LINE_STATE = {
   /** On its way, or taken and its row not yet read. */
@@ -2248,7 +2280,7 @@ export function checkoutCommand(branch: string): string {
 }
 
 /** A branch or a file's path as a GitHub address spells it: every character encoded but the slashes GitHub reads as the name's own. */
-export function githubPath(name: string): string {
+function githubPath(name: string): string {
   return encodeURIComponent(name).replaceAll("%2F", "/");
 }
 

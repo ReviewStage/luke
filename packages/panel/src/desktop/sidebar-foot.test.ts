@@ -20,7 +20,7 @@ import { SidebarFoot } from "./sidebar-foot.js";
 /**
  * The sidebar's foot as the developer meets it: the account's menu in
  * Cursor's order, Settings, what the menu bar's Help menu offers, Contact
- * us, and Log out, which asks first.
+ * us, and Sign out, which asks first.
  */
 
 const DEAN: AccountSnapshot = {
@@ -127,10 +127,13 @@ function accountMenu(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="menu"][aria-label="Account"]');
 }
 
-/** The open account menu as it reads down: its heading, each item's label and chord, and a dash for each rule. */
+/** The open account menu as it reads down: its heading, each item's label and chord, and a dash for each rule; not the unseen focus guards a submenu standing beside it leaves among them. */
 function accountMenuLines(): string[] {
   const menu = accountMenu() ?? assert.fail("the account's menu stands");
-  return [...menu.children].map((line) => {
+  const lines = [...menu.children].filter((line) =>
+    line.matches('hr, [role^="menuitem"], [role="none"]'),
+  );
+  return lines.map((line) => {
     if (line.matches("hr")) return "—";
     const words = [...line.querySelectorAll(":scope > span, :scope > kbd")].map(
       (part) => part.textContent ?? "",
@@ -175,7 +178,7 @@ function dialogButton(label: string): HTMLButtonElement {
   return button ?? assert.fail(`the dialog offers ${label}`);
 }
 
-test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Log out, parted by rules", async () => {
+test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Sign out, parted by rules", async () => {
   const button = mount(DEAN);
   await stateArrived();
   act(() => button.click());
@@ -191,7 +194,7 @@ test("the account opens its menu: who is signed in, then Settings, the Help menu
     "Keyboard shortcuts ⌘/",
     "Contact us",
     "—",
-    "Log out",
+    "Sign out",
   ]);
 });
 
@@ -270,9 +273,12 @@ test("Left or Escape closes Contact us's menu alone, and choosing in it closes b
   assert.deepEqual(sent, [{ kind: ACT_KIND.CONTACT_EMAIL }]);
 });
 
-test("in the window's bottom-left corner, Contact us's menu opens rightward and rises so it ends level with its row", () => {
+test("in the window's bottom-left corner, Contact us's menu opens rightward and rises so it ends level with its row", async () => {
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(1000);
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(700);
+  // Note that the page's root is the window's size, as a browser lays it out, though jsdom lays out nothing.
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1000);
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(700);
   const button = mount(DEAN);
   act(() => button.click());
   const contact = accountItem("Contact us");
@@ -283,18 +289,44 @@ test("in the window's bottom-left corner, Contact us's menu opens rightward and 
     height: 340,
   });
   placeAt(contact, { left: 16, top: 640, width: 200, height: 32 });
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ x: 0, y: 0, width: 196, height: 74 }),
-  );
+  // Note that a menu is laid out 196 by 74, its own offset size as well, as a browser lays it out, though jsdom lays out nothing.
+  const menuBox = (element: HTMLElement) =>
+    element.getAttribute("role") === "menu" ||
+    element.querySelector(':scope > [role="menu"]') !== null;
+  const measured = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return menuBox(this)
+      ? DOMRect.fromRect({ x: 0, y: 0, width: 196, height: 74 })
+      : measured.call(this);
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return menuBox(this) ? 196 : this.getBoundingClientRect().width;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return menuBox(this) ? 74 : this.getBoundingClientRect().height;
+  });
 
   act(() => contact.click());
+  // Note that Base UI places the submenu over a few promises rather than in the render that opened it.
+  await act(async () => {
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+  });
 
   const submenu = contactMenu() ?? assert.fail("Contact us opens its submenu");
-  assert.equal(submenu.style.left, "226px", "beside the menu's right edge");
-  assert.equal(submenu.style.top, "602px", "its foot level with Contact us's");
+  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(
+    submenu.parentElement?.style.transform ?? "",
+  );
+  assert.equal(at?.[1], "226px", "beside the menu's right edge");
+  assert.equal(at?.[2], "602px", "its foot level with Contact us's");
 });
 
-test("Log out asks first, and only its answer signs the account out", async () => {
+test("Sign out asks first, and only its answer signs the account out", async () => {
   let signOuts = 0;
   const button = mount(DEAN, {
     onSignOut: () => {
@@ -304,31 +336,34 @@ test("Log out asks first, and only its answer signs the account out", async () =
   });
   const logOut = () => {
     act(() => button.click());
-    act(() => accountItem("Log out").click());
+    act(() => accountItem("Sign out").click());
   };
 
   logOut();
-  assert.equal(dialog()?.querySelector("h2")?.textContent, "Log out of dean@example.com?");
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Sign out of dean@example.com?");
   act(() => dialogButton("Cancel").click());
   assert.equal(dialog(), null);
   assert.equal(signOuts, 0);
 
   logOut();
-  await act(async () => dialogButton("Log out").click());
+  await act(async () => dialogButton("Sign out").click());
   assert.equal(signOuts, 1);
 });
 
-test("a Log out that fails keeps the dialog up saying so, and the account still signed in", async () => {
+test("a Sign out that fails keeps the dialog up saying so, and the account still signed in", async () => {
   const button = mount(DEAN, { onSignOut: () => Promise.reject(new Error("refused")) });
   act(() => button.click());
-  act(() => accountItem("Log out").click());
+  act(() => accountItem("Sign out").click());
 
-  await act(async () => dialogButton("Log out").click());
+  await act(async () => dialogButton("Sign out").click());
 
-  assert.match(dialog()?.querySelector('[role="alert"]')?.textContent ?? "", /could not log out/u);
+  assert.match(
+    dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "",
+    /could not log out/u,
+  );
 });
 
-test("signed out, the account says so and its menu names no one and offers no Log out", async () => {
+test("signed out, the account says so and its menu names no one and offers no Sign out", async () => {
   const button = mount({ status: ACCOUNT_STATUS.SIGNED_OUT });
   await stateArrived();
 
@@ -408,7 +443,7 @@ test("the Mac offline says so in the foot, and nothing does while it is online",
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const mark = document.querySelector('[role="status"][aria-label="Offline"]');
+    const mark = document.querySelector('.offline-mark[aria-label="Offline"]');
     const words = mark?.textContent ?? null;
     for (const root of roots.splice(0)) act(() => root.unmount());
     return words;

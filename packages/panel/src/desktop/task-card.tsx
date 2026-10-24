@@ -29,7 +29,7 @@ import { useActorDoor } from "../person-door.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { WorkspaceDirectory } from "../tasks/chip-cards.js";
-import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
+import { agentName, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import {
@@ -195,7 +195,7 @@ export function AgentLine({
     <li data-task-card-agent="">
       <HoverCardRow
         glyph={<AgentGlyph agent={agent} />}
-        label={agentTabLabel(agent, models)}
+        label={agentName(agent, models)}
         end={agentEndMark(agent, false)}
         onPress={onShow}
       />

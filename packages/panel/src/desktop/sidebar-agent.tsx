@@ -1,6 +1,5 @@
 import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
-  ArchiveIcon,
   InlineEdit,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -8,14 +7,9 @@ import {
   LIST_ROW_INK,
   ListRow,
   OneLine,
-  PencilIcon,
-  PinIcon,
   RowHint,
   RowHintOptions,
   Time,
-  UnarchiveIcon,
-  UnpinIcon,
-  useMenu,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
@@ -23,6 +17,7 @@ import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -32,7 +27,7 @@ import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -53,11 +48,11 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * keyboard (`RowMarks`), as on a task's row, and rested on, the row hangs the
  * agent's card beside it, as its tab does on a task (`agent-ref.tsx`). A
  * press opens the agent's own page, and it reads in semibold while it ended
- * unseen, as its tab does, or while it is marked unread by hand. A right-click offers its actions where the
- * pointer is, in a task's row's groups: Copy link and Rename, which turns
+ * unseen, as its tab does, or while it is marked unread by hand. Its actions are one menu, opened alike by
+ * the row's ⋯, a right-click, and the menu key, in a task's row's groups: Copy link and Rename, which turns
  * the row into its name's field until the edit ends, with Mark as unread
  * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
- * the reader's own, Archive agent, asked first while the agent works
+ * the reader's own, Archive, asked first while a teammate's agent works
  * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
  * own sections, as a task's (`sidebar-sections.tsx`); and last and alone,
  * Permanently delete, always asked first (`agent-delete.tsx`), which leaves
@@ -69,9 +64,6 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
  */
-
-/** What the row's menu is called, as the agent page's ⋯ is. */
-const ACTIONS_LABEL = "Agent actions";
 
 /** Who started the agent, as its row's end wears them: its automation, or a teammate's face where it has none and `face` allows it. */
 function starterOf(
@@ -89,8 +81,8 @@ function starterOf(
 /** Pin or Unpin, whichever the agent is not yet, as a task's row offers them. */
 function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAction {
   return agent.pinnedAt === undefined
-    ? { label: "Pin", icon: <PinIcon />, onSelect: () => onPin(true) }
-    : { label: "Unpin", icon: <UnpinIcon />, onSelect: () => onPin(false) };
+    ? commandAction(PANEL_COMMAND.PIN_AGENT, () => onPin(true), false)
+    : commandAction(PANEL_COMMAND.UNPIN_AGENT, () => onPin(false), false);
 }
 
 /**
@@ -162,7 +154,6 @@ export function SidebarAgent({
     row.current = press;
     item.current = press?.parentElement ?? null;
   }, []);
-  const menu = useMenu(shown);
   const place = useRowPlace();
   const { act } = useAct();
   const reads = useAgentReadMarks();
@@ -181,9 +172,7 @@ export function SidebarAgent({
   const editing = rename?.editing ?? false;
   const endedByKey = useRefocusAfterEdit(editing, row);
   const renameItem: MenuAction | undefined =
-    onRename === undefined
-      ? undefined
-      : { label: "Rename", icon: <PencilIcon />, onSelect: onRename };
+    onRename === undefined ? undefined : commandAction(PANEL_COMMAND.RENAME, onRename, false);
   const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
   // Note that the row lays the agent's actions out in a task's row's groups, its own items among them.
   const groups: MenuEntry[][] = [
@@ -207,8 +196,7 @@ export function SidebarAgent({
       : [
           {
             key: "pin",
-            label: pinned ? "Unpin" : "Pin",
-            icon: pinned ? <UnpinIcon /> : <PinIcon />,
+            ...commandHead(pinned ? PANEL_COMMAND.UNPIN_AGENT : PANEL_COMMAND.PIN_AGENT),
             onSelect: () => onPin(!pinned),
           },
         ]),
@@ -218,14 +206,12 @@ export function SidebarAgent({
           archived
             ? {
                 key: "unarchive",
-                label: "Unarchive",
-                icon: <UnarchiveIcon />,
+                ...commandHead(PANEL_COMMAND.UNARCHIVE_AGENT),
                 onSelect: archive.onSelect,
               }
             : {
                 key: "archive",
-                label: "Archive",
-                icon: <ArchiveIcon />,
+                ...commandHead(PANEL_COMMAND.ARCHIVE_AGENT),
                 onSelect: archive.onSelect,
               },
         ]),
@@ -283,29 +269,13 @@ export function SidebarAgent({
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={isUnread}
-          menuOpen={menu.open !== undefined}
           hint={editing ? undefined : { Hint: RowHint, label: name }}
-          onPress={
-            editing
-              ? undefined
-              : () => {
-                  menu.close(false);
-                  onOpen();
-                }
-          }
-          contextMenu={editing ? undefined : menu.contextMenu(row)}
+          onPress={editing ? undefined : onOpen}
+          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown)}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={editing ? null : <RowMarks marks={marks} />}
         />
       </RowHintOptions>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={ACTIONS_LABEL}
-          menu={menu.drawn}
-          groups={withRowMoves(groups, place)}
-          onClose={menu.close}
-        />
-      )}
       {actions.dialog}
     </>
   );

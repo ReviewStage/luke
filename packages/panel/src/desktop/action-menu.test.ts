@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PaneBar } from "@luke/ui";
 import { CopyIcon } from "lucide-react";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { MenuRow } from "../settings/menu-row.js";
-import { BarMenu } from "../tasks/file-menu.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 
@@ -63,6 +63,17 @@ function rightClick(target: HTMLElement, at: { x: number; y: number }): void {
 }
 
 /** Lays an element out where the window would, which jsdom never does. */
+/** Where the open menu hangs, once Base UI has placed it over the few promises it places it in: its positioner's offset. */
+async function hungAt(): Promise<{ left: string; top: string } | undefined> {
+  await act(async () => {
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+  });
+  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(
+    openMenu()?.parentElement?.style.transform ?? "",
+  );
+  return at === null ? undefined : { left: at[1] ?? "", top: at[2] ?? "" };
+}
+
 function placeAt(element: Element, box: { left: number; top: number; bottom: number }): void {
   vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ x: box.left, y: box.top, width: 120, height: box.bottom - box.top }),
@@ -74,8 +85,8 @@ test("a Settings row's ⋯ and a file bar's ⋯ each open their menu on a press 
     createElement(
       "div",
       null,
-      createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
-      createElement(BarMenu, { label: "File actions", actions: ACTIONS }),
+      createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
+      createElement(PaneBar, { menu: { thing: "File", groups: [ACTIONS] } }),
     ),
   );
   for (const name of ["Linear actions", "File actions"]) {
@@ -94,17 +105,18 @@ test("a Settings row's ⋯ and a file bar's ⋯ each open their menu on a press 
   }
 });
 
-test("a right-click opens the row's menu at the pointer, and the menu key's under the row", () => {
+test("a right-click opens the row's menu at the pointer, and the menu key's under the row", async () => {
   const container = mount(
-    createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
+    createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
   );
   const row = container.querySelector<HTMLElement>(".settings-row");
   assert.ok(row, "the row is drawn");
 
   rightClick(row, { x: 300, y: 200 });
   const atPointer = openMenu();
-  assert.equal(atPointer?.style.left, "300px", "the menu hangs where the pointer is");
-  assert.equal(atPointer?.style.top, "200px");
+  const hung = await hungAt();
+  assert.equal(hung?.left, "300px", "the menu hangs where the pointer is");
+  assert.equal(hung?.top, "200px");
   act(() =>
     atPointer?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
   );
@@ -119,14 +131,54 @@ test("a right-click opens the row's menu at the pointer, and the menu key's unde
   // under the row from its start rather than into the window's corner.
   placeAt(row, { left: 40, top: 60, bottom: 100 });
   rightClick(row, { x: 0, y: 0 });
-  assert.equal(openMenu()?.style.left, "40px", "the menu key's menu starts at the row's start");
-  assert.equal(openMenu()?.style.top, "104px", "and hangs under the row");
+  const under = await hungAt();
+  assert.equal(under?.left, "40px", "the menu key's menu starts at the row's start");
+  assert.equal(under?.top, "104px", "and hangs under the row");
+});
+
+test("the menu key and ⇧F10 on a Settings row open the same menu under the row", async () => {
+  const container = mount(
+    createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
+  );
+  const row = container.querySelector<HTMLElement>(".settings-row") ?? assert.fail("no row");
+  placeAt(row, { left: 40, top: 60, bottom: 100 });
+  for (const key of [{ key: "ContextMenu" }, { key: "F10", shiftKey: true }]) {
+    act(() => {
+      row.dispatchEvent(new KeyboardEvent("keydown", { ...key, bubbles: true, cancelable: true }));
+    });
+    assert.equal(openMenu()?.getAttribute("aria-label"), "Linear actions");
+    assert.equal((await hungAt())?.left, "40px", "the menu hangs under the row from its start");
+    act(() =>
+      openMenu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    assert.equal(openMenu(), null);
+  }
+});
+
+test("Escape from a menu the menu key opened on a Settings row's ⋯ hands focus back to the ⋯", () => {
+  const container = mount(
+    createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
+  );
+  const ellipsis =
+    container.querySelector<HTMLButtonElement>('button[aria-label="Linear actions"]') ??
+    assert.fail("no ⋯");
+  act(() => ellipsis.focus());
+  act(() => {
+    ellipsis.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }),
+    );
+  });
+  const menu = openMenu();
+  assert.ok(menu, "the menu key opens it");
+  act(() => menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  assert.equal(openMenu(), null);
+  assert.equal(document.activeElement, ellipsis, "focus is back on the ⋯");
 });
 
 test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab, or a press elsewhere closes them, focus back on the ⋯", () => {
   const container = mount(
     createElement(MenuRow, {
-      label: "GitHub actions",
+      thing: "GitHub",
       actions: [ACTIONS, [{ label: "Disconnect", danger: true, onSelect: ignore }]],
       children: "GitHub",
     }),
@@ -171,9 +223,9 @@ test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab
   assert.equal(openMenu(), null, "a press elsewhere closes it");
 });
 
-test("a Settings row keeps its ⋯, named for its menu, and More on the pointer", () => {
+test("a Settings row keeps its ⋯, named for its menu, and says so on the pointer", () => {
   const container = mount(
-    createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
+    createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
   );
   const ellipsis =
     container.querySelector<HTMLButtonElement>('button[aria-label="Linear actions"]') ??
@@ -182,5 +234,5 @@ test("a Settings row keeps its ⋯, named for its menu, and More on the pointer"
   restOn(ellipsis);
 
   assert.equal(ellipsis.textContent, "", "with no words of its own");
-  assert.equal(document.querySelector(".luke-tooltip")?.textContent, "More");
+  assert.equal(document.querySelector(".luke-tooltip")?.textContent, "Linear actions");
 });

@@ -125,7 +125,7 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
  * app is offered only on the `linkPlatform` that can open it, a Mac.
  */
 export function webPlatform(
-  shell: Pick<AppPlatform, "recordSurfaceEvent" | "unsavedWork">,
+  shell: Pick<AppPlatform, "recordSurfaceEvent" | "unsavedWork" | "unsavedPlanWords">,
   linkPlatform: LinkPlatform = browserLinkPlatform(),
 ): AppPlatform {
   const platform: AppPlatform = {
@@ -151,6 +151,7 @@ export function webPlatform(
   };
   // A tab with no page leave to tell (a test's) holds nothing back.
   if (shell.unsavedWork !== undefined) platform.unsavedWork = shell.unsavedWork;
+  if (shell.unsavedPlanWords !== undefined) platform.unsavedPlanWords = shell.unsavedPlanWords;
   return platform;
 }
 

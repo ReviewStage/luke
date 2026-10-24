@@ -44,7 +44,7 @@
     pointer-events: none;
     transform: scale(0.25);
     transform-origin: 0 0;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-page-thumb[data-loaded="true"] .luke-page-thumb-frame {

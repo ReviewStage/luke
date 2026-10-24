@@ -64,11 +64,16 @@ it (the window under it is the shell's: `apps/desktop/src/renderer/AGENTS.md`):
 
 ## Confirms
 
-Any action that cannot be undone asks first, over `@luke/ui/confirm-state`. The one
+An act that cannot be undone asks first, over `@luke/ui/confirm-state`, its act in
+red (`CONFIRM_LOSS.IRREVERSIBLE`). One that can be undone but reaches someone else (a
+member removed, an invitation canceled, a shared channel archived, a teammate's agent
+stopped) still asks, its act in the accent (`CONFIRM_LOSS.AFFECTS_OTHERS`). One that
+can be undone and reaches only the reader asks nothing: it happens at once and offers
+Undo through `undoToast` (`toast.tsx`), whose Undo is the act's inverse. The one
 exception is merging a pull request from its merge control, which acts on the press,
 as GitHub-style review tools do; removing one from a merge queue still asks. In the
 desktop window it asks through `<ConfirmDialog>`, a modal over the window held by
-`useConfirmDialog`: title, what goes, Cancel focused and the act in red.
+`useConfirmDialog`: title, what goes, Cancel focused and the act last.
 Settings asks the same way, from a row's button or its ⋯ menu. A question does not
 outlive its subject — one left standing where a key used to be would point at
 whatever is stored there next — and does not outlive the surface it was asked on.

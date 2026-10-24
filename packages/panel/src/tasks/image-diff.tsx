@@ -1,6 +1,6 @@
 import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { CHOICE_BAR_LOOK, ChoiceBar, Slider } from "@luke/ui";
+import { CHOICE_BAR_LOOK, ChoiceBar, NOTE_LINE_LOOK, NoteLine, Slider } from "@luke/ui";
 import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
@@ -108,7 +108,7 @@ function SidePicture({ state, label }: { state: PictureState; label: string }) {
     return <img className="image-diff-picture" src={state.url} alt={label} />;
   }
   const words = state.kind === PICTURE_STATE.READING ? IMAGE_WORDS.READING : IMAGE_WORDS.MISSING;
-  return <p className="image-diff-note">{words}</p>;
+  return <NoteLine look={NOTE_LINE_LOOK.INSET}>{words}</NoteLine>;
 }
 
 /** One side alone, under the word for what it is, and a note under it where it stands for two. */
@@ -129,7 +129,7 @@ function OneSide({
       <figure className="image-diff-side">
         <figcaption>{label}</figcaption>
         <SidePicture state={state} label={label} />
-        {note === undefined ? null : <p className="image-diff-note">{note}</p>}
+        {note === undefined ? null : <NoteLine look={NOTE_LINE_LOOK.INSET}>{note}</NoteLine>}
       </figure>
     </div>
   );
@@ -316,7 +316,7 @@ function ImageSidesNear({
   })();
   return (
     <div ref={setBox} className="image-diff">
-      {near ? drawn : <p className="image-diff-note">{IMAGE_WORDS.READING}</p>}
+      {near ? drawn : <NoteLine look={NOTE_LINE_LOOK.INSET}>{IMAGE_WORDS.READING}</NoteLine>}
     </div>
   );
 }

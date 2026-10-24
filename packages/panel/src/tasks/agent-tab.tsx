@@ -19,24 +19,31 @@ import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
+import { replyFromWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
+  announce,
   BUTTON_VARIANT,
   Button,
+  CodeCard,
   DisclosureChevron,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
-  MESSAGE_ACTIONS_PLACEMENT,
+  MessageLine,
   OneLine,
+  STATUS_TONE,
   TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
   TextLink,
+  useAnnounce,
   useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
@@ -81,11 +88,10 @@ import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elemen
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
-import { useCopyToast } from "../copy-feedback.js";
+import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import {
   AgentCallControls,
   type AgentCallDoors,
@@ -116,11 +122,11 @@ import {
   type AgentPartCut,
   agentLines,
   agentListCallIds,
+  agentName,
   agentPart,
   agentParts,
   agentRows,
   agentStillWriting,
-  agentTabLabel,
   agentWorkingPhase,
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
@@ -134,6 +140,7 @@ import {
   endLineOffersContinue,
   endLineParts,
   endLineReason,
+  finishedReplyLead,
   lineSender,
   macOwnerOf,
   messageWords,
@@ -158,6 +165,7 @@ import {
   workerStatusOf,
   workerToolState,
 } from "./coding-agent-model.js";
+import { ConnectionNames, useServerName } from "./connection-names.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
@@ -175,7 +183,6 @@ import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
-import { SentTime } from "./sent-time.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
 import { SentWords, useSkill } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -186,6 +193,7 @@ import {
   calledAgent,
   cardTitle,
   delegationView,
+  isServerCallTool,
   loadedSkill,
   sentWords,
   TARGET_HINT,
@@ -225,6 +233,7 @@ import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
+import { useOpenLink } from "./use-open-link.js";
 import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
@@ -345,6 +354,9 @@ const AUTOMATION_LEAD: TranscriptLead = {
 
 /** What a webhook call's body is called, folded under the prompt it rode in with. */
 const WEBHOOK_BODY_LABEL = "Webhook body";
+
+/** What the header of a webhook body's card names it: the body is whatever the caller sent, so it is named for what it is rather than a language. */
+const WEBHOOK_BODY_KIND = "body";
 
 /** What an automation's sender line says beside its name once it is deleted. */
 const DELETED_WORDS = "(deleted)";
@@ -504,7 +516,14 @@ function ToolCallView({
   cut?: CutBody | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
+  const server = useServerName(view);
   const known = useKnownNames();
+  // Note that the chip of the agent a call is about hangs the card its tab hangs, which the place hands over by the agent's id.
+  const called = calledAgent(part);
+  const agentCard =
+    called?.id === undefined
+      ? undefined
+      : cards?.target({ kind: TOOL_TARGET.AGENT, agent: called.id }, called.title);
   return (
     <>
       <TranscriptTool
@@ -512,9 +531,11 @@ function ToolCallView({
         state={part.state}
         kind={view.kind}
         provider={view.provider}
+        server={server}
         subject={view.subject}
         description={view.description}
         agent={calledAgentActor(part, cards, known)}
+        agentCard={agentCard}
         input={view.input}
         output={view.output}
         errorText={part.errorText}
@@ -755,13 +776,15 @@ function TargetCallView({
   onOpen: () => void;
 }): ReactNode {
   const cards = useLiveDoors(doors)?.cards;
+  const openLink = useOpenLink();
   return (
     <OpeningCallView
       part={part}
       hint={TARGET_HINT[target.kind]}
       card={cards?.target(target, toolCallView(part).subject)}
       cards={cards}
-      onOpen={onOpen}
+      // Note that a pull request opens as a link to it does, in its Pull request tab where the place has one, so the row asks no window's `onOpenTarget`.
+      onOpen={target.kind === TOOL_TARGET.PULL_REQUEST ? () => openLink(target.url) : onOpen}
     />
   );
 }
@@ -897,7 +920,7 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
         {WEBHOOK_BODY_LABEL}
       </LineSummary>
       <FoldBody>
-        <pre className="agent-origin-body-text">{body}</pre>
+        <CodeCard title={WEBHOOK_BODY_KIND} code={body} copy={copyThroughShell} />
       </FoldBody>
     </Fold>
   );
@@ -963,12 +986,7 @@ function PlanCard({
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>
       </Plan>
-      {!named && sentAt === undefined ? null : (
-        <div className="message-meta">
-          {named ? <span className="message-sender">{sender}</span> : null}
-          {sentAt === undefined ? null : <SentTime at={sentAt} named={named} />}
-        </div>
-      )}
+      <MessageLine sender={named ? sender : undefined} at={sentAt} wrap />
     </Message>
   );
 }
@@ -1163,14 +1181,10 @@ function agentOrigin(input: {
 
 /** Who wrote or said a message: their mark and their name, hanging their card. */
 function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
-  return (
-    <span className="message-sender">
-      {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
-        <SendingAgent actor={actor} agentId={actor.agentId} />
-      ) : (
-        <ActorRef actor={actor} />
-      )}
-    </span>
+  return actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+    <SendingAgent actor={actor} agentId={actor.agentId} />
+  ) : (
+    <ActorRef actor={actor} />
   );
 }
 
@@ -1343,20 +1357,15 @@ export function AgentMessage({
           </MessageContent>
         )}
         <UndeliveredMark messageId={message.id} />
-        {words === "" && named === null && sentAt === undefined ? null : (
-          <div className="message-meta">
-            {words === "" ? null : (
-              <CopyMessageAction
-                words={shown}
-                messageId={message.id}
-                placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
-                rewind={REWIND_ACTION.EDIT}
-              />
-            )}
-            {named}
-            {sentAt === undefined ? null : <SentTime at={sentAt} named={named !== null} />}
-          </div>
-        )}
+        <MessageLine
+          sender={named}
+          at={sentAt}
+          actions={
+            words === "" ? null : (
+              <CopyMessageAction words={shown} messageId={message.id} rewind={REWIND_ACTION.EDIT} />
+            )
+          }
+        />
       </Message>
     );
   }
@@ -1398,7 +1407,6 @@ export function AgentMessage({
             messageId={message.id}
             forkable={forks}
             forkCut={forkCut}
-            placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
             rewind={REWIND_ACTION.REVERT}
           />
         ) : null
@@ -1449,9 +1457,9 @@ export function AgentMessage({
 
 /**
  * The line a transcript ends on once its turn was stopped or failed: a
- * failure's mark and its words in the danger ink; a stop's words quiet.
- * A turn failed on the reader's own refused key offers its API keys after
- * them.
+ * failure is a `FailureNote`; a stop's words are quiet. A turn failed on
+ * the reader's own refused key offers its API keys after the words, inside
+ * the note.
  */
 function AgentEndLine({
   ended,
@@ -1462,28 +1470,35 @@ function AgentEndLine({
   endReason: FailureReason | undefined;
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
-  const mark = ended.failed ? stateEndMark(GLYPH_STATE.FAILED, false) : null;
+  // Note that a failure's words are the note's to say, so only a stop's are said here.
+  useAnnounce(ANNOUNCE.POLITE, ended.failed ? "" : ended.words);
   // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
       ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words })
       : undefined;
+  const remedyButton =
+    remedy === undefined ? null : (
+      <span className="agent-end-remedy">
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
+          {remedy}
+        </Button>
+      </span>
+    );
+  if (ended.failed) {
+    return (
+      <div className="agent-end-line" data-ended="" data-failed="">
+        <FailureNote>
+          {ended.words}
+          {remedyButton}
+        </FailureNote>
+      </div>
+    );
+  }
   return (
-    <p
-      className="agent-end-line"
-      data-ended=""
-      data-failed={ended.failed ? "" : undefined}
-      aria-live="polite"
-    >
-      {mark}
+    <p className="agent-end-line" data-ended="">
       <span className="agent-end-words">{ended.words}</span>
-      {remedy === undefined ? null : (
-        <span className="agent-end-remedy">
-          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
-            {remedy}
-          </Button>
-        </span>
-      )}
+      {remedyButton}
     </p>
   );
 }
@@ -1748,6 +1763,47 @@ function useArrivals(
 }
 
 /**
+ * Says an agent's reply once its turn is whole, since its log is no live
+ * region (`ConversationContent`'s `streams`) and a reply read as it
+ * streamed would be heard in fragments. The rule: a page that says the turn
+ * completed, after one that said it was still writing, says its newest
+ * reply once, politely, as "Reply from {agent}: {its first sentence}"; a
+ * reader whose focus stands in the log is already at the reply, so they
+ * hear only who it is from. A tab opened on a finished turn says nothing,
+ * and a stop or a failure says its own end line instead.
+ */
+function useReplySaid({
+  messages,
+  status,
+  name,
+  quiet,
+  tab,
+}: {
+  messages: readonly CodingAgentMessage[];
+  /** Where the agent stood as the page holding `messages` said; none before a page landed. */
+  status: CodingAgentStatus | undefined;
+  name: string;
+  /** Whether a quiet reply leaves the reader nothing to hear, as an operator's does. */
+  quiet: boolean;
+  tab: RefObject<HTMLElement | null>;
+}): void {
+  const writing = useRef<boolean | undefined>(undefined);
+  const said = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (status === undefined) return;
+    const was = writing.current;
+    writing.current = agentStillWriting(status);
+    if (was !== true || status !== CODING_AGENT_STATUS.COMPLETED) return;
+    const reply = finishedReplyLead(messages, quiet);
+    if (reply === undefined || reply.messageId === said.current) return;
+    said.current = reply.messageId;
+    const log = tab.current?.querySelector('[role="log"]');
+    const reading = log?.contains(document.activeElement) === true;
+    announce(ANNOUNCE.POLITE, replyFromWords(name, reading ? undefined : reply.lead));
+  }, [messages, status, name, quiet, tab]);
+}
+
+/**
  * How a transcript's messages are placed, read once for the messages held
  * rather than on every draw: where the to-do lists stand, which message
  * opens it, the replay it opens on, each message with the lines that
@@ -1880,6 +1936,16 @@ function AgentTranscriptView({
   const cards = delegation?.cards;
   const chat = delegation?.chat;
   const live = useMemo(() => ({ cards, chat }), [cards, chat]);
+  // Whether a call of a server's tool is held, which is all the accounts' names are read for.
+  const callsServer = useMemo(
+    () =>
+      messages.some((message) =>
+        agentParts(message).some(
+          (part) => part.kind === AGENT_PART.TOOL && isServerCallTool(part.tool),
+        ),
+      ),
+    [messages],
+  );
   // Where each call begins and ends among the rows drawn, a line that reached a turn drawn inside it, and what of the calls heard here no row holds yet.
   const places = useMemo(() => callPlaces(placing.placed.map(callRowOf), calls), [placing, calls]);
   // Note that the clock is the minute's own, so a call's day moves on with it while the rows hold.
@@ -1929,131 +1995,140 @@ function AgentTranscriptView({
     const task = carded || blank ? undefined : first;
     return (
       <LiveDoors value={live}>
-        <Conversation list={log} onNearTop={onOlder}>
-          {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
-          {olderFailed && onOlder !== undefined ? (
-            <div className="conversation-older">
-              <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
-            </div>
-          ) : null}
-          {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
-          <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
-            <ConversationRows
-              keys={rowKeys}
-              estimate={ROW_ESTIMATE_PX}
-              gap={ROW_GAP_PX}
-              rowClassName="agent-log-row"
-              handle={rowsHandle}
-            >
-              {(index) => {
-                const row = placed[index];
-                if (row === undefined) return null;
-                const { message, said, read } = row;
-                return (
-                  <>
-                    {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
-                      <CallOpen key={call.key} call={call} now={now} />
-                    ))}
-                    {said.map((line) => (
-                      <SteadyAgentMessage
-                        key={line.id}
-                        message={line}
-                        plan={false}
-                        lead={lead}
-                        moving={false}
-                        forkCut={forkCutOf(line, open)}
-                        delegation={delegation}
-                        sender={lineSender(line.sentBy, readerId, members, former)}
-                      />
-                    ))}
-                    <SteadyAgentMessage
-                      message={message === first && opening !== undefined ? opening.brief : message}
-                      plan={message === plan}
-                      taskId={message === plan ? taskId : undefined}
-                      lead={lead}
-                      moving={working && index === placed.length - 1}
-                      said={working && index === placed.length - 1 ? undefined : read}
-                      forkCut={forkCutOf(message, open)}
-                      delegation={delegation}
-                      todos={todos}
-                      briefTitle={briefTitle}
-                      origin={message === plan ? origin : undefined}
-                      sender={
-                        message === task
-                          ? briefSender
-                          : lineSender(message.sentBy, readerId, members, former)
-                      }
-                      arrived={arrivals.get(message.id) ?? NO_ARRIVED}
-                    />
-                    {message === first && opening !== undefined && replay !== undefined ? (
-                      <>
-                        <ReplayCard
-                          replay={opening.replay}
-                          sentAt={first.sentAt}
-                          place={replay}
-                          taskId={taskId}
-                        />
-                        {opening.note === undefined ? null : (
-                          <SteadyAgentMessage
-                            message={opening.note}
-                            plan={false}
-                            lead={lead}
-                            moving={false}
-                            delegation={delegation}
-                            sender={briefSender}
-                          />
-                        )}
-                      </>
-                    ) : null}
-                    {earlierOmitted && message === plan ? (
-                      <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-                    ) : null}
-                    {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
-                      <CallClose key={call.key} call={call} />
-                    ))}
-                  </>
-                );
-              }}
-            </ConversationRows>
-            {heard.map((tail) => (
-              <Fragment key={tail.call.key}>
-                <CallOpen call={tail.opened ? undefined : tail.call} now={now} />
-                {tail.lines.map((line) => (
-                  <SteadyAgentMessage
-                    key={line.id}
-                    message={heardLine(line)}
-                    plan={false}
-                    lead={lead}
-                    moving={false}
-                    delegation={delegation}
-                  />
-                ))}
-                <CallClose call={tail.call.live ? undefined : tail.call} />
-              </Fragment>
-            ))}
-            {working ? (
-              <WorkingLine
-                startedAt={startedAt}
-                words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]}
-              />
-            ) : null}
-            {ended === undefined && endTrail === undefined ? null : (
-              <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
-                {ended === undefined ? null : (
-                  <AgentEndRow
-                    ended={ended}
-                    endReason={endReason}
-                    onOpenApiKeys={onOpenApiKeys}
-                    press={endPress}
-                  />
-                )}
-                {endTrail}
+        <ConnectionNames needed={callsServer}>
+          <Conversation list={log} onNearTop={onOlder}>
+            {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
+            {olderFailed && onOlder !== undefined ? (
+              <div className="conversation-older">
+                <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
               </div>
-            )}
-            {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
+            ) : null}
+            {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
+            <ConversationContent
+              className={overComposer ? "agent-log-over-composer" : undefined}
+              streams
+            >
+              <ConversationRows
+                keys={rowKeys}
+                estimate={ROW_ESTIMATE_PX}
+                gap={ROW_GAP_PX}
+                rowClassName="agent-log-row"
+                handle={rowsHandle}
+              >
+                {(index) => {
+                  const row = placed[index];
+                  if (row === undefined) return null;
+                  const { message, said, read } = row;
+                  return (
+                    <>
+                      {(places.opens.get(message.id) ?? NO_CALLS).map((call) => (
+                        <CallOpen key={call.key} call={call} now={now} />
+                      ))}
+                      {said.map((line) => (
+                        <SteadyAgentMessage
+                          key={line.id}
+                          message={line}
+                          plan={false}
+                          lead={lead}
+                          moving={false}
+                          forkCut={forkCutOf(line, open)}
+                          delegation={delegation}
+                          sender={lineSender(line.sentBy, readerId, members, former)}
+                        />
+                      ))}
+                      <SteadyAgentMessage
+                        message={
+                          message === first && opening !== undefined ? opening.brief : message
+                        }
+                        plan={message === plan}
+                        taskId={message === plan ? taskId : undefined}
+                        lead={lead}
+                        moving={working && index === placed.length - 1}
+                        said={working && index === placed.length - 1 ? undefined : read}
+                        forkCut={forkCutOf(message, open)}
+                        delegation={delegation}
+                        todos={todos}
+                        briefTitle={briefTitle}
+                        origin={message === plan ? origin : undefined}
+                        sender={
+                          message === task
+                            ? briefSender
+                            : lineSender(message.sentBy, readerId, members, former)
+                        }
+                        arrived={arrivals.get(message.id) ?? NO_ARRIVED}
+                      />
+                      {message === first && opening !== undefined && replay !== undefined ? (
+                        <>
+                          <ReplayCard
+                            replay={opening.replay}
+                            sentAt={first.sentAt}
+                            place={replay}
+                            taskId={taskId}
+                          />
+                          {opening.note === undefined ? null : (
+                            <SteadyAgentMessage
+                              message={opening.note}
+                              plan={false}
+                              lead={lead}
+                              moving={false}
+                              delegation={delegation}
+                              sender={briefSender}
+                            />
+                          )}
+                        </>
+                      ) : null}
+                      {earlierOmitted && message === plan ? (
+                        <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+                      ) : null}
+                      {(places.closes.get(message.id) ?? NO_CALLS).map((call) => (
+                        <CallClose key={call.key} call={call} />
+                      ))}
+                    </>
+                  );
+                }}
+              </ConversationRows>
+              {heard.map((tail) => (
+                <Fragment key={tail.call.key}>
+                  <CallOpen call={tail.opened ? undefined : tail.call} now={now} />
+                  {tail.lines.map((line) => (
+                    <SteadyAgentMessage
+                      key={line.id}
+                      message={heardLine(line)}
+                      plan={false}
+                      lead={lead}
+                      moving={false}
+                      delegation={delegation}
+                    />
+                  ))}
+                  <CallClose call={tail.call.live ? undefined : tail.call} />
+                </Fragment>
+              ))}
+              {working ? (
+                <WorkingLine
+                  startedAt={startedAt}
+                  words={
+                    WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
+                  }
+                />
+              ) : null}
+              {ended === undefined && endTrail === undefined ? null : (
+                <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
+                  {ended === undefined ? null : (
+                    <AgentEndRow
+                      ended={ended}
+                      endReason={endReason}
+                      onOpenApiKeys={onOpenApiKeys}
+                      press={endPress}
+                    />
+                  )}
+                  {endTrail}
+                </div>
+              )}
+              {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+        </ConnectionNames>
       </LiveDoors>
     );
   }
@@ -2097,6 +2172,7 @@ function AgentTranscriptView({
 function AgentTabView({
   agent,
   models,
+  modelsFailed,
   readModels,
   transcript,
   composer,
@@ -2144,6 +2220,7 @@ function AgentTabView({
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
   run?: CodingAgentOrigin | undefined;
   models: readonly CatalogModel[] | undefined;
+  modelsFailed: boolean;
   readModels: () => void;
   transcript: AgentTranscriptControl;
   composer: HeldComposer;
@@ -2158,7 +2235,7 @@ function AgentTabView({
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
   /** Brings the agent back from the archive; present exactly while it is archived, when no message is sent. */
-  onUnarchive?: (() => void) | undefined;
+  onUnarchive?: (() => void | Promise<void>) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   /** Opens what one of its calls is about; none where nothing opens it. */
@@ -2210,9 +2287,13 @@ function AgentTabView({
   const onRevert = useSteady(boxOpen ? composer.revert : undefined);
   // Note that the rewind doors stand as they were while what they say is unchanged, because every message
   // reads them, and a page that moved no rewind point must draw no message again.
+  const pending = composer.sent.length > 0;
   const points = useKept(
-    useMemo(() => rewindPoints(kept), [kept]),
-    (a, b) => sameSet(a.editable, b.editable) && sameEntries(a.revertsAt, b.revertsAt),
+    useMemo(() => rewindPoints(kept, pending), [kept, pending]),
+    (a, b) =>
+      sameSet(a.editable, b.editable) &&
+      sameEntries(a.revertsAt, b.revertsAt) &&
+      sameSet(a.followed, b.followed),
   );
   const editorNow = { agentId: agent.id, doors, keywords, skills, dictates: !onCall };
   const editorProps = useRef(editorNow);
@@ -2238,6 +2319,15 @@ function AgentTabView({
   );
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
+  const name = agentName(agent, models);
+  const tab = useRef<HTMLElement>(null);
+  useReplySaid({
+    messages: transcript.messages,
+    status: transcript.pageStatus,
+    name,
+    quiet: agent.kind === CODING_AGENT_KIND.OPERATOR,
+    tab,
+  });
   const steering = useKept(
     new Set(composer.sent.filter((line) => line.steers).map((line) => line.id)),
     sameSet,
@@ -2271,7 +2361,6 @@ function AgentTabView({
   const pictures = useAgentPictureDoor(agent.id);
   const wholeParts = useWholePartDoor(agent.id);
   const { members, former } = useMemberDirectory();
-  const tab = useRef<HTMLElement>(null);
   // The door the box hands Reply, which lays a quote in at its caret.
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const macOwner = useKept(macOwnerOf(agent.startedBy, members, readerId, former), sameFields);
@@ -2306,7 +2395,7 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <AgentTabFrame ref={tab} label={agentTabLabel(agent, models)}>
+    <AgentTabFrame ref={tab} label={name}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2391,6 +2480,7 @@ function AgentTabView({
             composer={composer}
             model={model}
             models={models}
+            modelsFailed={modelsFailed}
             readModels={readModels}
             usage={transcript.usage}
             payer={transcript.payer}
@@ -2408,7 +2498,13 @@ function AgentTabView({
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
             call={
-              call === undefined ? undefined : <AgentCallControls agentId={agent.id} doors={call} />
+              call === undefined ? undefined : (
+                <AgentCallControls
+                  agentId={agent.id}
+                  doors={call}
+                  startedAt={calls.find((each) => each.live)?.startedAt}
+                />
+              )
             }
             // Note that a call holds the microphone, so its own mute stands where Dictate would.
             dictates={!onCall}
@@ -2653,7 +2749,7 @@ function AgentTabBody({
     settled: !agentStillWriting(agent.status),
     drawn: (messageId) => messages.some((message) => message.id === messageId),
     bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
-    gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    gone: () => toast({ words: MESSAGE_GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
   });
   const starter = teammateStarter(agent.startedBy, control.me);
   const openAgent =
@@ -2704,6 +2800,7 @@ function AgentTabBody({
         bringIn={bringIn}
         holding={holding}
         models={control.models}
+        modelsFailed={control.modelsFailed}
         readModels={control.readModels}
         transcript={transcript}
         composer={sent === composer.sent ? composer : { ...composer, sent }}
@@ -2839,8 +2936,12 @@ export function AgentSubagentTab({
     const held = { messages, status: pageStatus, runStartedAt, title: pageTitle };
     onHeld(callId, { ...held, subagentTitles: new Map() });
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
+  // A worker's reply streams into a log as quiet as its agent's, so it is said once whole, under the worker's name.
+  const name = cardTitle(task);
+  const tab = useRef<HTMLElement>(null);
+  useReplySaid({ messages, status: pageStatus, name, quiet: false, tab });
   return (
-    <AgentTabFrame label={cardTitle(task)}>
+    <AgentTabFrame ref={tab} label={name}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>

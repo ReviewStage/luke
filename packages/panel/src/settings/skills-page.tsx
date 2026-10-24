@@ -7,15 +7,17 @@ import {
   type InstalledSkillFailedView,
 } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { formatBytes } from "@luke/features/number-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_SIZE,
-  DIALOG_TONE,
   Dialog,
+  DialogActions,
   DocumentIcon,
   ErrorState,
   Fact,
@@ -33,6 +35,7 @@ import {
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   SpinnerRegion,
+  STATUS_TONE,
   Stack,
   Switch,
   TEXT_ELEMENT,
@@ -52,7 +55,8 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
+import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -66,7 +70,6 @@ import {
   type SkillRow,
   shareFailureLine,
   shareQuestion,
-  sizeText,
   skillActions,
   skillGroups,
   withSkill,
@@ -172,11 +175,16 @@ type ContentRead =
 
 /** View: a skill's `SKILL.md` drawn as written, and every file it carries with its size. */
 function SkillFileDialog({
+  open,
   skill,
   onClose,
+  onExited,
 }: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
   skill: InstalledSkillSummary;
   onClose: () => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const [read, setRead] = useState<ContentRead>(READING);
@@ -201,14 +209,12 @@ function SkillFileDialog({
 
   return (
     <Dialog
+      open={open}
       title={skill.name}
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
-      actions={
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
-          Close
-        </Button>
-      }
+      onExited={onExited}
+      actions={<DialogActions onDone={onClose} />}
     >
       {read.kind === LIST.READING ? (
         <SpinnerRegion label={`Reading ${skill.name}`} delay />
@@ -224,7 +230,7 @@ function SkillFileDialog({
             <Facts>
               {read.content.files.map((file) => (
                 <Fact key={file.path} label={file.path}>
-                  {sizeText(file.bytes)}
+                  {formatBytes(file.bytes)}
                 </Fact>
               ))}
             </Facts>
@@ -262,6 +268,8 @@ function SkillRowView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [viewing, setViewing] = useState(false);
+  // Note that the card reads the skill while it is drawn, from its opening until its fade has run, so each View reads afresh.
+  const viewed = useDrawnThroughExit(viewing);
 
   /** A toggle or an update sent, its answer put in the list, or why it is unchanged under the row. */
   const write = (
@@ -335,7 +343,7 @@ function SkillRowView({
       >
         <div>
           <MenuRow
-            label={`${skill.name} actions`}
+            thing={skill.name}
             actions={actions}
             row={{
               leading: (
@@ -367,19 +375,32 @@ function SkillRowView({
         </div>
       </Tooltip>
       <ConfirmDialog
+        open
         confirm={removal}
         question={{
           title: `Remove ${skill.name}?`,
           body: "Agents started afterwards no longer load it. Installing it again takes the paste again.",
           verb: "Remove",
           running: "Removing…",
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       />
       <ConfirmDialog
+        open
         confirm={sharing}
-        question={{ ...shareQuestion(skill.name, workspace), tone: DIALOG_TONE.PRIMARY }}
+        question={{
+          ...shareQuestion(skill.name, workspace),
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+        }}
       />
-      {viewing ? <SkillFileDialog skill={skill} onClose={() => setViewing(false)} /> : null}
+      {viewed.drawn ? (
+        <SkillFileDialog
+          open={viewing}
+          skill={skill}
+          onClose={() => setViewing(false)}
+          onExited={viewed.onExited}
+        />
+      ) : null}
     </>
   );
 }
@@ -398,6 +419,8 @@ function ShownSkills({
   const [list, setList] = useState<ListRead>(READING);
   const [attempt, setAttempt] = useState(0);
   const [adding, setAdding] = useState(false);
+  // Note that the card keeps what is typed and previewed while it is drawn, from its opening until its fade has run, so each opening starts afresh.
+  const added = useDrawnThroughExit(adding);
   const [updates, setUpdates] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
   const toast = useToast();
@@ -467,7 +490,8 @@ function ShownSkills({
       );
       setLanded(new Set(made.map((each) => each.id)));
       const notice = installedNotice(made, workspace);
-      if (notice !== undefined) toast({ ...notice, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      if (notice !== undefined)
+        toast({ ...notice, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     },
     [toast, workspace],
   );
@@ -524,11 +548,13 @@ function ShownSkills({
           <SettingsSection title={SKILLS_LINE.PERSONAL}>{rows(groups?.personal)}</SettingsSection>
         </>
       )}
-      {adding ? (
+      {added.drawn ? (
         <AddSkillDialog
+          open={adding}
           workspace={workspace}
           onInstalled={installed}
           onClose={() => setAdding(false)}
+          onExited={added.onExited}
           {...(pause === undefined ? undefined : { pause })}
         />
       ) : null}

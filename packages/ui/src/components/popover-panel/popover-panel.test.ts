@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement, type ReactElement, useRef } from "react";
+import { act, createElement, type ReactElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { MOTION_TOKEN } from "../../motion-timing.js";
+import { holdExits } from "../../testing/held-exits.js";
 import {
   POPOVER_PANEL_LOOK,
   PopoverPanel,
@@ -15,8 +17,9 @@ import {
  * popover-panel.test.ts -- a hung panel is a dialog named by its title,
  * takes the focus as it opens, onto its owner's control or itself, keeps
  * Escape from the window and hands it to its owner, draws its × only where
- * named, and tells its owner when focus leaves it, never when focus moves
- * inside it.
+ * named, tells its owner when focus leaves it, never when focus moves
+ * inside it, and closed through `open` fades out before it goes, or goes
+ * at once where motion is held.
  */
 
 const roots: Root[] = [];
@@ -24,6 +27,8 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  document.body.style.removeProperty(MOTION_TOKEN.DURATION_FAST);
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 /** What a panel under test was told, and what it told back. */
@@ -53,6 +58,7 @@ function Stage({
     null,
     createElement("button", { type: "button" }, "Outside"),
     createElement(PopoverPanel, {
+      open: true,
       id: "panel",
       title: "Diff settings",
       look,
@@ -207,4 +213,74 @@ test("focus moving inside the panel is not a leaving", () => {
   const container = drawn(createElement(Stage, { heard, focusField: true }));
   act(() => button(container, "Inside")?.focus());
   assert.deepEqual(heard.left, []);
+});
+
+/** A button that opens and closes a panel through `open`, its field taking the focus each time it opens. */
+function OpenStage({ exits }: { exits?: { count: number } }): React.JSX.Element {
+  const [open, setOpen] = useState(true);
+  const field = useRef<HTMLInputElement>(null);
+  return createElement(
+    "div",
+    null,
+    createElement("button", { type: "button", onClick: () => setOpen((was) => !was) }, "Toggle"),
+    createElement(PopoverPanel, {
+      open,
+      title: "Diff settings",
+      initialFocus: field,
+      onDismiss: () => setOpen(false),
+      onLeave: () => undefined,
+      onExited: () => {
+        if (exits !== undefined) exits.count += 1;
+      },
+      children: createElement("input", { ref: field, "aria-label": "Search" }),
+    }),
+  );
+}
+
+/** The panel in `container`, while it stands. */
+function panelIn(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>('[role="dialog"]');
+}
+
+test("a panel its owner closes through open stays drawn, inert and ending, until its fade has run, and takes the focus again as it reopens", () => {
+  const exits = holdExits();
+  const container = drawn(createElement(OpenStage));
+  const toggle = button(container, "Toggle");
+  act(() => toggle?.click());
+  const leaving = panelIn(container);
+  const ending = leaving?.hasAttribute("data-ending-style");
+  const inert = leaving?.hasAttribute("inert");
+  act(() => exits.finish());
+  const gone = panelIn(container) === null;
+  act(() => toggle?.click());
+  const field = container.querySelector('input[aria-label="Search"]');
+
+  assert.ok(leaving, "the panel stands as it fades");
+  assert.equal(ending, true, "the panel is in its ending state");
+  assert.equal(inert, true, "the panel takes nothing while it fades");
+  assert.equal(gone, true, "the panel goes once its fade has run");
+  assert.ok(field !== null && document.activeElement === field, "the field takes the focus again");
+});
+
+test("a panel closed through open while motion is held goes at once", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  holdExits();
+  const container = drawn(createElement(OpenStage));
+  act(() => button(container, "Toggle")?.click());
+
+  assert.equal(panelIn(container), null);
+});
+
+test("a panel tells its owner it is gone once its fade has run, and not while it fades or before it first opened", () => {
+  const exits = holdExits();
+  const told = { count: 0 };
+  const container = drawn(createElement(OpenStage, { exits: told }));
+  const beforeClose = told.count;
+  act(() => button(container, "Toggle")?.click());
+  const whileFading = told.count;
+  act(() => exits.finish());
+
+  assert.equal(beforeClose, 0, "an open panel has not gone");
+  assert.equal(whileFading, 0, "a fading panel has not gone");
+  assert.equal(told.count, 1, "a faded panel has");
 });

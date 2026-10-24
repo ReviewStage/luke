@@ -16,7 +16,9 @@
  * `hidden` is not searched, nor what wears `FIND_SKIP_ATTRIBUTE`. A closed
  * `<details>` is searched, since what it folds is still the tab's to find,
  * and opened when its match is brought into view, as Chromium's own find
- * opens one.
+ * opens one; so is what is `hidden="until-found"`, the rest of a cut code
+ * card's lines (`CodeCard`), told of the match (`beforematch`) and shown
+ * as Chromium's own find shows it.
  *
  * What a shadow root draws is not searched, as a File tab's tree is not,
  * unless its host wears `FIND_SHADOW_ATTRIBUTE`, as a diff drawn by Pierre
@@ -67,6 +69,12 @@ const INLINE_TAGS = new Set([
   "VAR",
 ]);
 
+/** The `hidden` worn by what a find still searches, and shows when a match lands in it. */
+const UNTIL_FOUND = "until-found";
+
+/** The event fired at what `UNTIL_FOUND` hides before a match in it is shown. */
+const BEFORE_MATCH = "beforematch";
+
 /** The elements whose text is never read as words. */
 const UNREAD_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
 
@@ -113,11 +121,21 @@ export interface FindPainting {
 
 export const NO_PAINTING: FindPainting = { ranges: [], at: -1 };
 
+/** Whether an element is `hidden="until-found"`, as the attribute's value is read, without regard to case. */
+function hiddenUntilFound(element: Element): boolean {
+  return element.getAttribute("hidden")?.toLowerCase() === UNTIL_FOUND;
+}
+
+/** Whether an element is `hidden` from a find, as what is hidden until found is not. */
+function hiddenFromFind(element: Element): boolean {
+  return element.hasAttribute("hidden") && !hiddenUntilFound(element);
+}
+
 /** Whether an element's subtree is left out of the words searched, `skipped` naming more of it within a shadow root. */
 function unread(element: Element, skipped: string | undefined): boolean {
   return (
     UNREAD_TAGS.has(element.tagName) ||
-    element.hasAttribute("hidden") ||
+    hiddenFromFind(element) ||
     element.hasAttribute(FIND_SKIP_ATTRIBUTE) ||
     (skipped !== undefined && element.matches(skipped))
   );
@@ -380,8 +398,9 @@ export function repaint(previous: FindPainting, next: FindPainting): void {
 }
 
 /**
- * Brings a match into view: every closed `<details>` around it opened, as
- * Chromium's own find opens one, and every scroller up to `root` moved
+ * Brings a match into view: every closed `<details>` around it opened, and
+ * every element `hidden="until-found"` told (`beforematch`) and shown, as
+ * Chromium's own find does both, and every scroller up to `root` moved
  * until it stands in the middle.
  */
 export function reveal(range: Range, root: Element): void {
@@ -391,6 +410,10 @@ export function reveal(range: Range, root: Element): void {
     element = parentAcross(element)
   ) {
     if (element instanceof HTMLDetailsElement && !element.open) element.open = true;
+    if (hiddenUntilFound(element)) {
+      element.dispatchEvent(new Event(BEFORE_MATCH, { bubbles: true }));
+      element.removeAttribute("hidden");
+    }
   }
   scrollToRange(range, root);
 }
@@ -404,13 +427,17 @@ function containsAcross(root: Element, element: Element): boolean {
 }
 
 /**
- * Calls `onChange` whenever the text under `root` changes, or the text in
- * a shadow root searched in a host's place (`FIND_SHADOW_ATTRIBUTE`), each
- * such root watched from the moment its host stands under `root`, until the
- * answer is called.
+ * Calls `onChange` once in the frame after the text under `root` changes,
+ * or the text in a shadow root searched in a host's place
+ * (`FIND_SHADOW_ATTRIBUTE`), each such root watched from the moment its host
+ * stands under `root`, until the answer is called. Note that every change
+ * landing before that frame is heard in its one call, because an agent at
+ * work streams its words a few at a time, and a search of the whole tab on
+ * each would outrun the frames that draw them.
  */
 export function watchText(root: Element, onChange: () => void): () => void {
   const watched = new WeakSet<Node>();
+  let frame: number | undefined;
   const watchShadows = () => {
     for (const host of root.querySelectorAll(`[${FIND_SHADOW_ATTRIBUTE}]`)) {
       const shadow = host.shadowRoot;
@@ -420,12 +447,19 @@ export function watchText(root: Element, onChange: () => void): () => void {
     }
   };
   const observer = new MutationObserver(() => {
-    watchShadows();
-    onChange();
+    if (frame !== undefined) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      watchShadows();
+      onChange();
+    });
   });
   observer.observe(root, WATCHED);
   watchShadows();
-  return () => observer.disconnect();
+  return () => {
+    observer.disconnect();
+    if (frame !== undefined) cancelAnimationFrame(frame);
+  };
 }
 
 /**

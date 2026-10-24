@@ -10,11 +10,9 @@ import {
   MENU_ITEM_MARK,
   motionKey,
   motionRows,
+  ShowMoreRow,
   TaskPriorityMark,
   TaskStatusMark,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   TextButton,
   Tooltip,
   useLeaving,
@@ -77,12 +75,12 @@ import {
   UserIcon,
   UserXIcon,
 } from "lucide-react";
-import { type ReactNode, type RefObject, useMemo, useRef } from "react";
+import { type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { memberRows } from "../member-rows.js";
+import { memberReadNotice, memberRows } from "../member-rows.js";
 import { RepositoryPicture } from "../repository-picture.js";
-import { repositoryWords } from "../repository-row.js";
+import { RepositoryCard, repositoryWords } from "../repository-row.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
@@ -125,6 +123,8 @@ export interface TasksViewFrame {
   readonly display: TasksDisplay;
   /** Changes the view's display, as the line under a settled group does. */
   readonly onDisplay: (display: TasksDisplay) => void;
+  /** The page's scroller, whose position the page keeps for the view. */
+  readonly scroll: RefCallback<HTMLDivElement>;
 }
 
 /** What the buttons are called, on their tooltips and their menus alike. */
@@ -245,7 +245,7 @@ interface FieldValue {
   readonly icon: React.JSX.Element;
   /** Muted words beside the name in the menu, a repository's owner or a person's email or You; the chip names the value without them. */
   readonly detail?: string | undefined;
-  /** The card a person's row hangs. */
+  /** The card a person's or a repository's row hangs. */
   readonly card?: React.ReactNode;
 }
 
@@ -410,6 +410,7 @@ function fieldValues(
             value: repository,
             words: repositoryWords(repository).label,
             detail: repositoryWords(repository).detail,
+            card: <RepositoryCard repository={repository} pictures={pictures} />,
             icon: (
               <RepositoryPicture
                 repository={repository}
@@ -442,13 +443,6 @@ function offeredFields(shared: boolean): readonly TasksFilterField[] {
   );
 }
 
-/** The row standing last in a people's field while the members are read, which nothing picks. */
-const READING_MEMBERS: MenuAction = {
-  label: "Reading members…",
-  disabled: true,
-  onSelect: () => undefined,
-};
-
 /** What the Filter says of itself while it keeps anything. */
 export const FILTERED = "Filtered";
 
@@ -478,8 +472,8 @@ function filterEntries(
             onSelect: () => onFilter(toggledFilter(filter, field, value)),
           }),
         ),
-        // Note that the members are read for the people's fields alone, so no other field says it is reading.
-        ...(reader.membersReading && PERSON_FIELDS.includes(field) ? [READING_MEMBERS] : []),
+        // Note that the members are read for the people's fields alone, so no other field says it is reading or could not be read.
+        ...(PERSON_FIELDS.includes(field) ? memberReadNotice(reader) : []),
       ],
     };
   });
@@ -828,7 +822,7 @@ export function TasksViewOptions({
   );
 }
 
-/** The muted line ending a settled group the completed window leaves older tasks out of, which shows them all; nothing where it leaves none. */
+/** The foot of a settled group the completed window leaves older tasks out of, which shows them all; nothing where it leaves none. */
 export function OlderCompleted({
   older,
   onShow,
@@ -837,10 +831,5 @@ export function OlderCompleted({
   onShow: () => void;
 }): React.JSX.Element | null {
   if (older === undefined) return null;
-  // Note that the line is the group's quiet caption, as its "No tasks" is, the words a press.
-  return (
-    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      <TextButton onClick={onShow}>{`+ ${older} older`}</TextButton>
-    </Text>
-  );
+  return <ShowMoreRow more={older} shown={false} onToggle={onShow} />;
 }

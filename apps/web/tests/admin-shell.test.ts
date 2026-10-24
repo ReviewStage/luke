@@ -17,7 +17,7 @@ import { choose, menuItems, openViewOptions } from "./support/view-options";
  * sidebar hides and comes back from the toggle at its top, remembering which
  * across visits, and in a phone's narrow room stands as a drawer over the
  * view; the account stands at the sidebar's foot, its menu raised over it
- * closing on Escape or a press outside it, and Log out, asked first, leaves
+ * closing on Escape or a press outside it, and Sign out, asked first, leaves
  * for the sign-in. The page runs as its entry mounts it in the browser, on
  * its own `#root`, and is unmounted after each test so no render it scheduled
  * outlives jsdom; the network, the HTTP boundary to Luke and Better Auth, is
@@ -220,12 +220,13 @@ test("the toggle at the sidebar's top hides it and shows it again, remembered ac
 
 /**
  * Whether the view's toolbar starts past the sidebar's toggle: whether a rule
- * of the app's shared shell sheet that starts a toolbar at the toggle's
- * clearance reaches it. jsdom computes no padding drawn from a custom
- * property, so the sheet's own rules are read.
+ * of the app's shared shell sheet that sets where a toolbar's start stands to
+ * the toggle's clearance (`--luke-toolbar-start-at`) reaches the room around
+ * it. jsdom computes no padding drawn from a custom property, so the sheet's
+ * own rules are read.
  */
 function toolbarClearsToggle(page: HTMLElement): boolean {
-  const toolbar = page.querySelector("main header.desktop-toolbar");
+  const toolbar = page.querySelector("main header.luke-toolbar");
   if (toolbar === null) throw new Error("No toolbar heads the view");
   const laid = document.head.appendChild(document.createElement("style"));
   laid.textContent = SHELL_SHEET;
@@ -234,8 +235,9 @@ function toolbarClearsToggle(page: HTMLElement): boolean {
   return rules.some(
     (rule) =>
       rule instanceof CSSStyleRule &&
-      rule.style.getPropertyValue("padding-left") === "var(--sidebar-toggle-clearance)" &&
-      toolbar.matches(rule.selectorText),
+      rule.style.getPropertyValue("--luke-toolbar-start-at") ===
+        "var(--sidebar-toggle-clearance)" &&
+      toolbar.parentElement?.closest(rule.selectorText) != null,
   );
 }
 
@@ -324,7 +326,7 @@ test("the account stands at the sidebar's foot, not in the page's header, and it
     trigger.click();
   });
   const items = Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"]'));
-  expect(items.map((item) => item.textContent)).toEqual(["Log out"]);
+  expect(items.map((item) => item.textContent)).toEqual(["Sign out"]);
   expect(document.activeElement).toBe(items[0]);
   expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
@@ -344,7 +346,7 @@ test("the account stands at the sidebar's foot, not in the page's header, and it
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
 
-test("Log out asks first, then signs out and leaves for the sign-in", async () => {
+test("Sign out asks first, then signs out and leaves for the sign-in", async () => {
   const page = await openAdmin();
   const trigger = await accountButton(page);
   await act(async () => {
@@ -354,10 +356,10 @@ test("Log out asks first, then signs out and leaves for the sign-in", async () =
     document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]')?.click();
   });
   const dialog = document.querySelector('[role="alertdialog"]');
-  expect(dialog?.textContent).toContain("Log out of ada@example.com?");
+  expect(dialog?.textContent).toContain("Sign out of ada@example.com?");
 
   const confirm = Array.from(dialog?.querySelectorAll("button") ?? []).find(
-    (candidate) => candidate.textContent === "Log out",
+    (candidate) => candidate.textContent === "Sign out",
   );
   await act(async () => {
     confirm?.click();
@@ -418,7 +420,7 @@ async function press(element: Element | null | undefined): Promise<void> {
   });
 }
 
-/** The Log out question's own button for `words`. */
+/** The Sign out question's own button for `words`. */
 function dialogButton(words: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll('[role="alertdialog"] button')).find(
     (candidate): candidate is HTMLButtonElement =>
@@ -426,7 +428,7 @@ function dialogButton(words: string): HTMLButtonElement | undefined {
   );
 }
 
-test("in a phone's drawer, Log out and its question are pressed through without the drawer going away", async () => {
+test("in a phone's drawer, Sign out and its question are pressed through without the drawer going away", async () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ width: PHONE_WIDTH, height: 800 }),
   );
@@ -437,11 +439,11 @@ test("in a phone's drawer, Log out and its question are pressed through without 
 
   await press(document.querySelector('[role="menu"] [role="menuitem"]'));
   expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
-    "Log out of ada@example.com?",
+    "Sign out of ada@example.com?",
   );
   expect(unreachable(sectionLink(page, "Users"))).toBe(false);
 
-  await press(dialogButton("Log out"));
+  await press(dialogButton("Sign out"));
   await vi.waitFor(() => expect(page.querySelector("nav")).toBeNull());
 });
 
@@ -450,7 +452,7 @@ test("a sign-out the service refuses says so and leaves the dashboard signed in"
   const page = await openAdmin();
   await press(await accountButton(page));
   await press(document.querySelector('[role="menu"] [role="menuitem"]'));
-  await press(dialogButton("Log out"));
+  await press(dialogButton("Sign out"));
 
   await vi.waitFor(() =>
     expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(

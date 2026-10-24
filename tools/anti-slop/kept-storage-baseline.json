@@ -1,0 +1,7 @@
+{
+  "apps/web/src/admin/admin-appearance.ts": 1,
+  "apps/web/src/app/web-appearance.tsx": 1,
+  "packages/panel/src/admin/prefs.ts": 1,
+  "packages/panel/src/tasks/use-main-tabs.ts": 2,
+  "packages/panel/src/tasks/use-side-panel.ts": 2
+}

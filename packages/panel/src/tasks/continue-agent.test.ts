@@ -269,7 +269,7 @@ async function drawnTab(input: {
       container.querySelector<HTMLElement>(".agent-end") ??
       container.querySelector<HTMLElement>("[data-ended]")?.parentElement ??
       null,
-    note: () => container.querySelector<HTMLElement>(".agent-composer-note"),
+    note: () => container.querySelector<HTMLElement>(".luke-composer-foot-note"),
     continuedNote: () => container.querySelector<HTMLElement>(".continued-composer"),
     continuedIn: () => [...container.querySelectorAll<HTMLElement>("[data-continued]")],
     sendButton: () => container.querySelector<HTMLButtonElement>('button[aria-label="Send"]'),
@@ -278,7 +278,9 @@ async function drawnTab(input: {
     buttons,
     /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
-      const words = container.querySelector<HTMLElement>("[data-ended] .agent-end-words");
+      const words = container.querySelector<HTMLElement>(
+        "[data-ended] :is(.agent-end-words, .luke-failure-note-words)",
+      );
       const row = words?.closest<HTMLElement>(".agent-end-row") ?? null;
       return row === null ? null : { row, presses: buttons(row) };
     },
@@ -353,13 +355,19 @@ test("a failed turn's end line names no price, even from a service that sent the
   assert.match(line.textContent ?? "", /Failed: /);
   assert.doesNotMatch(line.textContent ?? "", /\$/);
   assert.ok(line.querySelector("[data-failed]"), "the line still tells of a failure");
+  assert.match(
+    line.querySelector('[role="alert"]')?.textContent ?? "",
+    /^Failed: /,
+    "and says it as an alert",
+  );
 
   const chip =
     tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
     assert.fail("the box offers its model chip");
   act(() => chip.click());
   await settle();
-  const menu = tab.container.querySelector(".agent-model-menu") ?? assert.fail("the menu opens");
+  const menu =
+    tab.container.querySelector(".luke-searchable-menu") ?? assert.fail("the menu opens");
   assert.match(menu.textContent ?? "", /This agent: 1\.2M tokens · \$2\.41/);
   assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
 });
@@ -474,9 +482,9 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
   assert.equal(tab.lines("Now add the dark variant.").length, 1);
   const [line] = tab.lines("Now add the dark variant.");
   assert.match(
-    line?.querySelector("[data-undelivered]")?.textContent ?? "",
+    line?.querySelector('[role="alert"]')?.textContent ?? "",
     /^Not delivered$/,
-    "the line says it did not go",
+    "the line says it did not go, as an alert",
   );
   const [button] = tab.buttons(note);
   assert.ok(button, "the note's remedy continues the agent");
@@ -776,7 +784,7 @@ test("an agent with only forks keeps its box, since a fork is no continuation", 
   assert.ok(tab.sendButton(), "the box still takes a message");
 });
 
-test("the continued box's Archive archives a settled agent at once, asks first where it would stop a running turn, and its Stop stands only while a turn runs", async () => {
+test("the continued box's Archive archives the reader's own agent at once, settled or running, and its Stop stands only while a turn runs", async () => {
   const archived: { agentId: string; archived: boolean }[] = [];
   const settled = await drawnTab({
     status: CODING_AGENT_STATUS.COMPLETED,
@@ -802,12 +810,8 @@ test("the continued box's Archive archives a settled agent at once, asks first w
   assert.deepEqual(stopped, [SOURCE]);
 
   await act(async () => running.named(note, "Archive")?.click());
-  assert.deepEqual(archived, [], "a running turn is not stopped unasked");
-  const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
-    assert.fail("Archive asks before it stops the turn");
-  await act(async () => running.named(question, "Stop and archive")?.click());
   await settle();
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
   assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
 });
 
@@ -922,6 +926,10 @@ test("a message refused before the transcript has read anything stands as the de
 
   const [line] = tab.lines("Continue testing.");
   assert.ok(line, "the refused line is the developer's");
-  assert.ok(line.querySelector("[data-undelivered]"), "marked as not delivered");
+  assert.equal(
+    line.querySelector('[role="alert"]')?.textContent,
+    "Not delivered",
+    "marked as not delivered",
+  );
   assert.match(line.textContent ?? "", /notes\.md/u, "with its file");
 });

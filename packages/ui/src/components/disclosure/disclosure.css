@@ -40,8 +40,8 @@
     list-style: none;
     user-select: none;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* The file row: the text's own ink, a fixed height, and a rule under it
@@ -178,7 +178,7 @@
 
   /* Under a card's head, past the hairline under it, at the head's inset. */
   .luke-disclosure-body[data-inset="card"] {
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
     border-top: 1px solid var(--luke-color-border);
   }
 

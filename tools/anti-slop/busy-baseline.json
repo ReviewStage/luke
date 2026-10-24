@@ -1,0 +1,7 @@
+{
+  "packages/panel/src/desktop/agent-archive.tsx": 1,
+  "packages/panel/src/settings/updates.tsx": 1,
+  "packages/panel/src/settings/workspace-token-repositories.tsx": 1,
+  "packages/panel/src/tasks/agent-servers.tsx": 4,
+  "packages/panel/src/tasks/mac-terminal-tab.tsx": 2
+}

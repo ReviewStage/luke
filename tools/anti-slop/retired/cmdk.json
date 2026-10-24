@@ -1,0 +1,4 @@
+{
+  "instead": "Draw a command list with CommandDialog from @luke/ui/command; cmdk is imported only there.",
+  "patterns": [{ "import": "cmdk", "allow": ["packages/ui/src/components/command/"] }]
+}

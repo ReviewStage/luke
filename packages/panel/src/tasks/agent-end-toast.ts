@@ -15,9 +15,10 @@
  * pushing out an earlier one, whose View would go with it.
  */
 
+import { STATUS_TONE } from "@luke/ui";
 import { useEffect, useRef } from "react";
 import { appBridge } from "../app-bridge.js";
-import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast.js";
+import { TOAST_HOLD, useToast, useWithdrawToast } from "../toast.js";
 
 /** What an agent's end offers, to open the agent it was. */
 const VIEW_LABEL = "View";
@@ -52,7 +53,7 @@ export function useAgentEndToasts(
           waits: true,
           hold: TOAST_HOLD.NEWS,
           subject: agentId,
-          tone: failed ? TOAST_TONE.FAILED : TOAST_TONE.DONE,
+          tone: failed ? STATUS_TONE.DANGER : STATUS_TONE.COMPLETE,
           action: { label: VIEW_LABEL, onPress: () => viewing.current({ taskId, agentId }) },
         }),
       ),

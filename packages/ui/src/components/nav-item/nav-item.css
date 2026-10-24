@@ -1,6 +1,6 @@
-/* nav-item.css -- NavItem: a place in a column, a fold's head, or who and
-   where, each with its glyph, its name, and its end; the keyboard's ring is
-   the app's reset's, as it is for every control. */
+/* nav-item.css -- NavItem: a place in a column, or who and where, each
+   with its glyph, its name, and its end; the keyboard's ring is the app's
+   reset's, as it is for every control. */
 
 @layer components {
   .luke-nav-item {
@@ -11,7 +11,7 @@
     min-width: 0;
     height: var(--luke-control-height);
     margin: 0;
-    padding: 0 var(--luke-space-8);
+    padding: 0 var(--luke-row-inset);
     border: 0;
     border-radius: var(--luke-control-radius);
     background: none;
@@ -21,14 +21,14 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
     text-align: left;
     /* Note that a NavItemLink is an anchor, which would otherwise wear the link's underline. */
     text-decoration: none;
     cursor: pointer;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -54,7 +54,7 @@
   }
 
   .luke-nav-item:disabled {
-    opacity: 0.45;
+    opacity: var(--luke-disabled-opacity);
     cursor: default;
   }
 
@@ -63,19 +63,7 @@
   }
 
   .luke-nav-item[data-unread="true"] .luke-nav-item-name {
-    font-weight: var(--luke-weight-semibold);
-  }
-
-  /* A fold's head speaks in the headings' voice and draws no fill, since
-     the container around it and its actions draws one. */
-  .luke-nav-item[data-variant="head"] {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    font-weight: var(--luke-weight-medium);
-  }
-
-  .luke-nav-item[data-variant="head"]:hover:not(:disabled) {
-    background: none;
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* Who or where stands tall enough for a face, in the primary ink. */
@@ -87,11 +75,10 @@
   }
 
   .luke-nav-item[data-variant="identity"] .luke-nav-item-name {
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
-  /* The glyph and, on a fold's head, the chevron share one cell, only one
-     of them drawn, so the swap crossfades in place and the name never moves. */
+  /* The glyph's cell. */
   .luke-nav-item-glyph {
     display: grid;
     flex: none;
@@ -102,65 +89,12 @@
 
   .luke-nav-item-glyph > * {
     display: grid;
-    grid-area: 1 / 1;
     place-items: center;
-    transition:
-      opacity var(--luke-duration-hover) ease,
-      transform var(--luke-duration-hover) ease;
   }
 
   .luke-nav-item-icon > svg {
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
-  }
-
-  .luke-nav-item-chevron {
-    opacity: 0;
-  }
-
-  .luke-nav-item-chevron > svg {
-    width: 12px; /* off-scale: the muted chevron a fold and a field share */
-    height: 12px; /* off-scale: the muted chevron a fold and a field share */
-  }
-
-  .luke-nav-item[aria-expanded="true"] .luke-nav-item-chevron {
-    transform: rotate(90deg);
-  }
-
-  .luke-nav-item:focus-visible
-    .luke-nav-item-glyph:has(.luke-nav-item-chevron)
-    > .luke-nav-item-icon {
-    opacity: 0;
-  }
-
-  .luke-nav-item:focus-visible .luke-nav-item-chevron {
-    opacity: 1;
-  }
-
-  /* Note that the pointer's own reveals, here and below, stand only where
-     there is a hover, because iOS plays a first tap as a hover and spends
-     it on a reveal: the row goes where it leads on the second tap alone. */
-  @media (hover: hover) {
-    .luke-nav-item:hover .luke-nav-item-glyph:has(.luke-nav-item-chevron) > .luke-nav-item-icon {
-      opacity: 0;
-    }
-
-    .luke-nav-item:hover .luke-nav-item-chevron {
-      opacity: 1;
-    }
-  }
-
-  /* A screen with no hover draws a fold's chevron at rest in its glyph's
-     place, since no pointer rests on the head to bring it, and a fold
-     should say it folds. */
-  @media (hover: none) {
-    .luke-nav-item-glyph:has(.luke-nav-item-chevron) > .luke-nav-item-icon {
-      opacity: 0;
-    }
-
-    .luke-nav-item-chevron {
-      opacity: 1;
-    }
   }
 
   /* A name cut short fades out over its last few pixels (`one-line.css`),
@@ -176,14 +110,13 @@
     min-width: 0;
     flex: 1 1 0;
     overflow: hidden;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  /* A place's end stands at the row's end; a fold's head says its count
-     and mark right after its name. */
+  /* A place's end stands at the row's end. */
   .luke-nav-item-rest,
   .luke-nav-item-shortcut {
     display: inline-flex;
@@ -192,7 +125,7 @@
     gap: var(--luke-space-6);
   }
 
-  .luke-nav-item:not([data-variant="head"]) > :is(.luke-nav-item-rest, .luke-nav-item-shortcut) {
+  .luke-nav-item > :is(.luke-nav-item-rest, .luke-nav-item-shortcut) {
     margin-left: auto;
   }
 
@@ -208,21 +141,20 @@
   }
 
   .luke-nav-item-count {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     font-variant-numeric: tabular-nums;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-nav-item-count[data-shown="on-hover"] {
     opacity: 0;
   }
 
-  /* Note that the accent count takes the accent's ink rather than its fill,
-     because a count is words, and the fill reads at 1.5:1 on the web's
-     light sidebar. */
-  .luke-nav-item-count[data-tone="accent"] {
-    color: var(--luke-color-accent-text);
+  /* A count of what waits on the reader is in the needs-you tone, as the
+     rows it counts are (`tokens/status-tone.css`); a tally keeps the muted ink. */
+  .luke-nav-item-count[data-tone]:not([data-tone="neutral"]) {
+    color: var(--luke-tone-ink);
   }
 
   .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {
@@ -240,7 +172,7 @@
      while the row is hovered or has the keyboard. */
   .luke-nav-item-shortcut {
     opacity: 0;
-    transition: opacity var(--luke-duration-quick) ease;
+    transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-shortcut {

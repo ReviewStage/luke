@@ -1,5 +1,7 @@
 import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ } from "@luke/features/admin-wire";
+import { formatCount } from "@luke/features/number-format";
+import { formatDayHeading } from "@luke/features/time-format";
 import {
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -7,7 +9,6 @@ import {
   type DataTableColumn,
 } from "@luke/ui";
 import { partialDayKey } from "@luke/ui/daily-series";
-import { formatCount, formatDayHeading } from "@luke/ui/time-format";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";

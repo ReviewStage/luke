@@ -8,11 +8,14 @@ import {
   type WritingMark,
   type WritingShortcut,
 } from "@luke/settings/shortcuts";
-import { Fragment, type KeyboardEvent, type ReactNode, type Ref, useRef, useState } from "react";
-import { ChevronDownIcon, CommentAddIcon } from "../../face/glyphs.js";
+import { Fragment, type ReactNode, type Ref, useMemo } from "react";
+import { ChevronDownIcon } from "../../face/glyphs.js";
+import { CommentAddIcon } from "../../icons/lucide-glyphs.js";
+import { joinRefs } from "../../join-refs.js";
 import { Button, IconButton } from "../button/button.js";
 import { dropBelowStart, useMenu } from "../menu/menu.js";
 import { MENU_SURFACE_FLOW, MenuSurface } from "../menu/menu-surface.js";
+import { ROVING_ORIENTATION, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { TurnIntoMenu } from "../turn-into-menu/turn-into-menu.js";
 import { WritingGlyph } from "../writing-glyph/writing-glyph.js";
@@ -33,7 +36,8 @@ import { WritingGlyph } from "../writing-glyph/writing-glyph.js";
  * A press never takes the focus, so the selection it acts on stays
  * selected in the editor under it; what a press does is its owner's, told
  * by `onMark`, `onTurn`, and `onComment`. To the keyboard it is one
- * toolbar: Tab stops on it once, and ←, →, Home, and End move along it.
+ * toolbar (`useRovingKeys`): Tab stops on it once, at the press last
+ * focused, and ←, →, Home, and End move along it.
  */
 
 /** The toolbar's own words. */
@@ -58,25 +62,10 @@ const MARK_GROUPS: readonly (readonly WritingMark[])[] = [
  */
 const LINK_CHORD: ShortcutChord = { key: SHORTCUT_KEY.K };
 
-/** Where each roving key moves the toolbar's one stop, from the stop it stands on among `count`. */
-const ROVING_KEYS = new Map([
-  ["ArrowRight", (at: number, count: number) => (at + 1) % count],
-  ["ArrowLeft", (at: number, count: number) => (at - 1 + count) % count],
-  ["Home", () => 0],
-  ["End", (_at: number, count: number) => count - 1],
-]);
-
-/** What a press is handed to stand in the toolbar's one stop: its element, whether Tab stops on it, and its focus arriving. */
-interface Roving {
-  readonly ref: (button: HTMLButtonElement | null) => void;
-  readonly tabbable: boolean;
-  readonly onFocus: () => void;
-}
-
-/** One press as the toolbar lays it out: its key, and how it is drawn in the stop it stands in. */
+/** One press as the toolbar lays it out: its key, and how it is drawn, an item of the toolbar's one stop. */
 interface Press {
   readonly key: string;
-  readonly draw: (roving: Roving) => ReactNode;
+  readonly draw: () => ReactNode;
 }
 
 /** The Turn into the toolbar offers: the block the selection is in, where it is one kind, and what turns it. */
@@ -92,13 +81,7 @@ function markChord(mark: WritingMark): ShortcutChord | undefined {
 }
 
 /** Turn into's press, naming the current block, and the menu it drops. */
-function TurnIntoPress({
-  turnInto,
-  roving,
-}: {
-  turnInto: FormatToolbarTurnInto;
-  roving: Roving;
-}): React.JSX.Element {
+function TurnIntoPress({ turnInto }: { turnInto: FormatToolbarTurnInto }): React.JSX.Element {
   const menu = useMenu(true);
   const block =
     turnInto.current === undefined ? undefined : WRITING_SHORTCUTS[turnInto.current].label;
@@ -106,7 +89,7 @@ function TurnIntoPress({
     <>
       <Tooltip label={FORMAT_TOOLBAR_WORDS.TURN_INTO}>
         <Button
-          {...roving}
+          roving
           keepFocus
           label={block === undefined ? undefined : `${FORMAT_TOOLBAR_WORDS.TURN_INTO} ${block}`}
           trailing={<ChevronDownIcon />}
@@ -141,7 +124,7 @@ function pressGroups(props: {
       : [
           {
             key: FORMAT_TOOLBAR_WORDS.TURN_INTO,
-            draw: (roving) => <TurnIntoPress turnInto={turnInto} roving={roving} />,
+            draw: () => <TurnIntoPress turnInto={turnInto} />,
           },
         ];
   const comment: Press[] =
@@ -150,12 +133,12 @@ function pressGroups(props: {
       : [
           {
             key: FORMAT_TOOLBAR_WORDS.COMMENT,
-            draw: (roving) => (
+            draw: () => (
               <Tooltip
                 label={FORMAT_TOOLBAR_WORDS.COMMENT}
                 command={APP_COMMAND.COMMENT_ON_SELECTION}
               >
-                <Button {...roving} keepFocus icon={<CommentAddIcon />} onClick={onComment}>
+                <Button roving keepFocus icon={<CommentAddIcon />} onClick={onComment}>
                   {FORMAT_TOOLBAR_WORDS.COMMENT}
                 </Button>
               </Tooltip>
@@ -166,10 +149,10 @@ function pressGroups(props: {
     group.map(
       (mark): Press => ({
         key: mark,
-        draw: (roving) => (
+        draw: () => (
           <Tooltip label={WRITING_SHORTCUTS[mark].label} chord={markChord(mark)}>
             <IconButton
-              {...roving}
+              roving
               keepFocus
               icon={<WritingGlyph action={mark} />}
               label={WRITING_SHORTCUTS[mark].label}
@@ -205,50 +188,25 @@ export function FormatToolbar({
   onComment?: (() => void) | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 }): React.JSX.Element {
-  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
-  const [stop, setStop] = useState(0);
+  const roving = useRovingKeys<HTMLDivElement>({ orientation: ROVING_ORIENTATION.HORIZONTAL });
+  // Note that the toolbar's box is its owner's too, which places it.
+  const box = useMemo(() => joinRefs(ref, roving.ref), [ref, roving.ref]);
   const groups = pressGroups({ marks, onMark, turnInto, onComment });
-  const count = groups.flat().length;
-  const at = Math.min(stop, count - 1);
-  const rove = (event: KeyboardEvent<HTMLDivElement>) => {
-    const move = ROVING_KEYS.get(event.key);
-    // Note that only a press's own keys move the stop, never one heard on its way up from the Turn into menu.
-    const from =
-      event.target instanceof HTMLButtonElement ? buttons.current.indexOf(event.target) : -1;
-    if (move === undefined || from < 0) return;
-    event.preventDefault();
-    const next = move(from, count);
-    setStop(next);
-    buttons.current[next]?.focus();
-  };
-  let index = 0;
   return (
     <MenuSurface
-      ref={ref}
+      {...roving}
+      ref={box}
       className="luke-format-toolbar"
       flow={MENU_SURFACE_FLOW.TOOLBAR}
       role="toolbar"
       aria-label={FORMAT_TOOLBAR_WORDS.GROUP}
-      onKeyDown={rove}
     >
       {groups.map((group, groupAt) => (
         <Fragment key={group[0]?.key}>
           {groupAt === 0 ? null : <span className="luke-format-toolbar-rule" aria-hidden="true" />}
-          {group.map((press) => {
-            const mine = index;
-            index += 1;
-            return (
-              <Fragment key={press.key}>
-                {press.draw({
-                  ref: (button) => {
-                    buttons.current[mine] = button;
-                  },
-                  tabbable: mine === at,
-                  onFocus: () => setStop(mine),
-                })}
-              </Fragment>
-            );
-          })}
+          {group.map((press) => (
+            <Fragment key={press.key}>{press.draw()}</Fragment>
+          ))}
         </Fragment>
       ))}
     </MenuSurface>

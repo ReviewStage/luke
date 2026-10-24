@@ -2,7 +2,7 @@ import type { Replay, ReplayStep } from "@luke/features/agent-replay";
 import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-agent-view";
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   BUTTON_VARIANT,
   Button,
@@ -12,6 +12,7 @@ import {
   DisclosureBody,
   DisclosureSummary,
   Inline,
+  MessageLine,
   OneLine,
   TEXT_ELEMENT,
   TEXT_LINK_LOOK,
@@ -46,7 +47,6 @@ import {
   stepView,
   summaryLine,
 } from "./replay-card-model.js";
-import { SentTime } from "./sent-time.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
@@ -217,19 +217,13 @@ function LineSender({
   const actor =
     view.sentBy === undefined ? undefined : lineSender(view.sentBy, readerId, members, former);
   if (actor !== undefined) {
-    return (
-      <div className="message-meta">
-        <span className="message-sender">
-          <ActorRef actor={actor} />
-        </span>
-      </div>
-    );
+    return <MessageLine sender={<ActorRef actor={actor} />} />;
   }
   // A member's line the reader sent is theirs; one the window cannot place keeps its name.
   if (readerId !== undefined && view.sentBy?.userId === readerId) return null;
   return (
-    <div className="message-meta">
-      <span className="message-sender">
+    <MessageLine
+      sender={
         <Text
           as={TEXT_ELEMENT.SPAN}
           variant={TEXT_VARIANT.INHERIT}
@@ -238,8 +232,8 @@ function LineSender({
         >
           {view.sender}
         </Text>
-      </span>
-    </div>
+      }
+    />
   );
 }
 
@@ -486,16 +480,11 @@ export function ReplayCard({
           <ReplayFoot agentId={agentId} place={place} />
         </PlanContent>
       </Plan>
-      {starter === undefined && sentAt === undefined ? null : (
-        <div className="message-meta">
-          {starter === undefined ? null : (
-            <span className="message-sender">
-              <ActorRef actor={starter} />
-            </span>
-          )}
-          {sentAt === undefined ? null : <SentTime at={sentAt} named={starter !== undefined} />}
-        </div>
-      )}
+      <MessageLine
+        sender={starter === undefined ? undefined : <ActorRef actor={starter} />}
+        at={sentAt}
+        wrap
+      />
     </Message>
   );
 }

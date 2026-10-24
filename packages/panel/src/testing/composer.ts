@@ -26,6 +26,7 @@ export const QUIET_COMPOSER = {
   status: CODING_AGENT_STATUS.COMPLETED,
   model: undefined,
   models: undefined,
+  modelsFailed: false,
   readModels: ignore,
   usage: undefined,
   servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
@@ -64,6 +65,21 @@ export function typeInComposer(container: ParentNode, text: string): void {
       if (index > 0) pressInComposer(container, "Enter", { shiftKey: true });
       if (line !== "") editor.view.dispatch(editor.state.tr.insertText(line).scrollIntoView());
     });
+  });
+}
+
+/** Words pasted into the box's editor, as the system's clipboard hands them over: plain text and no files. */
+export function pasteInComposer(container: ParentNode, text: string): void {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      files: [],
+      types: ["text/plain"],
+      getData: (type: string) => (type === "text/plain" ? text : ""),
+    },
+  });
+  act(() => {
+    composerEditor(container).dispatchEvent(event);
   });
 }
 

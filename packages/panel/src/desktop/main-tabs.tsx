@@ -4,7 +4,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -29,7 +29,7 @@ import { AgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import type { ChatNoticeDoors } from "../tasks/chat-notice.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
@@ -65,7 +65,7 @@ import { TabStrip } from "./tab-strip.js";
  * same hover and chosen fills, dragged and stepped along, closed by ×,
  * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
  * right-click (`strip-tabs.tsx`). A tab's own actions, on an agent's its
- * Rename, its Open terminal, its transcript's copies, and its Archive, are
+ * Rename, its Show terminal, its transcript's copies, and its Archive, are
  * its right-click menu's alone: the toolbar's one ⋯ is the task's.
  *
  * Each agent's tab is named by its title, or its model until it has one,
@@ -73,15 +73,16 @@ import { TabStrip } from "./tab-strip.js";
  * works and an alert once it failed, and the voice's live mark while a call
  * into it is in progress, and hangs a card naming it whole with when it
  * last moved and its latest step, read from what its tab last drew and
- * never from the service. Its menu offers Pin tab, which puts it in the
- * sidebar, Rename, which turns the tab into its name's field, Open terminal,
+ * never from the service. Its menu offers Pin, which puts it in the
+ * sidebar, Rename, which turns the tab into its name's field, Show terminal,
  * which shows the agent's own Terminal tab in the side panel as ⌘J does from
  * the tab, and its transcript's two copies. Closing it closes only the view:
  * the agent goes on as it was, and the "+" opens it again. A tab an agent
  * ended on while no one was looking at it reads in semibold until shown. The
  * draft's tab, named New agent as the "+" row that opens it is, stands after
  * the agents until its first message, or its Call, starts the agent, and
- * closing it lets the draft go. A task with no other tab standing shows a
+ * closing it lets the draft go at once, a toast's Undo bringing it back with
+ * its words and files where it held any (`use-coding-agents.ts`). A task with no other tab standing shows a
  * draft's (`use-main-tabs.ts`), so a voice chat or a typed one is the
  * developer's to start from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
  * agent's or the draft's, while its box holds words and another tab is
@@ -236,7 +237,7 @@ function agentTabs(input: {
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     const draftMark = drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined;
     return {
@@ -290,7 +291,7 @@ export function agentEntries(
   held?: HeldTranscripts,
 ): AddEntry[] {
   return (agents.agents ?? []).map((agent) => {
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     const chosen = main.tab !== undefined && sameTab({ agent: agent.id }, main.tab);
     return {
       row: {
@@ -382,9 +383,9 @@ function addEntries(
   return [...starts, ...agentRows];
 }
 
-/** The row the column's tabs stand in, which heads its toolbar: the strip, what follows it, and the "+" last. */
+/** The row the column's tabs stand in, which is its toolbar's title: the strip, what follows it, and the "+" last. */
 function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="desktop-toolbar-heading main-tabs">{children}</div>;
+  return <div className="main-tabs">{children}</div>;
 }
 
 /**
@@ -542,7 +543,7 @@ export function MainTabStrip({
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
-  return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+  return agent === undefined ? undefined : agentName(agent, agents.models);
 }
 
 /**

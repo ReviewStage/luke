@@ -12,7 +12,7 @@ import {
 /**
  * editable-heading.test.ts -- Esc leaves the heading back onto what holds
  * it and Return or ↓ on into what follows, each key held from typing, while
- * every other key types.
+ * every other key types, and a key an input method took is left alone.
  */
 
 declare global {
@@ -38,7 +38,6 @@ function drawHeading(left: EditableHeadingLeave[]): HTMLElement {
     root.render(
       createElement(EditableHeading, {
         label: "Task name",
-        level: 1,
         onLeave: (way) => left.push(way),
       }),
     ),
@@ -49,8 +48,13 @@ function drawHeading(left: EditableHeadingLeave[]): HTMLElement {
 }
 
 /** Presses `name` on `target`, answering whether the key went on to type. */
-function key(target: HTMLElement, name: string): boolean {
-  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: name });
+function key(target: HTMLElement, name: string, init: KeyboardEventInit = {}): boolean {
+  const event = new KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: name,
+    ...init,
+  });
   act(() => {
     target.dispatchEvent(event);
   });
@@ -82,4 +86,13 @@ test("it is named for what it edits and is no Tab stop of its own", () => {
   const heading = drawHeading([]);
   expect(heading.getAttribute("aria-label")).toBe("Task name");
   expect(heading.tabIndex).toBe(-1);
+});
+
+test("keys an input method took leave nothing and stay the input method's own", () => {
+  const left: EditableHeadingLeave[] = [];
+  const heading = drawHeading(left);
+  expect(key(heading, "Enter", { isComposing: true })).toBe(true);
+  expect(key(heading, "Enter", { keyCode: 229 })).toBe(true);
+  expect(key(heading, "Escape", { isComposing: true })).toBe(true);
+  expect(left).toEqual([]);
 });

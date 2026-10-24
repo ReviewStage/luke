@@ -6,9 +6,10 @@ import type {
 } from "@luke/features/admin-answer-wire";
 import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
+import { formatDate } from "@luke/features/time-format";
 import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
-import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useState } from "react";
 import {
   ACCOUNTS_TABLE_MIN_WIDTH,
@@ -92,7 +93,7 @@ const OVERVIEW_ACCOUNT_COLUMNS: readonly AccountsDetailColumn<AdminOverviewAccou
 ];
 
 function percentOf(part: number, whole: number): string {
-  return `${Math.round((part / whole) * 100)}%`;
+  return formatPercent(part / whole);
 }
 
 /** A tile's move against the run before, and what else it says. */

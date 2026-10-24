@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import {
@@ -9,18 +9,20 @@ import {
 import {
   createContext,
   createElement,
+  type MouseEvent,
   type ReactNode,
   useCallback,
   useContext,
   useMemo,
 } from "react";
 import { appPlatform } from "../app-platform.js";
+import { useSteadyDoor } from "../steady-door.js";
 
 /**
  * use-open-link.ts -- how a link in written words opens: a transcript's, an agent tab's, or an Inbox item's.
  *
  * A Luke link, the address of a task, a section, an agent, an Inbox item,
- * or any other place in Luke (`@luke/features/luke-link`), opens in the
+ * or any other place in Luke (`@luke/features/link-grammar`), opens in the
  * window, on that place, never the browser, as Linear's and Slack's own
  * links open in their apps; one written before the link was settled
  * (`luke://plan/<id>`) still opens its task. The window's opener for a
@@ -44,7 +46,7 @@ import { appPlatform } from "../app-platform.js";
  * other pull request of its repository in a Pull request tab by its number,
  * rather than on GitHub (`openPullRequestsHere`). Past the place, the window opens
  * a pull request any listed task's agent opened in that agent's Pull request
- * tab, on its task (`ListedPullRequestsProvider`), wherever it is pressed:
+ * tab, on its task (`ListedPullRequests`), wherever it is pressed:
  * Chat, a version, a task's card, or another task. Inside a pull
  * request's own tab, a link leaves for GitHub (`PullRequestsOnGitHub`).
  */
@@ -90,10 +92,28 @@ export function OpenHereFirst({
 /** The tasks the window lists, as their rows name their pull requests; none outside the window. */
 type ListedTasks = Parameters<typeof listedPullRequestOf>[1];
 
-const ListedTasksContext = createContext<ListedTasks | undefined>(undefined);
+/** Reads the tasks the window lists as they stand now. */
+type ListedTasksReader = () => ListedTasks;
 
-/** Hands everything under it the tasks the window lists, whose agents' pull requests open in their Pull request tabs. */
-export const ListedPullRequestsProvider = ListedTasksContext.Provider;
+const ListedTasksContext = createContext<ListedTasksReader | undefined>(undefined);
+
+/**
+ * Hands everything under it the tasks the window lists, whose agents' pull
+ * requests open in their Pull request tabs. Note that it hands a reader
+ * standing across draws rather than the list, which is read as a link is
+ * opened, because the list is new on every patch to any listed task, and
+ * every part opening links would be drawn again with it.
+ */
+export function ListedPullRequests({
+  tasks,
+  children,
+}: {
+  tasks: ListedTasks;
+  children: ReactNode;
+}): ReactNode {
+  const read = useSteadyDoor(() => tasks);
+  return createElement(ListedTasksContext.Provider, { value: read }, children);
+}
 
 /**
  * Under it, a link to a pull request leaves for GitHub, neither the place
@@ -203,9 +223,9 @@ function lukeLinkOf(href: string): ReadLink | undefined {
 /** The Pull request tab a link to a listed task's agent's pull request opens, as a Luke link names it; nothing for any other address. */
 function listedPullRequestLink(
   href: string,
-  listed: ListedTasks | undefined,
+  listed: ListedTasksReader | undefined,
 ): ReadLink | undefined {
-  const found = listed === undefined ? undefined : listedPullRequestOf(href, listed);
+  const found = listed === undefined ? undefined : listedPullRequestOf(href, listed());
   return found === undefined
     ? undefined
     : {
@@ -236,4 +256,22 @@ export function useOpenLink(): (href: string) => void {
     },
     [openPlace, openHere, listed],
   );
+}
+
+/**
+ * The press of a link that opens a page outside the window, over `open`
+ * ({@link useOpenLink}'s): the page opens through the platform's link-open
+ * act, so a refused address toasts as any refused open does, and the browser
+ * does not follow the address a second time. Note that the link is still an
+ * `<a href>`, so a right-click offers its link menu and a reader's link list
+ * finds it.
+ */
+export function linkPressOf(
+  open: (href: string) => void,
+  href: string,
+): (event: MouseEvent<HTMLAnchorElement>) => void {
+  return (event) => {
+    event.preventDefault();
+    open(href);
+  };
 }

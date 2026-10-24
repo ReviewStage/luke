@@ -1,0 +1,64 @@
+import type * as React from "react";
+import { cn } from "../cn.js";
+import { Label } from "./label.js";
+
+/**
+ * field.tsx -- shadcn/ui's field (style `base-nova`), vendored and drawn as Luke's form field.
+ *
+ * The parts are shadcn's own source, kept as close to it as the window
+ * allows, so a later `shadcn add field` reads as a small diff. The local
+ * changes: only the parts a `@luke/ui` component draws are kept (`Field`,
+ * `FieldLabel`, `FieldDescription`, `FieldError`); a field is one
+ * orientation, its parts one under another, so `Field` takes no
+ * `orientation` and draws no `role="group"`, which an unnamed field would
+ * only add to a reader's tree; and `FieldError` always stands, with no
+ * `role="alert"`, empty until it says something, its words what the caller
+ * says rather than a list of validation errors, which `ErrorLine` says
+ * through the window's `Announcer` rather than a live region of its own. The classes are Luke's: the parts six
+ * apart, the description in the muted caption, and the error in the danger
+ * ink, dropping into its line as it arrives and, while empty, standing out
+ * of the flow, so it gives back the gap before it in whatever stack holds it.
+ * None of shadcn's ring utilities (`shadcn-focus.test.ts`). `@luke/ui`'s
+ * `FormField` (`components/form-field`) is what an app draws, and its
+ * `ErrorLine` (`components/error-line`) the error alone; this is their inside.
+ */
+
+export function Field({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="field"
+      className={cn("flex min-w-0 flex-col gap-luke-6", className)}
+      {...props}
+    />
+  );
+}
+
+export function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
+  return <Label data-slot="field-label" className={className} {...props} />;
+}
+
+export function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+  return (
+    <p
+      data-slot="field-description"
+      className={cn(
+        "m-0 font-body text-caption font-text text-muted-foreground wrap-anywhere",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function FieldError({ className, ...props }: React.ComponentProps<"p">) {
+  return (
+    <p
+      data-slot="field-error"
+      className={cn(
+        "m-0 font-body text-caption font-text text-danger wrap-anywhere not-empty:animate-drop-in empty:absolute",
+        className,
+      )}
+      {...props}
+    />
+  );
+}

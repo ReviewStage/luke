@@ -47,6 +47,7 @@ import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
 import { boundSnapshotRetention } from "./sandbox-retention.js";
 import {
   deploymentOidcToken,
+  OPEN_INTERNET_POLICY,
   SANDBOX_STATUS,
   SandboxUnavailable,
   UP_STATUSES,
@@ -127,6 +128,9 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+          // The credential comes off first, as at a launch's end and in the sweeps, because a stopped
+          // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
+          yield* api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY);
           yield* api.stopSession(running);
           stopped += 1;
         }

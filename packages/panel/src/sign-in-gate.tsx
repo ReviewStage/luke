@@ -1,6 +1,7 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import {
+  ANNOUNCE,
   AuthPage,
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
@@ -10,6 +11,10 @@ import {
   TextLink,
   WingFace,
 } from "@luke/ui";
+import { useAnnounceShown } from "./use-announce-shown.js";
+
+/** What the gate says while it waits on the browser. */
+const FINISH_IN_BROWSER = "Finish in your browser.";
 
 /** Each way in, in the order the gate stands them, with the name it says. */
 const WAYS_IN = [
@@ -51,6 +56,7 @@ export function SignInGate({
   // A sign-in begun from no press of this gate still holds both buttons.
   const busy = waiting !== undefined || account.status === ACCOUNT_STATUS.SIGNING_IN;
   const primary = lastUsed ?? ACCOUNT_PROVIDER.GOOGLE;
+  useAnnounceShown(ANNOUNCE.POLITE, waiting ? FINISH_IN_BROWSER : "");
   return (
     <AuthPage
       mark={<WingFace />}
@@ -60,8 +66,8 @@ export function SignInGate({
         waiting || macAppLink !== undefined ? (
           <>
             {waiting ? (
-              <span role="status">
-                Finish in your browser.{" "}
+              <span>
+                {FINISH_IN_BROWSER}{" "}
                 <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onCancel}>
                   Cancel
                 </TextButton>
@@ -84,8 +90,8 @@ export function SignInGate({
           size={PROVIDER_BUTTON_SIZE.GATE}
           primary={primary === provider}
           lastUsed={lastUsed === provider}
-          pending={waiting === provider}
-          pendingLabel="Waiting for browser…"
+          busy={waiting === provider}
+          busyLabel="Waiting for browser…"
           disabled={busy}
           onPress={() => onBegin(provider)}
         />

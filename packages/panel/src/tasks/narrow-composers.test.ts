@@ -7,7 +7,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
@@ -16,7 +15,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
-import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
 /**
@@ -225,6 +223,7 @@ test("in a wide room, an open thread keeps the margin card's width", () => {
 async function composerDialog(): Promise<HTMLElement> {
   await draw(
     createElement(Dialog, {
+      open: true,
       title: "New task",
       size: DIALOG_SIZE.COMPOSER,
       onDismiss: ignore,
@@ -256,45 +255,10 @@ test("on a desktop, New task's dialog keeps the dimmed window's margins", async 
   assert.equal(pixels(dialog, style.marginRight), 0);
 });
 
-test("on a 390px screen, the repository menu opened from Home's chip stands inside the screen", async () => {
-  layContainersAt({}, { touch: true });
-  vi.spyOn(window, "innerWidth", "get").mockReturnValue(PHONE.SCREEN);
-  const chipLeft = 85;
-  vi.spyOn(HTMLButtonElement.prototype, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ x: chipLeft, y: 300, width: 120, height: 44 }),
-  );
-  // The menu at its own width, which jsdom lays out as none.
-  const menuWidth = 340;
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    return this.classList.contains("searchable-menu") ? menuWidth : 0;
-  });
-  const container = await draw(
-    createElement(RepositoryChip, {
-      value: "acme/web",
-      chooser: { ...tasksControl().repositories, recent: ["acme/web"] },
-      onChoose: ignore,
-      place: CHIP_PLACE.FIELD,
-      align: PICKER_ALIGN.START,
-    }),
-  );
-  const chip =
-    container.querySelector<HTMLButtonElement>(".repository-chip button") ??
-    assert.fail("the chip stands");
-  await act(async () => chip.click());
-  const menu = container.querySelector(".searchable-menu") ?? assert.fail("the menu opens");
-
-  const style = getComputedStyle(menu);
-  const start = chipLeft + pixels(menu, style.left);
-  const end = start + Math.min(menuWidth, pixels(menu, style.maxWidth));
-  assert.ok(start >= 0 && end <= PHONE.SCREEN, `the menu stands from ${start} to ${end}`);
-});
-
 /** The `@` list's foot, which names the keys it hears. */
 function mentionFoot(): HTMLElement {
   const menu = document.body.appendChild(document.createElement("div"));
-  menu.className = "luke-menu-surface searchable-menu mention-menu";
+  menu.className = "luke-menu-surface mention-menu";
   const foot = menu.appendChild(document.createElement("div"));
   foot.className = "luke-menu-keys";
   return foot;
@@ -324,7 +288,7 @@ test("a page that says no room of its own is answered by its dimmed window's wid
   assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
 });
 
-/** The Inbox's answer box as the box lays it (`inbox-answer-box.tsx`): its note line, and under it its foot of +, microphone, and Send. */
+/** The Inbox's answer box as the box lays it (`inbox-answer-box.tsx`): its note line, and under it its foot (`ComposerFoot`) of +, microphone, and Send. */
 function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "send", HTMLElement> {
   const part = (parent: Element, tag: string, className: string) => {
     const element = parent.appendChild(document.createElement(tag));
@@ -335,11 +299,11 @@ function inboxBox(): Record<"foot" | "attach" | "line" | "actions" | "mic" | "se
   const form = part(card, "form", "luke-composer-frame prompt-input inbox-answer");
   const line = part(form, "div", "agent-composer-field");
   part(line, "div", "agent-composer-input");
-  const foot = part(form, "div", "prompt-input-footer inbox-answer-foot");
-  const attach = part(part(foot, "div", "prompt-input-tools"), "button", "");
-  const actions = part(foot, "div", "inbox-answer-actions");
+  const foot = part(part(form, "div", "luke-composer-foot"), "div", "luke-composer-foot-bar");
+  const attach = part(part(foot, "div", "luke-composer-foot-tools"), "button", "");
+  const actions = part(foot, "div", "luke-composer-foot-end");
   const mic = part(actions, "button", "dictate-button");
-  const send = part(actions, "button", "prompt-input-submit");
+  const send = part(actions, "button", "");
   return { foot, attach, line, actions, mic, send };
 }
 

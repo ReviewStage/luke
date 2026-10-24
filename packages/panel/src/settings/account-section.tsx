@@ -2,13 +2,15 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
+  FailureNote,
   OneLine,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -22,23 +24,32 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useHeldThroughExit } from "../use-held-through-exit.js";
 import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
+
+/** What the row says where the token could not be read, so what stands is unknown. */
+const TOKEN_READ_FAILED = "Couldn't read the token.";
 
 /**
  * The member's own GitHub personal access token: its hint, login, and
  * expiry once one is saved, nothing while none is, and Manage or Add, which
  * opens the token's dialog (`github-dialog.tsx`). The token is read as the
  * row is drawn, again for each account it is drawn for (the section keys it
- * by the account); a read that fails draws Try again in place of Add or
- * Manage, since what stands is unknown.
+ * by the account); a read that fails says so under the row in a
+ * `FailureNote` whose Retry reads again, and draws neither Add nor Manage,
+ * since what stands is unknown.
  */
 function GitHubTokenRow(): React.JSX.Element {
   const { act } = useAct();
   const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
   const [managing, setManaging] = useState(false);
+  // Note that the card is drawn for the token it opened over until its fade has run, so it does not change under its own exit.
+  const { held: drawn, onExited } = useHeldThroughExit(
+    managing && token !== undefined ? token : undefined,
+  );
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -65,24 +76,34 @@ function GitHubTokenRow(): React.JSX.Element {
         }
         label="GitHub personal access token"
         description={token ? <TokenFacts token={token} /> : undefined}
+        // Note that a row with nothing below draws no `below` at all, since its box keeps a margin.
+        below={
+          token === undefined && readFailed
+            ? () => (
+                <FailureNote onRetry={() => setAttempt((n) => n + 1)}>
+                  {TOKEN_READ_FAILED}
+                </FailureNote>
+              )
+            : undefined
+        }
       >
         {() =>
-          token === undefined ? (
-            readFailed ? (
-              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setAttempt((n) => n + 1)}>
-                Try again
-              </Button>
-            ) : null
-          ) : (
+          token === undefined ? null : (
             <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setManaging(true)}>
               {token === null ? "Add" : "Manage"}
             </Button>
           )
         }
       </SettingsRow>
-      {managing && token !== undefined ? (
-        <GitHubTokenDialog token={token} onToken={setToken} onClose={() => setManaging(false)} />
-      ) : null}
+      {drawn === undefined ? null : (
+        <GitHubTokenDialog
+          open={managing && token !== undefined}
+          token={drawn}
+          onToken={setToken}
+          onClose={() => setManaging(false)}
+          onExited={onExited}
+        />
+      )}
     </div>
   );
 }
@@ -124,8 +145,6 @@ export function AccountSection({
   });
   const deletion = useConfirmDialog(surroundings, onDeleteAccount);
 
-  const busy = signOut.busy || deletion.busy;
-
   // Note that each row stands in a wrapper wearing its search anchor, because
   // a pressed result lands on and rings the whole row, as it did before the
   // row was shared, and the shared row takes no attribute of a caller's.
@@ -145,8 +164,14 @@ export function AccountSection({
           }
         >
           {() => (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={busy} onClick={signOut.ask}>
-              Sign out
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={signOut.busy}
+              busyLabel="Signing out"
+              disabled={deletion.busy}
+              onClick={signOut.ask}
+            >
+              {VERB.SIGN_OUT}
             </Button>
           )}
         </SettingsRow>
@@ -155,22 +180,30 @@ export function AccountSection({
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <SettingsRow label="Delete account">
           {() => (
-            <Button variant={BUTTON_VARIANT.DANGER_OUTLINE} disabled={busy} onClick={deletion.ask}>
+            <Button
+              variant={BUTTON_VARIANT.DANGER_OUTLINE}
+              busy={deletion.busy}
+              busyLabel="Deleting the account"
+              disabled={signOut.busy}
+              onClick={deletion.ask}
+            >
               Delete account
             </Button>
           )}
         </SettingsRow>
       </div>
       <ConfirmDialog
+        open
         confirm={signOut}
         question={{
-          title: `Sign out of ${account.email}?`,
-          verb: "Sign out",
+          title: `${VERB.SIGN_OUT} of ${account.email}?`,
+          verb: VERB.SIGN_OUT,
           running: "Signing out",
-          tone: DIALOG_TONE.PRIMARY,
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       />
       <ConfirmDialog
+        open
         confirm={deletion}
         gate={account.email}
         question={{
@@ -178,6 +211,7 @@ export function AccountSection({
           body: "This cannot be undone.",
           verb: "Delete account",
           running: "Deleting account",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </SettingsSection>

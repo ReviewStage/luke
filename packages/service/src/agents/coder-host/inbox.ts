@@ -10,7 +10,6 @@ import {
   INBOX_CLOSE_LEAD,
   INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_TOOL,
   type InboxAnswers,
@@ -19,7 +18,6 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
-  type InboxReply,
   type InboxThreadPostInput,
   inboxReadInputSchema,
   inboxThreadPostInputSchema,
@@ -175,10 +173,7 @@ interface AgentInboxLine {
   readonly thread: readonly AgentThreadLine[];
   /** The member who closed the thread without answering, by name: a former member's where their account is gone. */
   readonly closedBy?: string;
-  /** How a thread no message answers was answered, a notice's nod, and the names of the files the answer carried. */
-  readonly answer?: InboxReply;
-  readonly answerFiles?: readonly string[];
-  /** Why a thread whose messages ask nothing was closed. */
+  /** Why a thread whose messages ask nothing, a notice, was closed. */
   readonly closedReason?: string;
 }
 
@@ -292,26 +287,23 @@ function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
  * reads as no ask of the agent's.
  */
 function openNotice(item: InboxItem): boolean {
-  return item.status === INBOX_STATUS.OPEN && item.response.type === INBOX_RESPONSE.NONE;
+  return (
+    item.status === INBOX_STATUS.OPEN &&
+    !(item.thread ?? []).some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)
+  );
 }
 
 /**
- * What a thread no message asks or answers carries on itself rather than on
- * a message, a notice's: how it was answered, and why it was closed. Note
- * that a thread that asks carries each on its messages, so none is
- * repeated there.
+ * What a thread no message asks or answers, a notice's, carries on itself
+ * rather than on a message: why it was closed. Note that a thread that asks
+ * carries it on its withdrawn ask, so it is not repeated there, and that a
+ * notice's nod is its answered status alone.
  */
 function settlementOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<AgentInboxLine> {
   if (messages.some((message) => message.ask !== undefined || message.answers !== undefined)) {
     return {};
   }
-  return {
-    ...(item.answer === undefined ? undefined : { answer: item.answer }),
-    ...(item.answerFiles === undefined
-      ? undefined
-      : { answerFiles: item.answerFiles.map((file) => file.name) }),
-    ...(item.closedReason === undefined ? undefined : { closedReason: item.closedReason }),
-  };
+  return item.closedReason === undefined ? {} : { closedReason: item.closedReason };
 }
 
 /**
@@ -337,7 +329,7 @@ function settledMessages(messages: readonly InboxMessage[]): readonly InboxMessa
  * keeps, and how many it leaves out.
  */
 function lineOf(item: InboxItem): AgentInboxLine {
-  const messages = item.thread ?? item.messages ?? [];
+  const messages = item.thread ?? [];
   const open = item.status === INBOX_STATUS.OPEN;
   const told = open ? messages : settledMessages(messages);
   const earlier = messages.length - told.length;

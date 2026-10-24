@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DURATION_MS } from "@luke/brand";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   TERMINAL_PORT_CHANNEL,
@@ -31,7 +32,9 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -255,6 +258,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   document.head.innerHTML = "";
+  document.body.style.removeProperty("--luke-duration-pane");
   vi.restoreAllMocks();
 });
 
@@ -415,7 +419,7 @@ test("the tab is left out of the screen recording, its screen and bar with it", 
   const tab = await mount();
   const screen = tab.container.querySelector(".terminal-tab-screen");
   assert.ok(screen?.closest(".ph-no-capture"));
-  assert.ok(tab.container.querySelector(".file-view-bar")?.closest(".ph-no-capture"));
+  assert.ok(tab.container.querySelector(".luke-pane-bar")?.closest(".ph-no-capture"));
 });
 
 test("shown, the tab lists the agent's shells and attaches to the oldest; hidden, it lets the port go and attaches nothing more", async () => {
@@ -496,11 +500,36 @@ test("an agent that has not opened its sandbox yet shows the waiting bar", async
   assert.equal(tab.action(), null);
 });
 
+/** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */
+function revealBar(): void {
+  act(() => {
+    for (const name of ["animationend", "webkitAnimationEnd"]) {
+      document.querySelector(".terminal-bar")?.dispatchEvent(new Event(name, { bubbles: true }));
+    }
+  });
+}
+
 test("a dropped connection shows its bar, and its action asks for the shell again at once", async () => {
+  mountAnnouncer();
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "reconnecting" });
   assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "a bar still hidden says nothing, so a blip is never said");
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…", "it is said once shown");
+
+  // A later drop hides its bar again, so its words wait for that reveal too.
+  port.say({ type: "state", state: "starting" });
+  assert.equal(announcedPolitely(), "Waiting for the agent to open its sandbox…");
+  port.say({ type: "state", state: "reconnecting" });
+  assert.equal(
+    announcedPolitely(),
+    "",
+    "the second bar is hidden, so it says nothing yet, and the bar it replaced took its words back",
+  );
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
   assert.equal(tab.dimmed(), true);
   const before = main.sent.length;
   await act(async () => tab.action()?.click());
@@ -548,9 +577,15 @@ test("a sandbox that refuses a shell because it stopped meanwhile shows the stop
 
 test("a service it cannot reach shows a bar that says so, whose action asks again", async () => {
   main.down.add(ACT_KIND.TERMINAL_LIST);
+  mountAnnouncer();
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
   assert.equal(tab.bar(), "Luke's service did not answer.");
+  assert.equal(
+    announcedPolitely(),
+    "Luke's service did not answer.",
+    "the bar is said as it lands",
+  );
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();
@@ -920,6 +955,49 @@ test("a shell renamed from its row's menu is renamed in place, and the list says
   assert.equal(tab.rows()[0]?.name, "server");
 });
 
+test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename, New shell and End shell", async () => {
+  const tab = await mount();
+  const item = tab.container.querySelector<HTMLElement>('[aria-label="Shell list"] > li');
+  const row = item?.querySelector<HTMLButtonElement>(":scope > button, :scope button");
+  const more = item?.querySelector<HTMLButtonElement>('button[aria-label="Shell actions"]');
+  assert.ok(row && more, "the row stands with its ⋯");
+  const offered = () => {
+    const menu = document.querySelector('[role="menu"]:not([data-leaving])');
+    return {
+      label: menu?.getAttribute("aria-label"),
+      items: [...(menu?.querySelectorAll('[role="menuitem"]') ?? [])].map(
+        (each) => each.textContent,
+      ),
+    };
+  };
+  const closeMenu = async () => {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+  };
+  const SAME = { label: "Shell actions", items: ["Rename", "New shell", "End shell"] };
+
+  act(() => more.click());
+  assert.deepEqual(offered(), SAME, "the ⋯ opens it");
+  await closeMenu();
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  assert.deepEqual(offered(), SAME, "a right-click opens it");
+  await closeMenu();
+
+  act(() => {
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.deepEqual(offered(), SAME, "the menu key opens it");
+});
+
 test("the shells list folds away beside the screen, and its toggle asks the panel to bring it back", async () => {
   const tab = await mount(true, false);
   assert.equal(tab.container.querySelector(".terminal-shells"), null);
@@ -1201,7 +1279,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')
+  return document.querySelector('[role="search"][aria-label="Find"] .luke-search-field-tally')
     ?.textContent;
 }
 
@@ -1250,4 +1328,73 @@ test("a find with more matches than it counts says there are more", async () => 
   typeFind("hit");
   await act(async () => vi.advanceTimersByTimeAsync(100));
   assert.match(findTally() ?? "", /1000\+/);
+});
+
+/** The shells list over the screen, as it floats where the panel has no room for it beside. */
+function floatedShells(tab: { container: HTMLElement }): HTMLElement | null {
+  return tab.container.querySelector<HTMLElement>('[aria-label="Shells"]');
+}
+
+/** The toggle that floats the shells, which the stylesheet draws in a narrow panel alone. */
+function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
+  const toggle = tab.container.querySelector<HTMLButtonElement>(
+    '.file-tree-toggle[data-place="over"] button',
+  );
+  assert.ok(toggle, "the toggle that floats the shells is drawn");
+  return toggle;
+}
+
+/** A panel too narrow for the shells beside the screen, the list closed. */
+async function narrowTab() {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  // Only the sheet that draws the toggles, since each style read weighs every rule laid.
+  layContainersAt({ "side-panel": 400 }, { only: ["./tasks.css"] });
+  return mount(true, false);
+}
+
+test("in a narrow panel the shells open over the screen", async () => {
+  const tab = await narrowTab();
+  assert.equal(floatedShells(tab), null, "the shells are away until their toggle is pressed");
+
+  await act(async () => shellsToggle(tab).click());
+  const opened = floatedShells(tab);
+  assert.equal(opened?.getAttribute("data-state"), "open");
+  assert.equal(opened?.classList.contains("luke-over-pane"), true);
+  assert.equal(tab.toggled(), 0, "the panel's own place for the list is left as it was");
+});
+
+test("shells floated over the screen stay drawn through their exit, then are let go", async () => {
+  const tab = await narrowTab();
+  await act(async () => shellsToggle(tab).click());
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "open");
+
+  await act(async () => shellsToggle(tab).click());
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE - 1));
+  assert.notEqual(floatedShells(tab), null, "the exit has not finished");
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(floatedShells(tab), null, "the list is let go once its exit has played");
+});
+
+test("Escape in the shells floated over the screen puts them away and gives the keyboard back to their toggle", async () => {
+  const tab = await narrowTab();
+  act(() => shellsToggle(tab).focus());
+  await act(async () => shellsToggle(tab).click());
+  const shells = floatedShells(tab);
+  assert.ok(shells);
+  assert.equal(document.activeElement, shells, "the list takes the keyboard as it opens");
+
+  act(() => {
+    shells.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+  assert.equal(document.activeElement, shellsToggle(tab));
+});
+
+test("a shell chosen in the list floated over the screen takes the list down", async () => {
+  const tab = await narrowTab();
+  await act(async () => shellsToggle(tab).click());
+  await tab.choose("dev server");
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
 });

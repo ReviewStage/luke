@@ -44,7 +44,7 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
-import { TabCard, TabCards } from "@luke/ui";
+import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@luke/ui";
 import {
   isAgentTab,
   isChangesTab,
@@ -60,8 +60,7 @@ import {
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type HouseIcon, InboxIcon, ListTodoIcon, MessagesSquareIcon, ZapIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { overlayHoldsKeyboard, useAppCommand, useOverlayHold } from "../app-commands.js";
@@ -327,6 +326,9 @@ export function TabSwitcher({
   const [settle] = useState(settleAtom);
   const startSettle = useAtomSet(settle);
   useOverlayHold(state.held);
+  const titleId = useId();
+  const [face, setFace] = useState<SwitcherState>(state);
+  if (state.held && state.shown && face !== state) setFace(state);
 
   const move = (next: SwitcherState) => {
     latest.current = next;
@@ -539,46 +541,50 @@ export function TabSwitcher({
     };
   }, [answers]);
 
-  if (!state.held || !state.shown) return null;
-  const { cards, chosen } = state;
-  return createPortal(
-    <>
-      <div className="tab-switcher-backdrop" aria-hidden="true" />
-      <div className="tab-switcher" role="dialog" aria-label="Recent tabs">
-        <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-          <TabCards label="Recent tabs">
-            {cards.map((stop, at) => {
-              const look = cardLook(
-                stop,
-                tasks,
-                titles.current.find((held) => sameStop(held.stop, stop))?.title,
-              );
-              return (
-                <TabCard
-                  key={at}
-                  icon={look.icon}
-                  label={look.label}
-                  detail={look.detail}
-                  detailIcon={look.detailIcon}
-                  endMark={look.endMark}
-                  still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
-                  here={state.here && at === 0}
-                  chosen={at === chosen}
-                  // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
-                  pickOnPress
-                  onPoint={() => move(switcherChose(latest.current, at))}
-                  onPick={() => {
-                    move(switcherChose(latest.current, at));
-                    letGo(true);
-                  }}
-                />
-              );
-            })}
-          </TabCards>
-        </MemberDirectory>
-      </div>
-    </>,
-    document.body,
+  // Note that the cards are held as they last showed, so the dialog fades them out as it closes rather than drawing nothing.
+  if (!face.held || !face.shown) return null;
+  const { cards, chosen } = face;
+  return (
+    <Dialog
+      open={state.held && state.shown}
+      size={DIALOG_SIZE.MEDIA}
+      labelledBy={titleId}
+      // Note that Escape and a press on the dimmed window go nowhere, as Escape does while ⌃ is held.
+      onDismiss={() => letGo(false)}
+    >
+      <VisuallyHidden id={titleId}>Recent tabs</VisuallyHidden>
+      <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+        <TabCards label="Recent tabs">
+          {cards.map((stop, at) => {
+            const look = cardLook(
+              stop,
+              tasks,
+              titles.current.find((held) => sameStop(held.stop, stop))?.title,
+            );
+            return (
+              <TabCard
+                key={at}
+                icon={look.icon}
+                label={look.label}
+                detail={look.detail}
+                detailIcon={look.detailIcon}
+                endMark={look.endMark}
+                still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
+                here={face.here && at === 0}
+                chosen={at === chosen}
+                // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
+                pickOnPress
+                onPoint={() => move(switcherChose(latest.current, at))}
+                onPick={() => {
+                  move(switcherChose(latest.current, at));
+                  letGo(true);
+                }}
+              />
+            );
+          })}
+        </TabCards>
+      </MemberDirectory>
+    </Dialog>
   );
 }
 

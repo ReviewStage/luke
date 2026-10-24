@@ -1,34 +1,32 @@
 import {
   DetailPage,
+  GAP,
+  GROUP_HEADING,
+  GroupHeader,
+  Inline,
   List,
   ListRow,
-  ONE_LINE_ELEMENT,
-  OneLine,
   PAGE_FRAME,
-  PageToolbar,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
 } from "@luke/ui";
 import type { ReactNode } from "react";
 
 /**
  * person-frame.tsx -- a person's page's boxes, which the page and its placeholders both draw.
  *
- * The page's toolbar, its head, and its sections each stand in one
+ * The page's title, its content's top, and its sections each stand in one
  * component here, drawn by the page with what it read and by its
  * placeholders with blocks in what is still being read, so a placeholder is
- * the page's own shape rather than a copy of it. It stands outside the
+ * the page's own shape rather than a copy of it. The page names its person
+ * once, as its header's title (`PageHeader`, the page's one `h1`). It stands outside the
  * page's chunk (`pages-on-demand.ts`), so what the window draws while that
  * chunk loads draws through the same boxes.
  */
 
-/** How wide a placeholder section's name and its count stand, as a short section name and a number do. */
-const SKELETON_SECTION = { NAME: "120px", COUNT: "12px" } as const;
+/** How wide a placeholder section's name stands, as a short section name does. */
+const SKELETON_SECTION_NAME = "120px";
 
 /** How wide the placeholder head's name and the line under it stand, as a name and a role and email do. */
 const SKELETON_HEAD = { NAME: "180px", LINE: "240px" } as const;
@@ -49,79 +47,49 @@ const SKELETON_ROWS = [
 /** What the page is called where it cannot name the person yet. */
 export const PROFILE = "Profile";
 
-/** The page's toolbar: their name as the page's title, and the page's acts, where it has any, at its end. */
-export function PersonToolbar({
+/** The page's title, the page's one `h1`: their face beside their name, the badge that says it is the reader left to the line under it. */
+export function PersonTitle({
+  face,
   name,
-  words,
-  children,
 }: {
+  face: ReactNode;
   name: ReactNode;
-  /** The name's words, which the title reads whole where it cuts them short. */
-  words?: string | undefined;
-  children?: ReactNode;
 }): React.JSX.Element {
   return (
-    <PageToolbar
-      heading={
-        <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={words}>
-          {name}
-        </OneLine>
-      }
-      actions={children}
+    <Inline gap={GAP.CONTROL}>
+      {face}
+      {name}
+    </Inline>
+  );
+}
+
+/** The title while the members are read: a block where their face stands, and their name where the place that opened the page knew it, else a block. */
+export function PersonTitleSkeleton({ name }: { name: string | undefined }): React.JSX.Element {
+  return (
+    <PersonTitle
+      face={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_FACE} />}
+      name={name ?? <Skeleton width={SKELETON_HEAD.NAME} />}
     />
   );
 }
 
-/** The block standing in the page's title while nothing names them yet. */
-export function PersonNameSkeleton(): React.JSX.Element {
-  return <Skeleton width={SKELETON_HEAD.NAME} />;
+/** The line under the title while the members are read: a block where who they are here will stand. */
+export function PersonLineSkeleton(): React.JSX.Element {
+  return <Skeleton width={SKELETON_HEAD.LINE} />;
 }
 
-/** The page's top, which the sections stand a section's gap under: their head. */
-export function PersonTop({ children }: { children: ReactNode }): React.JSX.Element {
+/**
+ * The page's top, which the sections stand a section's gap under: it holds
+ * the note that stands where the profile could not be read, and the region
+ * that says the members are being read (`PersonReadingSkeleton`).
+ */
+export function PersonTop({ children }: { children?: ReactNode }): React.JSX.Element {
   return <div className="person-top">{children}</div>;
 }
 
-/** The page's head: their face, their name over who they are here. */
-export function PersonHeadFrame({
-  face,
-  name,
-  line,
-}: {
-  face: ReactNode;
-  name: ReactNode;
-  line: ReactNode;
-}): React.JSX.Element {
-  return (
-    <header className="person-head">
-      {face}
-      <div className="person-head-copy">
-        <p className="person-head-name">{name}</p>
-        {line}
-      </div>
-    </header>
-  );
-}
-
-/** The head while the members are read: a block where their face, their name, and who they are here will stand. */
-export function PersonHeadSkeleton(): React.JSX.Element {
-  return (
-    <SkeletonRegion label="Reading who they are…">
-      <PersonHeadFrame
-        face={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_FACE} />}
-        name={
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
-            <Skeleton width={SKELETON_HEAD.NAME} />
-          </Text>
-        }
-        line={
-          <Text variant={TEXT_VARIANT.CAPTION}>
-            <Skeleton width={SKELETON_HEAD.LINE} />
-          </Text>
-        }
-      />
-    </SkeletonRegion>
-  );
+/** What says, to a reader, that the members are read: the header's blocks are decoration. */
+export function PersonReadingSkeleton(): React.JSX.Element {
+  return <SkeletonRegion label="Reading who they are…">{null}</SkeletonRegion>;
 }
 
 /** A section: its name and count over what it holds, a region named `label` where it names one. */
@@ -133,35 +101,26 @@ export function PersonSectionFrame({
 }: {
   label?: string | undefined;
   title: ReactNode;
-  count: ReactNode;
+  count?: number | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
     <section className="home-section" aria-label={label}>
-      <header className="person-section-head">
-        <Text
-          as={label === undefined ? TEXT_ELEMENT.SPAN : TEXT_ELEMENT.H2}
-          variant={TEXT_VARIANT.SECTION}
-          tone={TEXT_TONE.MUTED}
-        >
-          {title}
-        </Text>
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-          {count}
-        </Text>
-      </header>
-      {children}
+      <GroupHeader
+        heading={label === undefined ? GROUP_HEADING.NONE : GROUP_HEADING.H2}
+        label={title}
+        count={count === undefined ? undefined : { value: count }}
+      >
+        {children}
+      </GroupHeader>
     </section>
   );
 }
 
-/** A section still being read: blocks where its name and count will stand, over the placeholder rows in `children`. */
+/** A section still being read: a block where its name will stand, over the placeholder rows in `children`. */
 export function SectionSkeleton({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <PersonSectionFrame
-      title={<Skeleton width={SKELETON_SECTION.NAME} />}
-      count={<Skeleton width={SKELETON_SECTION.COUNT} />}
-    >
+    <PersonSectionFrame title={<Skeleton width={SKELETON_SECTION_NAME} />}>
       {children}
     </PersonSectionFrame>
   );
@@ -188,19 +147,19 @@ export function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
 }
 
 /**
- * A person's page while its chunk loads: its frame, their name where the
- * place that opened it knew it, and their head as blocks, as the page
- * stands it until the members are read.
+ * A person's page while its chunk loads: its header, their name where the
+ * place that opened it knew it, and their face and who they are as blocks,
+ * as the page stands it until the members are read.
  */
 export function PersonPageSkeleton({ name }: { name: string | undefined }): React.JSX.Element {
   return (
     <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label={name ?? PROFILE}
-      toolbar={<PersonToolbar name={name ?? <PersonNameSkeleton />} words={name} />}
+      frame={PAGE_FRAME.PAGE}
+      title={<PersonTitleSkeleton name={name} />}
+      description={<PersonLineSkeleton />}
     >
       <PersonTop>
-        <PersonHeadSkeleton />
+        <PersonReadingSkeleton />
       </PersonTop>
     </DetailPage>
   );

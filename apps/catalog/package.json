@@ -1,6 +1,6 @@
 {
   "name": "@luke/catalog",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "description": "Every shared component of @luke/ui, drawn at both profiles in both themes on synthetic data; built, never deployed",
@@ -17,6 +17,7 @@
     "@luke/features": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/ui": "workspace:*",
+    "@luke/voice": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

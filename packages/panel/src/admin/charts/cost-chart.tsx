@@ -3,7 +3,7 @@
  */
 
 import { type AdminCostDay, COST_SOURCE, type CostSource } from "@luke/features/admin-cost-wire";
-import { formatCompact } from "@luke/ui/admin-format";
+import { formatCompact } from "@luke/features/number-format";
 import type { ChartConfig } from "@luke/ui/chart";
 import { DailyBars } from "@luke/ui/daily-bars";
 import { seriesHasNoData } from "@luke/ui/daily-series";

@@ -25,6 +25,7 @@ import {
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -33,7 +34,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { OpenSettingsProvider } from "../open-settings.js";
+import { OPEN_SETTINGS_LABEL, OpenSettingsProvider } from "../open-settings.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -129,7 +130,7 @@ async function mount(
   answer: string | undefined = undefined,
   preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
-  issues?: readonly LinearIssueSummary[],
+  issues?: readonly LinearIssueSummary[] | Error,
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
   github?: (repository: string, ask: RepositoryIssuesAsk) => GitHubRepositoryIssuesAnswer,
 ) {
@@ -180,16 +181,21 @@ async function mount(
           issues === undefined
             ? undefined
             : (ask?: LinearIssuesAsk) => {
+                // An error stands for a Linear that cannot be read, and a find that throws for one whose search cannot.
+                if (issues instanceof Error) return Promise.reject(issues);
                 if (ask === undefined) return Promise.resolve(issues);
                 asks.push(ask);
-                return Promise.resolve(finds(ask));
+                return new Promise<readonly LinearIssueSummary[]>((resolve) => resolve(finds(ask)));
               },
         githubIssuesIn: () =>
           github === undefined
             ? undefined
             : (repository: string, ask: RepositoryIssuesAsk) => {
                 githubAsks.push([repository, ask]);
-                return Promise.resolve(github(repository, ask));
+                // A read that throws stands for a GitHub that cannot be read.
+                return new Promise<GitHubRepositoryIssuesAnswer>((resolve) =>
+                  resolve(github(repository, ask)),
+                );
               },
       },
     });
@@ -296,7 +302,7 @@ test("the card holds the composer with its words focused, the repository chip in
   const card = await mount();
   const controls = card.controls();
   const head = card.dialog()?.querySelector(".new-task-head");
-  const foot = card.dialog()?.querySelector(".prompt-input-footer");
+  const foot = card.dialog()?.querySelector(".luke-composer-foot");
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the change for a coding agent…");
@@ -761,6 +767,84 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   );
 });
 
+/** A read answering that the App is installed and gives Luke no repository. */
+const NOTHING_REACHED = () =>
+  Promise.resolve({
+    repositories: {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  });
+
+/** A workspace's people as the host answers them: two to ask, a third owner past the names a note gives, and a plain member. */
+const PEOPLE: readonly WorkspaceMember[] = [
+  { userId: "u-dean", name: "Dean", email: "dean@acme.test", role: WORKSPACE_ROLE.OWNER },
+  { userId: "u-charles", name: "Charles", email: "charles@acme.test", role: WORKSPACE_ROLE.ADMIN },
+  { userId: "u-sam", name: "Sam", email: "sam@acme.test", role: WORKSPACE_ROLE.MEMBER },
+];
+
+test("a member of a workspace with no GitHub connected is told which owners and admins to ask, and no member is named", async () => {
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(PEOPLE) });
+  await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    workspaceName: "Acme",
+    manages: false,
+    read: NOWHERE_INSTALLED,
+  });
+
+  await openChip();
+  await settle();
+
+  assert.deepEqual(menuNotes(), ["Ask Dean or Charles to connect GitHub for Acme."]);
+});
+
+test("a member of a workspace whose GitHub reaches no repository is told so and which owners and admins to ask, with no Open Settings", async () => {
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(PEOPLE) });
+  await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    manages: false,
+    connected: true,
+    read: NOTHING_REACHED,
+  });
+
+  const buttons = await openChip();
+  await settle();
+
+  assert.deepEqual(menuNotes(), [
+    "Luke can't see any repository yet.",
+    "Ask Dean or Charles to add a repository to Luke on GitHub.",
+  ]);
+  assert.equal(
+    buttons.some((button) => button.textContent === OPEN_SETTINGS_LABEL),
+    false,
+  );
+});
+
+test("an owner of a workspace whose GitHub reaches no repository is offered Open Settings at the workspace's GitHub", async () => {
+  const dialog = await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    connected: true,
+    read: NOTHING_REACHED,
+  });
+
+  const buttons = await openChip();
+  const notes = menuNotes();
+  const open =
+    buttons.find((button) => button.textContent === OPEN_SETTINGS_LABEL) ??
+    assert.fail("the menu offers to open Settings");
+  act(() => open.click());
+
+  assert.deepEqual(notes, ["Luke can't see any repository yet."]);
+  assert.deepEqual(dialog.links, [
+    {
+      page: SETTINGS_VIEW.WORKSPACE,
+      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+      workspaceId: "workspace-acme",
+    },
+  ]);
+});
+
 /** The notes the chip's menu draws, and whether it offers Open Settings, for a workspace with a GitHub connected whose read finds none installed. */
 async function lapsedMenu(manages: boolean) {
   await mount(undefined, undefined, {
@@ -1018,7 +1102,7 @@ test("the Issue chip stands at the right end of the head row, after the reposito
   const head = connected.dialog()?.querySelector(".new-task-head");
   const placed = {
     last: head?.lastElementChild?.querySelector(ISSUE_CHIP) !== null,
-    inFoot: connected.dialog()?.querySelector(`.prompt-input-footer ${ISSUE_CHIP}`) !== null,
+    inFoot: connected.dialog()?.querySelector(`.luke-composer-foot ${ISSUE_CHIP}`) !== null,
   };
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -1491,4 +1575,54 @@ test("for an automation's agent files alone hold Start, since the words are the 
   card.type("Post the notes every Friday.");
   await settle();
   assert.equal(card.startButton().disabled, false, "words let it start");
+});
+
+/** What the open Issue menu says after its rows, and the press that reads again. */
+function issueNote(): { words: string; retry: HTMLButtonElement | null } {
+  const note = document.querySelector('[role="listbox"] .luke-combobox-note');
+  return {
+    words: note?.textContent ?? "",
+    retry:
+      [...(note?.querySelectorAll("button") ?? [])].find((button) =>
+        (button.textContent ?? "").includes("Retry"),
+      ) ?? null,
+  };
+}
+
+test("a GitHub read that failed says the issues could not be read, with Retry, never that none match, keeps Linear's, and Retry reads again", async () => {
+  let reachable = false;
+  const github = (repository: string, ask: RepositoryIssuesAsk): GitHubRepositoryIssuesAnswer => {
+    if (!reachable) throw new Error("offline");
+    return acmeGitHub(repository, ask);
+  };
+  await mount(undefined, undefined, {}, ISSUES, () => [], github);
+
+  await openLinear();
+  const failed = issueNote();
+
+  assert.match(failed.words, /GitHub's issues could not be read\./u);
+  assert.doesNotMatch(document.body.textContent ?? "", /No open issues match|No issues found/u);
+  assert.deepEqual(
+    issueRows().rows.map((row) => row.replace(/[A-Z]+-\d+.*$/u, "")),
+    ["Restack the deploy queue", "Add support for stacked PRs", "Rotate the deploy key"],
+    "Linear's issues stand beside the failure",
+  );
+
+  reachable = true;
+  act(() => (failed.retry ?? assert.fail("no Retry")).click());
+  await settle();
+
+  assert.equal(issueNote().words, "");
+  assert.equal(issueRows().rows[0]?.split("#")[0], "Login fails on Safari 18");
+});
+
+test("a Linear read that failed says its issues could not be read, with Retry, and not that no issues were found", async () => {
+  await mount(undefined, undefined, {}, new Error("offline"));
+
+  await openLinear();
+
+  assert.match(issueNote().words, /Linear's issues could not be read\./u);
+  assert.notEqual(issueNote().retry, null);
+  assert.deepEqual(issueRows().rows, []);
+  assert.doesNotMatch(document.body.textContent ?? "", /No issues found/u);
 });

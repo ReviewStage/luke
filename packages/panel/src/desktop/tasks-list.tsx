@@ -8,16 +8,25 @@ import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-s
 import {
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
+  TASK_STATUS,
   TASK_STATUS_ORDER,
   type TaskStanding,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import {
+  countWords,
+  noneYetWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   AVATAR_SIZE,
   BUTTON_SIZE,
-  BUTTON_VARIANT,
   CARD_PRESS_SELECTOR,
   CardPress,
   CHIP_LOOK,
@@ -25,15 +34,16 @@ import {
   CollectionPage,
   type CollectionState,
   cssCustomProperties,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FoldChevronIcon,
-  FoldingButton,
   GAP,
-  IconButton,
+  GROUP_HEAD,
+  GROUP_ROWS,
+  GROUP_SURFACE,
+  GroupHeader,
   InlineEdit,
+  joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
   motionKey,
@@ -41,7 +51,11 @@ import {
   OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
+  type SelectionAct,
+  SelectionBar,
+  SelectionRegion,
   Stack,
+  selectionMenu,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -49,19 +63,24 @@ import {
   TEXT_VARIANT,
   Text,
   Time,
-  Tooltip,
   useLeaving,
   useMinute,
+  useRovingKeys,
+  useRowMenu,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
+import { GLYPH } from "@luke/ui/icons";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
   isAgentEntry,
+  placeAllWrites,
   placeWrites,
+  restoreWrites,
   sectionEntries,
   sectionOrder,
   sectionTaskIds,
+  unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
 import { RENAME_FAILED_NOTE, TASK_MARK } from "@luke/ui/tasks-model";
@@ -88,11 +107,10 @@ import {
   PinIcon,
   UserXIcon,
 } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
-import { readKept, writeKept } from "../kept-storage.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -106,9 +124,14 @@ import {
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { undoToast, useToast } from "../toast.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
+import { keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
+import { rowMenu } from "./action-menu.js";
 import { sectionGlyph } from "./section-icon-picker.js";
-import { useTaskMenu } from "./task-actions.js";
+import { groupCount, sidebarFold } from "./sidebar-fold.js";
+import { useTaskMenuItems } from "./task-actions.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -148,16 +171,15 @@ import { useRowDrag } from "./use-row-drag.js";
  *
  * A row is changed where it stands, as a Board card is
  * (`task-row-parts.tsx`): its priority, status, and assignee are chips
- * dropping the menu that changes them, and its ⋯, shown while the row is in hand, and a
- * right-click drop the task's own menu, whose Rename makes its name its
- * field. A press anywhere else on the row opens the task. The row hangs no
- * card for the whole task, which would say what its columns already do;
- * its parts hang their own instead (`task-part-cards.tsx`): its assignee's
- * face and its creator's hang theirs, a pull request's mark the pull
- * request, the count after it those it counts, and the working mark the
- * task's agents.
+ * dropping the menu that changes them, and the task's own menu, whose Rename makes
+ * its name its field, which its ⋯, shown while the row is in hand, a right-click, and
+ * the menu key open alike (`useRowMenu`). A press anywhere else on the row opens the
+ * task. The row hangs no card for the whole task, which would say what its columns
+ * already do; its parts hang their own instead (`task-part-cards.tsx`): its assignee's
+ * face and its creator's hang theirs, a pull request's mark the pull request, the
+ * count after it those it counts, and the working mark the task's agents.
  *
- * A group's head folds it, kept on this Mac (`LIST_FOLDS_KEY`), its count
+ * A group's head folds it, kept on this Mac (`KEPT.FOLDS`), its count
  * standing beside its name either way. A row is dragged by its press
  * (`use-row-drag.ts`): within Pinned or a section to a new place there; onto
  * another status's, priority's, or assignee's group, which sends it that
@@ -172,16 +194,23 @@ import { useRowDrag } from "./use-row-drag.js";
  * most columns beside a name, nor a drag beside its scrolling,
  * so it draws only a row's chips, its name, and its time, its rows changed
  * by their chips and menus, the rest on its card.
+ *
+ * Rows are chosen together as a Mac's list chooses them (`SelectionRegion`):
+ * ⌘-click one in or out, ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn,
+ * and Esc none, across every group, while a plain press still opens the
+ * task. While any is chosen, a bar floating at the foot of the page acts on
+ * them all at once: Mark done, Set status, and Move to section, each
+ * answered by one toast whose Undo puts every task back where it stood.
  */
 
 /** What the page is called, to a screen reader. */
 const TASKS = "Tasks";
 
 /** What the page is read as while the tasks are. */
-const READING_LINE = "Reading tasks";
+const READING_LINE = readingWords(TERM.TASK.many);
 
 /** What the page says where the tasks could not be read. */
-const UNREAD_LINE = "Your tasks could not be read.";
+const UNREAD_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What the List says where the filter and the view leave no task standing. */
 const NONE_STANDING = "No tasks match this view";
@@ -193,11 +222,16 @@ const DRAG_HERE = "Drag tasks here";
 /** What a group of pinned tasks is called. */
 const PINNED = "Pinned";
 
+/** What the selection bar's acts say. */
+const SELECTION_ACT = {
+  MARK_DONE: "Mark done",
+  SET_STATUS: "Set status",
+  MOVE_TO_SECTION: "Move to section",
+  NO_SECTION: "Remove from section",
+} as const;
+
 /** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
 const ROW_HANDLE = CARD_PRESS_SELECTOR;
-
-/** Where the folded groups are kept in the renderer's storage. */
-const LIST_FOLDS_KEY = "luke.tasksListFolds";
 
 /** The properties a phone's List has no room for beside a name: all but the chips and the time. */
 const NARROW_LEFT_OUT: readonly TaskProperty[] = [
@@ -249,6 +283,11 @@ const storedFolds = Schema.fromJsonString(
 );
 
 type ListFolds = typeof storedFolds.Type;
+
+/** The List's folded groups, kept on this Mac. */
+const KEPT = {
+  FOLDS: keptKey("luke.tasksListFolds", storedFolds),
+} as const;
 
 /** A set of folded values with one folded or opened. */
 function flipped<T>(held: readonly T[] | undefined, value: T): readonly T[] {
@@ -305,14 +344,10 @@ function useListFolds(): {
   folded: (head: TasksGroupHead) => boolean;
   toggle: (head: TasksGroupHead) => void;
 } {
-  const [folds, setFolds] = useState<ListFolds>(() => readKept(LIST_FOLDS_KEY, storedFolds, {}));
+  const [folds, keep] = useKept(KEPT.FOLDS, {});
   return {
     folded: (head) => foldedIn(folds, head),
-    toggle: (head) => {
-      const next = toggledIn(folds, head);
-      setFolds(next);
-      writeKept(LIST_FOLDS_KEY, storedFolds, next);
-    },
+    toggle: (head) => keep(toggledIn(folds, head)),
   };
 }
 
@@ -468,6 +503,53 @@ function leaveSection(tasks: TasksControl, taskId: string): TaskSectionWrite[] {
     : [];
 }
 
+/** What the toast says once tasks were moved into the section titled, or out of every section where there is none. */
+function movedNote(count: number, title: string | null): string {
+  if (title === null) {
+    return count === 1
+      ? "Removed from its section"
+      : `${countWords(count, TERM.TASK)} removed from their sections`;
+  }
+  return count === 1 ? `Moved to ${title}` : `${countWords(count, TERM.TASK)} moved to ${title}`;
+}
+
+/**
+ * Moves tasks into a section, on top of it in their order, or out of every
+ * section where `sectionId` is null, and answers with one toast whose Undo
+ * puts each back in the section it stood in, under the rows it stood under,
+ * or in none. A task already where it is sent is left as it stands, and the
+ * Undo leaves one moved again since where it was moved, reading the tab as
+ * it stands when Undo is pressed (`latest`).
+ */
+function moveToSection(
+  tasks: TasksControl,
+  latest: () => TasksControl,
+  taskIds: readonly string[],
+  sectionId: string | null,
+  toast: (notice: ReturnType<typeof undoToast>) => void,
+): void {
+  const before = tasks.taskSections;
+  const entries = sectionEntries(before);
+  const moving = taskIds.filter((taskId) => (entries.get(taskId)?.sectionId ?? null) !== sectionId);
+  if (moving.length === 0) return;
+  const members = moving.map((id) => ({ agent: false, id }));
+  tasks.onWriteSections(
+    sectionId === null
+      ? unplaceAllWrites(members)
+      : placeAllWrites(before, members, sectionId, Date.now()),
+  );
+  const title =
+    sectionId === null
+      ? null
+      : (before.sections.find((section) => section.id === sectionId)?.title ?? "");
+  const undo = () => {
+    const now = latest();
+    const writes = restoreWrites(before, now.taskSections, members, sectionId, Date.now());
+    if (writes.length > 0) now.onWriteSections(writes);
+  };
+  toast(undoToast(movedNote(moving.length, title), undo));
+}
+
 /** A section's entries for the tasks its group draws, in its own order; its agents, which the List draws not, left out. */
 function drawnEntries(tasks: TasksControl, group: TasksGroup, sectionId: string) {
   const drawn = new Set(group.tasks.map((task) => task.id));
@@ -572,7 +654,9 @@ function listDrops(
  * its repository, the chip that changes its assignee, empty where its group
  * already says who, its creator's face, its agents' work, when it last
  * moved, and its ⋯. Renamed from its menu, its name is its field until the edit
- * ends.
+ * ends. Chosen among several, its ⋯, right-click, and menu key offer the
+ * selection bar's acts on every task chosen, as a Mac's list does; one not
+ * chosen keeps its own menu.
  */
 function TaskListRow({
   tasks,
@@ -583,6 +667,7 @@ function TaskListRow({
   now,
   properties,
   assigneeHeld,
+  chosen,
   onOpen,
   onStanding,
 }: {
@@ -597,18 +682,36 @@ function TaskListRow({
   properties: readonly TaskProperty[];
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
   assigneeHeld: boolean;
+  /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
+  chosen: ChosenTasks | undefined;
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
-  const actions = useTaskMenu(tasks, task.id, task.name, {
+  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
+  const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
   const press = useRef<HTMLButtonElement | null>(null);
+  const nameId = useId();
+  const own = { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer };
+  const menu = useRowMenu(
+    rename.editing
+      ? undefined
+      : chosen === undefined
+        ? own
+        : {
+            thing: own.thing,
+            groups: selectionMenu(chosen.acts),
+            heading: countWords(chosen.count, TERM.TASK),
+            shown: tasks.shown,
+          },
+    { disabled: actions.deletion.busy, opener: press },
+  );
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
   const drawn = (property: TaskProperty) => properties.includes(property);
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
@@ -631,7 +734,7 @@ function TaskListRow({
       className="tasks-list-row"
       data-task-id={task.id}
       {...motionKey(task.id)}
-      data-menu-open={actions.open ? "true" : undefined}
+      {...menu.props}
       data-editing={rename.editing ? "true" : undefined}
     >
       <span className="tasks-list-cell" data-cell="name">
@@ -652,14 +755,14 @@ function TaskListRow({
           <CardPress
             ref={press}
             disabled={actions.deletion.busy}
+            selectKey={task.id}
+            roving
             onPress={() => {
-              actions.close(false);
+              menu.close(false);
               onOpen();
             }}
-            onKeyDown={actions.keyMenu}
-            contextMenu={actions.contextMenu(press)}
           >
-            <span className="tasks-list-press">
+            <span id={nameId} className="tasks-list-press">
               <OneLine>{task.name}</OneLine>
               {spoken === "" ? null : (
                 <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
@@ -667,11 +770,7 @@ function TaskListRow({
             </span>
           </CardPress>
         )}
-        {rename.refused ? (
-          <span className="tasks-list-note" role="alert">
-            {RENAME_FAILED_NOTE}
-          </span>
-        ) : null}
+        {rename.refused ? <span className="tasks-list-note">{RENAME_FAILED_NOTE}</span> : null}
       </span>
       {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}
       {cell(
@@ -736,17 +835,9 @@ function TaskListRow({
         <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
       )}
       <span className="tasks-list-cell" data-cell="more">
-        <Tooltip label="Task actions">
-          <IconButton
-            icon={<EllipsisIcon />}
-            label={`Actions for ${task.name}`}
-            size={BUTTON_SIZE.COMPACT}
-            disabled={actions.deletion.busy}
-            {...actions.trigger()}
-          />
-        </Tooltip>
+        {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>
-      {actions.menu}
+      {menu.popup}
       {actions.dialog}
     </li>
   );
@@ -788,6 +879,36 @@ function TasksListGroup({
   });
   const zone = zoneOf(group.head);
   const titled = group.head.kind !== TASKS_GROUP.ALL;
+  const rows =
+    drawn.length === 0 ? (
+      group.older === undefined ? (
+        <Text
+          variant={TEXT_VARIANT.CAPTION}
+          tone={TEXT_TONE.MUTED}
+          className="tasks-list-group-empty"
+        >
+          {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
+        </Text>
+      ) : null
+    ) : (
+      <Stack
+        as={LAYOUT_ELEMENT.UL}
+        gap={GAP.NONE}
+        moves
+        className="tasks-list-rows"
+        aria-label={head.name}
+        data-row-drop-rows={ordered(group.head) ? "" : undefined}
+        onPointerDown={draggable ? drag : undefined}
+      >
+        {drawn.map(({ value }) => row(value))}
+      </Stack>
+    );
+  const body = (
+    <>
+      {rows}
+      <OlderCompleted older={group.older} onShow={onShowOlder} />
+    </>
+  );
   return (
     <section
       className="tasks-list-group"
@@ -795,58 +916,79 @@ function TasksListGroup({
       data-row-drop={draggable ? zone : undefined}
       data-folded={folded ? "true" : undefined}
     >
-      {/* Note that one run of every task, grouped by nothing, needs no head of its own. */}
+      {/* Note that one run of every task, grouped by nothing, needs no head of its own, and no fold. */}
       {titled ? (
-        <h2 className="tasks-list-head">
-          <FoldingButton
-            variant={BUTTON_VARIANT.ROW}
-            label={head.name}
-            aria-expanded={!folded}
-            onClick={onToggle}
-            trailing={group.tasks.length}
-            icon={
-              <>
-                <span
-                  className="tasks-list-chevron"
-                  data-open={folded ? undefined : "true"}
-                  aria-hidden="true"
-                >
-                  <FoldChevronIcon />
-                </span>
-                <span className="tasks-list-glyph" aria-hidden="true">
-                  {head.icon}
-                </span>
-              </>
-            }
-          />
-        </h2>
-      ) : null}
-      {folded ? null : drawn.length === 0 ? (
-        group.older === undefined ? (
-          <Text
-            variant={TEXT_VARIANT.CAPTION}
-            tone={TEXT_TONE.MUTED}
-            className="tasks-list-group-empty"
-          >
-            {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
-          </Text>
-        ) : null
-      ) : (
-        <Stack
-          as={LAYOUT_ELEMENT.UL}
-          gap={GAP.NONE}
-          moves
-          className="tasks-list-rows"
-          aria-label={head.name}
-          data-row-drop-rows={ordered(group.head) ? "" : undefined}
-          onPointerDown={draggable ? drag : undefined}
+        <GroupHeader
+          label={head.name}
+          glyph={head.icon}
+          fold={sidebarFold(folded, onToggle)}
+          count={groupCount(group.tasks.length)}
+          surface={GROUP_SURFACE.WIDE}
+          head={GROUP_HEAD.STICKS}
+          rows={GROUP_ROWS.SUBGRID}
         >
-          {drawn.map(({ value }) => row(value))}
-        </Stack>
+          {body}
+        </GroupHeader>
+      ) : (
+        body
       )}
-      {folded ? null : <OlderCompleted older={group.older} onShow={onShowOlder} />}
     </section>
   );
+}
+
+/** A selection of several tasks as a chosen row's menu reads it: how many, and the bar's acts on them all. */
+interface ChosenTasks {
+  readonly count: number;
+  readonly acts: readonly SelectionAct[];
+}
+
+/**
+ * What the selection bar offers the tasks chosen: Mark done; Set status,
+ * each status by its mark; and, while the account keeps sections in the
+ * workspace, Move to section, each by its glyph, and out of every section.
+ * Each acts on them all at once, then lets the selection go.
+ */
+function selectionActs(
+  tasks: TasksControl,
+  latest: () => TasksControl,
+  taskIds: readonly string[],
+  toast: (notice: ReturnType<typeof undoToast>) => void,
+  onActed: () => void,
+): SelectionAct[] {
+  const acted = (act: () => void) => () => {
+    act();
+    onActed();
+  };
+  const setStatus = SELECTION_ACT.SET_STATUS;
+  const statuses = TASK_STATUS_ORDER.map((status) => ({
+    label: TASK_STATUS_WORDS[status],
+    icon: <TaskStatusMark status={status} />,
+    onSelect: acted(() => tasks.onSettleTasks(taskIds, status)),
+  }));
+  const workspaceId = tasks.workspace?.id;
+  const sections =
+    workspaceId === undefined ? [] : workspaceSections(tasks.taskSections, workspaceId);
+  const move = (sectionId: string | null) =>
+    acted(() => moveToSection(tasks, latest, taskIds, sectionId, toast));
+  const sectionMenu = [
+    sections.map((section) => ({
+      label: section.title,
+      icon: sectionGlyph(section.icon) ?? <GLYPH.FOLDER />,
+      onSelect: move(section.id),
+    })),
+    [{ label: SELECTION_ACT.NO_SECTION, onSelect: move(null) }],
+  ];
+  return [
+    {
+      label: SELECTION_ACT.MARK_DONE,
+      icon: <GLYPH.DONE />,
+      onAct: acted(() => tasks.onSettleTasks(taskIds, TASK_STATUS.DONE)),
+    },
+    { label: setStatus, icon: <TaskStatusMark status={TASK_STATUS.TODO} />, menu: [statuses] },
+    ...(sections.length === 0
+      ? []
+      : [{ label: SELECTION_ACT.MOVE_TO_SECTION, icon: <GLYPH.MOVE />, menu: sectionMenu }]),
+  ];
 }
 
 /** The grid's columns for the properties drawn, in the order a row draws them: those before the name, the name, those after it, and the ⋯. */
@@ -918,69 +1060,107 @@ export function TasksList({
   const workspaceName = tasks.workspace?.name ?? "";
   const drops = listDrops(tasks, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
+  // The rows of every group are one Tab stop that ↑↓ walk, a folded group's passed by, as they are not drawn.
+  const roving = useRovingKeys<HTMLDivElement>();
+  const listRef = useMemo(() => joinRefs(list, roving.ref), [roving.ref]);
+  const toast = useToast();
+  const regionId = useId();
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());
+  // Note that only rows drawn stay chosen, so a task the filter or a fold took away is never acted on.
+  const drawnIds = new Set(
+    groups.flatMap((group) => (folds.folded(group.head) ? [] : group.tasks.map(taskIdOf))),
+  );
+  const selected: ReadonlySet<string> = new Set([...chosen].filter((id) => drawnIds.has(id)));
+  // Note that a row no longer drawn leaves the selection for good, so reopening its group chooses nothing anew.
+  if (selected.size !== chosen.size) setChosen(selected);
+  const clear = () => setChosen(new Set());
+  // The tab as it stands, which an Undo pressed renders after its act reads.
+  const latest = useRef(tasks);
+  latest.current = tasks;
+  const acts = selectionActs(tasks, () => latest.current, [...selected], toast, clear);
+  // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
+  const several: ChosenTasks | undefined =
+    selected.size > 1 ? { count: selected.size, acts } : undefined;
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
       width={PAGE_WIDTH.FULL}
       label={TASKS}
       toolbar={frame.toolbar}
+      scrollRef={frame.scroll}
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<ListTodoIcon />}>No tasks yet</EmptyState>}
+      empty={<EmptyState icon={<ListTodoIcon />}>{noneYetWords(TERM.TASK)}</EmptyState>}
       error={
         <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
         </ErrorState>
       }
     >
-      <ListMotion root={list}>
-        <div
-          ref={list}
-          className="tasks-list"
-          data-row-drop-scope=""
-          {...motionRows()}
-          style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
-        >
-          {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
-          {groups.every((group) => group.tasks.length === 0) ? (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-list-none">
-              {NONE_STANDING}
-            </Text>
-          ) : null}
-          {groups.map((group) => (
-            <TasksListGroup
-              key={groupKey(group.head)}
-              group={group}
-              head={groupHead(group.head, tasks, repositories, people)}
-              folded={folds.folded(group.head)}
-              onToggle={() => folds.toggle(group.head)}
-              drops={drops}
-              draggable={!narrow}
-              onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
-              row={(task) => (
-                <TaskListRow
-                  key={task.id}
-                  tasks={tasks}
-                  task={task}
-                  workspaceName={workspaceName}
-                  repositoryName={
-                    task.repository === null
-                      ? NO_REPOSITORY
-                      : repositoryLabel(task.repository, repositories)
-                  }
-                  waiting={waitingOn.get(task.id) ?? 0}
-                  now={now}
-                  properties={properties}
-                  assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
-                  onOpen={() => tasks.onSelect(task.id)}
-                  onStanding={(standing) => setStanding(task, standing)}
-                />
-              )}
-            />
-          ))}
-        </div>
-      </ListMotion>
+      {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
+      {tasks.listFailed && listed.length > 0 ? (
+        <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
+      ) : null}
+      <SelectionRegion id={regionId} selection={{ selected, onChange: setChosen }}>
+        <ListMotion root={list}>
+          <div
+            {...roving}
+            ref={listRef}
+            className="tasks-list"
+            data-row-drop-scope=""
+            {...motionRows()}
+            style={cssCustomProperties({ "--tasks-list-columns": gridColumns(properties) })}
+          >
+            {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
+            {groups.every((group) => group.tasks.length === 0) ? (
+              <Text
+                variant={TEXT_VARIANT.CAPTION}
+                tone={TEXT_TONE.MUTED}
+                className="tasks-list-none"
+              >
+                {NONE_STANDING}
+              </Text>
+            ) : null}
+            {groups.map((group) => (
+              <TasksListGroup
+                key={groupKey(group.head)}
+                group={group}
+                head={groupHead(group.head, tasks, repositories, people)}
+                folded={folds.folded(group.head)}
+                onToggle={() => folds.toggle(group.head)}
+                drops={drops}
+                draggable={!narrow}
+                onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
+                row={(task) => (
+                  <TaskListRow
+                    key={task.id}
+                    tasks={tasks}
+                    task={task}
+                    workspaceName={workspaceName}
+                    repositoryName={
+                      task.repository === null
+                        ? NO_REPOSITORY
+                        : repositoryLabel(task.repository, repositories)
+                    }
+                    waiting={waitingOn.get(task.id) ?? 0}
+                    now={now}
+                    properties={properties}
+                    assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
+                    chosen={several !== undefined && selected.has(task.id) ? several : undefined}
+                    onOpen={() => tasks.onSelect(task.id)}
+                    onStanding={(standing) => setStanding(task, standing)}
+                  />
+                )}
+              />
+            ))}
+          </div>
+        </ListMotion>
+      </SelectionRegion>
+      {/* Note that the bar floats at the page's foot rather than over the rows, so choosing a row moves none under the pointer. */}
+      <div className="tasks-list-selection">
+        <SelectionBar count={selected.size} acts={acts} onClear={clear} controls={regionId} />
+      </div>
     </CollectionPage>
   );
 }

@@ -3,8 +3,29 @@ import type { ESTree } from "@oxlint/plugins";
 /**
  * jsx.ts -- what the design system's guards read off a JSX element: the
  * intrinsic tag it renders, an attribute's name, and the literal strings an
- * attribute's value can be.
+ * attribute's value can be, and off a handler's body: whether a value is a
+ * node or a function, and the name a call is made by.
  */
+
+/** Whether `value` is an AST node, which is what a walk descends into. */
+export function isNode(value: unknown): value is ESTree.Node {
+  return typeof value === "object" && value !== null && "type" in value;
+}
+
+export function isFunction(node: ESTree.Node): boolean {
+  return (
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "FunctionExpression" ||
+    node.type === "FunctionDeclaration"
+  );
+}
+
+/** The name a call is made by: `press` in `press(x)` and in `act.press(x)`. */
+export function calleeName(callee: ESTree.Node): string | undefined {
+  if (callee.type === "Identifier") return callee.name;
+  if (callee.type !== "MemberExpression" || callee.computed) return undefined;
+  return callee.property.type === "Identifier" ? callee.property.name : undefined;
+}
 
 /** The name a member tag hangs from: `motion` for `motion.button`. */
 function rootOf(name: ESTree.JSXMemberExpression): string {

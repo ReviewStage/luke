@@ -1,37 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import {
-  INBOX_BOUNDS,
-  INBOX_REPLY,
-  INBOX_RESPONSE,
-  INBOX_STATUS,
-  type InboxItem,
-  type InboxMessage,
-  knownResponse,
-} from "@luke/features/inbox-wire";
-import {
-  BUTTON_TYPE,
-  BUTTON_VARIANT,
-  Button,
-  ErrorState,
-  SUBMIT_STATE,
-  TEXT_TONE,
-  Text,
-  Tooltip,
-} from "@luke/ui";
+import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
+import { pasteCutWords } from "@luke/features/words";
+import type { ShortcutChord } from "@luke/settings/shortcuts";
+import { ComposerFoot, type ComposerNote, STATUS_TONE, TEXT_AREA_SUBMIT } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input.js";
+import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { imageFiles } from "../feedback-images.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import {
   COMPOSER_INPUT,
@@ -39,24 +17,22 @@ import {
   type ComposerQuote,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
 import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
+import { askSendChord } from "./inbox-ask-controls.js";
 import {
   acknowledgedOnOpen,
   awaitsNod,
   type InboxDraft,
-  type InboxMissing,
-  inboxMessageOf,
-  inboxMissing,
   inboxNoteReading,
-  inboxReply,
   inboxThreadSend,
+  knownAsk,
+  openAskOf,
 } from "./inbox-model.js";
 import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -80,8 +56,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * While a question waits, its controls (`inbox-pane.tsx`) are the card's
  * body, with no card, border, or head of their own, since the agent's
  * message says what it asks: an ask's options, steps and presses, or
- * fields, or an older item's choice, cards, or fields, each numbered and
- * pressed as before. Under them stands the note line, "Add a note", a
+ * fields, each numbered and pressed as before. Under them stands the note line, "Add a note", a
  * full-width line that grows as it is written, and under it the foot's row
  * of presses, laid as the agent's and the chat's boxes lay theirs. Where no
  * controls stand, an ask of words alone, a notice, or a settled item, the
@@ -93,10 +68,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * until the box holds something to send, a pick, a tick, a field filled,
  * words, or files, and that is all it says. Enter sends what Send would,
  * Shift+Enter is a new line, and Escape leaves the box, as in the agent's
- * box; Enter on an older item's answer that lacks something sends nothing
- * and takes the keyboard there. The one exception is a notice waiting on
- * the reader's nod, where Send reads "Got it" while the box is empty,
- * which settles it without messaging the agent, and is the round Send again
+ * box. The one exception is a notice waiting on the reader's nod, where
+ * Send reads "Got it" while the box is empty, which settles it without
+ * messaging the agent (`use-task-inbox.ts`'s `onAcknowledge`), and is the
+ * round Send again
  * once a word or a file is in. A notice opening acknowledges
  * (`inbox-model.ts`'s `acknowledgedOnOpen`, `use-inbox-read-marks.ts`'s
  * `useNodOnOpen`) offers no Got it, since opening it was the nod. Unlike
@@ -104,24 +79,24 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * because K and J step the list and the number keys pick while the caret
  * is elsewhere.
  *
- * Files go with an answer as they go with a message (`attached-files.ts`):
+ * Files go with a reply as they go with a message (`use-attached-files.ts`):
  * the + at the foot's left opens the system's file picker, an image pasted
  * into the box is taken, and files dropped on the card are, each drawn as a
- * chip over the foot with its way off; a file that cannot come says why
- * under the card. Files stand for the developer's own words where they
- * wrote none, and while they are read the answer waits for them.
+ * chip over the foot's bar with its way off; a file that cannot come says
+ * why under it. Files stand for the developer's own words where they
+ * wrote none, and while they are read the reply waits for them.
  *
  * Words selected in the agent's part of the thread and answered with Reply
  * are laid into the box as a quote block where the caret stands, the box
  * then taking the caret, as the agent's own box takes them
  * (`reply-to-selection.tsx`); a quote goes out as a Markdown blockquote,
- * part of the answer or the message like any other words. The box stands
- * Reply itself, over the thread it is handed, and only while its editor is
- * loaded and takes a quote, never while an answer is out or a dictation
- * holds it, since a press lets the selection go.
+ * part of the reply like any other words. The box stands Reply itself,
+ * over the thread it is handed, and only while its editor is loaded and
+ * takes a quote, never while a send is out or a dictation holds it, since
+ * a press lets the selection go.
  *
- * Why an answer did not go, a file did not come, or a dictation left
- * nothing, is said under the card. A send refused because the agent is
+ * Why a reply did not go, a file did not come, or a dictation left
+ * nothing, is said under the foot's bar. A send refused because the agent is
  * archived says so, with Unarchive after it, which brings the agent back and
  * lets the note go, so the words kept in the box are sent again by a press.
  * Once the item is settled, answered or taken back, the same box writes a
@@ -140,14 +115,14 @@ const NOTE_PLACEHOLDER = "Add a note";
 /** What the box asks for where no controls stand over its line: an ask of words alone, a notice, or a settled item, whose words are the reply. */
 const REPLY_PLACEHOLDER = "Reply";
 
-/** What the card says in the box's place where the item asks something this build does not know. */
-const NEWER_LUKE = "Answer this in a newer Luke.";
-
 /** What the note says while the editor bundle could not be loaded. */
 export const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /** What the box's round Send is called, which is its tooltip too. */
 const SEND = "Send";
+
+/** What Send is named while its send is out. */
+const SENDING = "Sending";
 
 /** What Send reads on an empty notice that waits on the reader's nod, which settles it without messaging the agent. */
 const GOT_IT = "Got it";
@@ -166,38 +141,6 @@ const UNARCHIVE = "Unarchive";
 export function answerPlaceholder(asks: boolean, own: string | undefined): string {
   if (asks) return NOTE_PLACEHOLDER;
   return own ?? REPLY_PLACEHOLDER;
-}
-
-/** What an item's note line asks for, the agent's own placeholder standing only on an older item that asks for words. */
-function placeholderOf(item: InboxItem, answering: boolean, asks: boolean): string {
-  const response = item.response;
-  const own =
-    answering && knownResponse(response) && response.type === INBOX_RESPONSE.TEXT
-      ? response.placeholder
-      : undefined;
-  return answerPlaceholder(asks, own);
-}
-
-/**
- * Whether the box holds something to send, which is all that lights its
- * Send: an older item's answer, an older notice's words (its nod being Got
- * it's), a reply on a thread with an answer attached or words or files,
- * or a message on a settled item.
- */
-function holdsSend(
-  item: InboxItem,
-  draft: InboxDraft,
-  answering: boolean,
-  thread: readonly InboxMessage[] | undefined,
-): boolean {
-  if (answering) {
-    return item.response.type === INBOX_RESPONSE.NONE
-      ? !emptyBox(draft)
-      : inboxReply(item, draft) !== undefined;
-  }
-  return thread === undefined
-    ? inboxMessageOf(draft) !== undefined
-    : inboxThreadSend(thread, draft) !== undefined;
 }
 
 /** A box's field as its owner holds it: its editor, the field it stands in, the editor's bundle, and its lists and dictation. */
@@ -290,12 +233,18 @@ interface AnswerFormProps {
   readonly onEnter: () => void;
   /** Takes files pasted into the line, answering whether it took them; none where the box takes no files. */
   readonly onPasteFiles?: ((files: readonly File[]) => boolean) | undefined;
+  /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
+  readonly onPasteCut?: (() => void) | undefined;
   /** How a quote block the line holds is drawn; none where the box takes no quote. */
   readonly quote?: ((quote: ComposerQuote) => React.ReactNode) | undefined;
   /** What leads the foot, the + of files; nothing where the box takes none. */
   readonly tools?: React.ReactNode;
+  /** What the foot says under its bar: why a send did not go, a file did not come, or a dictation left nothing; nothing where it has nothing to say. */
+  readonly says?: ComposerNote | undefined;
   /** Whether Send reads Got it, a nod that messages nobody. */
   readonly nod: boolean;
+  /** The key Send's hint names, where Enter does not send; none where it does. */
+  readonly sendChord?: ShortcutChord | undefined;
   readonly sending: boolean;
   /** Whether a send waits, while one is out or files are read. */
   readonly held: boolean;
@@ -307,10 +256,11 @@ interface AnswerFormProps {
 }
 
 /**
- * A box's card: the question's controls as its body, the files it holds,
- * the note line on its own over the foot, and the foot's + at its left and
- * the microphone and Send at its right, a dictation's strip in their place;
- * Send reading Got it where the box nods.
+ * A box's card: the question's controls as its body, the note line on its
+ * own over the foot, and the foot (`ComposerFoot`), which holds the files the
+ * box has, the + at its left, the counter, the microphone and Send at its
+ * right, a dictation's strip in their place, and what the box says under
+ * them; Send reading Got it where the box nods.
  */
 export function AnswerForm({
   field,
@@ -324,9 +274,12 @@ export function AnswerForm({
   maxLength,
   onEnter,
   onPasteFiles,
+  onPasteCut,
   quote,
   tools,
+  says,
   nod,
+  sendChord,
   sending,
   held,
   sendable,
@@ -344,7 +297,6 @@ export function AnswerForm({
       onSubmit={onSubmit}
     >
       {controls}
-      {chips}
       {/* The note line stands on its own over the foot, as the agent's box's field does. */}
       <ComposerField
         module={module}
@@ -359,41 +311,29 @@ export function AnswerForm({
         takesFocus={false}
         {...pickers.field}
         onEnter={onEnter}
+        // Note that the note's Enter is a new line wherever the form's own is, since a partly filled form is already sendable.
+        submitKey={sendChord === undefined ? undefined : TEXT_AREA_SUBMIT.MOD_ENTER}
         onPasteFiles={onPasteFiles ?? takesNoFiles}
+        onPasteCut={onPasteCut}
         quote={quote}
       />
-      {/* The foot is the agent box's: the + at its left, the microphone and Send at its right, a dictation's strip in their place. */}
-      <PromptInputFooter className="inbox-answer-foot">
-        {dictating ? (
-          <DictationStrip dictation={dictation} />
-        ) : (
-          <>
-            <PromptInputTools>{tools}</PromptInputTools>
-            <div className="inbox-answer-actions">
-              <DictateButton dictation={dictation} disabled={module === undefined} />
-              {nod ? (
-                <Button
-                  type={BUTTON_TYPE.SUBMIT}
-                  variant={BUTTON_VARIANT.INK}
-                  busy={sending}
-                  busyLabel="Sending"
-                  disabled={held}
-                >
-                  {GOT_IT}
-                </Button>
-              ) : (
-                <Tooltip label={SEND}>
-                  <PromptInputSubmit
-                    label={SEND}
-                    status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                    disabled={held || !sendable}
-                  />
-                </Tooltip>
-              )}
-            </div>
-          </>
-        )}
-      </PromptInputFooter>
+      <ComposerFoot
+        files={chips}
+        tools={tools}
+        counter={{ length: note.length, limit: maxLength }}
+        actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
+        strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
+        send={{
+          label: nod ? GOT_IT : SEND,
+          inWords: nod,
+          chord: sendChord,
+          empty: !sendable,
+          held,
+          busy: sending,
+          busyLabel: SENDING,
+        }}
+        note={says}
+      />
     </PromptInput>
   );
 }
@@ -411,9 +351,9 @@ interface AnswerBoxProps {
   control: TaskInboxControl;
   /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads; none before the read lands. */
   agent: CodingAgentSummary | undefined;
-  /** The thread the item is drawn as from version 5, which the box only replies to; none for an item drawn as before. */
-  thread: readonly InboxMessage[] | undefined;
-  /** The open question's controls, the card's body over its foot: the open ask's, or an older item's response's; nothing where none waits, or the ask is of words alone. */
+  /** The item's thread, which the box replies to. */
+  thread: readonly InboxMessage[];
+  /** The open ask's controls, the card's body over its foot; nothing where none waits, or the ask is of words alone. */
   controls: React.ReactNode;
   /** Where the item's repository's skills are read from; nothing where none can be. */
   skills: SkillSource | undefined;
@@ -421,8 +361,6 @@ interface AnswerBoxProps {
   keywords: readonly string[];
   /** The thread whose agent's words the box stands Reply over, quoting them in. */
   replyScope: RefObject<HTMLElement | null>;
-  /** Takes the keyboard to what a send found the answer lacking, in the item's question or in the box. */
-  onMissing: (missing: InboxMissing) => void;
   /** Brings the item's agent back from the archive, offered after a send it refused for being archived. */
   onUnarchiveAgent: () => Promise<ActionResult>;
 }
@@ -438,31 +376,33 @@ function AnswerCard({
   skills,
   keywords,
   replyScope,
-  onMissing,
   onUnarchiveAgent,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const toast = useToast();
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  // How many hand-offs of files are still being read, during which the answer waits.
-  const [reading, setReading] = useState(0);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   const draft = control.draftOf(item);
   const sending = control.sending.has(item.id);
-  // Note that the item is read through a ref, because reading files takes a
-  // while and the item they land on is whichever revision is current by then.
-  const latest = useRef(item);
-  latest.current = item;
-  // Note that a settled item's box writes a message on its thread, which no response shapes, and a thread's only ever replies.
-  const answering = thread === undefined && item.status === INBOX_STATUS.OPEN;
-  const notice = thread !== undefined && awaitsNod(item, thread);
+  // Note that the answer waits while files are read, and files read for an item its agent revised meanwhile land nowhere, as its words were let go.
+  const files = useAttachedFiles({
+    holder: {
+      attachments: draft.attachments,
+      update: (next) => control.onAttachments(item, next),
+    },
+    place: { key: item.revision, moved: ITEM_CHANGED },
+    onRefusal: setRefusal,
+  });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
   const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
-  const nodding = notice || (answering && item.response.type === INBOX_RESPONSE.NONE);
-  const nod = nodding && emptyBox(draft) && !nodded;
-  const held = sending || reading > 0;
-  const sendable = nod || holdsSend(item, draft, answering, thread);
+  const nod = awaitsNod(item) && emptyBox(draft) && !nodded;
+  const held = sending || files.reading;
+  // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
+  const sendable = nod || inboxThreadSend(thread, draft) !== undefined;
   const asks = controls !== undefined;
-  const placeholder = placeholderOf(item, answering, asks);
+  const asking = openAskOf(thread);
+  const placeholder = answerPlaceholder(asks, undefined);
   const field = useAnswerField({
     draft: draft.note,
     placeholder,
@@ -477,121 +417,81 @@ function AnswerCard({
   const { dictating } = field.pickers;
   const kept = control.notes.get(item.id);
   const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent);
-  const note = noted?.words ?? refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  const note =
+    noted?.words ??
+    refusal ??
+    (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
+    (field.failed ? EDITOR_LOAD_FAILED : undefined);
   // Note that the note is let go once the agent is back, since what it said no longer stands, and only that note, never one a later send left meanwhile.
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       } else if (kept !== undefined) control.onDropNote(item.id, kept);
     });
-  const answer = () => {
-    setRefusal(undefined);
-    control.onAnswer(item, draft);
-  };
-  // A send of an answer that lacks something goes nowhere, and takes the keyboard to what it lacks.
-  const send = () => {
-    if (nodded && emptyBox(draft)) return;
-    const missing = inboxReply(item, draft) === undefined ? inboxMissing(item, draft) : undefined;
-    if (missing === undefined) answer();
-    else onMissing(missing);
-  };
   const message = () => {
     setRefusal(undefined);
+    setCut(false);
     control.onMessage(item, draft);
   };
   const acknowledge = () => {
     setRefusal(undefined);
-    control.onAnswer(item, draft, INBOX_REPLY.ACKNOWLEDGED);
+    setCut(false);
+    control.onAcknowledge(item);
   };
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0) return;
-    const { revision } = item;
-    setReading((count) => count + 1);
-    readFiles(files)
-      .then((read) => {
-        // Files read for an item its agent changed meanwhile land nowhere, as its words were let go.
-        const now = latest.current;
-        if (now.revision !== revision) {
-          setRefusal(ITEM_CHANGED);
-          return;
-        }
-        // Taken after whatever the card holds as the write lands, so neither a
-        // read that landed first nor a chip taken off meanwhile is undone.
-        let refusal = read.refusal;
-        control.onAttachments(now, (was) => {
-          const taken = withFiles(was, read);
-          refusal = taken.refusal;
-          return taken.attachments;
-        });
-        setRefusal(refusal);
-      })
-      .finally(() => setReading((count) => count - 1));
-  };
-  const takes = !answering || knownResponse(item.response);
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)), { over: takes, drop: takes });
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
-  const quotes = takes && !sending && !dictating && module !== undefined;
+  const quotes = !sending && !dictating && module !== undefined;
   return (
-    <div className="agent-composer" {...fileDrop.target}>
-      {takes ? (
-        <AnswerForm
-          dropping={fileDrop.dropping}
-          field={field}
-          asks={asks}
-          messages={!answering}
-          controls={controls}
-          chips={
-            <AttachedFileChips
-              files={attachmentChips(draft.attachments)}
-              onRemove={(index) => {
-                setRefusal(undefined);
-                control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
-              }}
-            />
-          }
-          note={draft.note}
-          onNote={(text) => control.onDraft(item, { ...draft, note: text })}
-          placeholder={placeholder}
-          maxLength={answering ? INBOX_BOUNDS.MAX_NOTE_CHARS : INBOX_BOUNDS.MAX_MESSAGE_CHARS}
-          onEnter={() => {
-            if (room.current === null) return;
-            // Note that an older item's Enter goes to its own send, which takes the keyboard to what an answer lacks.
-            if (answering) room.current.closest("form")?.requestSubmit();
-            else submitPromptInput(room.current);
-          }}
-          onPasteFiles={(files) => {
-            // Only images are taken from the clipboard; text pastes as it always does.
-            const pasted = imageFiles(files);
-            if (pasted.length === 0) return false;
-            attach(pasted);
-            return true;
-          }}
-          quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
-          tools={<AttachFilesButton onFiles={attach} />}
-          nod={nod}
-          sending={sending}
-          held={held}
-          sendable={sendable}
-          onSubmit={() => {
-            if (reading > 0) return;
-            if (answering) send();
-            else if (nod) acknowledge();
-            else message();
-          }}
-        />
-      ) : (
-        <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
-      )}
-      {note === undefined ? null : noted?.unarchive === true ? (
-        <div className="agent-composer-note">
-          <ErrorState remedy={{ label: UNARCHIVE, onClick: unarchive }}>{note}</ErrorState>
-        </div>
-      ) : (
-        <p className="error-message agent-composer-note" role="alert">
-          {note}
-        </p>
-      )}
+    <div className="agent-composer" {...files.drop.target}>
+      <AnswerForm
+        dropping={files.drop.dropping}
+        field={field}
+        asks={asks}
+        messages
+        controls={controls}
+        chips={
+          <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
+        }
+        note={draft.note}
+        onNote={(text) => {
+          setCut(false);
+          control.onDraft(item, { ...draft, note: text });
+        }}
+        onPasteCut={() => {
+          // Note that a paste cut says so over a refusal said of what came before it.
+          setRefusal(undefined);
+          setCut(true);
+        }}
+        placeholder={placeholder}
+        maxLength={INBOX_BOUNDS.MAX_MESSAGE_CHARS}
+        onEnter={() => {
+          if (room.current !== null) submitPromptInput(room.current);
+        }}
+        onPasteFiles={files.paste}
+        quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
+        tools={<AttachFilesButton onFiles={files.attach} />}
+        says={
+          note === undefined
+            ? undefined
+            : noted?.unarchive === true
+              ? { words: note, remedy: { label: UNARCHIVE, onClick: unarchive } }
+              : { words: note }
+        }
+        nod={nod}
+        sendChord={
+          asks && asking !== undefined && knownAsk(asking.ask)
+            ? askSendChord(asking.ask)
+            : undefined
+        }
+        sending={sending}
+        held={held}
+        sendable={sendable}
+        onSubmit={() => {
+          if (files.reading) return;
+          if (nod) acknowledge();
+          else message();
+        }}
+      />
       {quotes ? (
         <ReplyToSelection
           scope={replyScope}
@@ -605,8 +505,7 @@ function AnswerCard({
 }
 
 /**
- * The box under every item, answering an open one and writing a message on
- * a settled one's thread, as above, a note that it was not sent under the
+ * The box under every item, replying on its thread, open or settled, as above, a note that it was not sent under the
  * card as the composer's is. Each item gets a card of its
  * own, so a dictation, its note, and the editor's undo never follow the
  * developer to another item; where the account's servers stand is read

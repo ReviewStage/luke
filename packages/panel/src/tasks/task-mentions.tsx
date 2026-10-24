@@ -16,7 +16,7 @@ import {
 import { useAct } from "../act.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
-import { agentActor, agentTabLabel } from "./coding-agent-model.js";
+import { agentActor, agentName } from "./coding-agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type {
   MentionAgentsReader,
@@ -192,7 +192,7 @@ export function mentionablePullRequests(
     const pullRequest = agents.pullRequests.get(agent.id);
     if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
     offered.add(pullRequest.url);
-    return [{ ...pullRequest, agent: agentTabLabel(agent, agents.models) }];
+    return [{ ...pullRequest, agent: agentName(agent, agents.models) }];
   });
 }
 
@@ -202,7 +202,7 @@ export function mentionableAgent(
   names: ReadonlyMap<string, string>,
   models: readonly CatalogModel[] | undefined,
 ): MentionableAgent {
-  const name = agentTabLabel(agent, models);
+  const name = agentName(agent, models);
   return {
     id: agent.id,
     name,
@@ -220,7 +220,8 @@ export function mentionableAgent(
  * newest, or those the words name, archived ones among them, each by its
  * tab's name, wearing its tile, with its task named from `tasks`, the
  * tasks the window lists, archived ones among them; none where no
- * workspace is known or the read failed. The reader stands for as
+ * workspace is known, and a rejection where the read failed, which a list
+ * says it could not read rather than that no agent matches. The reader stands for as
  * long as what it reads by does, so a list keeps what it read.
  */
 export function useMentionAgentsReader(
@@ -238,16 +239,11 @@ export function useMentionAgentsReader(
       return act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
         workspaceId,
         ...(words === undefined ? undefined : { words, includeArchived: true }),
-      }).then(
-        (answer) => {
-          if ("failure" in answer) return NO_AGENTS;
-          const names = new Map(naming.current.tasks.map((task) => [task.id, task.name]));
-          return answer.agents.map((agent) =>
-            mentionableAgent(agent, names, naming.current.models),
-          );
-        },
-        () => NO_AGENTS,
-      );
+      }).then((answer) => {
+        if ("failure" in answer) throw new Error(answer.failure);
+        const names = new Map(naming.current.tasks.map((task) => [task.id, task.name]));
+        return answer.agents.map((agent) => mentionableAgent(agent, names, naming.current.models));
+      });
     },
     [act, workspaceId],
   );

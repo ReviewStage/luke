@@ -98,7 +98,7 @@ export const BRIDGE = {
    * a turn walking from connecting to responding is counted once. What
    * moved in the standing call's transcript rides beside them too, never the
    * whole of it, which grows for the call's length: main splices it into the
-   * document's `voice.callTranscript`.
+   * document's `callTranscript`.
    */
   reportVoiceView: entry({
     kind: "send",

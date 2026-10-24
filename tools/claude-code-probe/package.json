@@ -1,6 +1,6 @@
 {
   "name": "@luke/claude-code-probe",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "description": "Proves Claude Code on a Claude plan inside a Luke sandbox: the turn it runs there, and that its token stays with the CLI",

@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
-  INBOX_RESPONSE,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -49,9 +51,16 @@ function item(id: string, unread: boolean): InboxItem {
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title: "Alert at 80%?",
-    blocks: [],
-    response: { type: INBOX_RESPONSE.TEXT },
     needsReply: true,
+    thread: [
+      {
+        id: `e${id.slice(1)}`,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Alert at 80%, or later?",
+        ask: { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.OPEN },
+        createdAt: 1_000,
+      },
+    ],
     status: INBOX_STATUS.OPEN,
     postedAt: 1_000,
     updatedAt: 1_000,
@@ -120,7 +129,10 @@ function marks(first: readonly InboxItem[]) {
     read,
     /** Each item's dot as the hook draws it. */
     dots: () => drawn.map((each) => [each.id, isUnread(each)]),
-    mark: (target: InboxItem, unread: boolean) => act(() => held().onMark(target, unread)),
+    mark: (target: InboxItem, unread: boolean) =>
+      act(() => {
+        void held().onMark(target, unread);
+      }),
     markAll: (items: readonly InboxItem[]) => act(() => held().onMarkAll(items)),
   };
 }

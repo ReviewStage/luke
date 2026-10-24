@@ -12,6 +12,7 @@ import {
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
 import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
+import { formatBytes } from "@luke/features/number-format";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ALIGN,
@@ -485,13 +486,6 @@ function ShownStills({
   );
 }
 
-/** How a size is said under a picture that was not kept. */
-function sizeWords(bytes: number): string {
-  return bytes >= 1_000_000
-    ? `${(bytes / 1_000_000).toFixed(1)} MB`
-    : `${String(Math.max(1, Math.round(bytes / 1000)))} KB`;
-}
-
 /** What a chip says of a picture that was not kept. */
 const NOT_KEPT = "Not kept";
 
@@ -575,7 +569,7 @@ export function CallPictures({
             icon={<ImageOffIcon aria-hidden="true" />}
             state={ATTACHMENT_CHIP_STATE.FAILED}
             failure={NOT_KEPT}
-            detail={sizeWords(each.byteCount)}
+            detail={formatBytes(each.byteCount)}
           />
         ),
       )}

@@ -1,57 +1,43 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import { decodeMention } from "@luke/features/mention-link";
-import {
-  CONFLICT_NOTE,
-  DOCUMENT_EDITOR_STATE,
-  type DocumentEditor,
-} from "@luke/features/plan-edit-model";
+import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   Button,
   EDITABLE_BLOCK_KIND,
   EDITABLE_HEADING_LEAVE,
   EDITABLE_TEXT_BLOCK_SELECTOR,
   EditableBlock,
   EditableHeading,
+  PageHeader,
   RetryButton,
 } from "@luke/ui";
-import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
+import { markdownClass } from "@luke/ui/markdown-class";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useAppCommand } from "../app-commands.js";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
-import { DiagramPreview } from "../plan-diagram.js";
 import {
   type EditorAnchors,
-  type EditorDiagram,
-  type MentionNode,
-  type MentionNodeDoors,
   PLACEMENT_END,
+  PLAN_PLACEHOLDER,
   type PlacedWords,
   type PlanEditorHandle,
-  type PlanEditorModule,
   type PlanEditorPlacement,
-  type PlanEditorProps,
-  SLASH_INSERT,
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { useBlockPicker } from "./block-picker.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useEditorPictures } from "./editor-pictures.js";
-import {
-  type MentionDoors,
-  MentionNodeChip,
-  pastedMentionNode,
-  retargetedMention,
-} from "./mention-chip.js";
-import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
-import { useSelectionToolbar } from "./selection-toolbar.js";
+import { MarkdownEditor } from "./markdown-editor.js";
+import { type MentionDoors, retargetedMention } from "./mention-chip.js";
 import { useTaskMentions } from "./task-mentions.js";
-import { useKnownNames } from "./use-known-names.js";
-import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing.js";
+import {
+  EDITOR_PLACE,
+  type EditorHost,
+  type PlanEditing,
+  useMarkTitleUnsaved,
+} from "./use-plan-editing.js";
 
 /**
  * plan-document-editor.tsx -- the open plan, edited in place: its title, its sections as blocks, and its whole text in one editor.
@@ -76,22 +62,15 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * developer pauses (`use-plan-editing.ts`), and the service merges them with
  * what Luke writes.
  * A save's merged answer is taken into the open editor block by block, and
- * the notetaker's drafts never redraw it. A Mermaid code block's diagram is
- * previewed under it, drawn here as the read view draws it
- * (`../plan-diagram.tsx`), so the editor's bundle carries no Mermaid. Words
- * selected raise the format toolbar over them (`./selection-toolbar.tsx`),
- * with Turn into and, where the plan takes comments, Comment, in place of the
- * read view's Comment bubble; a `/` at a line's start or after a space opens
- * the block menu under it (`./block-picker.tsx`), which stands aside while
- * the `@` list stands, as the toolbar stands aside for either. The editor stands under
- * `ph-no-capture`, and its words are document text, which the recording masks.
+ * the notetaker's drafts never redraw it. The editor is every Markdown
+ * document's (`./markdown-editor.tsx`), with every option a plan takes: its
+ * mentions, its pictures, its comment threads and Comment on the format
+ * toolbar, in place of the read view's Comment bubble, its sections'
+ * placement and the title above, and a Mermaid block's preview.
  */
 
 /** What the open editor's room wears: the text and what it opened inside it, where the focus is the editor's. */
 export const EDITOR_ROOM_CLASS = "plan-document-editor";
-
-/** What the text says while the editor's bundle could not be loaded. */
-const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
 /** What the developer does that ends the editor keeping the words it opened on where they stood: a scroll, a press, or a key. */
 const KEEPING_ENDS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
@@ -110,7 +89,7 @@ const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
 );
 
 /** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button bar a picture's, a video's player, a task's checkbox or the label around it, or the section's byline. */
-function editsOnClick(target: EventTarget): boolean {
+export function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike. A picture's press is a button that hands on only the press it does not take, a diagram's under a mouse in a wide room, which is the words' as the bare picture's was. A video's player is its own whole, its frame and every control in it, whatever they are drawn as, since a press there plays, seeks, or enlarges it; its caption is the words'.
@@ -168,6 +147,56 @@ function wordsUnder(
     if (at.textContent === text && inCode(at) === code) occurrence += 1;
   }
   return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
+}
+
+/** Whether an element is a heading that opens a section, as the editor counts them (`SECTION_LEVELS`). */
+function opensSection(element: Element | null | undefined): element is HTMLHeadingElement {
+  return (
+    element instanceof HTMLHeadingElement && (element.tagName === "H1" || element.tagName === "H2")
+  );
+}
+
+/**
+ * The words a click at a point landed on in a document drawn whole rather
+ * than as its sections, as a pull request's description is: the section
+ * counted by the headings that open one before the words, as the editor
+ * counts them, so it finds them again (`PlacedWords`); none where it landed
+ * on no words.
+ */
+export function documentWordsUnder(
+  root: HTMLElement,
+  x: number,
+  y: number,
+): PlacedWords | undefined {
+  const range = rangeAt(x, y);
+  const words = range?.startContainer;
+  if (range == null || !(words instanceof Text) || !root.contains(words)) return undefined;
+  const code = inCode(words);
+  let section = 0;
+  let occurrence = 0;
+  // Whether any words came before, since a heading opening the text opens its first section.
+  let begun = false;
+  let heading: Element | undefined;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    const opens = at.parentElement?.closest("h1, h2");
+    if (opensSection(opens) && opens !== heading) {
+      heading = opens;
+      section += begun ? 1 : 0;
+      occurrence = begun ? 0 : occurrence;
+    }
+    if (at === words) break;
+    if ((at.textContent ?? "").trim() !== "") begun = true;
+    if (at.textContent === words.data && inCode(at) === code) occurrence += 1;
+  }
+  return {
+    section,
+    text: words.data,
+    occurrence,
+    offset: range.startOffset,
+    code,
+    top: lineTop(range, words),
+  };
 }
 
 /** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */
@@ -438,6 +467,7 @@ export function EditableTitle({
   entry,
   editing,
   renaming = 0,
+  actions,
   onRename,
   onDraft,
 }: {
@@ -447,13 +477,15 @@ export function EditableTitle({
   editing: PlanEditing;
   /** How many times Rename was chosen; each change is an ask of its own. */
   renaming?: number;
+  /** The title's ⋯, at the end of its line. */
+  actions?: ReactNode;
   /** Renames the task, answering whether the name was taken. */
   onRename: (name: string) => Promise<boolean>;
   onDraft: (name: string | undefined) => void;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
   const prefetchEditorBundle = usePrefetchEditorBundle();
-  const text = useRef<HTMLDivElement>(null);
+  const text = useRef<HTMLElement>(null);
   const [pause, restartPause] = useAtom(titlePauseAtom);
   const stamp = useRef(0);
   // ↑ on the text's first line comes back into the title, its caret at the end.
@@ -470,6 +502,10 @@ export function EditableTitle({
   const echo = useRef<string | undefined>(undefined);
   const doors = useRef({ onRename, onDraft });
   doors.current = { onRename, onDraft };
+  // How many renames asked for have not answered; the title's words are unsaved work while any is out or words are typed.
+  const asking = useRef(0);
+  const markUnsaved = useMarkTitleUnsaved();
+  const tellUnsaved = () => markUnsaved(typed.current || asking.current > 0);
   // The Rename last answered, so only a newer one puts the caret here.
   const renamed = useRef(renaming);
   useEffect(() => {
@@ -492,10 +528,17 @@ export function EditableTitle({
   const rename = (element: HTMLElement) => {
     typed.current = false;
     const next = typedName(element);
-    if (next === "" || next === base.current) return;
+    if (next === "" || next === base.current) {
+      tellUnsaved();
+      return;
+    }
     base.current = next;
     const asked = stamp.current;
+    asking.current += 1;
+    tellUnsaved();
     doors.current.onRename(next).then((renamed) => {
+      asking.current -= 1;
+      tellUnsaved();
       if (renamed) return;
       if (stamp.current !== asked) {
         if (base.current === next) base.current = "";
@@ -529,47 +572,55 @@ export function EditableTitle({
     };
   }, []);
   return (
-    <EditableBlock
-      ref={block}
-      label="Title"
-      kind={EDITABLE_BLOCK_KIND.TITLE}
-      entry={entry}
-      onPointerEnter={prefetchEditorBundle}
-      onFocus={(event) => {
-        prefetchEditorBundle();
-        if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
-      }}
-      onOpen={() => {
-        if (text.current !== null) caretAtEnd(text.current);
-      }}
-    >
-      <div className={`${MARKDOWN_CLASS.ROOT} task-title ph-no-capture`}>
-        <EditableHeading
-          ref={text}
-          label="Task name"
-          level={1}
-          onFocus={() => {
-            saved.current = false;
-          }}
-          onInput={(event) => {
-            saved.current = false;
-            typed.current = true;
-            boundTitle(event.currentTarget);
-            const next = typedName(event.currentTarget);
-            echo.current = next === "" ? undefined : next;
-            onDraft(echo.current);
-            stamp.current += 1;
-            restartPause(stamp.current);
-          }}
-          onBlur={(event) => save(event.currentTarget)}
-          onLeave={(way, heading) => {
-            save(heading);
-            if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
-            else editing.open();
-          }}
+    // Note that the unit's class lets the ⋯ show as the pointer or the keyboard comes onto the title, as a section's does.
+    <div className="task-title plan-unit-attributed ph-no-capture">
+      <EditableBlock
+        ref={block}
+        label="Title"
+        kind={EDITABLE_BLOCK_KIND.TITLE}
+        entry={entry}
+        onPointerEnter={prefetchEditorBundle}
+        onFocus={(event) => {
+          prefetchEditorBundle();
+          if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
+        }}
+        onOpen={() => {
+          if (text.current !== null) caretAtEnd(text.current);
+        }}
+      >
+        <PageHeader
+          title={
+            <EditableHeading
+              ref={text}
+              label="Task name"
+              onFocus={() => {
+                saved.current = false;
+              }}
+              onInput={(event) => {
+                saved.current = false;
+                if (!typed.current) {
+                  typed.current = true;
+                  tellUnsaved();
+                }
+                boundTitle(event.currentTarget);
+                const next = typedName(event.currentTarget);
+                echo.current = next === "" ? undefined : next;
+                onDraft(echo.current);
+                stamp.current += 1;
+                restartPause(stamp.current);
+              }}
+              onBlur={(event) => save(event.currentTarget)}
+              onLeave={(way, heading) => {
+                save(heading);
+                if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
+                else editing.open();
+              }}
+            />
+          }
+          actions={actions}
         />
-      </div>
-    </EditableBlock>
+      </EditableBlock>
+    </div>
   );
 }
 
@@ -592,6 +643,7 @@ interface DraftDoors {
 function useDraftHandOver(
   editing: PlanEditing,
   hostOf: (section: number) => EditorHost,
+  handed: React.RefObject<string>,
 ): DraftDoors {
   const [pause, restartPause] = useAtom(draftPauseAtom);
   const pending = useRef<{ markdown: string; anchors: EditorAnchors | undefined } | undefined>(
@@ -603,7 +655,9 @@ function useDraftHandOver(
   const flush = () => {
     const next = pending.current;
     pending.current = undefined;
-    if (next !== undefined) door.current.typeText(next.markdown, next.anchors);
+    if (next === undefined) return;
+    handed.current = next.markdown;
+    door.current.typeText(next.markdown, next.anchors);
   };
   // A pause that ran out on the newest text hands it over.
   useEffect(() => {
@@ -618,6 +672,7 @@ function useDraftHandOver(
   }, []);
   return {
     onDraft: (markdown, anchors) => {
+      if (pending.current === undefined) door.current.holdingWords();
       pending.current = { markdown, anchors };
       stamp.current += 1;
       restartPause(stamp.current);
@@ -637,104 +692,72 @@ function useDraftHandOver(
   };
 }
 
-/** The bundle's editor mounted in place, built once, on the text it opened with; its handle kept for the merged answers. */
-function MountedPlanEditor({
-  module,
-  props,
-  handle,
-}: {
-  module: PlanEditorModule;
-  props: PlanEditorProps;
-  handle: React.RefObject<PlanEditorHandle | undefined>;
-}): React.JSX.Element {
-  const host = useRef<HTMLDivElement>(null);
-  const latest = useRef(props);
-  latest.current = props;
-  useLayoutEffect(() => {
-    if (host.current === null) return;
-    const { mentions } = latest.current;
-    const mounted = module.mount(host.current, {
-      ...latest.current,
-      onDraft: (markdown, anchors) => latest.current.onDraft(markdown, anchors),
-      onFinish: (section) => latest.current.onFinish(section),
-      onLeaveUp: () => latest.current.onLeaveUp(),
-      // Note that the mentions' doors are read as they are used, as the rest are.
-      mentions:
-        mentions === undefined
-          ? undefined
-          : {
-              onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
-              onKey: (event) => latest.current.mentions?.onKey(event) ?? false,
-              drawMention: (element, mention, node) =>
-                latest.current.mentions?.drawMention(element, mention, node) ?? (() => undefined),
-              retarget: (target, renamed) => latest.current.mentions?.retarget(target, renamed),
-              pasted: (words) => latest.current.mentions?.pasted(words),
-              namesMention: (target) => latest.current.mentions?.namesMention(target) ?? false,
-            },
-      drawDiagram:
-        latest.current.drawDiagram === undefined
-          ? undefined
-          : (element, diagram) =>
-              latest.current.drawDiagram?.(element, diagram) ?? (() => undefined),
-      format:
-        latest.current.format === undefined
-          ? undefined
-          : {
-              onFormat: (format) => latest.current.format?.onFormat(format),
-              onLink: () => latest.current.format?.onLink(),
-            },
-      blocks:
-        latest.current.blocks === undefined
-          ? undefined
-          : {
-              onTrigger: (trigger) => latest.current.blocks?.onTrigger(trigger),
-              onKey: (event) => latest.current.blocks?.onKey(event) ?? false,
-            },
-    });
-    handle.current = mounted;
-    return () => {
-      handle.current = undefined;
-      mounted.destroy();
-    };
-  }, [module, handle]);
-  return <div ref={host} />;
-}
-
 /**
- * A save's merged answer taken into the open editor. A save that landed shows
- * as the model's base moving to the text it sent; the host draws the plan
- * the service answered before the save's answer arrives, so the plan whose
- * last save is the developer's, and newer than the one last taken, holds
- * the merged text. Then Luke's part of it is laid in and the model's base
- * becomes what the service holds. A draft never moves the last save, and a
- * save of Luke's is not the developer's, so neither reaches the editor.
+ * Text the open editor did not type taken into it, the caret kept where it
+ * stood, since the editor mounts once on its words and never follows them.
+ * Three kinds reach it. A save's merged answer: a save that landed shows as
+ * the model's base moving to the text it sent; the host draws the plan the
+ * service answered before the save's answer arrives, so the plan whose last
+ * save is the developer's, and newer than the one last taken, holds the
+ * merged text, whose other part is laid in and the model's base becomes
+ * what the service holds. A save someone else made, a teammate's, an
+ * agent's, or Luke's, reaching an editor holding nothing unsaved: their text
+ * is laid in and becomes the base. An editor holding words not yet saved
+ * keeps them instead, and its next save is laid over the service's text,
+ * whose merged answer then reaches it as the first kind. And words the
+ * model moved itself, as Keep mine's merged words: laid in place of the
+ * blocks they changed. `handed` is the last text the editor handed over or
+ * was laid with, which tells the model's own moves from the editor's.
  */
-function useMergedAnswers(
+function useTakenText(
   editor: DocumentEditor,
   editing: PlanEditing,
   task: Task,
   handle: React.RefObject<PlanEditorHandle | undefined>,
+  handed: React.RefObject<string>,
 ): void {
-  const seen = useRef({ base: editor.base, updatedAt: task.updatedAt });
+  const seen = useRef({ base: editor.base, draft: editor.draft, updatedAt: task.updatedAt });
   const landed = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const { base, sending, state } = editor;
+    const { base, draft, sending, state } = editor;
     const settled = sending === undefined && state.kind === DOCUMENT_EDITOR_STATE.EDITING;
     if (settled && base !== seen.current.base) landed.current = base;
     seen.current.base = base;
+    // Note that words handed over in this commit reach the draft only in the next, so only a draft that moved is the model's.
+    const moved = draft !== seen.current.draft;
+    seen.current.draft = draft;
+    const mounted = handle.current;
+    // Note that an editor still loading mounts on the newest words, which then need no laying in.
+    if (moved && draft !== handed.current) {
+      handed.current = mounted === undefined ? draft : mounted.take(handed.current, draft).text;
+      return;
+    }
+    if (task.updatedAt === seen.current.updatedAt) return;
     const sent = landed.current;
-    if (sent === undefined || task.updatedAt === seen.current.updatedAt) return;
-    if (task.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
-    landed.current = undefined;
+    if (sent !== undefined) {
+      if (task.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
+      landed.current = undefined;
+      seen.current.updatedAt = task.updatedAt;
+      const taken = mounted?.take(sent, task.document.body);
+      if (taken === undefined) return;
+      seen.current.base = taken.base;
+      handed.current = taken.text;
+      editing.rebase(taken.base, taken.text);
+      return;
+    }
+    if (!settled || editor.closing || draft !== base) return;
     seen.current.updatedAt = task.updatedAt;
-    const taken = handle.current?.take(sent, task.document.body);
-    if (taken === undefined) return;
+    const theirs = task.document.body;
+    if (theirs === base) return;
+    const taken =
+      mounted === undefined ? { base: theirs, text: theirs } : mounted.take(base, theirs);
     seen.current.base = taken.base;
+    handed.current = taken.text;
     editing.rebase(taken.base, taken.text);
   });
 }
 
-/** What stands under the editor: Luke's change and the choice it asks, or a failed save and its retry; a save under way says nothing. */
+/** What stands under the editor: someone else's change, named, and the choice it asks, or a failed save and its retry; a save under way says nothing. */
 function DocumentNote({
   editor,
   editing,
@@ -742,18 +765,23 @@ function DocumentNote({
   editor: DocumentEditor;
   editing: PlanEditing;
 }): React.JSX.Element | null {
-  if (editor.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT) {
+  useAnnounceShown(
+    ANNOUNCE.ALERT,
+    editing.conflict?.note ??
+      (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED ? editor.state.note : ""),
+  );
+  if (editing.conflict !== undefined) {
     return (
-      <div className="plan-editor-note" role="alert">
-        <span>{CONFLICT_NOTE}</span>
+      <div className="plan-editor-note">
+        <span>{editing.conflict.note}</span>
         <Button onClick={editing.keepMine}>Keep mine</Button>
-        <Button onClick={editing.takeLukes}>Use Luke's</Button>
+        <Button onClick={editing.takeTheirs}>{editing.conflict.take}</Button>
       </div>
     );
   }
   if (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED) {
     return (
-      <div className="plan-editor-note" role="alert">
+      <div className="plan-editor-note">
         <span>{editor.state.note}</span>
         <RetryButton onRetry={editing.retry} />
       </div>
@@ -763,11 +791,12 @@ function DocumentNote({
 }
 
 /**
- * The whole text in its editor, in place of its drawn sections, which stand
- * as `drawn` until the editor's bundle has loaded. `hostOf` names the block
- * of a section, which the keyboard goes back to as the editor finishes.
- * Focus leaving the editor closes it, unless it moved to its own buttons or
- * to the menu its toolbar dropped.
+ * The whole text in its editor (`./markdown-editor.tsx`), with every option
+ * a plan takes, in place of its drawn sections, which stand as `drawn` until
+ * the editor's bundle has loaded. `hostOf` names the block of a section,
+ * which the keyboard goes back to as the editor finishes. Focus leaving the
+ * editor closes it, unless it moved to its own buttons or to the menu its
+ * toolbar dropped.
  */
 export function PlanDocumentEditor({
   task,
@@ -797,7 +826,9 @@ export function PlanDocumentEditor({
   /** Starts a thread on the words selected, as the toolbar's Comment over them does; none where the plan takes no comments here. */
   onComment?: (() => void) | undefined;
 }): React.JSX.Element {
-  const doors = useDraftHandOver(editing, hostOf);
+  // The words the editor last handed over, or was laid with, which it holds unless the model moved them.
+  const handed = useRef(editor.draft);
+  const doors = useDraftHandOver(editing, hostOf, handed);
   // Note that this runs before the editor itself is taken down, so its caret is still measured.
   useLayoutEffect(
     () => () => {
@@ -815,11 +846,10 @@ export function PlanDocumentEditor({
             ? []
             : [{ thread: thread.id, ...thread.anchor }],
         );
-  useMergedAnswers(editor, editing, task, handle);
-  const module = useAtomValue(useSideBundles().planEditor);
+  useTakenText(editor, editing, task, handle, handed);
+  // Whether the editor's bundle has landed, which mounts the editor in the room.
+  const ready = AsyncResult.isSuccess(useAtomValue(useSideBundles().planEditor));
   const room = useRef<HTMLElement>(null);
-  const chips = useEditorDrawings<DrawnMention>();
-  const diagrams = useEditorDrawings<EditorDiagram>();
   const pictures = useEditorPictures(task.id, mentions?.place.workspace, handle);
   // A press on the document's empty room puts the caret there, at the text's end where it lands under it; one before the editor has loaded is where it opens.
   const [pending, setPending] = useState<PlanEditorPlacement | undefined>(undefined);
@@ -839,7 +869,6 @@ export function PlanDocumentEditor({
   // and again each time the editor's height changes as what it draws later
   // lands, a diagram's preview or a chip, until the developer scrolls,
   // presses, or types.
-  const ready = AsyncResult.isSuccess(module);
   useLayoutEffect(() => {
     if (!ready) return;
     // Note that a press on the room while the bundle loaded is where the editor opens, which keeps no words.
@@ -862,176 +891,52 @@ export function PlanDocumentEditor({
     for (const kind of KEEPING_ENDS) column.addEventListener(kind, release, { passive: true });
     return release;
   }, [ready]);
-  // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
-  const held = useRef<(() => void) | undefined>(undefined);
-  const once = (close: () => void) => {
-    if (pictures.sending) held.current = close;
-    else close();
-  };
-  useEffect(() => {
-    const close = held.current;
-    if (pictures.sending || close === undefined) return;
-    held.current = undefined;
-    close();
-  });
-  // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
-  const text = () => handle.current?.markdown() ?? editor.draft;
   // The plan's pages, agents, and pull requests are offered as the page's agents' boxes offer them.
   const page = useTaskMentions();
-  // A Luke address pasted whole is called by the name the window holds for what it names.
-  const known = useKnownNames();
-  const picker = useMentionPicker({
-    source: {
-      taskId: task.id,
-      taskName: task.name,
-      workspace: mentions?.place.workspace ?? "",
-      repository: task.repository,
-      text,
-      pages: page?.pages,
-      agents: page?.agents,
-      readAgents: page?.readAgents,
-      pullRequests: page?.pullRequests,
-      shownCode: page?.shownCode,
-      openFiles: page?.openFiles,
-    },
-    room,
-    side: MENTION_MENU_SIDE.BELOW,
-    onChoose: (mention) => handle.current?.chooseMention(mention),
-  });
-  const mentioning = picker.aria["aria-expanded"] === "true";
-  // A `/` opens the block menu under it, which stands aside while the `@` list stands; its Picture opens the chooser Insert image opens.
-  const blocks = useBlockPicker({
-    room,
-    offers: { pictures: pictures.choose !== undefined, mentions: mentions !== undefined },
-    held: mentioning,
-    onChoose: (block) => {
-      handle.current?.insertBlock(block);
-      if (block === SLASH_INSERT.PICTURE) pictures.choose?.();
-    },
-  });
-  // The words selected raise the format toolbar over them, which stands aside while the `@` list or the block menu stands.
-  const toolbar = useSelectionToolbar({
-    editor: handle,
-    room,
-    blocks: true,
-    onComment,
-    held: mentioning || blocks.open,
-  });
-  // While the toolbar stands, its Comment's command starts the thread as a press on it does.
-  useAppCommand(APP_COMMAND.COMMENT_ON_SELECTION, toolbar.standing ? onComment : undefined);
-  if (!AsyncResult.isSuccess(module)) {
-    return (
-      <section ref={room} className={`${EDITOR_ROOM_CLASS} ph-no-capture`} aria-busy="true">
-        {drawn}
-        {AsyncResult.isFailure(module) ? (
-          <p className="plan-editor-note" role="alert">
-            {EDITOR_LOAD_FAILED}
-          </p>
-        ) : null}
-      </section>
-    );
-  }
-  const props: PlanEditorProps = {
-    markdown: editor.draft,
-    anchors: commentAnchors,
-    placement: pending ?? editing.placement,
-    focus: true,
-    label: "Plan",
-    // Note that the text wears the drawn sections' own classes, so its lists keep their gutter and nothing moves as it opens or closes.
-    className: markdownClass("plan-unit"),
-    onDraft: doors.onDraft,
-    onFinish: (section) => once(() => doors.onFinish(section)),
-    onLeaveUp: doors.onLeaveUp,
-    mentions:
-      mentions === undefined
-        ? undefined
-        : {
-            onTrigger: picker.onTrigger,
-            onKey: picker.onKey,
-            drawMention: (element, mention, node) => chips.draw(element, { mention, node }),
-            retarget: (target, change) =>
-              retargetedMention(task.id, mentions.place, target, change),
-            pasted: (words) =>
-              pastedMentionNode(words, mentions.place, { known, taskId: task.id, text }),
-            namesMention: (target) =>
-              decodeMention(target, mentions.place.repository) !== undefined,
-          },
-    drawDiagram: diagrams.draw,
-    pictures: pictures.pictures,
-    format: toolbar.doors,
-    blocks: { onTrigger: blocks.onTrigger, onKey: blocks.onKey },
-  };
   return (
-    <section
-      ref={room}
-      className={`${EDITOR_ROOM_CLASS} ph-no-capture`}
-      aria-label="Editing the plan"
-      onBlur={(event) => {
-        const into = event.relatedTarget;
-        if (!event.currentTarget.contains(into) && !toolbar.holds(into)) once(doors.onLeave);
-      }}
+    <MarkdownEditor
+      markdown={editor.draft}
+      label="Plan"
+      roomLabel="Editing the plan"
+      placeholder={PLAN_PLACEHOLDER}
+      // Note that the text wears the drawn sections' own classes, so its lists keep their gutter and nothing moves as it opens or closes.
+      className={markdownClass("plan-unit")}
+      roomClassName={EDITOR_ROOM_CLASS}
+      onDraft={doors.onDraft}
+      onFinish={doors.onFinish}
+      onLeave={doors.onLeave}
+      handle={handle}
+      room={room}
+      loading={drawn}
+      placement={pending ?? editing.placement}
+      onLeaveUp={doors.onLeaveUp}
+      mentions={
+        mentions === undefined
+          ? undefined
+          : {
+              doors: mentions,
+              source: {
+                taskId: task.id,
+                taskName: task.name,
+                workspace: mentions.place.workspace,
+                repository: task.repository,
+                pages: page?.pages,
+                agents: page?.agents,
+                readAgents: page?.readAgents,
+                pullRequests: page?.pullRequests,
+                shownCode: page?.shownCode,
+                openFiles: page?.openFiles,
+              },
+              retarget: (target, change) =>
+                retargetedMention(task.id, mentions.place, target, change),
+            }
+      }
+      pictures={pictures}
+      anchors={commentAnchors}
+      onComment={onComment}
+      diagrams
     >
-      <MountedPlanEditor module={module.value} props={props} handle={handle} />
-      {toolbar.drawn}
-      {blocks.menu}
       <DocumentNote editor={editor} editing={editing} />
-      {pictures.drawn}
-      {mentions === undefined ? null : picker.menu}
-      {mentions === undefined
-        ? null
-        : chips.drawn.map((each) =>
-            createPortal(
-              <MentionNodeChip
-                mention={each.what.mention}
-                doors={mentions}
-                edit={{ node: each.what.node, pickDate: picker.pickDate }}
-              />,
-              each.element,
-              each.key,
-            ),
-          )}
-      {diagrams.drawn.map((each) =>
-        createPortal(
-          <DiagramPreview code={each.what.code} previous={each.what.previous} />,
-          each.element,
-          each.key,
-        ),
-      )}
-    </section>
+    </MarkdownEditor>
   );
-}
-
-/** A mention the editor asked to be drawn: what it holds, and the doors to its node. */
-interface DrawnMention {
-  readonly mention: MentionNode;
-  readonly node: MentionNodeDoors;
-}
-
-/** Something the editor asked to be drawn: the element it stands as, what it is, and the key its drawing goes under. */
-interface DrawnInEditor<A> {
-  readonly element: HTMLElement;
-  readonly what: A;
-  readonly key: number;
-}
-
-/** What the editor holds as drawn, and the door the editor asks to draw one through. */
-interface EditorDrawings<A> {
-  readonly drawn: readonly DrawnInEditor<A>[];
-  readonly draw: (element: HTMLElement, what: A) => () => void;
-}
-
-/**
- * What the editor asks the panel to draw, a mention or a diagram, each drawn
- * into its own element while it stands, as the composer draws its chips.
- */
-function useEditorDrawings<A>(): EditorDrawings<A> {
-  const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);
-  const counted = useRef(0);
-  const draw = (element: HTMLElement, what: A) => {
-    counted.current += 1;
-    const key = counted.current;
-    setDrawn((was) => [...was, { element, what, key }]);
-    return () => setDrawn((was) => was.filter((each) => each.key !== key));
-  };
-  return { drawn, draw };
 }

@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
@@ -137,6 +138,73 @@ test("a repository the picker lists on a member's token, on an owner the workspa
   await settle();
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+});
+
+test("a refresh that fails when the window comes back keeps the listed repositories, says Could not refresh with Retry, and Retry lists again", async () => {
+  let failing = false;
+  const { container } = await mount(() =>
+    failing ? Promise.reject(new Error("offline")) : TOKEN_LISTING(),
+  );
+  const chip =
+    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    assert.fail("the card draws the repository chip");
+  act(() => chip.click());
+  await settle();
+  const listed = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].some((option) =>
+      option.textContent?.includes("tools"),
+    );
+  const refreshNote = () =>
+    [...document.querySelectorAll('[role="alert"]')].find((each) =>
+      each.textContent?.includes("Could not refresh"),
+    );
+  assert.equal(listed(), true);
+
+  failing = true;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+
+  assert.equal(listed(), true, "the last listing stands");
+  const note = refreshNote();
+  assert.ok(note, "the failed refresh says so");
+
+  failing = false;
+  const retry = [...note.querySelectorAll("button")].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  act(() => retry?.click());
+  await settle();
+
+  assert.equal(listed(), true);
+  assert.equal(refreshNote(), undefined);
+});
+
+test("the repository chip hangs the repository's card while the pointer rests on it: its name, and its owner under it", async () => {
+  const { container } = await mount(TOKEN_LISTING, "octo/tools");
+  restOn(
+    container.querySelector(".luke-chip") ?? assert.fail("the card draws the repository chip"),
+  );
+  const card = document.querySelector("[data-repository-card]");
+
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "tools");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "octo");
+});
+
+test("a repository's row in the picker hangs the same card", async () => {
+  const { container } = await mount(TOKEN_LISTING);
+  act(() => container.querySelector<HTMLButtonElement>(".luke-chip")?.click());
+  await settle();
+  restOn(
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
+      option.textContent?.includes("tools"),
+    ) ?? assert.fail("the picker lists the token repository"),
+  );
+  const card = document.querySelector("[data-repository-card]");
+
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "tools");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "octo");
 });
 
 test("a preset on a token repository the picker lists stands chosen once the read lands", async () => {

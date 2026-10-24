@@ -22,16 +22,15 @@
  * frame with nothing easing behind it.
  */
 
-import { tokenTiming } from "@luke/ui";
+import { MOTION_TOKEN, tokenTiming } from "@luke/ui";
 import { Component, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 /** The content that glides where a pane displaced it, each by its own left edge. */
 const GLIDERS = [
-  ".desktop-toolbar-heading",
-  ".desktop-toolbar-actions",
+  ".luke-toolbar-heading",
+  ".luke-toolbar-actions",
   ".desktop-document .plan-body",
   ".desktop-agent > *",
-  ".agent-call-foot .call-bar",
   ".desktop-empty-region > *",
   ".automation-editor",
 ].join(", ");
@@ -79,7 +78,7 @@ type PaneGlideState = Record<never, never>;
  * here as everywhere else, without a check of their own.
  */
 export function paneTiming(element: Element): KeyframeAnimationOptions | undefined {
-  return tokenTiming(element, "--luke-duration-pane", "--luke-motion-pane");
+  return tokenTiming(element, MOTION_TOKEN.DURATION_PANE, MOTION_TOKEN.EASE_PANE);
 }
 
 function sameLayout(a: PaneLayout, b: PaneLayout): boolean {
@@ -235,8 +234,13 @@ export function usePaneSlide(open: boolean, edge: PaneEdge = PANE_EDGE.RIGHT): P
   const last = useRef(open);
   useLayoutEffect(() => {
     const element = pane.current;
-    if (last.current === open || element === null) return;
+    if (last.current === open) return;
     last.current = open;
+    // Note that a pane its owner draws nowhere, a tab too narrow to stand it beside, has no exit to play, so is let go at once.
+    if (element === null) {
+      if (!open) setLeaving(false);
+      return;
+    }
     const timing = paneTiming(element);
     // Note that the slide under way is read before it is stopped, because
     // the next one starts from where it had brought the pane, and that it is

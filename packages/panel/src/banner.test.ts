@@ -1,15 +1,22 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { ArchivedComposerNote } from "./tasks/archived-note.js";
 
 /**
  * banner.test.ts -- an archived agent's notice: the strip is named by its
  * words and carries the presses it offers. Synthetic throughout.
  */
+
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let root: Root | undefined;
 
@@ -76,4 +83,47 @@ test("an archived agent's Stop is named Stopping and unavailable until the servi
   await act(async () => answer());
   assert.equal(stop.getAttribute("aria-label"), null);
   assert.equal(stop.getAttribute("aria-disabled"), null);
+});
+
+test("an archived agent's Unarchive is named Unarchiving while the service answers, shows its ring once the settle delay has passed, holds Stop meanwhile, and clears when it answers", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    let answer: () => void = () => undefined;
+    let unarchives = 0;
+    const note = drawn(
+      createElement(ArchivedComposerNote, {
+        onUnarchive: () => {
+          unarchives += 1;
+          return new Promise<void>((resolve) => {
+            answer = resolve;
+          });
+        },
+        stop: () => Promise.resolve(),
+      }),
+    );
+    const unarchive = press(note, "Unarchive");
+    const stop = press(note, "Stop");
+    const ring = () => unarchive.querySelector(".luke-spinner-ring") !== null;
+    act(() => unarchive.click());
+    assert.equal(unarchive.getAttribute("aria-label"), "Unarchiving");
+    assert.equal(stop.disabled, true);
+    assert.equal(ring(), false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
+    assert.equal(ring(), true);
+    act(() => unarchive.click());
+    assert.equal(unarchives, 1);
+    await act(async () => answer());
+    assert.equal(unarchive.getAttribute("aria-label"), null);
+    assert.equal(stop.disabled, false);
+    assert.equal(ring(), false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an Unarchive that answers at once, as a chat topic's which asks first, shows nothing busy", () => {
+  const note = drawn(createElement(ArchivedComposerNote, { onUnarchive: () => undefined }));
+  const unarchive = press(note, "Unarchive");
+  act(() => unarchive.click());
+  assert.equal(unarchive.getAttribute("aria-busy"), null);
 });

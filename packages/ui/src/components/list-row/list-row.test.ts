@@ -4,11 +4,12 @@ import { act, cloneElement, createElement, Fragment, Profiler, useState } from "
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
-import { Menu, useMenu } from "../menu/menu.js";
+import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import {
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
+  LIST_ROW_LEAD,
   LIST_ROW_META,
   LIST_VARIANT,
   List,
@@ -20,16 +21,22 @@ import {
 /**
  * list-row.test.ts -- a row's press and its acts are separate buttons, never
  * one inside the other, and an act is pressed without pressing its row. A
- * row reads as its words, title first, and Tab meets it before its acts; the
+ * row reads as its words, title first, and Tab meets it before its acts. A
+ * list is one Tab stop, at its first row or the one last focused: ↑↓ step
+ * between its rows and wrap at the ends, Home and End go to the first and
+ * the last, an unavailable row is stepped over, an arrow held with a
+ * modifier is left to the app, and a row that says its own Tab stop is left
+ * out of the walk. The
  * open one is announced as current, whether it opens something or not; and a
  * row that opens nothing is no control, though its acts still are. A
  * keyboard-driven list can hand focus back to a row through its ref, hear
- * the keys pressed on it, and hear a right-click anywhere on it. A row
+ * the keys pressed on it. A row
  * current as the page beside the list is announced so, and the app's hint
  * hung from a row's press raises its words for the press. A row whose
  * metadata stands on its title's line reads it after the title and before
  * the line under it, and one whose lead names what it belongs to reads it
- * between the two, on the line under the title. A row swiped right rests open on its act's button
+ * between the two, on the line under the title, before the description's
+ * words or on a line of its own. A row swiped right rests open on its act's button
  * after a short swipe and does the act on a long one's release, by pointer
  * or by a trackpad's wheel; a cancelled pointer, a swipe whose act changed
  * under it, a swipe left, and a press up or down never act. A row that keeps
@@ -133,6 +140,55 @@ function press(target: HTMLElement): void {
   act(() => target.click());
 }
 
+/** The buttons Tab stops on, in the order it meets them. */
+function tabStops(within: HTMLElement): HTMLButtonElement[] {
+  return [...within.querySelectorAll<HTMLButtonElement>(".luke-list button")].filter(
+    (each) => each.tabIndex >= 0 && !each.disabled,
+  );
+}
+
+/** Presses `name` on whatever holds the focus, as the keyboard would. */
+function key(name: string, held: KeyboardEventInit = {}): void {
+  const target = document.activeElement ?? document.body;
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...held }),
+    );
+  });
+}
+
+/** A list of places, each a row that opens it, those named in `off` unavailable. */
+function walked(names: readonly string[], off: readonly string[] = []): React.ReactElement {
+  return createElement(List, {
+    label: "Places",
+    children: names.map((name) =>
+      createElement(ListRow, {
+        key: name,
+        title: name,
+        disabled: off.includes(name),
+        onPress: ignore,
+      }),
+    ),
+  });
+}
+
+/** Places, each with a button beside the list that turns its row unavailable. */
+function Unavailable({ names }: { names: readonly string[] }): React.JSX.Element {
+  const [off, setOff] = useState<readonly string[]>([]);
+  return createElement(
+    Fragment,
+    null,
+    walked(names, off),
+    ...names.map((name) =>
+      createElement(
+        "button",
+        { key: name, type: "button", onClick: () => setOff((all) => [...all, name]) },
+        `Turn off ${name}`,
+      ),
+    ),
+  );
+}
+
 test("a row's press and its acts are separate buttons in its item, neither inside the other", () => {
   const container = draw(createElement(Members));
   const buttons = [...container.querySelectorAll("button")];
@@ -213,7 +269,50 @@ test("a row's lead stands on the line under its title, before the description's 
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
-test("Tab meets a row, then its acts, then the next row, none taken out of the order", () => {
+test("a row's lead may stand on a line of its own between its title and its description, read between the two and apart from both", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Threads",
+      children: createElement(ListRow, {
+        title: "Retry the webhook?",
+        description: "Choice · 2 options",
+        lead: { icon: glyph(), label: "Billing usage alerts for every workspace" },
+        leadAt: LIST_ROW_LEAD.LINE,
+        meta: "2h",
+        metaAt: LIST_ROW_META.TITLE,
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  const row = button(
+    container,
+    "Retry the webhook?2hBilling usage alerts for every workspaceChoice · 2 options",
+  );
+  const lead = row.querySelector(".luke-list-row-lead");
+  expect(lead?.closest(".luke-list-row-description")).toBeNull();
+  expect(lead?.closest(".luke-list-row-head")).toBeNull();
+  expect(lead?.nextElementSibling?.classList.contains("luke-list-row-description")).toBe(true);
+  expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
+});
+
+test("a row whose lead stands on a line of its own draws it with no description under it", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Threads",
+      children: createElement(ListRow, {
+        title: "Retry the webhook?",
+        lead: { icon: glyph(), label: "Billing usage alerts" },
+        leadAt: LIST_ROW_LEAD.LINE,
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  const row = button(container, "Retry the webhook?Billing usage alerts");
+  expect(row.querySelector(".luke-list-row-lead")).not.toBeNull();
+  expect(row.querySelector(".luke-list-row-description")).toBeNull();
+});
+
+test("Tab meets the list's one row, then each row's acts, the other rows left to the arrows", () => {
   const container = draw(createElement(Members));
   const order = [
     "Ada Lovelaceada@example.comOwner",
@@ -222,9 +321,121 @@ test("Tab meets a row, then its acts, then the next row, none taken out of the o
     "More for grace",
   ].map((name) => button(container, name));
   expect([...container.querySelectorAll("button")]).toEqual(order);
-  for (const each of order) {
-    expect(each.tabIndex).toBe(0);
+  expect(tabStops(container)).toEqual([order[0], order[1], order[3]]);
+});
+
+test("Tab enters a list once, at its first row, and comes back to the row it left", () => {
+  const container = draw(walked(["Inbox", "Tasks", "Chat"]));
+  expect(tabStops(container)).toEqual([button(container, "Inbox")]);
+  act(() => button(container, "Inbox").focus());
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "Tasks"));
+  expect(tabStops(container)).toEqual([button(container, "Tasks")]);
+});
+
+test("↑↓ step between rows, Home and End go to the first and the last", () => {
+  const container = draw(walked(["Inbox", "Tasks", "Chat", "Automations"]));
+  act(() => button(container, "Inbox").focus());
+  const visited = ["ArrowDown", "ArrowDown", "ArrowUp", "End", "Home"].map((name) => {
+    key(name);
+    return document.activeElement?.textContent;
+  });
+  expect(visited).toEqual(["Tasks", "Chat", "Tasks", "Automations", "Inbox"]);
+});
+
+test("the arrows wrap from the last row to the first and back", () => {
+  const container = draw(walked(["Inbox", "Tasks", "Chat"]));
+  act(() => button(container, "Chat").focus());
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "Inbox"));
+  key("ArrowUp");
+  expect(document.activeElement).toBe(button(container, "Chat"));
+});
+
+test("an unavailable row is stepped over and is never the Tab stop", () => {
+  const container = draw(walked(["Inbox", "Tasks", "Chat", "Automations"], ["Inbox", "Chat"]));
+  expect(tabStops(container)).toEqual([button(container, "Tasks")]);
+  act(() => button(container, "Tasks").focus());
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "Automations"));
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "Tasks"));
+  key("Home");
+  expect(document.activeElement).toBe(button(container, "Tasks"));
+});
+
+test("the Tab stop moves on when its row turns unavailable", async () => {
+  const container = draw(createElement(Unavailable, { names: ["Inbox", "Tasks", "Chat"] }));
+  expect(tabStops(container)).toEqual([button(container, "Inbox")]);
+  await act(async () => button(container, "Turn off Inbox").click());
+  expect(tabStops(container)).toEqual([button(container, "Tasks")]);
+});
+
+test("an arrow held with ⌘, ⌥, Ctrl, or ⇧ is left to the app's own shortcut", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(
+      "div",
+      { onKeyDown: (event: React.KeyboardEvent) => heard.push(String(event.defaultPrevented)) },
+      walked(["Inbox", "Tasks", "Chat"]),
+    ),
+  );
+  act(() => button(container, "Inbox").focus());
+  for (const held of ["metaKey", "altKey", "ctrlKey", "shiftKey"] as const) {
+    key("ArrowDown", { [held]: true });
   }
+  expect(document.activeElement).toBe(button(container, "Inbox"));
+  expect(heard).toEqual(["false", "false", "false", "false"]);
+});
+
+test("a row that says its own Tab stop is left out of the arrows' walk", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Tools",
+      children: ["create_issue", "list_issues"].map((name) =>
+        createElement(ListRow, { key: name, title: name, tabbable: false, onPress: ignore }),
+      ),
+    }),
+  );
+  expect(tabStops(container)).toEqual([]);
+  act(() => button(container, "create_issue").focus());
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "create_issue"));
+});
+
+/** Two lists of places in one box, as a rail's groups stand, whose rows join the box's walk. */
+function Rail(): React.JSX.Element {
+  const roving = useRovingKeys<HTMLDivElement>();
+  return createElement(
+    "div",
+    roving,
+    ...[
+      ["Inbox", "Tasks"],
+      ["General", "Launch"],
+    ].map((names, at) =>
+      createElement(List, {
+        key: at,
+        label: `Group ${at + 1}`,
+        joinsWalk: true,
+        children: names.map((name) =>
+          createElement(ListRow, { key: name, title: name, onPress: ignore }),
+        ),
+      }),
+    ),
+  );
+}
+
+test("lists that join the walk of a box around them are one Tab stop the arrows walk from list to list", () => {
+  const container = draw(createElement(Rail));
+  expect(tabStops(container)).toEqual([button(container, "Inbox")]);
+  act(() => button(container, "Tasks").focus());
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "General"));
+  expect(tabStops(container)).toEqual([button(container, "General")]);
+  key("End");
+  expect(document.activeElement).toBe(button(container, "Launch"));
+  key("ArrowDown");
+  expect(document.activeElement).toBe(button(container, "Inbox"));
 });
 
 test("a row that opens nothing is no control, its acts still are", () => {
@@ -292,7 +503,7 @@ test("a row that opens nothing hands its item to its ref", () => {
   expect(row).toBe(container.querySelector("li"));
 });
 
-test("a key pressed on a row reaches its handler, and a right-click anywhere on it reaches its own", () => {
+test("a key pressed on a row reaches its handler", () => {
   const heard: string[] = [];
   const container = draw(
     createElement(List, {
@@ -301,25 +512,16 @@ test("a key pressed on a row reaches its handler, and a right-click anywhere on 
         title: "Ada Lovelace",
         onPress: () => undefined,
         onKeyDown: (event) => heard.push(`key ${event.key}`),
-        contextMenu: {
-          onContextMenu: () => heard.push("menu"),
-          onPointerDown: ignore,
-          onTouchEnd: ignore,
-          "data-long-press": "",
-        },
         actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
       }),
     }),
   );
-  const row = button(container, "Ada Lovelace");
   act(() => {
-    row.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    button(container, "More for ada").dispatchEvent(
-      new MouseEvent("contextmenu", { bubbles: true }),
+    button(container, "Ada Lovelace").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "j", bubbles: true }),
     );
   });
-  expect(heard).toEqual(["key j", "menu", "menu"]);
+  expect(heard).toEqual(["key j"]);
 });
 
 test("a row that opens nothing hears no keys, not even its acts'", () => {
@@ -1298,28 +1500,15 @@ test("a scroll that follows a quick trackpad swipe ends its flick, so the row on
 
 /** A row offering a swipe and a menu a right-click or a long press opens, its press counted in `opened`. */
 function SwipedMenuRow({ opened }: { opened: string[] }): React.JSX.Element {
-  const menu = useMenu(true);
-  return createElement(
-    Fragment,
-    null,
-    createElement(List, {
-      label: "Inbox",
-      children: createElement(ListRow, {
-        title: "Alert at 80%?",
-        onPress: () => opened.push("open"),
-        swipe: { label: "Read", icon: glyph(), onAct: () => opened.push("Read") },
-        contextMenu: menu.contextMenu(),
-      }),
+  return createElement(List, {
+    label: "Inbox",
+    children: createElement(ListRow, {
+      title: "Alert at 80%?",
+      onPress: () => opened.push("open"),
+      swipe: { label: "Read", icon: glyph(), onAct: () => opened.push("Read") },
+      menu: { thing: "Item", groups: [[{ label: "Archive", onSelect: ignore }]] },
     }),
-    menu.drawn === undefined
-      ? null
-      : createElement(Menu, {
-          label: "Item actions",
-          menu: menu.drawn,
-          groups: [[{ label: "Archive", onSelect: ignore }]],
-          onClose: menu.close,
-        }),
-  );
+  });
 }
 
 test("a row that swipes still opens its menu on a touch held still, and the touch's end makes no click", () => {

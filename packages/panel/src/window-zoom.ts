@@ -7,10 +7,13 @@
  * press landing before the last one's write has come back steps from the
  * size that write asked for, so two quick presses are two steps. A step that
  * would go past the smallest or largest size is not offered, so the key falls
- * through to nothing and the command palette leaves it out.
+ * through to nothing and the command palette leaves it out. Only the desktop
+ * zooms, so nothing is offered on the web, where the browser's own zoom keeps
+ * the chords.
  */
 
 import {
+  HOST_CAPABILITY,
   ZOOM_ACTUAL_SIZE,
   ZOOM_STEP,
   type ZoomPercent,
@@ -21,6 +24,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
+import { useCapability } from "./use-app-state.js";
 
 /** The custom property desktop.css divides the traffic lights' width by, since the page zoom does not scale them. */
 const ZOOM_PROPERTY = "--zoom";
@@ -35,10 +39,11 @@ export function useWindowZoom(
 ): void {
   // The size a press asked for that the settings do not say yet.
   const asked = useRef<ZoomPercent | undefined>(undefined);
+  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
 
   /** A write of the size `next` steps to from the latest size asked for, or nothing at that size already. */
   const offerOf = (next: (from: ZoomPercent) => ZoomPercent): (() => void) | undefined => {
-    if (zoom === undefined || next(zoom) === zoom) return undefined;
+    if (!desktopApp || zoom === undefined || next(zoom) === zoom) return undefined;
     return () => {
       const target = next(asked.current ?? zoom);
       if (target === (asked.current ?? zoom)) return;

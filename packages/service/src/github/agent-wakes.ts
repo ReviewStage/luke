@@ -13,6 +13,7 @@ import {
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
@@ -488,7 +489,7 @@ export function agentWakeOf(
 function pullRequestWords(wake: AgentWake): string {
   return wake.pullRequest === undefined
     ? `your pull request: ${wake.url}`
-    : `your pull request [@#${wake.pullRequest}](${wake.url}).`;
+    : `your pull request ${mentionMarkdownLink(`#${wake.pullRequest}`, wake.url)}.`;
 }
 
 /** One inline comment as the review's words carry it: where it is, its page, and what it says. */

@@ -283,20 +283,13 @@ test("a press of the toggle opens the tree with the keyboard in it, holds the ke
   assert.ok(treeDrawn(), "the tree floats over the diff");
   assert.ok(held.contains(document.activeElement), "the keyboard lands in the tree");
 
-  const outside =
-    tab.querySelector<HTMLButtonElement>('button[aria-label="Open on GitHub"]') ??
-    assert.fail("the bar offers GitHub");
-  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
+  // jsdom walks no focus for Tab, so what is read is the key: the tree takes it, wrapping it past its last control rather than leaving it to the browser to walk on out.
+  const tabbed = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
   act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
-    );
-    outside.focus();
+    document.activeElement?.dispatchEvent(tabbed);
   });
-  assert.ok(
-    held.contains(document.activeElement),
-    "Tab walks the keyboard no further than the tree",
-  );
+  assert.ok(tabbed.defaultPrevented, "Tab walks the keyboard no further than the tree");
+  assert.ok(held.contains(document.activeElement), "the keyboard stays in the tree");
 
   act(() => {
     document.activeElement?.dispatchEvent(

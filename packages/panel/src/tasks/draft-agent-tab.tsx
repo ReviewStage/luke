@@ -9,7 +9,7 @@ import { AgentComposer } from "./agent-composer.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
-import { agentTabLabel } from "./coding-agent-model.js";
+import { agentName } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -209,7 +209,7 @@ export function DraftAgentTab({
       {sentAt === undefined || fork === undefined ? null : (
         <ConversationEmptyState>
           <StartingLine
-            source={source === undefined ? undefined : agentTabLabel(source, control.models)}
+            source={source === undefined ? undefined : agentName(source, control.models)}
             sentAt={sentAt}
           />
         </ConversationEmptyState>
@@ -232,6 +232,7 @@ export function DraftAgentTab({
                 }
           }
           models={control.models}
+          modelsFailed={control.modelsFailed}
           readModels={control.readModels}
           published={undefined}
           usage={undefined}

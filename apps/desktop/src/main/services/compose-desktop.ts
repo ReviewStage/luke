@@ -17,17 +17,27 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@luke/host/effect";
-import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
+import { openMacTerminals } from "@luke/host/node";
+import {
+  confirmingHold,
+  type DesktopQuit,
+  LEAVE,
+  type Leave,
+  leaveGate,
+  leaveQuestion,
+  type UnsavedWorkHolders,
+  unsavedWorkHolders,
+} from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
-import { net } from "electron";
+import { net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
-import { askEndCallAndQuit } from "../window/quit-dialog";
+import { askBeforeLeaving } from "../window/quit-dialog";
 import { type AvatarLink, linkAvatar } from "./avatar-link";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
@@ -87,6 +97,14 @@ export interface DesktopServices {
    * run it rather than on a runtime of oRPC's own.
    */
   readonly services: Context.Context<never>;
+  /** Which panels say they hold unsaved work, as each tells it. */
+  readonly unsavedWork: UnsavedWorkHolders<WebContents>;
+  /**
+   * Asks before a way out of Luke while something would be lost, answering
+   * whether to go on: the one sheet the quit, Restart to update, and Sign
+   * out each ask through.
+   */
+  readonly askBeforeLeaving: (leave: Leave) => Promise<boolean>;
 }
 
 /** The desktop client as it stands once every step of the launch has run. */
@@ -233,15 +251,27 @@ export function composeDesktop(
         setVideo: (on) => operator.host.setVideo(on),
       });
       const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
-      // A quit asked for while a call stands asks first, as a call app does,
-      // and nothing else holds one.
+      // A quit, a restart to update, and a sign-out asked for while a call
+      // stands, a panel holds unsaved work, or a terminal of this Mac is open
+      // ask first, with Cancel the default, as a Mac app asks before it loses
+      // anything; while nothing would be lost none of them asks at all.
+      const unsavedWork = unsavedWorkHolders<WebContents>((sender) => sender.isDestroyed());
+      const atStake = () => {
+        const { view } = state.snapshot().voice;
+        return {
+          call: view !== undefined && callInProgress(view),
+          unsavedWork: unsavedWork.holding(),
+          macTerminals: openMacTerminals(),
+        };
+      };
+      const askFirst = leaveGate({
+        atStake,
+        ask: (question) => askBeforeLeaving(windows.panels.primaryPanel(), question),
+      });
       quit.holdWhile(
         confirmingHold({
-          standing: () => {
-            const { view } = state.snapshot().voice;
-            return view !== undefined && callInProgress(view);
-          },
-          confirm: () => askEndCallAndQuit(windows.panels.primaryPanel()),
+          standing: () => leaveQuestion(LEAVE.QUIT, atStake()) !== undefined,
+          confirm: () => askFirst(LEAVE.QUIT),
           again: () => config.quit(),
         }),
       );
@@ -291,13 +321,18 @@ export function composeDesktop(
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
       // A run that sends nothing, a fixture's or a capture's, is never offline.
       if (config.runMode.sendsNetwork) {
-        yield* linkNetworkWatch({ state, isOnline: () => net.isOnline() });
+        yield* linkNetworkWatch({
+          state,
+          isOnline: () => net.isOnline(),
+          regained: operator.host.tasksResync(),
+        });
       }
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,
         engine: updateEngine,
         beforeRestart: quit.teardown,
+        askBeforeRestart: () => askFirst(LEAVE.RESTART),
         state,
         showSettings: () => {
           windows.panels.focusExpanded();
@@ -328,6 +363,8 @@ export function composeDesktop(
         colourCode,
         run,
         services,
+        unsavedWork,
+        askBeforeLeaving: askFirst,
       };
     }),
   );

@@ -1,4 +1,12 @@
-import { dropBelow, EllipsisIcon, IconButton, Tooltip, useMenu } from "@luke/ui";
+import {
+  dropBelow,
+  MoreButton,
+  moreLabel,
+  TOOLBAR_INSET,
+  TOOLBAR_LOOK,
+  Toolbar,
+  useMenu,
+} from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 
@@ -10,8 +18,8 @@ import { ActionMenu, type MenuEntry } from "./action-menu.js";
  * thing the page is for, such as New task, in the start corner; one ⋯ in the
  * end corner holding everything else the page offers; and the title of what
  * is on screen between them. The corners are one control wide each, so the
- * title's centre is the row's, and it truncates between them
- * (`.phone-head` in desktop.css).
+ * title's centre is the row's, and it truncates between them (`Toolbar`'s
+ * phone look).
  *
  * A menu the page already drops from a button of its own, its View options
  * or its Filter, is kept whole rather than folded into the ⋯: the ⋯ offers
@@ -60,6 +68,7 @@ export function PhoneHead({
   place,
   start,
   title,
+  tag,
   end,
 }: {
   /** What the row heads, which its class names, as `task-head` for a task. */
@@ -68,20 +77,26 @@ export function PhoneHead({
   start: React.ReactNode;
   /** What is on screen, centred, or what stands in its place, such as a search's field. */
   title: React.ReactNode;
+  /** What names the page's state, after the title on its baseline (an experiment's mark). */
+  tag?: React.ReactNode;
   /** The end corner's one control, the ⋯. */
   end: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <header className={`desktop-toolbar phone-head ${place}-head`}>
-      <div className="phone-head-start">{start}</div>
-      <div className="desktop-toolbar-heading">{title}</div>
-      <div className="desktop-toolbar-actions">{end}</div>
-    </header>
+    <Toolbar
+      look={TOOLBAR_LOOK.PHONE}
+      place={place}
+      start={TOOLBAR_INSET.COLUMN}
+      end={TOOLBAR_INSET.COLUMN}
+      lead={start}
+      title={title}
+      tag={tag}
+      actions={end}
+    />
   );
 }
 
 /** What a place's ⋯ is called. */
-const MORE = "More";
 
 /**
  * A place's ⋯ and the menu it drops: `groups`, made as the menu is drawn
@@ -89,9 +104,12 @@ const MORE = "More";
  * under (`MenuAsk`).
  */
 export function PlaceMore({
+  thing,
   shown,
   groups,
 }: {
+  /** What the place is, which names its ⋯ and its menu: "Inbox" makes "Inbox actions". */
+  thing: string;
   /** Whether the place is on screen, for the menu not to outlive it. */
   shown: boolean;
   groups: (opener: HTMLElement) => readonly (readonly MenuEntry[])[];
@@ -99,12 +117,10 @@ export function PlaceMore({
   const menu = useMenu(shown);
   return (
     <>
-      <Tooltip label={MORE}>
-        <IconButton icon={<EllipsisIcon />} label={MORE} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={thing} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={MORE}
+          label={moreLabel(thing)}
           menu={menu.drawn}
           groups={groups(menu.drawn.opener)}
           onClose={menu.close}

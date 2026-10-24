@@ -27,6 +27,186 @@
   --color-switch-thumb: var(--luke-color-switch-thumb);
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
+  /* How far a control fades while it cannot be used (`opacity-disabled`). */
+  --opacity-disabled: var(--luke-disabled-opacity);
+
+  /* The controls' own roles (`profiles.css`), which a button, a toggle, and
+     a tab are drawn at in every profile; and a button's look, which its
+     variant and state set as `--luke-button-*` on the button itself
+     (`button.css`), so a container's sheet restyles it by those alone. */
+  --font-ui: var(--luke-font-sans);
+  --text-body: var(--luke-type-body-size);
+  --text-body--line-height: var(--luke-type-body-leading);
+  --text-label: var(--luke-type-label-size);
+  --text-label--line-height: var(--luke-type-label-leading);
+  --text-caption: var(--luke-type-caption-size);
+  --text-caption--line-height: var(--luke-type-caption-leading);
+  --spacing-control: var(--luke-control-height);
+  --spacing-control-inset: var(--luke-control-inset);
+  --spacing-control-icon: var(--luke-control-icon);
+  --spacing-icon-gap: var(--luke-icon-gap);
+  --spacing-menu-row: var(--luke-menu-row-height);
+  --spacing-menu-glyph: var(--luke-menu-glyph);
+  --spacing-list-gap: var(--luke-list-gap);
+  --radius-luke-6: var(--luke-radius-6);
+  --radius-luke-8: var(--luke-radius-8);
+  --radius-luke-10: var(--luke-radius-10);
+  --radius-luke-full: var(--luke-radius-full);
+  --radius-control: var(--luke-control-radius);
+  --radius-menu-row: var(--luke-menu-row-radius);
+  --color-fill-strong: var(--luke-color-fill-strong);
+  --color-fill-pressed: var(--luke-color-fill-pressed);
+  --color-border-selected: var(--luke-color-border-selected);
+  --color-accent-ink: var(--luke-color-accent-text);
+  --spacing-touch: var(--luke-touch-target);
+  /* A box or a range a choice is drawn in: a field's ground inside a
+     chosen row's edge, filled in the accent where it is on. */
+  --color-field: var(--luke-color-input);
+  --color-surface: var(--luke-color-surface);
+  --color-control-edge: var(--luke-color-border-selected);
+  --color-accent-fill: var(--luke-color-accent);
+  --color-on-accent: var(--luke-color-on-accent);
+  --color-button-fill: var(--luke-button-fill);
+  --color-button-ink: var(--luke-button-ink);
+  --color-button-edge: var(--luke-button-edge);
+  /* Text entry and the words around it (`text-field`, `search-field`,
+     `form-field`, `inline-edit`, `length-counter`): a
+     field's grounds and edges, the type roles its words are set in, and the
+     lengths it stands at, each a profile's role. A name added here that
+     tailwind-merge cannot read is listed in `../cn.ts`. */
+  --color-well: var(--luke-color-well);
+  --color-field-focus: var(--luke-color-input-focus);
+  --color-ground: var(--luke-color-ground);
+  --font-body: var(--luke-font-sans);
+  --text-title: var(--luke-type-title-size);
+  --text-title--line-height: var(--luke-type-title-leading);
+  /* A field set a size under the body's keeps the body's line. */
+  --leading-body: var(--luke-type-body-leading);
+  /* Words edited in place in the body's size, on the line of what they stand in. */
+  --text-body-size: var(--luke-type-body-size);
+  /* A finger's field takes 16px words at least, or iOS zooms into it. */
+  --text-touch: max(16px, 1em);
+  --text-caption-touch: max(16px, var(--luke-type-caption-size));
+  /* The base scale's larger steps by name (the smaller stand with the menus'
+     roles below), because Tailwind's numbered steps are rems of a root the
+     window sets at the body's size, not 16px. */
+  --spacing-luke-20: var(--luke-space-20);
+  --spacing-luke-24: var(--luke-space-24);
+  /* A field a step under a control, among a bar's controls. */
+  --spacing-control-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  /* A time's block inset: the room around one line, so its value stands on the field's middle. */
+  --spacing-time-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-body-leading)) /
+    2 -
+    1px
+  );
+  --spacing-time-value: var(--luke-type-body-leading);
+  /* A growing note's least height, from its rows (`--luke-text-area-rows`), and its most. */
+  --spacing-text-area-least: calc(
+    var(--luke-text-area-rows) *
+    var(--luke-type-body-leading) +
+    2 *
+    var(--luke-space-6) +
+    2px
+  );
+  --spacing-text-area-bare-least: max(
+    var(--luke-text-area-least, 0px),
+    calc(
+      var(--luke-text-area-rows) *
+      var(--luke-type-body-leading) +
+      var(--luke-text-area-inset-start, 0px) +
+      var(--luke-text-area-inset-end, 0px)
+    )
+  );
+  --spacing-text-area-grow-max: var(--luke-text-area-grow-max);
+  /* A bare text area's insets, which the card it stands in sets. */
+  --spacing-text-area-inset-start: var(--luke-text-area-inset-start, 0px);
+  --spacing-text-area-inset-inline: var(--luke-text-area-inset-inline, 0px);
+  --spacing-text-area-inset-end: var(--luke-text-area-inset-end, 0px);
+  /* A search's lead, a hair under a row's, so the magnifier stands where a row's glyph does. */
+  --spacing-search-lead: calc(var(--luke-space-8) - 1px);
+  /* A search's clear, nested inside the well's edge. */
+  --spacing-search-clear: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
+  /* A menu's search row: a menu row, its inset, and its hairline. */
+  --spacing-menu-search: calc(var(--luke-menu-row-height) + 2 * var(--luke-space-2) + 2px);
+  /* A settings label renamed in place overhangs the label by its inset and edge. */
+  /* off-scale: a 24px box over an 18px label line stands 3px past it each side. */
+  --spacing-inline-edit-lift: 3px;
+  --spacing-inline-edit-reach: calc(-1 * var(--luke-space-8) - 1px);
+  --radius-control-compact: calc(var(--luke-control-radius) - var(--luke-space-2));
+  --radius-inline-edit: calc(var(--luke-radius-6) - 1px);
+  --shadow-selected-edge: inset 0 0 0 1px var(--luke-color-border-selected);
+  --ease-plain: var(--luke-motion-exit);
+  /* A field turning wrong shakes once; an arriving part fades in, a clear
+     grows in and shrinks out, an error drops into its line, and a count
+     ticks in the way it moved. */
+  --animate-field-shake: field-shake var(--luke-duration-fast) var(--luke-motion-exit);
+  --animate-arrive: arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
+  --animate-leave: leave-fade var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  --animate-pop-in:
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
+    pop-grow var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  --animate-pop-out: pop-out var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  --animate-drop-in:
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit),
+    drop-in var(--luke-duration-fast) var(--luke-spring-fast);
+  --animate-tick-up:
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
+    tick-up var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  --animate-tick-down:
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
+    tick-down var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+
+  @keyframes field-shake {
+    20% {
+      transform: translateX(-3px);
+    }
+    40% {
+      transform: translateX(3px);
+    }
+    60% {
+      transform: translateX(-2px);
+    }
+    80% {
+      transform: translateX(2px);
+    }
+  }
+  @keyframes arrive-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes leave-fade {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-grow {
+    from {
+      transform: scale(0.5);
+    }
+  }
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+  @keyframes drop-in {
+    from {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes tick-up {
+    from {
+      transform: translateY(40%);
+    }
+  }
+  @keyframes tick-down {
+    from {
+      transform: translateY(-40%);
+    }
+  }
 
   /* The overlays' roles (`../shadcn/dialog.tsx`, `popover.tsx`, `tooltip.tsx`,
      `hover-card.tsx`): the dimmed window, the surface a card or a menu
@@ -37,15 +217,12 @@
   --color-popover: var(--luke-color-overlay);
   --color-popover-foreground: var(--luke-color-text);
   --color-border-strong: var(--luke-color-border-strong);
-  --color-subtle-foreground: var(--luke-color-text-subtle);
-  --color-fill-strong: var(--luke-color-fill-strong);
   --color-danger: var(--luke-color-danger-text);
   --color-tooltip: var(--luke-color-tooltip);
   --color-tooltip-foreground: var(--luke-color-tooltip-text);
   --color-tooltip-edge: var(--luke-color-tooltip-edge);
   --radius-dialog: var(--luke-dialog-radius);
   --radius-menu: var(--luke-menu-radius);
-  --radius-menu-row: var(--luke-menu-row-radius);
   --radius-tooltip: var(--luke-tooltip-radius);
   --shadow-dialog: var(--luke-dialog-shadow);
   --shadow-dialog-drop: var(--luke-dialog-drop-shadow);
@@ -60,9 +237,10 @@
   --spacing-card-inset-snug: var(--luke-card-inset-snug);
   --spacing-dialog-reach: var(--luke-space-12);
   --spacing-menu-inset: var(--luke-menu-inset);
-  --spacing-menu-row: var(--luke-menu-row-height);
-  --spacing-menu-glyph: var(--luke-menu-glyph);
-  --spacing-icon-gap: var(--luke-icon-gap);
+  --spacing-block-gap: var(--luke-block-gap);
+  --spacing-tight-gap: var(--luke-tight-gap);
+  --spacing-row-inset: var(--luke-row-inset);
+  --spacing-list-inset: var(--luke-list-inset);
   --spacing-control-gap: var(--luke-control-gap);
   --spacing-viewport-top: var(--luke-viewport-top);
   --spacing-keyboard-inset: var(--luke-keyboard-inset);
@@ -76,19 +254,24 @@
   --container-dialog-composer-reach: calc(100% + 2 * var(--luke-space-12));
   --container-dialog-media-min: min(var(--luke-dialog-media-min-width), 100%);
   --container-dialog-media-max: min(var(--luke-dialog-media-max-width), 100%);
+  /* off-scale: a command palette's card (`components/command/`), at its own
+     measure, standing a fifth of the way down the window rather than in its
+     middle, and never more than two thirds of the window tall; in a narrow
+     room, a sheet hung from the top of what is seen, four fifths of it tall
+     at most. */
+  --container-dialog-command: min(560px, 100%);
+  --spacing-dialog-command-top: calc(var(--luke-stage-height) * 0.18);
+  --spacing-dialog-command-room: calc(var(--luke-stage-height) * 0.64);
+  --spacing-dialog-command-sheet: calc(var(--luke-stage-height) * 0.8);
   --container-tooltip: var(--luke-tooltip-max-width);
   --container-tooltip-card: var(--luke-tooltip-card-width);
-  --text-body: var(--luke-type-body-size);
-  --text-body--line-height: var(--luke-type-body-leading);
-  --text-caption: var(--luke-type-caption-size);
-  --text-caption--line-height: var(--luke-type-caption-leading);
+  /* Breadcrumbs and DataTable. */
+  --font-weight-dialog: var(--luke-type-dialog-weight);
+  --leading-tag: var(--luke-type-tag-leading);
   --leading-caption: var(--luke-type-caption-leading);
   --text-section: var(--luke-type-section-size);
   --text-section--line-height: var(--luke-type-section-leading);
-  --text-hover-card-name: var(--luke-hover-card-name-size);
-  --text-hover-card-sub: var(--luke-hover-card-sub-size);
   --text-hover-card-code: var(--luke-hover-card-code-size);
-  --text-hover-card-coarse: var(--luke-hover-card-coarse-size);
   --font-sans: var(--luke-font-sans);
   --ease-motion-exit: var(--luke-motion-exit);
   --ease-pane: var(--luke-motion-pane);
@@ -100,7 +283,7 @@
      dropped and named again replays); a hung panel arrives and drops as a
      menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
      out once seen. */
-  --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) ease-out;
+  --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
   --animate-dialog-in:
     luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
     luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast);
@@ -173,13 +356,244 @@
     }
   }
 
+  /* The menu and picker roles (`../shadcn/dropdown-menu.tsx`,
+     `../shadcn/combobox.ts`, `../shadcn/calendar.ts`) the overlays' above
+     leave out: the inks, the corners, and the sizes a menu's surface and its
+     rows, a list, and a month are drawn at, each set per profile. */
+  --color-secondary: var(--luke-color-fill-strong);
+  --color-destructive: var(--luke-color-danger);
+  --color-input: var(--luke-color-input);
+  /* A picked day's fill and ink, and the wash of a range between its ends. */
+  --color-fill-selected: var(--luke-color-fill-selected);
+  /* A toolbar floated on the menu's surface: a row's round, a hair out. */
+  --radius-menu-toolbar: calc(var(--luke-menu-row-radius) + var(--luke-space-2));
+  /* The base scale, as `p-luke-8` (`tokens/scale.css`), because the window's
+     root type is 13px and Tailwind's own numbered steps are rems of it. */
+  --spacing-luke-2: var(--luke-space-2);
+  --spacing-luke-4: var(--luke-space-4);
+  --spacing-luke-6: var(--luke-space-6);
+  --spacing-luke-8: var(--luke-space-8);
+  --spacing-luke-12: var(--luke-space-12);
+  --spacing-luke-16: var(--luke-space-16);
+  --spacing-luke-40: var(--luke-space-40);
+  /* off-scale: a menu's least and most width, and a settings chevron in a row's end */
+  --spacing-menu-least: 196px;
+  --spacing-menu-most: 280px;
+  --spacing-menu-chevron: 14px;
+  /* A menu as tall as can be seen, a margin short of either edge, so a long
+     one scrolls above a phone's keyboard (`tokens/viewport.css`). */
+  --spacing-menu-max: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
+  /* A list's cap, an app's placement hook (README's "Placement hooks"). */
+  --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
+  /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
+  --spacing-combobox-lead: 9ch;
+  --text-group: var(--luke-type-group-size);
+  --text-group--line-height: var(--luke-type-group-leading);
+  --text-tag: var(--luke-type-tag-size);
+  --text-tag--line-height: var(--luke-type-tag-leading);
+  /* A role's weight, so a utility reads `font-label` and never `font-medium`:
+     the weight is the role's, which `profiles.css` sets once. */
+  --font-weight-text: var(--luke-type-body-weight);
+  --font-weight-label: var(--luke-type-label-weight);
+  --font-weight-group: var(--luke-type-group-weight);
+  --font-weight-tag: var(--luke-type-tag-weight);
+  --font-weight-caption: var(--luke-type-caption-weight);
+  --font-weight-section: var(--luke-type-section-weight);
+  --font-weight-emphasis: var(--luke-type-emphasis-weight);
+  --font-weight-title: var(--luke-type-title-weight);
+  --tracking-title: var(--luke-type-title-tracking);
+  /* A menu's exit, a fade, over `menu.css`'s keyframes; its entrance is the
+     overlays' `--animate-menu-in` above. */
+  --animate-menu-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  --z-index-menu: var(--luke-z-menu);
+  --z-index-menu-over-dialog: calc(var(--luke-z-dialog) + 1);
+  --text-dialog: var(--luke-type-dialog-size);
+  --text-dialog--line-height: var(--luke-type-dialog-leading);
+  --radius-breadcrumb: var(--luke-radius-6);
+  --spacing-breadcrumb-gap: var(--luke-space-4);
+  --spacing-breadcrumb-pill-block: var(--luke-space-2);
+  --spacing-breadcrumb-pill-inline: var(--luke-space-4);
+  --spacing-breadcrumb-chevron: var(--luke-space-12);
+  --spacing-breadcrumb-title-chevron: 13px; /* off-scale: the toolbar heading's chevron, a size under a control's glyph */
+  --spacing-data-table-cell-block: var(--luke-space-12);
+  --spacing-data-table-cell-inline: var(--luke-space-20);
+  --spacing-data-table-narrow: 520px;
+  --spacing-data-table-medium: 640px;
+  --spacing-data-table-wide: 760px;
+
+  /* Banner, ScrollArea, and Pagination. */
+  --color-attention: var(--luke-color-attention);
+  --color-body-foreground: var(--luke-color-text-body);
+  /* A strip's tint and hairline, mixed from the ink of the tone the banner
+     wears (`tokens/status-tone.css`). */
+  --color-banner-strip: color-mix(in srgb, var(--luke-tone-ink) 9%, var(--luke-color-ground));
+  --color-banner-strip-edge: color-mix(in srgb, var(--luke-tone-ink) 30%, var(--luke-color-border));
+  /* A status tone's tint, which whatever wears its `data-tone` sets. */
+  --color-tone-tint: var(--luke-tone-tint);
+  --spacing-banner-strip-block: var(--luke-space-2);
+  --spacing-banner-strip-end: var(--luke-space-12);
+  --spacing-banner-strip-start: var(--luke-space-20);
+  --spacing-banner-card: var(--luke-space-12);
+  --spacing-banner-card-start: var(--luke-space-16);
+  --spacing-banner-disc: var(--luke-space-32); /* the card's glyph disc */
+  --spacing-banner-words-gap: var(--luke-space-2);
+  --spacing-banner-row-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-body-leading)) /
+    2
+  );
+  --spacing-pagination-gap: var(--luke-space-4);
+  --spacing-pagination-steps-gap: var(--luke-space-16);
+  --spacing-pagination-item: calc(var(--luke-type-caption-leading) + 2 * var(--luke-space-6));
+  --spacing-pagination-item-inset: var(--luke-space-8);
+
+  /* Toast, Spinner, and Progress. Their lengths name the scale's steps
+     rather than Tailwind's rem ones, since a root may set its own size. */
+  --color-complete: var(--luke-color-complete);
+  --color-working: var(--luke-color-working);
+  --spacing-spinner: var(--luke-space-16);
+  --spacing-spinner-small: var(--luke-space-12);
+  --spacing-spinner-region: 22px; /* off-scale: a ring alone in a region */
+  --spacing-spinner-region-inset: var(--luke-space-24);
+  --spacing-progress-height: 3px; /* off-scale: a hairline bar */
+  --container-progress: 160px; /* off-scale: a meter's length beside a line of words */
+  --spacing-toast-gap: var(--luke-space-8);
+  --spacing-toast-inset: var(--luke-space-12);
+  --spacing-toast-line-gap: var(--luke-space-2);
+  --spacing-toast-glyph-inset: calc((var(--luke-control-height) - var(--luke-control-icon)) / 2);
+  --spacing-toast-text-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-section-leading)) /
+    2
+  );
+  --radius-toast: var(--luke-radius-14);
+  --shadow-toast: 0 1px 2px var(--luke-color-shadow-soft), 0 12px 36px var(--luke-color-shadow);
+  --shadow-toast-dismiss: 0 1px 3px var(--luke-color-shadow-soft);
+  --z-index-toast: var(--luke-z-toast);
+
+  /* Chip and Badge. Their lengths name the scale's steps, as above. */
+  --color-chip: var(--luke-color-chip);
+  --color-chip-hover: var(--luke-color-chip-hover);
+  --color-chip-selected: var(--luke-color-chip-selected);
+  --color-chip-edge: var(--luke-color-chip-edge);
+  --color-chip-edge-strong: var(--luke-color-chip-edge-strong);
+  --color-chip-count-pressed: color-mix(
+    in srgb,
+    var(--luke-color-ink-inverse) 65%,
+    var(--luke-color-ink)
+  );
+  --color-ink: var(--luke-color-ink);
+  --color-ink-foreground: var(--luke-color-ink-inverse);
+  --color-merged: var(--luke-color-merged);
+  --color-badge-fill: light-dark(var(--luke-badge-fill-light), var(--luke-badge-fill-dark));
+  --color-badge-fill-edge: light-dark(var(--luke-badge-edge-light), var(--luke-badge-edge-dark));
+  --color-badge-fill-words: light-dark(var(--luke-badge-words-light), var(--luke-badge-words-dark));
+  --spacing-chip-inset: var(--luke-space-8);
+  --spacing-chip-inset-wide: var(--luke-space-12);
+  --spacing-chip-tight: var(--luke-space-4);
+  --spacing-chip-compact: var(--luke-space-20);
+  --spacing-chip-compact-inset: calc(var(--luke-space-8) - 1px);
+  --spacing-chip-chevron: var(--luke-space-12);
+  --spacing-chip-remove: calc(var(--luke-control-height) - var(--luke-space-12));
+  --spacing-chip-remove-glyph: 10px; /* off-scale: the ×, a size under the chevron */
+  --spacing-chip-field: var(--luke-select-field-width);
+  --spacing-chip-field-half: calc(var(--luke-select-field-width) / 2);
+  --spacing-chip-min-field: min(var(--luke-select-field-width), 100%);
+  --spacing-badge-gap: var(--luke-space-4);
+  --spacing-badge-block: var(--luke-space-2);
+  --spacing-badge-inline: var(--luke-space-8);
+  --spacing-badge-glyph: var(--luke-space-12);
+  --spacing-badge-swatch: var(--luke-space-8);
+  --spacing-status-dot: 7px; /* off-scale: a status dot */
+  --radius-badge: calc(var(--luke-type-caption-leading) / 2 + var(--luke-space-2));
+
+  /* Avatar, Skeleton, and Card. */
+  --spacing-avatar-mark: 14px; /* off-scale: a disc at a row's time */
+  --spacing-avatar-inline: var(--luke-space-16); /* a disc in a line of words */
+  --spacing-avatar-glyph: var(--luke-control-icon);
+  --spacing-avatar-stack: 18px; /* off-scale: a facepile's disc */
+  --spacing-avatar-row: var(--luke-space-20); /* a list row's disc */
+  --spacing-avatar-account: 26px; /* off-scale: the account's disc */
+  --spacing-avatar-card: var(--luke-space-32); /* a card head's disc */
+  --spacing-avatar-page: var(--luke-space-48); /* a page head's disc */
+  --spacing-avatar-masthead: 56px; /* off-scale: a masthead's disc */
+  --spacing-avatar-portrait: var(--luke-space-64); /* a portrait's disc */
+  --spacing-avatar-glyph-share: 62%; /* off-scale: an app's glyph, a share of its disc */
+  --radius-avatar-square: 36%; /* off-scale: an app's corner, a share of its edge */
+  --radius-avatar-tile: 25%; /* off-scale: a tile's corner, a quarter of its edge */
+  --shadow-avatar-edge: inset 0 0 0 0.5px var(--luke-color-border-strong);
+  --shadow-avatar-tile-edge: inset 0 0 0 1px var(--luke-color-border);
+  --color-on-identity: var(--luke-color-on-identity);
+  --color-identity-1: var(--luke-color-identity-1);
+  --color-identity-2: var(--luke-color-identity-2);
+  --color-identity-3: var(--luke-color-identity-3);
+  --color-identity-4: var(--luke-color-identity-4);
+  --color-identity-5: var(--luke-color-identity-5);
+  --color-identity-6: var(--luke-color-identity-6);
+  --spacing-skeleton-line: 0.8em; /* off-scale: a line's words, as tall as their type */
+  --spacing-skeleton-line-gap: calc((1lh - 0.8em) / 2);
+  --radius-skeleton: 4px; /* off-scale: a line's corner */
+  --color-card-surface: var(--luke-color-surface);
+  --color-card-code: var(--luke-color-code-ground);
+  --color-card-drop: var(--luke-color-focus-ring);
+  --spacing-card: var(--luke-card-inset);
+  --spacing-card-snug: var(--luke-card-inset-snug);
+  --spacing-card-compact: var(--luke-card-inset-compact);
+  --spacing-card-head-block: var(--luke-space-4);
+  --spacing-card-head-inline: var(--luke-space-12);
+  --spacing-card-head-gap: var(--luke-space-8);
+  --radius-card: var(--luke-card-radius);
+  --radius-card-raised: var(--luke-radius-8);
+  --shadow-card-soft: 0 1px 2px var(--luke-color-shadow-soft);
+  --shadow-card-lift: 0 2px 6px var(--luke-color-shadow-soft);
+
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's
      own literal. */
   --default-transition-duration: var(--luke-duration-quick);
   --default-transition-timing-function: var(--luke-spring);
+
+  /* The choice bar's own (`components/choice-bar/`): a compact fill
+     option's height, a step under the control's; a segment's height and
+     corner inside its trough, the trough's inset in from the control's; the
+     thumb a segment stands on; a count's glyph, at the caption's size; and
+     the ink a status tone draws a count's part or a checked control in
+     (`tokens/status-tone.css`). */
+  --spacing-choice-fill-compact: calc(var(--luke-control-height) - var(--luke-space-4));
+  --spacing-choice-segment: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  --spacing-choice-segment-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-4));
+  --spacing-caption-glyph: var(--luke-type-caption-size);
+  --radius-choice-segment: calc(var(--luke-control-radius) - var(--luke-space-2));
+  --color-choice-thumb: var(--luke-color-thumb);
+  --color-tone-ink: var(--luke-tone-ink);
+
+  /* ChoiceList's own (`components/choice-list/`): a marked row's control,
+     filled in its status tone's ink (`tone-ink`) with its dot or tick in the
+     ground's ink; a checkbox's corner there, drawn at the
+     four-pixel space; the body's leading under a caption's size, as a pill
+     and a row's number keep it; and a caption's size alone, which keeps the
+     line of what holds it, as a card's aside does. */
+  --radius-choice-box: var(--luke-space-4);
+  --text-caption-inline: var(--luke-type-caption-size);
 }
 
+/* The conditions a control answers beside its states: a finger's pointer,
+   on which a press is taken a finger's width across (`pointer-coarse:`),
+   and the fold a narrow container asks of the controls in it through
+   `--luke-fold` (`fold-folded:`, `fold-bare:`; README's "Folding in a
+   narrow container"). */
+@custom-variant pointer-coarse (@media (pointer: coarse));
+@custom-variant fold-folded (@container style(--luke-fold: folded));
+@custom-variant fold-bare (@container style(--luke-fold: bare));
+
+/* An orientation, as shadcn/ui's own stylesheet names Base UI's
+   `data-orientation` for the components it vendors (a slider's, a tab
+   list's, a toggle group's). */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
+
+/* The choice bar's: the room a toolbar short of it asks a bar folding
+   together, or named in words alone, to take in (`--luke-fold: tight`,
+   `components/choice-bar/`). */
+@custom-variant fold-tight (@container style(--luke-fold: tight));
 /* A composer's dialog card on a phone's screen (`../shadcn/dialog.tsx`): a
    root that measures its own room says so in `data-luke-room` (the panel's
    `stage-room.ts`), and one that says nothing is answered by the dimmed

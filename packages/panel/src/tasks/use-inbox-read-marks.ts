@@ -1,5 +1,5 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -8,7 +8,6 @@ import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import {
   acknowledgedOnOpen,
-  EMPTY_INBOX_DRAFT,
   INBOX_HOLDER,
   type InboxGroup,
   type InboxListed,
@@ -47,8 +46,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /** What the Inbox's read marks offer: the presses that mark. */
 export interface InboxReadMarks {
-  /** Marks one item read or unread. */
-  readonly onMark: (item: InboxItem, unread: boolean) => void;
+  /** Marks one item read or unread; answers, once the mark went, whether the service took it, as a batch of marks counts what it refused. */
+  readonly onMark: (item: InboxItem, unread: boolean) => Promise<boolean>;
   /** Marks every item given that is unread as read, as the service marks the listed workspace's. */
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
 }
@@ -139,13 +138,14 @@ export function useInboxReadMarks({
   const send = useCallback((write: () => Promise<void>) => {
     queue.current = queue.current.then(write);
   }, []);
+  // Note that a mark a later one stood for before it went answers as taken, since the write that sent the later one answers its own press.
   const onMark = useCallback(
-    (item: InboxItem, unread: boolean) => {
+    (item: InboxItem, unread: boolean): Promise<boolean> => {
       const made = settler.mark(new Map([[item.id, markOf(basis.current, item, unread)]]));
       wanted.current.set(item.id, { made, unread });
-      send(() => {
+      const sent = queue.current.then(() => {
         const latest = wanted.current.get(item.id);
-        if (latest === undefined) return Promise.resolve();
+        if (latest === undefined) return true;
         wanted.current.delete(item.id);
         return act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
           itemId: item.id,
@@ -156,10 +156,13 @@ export function useInboxReadMarks({
             // Note that a mark is let go only where it still stands as it was made, so a later mark on the same item outlives an earlier one's refusal.
             if ("failure" in answer) settler.unmark(latest.made);
             else settler.marked(latest.made);
+            return !("failure" in answer);
           });
       });
+      queue.current = sent.then(() => undefined);
+      return sent;
     },
-    [act, send, settler],
+    [act, settler],
   );
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
@@ -239,10 +242,10 @@ export function useNodOnOpen({
 }: {
   shown: InboxListed | undefined;
   readerId: string | undefined;
-  control: Pick<TaskInboxControl, "read" | "failed" | "draftOf" | "onAnswer">;
+  control: Pick<TaskInboxControl, "read" | "failed" | "draftOf" | "onAcknowledge">;
 }): void {
   const nodded = useRef<{ readonly id: string; readonly revision: number } | undefined>(undefined);
-  const { read, failed, draftOf, onAnswer } = control;
+  const { read, failed, draftOf, onAcknowledge } = control;
   useEffect(() => {
     if (shown === undefined) {
       nodded.current = undefined;
@@ -257,6 +260,6 @@ export function useNodOnOpen({
     if (!acknowledgedOnOpen(item, readerId)) return;
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
-    onAnswer(item, EMPTY_INBOX_DRAFT, INBOX_REPLY.ACKNOWLEDGED);
-  }, [shown, readerId, read, failed, draftOf, onAnswer]);
+    onAcknowledge(item);
+  }, [shown, readerId, read, failed, draftOf, onAcknowledge]);
 }

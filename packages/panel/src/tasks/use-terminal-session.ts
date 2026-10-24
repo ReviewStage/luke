@@ -21,6 +21,7 @@ import {
 import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { STATUS_TONE } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -30,7 +31,7 @@ import { useSideBundles } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract.js";
 import { onTerminalPort } from "../terminal/terminal-port.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -280,7 +281,7 @@ export function useTerminalSession(
   const [shell, setShell] = useState<string | undefined>(undefined);
   const show = useToast();
   const failedToast = useCallback(
-    (words: string) => show({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    (words: string) => show({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [show],
   );
   // Note that the close is read through a ref, because the tab hands a new one each render.

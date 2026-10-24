@@ -3,25 +3,28 @@ import {
   TASK_SECTION_WRITE,
   type TaskSection,
   type TaskSectionIcon,
+  type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
   BUTTON_SIZE,
-  ConfirmDialog,
   DIALOG_TONE,
+  Dialog,
+  DialogActions,
   type DialogConfirm,
-  EllipsisIcon,
+  ErrorLine,
   GAP,
-  IconButton,
+  GROUP_HEADING,
+  GroupHeader,
   LAYOUT_ELEMENT,
   MarkDoneIcon,
+  MoreButton,
   NOTE_LINE_LOOK,
   NoteLine,
   PencilIcon,
   Stack,
   TextField,
-  Tooltip,
   TrashIcon,
   useConfirmDialog,
   useLeaving,
@@ -29,6 +32,7 @@ import {
 } from "@luke/ui";
 import { TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
+  applySectionWrite,
   memberOf,
   memberSection,
   placeAllWrites,
@@ -44,12 +48,15 @@ import { SETTLED_STATUS, settleOffered } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
+import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
-import { SidebarGroupHeader } from "./sidebar-group-header.js";
+import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -71,8 +78,10 @@ import { useRowDrag } from "./use-row-drag.js";
  * or onto Pinned, which pins it there and takes it out of every section too
  * (`use-row-drag.ts`'s drop zones); a section is dragged among the others
  * by its header. Every change is drawn at once and kept on the account
- * (`TasksControl.onWriteSections`). Deleting a section asks first, though
- * it deletes no task, because its title and icon are not brought back.
+ * (`TasksControl.onWriteSections`). Deleting a section deletes no task and
+ * asks nothing: it happens at once, and its toast's Undo makes the section
+ * again under its id, with its title and icon, where it stood, holding the
+ * rows it held that no other section has taken since.
  */
 
 /** The zone Tasks is as a drop zone, which takes a task out of every section; a section's is its id. */
@@ -82,10 +91,13 @@ export const TASKS_DROP_ZONE = "tasks";
 export const PINNED_DROP_ZONE = "pinned";
 
 /** What a press must land in to drag a section rather than one of its tasks. */
-const SECTION_HANDLE = ".sidebar-repository-header";
+const SECTION_HANDLE = ".luke-group-header-head";
 
 /** Why a blank title was not kept. */
 const TITLE_ASKED = "Name the section.";
+
+/** What the toast says once a section is deleted. */
+const SECTION_DELETED = "Section deleted";
 
 /** What the dialog was opened to do: make a section in a workspace, then perhaps more with it, or edit one. */
 type SectionAsk =
@@ -122,17 +134,57 @@ function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | un
 }
 
 /**
- * New section, Edit section, and Delete section's question, standing only
- * while `surfaceOpen` and an account is signed in. New and Edit ask a
- * title, held to the wire's bound, and an icon; Enter in the title answers.
- * Every answer is drawn at once, so the card never waits on the service.
+ * The writes an Undo of deleting `section` asks, read against the sections
+ * as they stood before, `before`, and as they stand now, `current`: the
+ * section made again under its id, stood back at its place among its
+ * workspace's, and its rows put back in it in their order. A row put in
+ * another section since stays there, since that was chosen anew. Note that
+ * each row is given a position, as `placeAllWrites` gives one, because rows
+ * put back together are stamped in the same instant.
+ */
+function undeleteWrites(
+  before: TaskSections,
+  current: TaskSections,
+  section: TaskSection,
+  now: number,
+): TaskSectionWrite[] {
+  const { id, workspaceId, title, icon } = section;
+  const made: TaskSectionWrite = {
+    kind: TASK_SECTION_WRITE.CREATE,
+    id,
+    workspaceId,
+    title,
+    ...(icon === undefined ? undefined : { icon }),
+  };
+  const remade = applySectionWrite(current, made, now);
+  const was = workspaceSections(before, workspaceId).findIndex((each) => each.id === id);
+  const order = workspaceSections(remade, workspaceId);
+  const from = order.findIndex((each) => each.id === id);
+  const at = Math.min(Math.max(was, 0), order.length - 1);
+  const moved = from === at ? [] : sectionMoveWrites(order, from, at);
+  const members = sectionOrder(before, id)
+    .map(memberOf)
+    .filter((member) => memberSection(current, member) === undefined);
+  return [made, ...moved, ...placeAllWrites(remade, members, id, now)];
+}
+
+/**
+ * New section and Edit section's dialog, standing only while `surfaceOpen`
+ * and an account is signed in, and Delete section, which asks nothing and
+ * offers Undo. New and Edit ask a title, held to the wire's bound, and an
+ * icon; Enter in the title answers. Every answer is drawn at once, so the
+ * card never waits on the service. Note that the Undo reads the sections as
+ * they stand when it is pressed (`latest`), since it lands renders after
+ * the delete.
  */
 export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): SectionDialogs {
   const [ask, setAsk] = useState<SectionAsk | undefined>(undefined);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState<TaskSectionIcon | undefined>(undefined);
-  const [doomed, setDoomed] = useState<TaskSection | undefined>(undefined);
   const field = useRef<HTMLInputElement | null>(null);
+  const toast = useToast();
+  const latest = useRef(tasks);
+  latest.current = tasks;
   // Note that a question about a section goes with the section, deleted on another Mac or by a refresh.
   const standing = (section: TaskSection | undefined) =>
     section !== undefined && tasks.taskSections.sections.some((each) => each.id === section.id);
@@ -148,15 +200,6 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
   );
-  const deletion = useConfirmDialog(
-    { subject: tasks.signedIn && standing(doomed), surfaceOpen },
-    (): Promise<ActionResult> => {
-      if (doomed !== undefined) {
-        tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: doomed.id }]);
-      }
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
-  );
   const open = (next: SectionAsk, words: string, chosen: TaskSectionIcon | undefined) => {
     setAsk(next);
     setTitle(words);
@@ -164,17 +207,27 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
     confirm.ask();
   };
   const editing = ask?.kind === TASK_SECTION_WRITE.EDIT;
+  const form = useFormDialog(confirm, title.trim() !== "");
   const dialog = (
     <>
-      <ConfirmDialog
-        confirm={confirm}
-        field={field}
-        question={{
-          title: editing ? "Edit section" : "New section",
-          verb: editing ? "Save" : "Create section",
-          running: editing ? "Saving" : "Creating section",
-          tone: DIALOG_TONE.PRIMARY,
-        }}
+      <Dialog
+        open={form.open}
+        title={editing ? "Edit section" : "New section"}
+        busy={form.settling}
+        refused={form.refusal !== undefined}
+        initialFocus={field}
+        onDismiss={form.dismiss}
+        actions={
+          <DialogActions
+            onCancel={form.dismiss}
+            act={{
+              verb: editing ? "Save" : "Create section",
+              tone: DIALOG_TONE.PRIMARY,
+              running: editing ? "Saving" : "Creating section",
+              ...form.act,
+            }}
+          />
+        }
       >
         <TextField
           ref={field}
@@ -183,7 +236,8 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           placeholder="Section title"
           maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
           value={title}
-          disabled={confirm.busy}
+          disabled={form.settling}
+          onEnter={form.submit}
           onChange={(next) => {
             setTitle(next);
             // Note that a refused answer has settled, so the refusal alone holds
@@ -196,19 +250,11 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
         <SectionIconPicker
           key={ask?.kind === TASK_SECTION_WRITE.EDIT ? ask.section.id : TASK_SECTION_WRITE.CREATE}
           icon={icon}
-          disabled={confirm.busy}
+          disabled={form.settling}
           onIcon={setIcon}
         />
-      </ConfirmDialog>
-      <ConfirmDialog
-        confirm={deletion}
-        question={{
-          title: "Delete section?",
-          body: `“${doomed?.title ?? ""}” leaves your sidebar, and its tasks go back under Tasks. No task is deleted.`,
-          verb: "Delete section",
-          running: "Deleting",
-        }}
-      />
+        <ErrorLine>{form.refusal}</ErrorLine>
+      </Dialog>
     </>
   );
   return {
@@ -217,8 +263,14 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
     askEdit: (section) =>
       open({ kind: TASK_SECTION_WRITE.EDIT, section }, section.title, section.icon),
     askDelete: (section) => {
-      setDoomed(section);
-      deletion.ask();
+      const before = tasks.taskSections;
+      tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: section.id }]);
+      toast(
+        undoToast(SECTION_DELETED, () => {
+          const now = latest.current;
+          now.onWriteSections(undeleteWrites(before, now.taskSections, section, Date.now()));
+        }),
+      );
     },
     dialog,
   };
@@ -269,8 +321,7 @@ export function moveToSectionEntry(
           },
         ];
   return {
-    label: "Move to section",
-    icon: <LayersIcon />,
+    ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION),
     items: [
       ...sections,
       { label: "New section…", onSelect: () => askNew(workspaceId, put) },
@@ -392,6 +443,61 @@ function sectionActionGroups(
   return [edit, bulk, remove];
 }
 
+/**
+ * A section's rows as drawn open or folded: open, every row, dragged among
+ * its own and out of it; folded, only the open one, which a drop over lands
+ * on top of rather than among.
+ */
+function SectionRows({
+  drawn,
+  context,
+  rows,
+  folded,
+}: {
+  drawn: DrawnSection;
+  context: SectionContext;
+  rows: readonly TaskRow[];
+  folded: boolean;
+}): React.JSX.Element {
+  const move = folded
+    ? undefined
+    : (from: number, to: number) =>
+        context.tasks.onWriteSections(placeWritesWithin(drawn, from, to));
+  const drag = useRowDrag(move, {
+    onDropOut: (from, zone, at) => {
+      const row = rows[from];
+      if (row !== undefined) context.onDropRow(row, zone, at);
+    },
+  });
+  const keys = useRowMoveKeys(move);
+  // Note that a row on its way out has no place among the rows a drag or a menu moves.
+  const shown = useLeaving(rows, taskRowKey);
+  const listedAt = new Map(rows.map((row, at) => [taskRowKey(row), at]));
+  const placeOf = (key: string) => {
+    const at = listedAt.get(key);
+    return move === undefined || at === undefined
+      ? undefined
+      : { at, count: rows.length, onMove: move };
+  };
+  return (
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.ROW}
+      className="sidebar-tasks"
+      data-row-drop-rows={folded ? undefined : ""}
+      moves
+      onPointerDown={drag}
+      {...keys}
+    >
+      {shown.map(({ key, value: row }) => (
+        <RowPlaced key={key} place={placeOf(key)}>
+          {context.row(row)}
+        </RowPlaced>
+      ))}
+    </Stack>
+  );
+}
+
 /** One section: its header, its menu, and its rows, or a word that tasks are dragged in while it holds none. */
 function SidebarSection({
   drawn,
@@ -406,28 +512,10 @@ function SidebarSection({
   const { section } = drawn;
   const { tasks } = context;
   const folded = context.folded(section.id);
-  const rows = folded ? drawn.rows.filter(context.current) : drawn.rows;
-  const move = folded
-    ? undefined
-    : (from: number, to: number) => tasks.onWriteSections(placeWritesWithin(drawn, from, to));
-  const drag = useRowDrag(move, {
-    onDropOut: (from, zone, at) => {
-      const row = rows[from];
-      if (row !== undefined) context.onDropRow(row, zone, at);
-    },
-  });
+  const standing = drawn.rows.filter(context.current);
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const reads = useReadMarks();
-  // Note that a row on its way out has no place among the rows a drag or a menu moves.
-  const shown = useLeaving(rows, taskRowKey);
-  const listedAt = new Map(rows.map((row, at) => [taskRowKey(row), at]));
-  const placeOf = (key: string) => {
-    const at = listedAt.get(key);
-    return move === undefined || at === undefined
-      ? undefined
-      : { at, count: rows.length, onMove: move };
-  };
   const held = drawnSectionTasks(drawn);
   const groups = sectionActionGroups(drawn, context, {
     onMarkRead: () => {
@@ -441,31 +529,37 @@ function SidebarSection({
   });
   const glyph = sectionGlyph(section.icon);
   return (
-    <div
-      className="sidebar-repository sidebar-own-section"
-      data-row-drop={section.id}
-      data-iconless={glyph === undefined ? "true" : undefined}
-    >
-      <SidebarGroupHeader
+    <div className="sidebar-repository sidebar-own-section" data-row-drop={section.id}>
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={glyph}
-        name={section.title}
-        folded={folded}
-        count={drawn.rows.length}
+        label={section.title}
+        fold={sidebarFold(folded, () => context.onToggle(section.id))}
+        count={foldedCount(folded, drawn.rows.length, TASK_NOUN)}
         menuOpen={menu.open !== undefined}
         contextMenu={menu.contextMenu(ellipsis)}
-        onToggle={() => context.onToggle(section.id)}
-        actions={
-          <Tooltip label="Section actions">
-            <IconButton
-              ref={ellipsis}
-              icon={<EllipsisIcon />}
-              label={`Actions for ${section.title}`}
-              size={BUTTON_SIZE.COMPACT}
-              {...menu.trigger()}
-            />
-          </Tooltip>
+        standing={
+          standing.length === 0 ? undefined : (
+            <SectionRows drawn={drawn} context={context} rows={standing} folded />
+          )
         }
-      />
+        actions={
+          <MoreButton
+            ref={ellipsis}
+            thing={section.title}
+            size={BUTTON_SIZE.COMPACT}
+            {...menu.trigger()}
+          />
+        }
+      >
+        {drawn.rows.length === 0 ? (
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
+          </div>
+        ) : (
+          <SectionRows drawn={drawn} context={context} rows={drawn.rows} folded={false} />
+        )}
+      </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${section.title} actions`}
@@ -473,29 +567,6 @@ function SidebarSection({
           groups={withRowMoves(groups, place)}
           onClose={menu.close}
         />
-      )}
-      {rows.length === 0 ? (
-        folded ? null : (
-          <div className="sidebar-section-slot">
-            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here</NoteLine>
-          </div>
-        )
-      ) : (
-        // A folded section's rows are only the open one, so a drop over it lands on top rather than among them.
-        <Stack
-          as={LAYOUT_ELEMENT.UL}
-          gap={GAP.ROW}
-          className="sidebar-tasks"
-          data-row-drop-rows={folded ? undefined : ""}
-          moves
-          onPointerDown={drag}
-        >
-          {shown.map(({ key, value: row }) => (
-            <RowPlaced key={key} place={placeOf(key)}>
-              {context.row(row)}
-            </RowPlaced>
-          ))}
-        </Stack>
       )}
     </div>
   );
@@ -524,6 +595,7 @@ export function SidebarSections({
   const move = (from: number, to: number) =>
     context.tasks.onWriteSections(sectionMoveWrites(order, from, to));
   const drag = useRowDrag(move, { handle: SECTION_HANDLE });
+  const keys = useRowMoveKeys(move);
   return (
     <nav className="sidebar-group" aria-label="Sections">
       <Stack
@@ -532,6 +604,7 @@ export function SidebarSections({
         className="sidebar-sections"
         moves
         onPointerDown={drag}
+        {...keys}
       >
         {sections.map((drawn, at) => (
           <li key={drawn.section.id} className="sidebar-sections-item">

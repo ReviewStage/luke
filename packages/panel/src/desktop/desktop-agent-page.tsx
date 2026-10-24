@@ -4,24 +4,26 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ConfirmDialog,
-  EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  IconButton,
   InlineEdit,
+  MoreButton,
+  moreLabel,
+  NOT_FOUND_THING,
+  NotFound,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
-  PageToolbar,
   SpinnerRegion,
-  Tooltip,
+  STATUS_TONE,
+  Toolbar,
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
@@ -36,11 +38,10 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
-import { NOT_FOUND_THING, NotFound } from "../not-found.js";
-import { CallNotice } from "../tasks/agent-call.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
@@ -61,7 +62,7 @@ import {
 } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
@@ -110,8 +111,8 @@ import { tabCard } from "./tab-card.js";
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers the agent's own actions, the very ones its
  * tab's ⋯ offers on a task (`agent-actions.tsx`): Rename, which turns the
- * title into its name's field, Open terminal, Copy link, the
- * transcript's two copies, and Archive agent, so an agent with no task is
+ * title into its name's field, Show terminal, Copy link, the
+ * transcript's two copies, and Archive, so an agent with no task is
  * acted on as a task's is; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
@@ -140,18 +141,18 @@ const nothing = (): void => undefined;
 const NO_UNREAD: readonly StripTab[] = [];
 
 /** What the page's ⋯ is called. */
-const ACTIONS_LABEL = "Agent actions";
+const ACTIONS_THING = "Agent";
 
 /** What the title's field is called for a reader, as an agent's tab calls its own. */
 const NAME_LABEL = "Agent name";
 
 /**
- * The page's title and its ⋯, which offer the agent's own actions as its
+ * The page's bar: its title and its ⋯, which offer the agent's own actions as its
  * tab in a task's column does (`agent-actions.tsx`): its title turned into
  * its name's field by Rename, and every action of the tab's ⋯, in the same
  * groups (`strip-tabs.tsx`'s `contentActionGroups`).
  */
-function AgentPageHeading({
+function AgentPageBar({
   agent,
   agents,
   shown,
@@ -168,7 +169,7 @@ function AgentPageHeading({
   /** Whether the agent is Luke, the account's operator, who is named Luke and is neither renamed, archived, nor deleted from here. */
   luke: boolean;
 }): React.JSX.Element {
-  const label = luke ? LUKE_NAME : agentTabLabel(agent, agents.models);
+  const label = luke ? LUKE_NAME : agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
   const menu = useMenu(shown);
   const doors = luke
@@ -183,13 +184,13 @@ function AgentPageHeading({
   });
   const rename = luke ? undefined : actions.rename;
   return (
-    <>
-      <div className="desktop-toolbar-heading">
-        {rename?.editing === true ? (
+    <Toolbar
+      title={
+        rename?.editing === true ? (
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
+            className="luke-toolbar-title"
           >
             <InlineEdit
               value={label}
@@ -202,26 +203,24 @@ function AgentPageHeading({
             />
           </OneLine>
         ) : (
-          <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title">
-            {label}
-          </OneLine>
-        )}
-      </div>
-      <div className="desktop-toolbar-actions">
-        <Tooltip label={ACTIONS_LABEL}>
-          <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
-        </Tooltip>
-        {menu.drawn === undefined ? null : (
-          <ActionMenu
-            label={ACTIONS_LABEL}
-            menu={menu.drawn}
-            groups={groups}
-            onClose={menu.close}
-          />
-        )}
-        {actions.dialog}
-      </div>
-    </>
+          label
+        )
+      }
+      actions={
+        <>
+          <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
+          {menu.drawn === undefined ? null : (
+            <ActionMenu
+              label={moreLabel(ACTIONS_THING)}
+              menu={menu.drawn}
+              groups={groups}
+              onClose={menu.close}
+            />
+          )}
+          {actions.dialog}
+        </>
+      }
+    />
   );
 }
 
@@ -267,12 +266,9 @@ function useTaskAgentsFollow(
 export function DesktopAgentPage({
   tasks,
   agentId,
-  notice,
 }: {
   tasks: TasksControl;
   agentId: string;
-  /** The voice's notice line, while it rides the foot of the page's agent's call. */
-  notice?: React.ReactNode;
 }): React.JSX.Element {
   // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
   const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
@@ -331,17 +327,17 @@ export function DesktopAgentPage({
   const toast = useToast();
   const openLink = useReadLinkOpener();
   // An Unarchive refused says why, as any other refusal of the agent's does.
-  const unarchive = () => {
+  // Note that it settles once the answer is said, so the note's Unarchive shows busy till then.
+  const unarchive = () =>
     onArchive(agentId, false).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     }, nothing);
-  };
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
-  // Open terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
+  // Show terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
   const terminalDoors = useAgentTerminalDoors(sidePanel, agentRepository, () =>
     setFocus(COLUMN.SIDE),
   );
@@ -360,22 +356,27 @@ export function DesktopAgentPage({
     [agentRepository, agent?.title],
   );
   // The pane draws the agent as the column's tab would: archived or not, it is the list's one agent.
-  const control = {
+  // Note that what the pane is handed stands while it says the same, because the pane holds while it does (`memo`), and every row of the transcript with it.
+  const control = useSteadyDoors({
     ...agents,
     agents: agent === undefined ? agents.agents : [agent],
     agentIds: agent === undefined ? agents.agentIds : [agent.id],
     models: agents.models ?? tasks.agents.models,
     keywords,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
-  };
-  const tab = { agent: agentId };
+  });
+  const tab = useMemo(() => ({ agent: agentId }), [agentId]);
   // A Fork or a Continue opens the page's draft in the agent's place, through the same doors a task's column opens its own by.
   const draftDoors = useAgentDraftDoors(agents, agent?.archivedAt !== undefined, (draftId) =>
     setDrafting({ agentId, draftId }),
   );
   // The draft stands in the pane while it is the one the page opened, and the agent again once it starts or is let go.
-  const paneTab =
-    draftShown !== undefined && agents.draft?.id === draftShown ? { draft: draftShown } : tab;
+  const draftTab =
+    draftShown !== undefined && agents.draft?.id === draftShown ? draftShown : undefined;
+  const paneTab = useMemo(
+    () => (draftTab === undefined ? tab : { draft: draftTab }),
+    [draftTab, tab],
+  );
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
@@ -383,7 +384,7 @@ export function DesktopAgentPage({
   );
   // Note that an inbox call and a page are the rows of a coding agent's own that open a tab, and a task's archive the one
   // that opens another task, as the sidebar opens it, a worker's opening through its delegation.
-  const openTarget = (target: ToolTarget) => {
+  const openTarget = useSteadyDoor((target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
     if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
@@ -393,44 +394,57 @@ export function DesktopAgentPage({
       sidePanel.onChoose(SIDE_PANEL_TAB.CODE);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
     if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose({ page: target.page });
-  };
+  });
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
-  const openDelegation = (
-    agent: string,
-    callId: string,
-    task: string,
-    status: CodingAgentStatus,
-  ) => {
-    views.onWorkerStatus(callId, status);
-    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
-  };
-  const openPullRequest = (published: string, number?: number) =>
-    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION, number);
+  const openDelegation = useSteadyDoor(
+    (agent: string, callId: string, task: string, status: CodingAgentStatus) => {
+      views.onWorkerStatus(callId, status);
+      sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+    },
+  );
+  const openPullRequest = useSteadyDoor((published: string, number?: number) =>
+    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION, number),
+  );
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task,
   // and one to any other pull request of its repository a Pull request tab by its number.
-  const openHere = openPullRequestsHere(control, openPullRequest, agentRepository);
+  // Note that the three openers handed to the transcript stand while what they read does, because every link and chip in it is drawn again with each new one.
+  const { pullRequests, agentIds, heldIds } = control;
+  const openHere = useMemo(
+    () =>
+      openPullRequestsHere({ pullRequests, agentIds, heldIds }, openPullRequest, agentRepository),
+    [pullRequests, agentIds, heldIds, openPullRequest, agentRepository],
+  );
   // A link to the page's own agent, as a fork's chip opens its source, leaves the page's draft for the agent.
-  const openLinkHere =
-    openLink === undefined
-      ? undefined
-      : (link: ReadLink) => {
-          const { place } = link;
-          const own =
-            (place.kind === LINK_PLACE.AGENT || place.kind === LINK_PLACE.MESSAGE) &&
-            place.agentId === agentId;
-          if (own) setDrafting(undefined);
-          openLink(link);
-        };
+  const openLinkHere = useMemo(
+    () =>
+      openLink === undefined
+        ? undefined
+        : (link: ReadLink) => {
+            const { place } = link;
+            const own =
+              (place.kind === LINK_PLACE.AGENT || place.kind === LINK_PLACE.MESSAGE) &&
+              place.agentId === agentId;
+            if (own) setDrafting(undefined);
+            openLink(link);
+          },
+    [openLink, agentId],
+  );
   const shown = tasks.shown && !sidePanel.fullScreen;
-  const cards = taskCards({
-    agents: control,
-    held: views.held,
-    chosen: (opened) =>
-      sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
-    shownCode: shownCode ?? [],
-    // Note that an agent on a task shows its pages on the task, so its rows read them there.
-    pages: agent?.planId == null ? { agentId } : { taskId: agent.planId },
-  });
+  const sideTab = sidePanel.tab;
+  const planId = agent?.planId ?? null;
+  const cards = useMemo(
+    () =>
+      taskCards({
+        agents: control,
+        held: views.held,
+        chosen: (opened) =>
+          sameTab(opened, tab) || (sideTab !== undefined && sameTab(opened, sideTab)),
+        shownCode: shownCode ?? [],
+        // Note that an agent on a task shows its pages on the task, so its rows read them there.
+        pages: planId === null ? { agentId } : { taskId: planId },
+      }),
+    [control, views.held, tab, sideTab, shownCode, planId, agentId],
+  );
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {
     if (agentRepository === undefined) return;
@@ -439,7 +453,7 @@ export function DesktopAgentPage({
     appPlatform().openGitHub(url);
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
-  const pullRequestCard = (url: string) => {
+  const pullRequestCard = useSteadyDoor((url: string) => {
     const pullRequest = control.pullRequests.get(agentId);
     if (pullRequest === undefined) return undefined;
     const number = repositoryPullRequestOf(url, agentRepository);
@@ -457,45 +471,49 @@ export function DesktopAgentPage({
       onOpenAgent: () => setDrafting(undefined),
     });
     return card ?? undefined;
-  };
+  });
   // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: Luke works in none.
-  const mentions =
-    workspaceId === undefined
-      ? undefined
-      : tasklessMentions(
-          {
-            workspace: listed?.slug ?? workspaceId,
-            workspaceId,
-            repository: agentRepository ?? null,
-          },
-          tasks.onShowMention,
-          readMentionAgents,
-          pullRequestCard,
-        );
+  const mentionWorkspace = listed?.slug ?? workspaceId;
+  const { onShowMention } = tasks;
+  const mentions = useMemo(
+    () =>
+      workspaceId === undefined || mentionWorkspace === undefined
+        ? undefined
+        : tasklessMentions(
+            { workspace: mentionWorkspace, workspaceId, repository: agentRepository ?? null },
+            onShowMention,
+            readMentionAgents,
+            pullRequestCard,
+          ),
+    [
+      workspaceId,
+      mentionWorkspace,
+      agentRepository,
+      onShowMention,
+      readMentionAgents,
+      pullRequestCard,
+    ],
+  );
   const toolbar =
     agent === undefined ? (
-      <PageToolbar heading={null} />
+      <Toolbar />
     ) : (
-      <PageToolbar
-        lead={
-          <AgentPageHeading
-            agent={agent}
-            agents={control}
-            shown={tasks.shown}
-            terminals={terminalDoors}
-            onClose={tasks.agentView.onClose}
-            luke={luke}
-          />
-        }
+      <AgentPageBar
+        agent={agent}
+        agents={control}
+        shown={tasks.shown}
+        terminals={terminalDoors}
+        onClose={tasks.agentView.onClose}
+        luke={luke}
       />
     );
   if (agent === undefined) {
+    // A page the service would not hand the reader keeps its bar over the words saying so.
+    if (agents.listMissing) return <NotFound thing={NOT_FOUND_THING.AGENT} bar={{}} />;
     return (
       <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
         {toolbar}
-        {agents.listMissing ? (
-          <NotFound thing={NOT_FOUND_THING.AGENT} />
-        ) : agents.listFailed ? (
+        {agents.listFailed ? (
           <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             {NOT_READ}
           </ErrorState>
@@ -546,23 +564,21 @@ export function DesktopAgentPage({
                           active={tasks.shown && !sideFocused}
                           subject={tab}
                         >
-                          <CallNotice.Provider value={notice}>
-                            <AgentPane
-                              call={calls}
-                              label={luke ? LUKE_NAME : agentTabLabel(agent, control.models)}
-                              tabbed={false}
-                              tab={paneTab}
-                              agents={control}
-                              shown={shown}
-                              views={views}
-                              onOpenDelegation={openDelegation}
-                              onOpenPullRequest={openPullRequest}
-                              onOpenTarget={openTarget}
-                              cards={cards}
-                              onFork={draftDoors.onFork}
-                              onContinue={draftDoors.onContinue}
-                            />
-                          </CallNotice.Provider>
+                          <AgentPane
+                            call={calls}
+                            label={luke ? LUKE_NAME : agentName(agent, control.models)}
+                            tabbed={false}
+                            tab={paneTab}
+                            agents={control}
+                            shown={shown}
+                            views={views}
+                            onOpenDelegation={openDelegation}
+                            onOpenPullRequest={openPullRequest}
+                            onOpenTarget={openTarget}
+                            cards={cards}
+                            onFork={draftDoors.onFork}
+                            onContinue={draftDoors.onContinue}
+                          />
                         </FindScope>
                       </Fill>
                       {drawing.panel ? (
@@ -589,6 +605,7 @@ export function DesktopAgentPage({
                     </div>
                     {/* The second call's question, which a Call press here asks over another agent's call. */}
                     <ConfirmDialog
+                      open
                       confirm={tasks.secondCall.confirm}
                       question={tasks.secondCall.question}
                     />

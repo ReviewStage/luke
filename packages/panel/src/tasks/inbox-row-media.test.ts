@@ -5,12 +5,11 @@ import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -139,8 +138,6 @@ test("a thread's row reads the pictures its messages' words draw and its replies
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title: "Which chart?",
-    blocks: [],
-    response: { type: INBOX_RESPONSE.TEXT },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     postedAt: 1_000,

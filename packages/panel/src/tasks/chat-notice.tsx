@@ -6,18 +6,19 @@ import {
   chatNoticeWords,
   knownBlock,
 } from "@luke/features/chat-wire";
+import { momentText } from "@luke/features/time-format";
 import {
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
-  MESSAGE_ACTIONS_PLACEMENT,
+  MESSAGE_LINE_ALIGN,
+  MessageLine,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
 import { CHAT_PLACE, type ChatNames, type ChatPlace, chatWho } from "@luke/ui/chat-model";
-import { momentText } from "@luke/ui/time-format";
 import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import { MessagesSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -27,7 +28,6 @@ import { previewWords } from "../desktop/chat-preview.js";
 import { useChatActor } from "./chat-actors.js";
 import { ChannelName, channelTitle } from "./chat-channel-name.js";
 import { CopyMessageAction } from "./copy-message.js";
-import { SentTime } from "./sent-time.js";
 import { SentWords } from "./skill-chip.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -194,32 +194,34 @@ export function ChatNoticeCard({
           )}
         </MessageContent>
       )}
-      <div className="message-meta">
-        {/* A sender the chat names is drawn by their own chip, which hangs their card, as another agent is by its own. */}
-        <span className="message-sender">
-          {from ??
-            (who?.member === undefined ? (
-              <Text
-                as={TEXT_ELEMENT.SPAN}
-                variant={TEXT_VARIANT.INHERIT}
-                truncate
-                className="message-sender-words"
-              >
-                {notice.from}
-              </Text>
-            ) : (
-              <ActorRef actor={actorOf(who.member.id)} />
-            ))}
-        </span>
-        {at === undefined ? null : <SentTime at={at} named />}
-        <CopyMessageAction
-          words={shownWords}
-          copyable={shownWords !== ""}
-          messageId={messageId}
-          placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
-          lead={open}
-        />
-      </div>
+      <MessageLine
+        align={MESSAGE_LINE_ALIGN.START}
+        // A sender the chat names is drawn by their own chip, which hangs their card, as another agent is by its own.
+        sender={
+          from ??
+          (who?.member === undefined ? (
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="message-sender-words"
+            >
+              {notice.from}
+            </Text>
+          ) : (
+            <ActorRef actor={actorOf(who.member.id)} />
+          ))
+        }
+        at={at}
+        actions={
+          <CopyMessageAction
+            words={shownWords}
+            copyable={shownWords !== ""}
+            messageId={messageId}
+            lead={open}
+          />
+        }
+      />
     </Message>
   );
 }

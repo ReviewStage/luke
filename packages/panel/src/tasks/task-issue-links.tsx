@@ -13,26 +13,31 @@ import {
   Chip,
   ChipName,
   CloseIcon,
+  CONFIRM_LOSS,
+  ConfirmDialog,
   dropBelowStart,
   ExternalIcon,
+  FailureNote,
   GAP,
   Inline,
   LAYOUT_ELEMENT,
+  POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
-  TEXT_BUTTON_TONE,
-  TextButton,
   Tooltip,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { CircleDotIcon } from "lucide-react";
+import { useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { PICKER_ALIGN } from "../settings/picker-row.js";
+import { IssueCard } from "./issue-card.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
 import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
 import { useOpenLink } from "./use-open-link.js";
-import { useTaskIssueLinks } from "./use-task-issue-links.js";
+import { relinkOf, useTaskIssueLinks } from "./use-task-issue-links.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -40,10 +45,13 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * Each chip is the issue's live mark, GitHub's for where it stands or
  * Linear's own, its key in the code face, and its title, cut short; its
- * tooltip says where the issue stands now and the keyword its pull requests
- * write. Its menu, headed by the same, opens the issue with its provider,
+ * card says where the issue stands now and the keyword its pull requests
+ * write, under its repository's key. Its menu, headed by the same, opens the issue with its provider,
  * offers Closes and Part of with the one chosen checked, and unlinks it,
- * which leaves the issue itself as it is with its provider. Where it
+ * which leaves the issue itself as it is with its provider. Unlink asks
+ * nothing and offers Undo, which links the issue again; one whose provider
+ * did not answer on the read could not be linked again, so its Unlink asks
+ * first, in red. Where it
  * stands is read as the row opens and never kept (`use-task-issue-links.ts`),
  * so a link its provider did not answer says no state. Link issue, at the
  * row's end, opens New task's own picker (`issue-picker-chip.tsx`) over the
@@ -52,7 +60,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * one whose workspace offers no issue to link and links none draws no row
  * at all. What did not land
  * is said under the chips, and a read that did not land says so in the
- * row's place with a Try again.
+ * row's place with Retry.
  */
 
 /** What the row says. */
@@ -62,7 +70,6 @@ const LINKS_WORDS = {
   [TASK_ISSUE_RELATION.CLOSES]: "Closes",
   [TASK_ISSUE_RELATION.PART_OF]: "Part of",
   UNLINK: "Unlink",
-  RETRY: "Try again",
 } as const;
 
 const RELATIONS = [TASK_ISSUE_RELATION.CLOSES, TASK_ISSUE_RELATION.PART_OF] as const;
@@ -117,6 +124,7 @@ function LinkChip({
 }): React.JSX.Element {
   const { drawn, close, trigger } = useMenu(true);
   const summary = linkSummary(link);
+  const stateWords = standingWords(link.standing);
   const open: MenuAction = {
     label: OPEN_WORDS[link.provider],
     icon: <ExternalIcon />,
@@ -138,7 +146,17 @@ function LinkChip({
   };
   return (
     <li className="task-issue-link" data-provider={link.provider} data-relation={link.relation}>
-      <Tooltip label={`${link.key} ${link.title} · ${summary}`}>
+      <Tooltip
+        label={`${link.key} ${link.title} · ${summary}`}
+        card={
+          <IssueCard
+            mark={<LinkMark link={link} />}
+            title={link.title}
+            heading={stateWords === undefined ? link.key : `${link.key} · ${stateWords}`}
+            note={`${LINKS_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
+          />
+        }
+      >
         <Chip
           look={CHIP_LOOK.FIELD}
           width={CHIP_WIDTH.AUTO}
@@ -189,17 +207,51 @@ export function TaskIssueLinks({
   const control = useTaskIssueLinks(taskId);
   const openLink = useOpenLink();
   const { links, note } = control;
+  const [doomed, setDoomed] = useState<TaskIssueLinkView>();
+  // Note that the question goes with its link, unlinked from another window meanwhile.
+  const unlinking = useConfirmDialog(
+    {
+      subject: doomed !== undefined && (links ?? []).some((link) => link.id === doomed.id),
+      surfaceOpen: true,
+    },
+    (): Promise<ActionResult> =>
+      doomed === undefined
+        ? Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED })
+        : control
+            .onUnlink(doomed.id)
+            .then((refused) =>
+              refused === undefined
+                ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+                : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused },
+            ),
+  );
+  const unlink = (link: TaskIssueLinkView) => {
+    if (relinkOf(link) !== undefined) {
+      void control.onUnlink(link.id);
+      return;
+    }
+    setDoomed(link);
+    unlinking.ask();
+  };
+  const question = (
+    <ConfirmDialog
+      open
+      confirm={unlinking}
+      question={{
+        title: `Unlink ${doomed?.key ?? ""}?`,
+        body: "Its provider can't be reached, so it can't be linked again until it can.",
+        verb: LINKS_WORDS.UNLINK,
+        running: "Unlinking",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
+      }}
+    />
+  );
   const offered = linearIn(workspaceId) !== undefined || githubIn(workspaceId) !== undefined;
   // A first read that did not land says why, rather than standing for a task that links nothing.
   if (links === undefined && note !== undefined) {
     return (
       <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
-        <p className="task-issue-links-note" role="alert">
-          {note}{" "}
-          <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={control.onRetry}>
-            {LINKS_WORDS.RETRY}
-          </TextButton>
-        </p>
+        <FailureNote onRetry={control.onRetry}>{note}</FailureNote>
       </section>
     );
   }
@@ -214,7 +266,7 @@ export function TaskIssueLinks({
             link={link}
             onOpen={() => openLink(link.url)}
             onRelate={(relation) => control.onRelate(link.id, relation)}
-            onUnlink={() => control.onUnlink(link.id)}
+            onUnlink={() => unlink(link)}
           />
         ))}
         {offered ? (
@@ -222,7 +274,7 @@ export function TaskIssueLinks({
             {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip
               trigger={LINKS_WORDS.LINK}
-              align={PICKER_ALIGN.START}
+              align={POPOVER_ALIGN.START}
               linearIn={linearIn}
               githubIn={githubIn}
               workspaceId={workspaceId}
@@ -244,11 +296,8 @@ export function TaskIssueLinks({
           </li>
         ) : null}
       </Inline>
-      {note === undefined ? null : (
-        <p className="task-issue-links-note" role="alert">
-          {note}
-        </p>
-      )}
+      {note === undefined ? null : <FailureNote>{note}</FailureNote>}
+      {question}
     </section>
   );
 }

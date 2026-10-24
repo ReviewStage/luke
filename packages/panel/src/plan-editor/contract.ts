@@ -1,8 +1,9 @@
 /**
- * contract.ts -- what the panel and the editor bundle say to each other: the plan's text and the composer's words, the two mount calls, and nothing that pulls TipTap into the panel.
+ * contract.ts -- what the panel and the editor bundle say to each other: a Markdown document's text and the composer's words, the two mount calls, and nothing that pulls TipTap into the panel.
  *
  * TipTap is too large for the bundle every window parses, so the panel's two
- * editors, a plan's text and an agent's message box, ship as one bundle of
+ * editors, a Markdown document's text (a plan's, and any other document the
+ * panel edits, `../tasks/markdown-editor.tsx`) and an agent's message box, ship as one bundle of
  * their own (`plan-editor.js`, built from `./index.ts`) that the panel starts
  * loading after its first paint (`../bundle-loader.ts`), as the whiteboard
  * and a File tab's tree load the first time they are shown. That bundle exports
@@ -18,6 +19,7 @@ import type {
   WritingInsert,
   WritingMark,
 } from "@luke/settings/shortcuts";
+import type { TextAreaSubmit } from "@luke/ui";
 
 /** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
 export interface EditorBox {
@@ -104,6 +106,17 @@ export type PlanEditorPlacement =
 /** The caret at the end of the text, as a press on the room under its last line puts it. */
 export const PLACEMENT_END = { end: true } as const;
 
+/** How the text was finished: ⌘↩, which a box sends or saves on, or Esc, which it lets go on; a plan finishes either way. */
+export const FINISH = {
+  SUBMIT: "submit",
+  ESCAPE: "escape",
+} as const;
+
+export type Finish = (typeof FINISH)[keyof typeof FINISH];
+
+/** What an empty plan says until a word is typed, the editor's own where a document names none. */
+export const PLAN_PLACEHOLDER = "Write the plan";
+
 /** What the `/` menu lays in beyond the writing vocabulary's blocks, each the menu's own. */
 export const SLASH_INSERT = {
   DIAGRAM: "slash-diagram",
@@ -117,6 +130,14 @@ type SlashInsert = (typeof SLASH_INSERT)[keyof typeof SLASH_INSERT];
 /** A block the `/` menu offers: one a line is turned into, the divider, or one of the menu's own. */
 export type SlashBlock = WritingBlock | WritingInsert | SlashInsert;
 
+/** A block of a document's own its `/` menu offers, laid in as the Markdown it names. */
+interface SlashMarkdown {
+  readonly markdown: string;
+}
+
+/** What a choice in the `/` menu lays in: one of the menu's blocks, or a document's own. */
+export type SlashChoice = SlashBlock | SlashMarkdown;
+
 /**
  * The plan editor's `/`, as the panel draws its menu: the `/` word the caret
  * ends reported (`onTrigger`), and the keys the menu over it takes first
@@ -127,11 +148,18 @@ export interface PlanEditorBlocks {
   readonly onKey: (event: KeyboardEvent) => boolean;
 }
 
-/** What the document hands the editor as it mounts it in place of the text's drawn sections. */
+/**
+ * What a document hands the editor as it mounts it: a plan in place of its
+ * text's drawn sections, or another Markdown document in place of its drawn
+ * words. What a plan alone takes, its sections' placement, mentions,
+ * pictures, comment threads, and diagrams, is each left out where the
+ * document takes none.
+ */
 export interface PlanEditorProps {
   /** The text as the document holds it, which the editor opens on. */
   readonly markdown: string;
-  readonly placement: PlanEditorPlacement | undefined;
+  /** Where the caret goes as the editor opens; the start of the text where none is given. */
+  readonly placement?: PlanEditorPlacement | undefined;
   /** Whether the editor takes the keyboard as it mounts, as a task opened by a click or a key does and a page drawing it does not. */
   readonly focus: boolean;
   readonly label: string;
@@ -141,10 +169,10 @@ export interface PlanEditorProps {
   readonly className: string;
   /** The text as it would be saved now, after each change, and where the comment threads' words stand in it, where the editor carries any. */
   readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
-  /** Esc or ⌘↩, with the section the caret stood in, counted as `planSections` counts them. */
-  readonly onFinish: (section: number) => void;
-  /** ↑ from the first line of the text, which goes to the title above it. */
-  readonly onLeaveUp: () => void;
+  /** Esc or ⌘↩, with the section the caret stood in, counted as `planSections` counts them, and which of the two it was. */
+  readonly onFinish: (section: number, how: Finish) => void;
+  /** ↑ from the first line of the text, which goes to the title above it; none where nothing stands above the text, where ↑ is the editor's own. */
+  readonly onLeaveUp?: (() => void) | undefined;
   /** What the text's mentions are drawn and picked with; none where the text takes no mentions, as a template does not. */
   readonly mentions?: PlanEditorMentions | undefined;
   /**
@@ -292,14 +320,15 @@ export interface HeadingsChange {
  * the caret ends reported (`onTrigger`), the keys a list over it takes first
  * (`onKey`), each mention the text holds drawn into its node's own element
  * (`drawMention`), and a target named again where the edit changed the
- * headings of the text (`retarget`), answering the new target or nothing
- * where the section it names kept its anchor, or names none.
+ * headings of the text (`retarget`), answering the target under the
+ * section's heading now, or nothing where the section it names kept its
+ * heading and its anchor, or names none.
  */
 export interface PlanEditorMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly drawMention: MentionDrawer;
-  readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
+  readonly retarget: (target: string, change: HeadingsChange) => MentionNode | undefined;
   /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
   /** Whether a link's target names a mention, which the read view draws as its chip, so the editor draws the link in a chip's light look. */
@@ -324,8 +353,8 @@ export interface PlanEditorHandle extends EditorFormatting {
   readonly take: (sent: string, merged: string) => { readonly base: string; readonly text: string };
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
-  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in. */
-  readonly insertBlock: (block: SlashBlock) => void;
+  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in, or a document's own Markdown laid in there; with no `/` word, a document's own Markdown laid in after the caret's block. */
+  readonly insertBlock: (block: SlashChoice) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
@@ -399,8 +428,12 @@ export interface ComposerEditorProps {
   readonly onKey: (event: KeyboardEvent) => boolean;
   /** Enter with no Shift, while no input method is composing; on a coarse pointer, where Enter is a new line, only with ⌘ or Ctrl. */
   readonly onEnter: () => void;
+  /** The key that sends, as it stands now: Enter where the box leaves it out, ⌘ or Ctrl with Enter where Enter must break the line. */
+  readonly submitKey?: (() => TextAreaSubmit) | undefined;
   /** Files pasted; answers whether the owner took them, which keeps them out of the words. */
   readonly onPasteFiles: (files: readonly File[]) => boolean;
+  /** A paste that ran past the bound and was cut to the room left, or laid in nowhere for want of it; the owner says so, since the words it sees are not the words pasted. */
+  readonly onPasteCut?: (() => void) | undefined;
   /** The `/` word the caret stands at the end of, as it changes; nothing once it stands in none. */
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   /** Draws a chip into the element its node stands as; answers what takes the drawing down. */

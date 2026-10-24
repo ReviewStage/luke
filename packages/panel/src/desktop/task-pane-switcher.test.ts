@@ -6,8 +6,8 @@ import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -50,6 +50,16 @@ const PAGE = {
   at: 1,
 };
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+beforeAll(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+const roots: Root[] = [];
+
 beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   fakeAppBridge({});
@@ -65,6 +75,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
   vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
@@ -86,6 +99,13 @@ test("the view standing follows the panel: Agents while it is shut, Plan on the 
 });
 
 /** The task's page in `room`, its panel open on `tab` over the plan, the Inbox, and the board, and a page of the plan's where `paged`, every press on the panel, the way out, and a rename told; `draw` draws it again over a panel opened or shut on another tab. */
+/** What a menu item says, its words and what it acts on, without the chord the open task's items print at their end. */
+function itemWords(item: HTMLElement): string {
+  const chord = item.querySelector(".luke-shortcut")?.textContent ?? "";
+  const words = item.textContent ?? "";
+  return chord !== "" && words.endsWith(chord) ? words.slice(0, -chord.length) : words;
+}
+
 function mount(
   room: ShellRoom,
   open = true,
@@ -95,6 +115,7 @@ function mount(
   const told: string[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
+  roots.push(root);
   const narrow = room === SHELL_ROOM.NARROW;
   const registry = AtomRegistry.make();
   const draw = (shown: boolean, on: SidePanelTab | undefined) =>
@@ -146,8 +167,7 @@ function mount(
   const menu = () => {
     act(() => more().click());
     const groups = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].map(
-      (each) =>
-        `${each.getAttribute("aria-checked") === "true" ? "*" : ""}${each.textContent ?? ""}`,
+      (each) => `${each.getAttribute("aria-checked") === "true" ? "*" : ""}${itemWords(each)}`,
     );
     act(() => more().click());
     return groups;
@@ -157,7 +177,7 @@ function mount(
   const choose = (name: string) => {
     act(() => more().click());
     const found = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
-      (each) => each.textContent === name,
+      (each) => itemWords(each) === name,
     );
     assert.ok(found, `the ⋯ offers ${name}`);
     act(() => found.click());
@@ -169,7 +189,9 @@ function mount(
     title: container.querySelector(".task-head h1")?.textContent,
   });
   const back = () => {
-    const found = container.querySelector<HTMLButtonElement>(".task-head .phone-head-start button");
+    const found = container.querySelector<HTMLButtonElement>(
+      ".task-head .luke-toolbar-lead button",
+    );
     assert.ok(found, "the row leads with its way back");
     act(() => found.click());
   };
@@ -204,7 +226,7 @@ function mount(
 
 test("on a phone a task is headed by one row, the way back named for the page it came from, the task's title, and one ⋯, whose menu leads with its views over the task's own actions", () => {
   const page = mount(SHELL_ROOM.NARROW);
-  assert.deepEqual(page.head(), { buttons: ["Back to Inbox", "Task actions"], title: TASK.name });
+  assert.deepEqual(page.head(), { buttons: ["Inbox", "Task actions"], title: TASK.name });
   assert.deepEqual(page.views(), ["*Plan", "Agents", "Activity"]);
   const menu = page.menu();
   assert.deepEqual(menu.slice(0, 3), ["*Plan", "Agents", "Activity"], "the views come first");
@@ -246,7 +268,7 @@ test("on a phone Agents shuts the panel by its own toggle, and Activity opens a 
 
   const shut = mount(SHELL_ROOM.NARROW, false);
   assert.deepEqual(shut.views(), ["Plan", "*Agents", "Activity"]);
-  assert.deepEqual(shut.head(), { buttons: ["Back to Inbox", "Task actions"], title: TASK.name });
+  assert.deepEqual(shut.head(), { buttons: ["Inbox", "Task actions"], title: TASK.name });
   assert.equal(
     shut.container.querySelectorAll('[aria-label="Task actions"]').length,
     1,
@@ -275,14 +297,14 @@ test("on a phone Activity asked over a shut panel lists the tabs whatever tab th
 
 test("on a phone a tab chosen from Activity names the row and leads it back to the list, and the ⋯ still leads with the views", () => {
   const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.BOARD);
-  assert.deepEqual(page.head(), { buttons: ["Back to Activity", "Task actions"], title: "Board" });
+  assert.deepEqual(page.head(), { buttons: ["Activity", "Task actions"], title: "Board" });
   assert.deepEqual(page.views(), ["Plan", "Agents", "*Activity"]);
 
   page.back();
   assert.deepEqual(page.rows(), ["Inbox", "Board"]);
   assert.deepEqual(
     page.head(),
-    { buttons: ["Back to Inbox", "Task actions"], title: TASK.name },
+    { buttons: ["Inbox", "Task actions"], title: TASK.name },
     "on the list the row names the task again and leads out of it",
   );
   assert.deepEqual(page.told, [], "going back to the list leaves the panel's tab as it stands");
