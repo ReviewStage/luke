@@ -274,7 +274,7 @@ What the barrel holds (`src/index.ts`):
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `RetryButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click) |
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
-| Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState` |
+| Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
 | Patterns | `PageToolbar`, `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `WingFace`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
