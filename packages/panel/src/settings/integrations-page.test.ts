@@ -1025,7 +1025,7 @@ test("a query that finds nothing says so, and clearing it brings every row back"
 
 test("while where the providers stand is read, the search stands usable above placeholder sections, and the rows land in their place", async () => {
   holdReads = true;
-  const page = await mount(undefined, true);
+  const page = await mount();
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no placeholder");
   assert.equal(status.textContent, "Reading the integrations");
@@ -1839,13 +1839,91 @@ test("with motion held still, an integration that connects takes its place and n
   }
 });
 
-test("a row opening onto its tools moves no row under it, since nothing changed section", async () => {
+/** Every element laid one row tall under the one before it in the document, so what a change inserts moves what follows it. */
+function layInDocumentOrder(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const top = [...document.querySelectorAll("*")].indexOf(this) * ROW;
+    return { top, bottom: top + ROW, left: 0, right: 0, width: 0, height: ROW } as DOMRect;
+  });
+}
+
+/** The chevron on a row's tools press, and whether it stands turned. */
+function toolsChevron(page: HTMLElement, name: string): HTMLElement {
+  return (
+    rowNamed(page, name).querySelector<HTMLElement>(
+      ".luke-settings-row-state button .luke-disclosure-turn",
+    ) ?? assert.fail(`${name}'s tools press wears a turning chevron`)
+  );
+}
+
+/** The motions played on `element`, by their keyframes. */
+function motionsOn(
+  motions: ReturnType<typeof playListMotions>,
+  element: Element | null | undefined,
+): Keyframe[][] {
+  return motions.played.filter((each) => each.element === element).map((each) => each.keyframes);
+}
+
+test("a row's tools unroll under one chevron that turns, and roll up as it turns back", async () => {
   const motions = playListMotions();
+  // Note that the arrival's fade and stagger are tokens the list motion's helper leaves unset.
+  for (const [name, value] of [
+    ["--luke-duration-quick", "140ms"],
+    ["--luke-row-stagger", "32ms"],
+  ] as const) {
+    document.documentElement.style.setProperty(name, value);
+  }
   try {
     connectVercelAndLinear();
     const page = await mount();
-    layRowsInOrder(page);
-    const vercel = movingRow(page, "Vercel");
+    layInDocumentOrder();
+    const under = movingRow(page, "Vercel");
+    assert.equal(toolsChevron(page, "Linear").dataset.open, "false");
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.equal(toolsChevron(page, "Linear").dataset.open, "true");
+    const box = rowNamed(page, "Linear")
+      .closest("[data-motion-key]")
+      ?.querySelector(".luke-reveal");
+    assert.notEqual(box?.querySelector(".integration-tools-panel"), null);
+    assert.deepEqual(motionsOn(motions, box).at(-1), [
+      { clipPath: "inset(0 0 100% 0)" },
+      { clipPath: "inset(0)" },
+    ]);
+    // Note that the row under it glides down with the clip's foot, rather than jumping under the tools.
+    assert.equal(motionsOn(motions, under).length > 0, true);
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.equal(toolsChevron(page, "Linear").dataset.open, "false");
+    assert.equal(box?.hasAttribute("inert"), true);
+    assert.deepEqual(motionsOn(motions, box).at(-1), [
+      { opacity: "1", clipPath: "inset(0)" },
+      { opacity: 0, clipPath: "inset(0 0 100% 0)" },
+    ]);
+    act(() => motions.played.findLast((each) => each.element === box)?.finish());
+    assert.equal(box?.isConnected, false);
+  } finally {
+    document.documentElement.style.removeProperty("--luke-duration-quick");
+    document.documentElement.style.removeProperty("--luke-row-stagger");
+    motions.remove();
+  }
+});
+
+test("with motion held still, a row's tools show at once and fold at once", async () => {
+  const motions = playListMotions();
+  try {
+    for (const name of ["--luke-duration-exit", "--luke-duration-shape"]) {
+      document.documentElement.style.setProperty(name, "0ms");
+    }
+    connectVercelAndLinear();
+    const page = await mount();
+    layInDocumentOrder();
 
     openRow(page, "Linear");
     await settle();
@@ -1856,10 +1934,19 @@ test("a row opening onto its tools moves no row under it, since nothing changed 
         ?.querySelector(".integration-tools-panel"),
       null,
     );
-    assert.equal(movingRow(page, "Vercel"), vercel);
     assert.deepEqual(
       motions.played.map((each) => each.keyframes),
       [],
+    );
+
+    openRow(page, "Linear");
+    await settle();
+
+    assert.equal(
+      rowNamed(page, "Linear")
+        .closest("[data-motion-key]")
+        ?.querySelector(".integration-tools-panel"),
+      null,
     );
   } finally {
     motions.remove();

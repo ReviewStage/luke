@@ -32,11 +32,12 @@ import {
   ANNOUNCE,
   BUTTON_VARIANT,
   Button,
-  ChevronDownIcon,
-  ChevronRightIcon,
   CONFIRM_LOSS,
   ConfirmDialog,
   commandKeyshortcuts,
+  DisclosureChevron,
+  DisclosureScope,
+  type DisclosureState,
   ErrorState,
   GAP,
   INLINE_EDIT_LOOK,
@@ -46,6 +47,9 @@ import {
   motionKey,
   ProviderMark,
   RetryButton,
+  Reveal,
+  RevealArea,
+  revealArea,
   ScrollArea,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
@@ -352,10 +356,24 @@ interface RowTools {
   readonly tokens: readonly string[];
 }
 
+/** The body a row's tools hand the fold their chevron reads, which the row's `Reveal` unrolls instead. */
+const NO_BODY = (): void => undefined;
+
+/** The fold state the tools' chevron turns by: open while they show, with the press the row's own. */
+function toolsFold(tools: RowTools): DisclosureState {
+  return {
+    open: tools.expanded,
+    drawn: tools.expanded,
+    leaving: false,
+    toggle: tools.onToggle,
+    body: NO_BODY,
+  };
+}
+
 /**
  * A connected row's line once its server answered with tools: Connected,
  * and the count of them as the press that opens the row onto them, its
- * chevron turning down while they show.
+ * chevron turning while they unroll.
  */
 function ToolsLine({
   name,
@@ -380,7 +398,9 @@ function ToolsLine({
         onClick={tools.onToggle}
       >
         {shown}
-        {tools.expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+        <DisclosureScope state={toolsFold(tools)}>
+          <DisclosureChevron />
+        </DisclosureScope>
       </TextButton>
     </SettingsRowStateLine>
   );
@@ -665,7 +685,7 @@ function IntegrationRow({
     : [];
   return (
     // Note that a row is followed by its connection, because one that connects or disconnects leaves one section for the other and glides across rather than leaving one and arriving in the other.
-    <Stack gap={GAP.NONE} {...motionKey(connection)}>
+    <Stack gap={GAP.NONE} {...motionKey(connection)} {...revealArea()}>
       <MenuRow
         thing={name}
         actions={actions}
@@ -733,9 +753,9 @@ function IntegrationRow({
           ),
         }}
       />
-      {connected && tools.expanded && tools.shown.length > 0 ? (
+      <Reveal shown={connected && tools.expanded && tools.shown.length > 0}>
         <RowToolsPanel id={panelId} name={name} tools={tools} />
-      ) : null}
+      </Reveal>
       <ConfirmDialog
         open
         confirm={disconnect}
@@ -831,9 +851,10 @@ function samePlaces(one: SectionPlaces, other: SectionPlaces): boolean {
  * The page's sections, which move (`ListMotion`): a row that connects or
  * disconnects glides from the section it stood in to the other, followed
  * by its connection, and the sections and rows it moved glide with it.
- * Note that only a change in where the rows stand plays, because a row
- * opening onto its tools grows in place, and the rows under it gliding down
- * would pass over the tools it opened.
+ * Note that only a change in where the rows stand plays here, because a row
+ * opening onto its tools is the row's own `Reveal`, whose area this is
+ * (`own`, since the page's outer area would leave the rows between it and
+ * the tools to this root), so the rows under it glide down with its edge.
  */
 function MovingSections({
   found,
@@ -856,9 +877,11 @@ function MovingSections({
   }
   return (
     <ListMotion root={moving} change={change}>
-      <Stack gap={GAP.PAGE} moves ref={moving}>
-        {children}
-      </Stack>
+      <RevealArea root={moving} own>
+        <Stack gap={GAP.PAGE} moves ref={moving}>
+          {children}
+        </Stack>
+      </RevealArea>
     </ListMotion>
   );
 }
