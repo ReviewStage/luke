@@ -249,6 +249,18 @@ test("a note being written is nudged rather than closed by the first Escape, clo
   assert.equal(field().value, "The board missed a plan.");
 });
 
+test("Cancel closes the card and keeps the note for the next opening", () => {
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  write("The board missed a plan.");
+  act(() => button("Cancel").click());
+  const closed = dialog() === null;
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+
+  assert.equal(closed, true, "Cancel closes the card");
+  assert.equal(field().value, "The board missed a plan.");
+});
+
 test("an empty note is closed by the first Escape", () => {
   mount();
   openFromHelp(APP_COMMAND.SEND_FEEDBACK);
