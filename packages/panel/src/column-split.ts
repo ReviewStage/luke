@@ -9,7 +9,9 @@
  * with.
  */
 
+import { RESIZE_EDGE_SIDE, type ResizeEdgeHandle, useResizeEdge } from "@luke/ui";
 import { type RefObject, useCallback, useState } from "react";
+import { SIDEBAR_WIDTH, type SidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 
 /**
@@ -24,6 +26,14 @@ const COLUMN_SPLIT = {
   ENTER: 860,
   LEAVE: 892,
 } as const;
+
+/**
+ * The share of a whole-window screen its list takes at most beside the item
+ * chosen: what the split's line leaves its least list (300 of 860), at which
+ * `desktop.css` draws the list's column too, so a sidebar dragged wide leaves
+ * the item its room.
+ */
+const LIST_SHARE = 0.35;
 
 /** Whether a screen this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
 function oneColumn(width: number, was: boolean): boolean {
@@ -89,4 +99,22 @@ export function useScreenRef<Element extends HTMLElement>(
     },
     [held, measure],
   );
+}
+
+/**
+ * The edge of a whole-window screen's list, Settings', a version history's,
+ * or Admin's, which shares the plans' sidebar's width. Note that the list is
+ * drawn no wider than its share of the screen, and its edge's room is that
+ * share too, so a drag or a key starts from the width drawn rather than a
+ * wider one kept.
+ */
+export function useListEdge(sidebar: SidebarCollapse): ResizeEdgeHandle {
+  return useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
+    width: sidebar.width,
+    bounds: SIDEBAR_WIDTH,
+    reserve: (screen) => screen.getBoundingClientRect().width * (1 - LIST_SHARE),
+    label: "Resize sidebar",
+    onResize: sidebar.onResize,
+  });
 }

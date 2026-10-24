@@ -46,7 +46,7 @@ import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
-import { useScreenRef, useScreenSplit } from "../column-split.js";
+import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
@@ -83,7 +83,7 @@ import {
 } from "../tasks/version-view.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
-import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -711,7 +711,7 @@ export function DesktopVersionHistory({
   const sectionRows = useRef(new Map<number, HTMLElement>()).current;
   const log = useRef<HTMLDivElement>(null);
   const { opened } = versions.spot ?? {};
-  const edge = useSidebarEdge(sidebar);
+  const edge = useListEdge(sidebar);
   const members = useWorkspaceMembers(subject.workspace);
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();

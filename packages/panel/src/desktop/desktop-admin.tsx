@@ -50,12 +50,12 @@ import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
-import { useScreenRef, useScreenSplit } from "../column-split.js";
+import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { backPlaceOf } from "./back-place.js";
-import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -121,7 +121,7 @@ export function DesktopAdmin({
   onExit,
 }: DesktopAdminProps): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
-  const edge = useSidebarEdge(sidebar);
+  const edge = useListEdge(sidebar);
   const split = useScreenSplit(room);
   const hidden = hiddenColumns(split.columns, listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, listed), split.ref);

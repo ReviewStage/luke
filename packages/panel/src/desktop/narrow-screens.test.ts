@@ -401,6 +401,20 @@ test("Settings' page list is as wide as the sidebar kept, but never more than it
   );
 });
 
+test("Settings' page list kept wider than its share moves from the width it is drawn at, at the first press of its edge", async () => {
+  window.localStorage.setItem("luke.sidebar-width", "400");
+  const page = await mount(900, createElement(SettingsWindow, { link: undefined }));
+  const edge = the(page, '[role="separator"][aria-label="Resize sidebar"]');
+  act(() => {
+    edge.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+  });
+  assert.equal(
+    edge.getAttribute("aria-valuenow"),
+    String(Math.round(900 * 0.35) - 16),
+    "one step narrower than the 35% of the stage it is drawn at, not than the 400 kept",
+  );
+});
+
 test("a link to a Settings page on a narrow stage opens on that page, with the way back to the list", async () => {
   const page = await mount(
     PHONE,

@@ -43,7 +43,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
-import { useScreenRef, useScreenSplit } from "../column-split.js";
+import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { AttentionMark } from "../settings/marks.js";
@@ -74,7 +74,7 @@ import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
-import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
+import { HistoryButtons } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
@@ -351,7 +351,7 @@ export function DesktopSettings({
   // The opened result stays marked only while its page is the one showing: a
   // page turned some other way, Escape or a voice request, leaves it.
   const marked = opened?.page === settings.view ? opened.id : undefined;
-  const edge = useSidebarEdge(sidebar);
+  const edge = useListEdge(sidebar);
   const hidden = hiddenColumns(split.columns, step.listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, step.listed), split.ref);
   const onList = split.single ? step.onList : undefined;
