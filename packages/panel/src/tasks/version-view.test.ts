@@ -31,7 +31,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({});
-  fakeActPort(() => Effect.die("Nothing is sent in this test."));
+  fakeActPort({});
 });
 
 afterEach(() => {
