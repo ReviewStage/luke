@@ -28,7 +28,7 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { CircleDotIcon } from "lucide-react";
 import { useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
@@ -214,14 +214,20 @@ export function TaskIssueLinks({
       subject: doomed !== undefined && (links ?? []).some((link) => link.id === doomed.id),
       surfaceOpen: true,
     },
-    () => {
-      if (doomed !== undefined) control.onUnlink(doomed.id);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    (): Promise<ActionResult> =>
+      doomed === undefined
+        ? Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED })
+        : control
+            .onUnlink(doomed.id)
+            .then((refused) =>
+              refused === undefined
+                ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+                : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused },
+            ),
   );
   const unlink = (link: TaskIssueLinkView) => {
     if (relinkOf(link) !== undefined) {
-      control.onUnlink(link.id);
+      void control.onUnlink(link.id);
       return;
     }
     setDoomed(link);

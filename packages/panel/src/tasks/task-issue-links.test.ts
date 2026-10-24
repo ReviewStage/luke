@@ -330,6 +330,34 @@ test("an issue its provider did not answer asks before it is unlinked, in red, s
   assert.equal(newestToastAction(), undefined, "no Undo is offered");
 });
 
+test("a red Unlink the service refuses keeps its question up saying why, and the issue stays linked", async () => {
+  const { standing: _, ...unread } = ENG;
+  const { container } = await mount({
+    links: [SAFARI, unread],
+    answers: { [ACT_KIND.TASK_ISSUES_UNLINK]: { failure: TASK_CALL_FAILURE.UNANSWERED } },
+  });
+
+  choose(container, 1, "Unlink");
+  await settle();
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+  const answer =
+    [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Unlink",
+    ) ?? assert.fail("no Unlink in the question");
+  await act(async () => answer.click());
+  await settle();
+
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /Luke didn't answer\. Try again\./u,
+  );
+  assert.deepEqual(
+    rows(container).map(({ key }) => key),
+    ["#312", "ENG-455"],
+  );
+});
+
 test("Link issue opens the picker over the task's repository, the linked issue dimmed, and an issue picked is linked and read back", async () => {
   const { container, sent } = await mount({ links: [SAFARI] });
 

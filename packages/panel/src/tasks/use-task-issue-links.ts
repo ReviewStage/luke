@@ -35,7 +35,8 @@ export interface TaskIssueLinksControl {
   readonly linking: boolean;
   readonly onLink: (issue: TaskIssueChoice) => void;
   readonly onRelate: (linkId: string, relation: TaskIssueRelation) => void;
-  readonly onUnlink: (linkId: string) => void;
+  /** Unlinks one, answering why the service refused it, or nothing where it took it. */
+  readonly onUnlink: (linkId: string) => Promise<string | undefined>;
   /** Reads the links again, as after a read that did not land. */
   readonly onRetry: () => void;
 }
@@ -159,16 +160,19 @@ export function useTaskIssueLinks(taskId: string): TaskIssueLinksControl {
     const unlinked = read?.links.find((link) => link.id === linkId);
     const relink = unlinked === undefined ? undefined : relinkOf(unlinked);
     say(undefined);
-    act(ACT_KIND.TASK_ISSUES_UNLINK, { taskId, linkId })
-      .then((answer) => {
-        if (!("unlinked" in answer)) {
-          say(linkNoteOf(answer));
-          return;
-        }
+    const refusedWith = (words: string) => {
+      say(words);
+      return words;
+    };
+    return act(ACT_KIND.TASK_ISSUES_UNLINK, { taskId, linkId }).then(
+      (answer) => {
+        if (!("unlinked" in answer)) return refusedWith(linkNoteOf(answer));
         replaced((links) => links.filter((link) => link.id !== linkId));
         if (relink !== undefined) toast(undoToast(UNLINKED, () => onLink(relink)));
-      })
-      .catch((refused: Error) => say(refusedSentence(refused)));
+        return undefined;
+      },
+      (refused: Error) => refusedWith(refusedSentence(refused)),
+    );
   };
 
   return {
