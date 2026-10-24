@@ -30,7 +30,7 @@ import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
 
 /**
- * tasks-list-select.test.ts -- the Tasks page's List chooses rows as a Mac's list does: ⌘-click two tasks and the bar's Mark done sets both Done at once, under one toast whose Undo puts both back where they stood; Set status and Move to section act on them all alike; and Esc lets the selection go.
+ * tasks-list-select.test.ts -- the Tasks page's List chooses rows as a Mac's list does: ⌘-click two tasks and the bar's Mark done sets both Done at once, under one toast whose Undo puts both back where they stood; Set status and Move to section act on them all alike; a right-click on a chosen row offers the bar's acts on them all, one on a row not chosen its own menu; and Esc lets the selection go.
  *
  * The List stands over the tasks tab itself (`useTasksTab`), so what a
  * press sends is what the service is asked, and what the rows draw is the
@@ -257,6 +257,27 @@ function choose(name: string): void {
   act(() => item.click());
 }
 
+/** Right-clicks the row of the task keyed `key`. */
+function rightClick(page: HTMLElement, key: string): void {
+  act(() => {
+    pressOf(page, key).dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+/** The open menu's heading, and its items' labels, in order. */
+function openMenu(): { heading: string | undefined; items: string[] } {
+  const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+  assert.ok(menu, "a menu stands open");
+  return {
+    heading: menu.querySelector(".luke-menu-heading")?.textContent ?? undefined,
+    items: [...menu.querySelectorAll(".luke-menu-item-label")].map(
+      (label) => label.textContent ?? "",
+    ),
+  };
+}
+
 /** The selection bar's button named `name`. */
 function barButton(page: HTMLElement, name: string): HTMLButtonElement {
   const button = [...page.querySelectorAll<HTMLButtonElement>('[role="toolbar"] button')].find(
@@ -313,6 +334,59 @@ test("Mark done's Undo puts both tasks back at the status each stood at", async 
     ["Todo", ["ACME-39"]],
     ["Backlog", ["ACME-36"]],
   ]);
+});
+
+test("right-clicking a task chosen among several offers the bar's acts under how many, and Mark done there sets them all Done", async () => {
+  const { page } = await mountPage();
+  commandClick(page, "ACME-39");
+  commandClick(page, "ACME-42");
+
+  rightClick(page, "ACME-42");
+  assert.deepEqual(openMenu(), {
+    heading: "2 tasks",
+    items: ["Mark done", "Set status", "Move to section"],
+  });
+  choose("Mark done");
+  await settle();
+
+  assert.deepEqual(asked, [
+    ["t-39", TASK_STATUS.DONE],
+    ["t-42", TASK_STATUS.DONE],
+  ]);
+  assert.match(newestToastSays() ?? "", /2 tasks marked done/u);
+  assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
+});
+
+test("a chosen task's menu sets every task chosen at the status picked from its Set status", async () => {
+  const { page } = await mountPage();
+  commandClick(page, "ACME-39");
+  commandClick(page, "ACME-36");
+
+  rightClick(page, "ACME-39");
+  choose("Set status");
+  choose("In progress");
+  await settle();
+
+  assert.deepEqual(asked, [
+    ["t-39", TASK_STATUS.IN_PROGRESS],
+    ["t-36", TASK_STATUS.IN_PROGRESS],
+  ]);
+});
+
+test("right-clicking a task outside the selection offers that task's own menu, and acts on it alone", async () => {
+  const { page } = await mountPage();
+  commandClick(page, "ACME-39");
+  commandClick(page, "ACME-42");
+
+  rightClick(page, "ACME-36");
+  const menu = openMenu();
+  assert.equal(menu.heading, undefined);
+  assert.ok(menu.items.includes("Rename"), "the task's own menu offers Rename");
+  choose("Mark done");
+  await settle();
+
+  assert.deepEqual(asked, [["t-36", TASK_STATUS.DONE]]);
+  assert.deepEqual(chosen(page), ["ACME-42", "ACME-39"], "the selection stands");
 });
 
 test("Esc lets the selection go, and the bar with it", async () => {
