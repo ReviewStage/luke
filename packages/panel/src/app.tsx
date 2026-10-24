@@ -258,7 +258,7 @@ export function App(): React.JSX.Element {
 }
 
 function AppWindow(): React.JSX.Element {
-  const { act, tell, updateSetting } = useAct();
+  const { act, press, tell, updateSetting } = useAct();
   // What main holds, each slice read on its own, so the window is drawn again
   // for a slice it draws from and for no other: a setting that moves draws
   // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
@@ -406,7 +406,7 @@ function AppWindow(): React.JSX.Element {
   const room = stage.room;
   // The Tasks tab, which reads the call standing where it draws it.
   const tasks = useTasksTab({
-    acts: { act, tell },
+    acts: { act, press, tell },
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,

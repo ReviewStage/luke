@@ -76,7 +76,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, pressAct } from "../act.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -89,9 +89,16 @@ import {
   type PanelSpan,
 } from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
-import { rendererRuntime } from "../renderer-runtime.js";
+import { rendererRegistry, rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { FAKE_ANSWER, fakeActs, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  FAKE_ANSWER,
+  fakeActPort,
+  fakeActs,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import {
   DESKTOP_CAPABILITIES,
   deliveryOf,
@@ -171,11 +178,18 @@ interface Standing {
   history: boolean;
 }
 
-/** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names, an act-port kind among them. */
+/**
+ * Mounts the hook alone over what the panel would hand it, keeping every act
+ * it told, in order; `answers` answers the acts it names, an act-port kind
+ * among them. A press is answered and kept as an asked act is, and stays
+ * quiet, unless `press` hands the window's own press door, which goes out on
+ * the act port the test installed.
+ */
 function mount(
   initial: Partial<Standing> = {},
   answers: { [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>> } = {},
   registry?: AtomRegistry,
+  press?: ActHandle["press"],
 ) {
   const told: PortActKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
@@ -249,6 +263,14 @@ function mount(
         // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
         act: (<Kind extends PortActKind>(kind: Kind, ...args: unknown[]) =>
           portAnswer(kind, ...args)) as ActHandle["act"],
+        // SAFETY: a pressed kind is recorded as an asked one is, the dispatch on the kind the one erasure.
+        press:
+          press ??
+          (((kind: PortActKind, ...args: unknown[]) =>
+            portAnswer(kind, ...args).then(
+              () => undefined,
+              () => undefined,
+            )) as ActHandle["press"]),
         // A told port kind is answered as an asked one is, recorded there, its answer or refusal read by no one, as `tell` reads none.
         // SAFETY: a told kind is recorded as an asked one is, the dispatch on the kind the one erasure.
         tell: ((kind: PortActKind, ...args: unknown[]) => {
@@ -3729,6 +3751,47 @@ test("an agent's Call press opens a call into it at once, and over another agent
   assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
     { agentId: AGENT_ID, taskId: TASK.id },
     { agentId: AGENT_ID, taskId: TASK.id },
+  ]);
+});
+
+test("a Call press and each Retry main refuses say why in a toast", async () => {
+  voiceDelivered();
+  // Each refresh is refused in words of its own, so each Retry's toast is told from the one before.
+  let refreshes = 0;
+  fakeActPort({
+    [ACT_KIND.TASKS_TALK]: () => Promise.reject(refusedOnPort("The voice window is not standing.")),
+    [ACT_KIND.TASKS_REFRESH]: () =>
+      Promise.reject(refusedOnPort(`Refresh ${++refreshes} could not read the tasks.`)),
+  });
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+    AtomRegistryModule.make(),
+    pressAct,
+  );
+  // A press's toast is raised on the window's own registry, so its toasts stand beside the tab's.
+  const windowToasts = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(windowToasts);
+  act(() => windowToasts.render(onRegistry(rendererRegistry, createElement(ToastHost))));
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().calls, "a desktop's agents take calls");
+  });
+
+  act(() => tab.control().calls?.onPress(AGENT_ID, { taskId: TASK.id, archived: false }));
+  await settle();
+  const called = newestToastSays();
+  const retried: (string | undefined)[] = [];
+  for (const retry of ["onRetryList", "onRetryWorkspaces", "onRetryCode"] as const) {
+    await act(async () => tab.control()[retry]());
+    retried.push(newestToastSays());
+  }
+
+  assert.equal(called, "The voice window is not standing.");
+  assert.deepEqual(retried, [
+    "Refresh 1 could not read the tasks.",
+    "Refresh 2 could not read the tasks.",
+    "Refresh 3 could not read the tasks.",
   ]);
 });
 

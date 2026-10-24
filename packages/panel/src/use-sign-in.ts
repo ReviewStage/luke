@@ -20,7 +20,7 @@ export interface SignIn {
  * signed in or not.
  */
 export function useSignIn(): SignIn {
-  const { act, tell } = useAct();
+  const { act, press } = useAct();
 
   /**
    * Whose sign-in the gate is waiting on. Held as app state with a ref
@@ -76,7 +76,7 @@ export function useSignIn(): SignIn {
     if (signInWaitNow() === undefined) return;
     signInAttempt.current += 1;
     setSignInWait(undefined);
-    tell(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN);
+    press(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN);
   }, [setSignInWait, signInWaitNow]);
 
   return { signInWait, signInFailure, beginSignIn, cancelSignIn };

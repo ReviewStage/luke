@@ -1,19 +1,22 @@
 // @vitest-environment jsdom
 
 /**
- * use-sign-in.test.ts -- a sign-in that ends without landing says why on the sign-in screen, each reason in words of its own.
+ * use-sign-in.test.ts -- a sign-in that ends without landing says why on the sign-in screen, each reason in words of its own; a Cancel main refuses says why in a toast.
  */
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { rendererRegistry } from "./renderer-runtime.js";
 import { SignInGate } from "./sign-in-gate.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs } from "./testing/app-bridge.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
+import { onRegistry } from "./testing/copy-feedback.js";
+import { ToastHost } from "./toast.js";
 import { useSignIn } from "./use-sign-in.js";
 
 /** What the screen says for each reason, as a person reads it. */
@@ -100,4 +103,44 @@ test("a refusal the port drew says only that the sign-in did not finish, never i
     reason: "Could not start signing in on this system.",
   });
   assert.equal(alertWords(container), SAID[SIGN_IN_FAILURE.UNFINISHED]);
+});
+
+test("a Cancel main refuses says why in a toast, and the gate is offered again all the same", async () => {
+  const refusal = "The sign-in could not be withdrawn.";
+  fakeActs({
+    act: (request) => {
+      // The sign-in waits on the browser for as long as the test runs.
+      if (request.kind === ACT_KIND.ACCOUNT_BEGIN_SIGN_IN) return new Promise(() => undefined);
+      if (request.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN) {
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: refusal });
+      }
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        Fragment,
+        null,
+        createElement(SignInScreen),
+        onRegistry(rendererRegistry, createElement(ToastHost)),
+      ),
+    ),
+  );
+  const press = (name: string) =>
+    [...container.querySelectorAll("button")].find((each) => each.textContent === name) ??
+    assert.fail(`the gate offers ${name}`);
+  await act(async () => press("Continue with Google").click());
+
+  await act(async () => press("Cancel").click());
+
+  const toasts = [
+    ...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words"),
+  ];
+  assert.equal(toasts.at(-1)?.textContent, refusal);
+  assert.equal(press("Continue with Google").disabled, false);
 });

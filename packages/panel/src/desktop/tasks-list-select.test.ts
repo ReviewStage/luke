@@ -173,6 +173,7 @@ async function mountPage(): Promise<{
           if (standing !== undefined) asked.push([standing.taskId, standing.status]);
           return Promise.resolve(true);
         }) as ActHandle["act"],
+        press: () => Promise.resolve(),
         tell: () => undefined,
       },
       tasks: view,

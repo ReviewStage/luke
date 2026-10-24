@@ -93,7 +93,7 @@ function VoiceNotices({ children }: { children: ReactNode }): React.JSX.Element 
   const onDismissHint = useCallback(() => {
     setHintDismissal({ at: Date.now(), stretch: silenceStretch });
   }, [silenceStretch]);
-  const { tell } = useAct();
+  const { press } = useAct();
   const openApiKeys = useOpenApiKeys();
   const openLink = useOpenLink();
   /** A failure's remedy, done where it is done: Settings for the OpenAI key, OpenAI's billing for its credit, System Settings for the microphone. */
@@ -107,11 +107,11 @@ function VoiceNotices({ children }: { children: ReactNode }): React.JSX.Element 
           openLink(OPENAI_BILLING_URL);
           return;
         case VOICE_REMEDY.ALLOW_MICROPHONE:
-          tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
+          press(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
           return;
       }
     },
-    [openApiKeys, openLink, tell],
+    [openApiKeys, openLink, press],
   );
   useVoiceNoticeToast({ notice, onDismissHint, onRemedy });
   return <>{children}</>;
@@ -131,7 +131,7 @@ function StandingCallCard({
   agentShown: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const { tell } = useAct();
+  const { press } = useAct();
   const view = useStandingVoiceView();
   const focused = useWindowFocused();
   const planning = useAppSlice(APP_SLICE.TASKS) ?? IDLE_TASKS_VIEW;
@@ -142,7 +142,7 @@ function StandingCallCard({
     () => (shown ? callCard({ view, tasks: planning }) : undefined),
     [shown, view, planning],
   );
-  const controls = useMemo(() => callControls(tell, speakerMuted), [tell, speakerMuted]);
+  const controls = useMemo(() => callControls(press, speakerMuted), [press, speakerMuted]);
   const call = useMemo<CallCardInput | undefined>(
     () => (card === undefined ? undefined : { card, speakerMuted, controls, video }),
     [card, speakerMuted, controls, video],

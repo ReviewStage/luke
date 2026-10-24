@@ -809,11 +809,11 @@ test("the plan template's version history keeps a call's card at the foot of its
   });
   // The card's presses sent as `App` sends them, over the bridge.
   function CallSettings(): React.JSX.Element {
-    const { tell } = useAct();
+    const { press } = useAct();
     const call: CallCardInput = {
       card: { taskName: "Checkout redesign", status: undefined, microphoneMuted: false },
       speakerMuted: false,
-      controls: callControls(tell, false),
+      controls: callControls(press, false),
     };
     return createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE, call });
   }

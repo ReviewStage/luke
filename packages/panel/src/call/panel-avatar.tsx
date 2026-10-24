@@ -87,7 +87,7 @@ export interface AgentCallVideoState {
  * avatar down or put it up again on the call standing.
  */
 export function useAgentCallVideo(agentId: string): AgentCallVideoState {
-  const { tell } = useAct();
+  const { press } = useAct();
   const view = useStandingVoiceView();
   const avatar = useVoiceAvatar();
   const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
@@ -95,7 +95,7 @@ export function useAgentCallVideo(agentId: string): AgentCallVideoState {
     status: agentCallVideoStatus({ view, avatar, agentId, videoCalls }),
     video: useAvatarTracks().video,
     endReason: avatar.endReason,
-    onSetVideo: (on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on }),
+    onSetVideo: (on) => press(ACT_KIND.VOICE_SET_VIDEO, { on }),
   };
 }
 
@@ -190,8 +190,8 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
  * offer.
  */
 export function useCallCardVideo(): CallCardVideo | undefined {
-  const { tell } = useAct();
+  const { press } = useAct();
   const status = useCardVideoStatus();
   const track = useAvatarTracks().video;
-  return useMemo(() => cardVideo(status, track, tell), [status, track, tell]);
+  return useMemo(() => cardVideo(status, track, press), [status, track, press]);
 }
