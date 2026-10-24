@@ -10,6 +10,7 @@ import {
 } from "@luke/features/terminal-wire";
 import {
   CloseIcon,
+  CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   Fill,
@@ -272,7 +273,12 @@ function ShellRow({
       />
       <ConfirmDialog
         confirm={ending}
-        question={{ title: `${kill}?`, verb: "End shell", running: "Ending the shell" }}
+        question={{
+          title: `${kill}?`,
+          verb: "End shell",
+          running: "Ending the shell",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
+        }}
       />
     </>
   );

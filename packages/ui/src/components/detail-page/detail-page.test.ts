@@ -40,6 +40,7 @@ function draw({
   act(() =>
     root.render(
       createElement(DetailPage, {
+        frame: PAGE_FRAME.PAGE,
         title: "Launch checklist",
         description,
         actions: createElement("button", { type: "button" }, "Edit"),
@@ -201,6 +202,7 @@ test("a title that is more than words hands the bar the words a reader hears, no
   act(() =>
     root.render(
       createElement(DetailPage, {
+        frame: PAGE_FRAME.PAGE,
         title: createElement(
           "span",
           null,

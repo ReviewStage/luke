@@ -1811,16 +1811,10 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
-/* A plan's title is set large in the semibold, and each section is named
-   by a heading with room above it rather than a rule under it. */
-.desktop-document .luke-markdown-heading[data-level="1"] {
-  font-size: 1.9em;
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-.desktop-document .luke-markdown-heading[data-level="2"] {
+/* Each section is named by a heading with room above it rather than a rule
+   under it; a plan's title is its page's header (`PageHeader`), not a
+   heading of the text. */
+.desktop-document .luke-markdown-heading:is([data-level="1"], [data-level="2"]) {
   margin-top: 1.6em;
   font-size: 1.3em;
   font-weight: var(--luke-weight-semibold);
@@ -1829,14 +1823,6 @@ ul.actor-stack {
 .desktop-document .luke-markdown-heading[data-level="3"] {
   font-size: 1.05em;
   font-weight: var(--luke-weight-medium);
-}
-
-/* In a column under 400px the title steps down to a section's size and a
-   half, so it no longer fills the first screen a few words a line. */
-@container plan-document (width < 400px) {
-  .desktop-document .task-title .luke-markdown-heading[data-level="1"] {
-    font-size: 1.5em;
-  }
 }
 
 /* The call's room --------------------------------------------------------- */
@@ -3972,23 +3958,6 @@ ul.actor-stack {
   padding-top: var(--luke-space-32);
 }
 
-/* A column too narrow for the name and the page's actions on one line
-   drops the actions under the name, as a Settings page's head drops its
-   Reset, rather than breaking the name inside a word. */
-.task-page-head .task-title-line {
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* The template's name in the page title role, where a Settings page's
-   title stands. */
-.template-document .task-page-head .luke-markdown-heading[data-level="1"] {
-  font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-medium);
-  letter-spacing: -0.015em;
-  line-height: var(--luke-type-title-leading);
-}
-
 .task-page-head .plan-edit-note {
   margin: var(--luke-space-4) 0 0;
 }
@@ -4987,31 +4956,6 @@ ul.actor-stack {
 
 .person-top ~ .person-section-foot {
   margin-top: var(--luke-space-4);
-}
-
-.person-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-12);
-}
-
-/* Note that a long name or email wraps anywhere rather than run past the
-   column or hide its end, so the head stays whole at any width. */
-.person-head-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-  overflow-wrap: anywhere;
-}
-
-.person-head-name {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  margin: 0;
 }
 
 /* A section's name and count. */

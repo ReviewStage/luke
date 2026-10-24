@@ -26,6 +26,7 @@ import {
   Chip,
   ChipName,
   COMMAND_LINK_ELEMENT,
+  CONFIRM_LOSS,
   CommandLink,
   ConfirmDialog,
   DIALOG_TONE,
@@ -314,6 +315,7 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   body: `Closing it takes it out of the merge queue, and reopening it does not queue it again. ${QUEUE_WARNING}`,
   verb: ACTION_WORDS[PULL_REQUEST_ACTION.CLOSE],
   running: "Closing",
+  loss: CONFIRM_LOSS.AFFECTS_OTHERS,
   tone: DIALOG_TONE.DANGER,
 };
 

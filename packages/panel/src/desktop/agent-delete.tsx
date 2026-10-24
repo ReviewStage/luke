@@ -1,5 +1,11 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { ConfirmDialog, type DialogQuestion, TrashIcon, useConfirmDialog } from "@luke/ui";
+import {
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  TrashIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { agentName } from "../tasks/coding-agent-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
@@ -30,6 +36,7 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
     verb: DELETE_LABEL,
     running: "Deleting",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
   };
 }
 

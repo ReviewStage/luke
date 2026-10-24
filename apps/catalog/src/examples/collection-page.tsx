@@ -88,6 +88,7 @@ function Tasks({
   const [open, setOpen] = useState<string>("billing");
   return (
     <CollectionPage
+      frame={PAGE_FRAME.PAGE}
       title="Tasks"
       description="Everything planned in this workspace."
       actions={

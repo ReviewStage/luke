@@ -3,6 +3,7 @@ import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-w
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   IconButton,
@@ -394,6 +395,7 @@ function deleteQuestion(name: string, settled: boolean): DialogQuestion {
     body: settled ? lost : `${lost} To keep it out of the way instead, mark it done.`,
     verb: "Permanently delete",
     running: "Deleting",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
   };
 }
 

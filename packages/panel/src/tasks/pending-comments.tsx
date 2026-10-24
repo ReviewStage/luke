@@ -9,6 +9,7 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   Comment,
   ConfirmDialog,
   type DialogQuestion,
@@ -66,6 +67,7 @@ const DELETE_QUESTION: DialogQuestion = {
   body: "This can't be undone.",
   verb: "Delete comment",
   running: "Deleting",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** A pending comment as the comment of a thread it is drawn as: keyed by its own id. */

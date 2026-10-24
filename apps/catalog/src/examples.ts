@@ -3,6 +3,7 @@ import { ARTWORK_EXAMPLE } from "./examples/artwork";
 import { ATTACHMENT_CHIPS_EXAMPLE } from "./examples/attachment-chips";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
+import { BACK_BUTTONS_EXAMPLE } from "./examples/back-buttons";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
 import { BAR_ITEMS_EXAMPLE } from "./examples/bar-items";
@@ -140,6 +141,7 @@ export const EXAMPLES: readonly Example[] = [
   LAYOUT_EXAMPLE,
   ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
+  BACK_BUTTONS_EXAMPLE,
   BADGES_EXAMPLE,
   BANNERS_EXAMPLE,
   BREADCRUMBS_EXAMPLE,
