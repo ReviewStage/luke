@@ -157,7 +157,7 @@ function ConnectGitHub(): React.JSX.Element {
   const ended = view.kind === VIEW.SAID ? view.words : undefined;
   const { back, open } = useConnectReturn({
     landed: ended !== undefined,
-    settled: ended?.tone === LANDING_TONE.SETTLED,
+    settled: ended?.tone === LANDING_TONE.COMPLETE,
   });
 
   useEffect(() => {

@@ -21,8 +21,8 @@ void React;
 
 /** The glyph each tone's badge carries. */
 const BADGE_GLYPH = {
-  [LANDING_TONE.SETTLED]: CheckIcon,
-  [LANDING_TONE.FAILED]: CloseIcon,
+  [LANDING_TONE.COMPLETE]: CheckIcon,
+  [LANDING_TONE.DANGER]: CloseIcon,
 } as const satisfies Record<LandingTone, () => React.JSX.Element>;
 
 /** `provider`'s mark, or Luke's where it is left out, in a ring, badged where `tone` says how the flow ended. */

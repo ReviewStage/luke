@@ -105,7 +105,7 @@ test("a page still on its way draws its mark with no badge", () => {
     createElement(AuthPage, {
       mark: createElement(AuthMark, {
         provider: MARK_PROVIDER.GITHUB,
-        tone: LANDING_TONE.FAILED,
+        tone: LANDING_TONE.DANGER,
       }),
       title: "Luke could not reach GitHub",
     }),

@@ -14,7 +14,7 @@ import { FACE_ART, GITHUB_PATH, GOOGLE_MARK_LAYERS } from "@luke/brand";
  */
 export const LOOPBACK_PAGE_TONE = {
   /** The sign-in reached a resting state worth a green pill. */
-  SETTLED: "settled",
+  COMPLETE: "complete",
   /** Something needs the user back in Luke. */
   ATTENTION: "attention",
 } as const;
