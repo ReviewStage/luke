@@ -95,8 +95,6 @@ export const SETTINGS_SECTION = {
   GITHUB_REPOSITORIES: "workspace-github-repositories",
   /** Where each repository is cloned on this Mac and the command that runs it, which Open on this Mac reads. */
   MAC_REPOSITORIES: "workspace-mac-repositories",
-  /** How code and diffs are drawn, on Appearance: every setting the View settings popover offers, and the File tabs' own. */
-  APPEARANCE_DIFFS: "appearance-diffs",
   /** Claude's row on Agents: the account's Claude plan and Anthropic key, anchored as its search result is. */
   CLAUDE: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
   /** Codex's row on Agents: the account's ChatGPT plan and OpenAI key, which calls and dictation run on too. */

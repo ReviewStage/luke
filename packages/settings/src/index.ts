@@ -21,6 +21,8 @@ export {
 export {
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,
+  DIFF_SETTING_GROUPS,
+  type DiffSettingSection,
   isAppSettingId,
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,

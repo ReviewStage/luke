@@ -977,8 +977,8 @@ test("View settings groups its rows under Diff, Lines, and Text, shows one appea
   await drawTab();
   const popover = openSettings("dark");
 
-  const groups = [...popover.querySelectorAll<HTMLElement>(".view-settings-group")].map((group) => [
-    group.querySelector("h3")?.textContent,
+  const groups = [...popover.querySelectorAll<HTMLElement>("section")].map((group) => [
+    group.querySelector("h2")?.textContent,
     [...group.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
       // A pop-up's name ends with the value it names, which is not the row's.
       (control) => control.getAttribute("aria-label")?.split(": ")[0],

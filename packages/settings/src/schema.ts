@@ -64,6 +64,21 @@ export {
 // the same set and may not depend on anything here.
 export { APP_SETTING_ID, isAppSettingId };
 
+/**
+ * The groups every setting of how code and diffs are drawn stands in, each
+ * with the name it is drawn under, in the order both surfaces draw them:
+ * Settings › Appearance and the Files changed View options popover. Kept
+ * here once, so the two surfaces read one list and cannot name or order a
+ * group apart.
+ */
+export const DIFF_SETTING_GROUPS = [
+  { section: SETTING_SECTION.DIFF, title: "Diff" },
+  { section: SETTING_SECTION.LINES, title: "Lines" },
+  { section: SETTING_SECTION.TEXT, title: "Text" },
+] as const;
+
+export type DiffSettingSection = (typeof DIFF_SETTING_GROUPS)[number]["section"];
+
 /* A theme is stored in lowercase; on a control it reads as a name. */
 function themeOptionLabel(theme: Theme): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
@@ -321,8 +336,8 @@ export const APP_SETTING_SCHEMA = {
     detail: "In File tabs and diffs alike.",
     default: true,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 200,
+    section: SETTING_SECTION.LINES,
+    order: 225,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     // Nothing to run per write: the panel draws code from every settings snapshot.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
@@ -334,8 +349,8 @@ export const APP_SETTING_SCHEMA = {
     detail: "In File tabs and diffs alike.",
     default: true,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 205,
+    section: SETTING_SECTION.LINES,
+    order: 220,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -350,8 +365,8 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_LAYOUT_LIST)),
     default: DIFF_LAYOUT.UNIFIED,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 210,
+    section: SETTING_SECTION.DIFF,
+    order: 200,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -365,8 +380,8 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_INDICATORS_LIST)),
     default: DIFF_INDICATORS.BARS,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 215,
+    section: SETTING_SECTION.DIFF,
+    order: 210,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -381,8 +396,8 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, oneOf(INLINE_DIFF_LIST)),
     default: INLINE_DIFF.WORD_ALT,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 220,
+    section: SETTING_SECTION.DIFF,
+    order: 205,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -392,8 +407,8 @@ export const APP_SETTING_SCHEMA = {
     label: "Backgrounds",
     default: true,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 225,
+    section: SETTING_SECTION.DIFF,
+    order: 215,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -408,8 +423,8 @@ export const APP_SETTING_SCHEMA = {
     default: "github-dark-default",
     search: "Search themes",
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 230,
+    section: SETTING_SECTION.TEXT,
+    order: 235,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -424,8 +439,8 @@ export const APP_SETTING_SCHEMA = {
     default: "github-light-default",
     search: "Search themes",
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 235,
+    section: SETTING_SECTION.TEXT,
+    order: 240,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -439,8 +454,8 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_FONT_LIST)),
     default: DIFF_FONT.SF_MONO,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 240,
+    section: SETTING_SECTION.TEXT,
+    order: 245,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -454,8 +469,8 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_FONT_SIZES)),
     default: "11.5",
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 245,
+    section: SETTING_SECTION.TEXT,
+    order: 250,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -469,8 +484,8 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_LINE_HEIGHT_LIST)),
     default: DIFF_LINE_HEIGHT.NORMAL,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 250,
+    section: SETTING_SECTION.TEXT,
+    order: 255,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -480,8 +495,8 @@ export const APP_SETTING_SCHEMA = {
     label: "Ligatures",
     default: false,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 255,
+    section: SETTING_SECTION.TEXT,
+    order: 260,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
@@ -491,8 +506,8 @@ export const APP_SETTING_SCHEMA = {
     label: "Minimize inline comments",
     default: false,
     page: SETTINGS_PAGE.APPEARANCE,
-    section: SETTING_SECTION.DIFFS,
-    order: 260,
+    section: SETTING_SECTION.LINES,
+    order: 230,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
