@@ -25,6 +25,7 @@ import {
   type CodingAgentsControl,
   type DraftCallStart,
   useCodingAgents,
+  withPendingAgents,
 } from "./use-coding-agents.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -46,6 +47,7 @@ interface Standing {
   agentId?: string;
   repository: string | null;
   listedAgents?: readonly CodingAgentSummary[];
+  viewedAgents?: readonly CodingAgentSummary[];
 }
 
 /** Any kind the hook asks. */
@@ -108,6 +110,7 @@ function mount(
       agentId: held.agentId,
       repository: held.repository,
       listedAgents: held.listedAgents,
+      viewedAgents: held.viewedAgents,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onStarted: (agentId) => started.push(agentId),
@@ -181,6 +184,74 @@ test("the task's agents the followed list carries draw before its list is read, 
     tab.control().archived?.map((agent) => agent.id),
     [archived.id],
   );
+});
+
+test("a rename draws the new name at once, and the name it replaced comes back when the service refuses it", async () => {
+  const titled = { ...STARTED, title: "Fix the invite email" };
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [titled] });
+  const renamed = Promise.withResolvers<WireBoundaryInput>();
+  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, renamed.promise);
+  await tab.mount();
+
+  let took: Promise<boolean> | undefined;
+  act(() => {
+    took = tab.control().onRename(AGENT, "Invite email subject");
+  });
+  await settle();
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.title),
+    ["Invite email subject"],
+  );
+
+  renamed.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
+  assert.equal(await took, false);
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.title),
+    ["Fix the invite email"],
+  );
+});
+
+test("an archive moves the agent under Archived at once, and back among the standing when the service refuses it", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  const archived = Promise.withResolvers<WireBoundaryInput>();
+  tab.answer(ACT_KIND.CODING_AGENTS_ARCHIVE, archived.promise);
+  await tab.mount();
+
+  act(() => {
+    void tab.control().onArchive(AGENT, true);
+  });
+  await settle();
+  assert.deepEqual(tab.control().agentIds, []);
+  assert.deepEqual(
+    tab.control().archived?.map((agent) => agent.id),
+    [AGENT],
+  );
+
+  archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
+  assert.deepEqual(tab.control().agentIds, [AGENT]);
+  assert.deepEqual(tab.control().archived, []);
+});
+
+test("a name given an agent another list draws stands over that list until it carries the name", async () => {
+  const taskless = { ...STARTED, planId: null, title: "Nightly triage" };
+  const tab = mount({ taskId: undefined, repository: null, viewedAgents: [taskless] });
+  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, { agent: { ...taskless, title: "Morning triage" } });
+  await tab.mount();
+
+  const drawn = () =>
+    withPendingAgents([taskless], tab.control().pending).map((agent) => agent.title);
+  await act(async () => {
+    assert.equal(await tab.control().onRename(AGENT, "Morning triage"), true);
+  });
+  await settle();
+  assert.deepEqual(drawn(), ["Morning triage"]);
+
+  await tab.stand({ viewedAgents: [{ ...taskless, title: "Morning triage" }] });
+  assert.deepEqual(drawn(), ["Nightly triage"]);
 });
 
 test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its prompt under the draft's key, with the MCP servers it switched off, opening its tab", async () => {

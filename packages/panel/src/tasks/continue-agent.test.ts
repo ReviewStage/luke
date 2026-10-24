@@ -162,6 +162,10 @@ async function drawnTab(input: {
   onUnarchive?: () => void;
   source?: Partial<CodingAgentSummary>;
   onArchive?: (agentId: string, archived: boolean) => void;
+  /** The signed-in reader, whose own agents archive at once; another's at rest is read again first. */
+  me?: string;
+  /** Reads the agent again before a teammate's is archived unasked. */
+  readAgent?: (agentId: string) => Promise<CodingAgentSummary | undefined>;
   onStop?: (agentId: string) => void;
   answer?: () => Promise<Failure | undefined>;
   message?: CodingAgentAgentAnswer;
@@ -196,6 +200,8 @@ async function drawnTab(input: {
     archived: input.archived ?? [],
     continueAgent: input.continues === false ? undefined : continueAgent,
     onUnarchive: input.onUnarchive,
+    me: input.me,
+    ...(input.readAgent === undefined ? undefined : { readAgent: input.readAgent }),
     onArchive: (agentId, archived) => {
       input.onArchive?.(agentId, archived);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -833,6 +839,31 @@ test("the continued box's Archive archives the reader's own agent at once, settl
   await act(async () => running.named(note, "Archive")?.click());
   await settle();
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
+});
+
+test("the continued box's Archive is held busy while a teammate's agent at rest is read again first, then archives it", async () => {
+  const archived: { agentId: string; archived: boolean }[] = [];
+  const read = Promise.withResolvers<CodingAgentSummary | undefined>();
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    source: { startedBy: { userId: "user-teammate", name: "Charles Pan" } },
+    me: "user-reader",
+    readAgent: () => read.promise,
+    others: [agentOf(NEXT, { from: FROM_SOURCE })],
+    onArchive: (agentId, each) => archived.push({ agentId, archived: each }),
+  });
+  const note = tab.continuedNote() ?? assert.fail("the box gives way to its note");
+  const archive = tab.named(note, "Archive") ?? assert.fail("the note offers Archive");
+  assert.equal(archive.getAttribute("aria-busy"), null);
+
+  await act(async () => archive.click());
+  assert.equal(archive.getAttribute("aria-busy"), "true");
+  assert.deepEqual(archived, [], "nothing is archived before the read answers");
+
+  read.resolve(agentOf(SOURCE, { status: CODING_AGENT_STATUS.COMPLETED }));
+  await settle();
+  assert.equal(archive.getAttribute("aria-busy"), null);
   assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
 });
 

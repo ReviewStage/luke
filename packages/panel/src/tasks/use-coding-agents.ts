@@ -30,6 +30,14 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { STATUS_TONE } from "@luke/ui";
+import {
+  type PendingValues,
+  pendingSettled,
+  pendingShown,
+  pendingValue,
+  pendingWithout,
+  type SameValue,
+} from "@luke/ui/pending-values";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -41,6 +49,7 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts.js";
+import { usePendingNow } from "../pending-clock.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -147,8 +156,12 @@ const NO_KEYWORDS: readonly string[] = [];
  * turn it still runs is stopped. The list is read with the archived agents
  * among the rest and split here: `agents` holds those standing, which is
  * every tab, row, and menu of the task, and `archived` the rest, which the
- * summary keeps folded away with an Unarchive on each. The agent the
- * service answers moves between the two at once, and a toast offers Undo.
+ * summary keeps folded away with an Unarchive on each. A rename, an archive,
+ * and an unarchive are drawn at once, before the service answers, over
+ * every list that names the agent (`pending`, `withPendingAgents`), and put
+ * back if it refuses; each stands until a view carries it, carries a third
+ * value, no longer holds the agent, or its time runs out
+ * (`@luke/ui/pending-values`). Once an archive lands, a toast offers Undo.
  *
  * An agent may be continued in a new one, which is a Start on the task
  * `from` that agent on its whole transcript, with the developer's words, where
@@ -338,13 +351,15 @@ export interface CodingAgentsControl {
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is; at the page's top where none is known. */
   onOpenApiKeys: (provider: ModelProvider | undefined) => void;
-  /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
+  /** The names and archives given here that no view carries yet, which every list naming an agent draws over its own (`withPendingAgents`). */
+  pending: PendingAgents;
+  /** Renames one agent, drawn at once and taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /**
    * Archives one agent, a turn it still runs stopped first, or brings it
-   * back, taking the agent as the service answers it and offering Undo in a
-   * toast; a refusal is answered rather than said, for the caller to say in
-   * its dialog or a toast of its own.
+   * back, drawn at once, taking the agent as the service answers it and
+   * offering Undo in a toast; a refusal puts it back and is answered rather
+   * than said, for the caller to say in its dialog or a toast of its own.
    */
   onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
   /**
@@ -658,6 +673,69 @@ function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boo
   );
 }
 
+/**
+ * The names and archives given here that no view carries yet, by agent id:
+ * a rename's title, and an archive's time or null for an unarchive.
+ */
+export interface PendingAgents {
+  readonly titles: PendingValues<string, string | null>;
+  readonly archives: PendingValues<string, number | null>;
+}
+
+/** What a name or archive given here is laid over and waits on: an agent as any list holds it. */
+type NamedAgent = Pick<CodingAgentSummary, "id" | "title" | "archivedAt">;
+
+/** No name given here and waiting on a view. */
+const NO_PENDING_TITLES: PendingValues<string, string | null> = new Map();
+
+/** No archive given here and waiting on a view. */
+const NO_PENDING_ARCHIVES: PendingValues<string, number | null> = new Map();
+
+/** Whether two titles are one. */
+const sameTitle: SameValue<string | null> = (a, b) => a === b;
+
+/** Whether two archive stamps say the same: archived, at whatever time, or not. */
+const sameArchive: SameValue<number | null> = (a, b) => (a === null) === (b === null);
+
+/** When an agent a view holds was archived, null while it stands; none where the view holds no such agent. */
+function archiveOf(agent: NamedAgent | undefined): number | null | undefined {
+  return agent === undefined ? undefined : (agent.archivedAt ?? null);
+}
+
+/** One agent with the name and archive given here laid over it, each where one stands. */
+function pendingAgent<A extends NamedAgent>(
+  agent: A,
+  title: string | null | undefined,
+  archive: number | null | undefined,
+): A {
+  const named = title === undefined ? agent : { ...agent, title };
+  if (archive === undefined) return named;
+  if (archive !== null) return { ...named, archivedAt: archive };
+  const { archivedAt: _archivedAt, ...standing } = named;
+  return standing as A;
+}
+
+/**
+ * The agents a list holds with every name and archive given here that the
+ * list does not yet carry laid over them, so each surface draws the press at
+ * once from its own list: the task's, an agent's page, or the sidebar's.
+ */
+export function withPendingAgents<A extends NamedAgent>(
+  list: readonly A[],
+  pending: PendingAgents,
+): readonly A[] {
+  if (pending.titles.size === 0 && pending.archives.size === 0) return list;
+  const byId = new Map(list.map((agent) => [agent.id, agent] as const));
+  const titles = pendingShown(
+    pendingSettled(pending.titles, (id) => byId.get(id)?.title, sameTitle, undefined),
+  );
+  const archives = pendingShown(
+    pendingSettled(pending.archives, (id) => archiveOf(byId.get(id)), sameArchive, undefined),
+  );
+  if (titles.size === 0 && archives.size === 0) return list;
+  return list.map((agent) => pendingAgent(agent, titles.get(agent.id), archives.get(agent.id)));
+}
+
 export function useCodingAgents(input: {
   acts: Pick<ActHandle, "act">;
   /** The open task, or none; a fixture run's tasks have no agents. */
@@ -676,6 +754,12 @@ export function useCodingAgents(input: {
    * list the open task.
    */
   listedAgents?: readonly CodingAgentSummary[] | undefined;
+  /**
+   * The agents another list draws from this control's presses, as the
+   * sidebar's agents with no task are, which a name or archive given here
+   * waits on beside the control's own; none where only its own list draws.
+   */
+  viewedAgents?: readonly NamedAgent[] | undefined;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page. */
@@ -764,10 +848,32 @@ export function useCodingAgents(input: {
     [listedAgents, taskId],
   );
   const shown = held ?? listedHere;
-  const agents = useMemo(() => shown?.filter((agent) => agent.archivedAt === undefined), [shown]);
+  // A name or archive given here stands over every list that names the agent until a view carries
+  // it, and lets go once none holds the agent, as after a sign-out. The clock is read only while
+  // one waits.
+  const [titles, setTitles] = useState(NO_PENDING_TITLES);
+  const [archives, setArchives] = useState(NO_PENDING_ARCHIVES);
+  const given = useMemo((): PendingAgents => ({ titles, archives }), [titles, archives]);
+  const pendingNow = usePendingNow(titles.size > 0 || archives.size > 0);
+  const { viewedAgents } = input;
+  useEffect(() => {
+    const viewedOf = (agentId: string) =>
+      shown?.find((agent) => agent.id === agentId) ??
+      viewedAgents?.find((agent) => agent.id === agentId);
+    setTitles((was) => pendingSettled(was, (id) => viewedOf(id)?.title, sameTitle, pendingNow));
+    setArchives((was) =>
+      pendingSettled(was, (id) => archiveOf(viewedOf(id)), sameArchive, pendingNow),
+    );
+  }, [shown, viewedAgents, pendingNow]);
+  const drawn = useMemo(
+    () => (shown === undefined ? undefined : withPendingAgents(shown, given)),
+    [shown, given],
+  );
+  const agents = useMemo(() => drawn?.filter((agent) => agent.archivedAt === undefined), [drawn]);
   const archivedAgents = useMemo(
-    () => held?.filter((agent) => agent.archivedAt !== undefined),
-    [held],
+    () =>
+      held === undefined ? undefined : drawn?.filter((agent) => agent.archivedAt !== undefined),
+    [held, drawn],
   );
   const listFailed = ours(list) && list.failed;
   const listMissing = ours(list) && list.missing === true;
@@ -1400,42 +1506,57 @@ export function useCodingAgents(input: {
     [act, failed],
   );
 
-  // A rename's field closes as the edit ends, so a second rename may be out before the first
-  // answers; as with a change of model, only the newest one's answer is taken into the list,
-  // and only the newest one's refusal is said, in a toast, as the old name comes back.
+  // The agent as the views the control's presses reach carry it, before anything given here.
+  const viewedAgent = (agentId: string) =>
+    shown?.find((agent) => agent.id === agentId) ??
+    viewedAgents?.find((agent) => agent.id === agentId);
+
+  // A rename's field closes as the edit ends, and the new name is drawn at once, so a second
+  // rename may be out before the first answers; as with a change of model, only the newest one's
+  // answer is taken into the list, and only the newest one's refusal is said, in a toast, as the
+  // name it replaced comes back.
   const renames = useRef(new Map<string, number>());
-  const onRename = useCallback(
-    async (agentId: string, title: string) => {
-      const rename = (renames.current.get(agentId) ?? 0) + 1;
-      renames.current.set(agentId, rename);
-      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
-        agentId,
-        title,
-      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
-      const newest = renames.current.get(agentId) === rename;
-      if ("failure" in answer) {
-        if (newest) failed(RENAME_FAILED);
-        return false;
-      }
-      if (newest) {
-        setList((was) =>
-          was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
-        );
-      }
-      return true;
-    },
-    [act, failed],
-  );
+  const onRename = async (agentId: string, title: string): Promise<boolean> => {
+    const rename = (renames.current.get(agentId) ?? 0) + 1;
+    renames.current.set(agentId, rename);
+    const asked = pendingValue(titles.get(agentId), title, viewedAgent(agentId)?.title, sameTitle);
+    setTitles((was) => new Map(was).set(agentId, asked));
+    const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
+      agentId,
+      title,
+    }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    const newest = renames.current.get(agentId) === rename;
+    if ("failure" in answer) {
+      setTitles((was) => pendingWithout(was, agentId, asked));
+      if (newest) failed(RENAME_FAILED);
+      return false;
+    }
+    if (newest) {
+      setList((was) =>
+        was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
+      );
+    }
+    return true;
+  };
 
   // Note that the archive is read through a ref from its toast's Undo,
-  // because the press lands renders after the toast was raised.
+  // because the press lands renders after the toast was raised. The agent
+  // moves at once, and back where the service refuses.
   const onArchive = async (agentId: string, archived: boolean): Promise<ActionResult> => {
+    const asked = pendingValue(
+      archives.get(agentId),
+      archived ? Date.now() : null,
+      archiveOf(viewedAgent(agentId)),
+      sameArchive,
+    );
+    setArchives((was) => new Map(was).set(agentId, asked));
     const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_ARCHIVE, {
       agentId,
       archived,
     }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
     const words = archiveWords(archived);
     if ("failure" in answer) {
+      setArchives((was) => pendingWithout(was, agentId, asked));
       const notReady = answer.failure === CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY;
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
@@ -1755,6 +1876,7 @@ export function useCodingAgents(input: {
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     me: input.me,
     onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
+    pending: given,
     onRename,
     onArchive,
     onDelete,

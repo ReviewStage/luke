@@ -258,7 +258,7 @@ test("Rename on the row's right-click turns the row into its name's field, and t
   assert.deepEqual(renames, [{ agentId: AGENT_ID, title: "Remove the stale banners" }]);
 });
 
-test("a refused rename reopens the row's field holding the name typed", async () => {
+test("a refused rename reopens the row's field holding the name typed, and says under it that the agent was not renamed, as a task's row does", async () => {
   renameTaken = false;
   const row = mount(RUN);
   const offered = rightClick(row);
@@ -274,6 +274,7 @@ test("a refused rename reopens the row's field holding the name typed", async ()
 
   const reopened = row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
   assert.equal(reopened?.value, "Remove the stale banners");
+  assert.ok(row.textContent?.includes("The agent could not be renamed. Try again."));
 });
 
 test("rested on, the row hangs the agent's card beside it, naming it as its tab's card does", () => {

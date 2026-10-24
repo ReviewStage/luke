@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
@@ -147,9 +146,6 @@ import type { MicrophoneStatus } from "@luke/voice/audio";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { Clock, Duration, Option, Schedule, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { streamFrom } from "../act-stream.js";
@@ -160,8 +156,8 @@ import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { useOpenAiKeyMissing } from "../openai-key.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
+import { usePendingNow } from "../pending-clock.js";
 import { pressedWithCommand } from "../press-intent.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
@@ -197,7 +193,11 @@ import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./restin
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
-import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
+import {
+  type CodingAgentsControl,
+  useCodingAgents,
+  withPendingAgents,
+} from "./use-coding-agents.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
@@ -1078,20 +1078,6 @@ const NO_PENDING_MARKS: PendingMarks = new Map();
 /** No status given here and still waiting on main's view. */
 const NO_PENDING_STATUSES: PendingStatuses = new Map();
 
-/**
- * How often the runtime clock is read while a task's name, pin, or status
- * given here waits on main's view, so one past its time limit lets go.
- */
-const PENDING_TICK = Duration.seconds(5);
-
-/** The time now, and again each `PENDING_TICK` after, on the renderer's clock, read only while a value waits. */
-const pendingClockAtom = rendererRuntime.atom(
-  Stream.fromEffectSchedule(Clock.currentTimeMillis, Schedule.spaced(PENDING_TICK)),
-);
-
-/** No reading, while nothing waits on main's view. */
-const NO_PENDING_CLOCK = Atom.make(AsyncResult.initial<number>());
-
 /** No repository pin given here and still waiting on main's view. */
 const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 
@@ -1385,9 +1371,7 @@ export function useTasksTab(input: {
   const [marks, setMarks] = useState<PendingMarks>(NO_PENDING_MARKS);
   const [statuses, setStatuses] = useState<PendingStatuses>(NO_PENDING_STATUSES);
   const waiting = renames.size > 0 || marks.size > 0 || statuses.size > 0;
-  const pendingNow = Option.getOrUndefined(
-    AsyncResult.value(useAtomValue(waiting ? pendingClockAtom : NO_PENDING_CLOCK)),
-  );
+  const pendingNow = usePendingNow(waiting);
   useEffect(() => {
     setRenames((held) =>
       accountSignedIn ? settledRenames(held, viewed, pendingNow) : NO_PENDING_RENAMES,
@@ -1508,18 +1492,7 @@ export function useTasksTab(input: {
       ),
     [tasks.tasks, listedWorkspaceId],
   );
-  // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
-  // each pinned as given here until main's view carries it.
   const { tasklessAgents } = tasks;
-  const listedAgents = useMemo(() => {
-    const listed = agentsPinned(tasklessAgents ?? NO_TASKLESS_AGENTS, agentPins).filter(
-      (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
-    );
-    return {
-      standing: listed.filter((agent) => agent.archivedAt === undefined),
-      archived: listed.filter((agent) => agent.archivedAt !== undefined),
-    };
-  }, [tasklessAgents, agentPins, listedWorkspaceId]);
   const { inboxWaiting, inboxTasks } = input;
   const listedInbox = useMemo(
     () => ({
@@ -1651,7 +1624,21 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
+    viewedAgents: tasklessAgents,
   });
+  // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
+  // each pinned, named, and archived as given here until main's view carries it.
+  const agentsGiven = agents.pending;
+  const listedAgents = useMemo(() => {
+    const listed = withPendingAgents(
+      agentsPinned(tasklessAgents ?? NO_TASKLESS_AGENTS, agentPins),
+      agentsGiven,
+    ).filter((agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId);
+    return {
+      standing: listed.filter((agent) => agent.archivedAt === undefined),
+      archived: listed.filter((agent) => agent.archivedAt !== undefined),
+    };
+  }, [tasklessAgents, agentPins, agentsGiven, listedWorkspaceId]);
   // An Untitled task takes its first agent's title on the service, and the
   // window hears no push for a task's row, so the tasks are read again as an
   // agent of the open task first holds a title while it stands Untitled.

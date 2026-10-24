@@ -962,6 +962,55 @@ test("a shell renamed from its row's menu is renamed in place, and the list says
   assert.equal(tab.rows()[0]?.name, "server");
 });
 
+/** Opens the oldest shell's name field from its row's menu and ends it on `name`, as Return does. */
+async function renameOldest(container: HTMLElement, name: string): Promise<void> {
+  const row = container.querySelector<HTMLButtonElement>('[aria-label="Shell list"] > li > button');
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const rename = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  await act(async () => rename?.click());
+  const field = container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.ok(field, "the name is edited in place");
+  act(() => {
+    field.value = name;
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+}
+
+test("a shell's new name is drawn at once, before the service answers the rename", async () => {
+  const tab = await mount();
+  main.holding.add(ACT_KIND.TERMINAL_RENAME);
+  await renameOldest(tab.container, "server");
+  assert.equal(main.held.length, 1, "the rename is still out");
+  assert.equal(tab.rows()[0]?.name, "server");
+
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "server");
+});
+
+test("a refused shell rename reopens its field holding the name typed, says under it that the shell was not renamed, and Escape leaves the old name", async () => {
+  const tab = await mount();
+  main.down.add(ACT_KIND.TERMINAL_RENAME);
+  await renameOldest(tab.container, "server");
+
+  const reopened = tab.container.querySelector<HTMLInputElement>('input[aria-label="Shell name"]');
+  assert.equal(reopened?.value, "server");
+  assert.ok(tab.container.textContent?.includes("The shell could not be renamed. Try again."));
+
+  act(() => {
+    reopened?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+  assert.equal(tab.rows()[0]?.name, "zsh");
+  assert.ok(!tab.container.textContent?.includes("could not be renamed"));
+});
+
 test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename, New shell and End shell", async () => {
   const tab = await mount();
   const item = tab.container.querySelector<HTMLElement>('[aria-label="Shell list"] > li');
