@@ -13,7 +13,8 @@ import { fileTree } from "./index.js";
  * is the toggle's alone, the row neither opening its file nor taking the
  * keyboard, while a press anywhere else on the row opens the file, and V
  * on the row the tree's keyboard stands on presses its toggle. A reader
- * finds the toggle as a checkbox named Viewed. The
+ * finds the toggle as a checkbox named Viewed. A ⌘-press opens its file
+ * in a tab of its own and leaves the tab's own file the one row marked. The
  * tree is the bundle's own, Pierre drawing it in jsdom; synthetic paths.
  */
 
@@ -60,6 +61,16 @@ function row(path: string): HTMLElement {
     }
   }
   return assert.fail(`the tree draws ${path}`);
+}
+
+/** The rows the tree draws as chosen, by path. */
+function chosen(): string[] {
+  const rows = [...(mounted?.host.querySelectorAll("file-tree-container") ?? [])]
+    .filter((container) => container.closest("[hidden]") === null)
+    .flatMap((container) => [
+      ...(container.shadowRoot?.querySelectorAll<HTMLElement>('[data-item-selected="true"]') ?? []),
+    ]);
+  return rows.map((each) => each.dataset.itemPath ?? "");
 }
 
 /** The words at the end of a row, part by part. */
@@ -174,4 +185,21 @@ test("a row's Viewed toggle is a checkbox named Viewed, checked once its file is
   await settle();
 
   assert.deepEqual(named("src/seats.ts"), ["checkbox", "Viewed", "true"]);
+});
+
+test("a ⌘-press opens its file in a tab of its own and leaves the tab's own file the one row marked", async () => {
+  const { handle, opened } = await mountMarked(MARKS);
+  handle.reveal("src/seats.ts", { focus: false });
+  await settle();
+  assert.deepEqual(chosen(), ["src/seats.ts"]);
+
+  for (const path of ["README.md", "src/seats.ts"]) {
+    row(path).dispatchEvent(
+      new MouseEvent("click", { metaKey: true, bubbles: true, composed: true }),
+    );
+    await settle();
+  }
+
+  assert.deepEqual(opened, ["README.md", "src/seats.ts"]);
+  assert.deepEqual(chosen(), ["src/seats.ts"]);
 });

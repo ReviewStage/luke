@@ -38,16 +38,22 @@ function folderItem(tree: FileTree, folder: string): FileTreeDirectoryHandle | u
 }
 
 /**
- * Marks one entry as the one shown, though a ⌘-press had added others to
- * the marks, and scrolls it to the middle of the tree.
+ * Marks one entry as the one shown, or none, where a ⌘-press had added
+ * others to the marks or taken it from them, leaving the tree where it is
+ * scrolled.
  */
-export function markAlone(tree: FileTree, id: string, focus: boolean): void {
+export function keepMarked(tree: FileTree, id: string | undefined): void {
   for (const selected of tree.getSelectedPaths()) {
     if (selected !== id) tree.getItem(selected)?.deselect();
   }
-  const item = tree.getItem(id);
-  if (item === null) return;
-  if (!item.isSelected()) item.select();
+  const item = id === undefined ? null : tree.getItem(id);
+  if (item !== null && !item.isSelected()) item.select();
+}
+
+/** Marks one entry as the one shown, as `keepMarked` does, and scrolls it to the middle of the tree. */
+export function markAlone(tree: FileTree, id: string, focus: boolean): void {
+  keepMarked(tree, id);
+  if (tree.getItem(id) === null) return;
   tree.scrollToPath(id, { focus, offset: "center" });
 }
 

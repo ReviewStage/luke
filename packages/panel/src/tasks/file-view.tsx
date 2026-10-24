@@ -404,8 +404,12 @@ export function usePaneRoom(shown: {
   };
 }
 
-/** How much of the box the tree stands in a drag leaves the tab beside it, in CSS pixels. */
-const TAB_RESERVE = 320;
+/**
+ * How much of the box the tree stands in a drag leaves the tab beside it, in
+ * CSS pixels: the least a diff reads at, which the stylesheet holds the tree
+ * to as well (`.file-tree-pane`), so a drag starts from the width drawn.
+ */
+const TAB_RESERVE = 200;
 
 /** The tree as the panel holds it for every File and Changes tab: open or not, and how wide. */
 export interface TreeShown {
