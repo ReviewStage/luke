@@ -482,7 +482,7 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
   assert.equal(tab.lines("Now add the dark variant.").length, 1);
   const [line] = tab.lines("Now add the dark variant.");
   assert.match(
-    line?.querySelector('[data-undelivered] [role="alert"]')?.textContent ?? "",
+    line?.querySelector('[role="alert"]')?.textContent ?? "",
     /^Not delivered$/,
     "the line says it did not go, as an alert",
   );
@@ -930,6 +930,10 @@ test("a message refused before the transcript has read anything stands as the de
 
   const [line] = tab.lines("Continue testing.");
   assert.ok(line, "the refused line is the developer's");
-  assert.ok(line.querySelector("[data-undelivered]"), "marked as not delivered");
+  assert.equal(
+    line.querySelector('[role="alert"]')?.textContent,
+    "Not delivered",
+    "marked as not delivered",
+  );
   assert.match(line.textContent ?? "", /notes\.md/u, "with its file");
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DURATION_MS } from "@luke/brand";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   TERMINAL_PORT_CHANNEL,
@@ -32,6 +33,7 @@ import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -255,6 +257,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   document.head.innerHTML = "";
+  document.body.style.removeProperty("--luke-duration-pane");
   vi.restoreAllMocks();
 });
 
@@ -1293,4 +1296,66 @@ test("a find with more matches than it counts says there are more", async () => 
   typeFind("hit");
   await act(async () => vi.advanceTimersByTimeAsync(100));
   assert.match(findTally() ?? "", /1000\+/);
+});
+
+/** The shells list over the screen, as it floats where the panel has no room for it beside. */
+function floatedShells(tab: { container: HTMLElement }): HTMLElement | null {
+  return tab.container.querySelector<HTMLElement>('[aria-label="Shells"]');
+}
+
+/** The toggle that floats the shells, which the stylesheet draws in a narrow panel alone. */
+function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
+  const toggle = tab.container.querySelector<HTMLButtonElement>(
+    '.file-tree-toggle[data-place="over"] button',
+  );
+  assert.ok(toggle, "the toggle that floats the shells is drawn");
+  return toggle;
+}
+
+/** A panel too narrow for the shells beside the screen, the list closed. */
+async function narrowTab() {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  layContainersAt({ "side-panel": 400 });
+  return mount(true, false);
+}
+
+test("in a narrow panel the shells open over the screen, stay drawn through their exit, then are let go", async () => {
+  const tab = await narrowTab();
+  assert.equal(floatedShells(tab), null, "the shells are away until their toggle is pressed");
+
+  await act(async () => shellsToggle(tab).click());
+  const opened = floatedShells(tab);
+  assert.equal(opened?.getAttribute("data-state"), "open");
+  assert.equal(opened?.classList.contains("luke-over-pane"), true);
+  assert.equal(tab.toggled(), 0, "the panel's own place for the list is left as it was");
+
+  await act(async () => shellsToggle(tab).click());
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE - 1));
+  assert.notEqual(floatedShells(tab), null, "the exit has not finished");
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(floatedShells(tab), null, "the list is let go once its exit has played");
+});
+
+test("Escape in the shells floated over the screen puts them away and gives the keyboard back to their toggle", async () => {
+  const tab = await narrowTab();
+  act(() => shellsToggle(tab).focus());
+  await act(async () => shellsToggle(tab).click());
+  const shells = floatedShells(tab);
+  assert.ok(shells);
+  assert.equal(document.activeElement, shells, "the list takes the keyboard as it opens");
+
+  act(() => {
+    shells.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
+  assert.equal(document.activeElement, shellsToggle(tab));
+});
+
+test("a shell chosen in the list floated over the screen takes the list down", async () => {
+  const tab = await narrowTab();
+  await act(async () => shellsToggle(tab).click());
+  await tab.choose("dev server");
+  assert.equal(floatedShells(tab)?.getAttribute("data-state"), "leaving");
 });

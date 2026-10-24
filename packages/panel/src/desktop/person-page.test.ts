@@ -543,7 +543,7 @@ test("Their tasks in sidebar lists every task assigned to them, letting go of a 
   assert.deepEqual([kept?.assignedTo, kept?.createdBy], [CHARLES.userId, undefined]);
 });
 
-test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and Show all lists every one assigned in the sidebar", async () => {
+test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and its foot counts the two it leaves out and lists every one assigned in the sidebar", async () => {
   // Six tasks Dean created for Charles, one more than the page draws, and one Charles made for himself.
   const handed = [5, 6, 7, 8, 9, 10].map((n) =>
     task(n, `Handed over ${n}`, DEAN, n * MINUTE, [], CHARLES),
@@ -566,7 +566,7 @@ test("a person's tasks assigned to them stand above those they created, a task b
   // Each section wears no face, the page's head saying whose they are.
   assert.equal(page.querySelector('section[aria-label="Assigned"] .actor-mark'), null);
 
-  button(page, "Show all 7 in sidebar").click();
+  button(page, "Show 2 more").click();
   assert.equal(keptViews()[ACME.id]?.assignedTo, CHARLES.userId);
 });
 

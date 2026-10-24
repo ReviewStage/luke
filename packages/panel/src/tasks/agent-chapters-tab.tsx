@@ -38,6 +38,9 @@ import {
   MarkStrip,
   NAV_CURRENT,
   NavItem,
+  OVER_PANE_EDGE,
+  OVER_PANE_WIDTH,
+  OverPane,
   PaneBar,
   SCROLL_SIZE,
   ScrollArea,
@@ -67,7 +70,7 @@ import {
   RotateCwIcon,
   SparklesIcon,
 } from "lucide-react";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import {
   AgentChangesTab,
@@ -94,6 +97,7 @@ import {
   steppedChapter,
 } from "./chapters-model.js";
 import type { ChaptersRead } from "./chapters-read.js";
+import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -225,6 +229,9 @@ const RISK_TONES = {
 /** The rail's toggle that opens it beside the chapter, which the stylesheet draws only where it has room there. */
 const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
 
+/** The rail's toggle that floats it over the chapter, which the stylesheet draws only where the panel has no room for it beside. */
+const OVER_TOGGLE = '.chapter-rail-toggle[data-place="over"]';
+
 /** The widths of the blocks standing for the rail's rows, and for the chapter's lines. */
 const SKELETON_ROWS = ["80%", "65%", "72%", "50%"] as const;
 const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
@@ -238,7 +245,23 @@ function ChaptersBody({ children }: { children: ReactNode }): React.JSX.Element 
   );
 }
 
-/** The rail's own pane and list, which the chapters' rows and their placeholder rows both stand in. */
+/** The rail's list in its scroller, which the chapters' rows and their placeholder rows both stand in. */
+function ChapterRailList({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <ScrollArea>
+      <Stack
+        as={LAYOUT_ELEMENT.OL}
+        gap={GAP.NONE}
+        inset={INSET.COLUMN}
+        className="chapter-rail-list"
+      >
+        {children}
+      </Stack>
+    </ScrollArea>
+  );
+}
+
+/** The rail's own pane beside the chapter, which the chapters' rows and their placeholder rows both stand in. */
 function ChapterRailFrame({
   pane,
   leaving = false,
@@ -256,18 +279,16 @@ function ChapterRailFrame({
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
     >
-      <ScrollArea>
-        <Stack
-          as={LAYOUT_ELEMENT.OL}
-          gap={GAP.NONE}
-          inset={INSET.COLUMN}
-          className="chapter-rail-list"
-        >
-          {children}
-        </Stack>
-      </ScrollArea>
+      <ChapterRailList>{children}</ChapterRailList>
     </nav>
   );
+}
+
+/** What the rail floating over the chapter is handed (`OverPane`): whether it stands there, the doors that put it away, and the controls that float it. */
+interface RailOver {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly toggle: readonly RefObject<HTMLElement | null>[];
 }
 
 /** The chapter being read, beside the rail, named by its title where it has one. */
@@ -404,18 +425,26 @@ interface ChapterRow {
 function RailToggle({
   beside,
   over,
+  overBox,
   onBeside,
   onOver,
 }: {
   beside: boolean;
   over: boolean;
+  /** The box around the toggle that floats the rail, which the rail takes as its toggle. */
+  overBox: RefObject<HTMLSpanElement | null>;
   onBeside: () => void;
   onOver: () => void;
 }): React.JSX.Element {
-  const toggle = (place: string, open: boolean, onToggle: () => void) => {
+  const toggle = (
+    place: string,
+    open: boolean,
+    onToggle: () => void,
+    box?: RefObject<HTMLSpanElement | null>,
+  ) => {
     const label = open ? CHAPTERS_WORDS.HIDE_RAIL : CHAPTERS_WORDS.SHOW_RAIL;
     return (
-      <span className="chapter-rail-toggle" data-place={place}>
+      <span ref={box} className="chapter-rail-toggle" data-place={place}>
         <Tooltip label={label}>
           <IconButton
             icon={<PanelLeftIcon aria-hidden="true" />}
@@ -430,7 +459,7 @@ function RailToggle({
   return (
     <>
       {toggle("beside", beside, onBeside)}
-      {toggle("over", over, onOver)}
+      {toggle("over", over, onOver, overBox)}
     </>
   );
 }
@@ -443,6 +472,7 @@ function ChapterRail({
   viewed,
   pane,
   leaving,
+  over,
   onChoose,
 }: {
   rows: readonly ChapterRow[];
@@ -452,10 +482,12 @@ function ChapterRail({
   viewed: (paths: readonly string[]) => boolean;
   pane: React.Ref<HTMLElement>;
   leaving: boolean;
+  /** What the rail floating over the chapter is handed; none draws it beside the chapter. */
+  over: RailOver | undefined;
   onChoose: (at: number) => void;
 }): React.JSX.Element {
-  return (
-    <ChapterRailFrame pane={pane} leaving={leaving}>
+  const list = (
+    <>
       {rows.map((row, index) => {
         const risk = row.chapter.risk === null ? undefined : RISK_WORDS[row.chapter.risk];
         const done = viewed(row.paths);
@@ -482,7 +514,26 @@ function ChapterRail({
           </li>
         );
       })}
-    </ChapterRailFrame>
+    </>
+  );
+  if (over === undefined) {
+    return (
+      <ChapterRailFrame pane={pane} leaving={leaving}>
+        {list}
+      </ChapterRailFrame>
+    );
+  }
+  return (
+    <OverPane
+      open={over.open}
+      onClose={over.onClose}
+      toggle={over.toggle}
+      label={CHAPTERS_WORDS.RAIL}
+      edge={OVER_PANE_EDGE.LEFT}
+      width={OVER_PANE_WIDTH.COLUMN}
+    >
+      <ChapterRailList>{list}</ChapterRailList>
+    </OverPane>
   );
 }
 
@@ -491,15 +542,18 @@ function ChapterStrip({
   rows,
   at,
   viewed,
+  box,
   onOpen,
 }: {
   rows: readonly ChapterRow[];
   at: number;
   viewed: (paths: readonly string[]) => boolean;
+  /** The strip's box, which the rail floating over the chapter takes as a toggle of its own. */
+  box: RefObject<HTMLDivElement | null>;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <div className="chapter-strip">
+    <div ref={box} className="chapter-strip">
       <MarkStrip
         marks={rows.map((row, index) => ({
           tone: row.chapter.risk ? RISK_TONES[row.chapter.risk] : undefined,
@@ -544,12 +598,6 @@ function KeyChangeItem({
       )}
     </Card>
   );
-}
-
-/** Whether an element of the view is drawn, which is the stylesheet's to say. */
-function drawnIn(view: Element | null, selector: string): boolean {
-  const element = view?.querySelector(selector);
-  return element !== null && element !== undefined && getComputedStyle(element).display !== "none";
 }
 
 /** No review thread, for a view handed none. */
@@ -603,7 +651,11 @@ function ChaptersReading({
   };
   const [reveal, setReveal] = useState<FileReveal | undefined>(undefined);
   const asks = useRef(0);
-  const root = useRef<HTMLDivElement | null>(null);
+  const [root, setRoot] = useState<HTMLElement | null>(null);
+  const overBox = useRef<HTMLSpanElement | null>(null);
+  const stripBox = useRef<HTMLDivElement | null>(null);
+  // Note that the rail floats over the chapter wherever the stylesheet draws its over toggle, and then only.
+  const narrow = useFloatsOver(root, OVER_TOGGLE, BESIDE_TOGGLE);
   const hunks = useMemo(() => chapterHunks(files), [files]);
   const rows = useMemo(
     () =>
@@ -650,7 +702,7 @@ function ChaptersReading({
   const step = (by: number) => choose(steppedChapter(at, by, chapters.length));
   // Note that the rail is shown where it is seen: beside the chapter where it has room, else over it.
   const toggleRail = () =>
-    drawnIn(root.current, BESIDE_TOGGLE) ? setBeside((was) => !was) : setOver((was) => !was);
+    drawnIn(root, BESIDE_TOGGLE) ? setBeside((was) => !was) : setOver((was) => !was);
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape" && over && !event.nativeEvent.isComposing) {
       // Note that the Escape is stopped here, because the window's own would leave the view.
@@ -681,7 +733,7 @@ function ChaptersReading({
   return (
     // The view hears its chapter keys from whatever in it has the focus, past the list's own.
     <Fill
-      ref={root}
+      ref={setRoot}
       className="chapters-view"
       data-rail-beside={String(slide.drawn)}
       data-rail-over={over ? "open" : "closed"}
@@ -703,24 +755,28 @@ function ChaptersReading({
         </Text>
       </p>
       <ChaptersBody>
-        {slide.drawn || over ? (
-          <ChapterRail
-            rows={rows}
-            at={at}
-            viewed={viewed}
-            stale={stale}
-            pane={slide.pane}
-            leaving={slide.leaving}
-            onChoose={choose}
-          />
-        ) : null}
-        <ChapterStrip rows={rows} at={at} viewed={viewed} onOpen={toggleRail} />
+        <ChapterRail
+          rows={rows}
+          at={at}
+          viewed={viewed}
+          stale={stale}
+          pane={slide.pane}
+          leaving={slide.leaving}
+          over={
+            !narrow && slide.drawn
+              ? undefined
+              : { open: over, onClose: () => setOver(false), toggle: [overBox, stripBox] }
+          }
+          onChoose={choose}
+        />
+        <ChapterStrip rows={rows} at={at} viewed={viewed} box={stripBox} onOpen={toggleRail} />
         <ChapterReading label={`${at + 1}. ${chapter.title}`}>
           <PaneBar
             mark={
               <RailToggle
                 beside={beside}
                 over={over}
+                overBox={overBox}
                 onBeside={() => setBeside((was) => !was)}
                 onOver={() => setOver((was) => !was)}
               />

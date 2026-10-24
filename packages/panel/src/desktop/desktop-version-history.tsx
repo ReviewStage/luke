@@ -10,11 +10,11 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
-  BusyLabel,
   commandKeyshortcuts,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FailureNote,
   FILL_ELEMENT,
   Fill,
   FoldingButton,
@@ -26,16 +26,15 @@ import {
   OneLine,
   PageToolbar,
   ResizeEdge,
-  RetryRowLabel,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
   Shortcut,
+  ShowMoreRow,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TEXT_BUTTON_LINES,
   TextButton,
   Time,
   Tooltip,
@@ -400,18 +399,25 @@ function SectionsSkeleton(): React.JSX.Element {
 }
 
 /**
- * The foot of the list while an older page stands: read on its press, and
- * offered again after a read that failed. Note that it is a text button
- * rather than `@luke/ui`'s Button, because its failure and Retry run to two
- * lines in a column the sidebar's width, which a control's one line would
- * cut short.
+ * The foot of the list while an older page stands: how many older versions
+ * wait, read a page of them on its press, and a failed read said above it
+ * with Retry. Note that the count is the versions numbered below `before`,
+ * the oldest one the list holds, since a plan's versions are numbered from
+ * one without gaps.
  */
-function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.Element {
+function EarlierRow({
+  before,
+  onRead,
+}: {
+  before: number;
+  onRead: () => Promise<boolean>;
+}): React.JSX.Element {
   const [reading, setReading] = useState(false);
   const [failed, setFailed] = useState(false);
   const read = () => {
     if (reading) return;
     setReading(true);
+    setFailed(false);
     onRead().then(
       (landed) => {
         setReading(false);
@@ -424,17 +430,19 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
     );
   };
   return (
-    <p className="version-earlier">
-      <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={read}>
-        <BusyLabel delay busy={reading} label="Loading older versions">
-          {failed ? (
-            <RetryRowLabel failure="Could not read older versions." />
-          ) : (
-            "Show older versions"
-          )}
-        </BusyLabel>
-      </TextButton>
-    </p>
+    <div className="version-earlier">
+      {failed ? (
+        <FailureNote onRetry={read}>Could not read older versions.</FailureNote>
+      ) : (
+        <ShowMoreRow
+          more={before - 1}
+          shown={false}
+          onToggle={read}
+          busy={reading}
+          busyLabel="Loading older versions"
+        />
+      )}
+    </div>
   );
 }
 
@@ -800,7 +808,7 @@ export function DesktopVersionHistory({
                     })}
                   </List>
                   {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
-                    <EarlierRow onRead={versions.onLoadEarlier} />
+                    <EarlierRow before={list.earlier} onRead={versions.onLoadEarlier} />
                   ) : null}
                 </div>
               </ScrollArea>
@@ -829,9 +837,12 @@ export function DesktopVersionHistory({
                       onBack={closeSections}
                     />
                     {failed ? (
-                      <div className="sidebar-note">
-                        <ErrorState onRetry={versions.onRetryVersion}>{SECTIONS_FAILED}</ErrorState>
-                      </div>
+                      <ErrorState
+                        onRetry={versions.onRetryVersion}
+                        placement={ERROR_STATE_PLACEMENT.ROWS}
+                      >
+                        {SECTIONS_FAILED}
+                      </ErrorState>
                     ) : sections === undefined ? (
                       <SectionsSkeleton />
                     ) : null}

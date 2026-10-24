@@ -941,7 +941,7 @@
 }
 
 /* A code card's failure stands at its foot, so it draws no rule under it. */
-.code-card > .file-tab-notice {
+.luke-code-card > .file-tab-notice {
   border-bottom: 0;
 }
 
@@ -1100,28 +1100,6 @@
   background: var(--luke-color-well);
 }
 
-/* A Code card is `@luke/ui`'s Card on the code's ground, clipped at its
-   rounded edge, against which its header's actions stand flush: the file
-   at the left and the card's actions at its right edge, so the header is
-   the buttons' height and no more, as a transcript fence's is. */
-.code-card-header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding-left: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A card's copy and its file's opening keep to the header's right. */
-.code-card-actions {
-  display: flex;
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
 /* A File tab: its file, or the lines Luke showed of it under why the file
    is not shown, filling the tab. */
 .file-tab {
@@ -1133,39 +1111,6 @@
    which would make a scroller a focus could scroll sideways. */
 .file-view-body {
   position: relative;
-}
-
-/* The bar: history, the path, then the file's actions and the tree's
-   toggle at its end, in the window's toolbar buttons. It stands the one
-   height of a tab's bar whatever it holds, words alone or nothing yet, its
-   words in the caption's type.
-
-   Every tab's bar is this one (File, Changes, Page, Terminal, Pull
-   request), and each keeps to the panel's top row's two edges, so the tab
-   reads down from the strip above it: a control at its start stands where
-   the row's first tab does, its last control ends where the row's last
-   control ends, and words leading the bar start at the content inset,
-   where a tab's glyph does. Its groups stand a control's gap apart, the
-   glyphs within a group close. */
-.file-view-bar {
-  display: flex;
-  min-width: 0;
-  min-height: var(--secondary-bar-height);
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-space-4) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* Words leading the bar, with no control before them. */
-.file-view-bar > .page-view-title,
-.file-view-bar > .terminal-tab-title,
-.file-view-bar :is(.file-view-path, .files-viewed):first-child {
-  padding-left: var(--row-inset);
 }
 
 /* How many of Files changed's files are viewed, leading its bar in the
@@ -1232,14 +1177,6 @@
 
 .file-crumb-tree .file-tree-host {
   --trees-bg-override: var(--luke-color-overlay);
-}
-
-.file-crumb-notice {
-  margin: 0;
-  padding: var(--luke-space-4) var(--luke-space-8);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* The box a pane's toggle stands in, which names the place it opens the
@@ -2040,12 +1977,6 @@
   background-color: var(--luke-color-code-ground);
 }
 
-.image-diff-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
 /* The tree's search field and its filter, in one row over the tree. */
 .file-tree-search {
   display: flex;
@@ -2246,7 +2177,7 @@
    chip does, and every word and glyph at the content inset, where a tab's
    glyph does, a box holding its own at a row's inset within; each row's
    last control ends where the row's last control ends, as every tab's
-   bar's does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
+   bar's does (`PaneBar`). A boxed thing's hairline counts toward its inset
    (`--boxed-inset`), so what it holds lands on the content inset to the
    pixel. */
 .pull-request-tab {
@@ -2390,27 +2321,6 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.chapter-head-row {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-.chapter-head-title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.chapter-head-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  margin-left: auto;
-}
-
 .chapter-viewed {
   display: flex;
   align-items: center;
@@ -2444,21 +2354,6 @@
 /* A key change's lines named alone, while stale chapters draw no diff to bring them into. */
 .chapter-key-change-ref {
   color: var(--luke-color-text-muted);
-}
-
-.chapter-foot {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  padding: var(--luke-space-4) var(--column-inset);
-  border-top: 1px solid var(--luke-color-border);
-}
-
-.chapter-foot-place {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* Chapters being made: how long it has been, then blocks where the rail
@@ -2564,12 +2459,6 @@
   gap: var(--luke-control-gap);
   padding: var(--luke-space-6) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* The tabs take what room Review leaves them. */
-.pull-request-tab-bar {
-  min-width: 0;
-  flex: 1 1 0;
 }
 
 .pull-request-tabs > .pull-request-review {
@@ -3879,13 +3768,6 @@
   height: calc(var(--snippet-rows) * var(--snippet-row));
 }
 
-/* A transcript's fenced block: each run carries its colour in both
-   appearances (`transcript-markdown.tsx`); a run in the theme's own
-   foreground carries neither and takes the pane's. */
-.transcript-code-body span {
-  color: light-dark(var(--run-light, var(--code-text)), var(--run-dark, var(--code-text)));
-}
-
 /* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
    selectable, breaking a long path anywhere rather than widening the
    column. Its headings are a note's, a step above the words around them and
@@ -4086,18 +3968,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   color: var(--luke-color-text-muted);
 }
 
-.tool-error {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-danger-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
-  overflow-wrap: anywhere;
-  user-select: text;
-  white-space: pre-wrap;
-}
-
 /* Show more, under an answer cut to its first lines: a quiet strip across
    the card's width. */
 .tool-more {
@@ -4166,82 +4036,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   white-space: pre-wrap;
 }
 
-/* A transcript's fenced block (transcript-markdown.tsx), on `@luke/ui`'s
-   code card as a Code tab card is: a header naming the language with the
-   copy at its right, and the lines in the cards' type. The copy is the
-   window's own icon button, flush with the header's right edge, so the
-   header is the button's height and no more. The lines keep whole and
-   scroll sideways inside the block, so a long one never widens the
-   transcript. */
-.transcript-code-header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  padding-left: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.transcript-code-language {
-  font-family: var(--luke-font-mono);
-  text-transform: lowercase;
-}
-
-/* A suggested change's header names it in words rather than as a language. */
-.transcript-code-suggestion {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
-}
-
-.transcript-code-body {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  color: var(--code-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
-  overflow-wrap: normal;
-  tab-size: 2;
-  white-space: pre;
-}
-
-.transcript-code-body > code {
-  font: inherit;
-}
-
-/* A block drawn as rows, a suggestion's or a diff's: each row as wide as
-   the widest and inset as the block's lines are, so its tint runs edge to
-   edge; a line removed on the diff's removed ground, one added on its added
-   ground, as Files changed tints them. */
-.transcript-code-body[data-rows] {
-  padding-inline: 0;
-}
-
-.transcript-code-body[data-rows] > code {
-  display: block;
-  min-width: fit-content;
-}
-
-.transcript-code-row {
-  display: block;
-  padding-inline: var(--luke-space-12);
-}
-
-.transcript-code-row[data-row="removed"] {
-  background: var(--diff-removed-ground);
-}
-
-.transcript-code-row[data-row="added"] {
-  background: var(--diff-added-ground);
-}
-
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */
 .transcript-inline-code {
   padding: 0.1em 0.35em;
@@ -4279,7 +4073,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    cut at its edge fade the same way, so a line cut short reads as one to
    scroll. */
 .transcript-table,
-.desktop-shell[data-room="narrow"] :is(.luke-markdown pre, .transcript-code-body) {
+.desktop-shell[data-room="narrow"] :is(.luke-markdown pre, .luke-code-card-body) {
   mask-image: linear-gradient(
     to right,
     transparent,
@@ -4486,25 +4280,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   opacity: 0.6;
 }
 
-/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
-   and files faded, as words that did not go, and the quiet mark under
-   them in the danger red a failure note speaks in. */
-.agent-undelivered {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  margin: 0;
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-}
-
-.agent-undelivered > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-}
-
-.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .luke-message-line) {
+/* A line the agent refused for good or for now (`undelivered-mark.tsx`): its
+   bubble and files faded, as words that did not go, under the failure note
+   that says so. */
+.is-user:has(> .luke-failure-note) > :not(.luke-failure-note, .luke-message-line) {
   opacity: 0.6;
 }
 
@@ -4684,13 +4463,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todos-body {
   margin: var(--luke-space-2) 0 var(--luke-space-4) var(--transcript-gutter);
   user-select: text;
-}
-
-.todos-error {
-  margin: var(--luke-space-4) 0 0;
-  color: var(--luke-color-danger-text);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* A list's items, each behind the glyph of where it stands, in a 16px
@@ -5488,23 +5260,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   right: 0;
 }
 
-.terminal-shells-head {
-  display: flex;
-  min-height: 35px;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-4) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.terminal-shells-title {
-  flex: 1;
-}
-
 /* The shells' rows, inside the `ScrollArea` that scrolls them. */
 .terminal-shells-rows {
   padding: var(--luke-space-4);
@@ -6023,13 +5778,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   line-height: var(--luke-type-caption-leading);
 }
 
-.task-issue-links-note {
-  margin: var(--luke-space-6) 0 0;
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* The pull request's row pinned over the composer, a card of one row
    (`@luke/ui`'s List). The lines it adds and removes read in the success
    green and the danger red, in tabular numerals so a count does not shift as
@@ -6122,16 +5870,6 @@ svg.lucide {
 .subagent-pair,
 .subagent-time {
   flex-shrink: 0;
-}
-
-/* Why a call failed, under the job, past the line's 4px padding, mark, and
-   gap. */
-.subagent-error {
-  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* Too narrow for the job beside the model and effort: they go first, as
@@ -6852,24 +6590,6 @@ svg.lucide {
 .comments-tab {
   position: relative;
   height: 100%;
-}
-
-/* The tab's head, as the sidebar's section heads are: the list's name in
-   the quiet ink, how many it holds after it, and its toggle at the end. */
-.comments-head {
-  display: flex;
-  height: var(--luke-control-height);
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  margin: var(--luke-space-6) var(--column-inset) var(--luke-space-2) var(--luke-space-16);
-}
-
-.comments-head-title {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--luke-space-6);
-  padding-left: var(--luke-space-12);
 }
 
 /* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */

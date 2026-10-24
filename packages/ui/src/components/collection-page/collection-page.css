@@ -50,47 +50,9 @@
     padding-inline: var(--luke-collection-page-inset);
   }
 
-  /* The title's acts are centred on its first line, whatever a control's
-     height is beside the title's leading. They share the title's line
-     while the title fits beside them unbroken, however narrow the page;
-     a title too long for that takes the line and they wrap under it, and
-     wrap among themselves past the line's width, so no act stands outside
-     the page. */
+  /* The header (`PageHeader`) opens at the page's inset. */
   .luke-collection-page-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--luke-control-gap);
     padding-top: var(--luke-collection-page-inset);
-  }
-
-  .luke-collection-page-heading {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .luke-collection-page-title {
-    margin: 0;
-    font-size: var(--luke-type-title-size);
-    line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-type-title-weight);
-    letter-spacing: var(--luke-type-title-tracking);
-  }
-
-  .luke-collection-page-description {
-    margin: var(--luke-space-4) 0 0;
-    color: var(--luke-color-text-muted);
-  }
-
-  .luke-collection-page-actions {
-    display: flex;
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    min-width: 0;
-    gap: var(--luke-control-gap);
-    margin-top: calc((var(--luke-type-title-leading) - var(--luke-control-height)) / 2);
   }
 
   .luke-collection-page-filters {

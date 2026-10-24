@@ -11,9 +11,10 @@ import { OverPane } from "./over-pane.js";
  * over-pane.test.ts -- a closed pane stays drawn through its slide out and
  * is let go once it has run, or at once where motion is held still; one
  * opened again on its way out stays; Escape and a press outside it close
- * it, a press in it or on its toggle does not; and it takes the keyboard as
- * it opens, holds it against Tab, and hands it back to its toggle as it
- * closes.
+ * it, a press in it or on its toggle, or any of its toggles, does not; and
+ * it takes the keyboard as it opens, holds it against Tab, and hands it back
+ * to its toggle as it closes; one that comes as a peek takes no keyboard
+ * until it is made open.
  */
 
 declare global {
@@ -165,4 +166,86 @@ test("Escape hands the keyboard back to the toggle that opened the pane", () => 
   act(() => button("Last").focus());
   key(button("Last"), "Escape");
   expect(document.activeElement).toBe(button("Files"));
+});
+
+/** A tab whose pane is a peek until its Settle is pressed, the pane named by two toggles. */
+function PeekTab(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [peek, setPeek] = useState(true);
+  const first = useRef<HTMLButtonElement>(null);
+  const second = useRef<HTMLButtonElement>(null);
+  return createElement(
+    "div",
+    null,
+    createElement(Button, {
+      ref: first,
+      onClick: () => {
+        setPeek(true);
+        setOpen(true);
+      },
+      children: "Peek",
+    }),
+    createElement(Button, { ref: second, onClick: () => setPeek(false), children: "Settle" }),
+    createElement(Button, { onClick: () => undefined, children: "Elsewhere" }),
+    createElement(OverPane, {
+      open,
+      peek,
+      onClose: () => setOpen(false),
+      label: "Files pane",
+      toggle: [first, second],
+      children: createElement(Button, { onClick: () => undefined, children: "Inside" }),
+    }),
+  );
+}
+
+test("a peek takes no keyboard and holds none against Tab, until it is made open; a press on either toggle is no press outside", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(PeekTab)));
+  act(() => button("Elsewhere").focus());
+
+  press(button("Peek"));
+  expect(pane()?.getAttribute("data-arrival")).toBe("peek");
+  expect(document.activeElement).toBe(button("Elsewhere"));
+  key(button("Inside"), "Tab");
+  expect(document.activeElement).toBe(button("Elsewhere"));
+
+  press(button("Settle"));
+  expect(pane()?.getAttribute("data-state")).toBe("open");
+  expect(pane()?.hasAttribute("data-arrival")).toBe(false);
+  expect(document.activeElement).toBe(pane());
+
+  press(button("Elsewhere"));
+  expect(pane()?.getAttribute("data-state")).toBe("leaving");
+});
+
+test("Escape puts a peek away wherever the keyboard stands, though it holds none", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(PeekTab)));
+  act(() => button("Elsewhere").focus());
+  press(button("Peek"));
+  expect(pane()?.getAttribute("data-arrival")).toBe("peek");
+
+  key(button("Elsewhere"), "Escape");
+  expect(pane()?.getAttribute("data-state")).toBe("leaving");
+});
+
+test("a peek leaves Escape to what the keyboard stands in when that takes it", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(PeekTab)));
+  act(() => button("Elsewhere").focus());
+  press(button("Peek"));
+  const taken = (event: Event) => event.preventDefault();
+  button("Elsewhere").addEventListener("keydown", taken);
+
+  const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    button("Elsewhere").dispatchEvent(event);
+  });
+  expect(pane()?.getAttribute("data-state")).toBe("open");
 });

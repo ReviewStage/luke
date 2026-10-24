@@ -23,6 +23,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_VARIANT,
   Button,
+  CodeCard,
   DisclosureChevron,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
@@ -83,7 +84,7 @@ import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elemen
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
-import { useCopyToast } from "../copy-feedback.js";
+import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -348,6 +349,9 @@ const AUTOMATION_LEAD: TranscriptLead = {
 
 /** What a webhook call's body is called, folded under the prompt it rode in with. */
 const WEBHOOK_BODY_LABEL = "Webhook body";
+
+/** What the header of a webhook body's card names it: the body is whatever the caller sent, so it is named for what it is rather than a language. */
+const WEBHOOK_BODY_KIND = "body";
 
 /** What an automation's sender line says beside its name once it is deleted. */
 const DELETED_WORDS = "(deleted)";
@@ -911,7 +915,7 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
         {WEBHOOK_BODY_LABEL}
       </LineSummary>
       <FoldBody>
-        <pre className="agent-origin-body-text">{body}</pre>
+        <CodeCard title={WEBHOOK_BODY_KIND} code={body} copy={copyThroughShell} />
       </FoldBody>
     </Fold>
   );

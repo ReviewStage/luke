@@ -32,6 +32,7 @@ import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
 import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
+import { DIALOG_ACTIONS_EXAMPLE } from "./examples/dialog-actions";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
@@ -67,6 +68,7 @@ import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { OVER_PANES_EXAMPLE } from "./examples/over-panes";
+import { PAGE_HEADER_EXAMPLE } from "./examples/page-header";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
 import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
@@ -92,6 +94,7 @@ import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEARCHABLE_MENU_EXAMPLE } from "./examples/searchable-menu";
 import { SECRET_FIELDS_EXAMPLE } from "./examples/secret-fields";
+import { SELECTION_EXAMPLE } from "./examples/selection";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -163,6 +166,7 @@ export const EXAMPLES: readonly Example[] = [
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
+  DIALOG_ACTIONS_EXAMPLE,
   DISCLOSURES_EXAMPLE,
   DRAWER_SWIPES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
@@ -192,6 +196,7 @@ export const EXAMPLES: readonly Example[] = [
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   SHOW_MORE_ROWS_EXAMPLE,
+  SELECTION_EXAMPLE,
   LIST_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,
@@ -205,6 +210,7 @@ export const EXAMPLES: readonly Example[] = [
   ONE_LINE_EXAMPLE,
   OVER_PANES_EXAMPLE,
   PAGINATION_EXAMPLE,
+  PAGE_HEADER_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
   PAGE_TOOLBAR_EXAMPLE,
   PANE_BARS_EXAMPLE,
