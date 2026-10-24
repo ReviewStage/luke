@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BUTTON_VARIANT, CALL_CONTROL_LABEL } from "@luke/ui";
+import { BUTTON_VARIANT, CALL_CONTROL_LABEL, TEXT_TONE, TEXT_VARIANT } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -59,4 +59,29 @@ test("the card's End call is the danger button with the hang-up glyph, and its p
   );
   act(() => end.click());
   assert.deepEqual(ended, ["end"]);
+});
+
+test("the card's task name is the muted caption role, set through Text rather than a type of its own", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      createElement(CallCard, {
+        card: { taskName: "Invite expiry", status: undefined, microphoneMuted: false },
+        speakerMuted: false,
+        controls: {
+          onReturn: () => undefined,
+          onToggleMicrophone: () => undefined,
+          onToggleSpeaker: () => undefined,
+          onEnd: () => undefined,
+        },
+        surface: CALL_CARD_SURFACE.SIDEBAR,
+      }),
+    ),
+  );
+  const title = container.querySelector<HTMLElement>(".call-card-title");
+  assert.ok(title, "the card names its task");
+  assert.equal(title.textContent, "Invite expiry");
+  assert.equal(title.dataset.variant, TEXT_VARIANT.CAPTION);
+  assert.equal(title.dataset.tone, TEXT_TONE.MUTED);
 });

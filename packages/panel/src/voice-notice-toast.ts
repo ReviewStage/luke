@@ -9,7 +9,7 @@
  * how long it stands, not a toast's hold. A failure is the danger tone,
  * which the stack says as an alert; a notice and the volume hint ask the
  * developer's attention, said politely. A failure with a remedy offers it as
- * the toast's action, and the volume hint offers "Got it". Words that change
+ * the toast's action, and the volume hint offers "Dismiss". Words that change
  * are a new toast in the old one's place; words the developer dismissed stay
  * dismissed until the voice says something else.
  */
@@ -26,7 +26,7 @@ import {
 } from "./use-voice-notice.js";
 
 /** What dismisses the volume hint for this stretch of silence. */
-const DISMISS_HINT_LABEL = "Got it";
+const DISMISS_HINT_LABEL = "Dismiss";
 
 /** What the voice's toast is about, by which it is withdrawn once the voice stops saying it. */
 const VOICE_NOTICE_SUBJECT = "voice-toast";
@@ -59,7 +59,7 @@ export interface VoiceNoticeToastOptions extends VoiceNoticePresses {
   notice: VoiceNoticePresentation;
 }
 
-/** The toast a notice stands as: its words in its tone, with the hint's "Got it" or a failure's remedy as its action. */
+/** The toast a notice stands as: its words in its tone, with the hint's "Dismiss" or a failure's remedy as its action. */
 function noticeToast(
   content: VoiceNoticeContent,
   presses: RefObject<VoiceNoticePresses>,

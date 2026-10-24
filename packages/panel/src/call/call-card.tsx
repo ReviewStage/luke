@@ -23,6 +23,9 @@ import {
   KeepFocus,
   OneLine,
   ReturnIcon,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
   VideoToggle,
 } from "@luke/ui";
@@ -187,9 +190,9 @@ export function CallCard({
         />
       ) : null}
       <div className="call-card-head">
-        <p className="call-card-title">
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="call-card-title">
           <OneLine>{card.taskName}</OneLine>
-        </p>
+        </Text>
         {video?.status === AVATAR_STATUS.OFF ? (
           <VideoToggle on={false} onSetVideo={video.onSetVideo} />
         ) : null}
