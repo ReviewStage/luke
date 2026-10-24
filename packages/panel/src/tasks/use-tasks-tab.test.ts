@@ -23,7 +23,7 @@ import {
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -558,6 +558,40 @@ test("a task given a name or a status here is pending until the view carries it,
   assert.deepEqual([...(renaming ?? [])], [TASK.id]);
   assert.deepEqual([...(named ?? [])], []);
   assert.deepEqual([...(tab.control().pendingTasks ?? [])], [TASK.id]);
+});
+
+test("a priority and an assignee sent from a chip or a drop are drawn at once, waiting on the view, and go back where the list stands the task once the service refuses them", async () => {
+  let answer: (kept: boolean) => void = () => undefined;
+  const tab = mount(
+    { shown: true, tasks: listRead([listed()]) },
+    {
+      [ACT_KIND.TASKS_SET_STANDING]: () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        }),
+    },
+  );
+  const drawn = () => tab.control().listed.tasks.find((task) => task.id === TASK.id);
+  let kept: Promise<boolean> = Promise.resolve(true);
+
+  await act(async () => {
+    kept = tab
+      .control()
+      .onSetTaskStanding(TASK.id, { priority: TASK_PRIORITY.URGENT, assigneeId: "user-charles" });
+  });
+  const sending = drawn();
+  const waiting = [...(tab.control().pendingTasks ?? [])];
+  await act(async () => {
+    answer(false);
+    await kept;
+  });
+
+  assert.equal(sending?.priority, TASK_PRIORITY.URGENT);
+  assert.equal(sending?.assignee?.userId, "user-charles");
+  assert.deepEqual(waiting, [TASK.id]);
+  assert.equal(drawn()?.priority, undefined);
+  assert.equal(drawn()?.assignee, undefined);
+  assert.deepEqual([...(tab.control().pendingTasks ?? [])], []);
 });
 
 it.effect(

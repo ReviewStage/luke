@@ -40,7 +40,9 @@ import { TasksList } from "./tasks-list.js";
  * shown, so a teammate's change moves nothing under the reader's eye, though
  * the row says its new value; hidden and shown again, or under another
  * grouping, each task stands where it is now, and a task the reader moved
- * here, by its chip or a rename, moves at once. Synthetic throughout.
+ * here, by its chip or a rename, moves at once: the tab draws it at its new
+ * value and waiting on the view (`pendingTasks`), as these draws do.
+ * Synthetic throughout.
  */
 
 const DEAN = "user-dean";
@@ -124,6 +126,7 @@ async function mountView(
   roots.push(root);
   const registry = AtomRegistry.make();
   const sent: [string, unknown][] = [];
+  const named: (string | undefined)[] = [];
   const draw = (listed: readonly TaskSummary[], drawing: Drawing = {}) => {
     const control = tasksControl({
       tasks: [...listed],
@@ -133,8 +136,9 @@ async function mountView(
       listRead: true,
       shown: drawing.shown ?? true,
       ...(drawing.pendingTasks === undefined ? {} : { pendingTasks: drawing.pendingTasks }),
-      onSetTaskStanding: (taskId, standing) => {
+      onSetTaskStanding: (taskId, standing, assigneeName) => {
         sent.push([taskId, standing]);
+        named.push(assigneeName);
         return Promise.resolve(true);
       },
     });
@@ -171,7 +175,7 @@ async function mountView(
   };
   draw(tasks);
   await act(async () => undefined);
-  return { container, draw, sent };
+  return { container, draw, sent, named };
 }
 
 /** Each of the List's groups, or the Board's columns: its name and its tasks' keys, in order. */
@@ -268,13 +272,12 @@ test("in the List, a task held still stands where it is now once the page is hid
   assert.deepEqual(laidOut(container), [["Tasks", ["ACME-40", "ACME-39", "ACME-42", "ACME-41"]]]);
 });
 
-test("in the List, a status the reader picks on a row's chip moves the row once the view carries it", async () => {
+test("in the List, a status the reader picks on a row's chip moves the row at once, as the tab draws it waiting on the view", async () => {
   const { container, draw, sent } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
 
   act(() => chipOf(container, "ACME-39", "Status").click());
   pick("In progress");
-  await act(async () => undefined);
-  draw(changed(39, { status: TASK_STATUS.IN_PROGRESS }));
+  draw(changed(39, { status: TASK_STATUS.IN_PROGRESS }), { pendingTasks: new Set(["t-39"]) });
 
   assert.deepEqual(sent, [["t-39", { status: TASK_STATUS.IN_PROGRESS }]]);
   assert.deepEqual(laidOut(container), [
@@ -282,6 +285,7 @@ test("in the List, a status the reader picks on a row's chip moves the row once 
     ["Todo", ["ACME-40", "ACME-41"]],
   ]);
 
+  draw(changed(39, { status: TASK_STATUS.IN_PROGRESS }));
   draw(changed(39, { status: TASK_STATUS.IN_PROGRESS, priority: TASK_PRIORITY.LOW }));
 
   assert.deepEqual(
@@ -292,6 +296,34 @@ test("in the List, a status the reader picks on a row's chip moves the row once 
     ],
     "once moved, it holds still again in its new place",
   );
+});
+
+for (const [name, view, display] of [
+  ["List", TasksList, DEFAULT_LIST_DISPLAY],
+  ["Columns", TasksBoard, DEFAULT_BOARD_DISPLAY],
+] as const) {
+  test(`in the ${name}, a status the reader gave a task that the service refuses puts it back in the group it stands in`, async () => {
+    const { container, draw } = await mountView(view, TASKS, display);
+    const before = laidOut(container);
+    const under = (key: string) => laidOut(container).find(([, keys]) => keys.includes(key))?.[0];
+
+    draw(changed(39, { status: TASK_STATUS.IN_PROGRESS }), { pendingTasks: new Set(["t-39"]) });
+    assert.equal(under("ACME-39"), "In progress", "it moves at once");
+    draw(TASKS);
+    draw(TASKS);
+
+    assert.deepEqual(laidOut(container), before);
+  });
+}
+
+test("in the List, a member picked on a row's Assignee chip is sent with the name the member directory knows them by, so the row draws it at once", async () => {
+  const { container, sent, named } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
+
+  act(() => chipOf(container, "ACME-41", "Assignee").click());
+  pick("Charles Pan");
+
+  assert.deepEqual(sent, [["t-41", { assigneeId: CHARLES }]]);
+  assert.deepEqual(named, ["Charles Pan"]);
 });
 
 test("in the List ordered by name, a task the reader renamed here moves at once, and one a teammate renamed holds its place", async () => {
@@ -312,7 +344,7 @@ test("in the List ordered by name, a task the reader renamed here moves at once,
   assert.deepEqual(laidOut(container), [["Tasks", ["ACME-41", "ACME-40", "ACME-42", "ACME-39"]]]);
 });
 
-test("on the Columns, a teammate's change holds a card in its column, and the reader's own pick on its chip moves it once the view carries it", async () => {
+test("on the Columns, a teammate's change holds a card in its column, and the reader's own pick on its chip moves it at once", async () => {
   const { container, draw } = await mountView(TasksBoard, TASKS, DEFAULT_BOARD_DISPLAY);
   const todo = (columns: [string, string[]][]) => columns.find(([name]) => name === "Todo")?.[1];
   const inProgress = (columns: [string, string[]][]) =>
@@ -327,11 +359,11 @@ test("on the Columns, a teammate's change holds a card in its column, and the re
 
   act(() => chipOf(container, "ACME-40", "Status").click());
   pick("In progress");
-  await act(async () => undefined);
   draw(
     teammate.map((each) =>
       each.number === 40 ? { ...each, status: TASK_STATUS.IN_PROGRESS } : each,
     ),
+    { pendingTasks: new Set(["t-40"]) },
   );
 
   assert.deepEqual(todo(laidOut(container)), ["ACME-39", "ACME-41"]);

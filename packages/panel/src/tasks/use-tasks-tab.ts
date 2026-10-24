@@ -94,13 +94,14 @@ import {
   markAsked,
   markedView,
   microphoneButton,
+  NO_PENDING_STANDINGS,
   type PendingAgentPins,
   type PendingMarks,
   type PendingPinPositions,
   type PendingRenames,
   type PendingRepositoryPin,
   type PendingRepositoryPins,
-  type PendingStatuses,
+  type PendingStandings,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
   pinnedRepositories,
@@ -117,12 +118,14 @@ import {
   settledMarks,
   settledNote,
   settledRenames,
-  settledStatuses,
+  settledStandings,
   settleFailedNote,
   sidebarTasks,
+  standingAsked,
+  standingTasks,
+  standingView,
+  standingWithout,
   startFailureNote,
-  statusAsked,
-  statusedView,
   TASK_MARK,
   TASKS_PAGE,
   type TaskMark,
@@ -133,6 +136,7 @@ import {
   unsettledAgentPins,
   unsettledPinPositions,
   unsettledRepositoryPins,
+  withStanding,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -641,7 +645,7 @@ export interface TasksControl {
     inbox: readonly AppInboxTask[];
     inboxTasks: readonly AppInboxTaskHolding[];
   };
-  /** The tasks a name or status given here stands over until the view carries it (`@luke/ui/pending-values`), which a list held still moves at once; none where nothing waits. */
+  /** The tasks a name, status, priority, or assignee given here stands over until the view carries it (`@luke/ui/pending-values`), which a list held still moves at once; none where nothing waits. */
   pendingTasks?: ReadonlySet<string>;
   /** The chosen workspace's agents an automation started with no plan, newest started first, which the sidebar lists among the plans, and those archived, which its Archived view lists among the archived plans. */
   listedAgents: {
@@ -798,8 +802,12 @@ export interface TasksControl {
   onChangeRepository: (taskId: string) => void;
   /** Gives a task its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
   onSetRepository: (taskId: string, repository: string | null) => Promise<string | undefined>;
-  /** Sets where a task stands, how much it matters, or both; answers whether the service kept it. */
-  onSetTaskStanding: (taskId: string, standing: TaskStanding) => Promise<boolean>;
+  /** Sets where a task stands, how much it matters, or who it is assigned to, drawn at once by the assignee's name where the caller knows it; answers whether the service kept it. */
+  onSetTaskStanding: (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ) => Promise<boolean>;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -1066,9 +1074,6 @@ const NO_PENDING_RENAMES: PendingRenames = new Map();
 
 /** No task pin given here and still waiting on main's view. */
 const NO_PENDING_MARKS: PendingMarks = new Map();
-
-/** No status given here and still waiting on main's view. */
-const NO_PENDING_STATUSES: PendingStatuses = new Map();
 
 /** No repository pin given here and still waiting on main's view. */
 const NO_PENDING_PINS: PendingRepositoryPins = new Map();
@@ -1346,7 +1351,7 @@ export function useTasksTab(input: {
   const fixture = tasksFixture?.fixtureTasksView(input.run);
   const viewed = fixture ?? input.tasks;
   const accountSignedIn = input.signedIn;
-  // A name, pin, or status given here stands until main's view answers it
+  // A name, pin, status, priority, or assignee given here stands until main's view answers it
   // (`@luke/ui/pending-values`), so a press that landed never flickers back
   // while main's copy of the view catches up, and one the service or a
   // teammate answered otherwise, or that waited past its time, gives way to
@@ -1355,8 +1360,8 @@ export function useTasksTab(input: {
   // one waits, so a window with nothing pending draws nothing on its ticks.
   const [renames, setRenames] = useState<PendingRenames>(NO_PENDING_RENAMES);
   const [marks, setMarks] = useState<PendingMarks>(NO_PENDING_MARKS);
-  const [statuses, setStatuses] = useState<PendingStatuses>(NO_PENDING_STATUSES);
-  const waiting = renames.size > 0 || marks.size > 0 || statuses.size > 0;
+  const [standings, setStandings] = useState<PendingStandings>(NO_PENDING_STANDINGS);
+  const waiting = renames.size > 0 || marks.size > 0 || standingTasks(standings).length > 0;
   const pendingNow = usePendingNow(waiting);
   useEffect(() => {
     setRenames((held) =>
@@ -1365,8 +1370,8 @@ export function useTasksTab(input: {
     setMarks((held) =>
       accountSignedIn ? settledMarks(held, viewed, pendingNow) : NO_PENDING_MARKS,
     );
-    setStatuses((held) =>
-      accountSignedIn ? settledStatuses(held, viewed, pendingNow) : NO_PENDING_STATUSES,
+    setStandings((held) =>
+      accountSignedIn ? settledStandings(held, viewed, pendingNow) : NO_PENDING_STANDINGS,
     );
   }, [viewed, accountSignedIn, pendingNow]);
   // A name being typed is drawn over both, held here rather than read back
@@ -1438,13 +1443,13 @@ export function useTasksTab(input: {
   }, [accountSignedIn, setClosedTabs]);
   const renamed = useMemo(() => renamedView(viewed, pendingShown(renames)), [viewed, renames]);
   const pendingTasks = useMemo(
-    () => new Set([...renames.keys(), ...statuses.keys()]),
-    [renames, statuses],
+    () => new Set([...renames.keys(), ...standingTasks(standings)]),
+    [renames, standings],
   );
   const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
   const marked = useMemo(
-    () => statusedView(markedView(drafted, marks), statuses),
-    [drafted, marks, statuses],
+    () => standingView(markedView(drafted, marks), standings),
+    [drafted, marks, standings],
   );
   const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
@@ -2341,28 +2346,31 @@ export function useTasksTab(input: {
       return held?.id === taskId ? [held] : [];
     });
   };
-  // Each status change is drawn at once and sent, and a refused one goes
-  // back where it was only while no later press replaced it. Answers which
-  // tasks the service kept and how many it refused.
+  // A change of where a task stands, its status, priority, or assignee, is
+  // drawn at once and sent, and a refused one goes back where it was only
+  // while no later press replaced it. Answers whether the service kept it.
+  const sendStanding = (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ): Promise<boolean> => {
+    if (standing.status !== undefined) chooseStatus(taskId);
+    const asked = standingAsked(standings, viewed, taskId, standing, assigneeName);
+    setStandings((held) => withStanding(held, taskId, asked));
+    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing })
+      .catch(() => false)
+      .then((kept) => {
+        if (!kept) setStandings((held) => standingWithout(held, taskId, asked));
+        return kept;
+      });
+  };
+  // Each status change is sent as one standing. Answers which tasks the
+  // service kept and how many it refused.
   const sendStatuses = (changes: readonly StatusChange[]) => {
-    for (const { taskId } of changes) chooseStatus(taskId);
-    const asked = changes.map(({ taskId, status }) => ({
-      taskId,
-      next: statusAsked(statuses, viewed, taskId, status),
-    }));
-    setStatuses(
-      (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
-    );
-    const answers = asked.map(({ taskId, next }) =>
-      act(ACT_KIND.TASKS_SET_STANDING, { taskId, status: next.value }).catch(() => false),
-    );
+    const answers = changes.map(({ taskId, status }) => sendStanding(taskId, { status }));
     return Promise.all(answers).then((changed) => {
-      const refused = asked.filter((_, index) => !changed[index]);
-      setStatuses((held) =>
-        refused.reduce((kept, each) => pendingWithout(kept, each.taskId, each.next), held),
-      );
-      const landed = asked.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
-      return { landed, refused: refused.length };
+      const landed = changes.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
+      return { landed, refused: changes.length - landed.length };
     });
   };
 
@@ -2717,17 +2725,13 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
-  // A status chosen here supersedes one a press drew and main's view has
-  // yet to carry, which is let go so the view's answer is drawn.
-  const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
+  const setTaskStanding = (
+    taskId: string,
+    standing: TaskStanding,
+    assigneeName?: string,
+  ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    if (standing.status !== undefined) {
-      chooseStatus(taskId);
-      setStatuses((held) =>
-        held.has(taskId) ? new Map([...held].filter(([pending]) => pending !== taskId)) : held,
-      );
-    }
-    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing }).catch(() => false);
+    return sendStanding(taskId, standing, assigneeName);
   };
 
   // A fixture's tasks move nowhere, as they are read from nowhere. Note that

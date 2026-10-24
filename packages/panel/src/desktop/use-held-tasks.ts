@@ -1,4 +1,4 @@
-import type { TaskStanding, TaskSummary } from "@luke/features/task-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import {
   filterValues,
   TASKS_FILTER_FIELD,
@@ -9,7 +9,6 @@ import {
 import { useLayoutEffect, useRef } from "react";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { standsAt } from "./task-row-parts.js";
 
 /**
  * use-held-tasks.ts -- the Tasks page's List and Columns held still while
@@ -23,12 +22,16 @@ import { standsAt } from "./task-row-parts.js";
  * as it is now, so a teammate's change of its status, priority, assignee,
  * or name moves nothing under the reader. Hidden, or drawn under another
  * view, every task stands where it is now. A task the reader moved here
- * moves at once: one whose name or status this window has yet to see the
- * view carry (`pendingTasks`), and one this page sent a status, priority,
- * or assignee, until the view carries it or it is refused. A task new to
- * the list, or one the filter or the completed window left out, stands
- * where it is now, and one gone from it is gone.
+ * moves at once: one whose name, status, priority, or assignee given here
+ * this window has yet to see the view carry (`pendingTasks`), and once more
+ * as it stops waiting, so a change carried holds its new place and one
+ * refused goes back to where the task stands. A task new to the list, or
+ * one the filter or the completed window left out, stands where it is now,
+ * and one gone from it is gone.
  */
+
+/** No task waiting on the view. */
+const NO_TASKS: ReadonlySet<string> = new Set();
 
 /** What decides where the page stands its tasks: the workspace listed, the filter, and the display's layout of them. */
 interface HeldTasksView {
@@ -60,21 +63,19 @@ function sameTasksOrder(was: HeldTasksView, now: HeldTasksView): boolean {
 
 /**
  * The groups `group` lays the listed tasks out in, held still as the
- * module's head says while the page is shown, each task drawn as it is now;
- * and the tab's control, its changes of where a task stands marked as the
- * reader's own, which the page's rows, cards, and drops send through.
+ * module's head says while the page is shown, each task drawn as it is now.
  */
 export function useHeldTasks(
   tasks: TasksControl,
   view: HeldTasksView,
   group: (tasks: readonly TaskSummary[]) => readonly TasksGroup[],
-): { readonly groups: readonly TasksGroup[]; readonly tasks: TasksControl } {
-  // The standing this page sent each task, until the view carries it or the service refuses it.
-  const sent = useRef(new Map<string, TaskStanding>());
+): readonly TasksGroup[] {
   const listed = tasks.listed.tasks;
   const live = new Map(listed.map((task) => [task.id, task] as const));
+  // The tasks waiting on the view when the page was last drawn.
+  const waited = useRef<ReadonlySet<string>>(NO_TASKS);
   const moving = (task: TaskSummary) =>
-    tasks.pendingTasks?.has(task.id) === true || sent.current.has(task.id);
+    tasks.pendingTasks?.has(task.id) === true || waited.current.has(task.id);
   // Each task as it was first drawn, or as it is now where it is new or the reader moved it.
   const placed = (held: ReadonlyMap<string, TaskSummary>) =>
     listed.map((task) => (moving(task) ? task : (held.get(task.id) ?? task)));
@@ -97,19 +98,9 @@ export function useHeldTasks(
       },
     },
   );
-  // Note that a standing the view now carries is let go only once its task's new place is held, so it never springs back.
+  // Note that this runs after the held order keeps its places, so a task that stopped waiting is placed anew once before it holds still.
   useLayoutEffect(() => {
-    for (const [taskId, standing] of sent.current) {
-      const task = live.get(taskId);
-      if (task === undefined || standsAt(task, standing)) sent.current.delete(taskId);
-    }
+    waited.current = tasks.pendingTasks ?? NO_TASKS;
   });
-  const onSetTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
-    sent.current.set(taskId, standing);
-    return tasks.onSetTaskStanding(taskId, standing).then((kept) => {
-      if (!kept && sent.current.get(taskId) === standing) sent.current.delete(taskId);
-      return kept;
-    });
-  };
-  return { groups, tasks: { ...tasks, onSetTaskStanding } };
+  return groups;
 }

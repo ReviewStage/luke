@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { inPinOrder } from "@luke/features/pin-order";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   TASK_PRIORITY,
@@ -14,8 +15,8 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
-import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+import { applySectionWrite, NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
+import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -979,10 +980,10 @@ test("a row dragged out of Pinned onto Todo is unpinned and sent todo, and one d
   dragRow(page, "ACME-36", "Pinned");
   await act(async () => undefined);
 
-  // Note that the unpin waits on the status being kept, so it lands after the pin sent at once.
+  // Note that the row leaves Pinned at once, as its new status is drawn, before the service answers.
   assert.deepEqual(marked, [
-    ["t-36", TASK_MARK.PIN],
     ["t-44", TASK_MARK.UNPIN],
+    ["t-36", TASK_MARK.PIN],
   ]);
   assert.deepEqual(sent, [["t-44", { status: TASK_STATUS.TODO }]]);
 });
@@ -1146,7 +1147,7 @@ function writesSent(): unknown[] {
   );
 }
 
-test("a row dragged out of its section onto a status the service refuses stays in its section and pinned", async () => {
+test("a row dragged out of its section or Pinned onto a status the service refuses goes back to its section and its pin, and says so", async () => {
   const LAUNCH = "a1b2c3d4-0000-4000-8000-000000000002";
   sections = {
     sections: [{ id: LAUNCH, workspaceId: ACME.id, title: "Launch week", createdAt: 1 }],
@@ -1154,20 +1155,87 @@ test("a row dragged out of its section onto a status the service refuses stays i
     agentEntries: [],
   };
   keeps = false;
-  const page = await mountPage();
+  // Note that the sections are drawn as written, as the tab draws a write at once, so the refusal finds the row where the drop left it.
+  const page = await mountPage(TASKS, SHELL_ROOM.WIDE, {
+    onWriteSections: (writes) => {
+      written.push(writes);
+      sections = writes.reduce((held, write) => applySectionWrite(held, write, 2), sections);
+    },
+  });
   layRowsOut(page);
 
   dragRow(page, "ACME-42", "Backlog");
   dragRow(page, "ACME-44", "Backlog");
+  listWorkspace(ACME);
   await act(async () => undefined);
 
   assert.deepEqual(sent, [
     ["t-42", { status: TASK_STATUS.BACKLOG }],
     ["t-44", { status: TASK_STATUS.BACKLOG }],
   ]);
-  assert.deepEqual(written, [], "the row keeps its section");
-  assert.deepEqual(marked, [], "the row keeps its pin");
+  assert.deepEqual(
+    writesSent(),
+    [[["place", "t-42", null]], [["place", "t-42", LAUNCH]]],
+    "the row leaves its section at once, and goes back once refused",
+  );
+  assert.deepEqual(
+    marked,
+    [
+      ["t-44", TASK_MARK.UNPIN],
+      ["t-44", TASK_MARK.PIN],
+    ],
+    "the row is unpinned at once, and pinned again once refused",
+  );
   assert.match(document.body.textContent ?? "", /The task could not be changed/);
+});
+
+/** The pins' order, by number, once the task numbered `key` among `pinned` is dragged out of Pinned, refused, and pinned again later than any, as the service would stand them. */
+async function pinsAfterRefusedDrop(pinned: readonly TaskSummary[], key: number) {
+  keeps = false;
+  const moved: PinMove[] = [];
+  const page = await mountPage(pinned, SHELL_ROOM.WIDE, {
+    onMovePins: (moves) => moved.push(...moves),
+  });
+  layRowsOut(page);
+  const before = groups(page)[0];
+
+  dragRow(page, `ACME-${key}`, "Backlog");
+  await act(async () => undefined);
+
+  const positions = new Map(moved.map((move) => [move.id, move.position] as const));
+  const after = pinned
+    .filter((each) => each.pinnedAt !== undefined)
+    .map((each) => (each.number === key ? { ...each, pinnedAt: 100 } : each))
+    .map((each) => ({ ...each, pinPosition: positions.get(each.id) ?? each.pinPosition }));
+  const order = inPinOrder(after, (each) => ({
+    position: each.pinPosition,
+    at: each.pinnedAt ?? 0,
+  }));
+  return { before, after: ["Pinned", order.map((each) => `ACME-${each.number}`)] };
+}
+
+test("a pin dragged onto a status the service refuses is pinned again where it stood, though a pin given anew would lead the pins", async () => {
+  // Note that Rate limit search was pinned last, so it leads, and the invitations' task, pinned before it, stands under it.
+  const pinned = TASKS.map((each) => (each.number === 39 ? { ...each, pinnedAt: 6 } : each));
+
+  const { before, after } = await pinsAfterRefusedDrop(pinned, 44);
+
+  assert.deepEqual(before, ["Pinned", ["ACME-39", "ACME-44"]]);
+  assert.deepEqual(after, before);
+});
+
+test("a pin with a position of its own, dragged onto a status the service refuses, is pinned again where it stood among pins with and without positions", async () => {
+  const pinned = TASKS.map((each) => {
+    if (each.number === 39) return { ...each, pinnedAt: 10, pinPosition: "a1" };
+    if (each.number === 40) return { ...each, pinnedAt: 8 };
+    if (each.number === 44) return { ...each, pinPosition: "a5" };
+    return each;
+  });
+
+  const { before, after } = await pinsAfterRefusedDrop(pinned, 44);
+
+  assert.deepEqual(before, ["Pinned", ["ACME-39", "ACME-40", "ACME-44"]]);
+  assert.deepEqual(after, before);
 });
 
 test("a section holding no task stands in the List, empty, and a row dragged into it is kept there", async () => {
