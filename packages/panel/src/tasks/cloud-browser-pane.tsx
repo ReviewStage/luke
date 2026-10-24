@@ -733,7 +733,6 @@ export function CloudBrowserDraftPane({
   const { act } = useAct();
   const [opening, setOpening] = useState(false);
   const [refused, setRefused] = useState<string | undefined>(undefined);
-  useAnnounceShown(ANNOUNCE.ALERT, refused ?? "");
   const open = (address: string) => {
     if (opening) return;
     setOpening(true);

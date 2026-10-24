@@ -570,10 +570,12 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
 
   await pressEnter();
   assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: "http://localhost:3000/" }]);
-  assert.ok(
-    announcedAsAlert().includes("hasn't opened its sandbox"),
-    "a refusal is announced as an alert",
+  assert.equal(
+    document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
+    "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
+    "a refusal is an alert, said once",
   );
+  assert.equal(announcedAsAlert(), "", "the window's own alert does not say it again");
   assert.ok(
     document
       .querySelector(".cloud-browser-standing .luke-failure-note")
