@@ -119,6 +119,7 @@ export function EditComposer({
         composer={composer}
         model={undefined}
         models={undefined}
+        modelsFailed={false}
         readModels={noop}
         usage={undefined}
         servers={undefined}

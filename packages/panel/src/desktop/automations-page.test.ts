@@ -258,6 +258,12 @@ let agentsOpened: string[] = [];
 let defaultRefused = false;
 /** How many times the model catalog was read. */
 let catalogReads = 0;
+/** Whether the model catalog answers that it could not be read. */
+let catalogRefused = false;
+/** Whether the workspace's newest agents answer that they could not be read. */
+let agentListRefused = false;
+/** Whether a search among the workspace's agents answers that it could not be made. */
+let agentSearchRefused = false;
 /** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
 let noRecent = false;
 /** Whether the read of the account's integrations is held unanswered, as one still out on the wire. */
@@ -315,6 +321,9 @@ beforeEach(() => {
   boardOpens = [];
   defaultRefused = false;
   catalogReads = 0;
+  catalogRefused = false;
+  agentListRefused = false;
+  agentSearchRefused = false;
   changeRefusal = undefined;
   noRecent = false;
   integrationsHeld = false;
@@ -456,7 +465,10 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
         catalogReads += 1;
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { models: CATALOG } });
+        const value = catalogRefused
+          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+          : { models: CATALOG };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
         const value = defaultRefused
@@ -467,6 +479,12 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
         const { words } = request.payload;
+        if (words === undefined ? agentListRefused : agentSearchRefused) {
+          return Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { failure: AUTOMATION_CALL_FAILURE.UNANSWERED },
+          });
+        }
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
           value: { agents: words === undefined ? workspaceAgents : agentsFound(words) },
@@ -3349,4 +3367,86 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   await settle();
   assert.equal(creates.length, 0);
   assert.match(page.textContent ?? "", /Luke can't receive Sentry events here/u);
+});
+
+test("a model catalog that could not be read says so in the model menu, and Retry reads it again", async () => {
+  defaultRefused = true;
+  catalogRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("automation-model-picker"))
+      return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
+    if (this.classList.contains("luke-anchored-popover"))
+      return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  act(() => button("Choose a model").click());
+  await settle();
+
+  const menu = page.querySelector(".agent-model-menu") ?? assert.fail("the model menu opens");
+  assert.equal(
+    menu.querySelector("[role=alert]")?.textContent,
+    "The models could not be read.Retry",
+  );
+  assert.equal(menu.querySelector("[role=status]"), null, "it does not read for ever");
+
+  catalogRefused = false;
+  const readsBefore = catalogReads;
+  act(() =>
+    (menu.querySelector<HTMLButtonElement>("[role=alert] button") ?? assert.fail()).click(),
+  );
+  await settle();
+
+  assert.equal(catalogReads, readsBefore + 1, "Retry reads the catalog again");
+  assert.equal(menu.querySelector("[role=alert]"), null);
+  assert.ok(menu.querySelectorAll("[role=option]").length > 0, "the models are listed");
+});
+
+test("workspace agents that could not be read say so in the Agent row, and Retry reads them again", async () => {
+  agentListRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+
+  assert.match(page.textContent ?? "", /The workspace's agents could not be read\./u);
+
+  agentListRefused = false;
+  act(() => button("Retry").click());
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.equal(picked(page, "Agent"), "Choose an agent");
+});
+
+test("a search of the Agent picker that failed says it failed rather than that no agent matches, and Retry searches again", async () => {
+  agentSearchRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+
+  type(
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
+    "zzz",
+  );
+  await settle();
+  const dialog = document.querySelector('[role="dialog"][aria-label="Agent"]') ?? assert.fail();
+  assert.equal(
+    dialog.querySelector("[role=alert]")?.textContent,
+    "The search for agents could not be read.Retry",
+  );
+  assert.doesNotMatch(dialog.textContent ?? "", /No agents match/u);
+
+  agentSearchRefused = false;
+  act(() =>
+    (dialog.querySelector<HTMLButtonElement>("[role=alert] button") ?? assert.fail()).click(),
+  );
+  await settle();
+
+  assert.equal(dialog.querySelector("[role=alert]"), null);
+  assert.match(dialog.textContent ?? "", /No agents match/u);
 });

@@ -10,6 +10,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -22,6 +23,7 @@ import {
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
+  Spinner,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
@@ -44,6 +46,7 @@ import {
   fastRestingNote,
   longWindowNote,
   MODEL_NOT_CONNECTED,
+  MODELS_READ_FAILED,
   modelLabel,
   offeredModels,
   readModelChoice,
@@ -94,7 +97,6 @@ import { SwitchRow } from "./switch-row.js";
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
   FAILED: "The default could not be read.",
-  MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
   MODELS_NONE_MATCH: "No models match",
   SIGNED_OUT: "Sign in to choose the model your agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
@@ -154,6 +156,8 @@ function DefaultRows({
   models,
   ownKeys,
   busy,
+  modelsRetrying,
+  onRetryModels,
   onChange,
 }: {
   choice: ModelChoice;
@@ -162,6 +166,10 @@ function DefaultRows({
   /** How each provider the account holds a key of its own for last answered it. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
   busy: boolean;
+  /** Whether a read of the catalog, asked for again after it failed, is out. */
+  modelsRetrying: boolean;
+  /** Reads the catalog again: the failure's Retry. */
+  onRetryModels: () => void;
   /** Asks the service to keep `choice`, answering whether it did. */
   onChange: (choice: ModelChoice) => Promise<ActionResult>;
 }): React.JSX.Element {
@@ -233,7 +241,13 @@ function DefaultRows({
         placeholder="Search models"
         noMatch={PAGE_LINE.MODELS_NONE_MATCH}
         note={
-          models === undefined ? <span role="alert">{PAGE_LINE.MODELS_FAILED}</span> : undefined
+          models === undefined ? (
+            modelsRetrying ? (
+              <Spinner delay label={readingWords("models")} />
+            ) : (
+              <ErrorState onRetry={onRetryModels}>{MODELS_READ_FAILED}</ErrorState>
+            )
+          ) : undefined
         }
         anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL}
         disabled={busy}
@@ -335,6 +349,9 @@ function CodingAgentsSection({
   const [readFailed, setReadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Each press of the catalog's Retry reads it again alone, leaving the default read where it stands.
+  const [modelReads, setModelReads] = useState(0);
+  const [modelsRetrying, setModelsRetrying] = useState(false);
 
   // The page opening reads the default the service holds now, which a Start may just have written.
   useEffect(() => {
@@ -369,12 +386,17 @@ function CodingAgentsSection({
     const failModels = () => {
       setModels(undefined);
       setModelsFailed(true);
+      setModelsRetrying(false);
     };
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
         if (!live) return;
         if ("failure" in answer) failModels();
-        else setModels(answer.models);
+        else {
+          setModels(answer.models);
+          setModelsFailed(false);
+          setModelsRetrying(false);
+        }
       },
       () => {
         if (live) failModels();
@@ -383,7 +405,7 @@ function CodingAgentsSection({
     return () => {
       live = false;
     };
-  }, [act, signedIn, attempt, keysRead, keysAnswered]);
+  }, [act, signedIn, attempt, keysRead, keysAnswered, modelReads]);
 
   const write = useCallback(
     (next: ModelChoice): Promise<ActionResult> => {
@@ -410,6 +432,11 @@ function CodingAgentsSection({
           models={models}
           ownKeys={ownKeys ?? new Map()}
           busy={busy}
+          modelsRetrying={modelsRetrying}
+          onRetryModels={() => {
+            setModelsRetrying(true);
+            setModelReads((count) => count + 1);
+          }}
           onChange={write}
         />
       ) : readFailed ? (

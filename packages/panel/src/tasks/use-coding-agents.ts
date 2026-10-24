@@ -204,7 +204,9 @@ export interface CodingAgentsControl {
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
   models: readonly CatalogModel[] | undefined;
-  /** Reads the models now, for a menu opening. */
+  /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
+  modelsFailed: boolean;
+  /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<CodingAgentDefaultAnswer>;
@@ -652,6 +654,7 @@ export function useCodingAgents(input: {
   const ours = (was: { taskId: string | undefined; agentId: string | undefined }) =>
     was.taskId === taskId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
+  const [modelsFailed, setModelsFailed] = useState(false);
   const [starting, setStarting] = useState(false);
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
@@ -782,11 +785,17 @@ export function useCodingAgents(input: {
   const readAgain = useCallback(() => setReads((count) => count + 1), []);
 
   const readModels = useCallback(() => {
+    // The menu reads again while a read is out, so a Retry shows its reading.
+    setModelsFailed(false);
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer: CodingAgentModelsAnswer) => {
-        if (!("failure" in answer)) setModels(answer.models);
+        if ("failure" in answer) setModelsFailed(true);
+        else {
+          setModels(answer.models);
+          setModelsFailed(false);
+        }
       },
-      () => undefined,
+      () => setModelsFailed(true),
     );
   }, [act]);
 
@@ -1626,6 +1635,7 @@ export function useCodingAgents(input: {
     listMissing,
     onRetryList: readAgain,
     models,
+    modelsFailed,
     readModels,
     readDefault,
     onUnarchive: undefined,

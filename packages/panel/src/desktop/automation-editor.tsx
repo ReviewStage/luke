@@ -76,7 +76,7 @@ import {
   type SentryLevel,
   type SentryTriggerEvent,
 } from "@luke/features/trigger-catalog";
-import { andList, noMatchWords, TERM } from "@luke/features/words";
+import { andList, noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -1536,10 +1536,13 @@ const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
  */
 function ModelPicker({
   models,
+  modelsFailed,
   readModels,
   onChoose,
 }: {
   models: RunChoices["models"];
+  /** Whether the catalog could not be read, which the menu says with Retry. */
+  modelsFailed: boolean;
   /** Reads the catalog now, as the menu opens, so a catalog that failed to read is asked for again. */
   readModels: () => void;
   onChoose: (choice: ModelChoice) => void;
@@ -1578,6 +1581,8 @@ function ModelPicker({
             id={menuId}
             className="agent-model-menu"
             models={models}
+            failed={modelsFailed}
+            onRetry={readModels}
             chosen={undefined}
             onChoose={(choice) => {
               onChoose(choice);
@@ -1622,6 +1627,7 @@ function ModelRow({
           <AgentModelChip
             model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
             models={choices.models}
+            modelsFailed={choices.modelsFailed}
             readModels={choices.readModels}
             usage={undefined}
             look={CHIP_LOOK.FIELD}
@@ -1630,6 +1636,7 @@ function ModelRow({
         ) : choices.defaultFailed ? (
           <ModelPicker
             models={choices.models}
+            modelsFailed={choices.modelsFailed}
             readModels={choices.readModels}
             onChoose={(choice) => onDraft({ choice })}
           />
@@ -1642,8 +1649,9 @@ function ModelRow({
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
-/** What the agent row says where the workspace's agents could not be read. */
-const AGENTS_UNREAD = "The workspace's agents could not be read.";
+/** What the agent row says where the workspace's agents could not be read, and where the search among them did not answer. */
+const AGENTS_UNREAD = readFailedWords("the workspace's agents");
+const AGENT_SEARCH_FAILED = readFailedWords("the search for agents");
 
 /** What the agent row says under its name. */
 const AGENT_DETAIL =
@@ -1673,7 +1681,15 @@ function AgentRow({
   problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const { agents, found, models, searched: words, searchAgents } = choices;
+  const {
+    agents,
+    found,
+    models,
+    searched: words,
+    searchAgents,
+    searchFailed,
+    retryAgents,
+  } = choices;
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const known = useKnownNames();
   const place = useAgentRowPlace();
@@ -1684,10 +1700,9 @@ function AgentRow({
       <SettingsRow
         label="Agent"
         description={AGENT_DETAIL}
-        error={problem === undefined ? AGENTS_UNREAD : `${AGENTS_UNREAD} ${problem}`}
-      >
-        {() => null}
-      </SettingsRow>
+        error={problem}
+        below={() => <ErrorState onRetry={retryAgents}>{AGENTS_UNREAD}</ErrorState>}
+      />
     );
   }
   const offered = (agents?.agents ?? []).map((agent) =>
@@ -1740,7 +1755,11 @@ function AgentRow({
       rows={rows}
       placeholder="Search agents"
       note={
-        words !== "" ? undefined : agents === undefined ? (
+        words !== "" ? (
+          searchFailed ? (
+            <ErrorState onRetry={retryAgents}>{AGENT_SEARCH_FAILED}</ErrorState>
+          ) : undefined
+        ) : agents === undefined ? (
           <Spinner delay label="Loading agents" />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."

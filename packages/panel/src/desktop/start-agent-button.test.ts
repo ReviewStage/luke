@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import assert from "node:assert/strict";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -139,4 +140,33 @@ test("a press with nothing picked names no choice, and one after a pick starts o
   await act(async () => button("Start a coding agent").click());
 
   expect(started).toEqual([undefined, { model: "anthropic/claude-opus-5.5-fast", effort: "high" }]);
+});
+
+test("a catalog that could not be read says so in the model menu with Retry, which reads it again", () => {
+  let reads = 0;
+  mount({
+    ...startable([]),
+    models: undefined,
+    modelsFailed: true,
+    readModels: () => {
+      reads += 1;
+    },
+  });
+
+  act(() => button("Choose a model to start with").click());
+  const alert = document.querySelector('[role="alert"]') ?? assert.fail("the menu says it failed");
+  assert.equal(alert.textContent, "The models could not be read.Retry");
+  assert.equal(document.querySelector('[role="status"]'), null, "it does not read for ever");
+
+  const before = reads;
+  act(() => (alert.querySelector("button") ?? assert.fail("no Retry")).click());
+  assert.equal(reads, before + 1);
+});
+
+test("a catalog still being read says so with no failure", () => {
+  mount({ ...startable([]), models: undefined, modelsFailed: false });
+
+  act(() => button("Choose a model to start with").click());
+
+  assert.equal(document.querySelector('[role="alert"]'), null);
 });

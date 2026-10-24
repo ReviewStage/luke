@@ -365,6 +365,7 @@ export function AgentComposer({
   composer,
   model,
   models,
+  modelsFailed,
   readModels,
   usage,
   payer,
@@ -402,6 +403,8 @@ export function AgentComposer({
   model: AgentModelControl | undefined;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
+  /** Whether the last read of the catalog did not land, which the chip's menu says with Retry. */
+  modelsFailed: boolean;
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
@@ -792,6 +795,7 @@ export function AgentComposer({
                   <AgentModelChip
                     model={model}
                     models={models}
+                    modelsFailed={modelsFailed}
                     readModels={readModels}
                     usage={usage}
                     payer={payer}
