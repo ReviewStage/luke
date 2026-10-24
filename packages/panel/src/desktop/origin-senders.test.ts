@@ -16,6 +16,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
@@ -196,6 +197,23 @@ test("the line naming who sent the plan stands under its card, then when it was 
     line.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING,
     "the time follows who sent it",
   );
+});
+
+test("the card a transcript opens on offers Copy, which copies the brief's text", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const { container } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
+
+  const copy = container.querySelector<HTMLButtonElement>(
+    '.agent-origin button[aria-label="Copy message"]',
+  );
+  assert.ok(copy, "the card has Copy");
+  await act(async () => {
+    copy.click();
+    await Promise.resolve();
+  });
+
+  assert.deepEqual(copied, ["# Teammate invitations\n\nExpire invites after seven days."]);
 });
 
 test("a worker's tab opens on its task sent by the agent that delegated it, whose name opens that agent's tab", async () => {

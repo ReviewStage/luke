@@ -1003,7 +1003,12 @@ function PlanCard({
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>
       </Plan>
-      <MessageLine sender={named ? sender : undefined} at={sentAt} wrap />
+      <MessageLine
+        sender={named ? sender : undefined}
+        at={sentAt}
+        wrap
+        actions={<CopyMessageAction words={text} messageId={messageId} />}
+      />
     </Message>
   );
 }
