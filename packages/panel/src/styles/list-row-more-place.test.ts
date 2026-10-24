@@ -18,9 +18,11 @@ import { layContainersAt } from "../testing/container-width.js";
  * list-row-more-place.test.ts -- where there is a hover, a row whose acts
  * come in on hover, as an Inbox item's or a sidebar task's, keeps no track
  * of its own for its ⋯: the ⋯ comes in with the acts in its end's place, so
- * at rest nothing stands empty past the row's metadata. A row whose acts
- * always stand keeps the ⋯ in its own track beside them, and so does every
- * row on a screen with no hover, where the ⋯ is always shown. jsdom lays
+ * at rest nothing stands empty past the row's metadata. A row that offers a
+ * menu and no acts keeps the ⋯ in its own track beside its end, which
+ * nothing steps in for, a row whose acts always stand keeps it beside them,
+ * and so does every row on a screen with no hover, where the ⋯ is always
+ * shown. jsdom lays
  * nothing out, so the sheets are laid for a mouse or a touch screen
  * (`testing/container-width.ts`) and the track each part is given is read.
  */
@@ -44,8 +46,8 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-luke-profile");
 });
 
-/** A mail-style row with a ⋯ and one act, on hover or always; answers the tracks its end, its acts, and its ⋯ are given. */
-function tracks(actionsAt: ListRowActions, touch: boolean) {
+/** A mail-style row with a ⋯ and one act, on hover or always, or with a ⋯ alone; answers the tracks its end, its acts, and its ⋯ are given. */
+function tracks(actionsAt: ListRowActions, touch: boolean, acted = true) {
   document.documentElement.setAttribute("data-luke-profile", "desktop");
   laid = layContainersAt({}, { touch });
   const container = document.body.appendChild(document.createElement("div"));
@@ -62,7 +64,7 @@ function tracks(actionsAt: ListRowActions, touch: boolean) {
           meta: "2h",
           metaAt: LIST_ROW_META.TITLE,
           actionsAt,
-          actions: createElement(IconButton, { icon: "✓", label: "Mark read" }),
+          actions: acted ? createElement(IconButton, { icon: "✓", label: "Mark read" }) : undefined,
           menu: { thing: "Item", groups: [[{ label: "Copy link", onSelect: () => undefined }]] },
           onPress: () => undefined,
         }),
@@ -73,7 +75,7 @@ function tracks(actionsAt: ListRowActions, touch: boolean) {
     getComputedStyle(container.querySelector(selector) ?? assert.fail(selector)).gridColumn;
   return {
     end: column(".luke-list-row-end"),
-    acts: column(".luke-list-row-actions"),
+    acts: acted ? column(".luke-list-row-actions") : undefined,
     more: column(".luke-list-row-more"),
   };
 }
@@ -83,6 +85,13 @@ test("with a mouse, a row whose acts come in on hover stands its ⋯ with them i
 
   assert.equal(acts, end, "the acts stand in the end's place");
   assert.equal(more, end, "the ⋯ stands there with them");
+});
+
+test("with a mouse, a row that offers a menu and no acts keeps its ⋯ in its own track, beside the end nothing steps in for", () => {
+  const { end, more } = tracks(LIST_ROW_ACTIONS.HOVER, false, false);
+
+  assert.notEqual(more, end);
+  assert.equal(more, "more");
 });
 
 test("a row whose acts always stand keeps its ⋯ in its own track beside them", () => {
