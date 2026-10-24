@@ -258,6 +258,10 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   opens a page (`anti-slop/no-open-page-from-button`): draw a `ButtonLink`, a
   `TextLink`, a `Chip` with `href`, or a toast action with `href`, so a
   right-click, ⌘-click and a reader's link list find it.
+- **A heading is `Text`.** Outside this package an intrinsic `h1`–`h6` is
+  refused (`anti-slop/no-raw-heading-outside-ui`): draw it with `Text`,
+  `as={TEXT_ELEMENT.H2}` for the outline and a type role (`TEXT_VARIANT.GROUP`,
+  `SECTION`, `DIALOG`, `TITLE`) for the look, so no sheet sets a heading's font.
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
   `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
@@ -332,6 +336,7 @@ is refused where it reaches Tailwind's own scale (`text-sm`, `font-medium`,
 | `literal-duration` | A literal duration or delay, or `duration-150` | Read a motion token (`--luke-duration-*`, `--luke-*-delay`). An endless loop whose `animation-play-state` answers `--luke-loop-motion` or `--luke-face-motion` may keep its literal |
 | `literal-easing` | `ease`, `linear`, `cubic-bezier()`, `steps()` in a transition or animation, or `ease-in-out` | Read `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit`, or `--luke-motion-pane`; a hover's `ease` is the default, so drop it |
 | `literal-picker-width` | A literal `width`, `min-width` or `max-width` on a picker's, popover's or menu's class, outside `@luke/ui` | Hang the layer at one of `POPOVER_WIDTH`'s three widths (`AnchoredPopover`'s or `RectFloat`'s `width`), and let what it holds fill it |
+| `literal-spacing` | A `px` or `rem` literal on `padding`, `margin`, `gap`, `row-gap` or `column-gap` in `packages/panel/src/styles/*.css`; `0`, `auto` and `1px` pass | Read the spacing role (`--luke-list-gap`, `--luke-tight-gap`, `--luke-control-gap`, `--luke-row-inset`, `--luke-section-gap`, `--luke-page-section-gap`) or, where no role fits, a `--luke-space-*` step |
 
 No comment silences it, and it refuses one that asks to
 (`style-guard-disable`); the face's generated `face/face-motion.css` is the one
