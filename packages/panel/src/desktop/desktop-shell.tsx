@@ -428,8 +428,6 @@ interface Holder {
   element: HTMLElement;
   tag: string;
   label: string;
-  /** Which of the controls so called it was, in the order the window draws them. */
-  place: number;
 }
 
 /** What a control is called: its label, its placeholder, or its words. */
@@ -454,12 +452,18 @@ function holder(): Holder | undefined {
   const tag = element.localName;
   const label = labelOf(element);
   if (label === "") return undefined;
-  return { element, tag, label, place: calledSo(tag, label).indexOf(element) };
+  return { element, tag, label };
 }
 
-/** The control that held the keyboard, as it stands now: itself where it never left, else the one drawn in its place, if any. */
-function found({ element, tag, label, place }: Holder): HTMLElement | undefined {
-  return element.isConnected ? element : calledSo(tag, label)[place];
+/**
+ * The control that held the keyboard, as it stands now: itself where it never left, else the one drawn in its place.
+ * Note that a name shared by several controls, as a row's Pin is, or no longer borne by one, as a row's time moves on,
+ * finds none, because the keyboard is better left with the window than handed to a neighbour of the same name.
+ */
+function found({ element, tag, label }: Holder): HTMLElement | undefined {
+  if (element.isConnected) return element;
+  const called = calledSo(tag, label);
+  return called.length === 1 ? called[0] : undefined;
 }
 
 /**

@@ -305,6 +305,27 @@ test("leaving Settings where the control that held the keyboard is gone leaves i
   assert.equal(document.activeElement, document.body);
 });
 
+test("leaving Settings hands the keyboard to no control of a name several share, as a row's Pin is, rather than to the wrong row's", () => {
+  handState({});
+  const draw = mountSwitching();
+  const pin = () => {
+    const button = document.createElement("button");
+    button.setAttribute("aria-label", "Pin");
+    return button;
+  };
+  const [first, second] = [pin(), pin()];
+  document.body.append(first, second);
+  second.focus();
+
+  draw(PANEL_TAB.SETTINGS);
+  first.remove();
+  second.remove();
+  document.body.append(pin(), pin());
+  draw(PANEL_TAB.TASKS);
+
+  assert.equal(document.activeElement, document.body);
+});
+
 /**
  * The shell in a narrow room on `tab` over `overrides`, Settings standing on
  * its list or its page as `listed` says, over a history whose Back goes to
