@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { HOST_CAPABILITY } from "./capabilities.js";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
@@ -14,6 +15,7 @@ import {
   isAppCommand,
   KEYED_COMMANDS,
   type ShortcutChord,
+  shortcutShown,
 } from "./shortcuts.js";
 
 /**
@@ -67,4 +69,19 @@ test("⇧⌘A, Archive's chord, runs Mark done, which still answers to the id th
   assert.equal(command === undefined ? undefined : appCommandLabel(command), "Mark done");
   assert.ok(isAppCommand("archive-plan"));
   assert.equal(APP_COMMAND.MARK_TASK_DONE, "archive-plan");
+});
+
+test("the commands only the desktop's window can carry out stand on the desktop and in no list of a browser", () => {
+  const WINDOW_COMMANDS = [
+    APP_COMMAND.ZOOM_IN,
+    APP_COMMAND.ZOOM_OUT,
+    APP_COMMAND.ACTUAL_SIZE,
+    APP_COMMAND.FULL_SCREEN,
+    APP_COMMAND.MINIMIZE,
+    APP_COMMAND.CLOSE_WINDOW,
+  ] as const;
+  for (const command of WINDOW_COMMANDS) {
+    assert.equal(shortcutShown(command, {}, [HOST_CAPABILITY.DESKTOP_APP]), true, command);
+    assert.equal(shortcutShown(command, {}, []), false, command);
+  }
 });
