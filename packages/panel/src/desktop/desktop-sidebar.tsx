@@ -41,6 +41,7 @@ import {
   NavItem,
   NOTE_LINE_LOOK,
   NoteLine,
+  opensMenu,
   PanePin,
   PinIcon,
   PlusIcon,
@@ -298,8 +299,8 @@ function historyGroups(
 
 /**
  * Back or Forward: a press takes one step, and a press held (`HoldPress`),
- * or a right-click, lists the steps along that way, any of which it goes straight
- * to, as a browser's Back and Forward do.
+ * a right-click, or the menu key (⇧F10 too) lists the steps along that way, any
+ * of which it goes straight to, as a browser's Back and Forward do.
  */
 function HistoryButton({
   label,
@@ -331,6 +332,12 @@ function HistoryButton({
       mouse
       disabled={!able}
       onHold={openList}
+      onKeyDown={(event) => {
+        // Note that the list hangs from the button, not from the wrapper this key bubbles to, because the wrapper lays nothing out.
+        if (!able || !opensMenu(event)) return;
+        event.preventDefault();
+        openList();
+      }}
       onContextMenu={() => {
         if (menu.open === undefined) openList();
       }}

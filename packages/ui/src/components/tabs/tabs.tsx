@@ -1,3 +1,4 @@
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type {
   ComponentType,
   FocusEventHandler,
@@ -39,6 +40,7 @@ import {
   useRovingKeys,
 } from "../roving-keys/roving-keys.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
+import { Tooltip } from "../tooltip/hint.js";
 import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
 /**
@@ -197,17 +199,15 @@ export type TabHint = ComponentType<{
   children: ReactElement<TabHintProps>;
 }>;
 
-/** The words a tab's hint joins: its label where it is cut short, what the tab adds, and its news. */
+/** The words a tab's hint joins: its label where it is cut short, and its news. */
 function tabHint(input: {
   label: string;
   /** Whether the label may not be read whole: cut short, or a tab other than the chosen one, which a narrow strip may draw as its glyph alone. */
   clipped: boolean;
-  tooltip: string | undefined;
   unread: boolean;
 }): string | undefined {
   const words = [
     input.clipped ? input.label : undefined,
-    input.tooltip,
     input.unread ? UNREAD_TAB_NOTE : undefined,
   ].filter((word) => word !== undefined);
   return words.length === 0 ? undefined : words.join(" · ");
@@ -438,9 +438,10 @@ export function Tabs({
  * under the pointer, as an editor's tab trades its unsaved dot for its ×.
  * `editor`, while given, is drawn in the label's place as a field of its
  * own, outside the tab's role, so a reader reaches it. A label cut short is
- * said whole in the tab's `hint`, before what `tooltip` adds and an unread
- * tab's news; `card`, while given, hangs in the hint's place whether or not
- * the label is cut short, and says the whole name itself. `contextMenu`
+ * said whole in the tab's `hint`, before an unread tab's news; `card`, while
+ * given, hangs in the hint's place whether or not the label is cut short, and
+ * says the whole name itself. The × says which tab it closes in a hint of its
+ * own, with ⌘W on the chosen tab's alone. `contextMenu`
  * (`useMenu`'s) opens the tab's own actions from a right-click or a long
  * press, and `onMenu` opens them where it says from the keyboard's menu
  * keys. A `quiet` tab draws no fill at rest, chosen or not, and the hover
@@ -455,10 +456,8 @@ export function Tab({
   endMark,
   selected,
   unread = false,
-  tooltip,
   card,
   hint: Hint,
-  keyshortcuts,
   editor,
   tabRef,
   quiet = false,
@@ -479,13 +478,10 @@ export function Tab({
   selected: boolean;
   /** Something arrived on the tab while another was chosen: its label in semibold until it is chosen. */
   unread?: boolean;
-  /** What the pointer resting on the tab says beyond its label. */
-  tooltip?: string | undefined;
   /** What the pointer resting on the tab shows in its hint's place: a card naming it whole and saying what it last did. */
   card?: ReactNode;
   /** The app's hint the tab hangs its words or its card from; none drawn where absent. */
   hint?: TabHint | undefined;
-  keyshortcuts?: string | undefined;
   editor?: ReactNode;
   tabRef?: RefObject<HTMLButtonElement | null> | undefined;
   quiet?: boolean;
@@ -505,7 +501,7 @@ export function Tab({
   // Note that a tab other than the chosen one is named in its hint whether or
   // not its label shows, because a narrow strip may draw it as its glyph
   // alone, which the label's own measure cannot see.
-  const said = tabHint({ label, clipped: clipped || !selected, tooltip, unread });
+  const said = tabHint({ label, clipped: clipped || !selected, unread });
   const own = useRef<HTMLButtonElement | null>(null);
   const button = tabRef ?? own;
   const glyph = (
@@ -520,7 +516,6 @@ export function Tab({
       role="tab"
       className={TAB_BUTTON}
       aria-selected={selected}
-      aria-keyshortcuts={keyshortcuts}
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       {...rovingItem()}
       onClick={(event) => {
@@ -597,13 +592,15 @@ export function Tab({
       )}
       {onClose === undefined || editor !== undefined ? null : (
         <span className={cn("luke-tab-close", END_SLOT)}>
-          <IconButton
-            icon={<CloseIcon />}
-            label={`Close ${label}`}
-            size={BUTTON_SIZE.COMPACT}
-            tabbable={false}
-            onClick={onClose}
-          />
+          <Tooltip label={`Close ${label}`} command={selected ? APP_COMMAND.CLOSE_TAB : undefined}>
+            <IconButton
+              icon={<CloseIcon />}
+              label={`Close ${label}`}
+              size={BUTTON_SIZE.COMPACT}
+              tabbable={false}
+              onClick={onClose}
+            />
+          </Tooltip>
         </span>
       )}
     </div>
