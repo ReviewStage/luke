@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
+import { formatCount } from "@luke/features/number-format";
 import { pasteCutWords } from "@luke/features/words";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -367,7 +368,7 @@ test("the box's foot says a cut paste's note and the counter from four fifths of
   pasteInComposer(box, "x".repeat(cap + 100));
   assert.equal(boxWords(box).length, cap);
   assert.equal(note()?.includes(pasteCutWords(cap)), true);
-  assert.equal(counter(), `${cap}/${cap}`);
+  assert.equal(counter(), `${formatCount(cap)}/${formatCount(cap)}`);
 
   const editor = composerEditor(box).editor;
   assert.ok(editor);

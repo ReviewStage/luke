@@ -6,6 +6,7 @@ import {
   type CodingAgentAgentAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { formatCount } from "@luke/features/number-format";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -221,7 +222,7 @@ test("the length counter stands from four fifths of the cap and not before", asy
   typeInComposer(box.container, "x".repeat(cap * 0.8 - 1));
   assert.equal(counter(), undefined);
   typeInComposer(box.container, "x");
-  assert.equal(counter(), `${cap * 0.8}/${cap}`);
+  assert.equal(counter(), `${formatCount(cap * 0.8)}/${formatCount(cap)}`);
 });
 
 test("words selected raise the format toolbar, its marks alone, and a message bolded from it is sent as its Markdown", async () => {

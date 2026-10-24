@@ -7,6 +7,7 @@ import { afterEach, test } from "vitest";
 import { holdExits } from "../../testing/held-exits.js";
 import { FormField } from "../form-field/form-field.js";
 import { TextField } from "../text-field/text-field.js";
+import { LengthCounter } from "./length-counter.js";
 
 /**
  * length-counter.test.ts -- a field with a limit says nothing of it until
@@ -77,6 +78,14 @@ test("the count stands only once the words reach four fifths of the limit", () =
     "Name",
     "the label still names the field alone",
   );
+});
+
+test("a limit in the thousands is counted as every figure is, grouped, as the note about a cut paste says it", () => {
+  const page = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(page);
+  roots.push(root);
+  act(() => root.render(createElement(LengthCounter, { length: 3420, limit: 4000 })));
+  assert.equal(counter(page)?.textContent, "3,420/4,000");
 });
 
 test("each change ticks the way the count moved, in the danger ink at the limit", () => {
