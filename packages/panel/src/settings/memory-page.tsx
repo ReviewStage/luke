@@ -120,7 +120,7 @@ function MemoryRow({
   return (
     <div className="memory-row">
       <MenuRow
-        label="Memory actions"
+        thing="Memory"
         actions={actions}
         row={{
           label: <span className="memory-text">{memory.text}</span>,

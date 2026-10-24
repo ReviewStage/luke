@@ -521,7 +521,7 @@ function MemberRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${member.name} actions`}
+        thing={member.name}
         actions={[profileActs, roleActs, removeActs]}
         row={{
           leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
@@ -1117,7 +1117,7 @@ function Invitations({
       {(pending ?? []).map((one) => (
         <MenuRow
           key={one.id}
-          label={`${one.email} actions`}
+          thing={one.email}
           actions={[
             {
               label: "Cancel invitation",
@@ -1370,7 +1370,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Linear actions"
+        thing="Linear"
         actions={actions}
         row={{
           leading: LINEAR_MARK,
@@ -1502,7 +1502,7 @@ function ManagedSentry({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Sentry actions"
+        thing="Sentry"
         actions={actions}
         row={{
           leading: SENTRY_MARK,
@@ -1718,7 +1718,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label="Workspace actions"
+        thing="Workspace"
         actions={actions}
         row={{
           leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,

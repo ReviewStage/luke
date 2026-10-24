@@ -22,7 +22,7 @@ import {
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { ActionMenu, type MenuAction, rowMenu } from "../desktop/action-menu.js";
 import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./coding-agent-model.js";
 import { MentionChipCard } from "./mention-chip.js";
 import { PullRequestMark } from "./pull-request-mark.js";
@@ -68,9 +68,11 @@ export interface PublishedDoors {
 }
 
 const MENU_LABEL = "Branch actions";
+/** What the pull request's row is, which names its ⋯ and its menu. */
+const PUBLISHED_THING = "Pull request";
 const CHECKS_FAILING = "Checks failing";
 
-/** What a right-click offers: the pull request on GitHub where a press opens its tab instead, then the branch's name and the command that checks it out, each to the clipboard, where a branch is named. */
+/** What a ⋯ and right-click offer: the pull request on GitHub where a press opens its tab instead, then the branch's name and the command that checks it out, each to the clipboard, where a branch is named. */
 function branchActions(
   branch: string | null,
   doors: PublishedDoors,
@@ -178,11 +180,10 @@ export function PublishedRow({
   doors,
 }: {
   pullRequest: CodingAgentPullRequest;
-  /** The branch the pull request is from, whose name and checkout the right-click copies; none where it is not known. */
+  /** The branch the pull request is from, whose name and checkout its menu copies; none where it is not known. */
   branch: string | null;
   doors: PublishedDoors;
 }): ReactNode {
-  const menu = useMenu(true);
   const state = pullRequestStateWord(pullRequest);
   const inPanel = doors.openPullRequest;
   const actions = branchActions(branch, doors, inPanel === undefined ? undefined : pullRequest.url);
@@ -206,41 +207,31 @@ export function PublishedRow({
     />
   );
   return (
-    <>
-      <div className="agent-published">
-        <List label="Pull request" variant={LIST_VARIANT.CARD} fingerTall>
-          {/* Note that the card stands in the pill's place whatever the title's width, since it names the title whole, the published one where GitHub answered nothing. */}
-          <RowHintOptions card={card}>
-            <ListRow
-              leading={<PullRequestMark pullRequest={pullRequest} />}
-              title={pullRequestLabelOf(pullRequest)}
-              meta={
-                <span className="agent-published-meta">
-                  {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
-                    <span className="agent-published-checks">{CHECKS_FAILING}</span>
-                  ) : null}
-                  {state === undefined ? null : <span>{state}</span>}
-                  <LinesChanged
-                    additions={pullRequest.additions}
-                    deletions={pullRequest.deletions}
-                  />
-                </span>
-              }
-              hint={{ Hint: RowHint, label: pullRequest.title }}
-              menuOpen={menu.open !== undefined}
-              onPress={() => {
-                menu.close(false);
-                if (inPanel === undefined) doors.openGitHub(pullRequest.url);
-                else inPanel();
-              }}
-              contextMenu={actions.length === 0 ? undefined : menu.contextMenu()}
-            />
-          </RowHintOptions>
-        </List>
-      </div>
-      {menu.drawn === undefined || actions.length === 0 ? null : (
-        <ActionMenu menu={menu.drawn} groups={actions} label={MENU_LABEL} onClose={menu.close} />
-      )}
-    </>
+    <div className="agent-published">
+      <List label="Pull request" variant={LIST_VARIANT.CARD} fingerTall>
+        {/* Note that the card stands in the pill's place whatever the title's width, since it names the title whole, the published one where GitHub answered nothing. */}
+        <RowHintOptions card={card}>
+          <ListRow
+            leading={<PullRequestMark pullRequest={pullRequest} />}
+            title={pullRequestLabelOf(pullRequest)}
+            meta={
+              <span className="agent-published-meta">
+                {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
+                  <span className="agent-published-checks">{CHECKS_FAILING}</span>
+                ) : null}
+                {state === undefined ? null : <span>{state}</span>}
+                <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
+              </span>
+            }
+            hint={{ Hint: RowHint, label: pullRequest.title }}
+            onPress={() => {
+              if (inPanel === undefined) doors.openGitHub(pullRequest.url);
+              else inPanel();
+            }}
+            menu={rowMenu(PUBLISHED_THING, actions)}
+          />
+        </RowHintOptions>
+      </List>
+    </div>
   );
 }
