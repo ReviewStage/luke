@@ -304,6 +304,8 @@ export interface CodingAgentsControl {
     succeeded: boolean;
     /** Starts an agent on the choice given, or on the account's default with none. */
     onPress: (choice?: ModelChoice) => void;
+    /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
+    pending?: StartingAgent | undefined;
   };
   /**
    * A draft's Call: starts the draft's agent for a call to open into, on
@@ -479,6 +481,12 @@ function forkOf(fork: AgentFork | undefined): { readonly fork?: AgentFork } {
 
 /** Nothing laid in after a draft's own words as they move. */
 const NOTHING_CARRIED: Pick<Draft, "text" | "attachments"> = { text: "", attachments: [] };
+
+/** The agent a Start is still making: the key its press minted, which its tab stands under until the service answers, and the model it was chosen on, none for the account's default. */
+export interface StartingAgent {
+  readonly key: string;
+  readonly model: string | undefined;
+}
 
 /** A Start on its way or asked again: the task, the key the press minted, and the choice it was for. */
 interface PendingStart {
@@ -672,6 +680,14 @@ export function useCodingAgents(input: {
     { taskId: string; agent: CodingAgentSummary; line: SentLine } | undefined
   >(undefined);
   const pending = useRef<PendingStart | undefined>(undefined);
+  // The Start out now on a task, whose tab stands under its key until it answers.
+  const [pressed, setPressed] = useState<{ taskId: string; starting: StartingAgent } | undefined>(
+    undefined,
+  );
+  // The agents Starts made on a task whose list was not read as they landed, which stand among its agents until the list is.
+  const [unlisted, setUnlisted] = useState<
+    { taskId: string; agents: readonly CodingAgentSummary[] } | undefined
+  >(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
   const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
@@ -704,7 +720,27 @@ export function useCodingAgents(input: {
     [listedAgents, taskId],
   );
   const shown = held ?? listedHere;
-  const agents = useMemo(() => shown?.filter((agent) => agent.archivedAt === undefined), [shown]);
+  // Note that the agents Starts made before the list was read stand beside what is shown, whatever
+  // the followed task list carries yet, so their tabs never leave between the answer and the list.
+  const landedHere =
+    read === undefined && unlisted?.taskId === taskId ? unlisted?.agents : undefined;
+  const standing = useMemo(() => {
+    const missing = landedHere?.filter(
+      (landed) => shown?.some((agent) => agent.id === landed.id) !== true,
+    );
+    return missing === undefined || missing.length === 0 ? shown : [...(shown ?? []), ...missing];
+  }, [shown, landedHere]);
+  const agents = useMemo(
+    () => standing?.filter((agent) => agent.archivedAt === undefined),
+    [standing],
+  );
+  // Note that a Start out on the task stands among its tabs under the press's key, the task's
+  // agents known or not, since it is the tab the press opens.
+  const pressedHere = pressed?.taskId === taskId ? pressed?.starting : undefined;
+  const agentIds = useMemo(() => {
+    const ids = agents?.map((agent) => agent.id);
+    return pressedHere === undefined ? ids : [...(ids ?? []), pressedHere.key];
+  }, [agents, pressedHere]);
   const archivedAgents = useMemo(
     () => held?.filter((agent) => agent.archivedAt !== undefined),
     [held],
@@ -836,11 +872,23 @@ export function useCodingAgents(input: {
     });
   };
 
-  /** A Start that landed: the agent joins the list and its tab opens. Note that one landing after the developer left the task opens no tab on the task now open. */
+  /**
+   * A Start that landed: the agent joins the list and its tab opens. Note
+   * that one landing after the developer left the task opens no tab on the
+   * task now open, and that the list is read again only where it was not
+   * read yet, the agent standing among the task's agents until it is, since
+   * a read already standing is joined the agent at once and one still out
+   * may answer from before the Start.
+   */
   const landed = (on: string, agent: CodingAgentSummary) => {
     if ((latest.current.taskId ?? latest.current.agentId) !== on) return;
     joined(on, agent);
     latest.current.onStarted(agent.id);
+    if (listedNow.current) return;
+    setUnlisted((was) => ({
+      taskId: on,
+      agents: [...(was?.taskId === on ? was.agents : []), agent],
+    }));
     readAgain();
   };
 
@@ -856,10 +904,14 @@ export function useCodingAgents(input: {
         : mintKey();
     pending.current = { taskId, key, choice };
     setNote(undefined);
+    // The agent's tab opens on the press, under its key, and gives way to the agent once it is made.
+    setPressed({ taskId, starting: { key, model: choice?.model } });
+    latest.current.onStarted(key);
     askStart(taskId, {
       idempotencyKey: key,
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     }).then((answer) => {
+      setPressed((was) => (was?.starting.key === key ? undefined : was));
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
@@ -1606,7 +1658,7 @@ export function useCodingAgents(input: {
     workspaceId,
     agentRepository,
     origin: ours(list) ? list.origin : undefined,
-    agentIds: agents?.map((agent) => agent.id),
+    agentIds,
     heldIds: held?.map((agent) => agent.id),
     draft,
     onNewDraft,
@@ -1636,6 +1688,7 @@ export function useCodingAgents(input: {
       note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       succeeded: startLanded,
       onPress: pressStart,
+      pending: pressedHere,
     },
     startCall: taskId !== undefined ? startCall : undefined,
     onStop,
