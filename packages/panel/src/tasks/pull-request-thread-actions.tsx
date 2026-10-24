@@ -39,7 +39,7 @@ const THREAD_WORDS = {
 /** What a reply's form is named, asks for, and says. */
 const REPLY_WORDS: ReplyFormWords = {
   field: "Reply",
-  placeholder: "Reply in Markdown…",
+  placeholder: "Reply",
   cancel: "Cancel",
   send: "Reply",
   sending: "Replying",

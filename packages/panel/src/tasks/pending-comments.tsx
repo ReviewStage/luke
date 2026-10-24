@@ -57,7 +57,7 @@ export const PENDING_WORDS = {
 /** What the edit's form is named, asks for, and says. */
 const EDIT_WORDS: ReplyFormWords = {
   field: "Pending comment",
-  placeholder: "Leave a comment…",
+  placeholder: "Edit comment",
   cancel: "Cancel",
   send: "Save",
   sending: "Saving",

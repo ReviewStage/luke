@@ -305,7 +305,7 @@ test("the card holds the composer with its words focused, the repository chip in
   const foot = card.dialog()?.querySelector(".luke-composer-foot");
 
   assert.equal(document.activeElement, card.field());
-  assert.equal(card.placeholder(), "Describe the change for a coding agent…");
+  assert.equal(card.placeholder(), "Describe the task");
   assert.equal(controls.includes("Plan with Luke first"), false, "no Plan toggle stands");
   for (const each of ["Attach files", "acme/web", "Start agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
@@ -1520,7 +1520,7 @@ test("a repository whose installation grants Luke no issues says so in the GitHu
 test("for an automation's agent the card is titled for it, and Return hands the agent the brief with the words fenced last", async () => {
   const card = await mount(undefined, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
   assert.equal(card.dialog()?.querySelector("h2")?.textContent, "Create with an agent");
-  assert.equal(card.placeholder(), "Describe what to automate for a coding agent…");
+  assert.equal(card.placeholder(), "Describe what to automate");
   card.type("Every Monday, audit our agents' tool sets.");
   await card.key("Enter");
 

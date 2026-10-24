@@ -182,7 +182,7 @@ function ComposerDialog({ open, onClose }: DialogBody): React.JSX.Element {
       <TextArea
         ref={field}
         label="Task"
-        placeholder="Describe the change for a coding agent…"
+        placeholder="Describe the task"
         value={words}
         onChange={setWords}
         rows={5}

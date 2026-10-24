@@ -145,12 +145,12 @@ const PURPOSE_HEADING = {
 /** What each purpose's card asks for, calls its field, and calls its round button. */
 const PURPOSE_WORDS = {
   [NEW_TASK_PURPOSE.TASK]: {
-    placeholder: "Describe the change for a coding agent…",
+    placeholder: "Describe the task",
     label: "Task prompt",
     send: "Start agent",
   },
   [NEW_TASK_PURPOSE.AUTOMATION]: {
-    placeholder: "Describe what to automate for a coding agent…",
+    placeholder: "Describe what to automate",
     label: "What to automate",
     send: "Start agent",
   },
@@ -558,7 +558,6 @@ export function NewTaskComposer({
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
         onStop={() => Promise.resolve()}
-        followsUp={false}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}

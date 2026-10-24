@@ -33,7 +33,6 @@ export const QUIET_COMPOSER = {
   published: undefined,
   doors: { openGitHub: ignore, copy: ignore },
   onStop: () => Promise.resolve(),
-  followsUp: true,
 } as const;
 
 /** Imports the editor bundle and settles once it has landed, as the panel lands it after its first paint. */
