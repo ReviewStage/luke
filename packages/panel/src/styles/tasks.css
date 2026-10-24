@@ -457,14 +457,27 @@
 .plan-document-text :is(h1, h2, h3, h4, h5, h6),
 .plan-document-text p {
   margin: 0;
+}
+
+/* Note that the first three levels keep prose's sizes (`@luke/ui`'s
+   prose.css), as the read view does, so a heading does not shrink to the
+   text's size as its section opens. */
+.plan-document-text :is(h4, h5, h6),
+.plan-document-text p {
   font-size: inherit;
 }
 
 /* Note that a drawn section's heading margin folds into the gap above its
-   section, so a heading in the editor stands the gap alone. */
+   section, so a heading in the editor stands the gap alone. An h3 after a
+   block stands it too, as it does drawn (desktop.css), so opening the text
+   does not pull it up onto the block before it. */
 .desktop-document
   .plan-document-text
-  > .luke-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
+  > .luke-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child),
+.desktop-document
+  .plan-document-text
+  > :not(.luke-markdown-heading)
+  + .luke-markdown-heading[data-level="3"] {
   margin-top: var(--plan-section-gap);
 }
 

@@ -1719,8 +1719,11 @@ ul.actor-stack {
    under it; a plan's title is its page's header (`PageHeader`), not a
    heading of the text. Note that the headings keep prose's own scale and
    weight (`@luke/ui`'s prose.css), so a plan's h1, h2 and h3 read as three
-   steps, as they do in every other note. */
-.desktop-document .luke-markdown-heading:is([data-level="1"], [data-level="2"]) {
+   steps, as they do in every other note. An h3 that follows a block inside
+   a section stands the same room above it, so it never sits on the list or
+   paragraph before it; one straight under a heading stays close to it. */
+.desktop-document .luke-markdown-heading:is([data-level="1"], [data-level="2"]),
+.desktop-document :not(.luke-markdown-heading) + .luke-markdown-heading[data-level="3"] {
   margin-top: 1.6em;
 }
 
