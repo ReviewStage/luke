@@ -76,6 +76,7 @@ import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
+import { ROVING_KEYS_EXAMPLE } from "./examples/roving-keys";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
@@ -172,6 +173,7 @@ export const EXAMPLES: readonly Example[] = [
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   LIST_MOTION_EXAMPLE,
+  ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,
   FORMAT_TOOLBAR_EXAMPLE,
   BLOCK_MENU_EXAMPLE,

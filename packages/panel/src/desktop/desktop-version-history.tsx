@@ -283,6 +283,8 @@ function RevisionRow({
           description={<span className="version-row-summary">{summary}</span>}
           meta={<Time at={lastEdit.at} now={now} />}
           current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+          // Note that the view's own arrows choose the row they step to, so the list's are left out.
+          tabbable
           onPress={onSelect}
           contextMenu={offered ? showMenu : undefined}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
@@ -373,6 +375,8 @@ function SectionRow({
         title={sectionName(section.heading)}
         meta={word}
         current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+        // Note that the view's own arrows choose the row they step to, so the list's are left out.
+        tabbable
         onPress={onSelect}
         contextMenu={source === undefined ? undefined : menu.contextMenu()}
       />
