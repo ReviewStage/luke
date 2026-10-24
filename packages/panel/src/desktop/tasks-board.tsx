@@ -150,8 +150,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * its parts hang their own instead (`task-part-cards.tsx`). A card dragged onto another column
  * is sent that column's status or priority, or assigned to its person, No
  * assignee's assigning it to no one, as the task page's chips send them,
- * and stands where it was until the list read again says otherwise; a
- * change the service did not keep says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
+ * and moves there at once; a change the service did not keep goes back
+ * where it stood and says so, whether dragged or picked. Which columns stand, what each holds, its order, and what a card
  * draws are the Tasks page's filter and the Board's own display
  * (`tasks-page-model.ts`): Backlog, Todo, In progress, and Done at first,
  * Canceled once asked for. A task archived is off the board, as it is off
@@ -602,7 +602,7 @@ function TaskBoardColumnView({
 
 /** The Tasks page's Board: the listed workspace's tasks by status, by priority, or by assignee, under the page's filter. */
 export function TasksBoard({
-  tasks: control,
+  tasks,
   room,
   title,
   frame,
@@ -614,15 +614,15 @@ export function TasksBoard({
   /** The Tasks page's toolbar, filter chips, filter, and the Board's display. */
   frame: TasksViewFrame;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_BOARD, control.boardView.onClose);
+  useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
   const now = useMinute();
-  const { waiting } = useSettledWaiting(control.listed.inbox, control.inboxTaskless);
+  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
   const crossing = useRovingColumns<HTMLDivElement>();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
-  const listed = control.listed.tasks;
+  const listed = tasks.listed.tasks;
   const { filter, display } = frame;
   const directory = useMemberDirectory();
   const people: ColumnPeople = {
@@ -632,14 +632,14 @@ export function TasksBoard({
     words: (userId) => assigneeWords(userId, directory, listed),
   };
   // While the page is shown each card keeps the column and the place it was first drawn in, so one a teammate's change would move stays under the reader's eye.
-  const { groups: columns, tasks } = useHeldTasks(
-    control,
-    { workspaceId: control.workspace?.id, filter, display },
+  const columns = useHeldTasks(
+    tasks,
+    { workspaceId: tasks.workspace?.id, filter, display },
     (standing) =>
       tasksBoardColumns(standing, {
         filter,
         display,
-        readerId: control.me,
+        readerId: tasks.me,
         personName: people.words,
         members: (directory.members ?? []).map((member) => member.userId),
         now,

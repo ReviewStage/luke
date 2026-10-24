@@ -561,14 +561,17 @@ interface ListDrops {
 /**
  * The List's drag: a row moved within Pinned or a section stands there at
  * its new place; let go over another group, it is pinned there, kept in
- * that section, or sent that group's status or priority, and leaves Pinned
- * or its section where it came from one, as the sidebar keeps a task in one
- * place.
+ * that section, or sent that group's status, priority, or assignee, and
+ * leaves Pinned or its section where it came from one, as the sidebar keeps
+ * a task in one place. Each lands at once; a status, priority, or assignee
+ * the service refuses goes back, and so does the row, to Pinned or its
+ * section, as the tab reads when the refusal comes (`latest`).
  */
 function listDrops(
   tasks: TasksControl,
+  latest: () => TasksControl,
   groups: readonly TasksGroup[],
-  setStanding: (task: TaskSummary, standing: TaskStanding, onKept?: () => void) => void,
+  setStanding: (task: TaskSummary, standing: TaskStanding, onRefused?: () => void) => void,
 ): ListDrops {
   const pins = groups.find((group) => group.head.kind === TASKS_GROUP.PINNED)?.tasks ?? [];
   const move = (group: TasksGroup) => {
@@ -602,6 +605,21 @@ function listDrops(
       if (fromPins) tasks.onMarkTask(task.id, TASK_MARK.UNPIN);
       if (leaving.length > 0) tasks.onWriteSections(leaving);
     };
+    // Note that a row put back is pinned at the place it held, and kept in its section under the rows it stood under.
+    const before = tasks.taskSections;
+    const back = () => {
+      const now = latest();
+      if (fromPins) {
+        now.onMarkTask(task.id, TASK_MARK.PIN);
+        if (task.pinPosition !== undefined) {
+          now.onMovePins([{ agent: false, id: task.id, position: task.pinPosition }]);
+        }
+      }
+      if (leaving.length === 0) return;
+      const member = { agent: false, id: task.id };
+      const writes = restoreWrites(before, now.taskSections, [member], null, Date.now());
+      if (writes.length > 0) now.onWriteSections(writes);
+    };
     switch (onto.kind) {
       case TASKS_GROUP.PINNED: {
         // Note that the task lands as one pinned now, with no place of its own yet, as the sidebar pins one dragged into Pinned.
@@ -624,15 +642,17 @@ function listDrops(
         tasks.onWriteSections(placeWrites(entries, member, onto.sectionId, at, Date.now()));
         return;
       }
-      // Note that a row leaves Pinned or its section only once its new status or priority is kept, so a refused change leaves it where it stood.
       case TASKS_GROUP.STATUS:
-        setStanding(task, { status: onto.status }, leave);
+        leave();
+        setStanding(task, { status: onto.status }, back);
         return;
       case TASKS_GROUP.PRIORITY:
-        setStanding(task, { priority: onto.priority }, leave);
+        leave();
+        setStanding(task, { priority: onto.priority }, back);
         return;
       case TASKS_GROUP.ASSIGNEE:
-        setStanding(task, { assigneeId: onto.assigneeId }, leave);
+        leave();
+        setStanding(task, { assigneeId: onto.assigneeId }, back);
         return;
       default:
         leave();
@@ -1013,7 +1033,7 @@ function gridColumns(properties: readonly TaskProperty[]): string {
 
 /** The List: the listed workspace's tasks under their pins, sections, and the grouping chosen, in one grid whose columns line up down the page. */
 export function TasksList({
-  tasks: control,
+  tasks,
   room,
   frame,
 }: {
@@ -1021,18 +1041,18 @@ export function TasksList({
   room: ShellRoom;
   frame: TasksViewFrame;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_BOARD, control.boardView.onClose);
+  useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
   const { filter, display } = frame;
   const directory = useMemberDirectory();
   const now = useMinute();
   const folds = useListFolds();
-  const { waiting } = useSettledWaiting(control.listed.inbox, control.inboxTaskless);
+  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const narrow = room === SHELL_ROOM.NARROW;
   const properties = narrow
     ? display.properties.filter((property) => !NARROW_LEFT_OUT.includes(property))
     : display.properties;
-  const listed = control.listed.tasks;
+  const listed = tasks.listed.tasks;
   const pinned = inPinOrder(
     listed.filter((task) => task.pinnedAt !== undefined),
     pinPlaceOf,
@@ -1054,16 +1074,16 @@ export function TasksList({
     ),
   };
   // While the page is shown each task keeps the group and the place it was first drawn in, so one a teammate's change would move stays under the reader's eye.
-  const { groups, tasks } = useHeldTasks(
-    control,
-    { workspaceId: control.workspace?.id, filter, display },
+  const groups = useHeldTasks(
+    tasks,
+    { workspaceId: tasks.workspace?.id, filter, display },
     (standing) =>
       tasksListGroups(standing, {
         filter,
         display,
         pinned,
-        sections: listSections(control),
-        readerId: control.me,
+        sections: listSections(tasks),
+        readerId: tasks.me,
         personName:
           display.grouping === TASKS_GROUPING.ASSIGNEE ? people.assigneeName : people.creatorName,
         members: (directory.members ?? []).map((member) => member.userId),
@@ -1075,7 +1095,10 @@ export function TasksList({
     group.tasks.map((task) => ({ repository: task.repository })),
   );
   const workspaceName = tasks.workspace?.name ?? "";
-  const drops = listDrops(tasks, groups, setStanding);
+  // The tab as it stands, which an Undo pressed or a refusal answered renders after its act reads.
+  const latest = useRef(tasks);
+  latest.current = tasks;
+  const drops = listDrops(tasks, () => latest.current, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
   // The rows of every group are one Tab stop that ↑↓ walk, a folded group's passed by, as they are not drawn.
   const roving = useRovingKeys<HTMLDivElement>();
@@ -1091,9 +1114,6 @@ export function TasksList({
   // Note that a row no longer drawn leaves the selection for good, so reopening its group chooses nothing anew.
   if (selected.size !== chosen.size) setChosen(selected);
   const clear = () => setChosen(new Set());
-  // The tab as it stands, which an Undo pressed renders after its act reads.
-  const latest = useRef(tasks);
-  latest.current = tasks;
   const acts = selectionActs(tasks, () => latest.current, [...selected], toast, clear);
   // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
   const several: ChosenTasks | undefined =
