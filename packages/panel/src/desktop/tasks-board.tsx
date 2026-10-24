@@ -51,6 +51,7 @@ import {
   PAGE_FRAME,
   PAGE_WIDTH,
   SCROLL_FADE,
+  SCROLL_GUTTER,
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
@@ -565,9 +566,11 @@ function TaskBoardColumnView({
       ) : (
         <div className="tasks-board-column-scroll" {...roving}>
           {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
+          {/* Note that the gutter is kept, because the column is as tall as its cards measured without a scroll bar, so a bar that takes room and rewraps a card's pills taller would leave a column that fits scrolling and faded. */}
           <ScrollArea
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
             fade={SCROLL_FADE.BOTH}
+            gutter={SCROLL_GUTTER.STABLE}
             overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
             <Stack
