@@ -54,7 +54,7 @@ function Acting({
         <ToastActions
           label={label}
           href={href}
-          onPress={noop}
+          onPress={href === undefined ? noop : () => window.open(href, "_blank", "noreferrer")}
           dismissLabel="Dismiss"
           onDismiss={noop}
         />
