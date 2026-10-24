@@ -11,6 +11,7 @@ import {
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
 import { shownWhereRead } from "./file-tab-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
+import { useTaskMentions } from "./task-mentions.js";
 
 /**
  * file-ref.tsx -- a file named anywhere in the window: its look as a row wears it, the card its tab hangs, and its mark, path, and lines as the one button that hangs that card and opens its tab.
@@ -114,6 +115,8 @@ export function FileRef({
   /** Shows the file's tab on the reference's lines; none where the file cannot be opened from here. */
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
+  // Note that a file named in place is of the task's repository, which its card names as a mention's does.
+  const repository = useTaskMentions()?.repository ?? undefined;
   return (
     <InlineRef
       look={INLINE_REF_LOOK.LINK}
@@ -123,7 +126,7 @@ export function FileRef({
       state={lineRangeText(codeRef)}
       onPress={onOpen === undefined ? undefined : () => onOpen()}
       pressLabel={onOpen === undefined ? undefined : `Open ${fileRefText(codeRef)}`}
-      card={<FileCard path={codeRef.path} note={note} />}
+      card={<FileCard path={codeRef.path} repository={repository} note={note} />}
       data-file-ref=""
     />
   );

@@ -4036,7 +4036,7 @@ test("an item of an agent with no plan stands under the automation that started 
   assert.deepEqual(asked.shownTasks, [], "the automation's crumb opens no plan");
 });
 
-test("a link alone on its line to a page an agent with no plan showed stands as the page's row, hanging the card a plan's page hangs, its title, version and the agent that showed it, read as it is first hung; one of an agent the reader cannot reach keeps the chip's own card", async () => {
+test("a link alone on its line to a page an agent with no plan showed stands as the page's row, hanging the card a plan's page hangs, its title, version and the agent that showed it, read as it is first hung; one of an agent the reader cannot reach says it can't be read", async () => {
   const ledger: PageLine = {
     id: "4a5b6c7d-8e9f-4a0b-8c1d-2e3f4a5b6c7d",
     title: "Flake ledger",
@@ -4091,11 +4091,13 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
 
   restOn(theirs);
   await settle();
-  assert.equal(document.querySelector(".luke-tooltip-card [data-page-card]"), null);
-  assert.equal(
-    document.querySelector(".luke-tooltip-card [data-mention-card] .luke-hover-card-name")
-      ?.textContent,
-    "Their ledger",
+  const refused = document.querySelector(".luke-tooltip-card [data-page-card]");
+  assert.deepEqual(
+    [
+      refused?.querySelector(".luke-hover-card-name")?.textContent,
+      refused?.querySelector(".luke-hover-card-note")?.textContent,
+    ],
+    ["Their ledger", "Luke can't read this page."],
   );
 });
 

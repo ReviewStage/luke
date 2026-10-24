@@ -4,7 +4,15 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, useMinute } from "@luke/ui";
+import {
+  DocumentIcon,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  Skeleton,
+  SkeletonRegion,
+  useMinute,
+} from "@luke/ui";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -12,7 +20,11 @@ import { HashIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { askAct } from "../act.js";
 import { AutomationCard, actorCard } from "../actor-ref.js";
-import { AutomationDirectory, useAutomation } from "../automation-directory.js";
+import {
+  AutomationDirectory,
+  useAutomation,
+  useAutomationsLanded,
+} from "../automation-directory.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -71,6 +83,50 @@ function versionWords(revision: number): string {
 
 /** What an automation's card opens: nothing, since the chip it hangs from opens the automation. */
 const OPEN_NOTHING = (): void => undefined;
+
+/** What a card's placeholder says to a reader while what it shows is read. */
+const CARD_READING = "Reading…";
+
+/** How wide the line standing in for a card's note stands while it is read, as the skill card's does. */
+const CARD_NOTE_WIDTH = "80%";
+
+/** What a page's card says where its page cannot be read: deleted, or on a plan or an agent the reader cannot reach. */
+const PAGE_UNREAD = "Luke can't read this page.";
+
+/**
+ * Every chip's card while what it shows is read, whatever its kind: the
+ * chip's glyph and name, which it already knows, in a card's own head, and
+ * one line standing in for what the card says under it, so a plan, an
+ * agent, a page, a pull request, a person, and an automation all wait
+ * alike rather than each showing the chip's words, a bare address, or
+ * nothing.
+ */
+export function ChipCardSkeleton({
+  glyph,
+  name,
+}: {
+  glyph: ReactNode;
+  name: string;
+}): React.JSX.Element {
+  return (
+    <HoverCard data-chip-card-reading="">
+      <HoverCardHead glyph={glyph} name={name} />
+      <SkeletonRegion label={CARD_READING}>
+        <Skeleton width={CARD_NOTE_WIDTH} />
+      </SkeletonRegion>
+    </HoverCard>
+  );
+}
+
+/** A page's card where its page cannot be read: the chip's glyph and name, and a note saying so. */
+export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string }): ReactNode {
+  return (
+    <HoverCard data-page-card="">
+      <HoverCardHead glyph={glyph} name={name} />
+      <HoverCardNote>{PAGE_UNREAD}</HoverCardNote>
+    </HoverCard>
+  );
+}
 
 /**
  * The heading a section's anchor names in a plan the window holds the
@@ -171,23 +227,32 @@ const agentPagesAtom = Atom.family((agentId: string) =>
 /** One plan's pages where the window does not hold them, read once for every card hung of it while one stands. */
 const taskPagesAtom = Atom.family((taskId: string) => rendererRuntime.atom(placePages({ taskId })));
 
-/** A page among pages read as its card is hung; `fallback` while the read is out, and where it failed or holds no such page. */
+/** A page among pages read as its card is hung; `reading` while the read is out, and `fallback` where it failed or holds no such page. */
 function ReadPageChipCard({
   place,
   read,
   pageId,
+  reading,
   fallback,
 }: {
   place: PagePlace;
   read: AsyncResult.AsyncResult<readonly PageLine[] | undefined>;
   pageId: string;
+  reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
+  if (AsyncResult.isInitial(read)) return reading;
   const page = AsyncResult.isSuccess(read)
     ? read.value?.find((each) => each.id === pageId)
     : undefined;
   if (page === undefined) return fallback;
   return <PageCard place={place} page={page} />;
+}
+
+/** What a page's card stands in with: `reading` while its page is read, `fallback` where it cannot be. */
+interface PageWait {
+  readonly reading: ReactNode;
+  readonly fallback: ReactNode;
 }
 
 /**
@@ -199,28 +264,28 @@ function ReadPageChipCard({
 function AgentPageChipCard({
   agentId,
   pageId,
-  fallback,
+  wait,
 }: {
   agentId: string;
   pageId: string;
-  fallback: ReactNode;
+  wait: PageWait;
 }): ReactNode {
   const read = useAtomValue(agentPagesAtom(agentId));
-  return <ReadPageChipCard place={{ agentId }} read={read} pageId={pageId} fallback={fallback} />;
+  return <ReadPageChipCard place={{ agentId }} read={read} pageId={pageId} {...wait} />;
 }
 
 /** The card of a page of a plan not open, read by the plan's pages as it is first hung, as an agent's page is. */
 function ReadTaskPageChipCard({
   taskId,
   pageId,
-  fallback,
+  wait,
 }: {
   taskId: string;
   pageId: string;
-  fallback: ReactNode;
+  wait: PageWait;
 }): ReactNode {
   const read = useAtomValue(taskPagesAtom(taskId));
-  return <ReadPageChipCard place={{ taskId }} read={read} pageId={pageId} fallback={fallback} />;
+  return <ReadPageChipCard place={{ taskId }} read={read} pageId={pageId} {...wait} />;
 }
 
 /**
@@ -232,36 +297,44 @@ function ReadTaskPageChipCard({
 function TaskPageChipCard({
   taskId,
   pageId,
-  fallback,
+  wait,
 }: {
   taskId: string;
   pageId: string;
-  fallback: ReactNode;
+  wait: PageWait;
 }): ReactNode {
   const tasks = useAppSlice(APP_SLICE.TASKS);
   if (tasks?.activeTaskId !== taskId) {
-    return <ReadTaskPageChipCard taskId={taskId} pageId={pageId} fallback={fallback} />;
+    return <ReadTaskPageChipCard taskId={taskId} pageId={pageId} wait={wait} />;
   }
   const page = tasks.pages?.find((each) => each.id === pageId);
-  if (page === undefined) return fallback;
+  if (page === undefined) return wait.fallback;
   return <PageCard place={{ taskId }} page={page} />;
 }
 
-/** A page's card, its tab's, previewing it: a plan's page's as the window holds it, an agent's read as it is hung; else `fallback`. */
+/**
+ * A page's card, its tab's, previewing it: a plan's page's as the window
+ * holds it, an agent's read as it is hung; `reading` while that read is
+ * out, which is `fallback` where none is given, and `fallback` where the
+ * page cannot be read.
+ */
 export function PageChipCard({
   place,
   pageId,
+  reading,
   fallback,
 }: {
   /** The plan the link names the page on, or the agent on no task. */
   place: PagePlace;
   pageId: string;
+  reading?: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
+  const wait = { reading: reading ?? fallback, fallback };
   return "taskId" in place ? (
-    <TaskPageChipCard taskId={place.taskId} pageId={pageId} fallback={fallback} />
+    <TaskPageChipCard taskId={place.taskId} pageId={pageId} wait={wait} />
   ) : (
-    <AgentPageChipCard agentId={place.agentId} pageId={pageId} fallback={fallback} />
+    <AgentPageChipCard agentId={place.agentId} pageId={pageId} wait={wait} />
   );
 }
 
@@ -295,49 +368,65 @@ export function WorkspaceDirectory({
   );
 }
 
-/** A member's card, as the directory around it holds them; `fallback` where it holds no one of the id, or while it is read. */
-function MemberCard({ userId, fallback }: { userId: string; fallback: ReactNode }): ReactNode {
-  const { members, former } = useMemberDirectory();
+/** A member's card, as the directory around it holds them; `reading` while it is read, and `fallback` where it holds no one of the id. */
+function MemberCard({
+  userId,
+  reading,
+  fallback,
+}: {
+  userId: string;
+  reading: ReactNode;
+  fallback: ReactNode;
+}): ReactNode {
+  const directory = useMemberDirectory();
+  const { members, former } = directory;
   const name = [...(members ?? []), ...(former ?? [])].find((each) => each.userId === userId)?.name;
   const actor = usePerson({ userId, name: name ?? "" });
-  return name === undefined ? fallback : (actorCard(actor) ?? fallback);
+  if (name === undefined) return directory.reading ? reading : fallback;
+  return actorCard(actor) ?? fallback;
 }
 
 /**
  * A member's card, as every place naming them hangs it, read against the
  * members of the workspace the link names, since their role and whether
- * they left are that workspace's; `fallback` where the account holds no
- * such workspace, or it lists no one of the id.
+ * they left are that workspace's; `reading` while those are read, and
+ * `fallback` where the account holds no such workspace, or it lists no one
+ * of the id.
  */
 export function PersonChipCard({
   userId,
   workspace,
+  reading,
   fallback,
 }: {
   userId: string;
   /** The slug of the workspace the link was written under. */
   workspace: string;
+  reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
   const named = useLinkWorkspace(workspace);
   if (named === undefined) return fallback;
   return (
     <WorkspaceDirectory workspace={named}>
-      <MemberCard userId={userId} fallback={fallback} />
+      <MemberCard userId={userId} reading={reading} fallback={fallback} />
     </WorkspaceDirectory>
   );
 }
 
-/** An automation's card, as the directory around the chip knows it; else `fallback`. */
+/** An automation's card, as the directory around the chip knows it; `reading` while its automations are read, else `fallback`. */
 function KnownAutomationCard({
   automationId,
+  reading,
   fallback,
 }: {
   automationId: string;
+  reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
   const known = useAutomation(automationId);
-  if (known === undefined) return fallback;
+  const landed = useAutomationsLanded();
+  if (known === undefined) return landed ? fallback : reading;
   return <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />;
 }
 
@@ -345,13 +434,15 @@ function KnownAutomationCard({
  * An automation's card, the workspace's automations read as it is first
  * hung where no directory around the chip reads them yet, and shared with
  * one that does (`AutomationDirectory`), of the workspace the link names,
- * else the one the words are of; `fallback` while the read is out, or
- * where the workspace lists no such automation.
+ * else the one the words are of; `reading` while the read is out, and
+ * `fallback` where it failed, no workspace is known, or the workspace
+ * lists no such automation.
  */
 export function AutomationChipCard({
   automationId,
   workspace: slug,
   wordsWorkspaceId,
+  reading,
   fallback,
 }: {
   automationId: string;
@@ -359,6 +450,7 @@ export function AutomationChipCard({
   workspace: string;
   /** The workspace the words are of, read where the account holds none of the link's slug. */
   wordsWorkspaceId: string | undefined;
+  reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
   const named = useLinkWorkspace(slug);
@@ -366,9 +458,10 @@ export function AutomationChipCard({
     (each) => each.id === wordsWorkspaceId,
   );
   const workspace = named ?? words;
+  if (workspace === undefined) return fallback;
   return (
     <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>
-      <KnownAutomationCard automationId={automationId} fallback={fallback} />
+      <KnownAutomationCard automationId={automationId} reading={reading} fallback={fallback} />
     </AutomationDirectory>
   );
 }

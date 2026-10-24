@@ -148,6 +148,17 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   assert.deepEqual(cardOn(head), [PATH, NOTE]);
 });
 
+test("a code card's head hangs the file's card naming the repository it is read in, as a mention's chip of it does", () => {
+  const head = mount([]).querySelector(".side-panel .code-card [data-file-ref]");
+  assert.ok(head, "the code card names the file");
+  restOn(head);
+
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-file-card] .luke-hover-card-sub")?.textContent,
+    TASK.repository,
+  );
+});
+
 test("a code card's head says its lines as Lines 3–5, and a press on it opens the file on those lines at the commit Luke read them at", () => {
   const opened: unknown[][] = [];
   const head = mount(opened).querySelector<HTMLButtonElement>(".code-card button[data-file-ref]");

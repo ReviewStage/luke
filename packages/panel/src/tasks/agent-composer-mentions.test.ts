@@ -1098,7 +1098,7 @@ test("an @ row for a page still on its first version says how long ago it was wr
   assert.equal(option.querySelector(".luke-combobox-option-detail")?.textContent, "3h");
 });
 
-test("a sent mention of an agent of another task or none hangs a card naming where it works, never the task page's own card for an id it has no tab of", () => {
+test("a sent mention of an agent of another task or none hangs its card's one reading state while it is read, never the task page's own card for an id it has no tab of", () => {
   const mention = (agentId: string, taskId: string | undefined) =>
     mentionMarkdown(
       taskId === undefined
@@ -1126,8 +1126,10 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
 
   const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     restOn(chip);
-    const card = document.querySelector(".luke-tooltip-card [data-mention-card]");
-    const words = card?.textContent ?? "";
+    const card = document.querySelector(".luke-tooltip-card > *");
+    const words = card?.hasAttribute("data-chip-card-reading")
+      ? "Reading"
+      : (/Not found/u.exec(card?.textContent ?? "")?.[0] ?? card?.textContent);
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });
@@ -1135,9 +1137,9 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
   });
 
   assert.deepEqual(
-    notes.map((words) => /A coding agent on [a-z ]+task|Not found/u.exec(words)?.[0]),
-    ["Not found", "A coding agent on another task", "A coding agent on no task"],
-    "the task's own agent hangs its tab's card; another task's and one on none name where they work",
+    notes,
+    ["Not found", "Reading", "Reading"],
+    "the task's own agent hangs its tab's card; another task's and one on none wait on their read",
   );
 });
 
