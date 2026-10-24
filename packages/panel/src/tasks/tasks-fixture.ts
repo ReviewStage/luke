@@ -434,22 +434,26 @@ export function fixtureSidePanel(run: {
 }
 
 /**
- * A task's agents as a fixture run lists them where no agent profile stages
- * one: none. Note that main answers a fixture run's list with nothing, which
- * the task's column would wait on in its placeholder for good.
+ * What a fixture run reads of its task where no profile stages more: no
+ * agents, and no linked issues. Note that main answers a fixture run's
+ * service reads with nothing, which the task's column would wait on in its
+ * placeholder for good, and which the plan's Linked issues box would say as
+ * a read Luke did not answer.
  */
-function noAgentsAnswer(
+function emptyTaskAnswer(
   kind: PortActKind,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
-  return kind === ACT_KIND.CODING_AGENTS_LIST ? { answer: { agents: [] } } : undefined;
+  if (kind === ACT_KIND.CODING_AGENTS_LIST) return { answer: { agents: [] } };
+  if (kind === ACT_KIND.TASK_ISSUES_READ) return { answer: { issues: [] } };
+  return undefined;
 }
 
 /**
  * What a fixture run answers an act with in place of main (`act.ts`), boxed
  * so an act that answers nothing is told from one left to main: its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads, every other
- * profile's task as one with no agents, and nothing else, which goes to main
- * as it would.
+ * profile's task as one with no agents and no linked issues, and nothing
+ * else, which goes to main as it would.
  */
 export function fixtureActAnswer(
   run: { readonly profile: string },
@@ -460,7 +464,7 @@ export function fixtureActAnswer(
     agentActAnswer(run.profile, kind, payload) ??
     automationsActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??
-    noAgentsAnswer(kind)
+    emptyTaskAnswer(kind)
   );
 }
 
