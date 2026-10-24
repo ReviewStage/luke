@@ -103,6 +103,27 @@ their generators in `@luke/brand` (`pnpm --filter @luke/brand check` reports
 drift when run by hand), renderer CSS may not reintroduce `@starting-style`, and no rule may transition
 a layout property. A new exception belongs in this contract in the same change.
 
+## Width lines and zoom
+
+The window answers three width lines, each measured in script on the stage
+(the panel's root element) in CSS pixels, with a leave width a few pixels past
+its enter width so a window dragged across it does not flicker:
+
+- **Narrow**, enter 640, leave 672 (`shell-room.ts`): the phone's one pane, with
+  the sidebar a drawer, the mobile bar, and the side panel full screen only.
+- **Split**, enter 860, leave 892 (`column-split.ts`): a screen that lists
+  things beside the one chosen shows two columns or one, by its own width.
+- **Pinned**, enter 1120, leave 1160 (`sidebar-collapse.ts`): the sidebar docks
+  beside the work or floats over it.
+
+Zoom is a window size. It works by shrinking the CSS pixel, so the desktop
+window's least width (760) is 608 CSS pixels at 125% and 380 at 200%, and the
+default window (1280) is 1024 at 125%. The desktop can therefore be narrow
+when zoomed, and then draws the phone's layout under a mouse. Dean accepted
+that: it is the responsive layout doing its job, and the window's least size
+does not rise with zoom. A layout change is checked at the least window at 125%
+and 200% as well as at a phone's width (`desktop/shell-room.test.ts`).
+
 ## Shared tokens and components
 
 The tokens a control is drawn with, and every control any app draws,
