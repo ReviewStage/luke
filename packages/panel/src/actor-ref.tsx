@@ -205,7 +205,8 @@ function SomeoneDisc({ glyph, size }: { glyph: ReactNode; size: ActorSize }): Re
 
 /** An automation's glyph on its square: what fires it, GitHub's or Sentry's mark among them, or the automation's own glyph where only its name is known, wearing where its newest run stands. */
 function automationGlyph(actor: ActorOf<typeof ACTOR_KIND.AUTOMATION>): React.JSX.Element {
-  const glyph = actor.trigger === undefined ? <GLYPH.AUTOMATION /> : <FiringGlyph of={actor.trigger} />;
+  const glyph =
+    actor.trigger === undefined ? <GLYPH.AUTOMATION /> : <FiringGlyph of={actor.trigger} />;
   return <StateGlyph glyph={glyph} state={GLYPH_OF_STATE[actor.state]} />;
 }
 
@@ -498,7 +499,7 @@ function githubBot(actor: Actor): boolean {
 }
 
 /** The quiet badge an App's bot on GitHub wears after its name, as GitHub's own pages mark one; nothing for anyone else. */
-function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null {
+export function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null {
   return githubBot(actor) ? <span className="actor-bot">bot</span> : null;
 }
 

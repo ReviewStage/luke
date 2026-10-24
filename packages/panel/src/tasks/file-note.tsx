@@ -1,6 +1,5 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import {
-  DisclosureAction,
   GLYPH_INK,
   GlyphSlot,
   MoreButton,
@@ -95,19 +94,17 @@ function NoteMenu({ place }: { place: LinkPlace | undefined }): React.JSX.Elemen
   ];
   if (actions.length === 0) return null;
   return (
-    <DisclosureAction>
-      <span className="file-note-menu">
-        <MoreButton thing={NOTE_WORDS.THING} {...menu.trigger()} />
-        {menu.drawn === undefined ? null : (
-          <ActionMenu
-            label={moreLabel(NOTE_WORDS.THING)}
-            menu={menu.drawn}
-            groups={[actions]}
-            onClose={menu.close}
-          />
-        )}
-      </span>
-    </DisclosureAction>
+    <span className="file-note-menu">
+      <MoreButton thing={NOTE_WORDS.THING} {...menu.trigger()} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={moreLabel(NOTE_WORDS.THING)}
+          menu={menu.drawn}
+          groups={[actions]}
+          onClose={menu.close}
+        />
+      )}
+    </span>
   );
 }
 

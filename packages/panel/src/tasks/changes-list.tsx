@@ -9,9 +9,10 @@ import {
 } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  DISCLOSURE_FILL,
   DISCLOSURE_SUMMARY,
   Disclosure,
-  DisclosureAction,
+  DisclosureFrame,
   DisclosureSummary,
   IconButton,
   OneLine,
@@ -526,18 +527,16 @@ export function FileHead({
     </span>
   );
   const pathCopy = (path: string, at: number, words: string, hint: string, moved: boolean) => (
-    <DisclosureAction>
-      <span ref={partAt(at)} className="diff-list-path-part" data-moved={moved ? "" : undefined}>
-        {hinted(
-          hint,
-          <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
-            <span className="diff-list-path-words">
-              <PathParts path={path} />
-            </span>
-          </TextButton>,
-        )}
-      </span>
-    </DisclosureAction>
+    <span ref={partAt(at)} className="diff-list-path-part" data-moved={moved ? "" : undefined}>
+      {hinted(
+        hint,
+        <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
+          <span className="diff-list-path-words">
+            <PathParts path={path} />
+          </span>
+        </TextButton>,
+      )}
+    </span>
   );
   return (
     <div
@@ -555,48 +554,61 @@ export function FileHead({
         setNear(true);
       }}
     >
-      <Disclosure open={!collapsed} onOpenChange={onToggle}>
-        <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW} onPointerDown={onStand}>
-          <DisclosureAction>
-            {hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
-          </DisclosureAction>
-          {hinted(STATUS_WORDS[file.status], letter)}
-          <FileTypeIcon name={fileName(file.path)} />
-          <span className="diff-list-path">
-            {file.previousPath === null ? (
-              pathCopy(file.path, 3, PATH_COPY_WORDS.PATH_COPIED, PATH_COPY_WORDS.COPY_PATH, false)
-            ) : (
-              <>
-                {pathCopy(
-                  file.previousPath,
-                  2,
-                  PATH_COPY_WORDS.PATH_COPIED,
-                  PATH_COPY_WORDS.COPY_OLD_PATH,
-                  true,
-                )}
-                <Text
-                  as={TEXT_ELEMENT.SPAN}
-                  variant={TEXT_VARIANT.INHERIT}
-                  truncate
-                  className="diff-list-folder"
-                  aria-hidden="true"
-                >
-                  {"\u00a0\u2192\u00a0"}
-                </Text>
-                {pathCopy(
+      <DisclosureFrame
+        fill={DISCLOSURE_FILL.ACTIONS}
+        lead={hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
+        actions={
+          <>
+            <span className="diff-list-path">
+              {file.previousPath === null ? (
+                pathCopy(
                   file.path,
                   3,
                   PATH_COPY_WORDS.PATH_COPIED,
-                  PATH_COPY_WORDS.COPY_NEW_PATH,
+                  PATH_COPY_WORDS.COPY_PATH,
                   false,
-                )}
-              </>
-            )}
-          </span>
-          <LinesChanged additions={file.additions} deletions={file.deletions} />
-          {controls === undefined ? null : <DisclosureAction>{controls}</DisclosureAction>}
-        </DisclosureSummary>
-      </Disclosure>
+                )
+              ) : (
+                <>
+                  {pathCopy(
+                    file.previousPath,
+                    2,
+                    PATH_COPY_WORDS.PATH_COPIED,
+                    PATH_COPY_WORDS.COPY_OLD_PATH,
+                    true,
+                  )}
+                  <Text
+                    as={TEXT_ELEMENT.SPAN}
+                    variant={TEXT_VARIANT.INHERIT}
+                    truncate
+                    className="diff-list-folder"
+                    aria-hidden="true"
+                  >
+                    {"\u00a0\u2192\u00a0"}
+                  </Text>
+                  {pathCopy(
+                    file.path,
+                    3,
+                    PATH_COPY_WORDS.PATH_COPIED,
+                    PATH_COPY_WORDS.COPY_NEW_PATH,
+                    false,
+                  )}
+                </>
+              )}
+            </span>
+            <LinesChanged additions={file.additions} deletions={file.deletions} />
+            {controls}
+          </>
+        }
+        onPointerDown={onStand}
+      >
+        <Disclosure open={!collapsed} onOpenChange={onToggle}>
+          <DisclosureSummary look={DISCLOSURE_SUMMARY.ROW}>
+            {hinted(STATUS_WORDS[file.status], letter)}
+            <FileTypeIcon name={fileName(file.path)} />
+          </DisclosureSummary>
+        </Disclosure>
+      </DisclosureFrame>
     </div>
   );
 }

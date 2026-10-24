@@ -8,6 +8,7 @@ import {
   type CommentAuthor,
   DISCLOSURE_SUMMARY,
   DisclosureChevron,
+  DisclosureFrame,
   DisclosureSummary,
   GAP,
   LAYOUT_ELEMENT,
@@ -141,13 +142,13 @@ export function AnnotationCard({
   onOpenChange: (open: boolean) => void;
   /** The first writer's face, 20 pixels across. */
   face: ReactNode;
-  /** Who wrote it; a control in it, such as a link to the writer's page, sits in a `DisclosureAction`, so pressing it leaves the card folded as it stood. */
+  /** Who wrote it, in words alone, since the head that says it is the card's summary, which holds no control. */
   name: ReactNode;
   time?: ReactNode;
   states?: readonly AnnotationState[];
   /** How many comments it holds, said while it is folded; none says nothing. */
   count?: number | undefined;
-  /** Its ⋯, at the head's end; nothing where it offers nothing. */
+  /** Its ⋯, beside the head's end rather than in it; nothing where it offers nothing. */
   menu?: ReactNode;
   /** The strip over its head naming its file and lines, where its place does not. */
   where?: ReactNode;
@@ -172,30 +173,35 @@ export function AnnotationCard({
       onAnimationEnd={landing?.onAnimationEnd}
     >
       {where === undefined ? null : <div className="annotation-card-where">{where}</div>}
-      <Fold className="annotation-card-fold" open={open} onOpenChange={onOpenChange}>
-        <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
-          <span className="annotation-card-turn">
-            <DisclosureChevron />
-          </span>
-          <span className="annotation-card-face">{face}</span>
-          <span className="annotation-card-name">{name}</span>
-          {time === undefined ? null : (
-            <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
-              <span className="annotation-card-time">{time}</span>
-            </VisuallyHidden>
-          )}
-          {states.map((state) => (
-            <StateChip key={state.word} state={state} />
-          ))}
-          {count === undefined ? null : <FoldedCount count={count} />}
-          <span className="annotation-card-end">{menu}</span>
-        </DisclosureSummary>
-        <FoldBody className="annotation-card-body">
-          {lead}
-          <div className="annotation-card-content">{children}</div>
-          {footer}
-        </FoldBody>
-      </Fold>
+      <DisclosureFrame
+        actions={
+          menu === undefined ? undefined : <span className="annotation-card-end">{menu}</span>
+        }
+      >
+        <Fold className="annotation-card-fold" open={open} onOpenChange={onOpenChange}>
+          <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
+            <span className="annotation-card-turn">
+              <DisclosureChevron />
+            </span>
+            <span className="annotation-card-face">{face}</span>
+            <span className="annotation-card-name">{name}</span>
+            {time === undefined ? null : (
+              <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
+                <span className="annotation-card-time">{time}</span>
+              </VisuallyHidden>
+            )}
+            {states.map((state) => (
+              <StateChip key={state.word} state={state} />
+            ))}
+            {count === undefined ? null : <FoldedCount count={count} />}
+          </DisclosureSummary>
+          <FoldBody className="annotation-card-body">
+            {lead}
+            <div className="annotation-card-content">{children}</div>
+            {footer}
+          </FoldBody>
+        </Fold>
+      </DisclosureFrame>
     </Card>
   );
 }

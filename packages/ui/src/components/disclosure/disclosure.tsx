@@ -2,6 +2,7 @@ import {
   type ComponentPropsWithoutRef,
   createContext,
   type MouseEvent,
+  type PointerEvent,
   type ReactNode,
   type SyntheticEvent,
   useCallback,
@@ -48,10 +49,17 @@ import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../us
  * (`DISCLOSURE_LOOK.CARD`), as what a transcript opens on is, it stands on
  * the hover's wash inside a hairline, its head the one line a closed card
  * shows (`DISCLOSURE_SUMMARY.HEAD`) and its body under a hairline
- * (`DISCLOSURE_BODY.CARD`). A control standing in
- * a summary sits in a `DisclosureAction`, so pressing it leaves the fold be.
- * A surface that skins its fold its own way builds on `useDisclosureFold`
- * and `DisclosureScope` instead, so the state and the motion live here once.
+ * (`DISCLOSURE_BODY.CARD`). A surface that skins its fold its own way
+ * builds on `useDisclosureFold` and `DisclosureScope` instead, so the state
+ * and the motion live here once.
+ *
+ * No control stands inside a summary, because a summary is the button that
+ * opens its fold, and what it holds is that button's name: a ⋯ inside it
+ * would be read as part of the row's name and pressed as part of the row. A
+ * fold's head that holds controls of its own, a row's ⋯ or a file's path
+ * that copies itself, stands them beside its summary instead: `Disclosure`'s
+ * `lead` and `actions`, or `DisclosureFrame` around a fold skinned its own
+ * way, which lays them in the summary's row outside the `details`.
  */
 
 /** Where an open body stands: under the summary's words, past its chevron, flush with the row, inset under a card's head and the hairline below it, or wherever the caller's own skin inside it sets it. */
@@ -265,15 +273,24 @@ type DisclosureProps = {
   /** Whether it is open, where its holder keeps that; `onOpenChange` hears each press and toggle. */
   open?: boolean | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;
+  /** Controls standing before its summary, beside it rather than in it (`DisclosureFrame`). */
+  lead?: ReactNode;
+  /** Controls standing after its summary, beside it rather than in it, such as a row's ⋯. */
+  actions?: ReactNode;
+  /** Which part of a head with controls takes the room its row leaves. */
+  fill?: DisclosureFill;
   children: ReactNode;
 } & Omit<ComponentPropsWithoutRef<"details">, "open" | "className" | "style" | "children">;
 
-/** A fold drawn as the quiet summary row and its body. */
+/** A fold drawn as the quiet summary row and its body, and the controls its head holds beside its summary. */
 export function Disclosure({
   look = DISCLOSURE_LOOK.PLAIN,
   defaultOpen = false,
   open,
   onOpenChange,
+  lead,
+  actions,
+  fill,
   onToggle,
   children,
   ...props
@@ -282,13 +299,15 @@ export function Disclosure({
     defaultOpen,
     open === undefined ? undefined : { open, onOpenChange: onOpenChange ?? NO_CHANGE },
   );
-  return (
+  const skin = look === DISCLOSURE_LOOK.PLAIN ? undefined : look;
+  const framed = lead !== undefined || actions !== undefined;
+  const fold = (
     <DisclosureScope state={state}>
       <details
         {...props}
         {...details}
         className="luke-disclosure"
-        data-look={look === DISCLOSURE_LOOK.PLAIN ? undefined : look}
+        data-look={framed ? undefined : skin}
         onToggle={(event) => {
           details.onToggle(event);
           onToggle?.(event);
@@ -297,6 +316,13 @@ export function Disclosure({
         {children}
       </details>
     </DisclosureScope>
+  );
+  if (!framed) return fold;
+  // Note that a card's hairline and wash go round the frame, so the controls beside its head stand inside the card.
+  return (
+    <Frame look={skin} lead={lead} actions={actions} fill={fill}>
+      {fold}
+    </Frame>
   );
 }
 
@@ -362,41 +388,108 @@ export function DisclosureSummary({
 }
 
 /**
- * What a press on `target` already does for itself: a link, a button, a
- * field, or a label. Note that the summary is left out, because every slot
- * stands inside one.
+ * Which part of a head with controls takes the room its row leaves: the
+ * summary, its controls standing at the row's ends; or the controls after
+ * it, the summary as wide as what it says, as a file's row runs its path
+ * and counts on past its letter.
  */
-const OWN_PRESS = "a[href], area[href], button, input, label, select, textarea";
+export const DISCLOSURE_FILL = {
+  SUMMARY: "summary",
+  ACTIONS: "actions",
+} as const;
+export type DisclosureFill = (typeof DISCLOSURE_FILL)[keyof typeof DISCLOSURE_FILL];
+
+/** What a press already does for itself: a link, a button, a field, a label, or anything that takes the focus. */
+const OWN_PRESS =
+  'a[href], area[href], button, input, label, select, textarea, [role="button"], [role="link"], [role="checkbox"], [role="switch"], [tabindex]';
 
 /**
- * A press inside an action's slot, kept for what it landed on rather than
- * folding the summary around it. Note that a press on the slot's bare ground
- * is also stopped from reaching the element's own toggle, while one on a
- * control is left to do what it does, a link's navigation and a box's check
- * among it.
+ * A press on a frame's cell, which folds the fold where it lands on the
+ * cell's bare ground, the row's room beside its controls, as a press on the
+ * summary does, and is the control's alone where it lands on one. Note that
+ * a press inside a menu a control drew elsewhere still bubbles here through
+ * React's tree, so only a press inside the cell's own box folds.
  */
-function keepPress(event: MouseEvent<HTMLElement>): void {
-  event.stopPropagation();
-  if (event.target instanceof Element && event.target.closest(OWN_PRESS) !== null) return;
-  event.preventDefault();
+function groundPress(event: MouseEvent<HTMLElement>): void {
+  const cell = event.currentTarget;
+  const target = event.target;
+  if (!(target instanceof Element) || !cell.contains(target)) return;
+  const own = target.closest(OWN_PRESS);
+  if (own !== null && cell.contains(own)) return;
+  cell.parentElement?.querySelector<HTMLElement>(":scope > details > summary")?.click();
+}
+
+function Frame({
+  look,
+  lead,
+  actions,
+  fill = DISCLOSURE_FILL.SUMMARY,
+  onPointerDown,
+  children,
+}: {
+  look?: DisclosureLook | undefined;
+  lead?: ReactNode;
+  actions?: ReactNode;
+  fill?: DisclosureFill | undefined;
+  onPointerDown?: ((event: PointerEvent<HTMLElement>) => void) | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      className="luke-disclosure-frame"
+      data-look={look}
+      data-fill={fill === DISCLOSURE_FILL.SUMMARY ? undefined : fill}
+      onPointerDown={onPointerDown}
+    >
+      {lead === undefined ? null : (
+        // biome-ignore lint/a11y/noStaticElementInteractions: the cell's bare ground folds as the summary beside it does, for the pointer alone; the summary is the keyboard's.
+        // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the cell leaves to the control.
+        <div className="luke-disclosure-lead" onClick={groundPress}>
+          {lead}
+        </div>
+      )}
+      {children}
+      {actions === undefined ? null : (
+        // biome-ignore lint/a11y/noStaticElementInteractions: the cell's bare ground folds as the summary beside it does, for the pointer alone; the summary is the keyboard's.
+        // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the cell leaves to the control.
+        <div className="luke-disclosure-actions" onClick={groundPress}>
+          {actions}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
- * The seat of a control in a fold's summary, such as a row's ⋯ or a name
- * that opens a page: a press on what it holds, or a key that presses it,
- * acts on that alone and leaves the fold as it stood. Note that it draws no
- * box of its own (`display: contents`), so what it holds is laid out as the
- * summary's own child, and that a press inside a menu it opens, portaled
- * elsewhere, still reaches it, as React bubbles a portal's events through
- * the tree that drew it.
+ * A fold's head with controls of its own, around a fold a surface skins
+ * its own way (`useDisclosureFold`): the controls before its summary
+ * (`lead`) and after it (`actions`) stand in the summary's row, each in a
+ * cell of its own beside the summary rather than inside it, so a control's
+ * words never join the summary's name and a press on one never folds. A
+ * press on a cell's bare ground folds as the summary does. Note that the
+ * cells stand outside the `details`, because a closed one draws nothing but
+ * its summary, and that the `details` is laid into the frame's row by
+ * subgrid (disclosure.css), its body under all three. `onPointerDown` hears
+ * a press land anywhere in the frame, a control's among them.
  */
-export function DisclosureAction({ children }: { children: ReactNode }): React.JSX.Element {
+export function DisclosureFrame({
+  lead,
+  actions,
+  fill,
+  onPointerDown,
+  children,
+}: {
+  lead?: ReactNode;
+  actions?: ReactNode;
+  fill?: DisclosureFill;
+  onPointerDown?: ((event: PointerEvent<HTMLElement>) => void) | undefined;
+  /** The fold: its `details`, drawn by `Disclosure` or a skin of its own. */
+  children: ReactNode;
+}): React.JSX.Element {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the slot only keeps its controls' presses from folding the summary they stand in; the controls inside are the presses.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the slot keeps the same way.
-    <span className="luke-disclosure-action" onClick={keepPress}>
+    <Frame lead={lead} actions={actions} fill={fill} onPointerDown={onPointerDown}>
       {children}
-    </span>
+    </Frame>
   );
 }
 
