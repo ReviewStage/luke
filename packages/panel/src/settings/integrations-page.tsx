@@ -271,9 +271,9 @@ function signInRowLine(provider: IntegrationProvider, signIn: SignIn): RowLine {
 
 /**
  * The line under a row's name: a sign-in the window waits on or last waited
- * on, else where the connection stands, or nothing where the row's own
- * control already says it — a Connect, or a row whose status has not been
- * read. A connection that stands outranks a sign-in, which a read that
+ * on, else where the connection stands, a connection under way that the
+ * window does not wait on included, or nothing where the row's own control
+ * already says it — a Connect, or a row whose status has not been read. A connection that stands outranks a sign-in, which a read that
  * finds it connected ends anyway.
  */
 function rowLine(
@@ -286,7 +286,7 @@ function rowLine(
   if (signIn !== undefined) return signInRowLine(provider, signIn);
   switch (status) {
     case INTEGRATION_STATUS.PENDING:
-      return undefined;
+      return { text: "Connecting…", state: LINE_STATE.WAITING };
     case INTEGRATION_STATUS.EXPIRED:
       return { text: "Sign-in expired.", state: LINE_STATE.ATTENTION };
     case INTEGRATION_STATUS.DISCONNECTED:

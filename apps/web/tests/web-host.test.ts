@@ -8,6 +8,7 @@ import {
   TERMINAL_PORT_MESSAGE,
 } from "@luke/features/terminal-acts";
 import { ACT_KIND } from "@luke/host/acts";
+import { RUN_PROFILE } from "@luke/host/app-state";
 import { askAct } from "@luke/panel/act";
 import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { HOST_CAPABILITY, THEME } from "@luke/settings";
@@ -46,9 +47,11 @@ const standingHost = (service: ReturnType<typeof fakeService>) =>
   });
 
 afterEach(() => {
+  history.replaceState(null, "", "/");
   localStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   RelaySocket.opened = [];
 });
 
@@ -379,4 +382,44 @@ it.effect(
         page.close();
       }),
     ),
+);
+
+/** The run the host states for a tab opened at an address, in a build whose `DEV` is as given. */
+const runAt = (address: string, development: boolean) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      vi.stubEnv("DEV", development);
+      history.replaceState(null, "", address);
+      const { bridge } = yield* standingHost(fakeService({ signedIn: false }));
+      return (yield* Effect.promise(() => bridge.requestAppState())).run;
+    }),
+  );
+
+it.effect(
+  "a development tab opened with ?fixture= names the profile and runs on fixture data",
+  () =>
+    Effect.gen(function* () {
+      const run = yield* runAt(`/app?fixture=${RUN_PROFILE.AGENT_CHECKS}`, true);
+
+      assert.equal(run.fixtureMode, true);
+      assert.equal(run.profile, RUN_PROFILE.AGENT_CHECKS);
+    }),
+);
+
+it.effect("a development tab opened with a word that is no profile stays live", () =>
+  Effect.gen(function* () {
+    const run = yield* runAt("/app?fixture=nope", true);
+
+    assert.equal(run.fixtureMode, false);
+    assert.equal(run.profile, RUN_PROFILE.IDLE);
+  }),
+);
+
+it.effect("a production build ignores ?fixture=", () =>
+  Effect.gen(function* () {
+    const run = yield* runAt(`/app?fixture=${RUN_PROFILE.TASKS}`, false);
+
+    assert.equal(run.fixtureMode, false);
+    assert.equal(run.profile, RUN_PROFILE.IDLE);
+  }),
 );

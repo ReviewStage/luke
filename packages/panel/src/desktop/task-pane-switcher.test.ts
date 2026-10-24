@@ -351,3 +351,40 @@ test("on a phone the ⋯'s Rename on a tab opens the task's name in the title's 
   );
   assert.equal(field?.value, TASK.name);
 });
+
+test("on a phone a task still read, or one that cannot be, is headed by its way back alone, as the task's own head will lead", () => {
+  for (const region of [
+    { kind: DOCUMENT_REGION.READING },
+    { kind: DOCUMENT_REGION.FAILED },
+  ] as const) {
+    const told: string[] = [];
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            room: SHELL_ROOM.NARROW,
+            away: { label: "Inbox", onPress: () => told.push("away") },
+            tasks: tasksControl({ page: TASKS_PAGE.DOCUMENT, region }),
+          }),
+        ),
+      ),
+    );
+    const head = container.querySelector<HTMLElement>(".task-head");
+    assert.ok(head, `a ${region.kind} task is headed`);
+    assert.deepEqual(
+      [...head.querySelectorAll("button")].map(
+        (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+      ),
+      ["Inbox"],
+    );
+    act(() => head.querySelector("button")?.click());
+    assert.deepEqual(told, ["away"]);
+    act(() => root.unmount());
+    container.remove();
+  }
+});

@@ -681,13 +681,13 @@ function callFailure(text: string): Failure {
 /**
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
- * Settings; the repository given to Luke on GitHub; another repository
+ * Settings; the repository given to Luke's GitHub App; another repository
  * chosen; the task moved to the workspace whose GitHub reaches it; or the
  * member's own token replaced in Settings › Profile, or authorized on
  * GitHub for the organization's SAML SSO. A service that said nothing more
  * says the bare sentence, which Retry answers, and so does an agent with no
  * task wherever the remedy is pressed on the task: only giving the
- * repository to Luke on GitHub, and a token's remedies, are not.
+ * repository to Luke's GitHub App, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -696,7 +696,7 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
     return {
       reason: FAILURE_REASON.ADD_REPOSITORY,
-      text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
+      text: `Luke's GitHub App doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
     };
@@ -2310,6 +2310,13 @@ export function pullRequestStateWord(
 
 /** What the row says of an open pull request GitHub's merge queue holds, as its tab's pill says it. */
 const QUEUED_LABEL = "Queued";
+
+/** Where a pull request stands in one word, as its card heads it: Queued for an open one the merge queue holds, else its state's label. */
+export function pullRequestStateLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+): string {
+  return pullRequestStateWord(pullRequest) ?? PULL_REQUEST_STATE_LABEL[pullRequest.state];
+}
 
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(

@@ -60,6 +60,8 @@ let archives: { agentId: string; archived: boolean }[] = [];
 let seen: string[] = [];
 /** Every rename asked, in order. */
 let renames: { agentId: string; title: string }[] = [];
+/** Whether the service takes the names the rows ask for. */
+let renameTaken = true;
 /** Every delete asked, in order. */
 let deletes: string[] = [];
 /** How many times a delete that landed left the agent's page. */
@@ -70,6 +72,7 @@ beforeEach(() => {
   standing = RUN;
   archives = [];
   renames = [];
+  renameTaken = true;
   deletes = [];
   left = 0;
   seen = [];
@@ -111,7 +114,7 @@ function mount(
     },
     onRename: (agentId, title) => {
       renames.push({ agentId, title });
-      return Promise.resolve(true);
+      return Promise.resolve(renameTaken);
     },
     onDelete: (agentId) => {
       deletes.push(agentId);
@@ -253,6 +256,24 @@ test("Rename on the row's right-click turns the row into its name's field, and t
   await settle();
 
   assert.deepEqual(renames, [{ agentId: AGENT_ID, title: "Remove the stale banners" }]);
+});
+
+test("a refused rename reopens the row's field holding the name typed", async () => {
+  renameTaken = false;
+  const row = mount(RUN);
+  const offered = rightClick(row);
+  act(() => item(offered, "Rename").click());
+  const field =
+    row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]') ??
+    assert.fail("the row is its name's field");
+  act(() => {
+    field.value = "Remove the stale banners";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  const reopened = row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
+  assert.equal(reopened?.value, "Remove the stale banners");
 });
 
 test("rested on, the row hangs the agent's card beside it, naming it as its tab's card does", () => {

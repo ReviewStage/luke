@@ -134,11 +134,12 @@ export function confirmingHold(options: {
   };
 }
 
-/** A way out of Luke that asks first while something would be lost: a quit, a restart to install an update, or a sign-out. */
+/** A way out of Luke that asks first while something would be lost: a quit, a restart to install an update, a sign-out, or a window's page reloaded. */
 export const LEAVE = {
   QUIT: "quit",
   RESTART: "restart",
   SIGN_OUT: "signOut",
+  RELOAD: "reload",
 } as const;
 
 export type Leave = (typeof LEAVE)[keyof typeof LEAVE];
@@ -174,6 +175,7 @@ const LEAVE_WORDS = {
     closesTerminals: true,
   },
   [LEAVE.SIGN_OUT]: { message: "Sign out of Luke?", act: "Sign out", closesTerminals: false },
+  [LEAVE.RELOAD]: { message: "Reload this window?", act: "Reload", closesTerminals: false },
 } as const satisfies Record<Leave, { message: string; act: string; closesTerminals: boolean }>;
 
 const MAC_TERMINAL: Noun = { one: "Mac terminal", many: "Mac terminals" };
@@ -212,25 +214,22 @@ export function leaveQuestion(leave: Leave, atStake: AtStake): LeaveQuestion | u
 }
 
 /**
- * The one ask every way out goes through: yes at once while nothing is at
- * stake, else the question put to the developer and their answer. A second
- * ask while one stands is a no, so a press repeated behind the sheet never
- * stacks a second sheet or acts on its own; a question that could not be
- * put is a no as well, since nothing is lost without one.
+ * Puts a way out's question to the developer, one at a time: yes at once
+ * where there is none, since nothing is at stake. A second ask while one
+ * stands is a no, so a press repeated behind the sheet never stacks a second
+ * sheet or acts on its own; a question that could not be put is a no as
+ * well, since nothing is lost without one.
  */
-export function leaveGate(options: {
-  atStake: () => AtStake;
-  ask: (question: LeaveQuestion) => Promise<boolean>;
-}): (leave: Leave) => Promise<boolean> {
-  const { atStake, ask } = options;
+function askingOneAtATime<Subject>(
+  ask: (subject: Subject, question: LeaveQuestion) => Promise<boolean>,
+): (subject: Subject, question: LeaveQuestion | undefined) => Promise<boolean> {
   let asking = false;
-  return async (leave) => {
-    const question = leaveQuestion(leave, atStake());
+  return async (subject, question) => {
     if (question === undefined) return true;
     if (asking) return false;
     asking = true;
     try {
-      return await ask(question);
+      return await ask(subject, question);
     } catch {
       return false;
     } finally {
@@ -239,12 +238,44 @@ export function leaveGate(options: {
   };
 }
 
+/** The one ask every way out of Luke goes through: yes at once while nothing is at stake, else the question put to the developer and their answer. */
+export function leaveGate(options: {
+  atStake: () => AtStake;
+  ask: (question: LeaveQuestion) => Promise<boolean>;
+}): (leave: Leave) => Promise<boolean> {
+  const { atStake, ask } = options;
+  const asked = askingOneAtATime<Leave>((_leave, question) => ask(question));
+  return (leave) => asked(leave, leaveQuestion(leave, atStake()));
+}
+
+/**
+ * The ask a window's reload goes through, on the same terms as a way out of
+ * Luke: yes at once unless that page holds edits that haven't saved. Note
+ * that a call is never at stake, because it stands in the voice window,
+ * which no reload reaches, and neither are this Mac's terminals, which main
+ * keeps open across a page's reload.
+ */
+export function reloadGate<Page>(options: {
+  holds: (page: Page) => boolean;
+  ask: (page: Page, question: LeaveQuestion) => Promise<boolean>;
+}): (page: Page) => Promise<boolean> {
+  const { holds, ask } = options;
+  const asked = askingOneAtATime(ask);
+  return (page) =>
+    asked(
+      page,
+      leaveQuestion(LEAVE.RELOAD, { call: false, unsavedWork: holds(page), macTerminals: 0 }),
+    );
+}
+
 /** Which windows say they hold unsaved work. */
 export interface UnsavedWorkHolders<Sender> {
   /** What one window says: whether it holds unsaved work now. */
   readonly tell: (sender: Sender, holding: boolean) => void;
   /** Whether any window standing holds unsaved work. */
   readonly holding: () => boolean;
+  /** Whether this one window holds unsaved work. */
+  readonly holds: (sender: Sender) => boolean;
 }
 
 /**
@@ -265,5 +296,6 @@ export function unsavedWorkHolders<Sender>(
       for (const sender of holders) if (gone(sender)) holders.delete(sender);
       return holders.size > 0;
     },
+    holds: (sender) => holders.has(sender) && !gone(sender),
   };
 }

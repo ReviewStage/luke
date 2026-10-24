@@ -12,7 +12,7 @@
  * the agent's tab is shown, by any route, the toast has nothing left to
  * say. Several
  * agents may end in one read, so each end waits for room rather than
- * pushing out an earlier one, whose View would go with it.
+ * pushing out an earlier one, whose Open would go with it.
  */
 
 import { STATUS_TONE } from "@luke/ui";
@@ -21,7 +21,7 @@ import { appBridge } from "../app-bridge.js";
 import { TOAST_HOLD, useToast, useWithdrawToast } from "../toast.js";
 
 /** What an agent's end offers, to open the agent it was. */
-const VIEW_LABEL = "View";
+const OPEN_LABEL = "Open";
 
 /** Where an agent stands to be opened: its plan, on its tab, or its own page where it has no plan. */
 export interface AgentPlace {
@@ -54,7 +54,7 @@ export function useAgentEndToasts(
           hold: TOAST_HOLD.NEWS,
           subject: agentId,
           tone: failed ? STATUS_TONE.DANGER : STATUS_TONE.COMPLETE,
-          action: { label: VIEW_LABEL, onPress: () => viewing.current({ taskId, agentId }) },
+          action: { label: OPEN_LABEL, onPress: () => viewing.current({ taskId, agentId }) },
         }),
       ),
     [toast],

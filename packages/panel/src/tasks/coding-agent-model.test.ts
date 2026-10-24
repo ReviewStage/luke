@@ -623,7 +623,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Luke on GitHub is pressed on GitHub, not the task, so it stands for an agent with no task.
+  // Giving the repository to Luke's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -637,7 +637,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   );
   assert.deepEqual(notSelected, {
     reason: FAILURE_REASON.ADD_REPOSITORY,
-    text: "Luke on GitHub doesn't have access to acme/relay.",
+    text: "Luke's GitHub App doesn't have access to acme/relay.",
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });

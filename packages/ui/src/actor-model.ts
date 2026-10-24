@@ -1,4 +1,5 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
+import type { AutomationTrigger } from "@luke/features/automation-wire";
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
@@ -96,6 +97,8 @@ export type Actor =
       readonly automationId?: string | undefined;
       readonly name: string;
       readonly state: ActorState;
+      /** What fires it, whose glyph its tile wears (`FiringGlyph`); the clock where the place naming it knows only its name. */
+      readonly trigger?: AutomationTrigger | undefined;
     }
   | {
       readonly kind: typeof ACTOR_KIND.SOMEONE;
@@ -117,9 +120,6 @@ export interface GitHubActor {
   /** Whether it is an App's bot, drawn on a square as Luke and the agents are, rather than a person's circle. */
   readonly bot: boolean;
 }
-
-/** The most sections an activity names before it counts the rest. */
-const NAMED_SECTIONS = 3;
 
 /** What an activity calls the words a plan holds before its first heading, as the version history does. */
 const OPENING_SECTION = "Opening";
@@ -501,14 +501,9 @@ export function latestActivity(
   };
 }
 
-/** An activity in a line: "Edited Rollout and Risks", or "Edited Goal, Rollout, and 3 more" past a few. */
+/** An activity in a line, every section it changed named: "Edited Rollout and Risks", "Edited Goal, Rollout, Risks, and Open questions". */
 export function activityWords(activity: ActorActivity): string {
-  const { sections } = activity;
-  const named =
-    sections.length <= NAMED_SECTIONS
-      ? sections
-      : [...sections.slice(0, NAMED_SECTIONS - 1), `${sections.length - NAMED_SECTIONS + 1} more`];
-  return `Edited ${andList(named)}`;
+  return `Edited ${andList(activity.sections)}`;
 }
 
 /**

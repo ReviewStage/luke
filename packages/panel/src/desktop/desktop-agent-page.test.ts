@@ -430,12 +430,13 @@ afterEach(() => {
 function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
+  away?: { label: string; onPress: () => void },
   registry = AtomRegistry.make(),
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID });
+  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID, away });
   act(() =>
     root?.render(
       onRegistry(
@@ -1213,6 +1214,23 @@ test("an agent the service will not hand the reader, as a link to another worksp
   );
 });
 
+test("on a phone an agent that is not found still leads with its way back", async () => {
+  pages = [{ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }];
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Not found/u);
+  const head = page.querySelector<HTMLElement>(".agent-head") ?? assert.fail("the phone's bar");
+  const back = head.querySelector<HTMLButtonElement>("button") ?? assert.fail("its way back");
+  assert.equal(back.textContent?.trim(), "Inbox");
+  act(() => back.click());
+  assert.deepEqual(left, ["away"]);
+});
+
 test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   const page = mount();
@@ -1957,6 +1975,7 @@ it.effect(
       const page = mount(
         tasksControl({ tasks: [billing] }),
         undefined,
+        undefined,
         registryOn(yield* Clock.Clock),
       );
       yield* Effect.promise(settle);
@@ -1998,6 +2017,7 @@ it.effect(
       ];
       const page = mount(
         tasksControl({ workspace: ACME, workspaces: [ACME] }),
+        undefined,
         undefined,
         registryOn(yield* Clock.Clock),
       );
@@ -2264,6 +2284,28 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   // No File tab reads a repository no task names, so the card offers no way into one.
   assert.ok(panel.querySelector(".luke-code-card"), "the code's card stands");
   assert.equal(panel.querySelector(".luke-code-card [aria-label^='Open ']"), null);
+});
+
+test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".agent-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Inbox", "Agent actions"],
+    "one control a corner",
+  );
+  assert.ok(head.querySelector("h1")?.textContent, "the agent's name is the title");
+  assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
+  act(() => head.querySelector<HTMLButtonElement>("button")?.click());
+  assert.deepEqual(left, ["away"], "the way back goes where the shell says");
 });
 
 test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {

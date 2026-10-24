@@ -113,7 +113,7 @@ test("a sign-in waited on holds both buttons, keeps the badge, and Cancel takes 
       onCancel: () => (cancelled += 1),
     }),
   );
-  const waiting = button(container, "Waiting for browser…");
+  const waiting = button(container, "Waiting for browser");
   assert.equal(waiting.disabled, true);
   assert.equal(button(container, "Continue with Google").disabled, true);
   assert.equal(

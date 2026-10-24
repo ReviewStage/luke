@@ -137,13 +137,15 @@
      whole, where the box folds its own presses into its
      ⋯ (a card under 400px), the mutes' struck glyphs and End call still
      saying a call stands (composer-foot.css). */
-  @container luke-composer-foot (max-width: 495px) {
+  /* off-scale: 496px, where the foot's live word stops fitting */
+  @container luke-composer-foot (width < 496px) {
     .luke-call-live[data-stage="live"] .luke-call-live-word {
       display: none;
     }
   }
 
-  @container luke-composer-foot (max-width: 375px) {
+  /* off-scale: 376px, where the foot's live mark stops fitting */
+  @container luke-composer-foot (width < 376px) {
     .luke-call-live {
       display: none;
     }
@@ -151,7 +153,7 @@
 
   /* Too narrow for both of the backend's parts: the notetaker's goes while
      Luke's stands, so what Luke is doing keeps the line. */
-  @container luke-call-bar (max-width: 479px) {
+  @container luke-call-bar (width < 480px) {
     .luke-call-backend-part[data-part="brain"] ~ [data-part="notes"] {
       display: none;
     }
@@ -161,7 +163,8 @@
      card's mutes and End call stand under its Video on and its way back,
      each apart from the next, and the working dots go, the line's own words
      saying Luke works, so Luke's command keeps their room. */
-  @container luke-call-bar (max-width: 279px) {
+  /* off-scale: 280px, a call card's controls at its head's step */
+  @container luke-call-bar (width < 280px) {
     .luke-call-backend > .luke-call-backend-dots {
       display: none;
     }
@@ -175,7 +178,8 @@
      narrowest): the status takes a row of its own, the voice's word whole,
      and the controls stand under it at the right. The floating window's bar
      is wider than this and must stay so, since its window's height is fixed. */
-  @container luke-call-bar (max-width: 209px) {
+  /* off-scale: 210px, the sidebar's card at its narrowest */
+  @container luke-call-bar (width < 210px) {
     .luke-call-status {
       flex-basis: 100%;
     }
@@ -350,6 +354,7 @@
   /* A tile too narrow for words beside the face, as an agent's video at its
      first 120px or smaller, keeps the face, the wait's dots, and a round
      Restart video, and its words for a reader, so nothing it draws is cut. */
+  /* off-scale: 168px, a tile too narrow for words beside the face */
   @container (width < 168px) {
     .luke-call-video-note-words {
       position: absolute;

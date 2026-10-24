@@ -58,7 +58,7 @@
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
-  @container (max-width: 479px) {
+  @container (width < 480px) {
     .luke-detail-page > * {
       --luke-detail-page-inset: var(--luke-page-inset-narrow);
     }
@@ -170,7 +170,7 @@
 
   /* In a pane too narrow for two columns, the secondary one follows the
      main in the one scroll, both at the page's inset. */
-  @container (max-width: 719px) {
+  @container (width < 720px) {
     .luke-detail-page-body,
     .luke-detail-page-body:has(> .luke-detail-page-secondary) {
       display: block;

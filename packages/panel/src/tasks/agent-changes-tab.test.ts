@@ -999,7 +999,7 @@ test("the ⋯ holds the pull request's actions alone, no file's, its looks set i
 
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
-    ["Copy PR patch", "Download PR patch", "Refresh changes"],
+    ["Copy patch", "Download patch", "Refresh changes"],
   );
 });
 

@@ -13,7 +13,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -23,10 +23,12 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { tasksControl } from "../testing/tasks-control.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-luke.test.ts -- Luke, the account's operator, stands in his own row at the head of the sidebar's list while the account has the operator on, and nowhere at all while it does not: drawing him ensures him once per workspace, a failed ensure draws a quiet retry rather than an error, he is not listed again among the agents, and his Reset asks first, then ensures a fresh Luke and opens him.
+ * sidebar-luke.test.ts -- Luke, the account's operator, stands in his own row at the head of the sidebar's list while the account has the operator on, and nowhere at all while it does not: drawing him ensures him once per workspace, a failed ensure draws a quiet retry rather than an error, he is not listed again among the agents, and his Reset asks nothing: it ensures a fresh Luke and opens him at once, and its toast's Undo brings the old one back and opens him again.
  *
  * The service is a script at the act boundary; synthetic workspaces and agents throughout.
  */
@@ -118,9 +120,10 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The sidebar over `tasks`, beside the work, with a way to draw it again over other tasks. */
+/** The sidebar over `tasks`, beside the work and the window's toasts where `toasts` says, with a way to draw it again over other tasks. */
 async function mount(
   tasks: TasksControl,
+  toasts = false,
 ): Promise<{ sidebar: HTMLElement; redraw: (next: TasksControl) => Promise<void> }> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -131,7 +134,12 @@ async function mount(
       root.render(
         onRegistry(
           registry,
-          createElement(DesktopSidebar, { ...sidebarProps(next), room: SHELL_ROOM.WIDE }),
+          createElement(
+            Fragment,
+            null,
+            createElement(DesktopSidebar, { ...sidebarProps(next), room: SHELL_ROOM.WIDE }),
+            toasts ? createElement(ToastHost) : null,
+          ),
         ),
       ),
     );
@@ -284,29 +292,59 @@ test("Luke is known by his kind, so a list read before his ensure answers never 
   assert.deepEqual(rowNames(sidebar), ["Luke", "Copy sweep"]);
 });
 
-test("Reset asks first, and only then ensures a fresh Luke and opens him", async () => {
-  const sent = serve((payload) =>
-    (payload as { reset?: boolean }).reset === true ? { agentId: FRESH_ID } : { agentId: LUKE_ID },
-  );
+test("Reset asks nothing: it ensures a fresh Luke and opens him at once, and Undo brings the old one back and opens him", async () => {
+  const sent = serve((payload) => {
+    const asked = payload as { reset?: boolean; restore?: string };
+    if (asked.reset === true) return { agentId: FRESH_ID };
+    return { agentId: asked.restore ?? LUKE_ID };
+  });
   handState(experimentsOn(EXPERIMENT.OPERATOR));
   const opened: string[] = [];
-  const { sidebar } = await mount(acme([OPERATOR], opened));
+  const { sidebar } = await mount(acme([OPERATOR], opened), true);
 
   act(() => button("Luke actions").click());
   assert.ok(!document.body.textContent?.includes("Archive"), "Luke offers no Archive");
   assert.ok(!document.body.textContent?.includes("Permanently delete"), "Luke offers no delete");
   act(() => item("Reset Luke").click());
-  assert.ok(document.querySelector('[role="alertdialog"]'), "the reset is asked first");
-  assert.match(document.body.textContent ?? "", /Start a fresh Luke\?/u);
-  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id, timeZone: ZONE }]);
-
-  act(() => button("Start fresh").click());
   await settle();
 
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "the reset asks nothing");
   assert.deepEqual(ensures(sent), [
     { workspaceId: ACME.id, timeZone: ZONE },
     { workspaceId: ACME.id, reset: true, timeZone: ZONE },
   ]);
   assert.deepEqual(opened, [FRESH_ID]);
+  assert.match(newestToastSays() ?? "", /Luke reset/u);
+
+  const undo = newestToastAction() ?? assert.fail("the toast offers Undo");
+  assert.equal(undo.textContent, "Undo");
+  act(() => undo.click());
+  await settle();
+
+  assert.deepEqual(ensures(sent).at(-1), {
+    workspaceId: ACME.id,
+    restore: LUKE_ID,
+    timeZone: ZONE,
+  });
+  assert.deepEqual(opened, [FRESH_ID, LUKE_ID]);
   assert.ok(lukeRow(sidebar), "Luke's row still stands");
+});
+
+test("a Reset the service refuses opens nothing and says so, offering no Undo", async () => {
+  serve((payload) =>
+    (payload as { reset?: boolean }).reset === true
+      ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+      : { agentId: LUKE_ID },
+  );
+  handState(experimentsOn(EXPERIMENT.OPERATOR));
+  const opened: string[] = [];
+  await mount(acme([OPERATOR], opened), true);
+
+  act(() => button("Luke actions").click());
+  act(() => item("Reset Luke").click());
+  await settle();
+
+  assert.deepEqual(opened, []);
+  assert.match(newestToastSays() ?? "", /Luke could not be reset/u);
+  assert.notEqual(newestToastAction()?.textContent, "Undo");
 });

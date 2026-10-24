@@ -12,7 +12,12 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ProviderMark } from "@luke/ui";
-import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
+import {
+  DOCUMENT_REGION,
+  RENAME_FAILED_NOTE,
+  TASKS_PAGE,
+  type TaskMark,
+} from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -833,6 +838,29 @@ test("a sidebar task's ⋯, a right-click on it, and the menu key open the same 
   pressKey(press, "F10", true);
   assert.deepEqual(openedMenu(), fromMore);
   assert.deepEqual(asked.opened, [], "the row itself opened nothing");
+});
+
+test("a sidebar task whose rename was refused reopens its field holding the name typed, with the refusal under it", async () => {
+  const { tasks, asked } = openTab({}, undefined, () => Promise.resolve(false));
+  const press = mountSidebarTask(tasks, OTHER, asked);
+  rightClick(press, 40, 60);
+  choose("Rename");
+  const field = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
+  assert.ok(field, "the row's name is its field");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      field,
+      "Ship the launch",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await act(async () => undefined);
+
+  assert.deepEqual(asked.renamed, [[OTHER.id, "Ship the launch"]]);
+  const reopened = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
+  assert.equal(reopened?.value, "Ship the launch");
+  assert.match(document.body.textContent ?? "", new RegExp(RENAME_FAILED_NOTE, "u"));
 });
 
 test("a sidebar task being renamed draws no ⋯ and offers no menu", () => {

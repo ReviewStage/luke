@@ -70,21 +70,18 @@ import {
   memberActor,
   personActor,
 } from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
   CheckIcon,
   CircleCheckIcon,
-  CircleDotIcon,
   ClockArrowDownIcon,
   ClockArrowUpIcon,
-  FactoryIcon,
+  GLYPH,
   HourglassIcon,
   ImagesIcon,
   InboxIcon,
   ListIcon,
-  ListTodoIcon,
   MailIcon,
   MailOpenIcon,
   PenLineIcon,
@@ -93,7 +90,8 @@ import {
   SquareCheckIcon,
   UserIcon,
   UsersIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
@@ -284,7 +282,7 @@ const SKELETON_TIME = "20px";
 
 /** What each scope is called, in the view's menu and, but for To do, after the Inbox's name at its head, and its glyph in the menu. */
 const SCOPE_WORDS = {
-  [INBOX_SHOW.TO_DO]: { label: "To do", icon: <ListTodoIcon /> },
+  [INBOX_SHOW.TO_DO]: { label: "To do", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
@@ -360,7 +358,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
 function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
   switch (kind) {
     case INBOX_LINE.DECIDE:
-      return <CircleDotIcon aria-hidden="true" />;
+      return <GLYPH.DECIDE />;
     case INBOX_LINE.DO:
       return <SquareCheckIcon aria-hidden="true" />;
     case INBOX_LINE.ANSWER:
@@ -607,8 +605,8 @@ function groupHead(folded: boolean, count: number, onToggle: () => void) {
 /**
  * A holder's group header: a task's status's mark and name; an
  * automation's clock tile, wearing how its last run went and hanging its
- * card where the window reads the automation; and the factory glyph for the
- * agents no automation names, since that group names no one actor.
+ * card where the window reads the automation; and the automation glyph for
+ * the agents no automation names, since that group names no one actor.
  * A press folds the group, which then fades its rows out, as every group
  * header's does.
  */
@@ -646,9 +644,7 @@ function HolderHeader({
     );
   }
   if (holder.automationId === null) {
-    return (
-      <GroupHeader glyph={<FactoryIcon aria-hidden="true" />} label={holder.name} {...shared} />
-    );
+    return <GroupHeader glyph={<GLYPH.AUTOMATION />} label={holder.name} {...shared} />;
   }
   const actor =
     known === undefined
@@ -861,7 +857,7 @@ function windowEntries(
         groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
         groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
         groupBy("Person", <UsersIcon />, INBOX_GROUPING.PERSON),
-        groupBy("Status", <CircleDotIcon />, INBOX_GROUPING.STATUS),
+        groupBy("Status", <GLYPH.STATUS />, INBOX_GROUPING.STATUS),
       ],
     },
     {

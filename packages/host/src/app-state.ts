@@ -27,7 +27,8 @@ export type { MacCommandAsk } from "./mac-command-ask.js";
  * The launch profiles a window answers to. A capture run stages a
  * conversation it has no voice window for: Luke speaking, that with the
  * Mac's output off, and both speakers heard at once; or, in any fixture run,
- * the panel's Tasks tab over a synthetic task. Any other word — the default
+ * the panel's Tasks tab over a synthetic task, or over its synthetic coding
+ * agent and that agent's tabs. Any other word — the default
  * included — stages nothing.
  */
 export const RUN_PROFILE = {
@@ -45,6 +46,25 @@ export const RUN_PROFILE = {
   TASKS_WORK: "tasks-work",
   /** The tasks' list, opened at launch on the window's Chat over a synthetic chat. */
   CHAT: "chat",
+  /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */
+  AGENT_PULL_REQUEST: "agent-pull-request",
+  /** The same agent, its Pull request tab on the checks. */
+  AGENT_CHECKS: "agent-checks",
+  /** The same agent, its Pull request tab on Files changed. */
+  AGENT_FILES: "agent-files",
+  /** The same agent, its Pull request tab on Chapters. */
+  AGENT_CHAPTERS: "agent-chapters",
+  /** The same agent beside a file of its repository opened in a tab of its own. */
+  AGENT_FILE: "agent-file",
+  /** The same agent beside its Terminal, attached to a shell: one profile per state the tab draws. */
+  AGENT_TERMINAL: "agent-terminal",
+  AGENT_TERMINAL_CONNECTING: "agent-terminal-connecting",
+  AGENT_TERMINAL_RECONNECTING: "agent-terminal-reconnecting",
+  AGENT_TERMINAL_IDLE: "agent-terminal-idle",
+  AGENT_TERMINAL_EXITED: "agent-terminal-exited",
+  AGENT_TERMINAL_STOPPED: "agent-terminal-stopped",
+  AGENT_TERMINAL_STARTING: "agent-terminal-starting",
+  AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

@@ -10,11 +10,14 @@ import {
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { RUN_PROFILE } from "@luke/host/app-state";
+import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
+import { agentActAnswer, agentSidePanel, agentTasksView } from "./agent-fixture.js";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelState,
+  type StagedSidePanel,
 } from "./use-side-panel.js";
 
 /**
@@ -377,14 +380,17 @@ const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: fals
 
 /**
  * The tasks a fixture run draws: the list with its first task open under the
- * tasks profile, the list alone under any other, and nothing for a live
- * run, which draws what the host read.
+ * tasks profiles, that task holding its coding agent under the agent
+ * profiles (`agent-fixture.ts`), the list alone under any other, and nothing
+ * for a live run, which draws what the host read.
  */
 export function fixtureTasksView(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
 }): TasksView | undefined {
   if (!run.fixtureMode) return undefined;
+  const agent = agentTasksView(run.profile, FIXTURE_OPEN_TASK);
+  if (agent !== undefined) return agent;
   if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_OPEN_TASK;
   if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_OPEN_BOARD;
   if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_OPEN_TASK;
@@ -397,17 +403,33 @@ export function fixtureTasksView(run: {
  * screen under the tasks profile, on the whiteboard under the
  * tasks-board profile, on the plan under the tasks-transcript and
  * tasks-work profiles, whose call the task's column shows, the latter with
- * Luke at work on it, and closed under any other. Nothing for a live
- * run, which opens the panel as the developer last left it.
+ * Luke at work on it, on the agent's tab each agent profile names, and
+ * closed under any other. Nothing for a live run, which opens the panel as
+ * the developer last left it.
  */
 export function fixtureSidePanel(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
-}): SidePanelState | undefined {
+}): StagedSidePanel | undefined {
   if (!run.fixtureMode) return undefined;
+  const agent = agentSidePanel(run.profile, FIXTURE_CODE_PANEL, FIXTURE_TASK_ID);
+  if (agent !== undefined) return agent;
   if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_CODE_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_BOARD_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_DOCUMENT_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_DOCUMENT_PANEL;
   return FIXTURE_CLOSED_PANEL;
+}
+
+/**
+ * What a fixture run answers an act with in place of main (`act.ts`), boxed
+ * so an act that answers nothing is told from one left to main: its agent
+ * profiles' tabs' reads, and nothing else, which goes to main as it would.
+ */
+export function fixtureActAnswer(
+  run: { readonly profile: string },
+  kind: PortActKind,
+  payload: PortActPayload<PortActKind>,
+): { readonly answer: PortActResult<PortActKind> } | undefined {
+  return agentActAnswer(run.profile, kind, payload);
 }
