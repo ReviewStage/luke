@@ -31,10 +31,14 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-label-size);
     font-weight: var(--luke-type-label-weight);
-    -webkit-app-region: no-drag;
     transition:
       background-color var(--luke-duration-hover) var(--luke-motion-exit),
       opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  /* Only the desktop's window is dragged, so a press on its bar stays a press. */
+  [data-luke-profile="desktop"] .luke-provider-button {
+    -webkit-app-region: no-drag;
   }
 
   /* Under a finger, a finger's height at least. */

@@ -29,7 +29,7 @@
      it, each as wide as the line allows, and the words wrap at their own
      width rather than being squeezed past it or cut short. A container query
      at the banner's own breakpoint, which no utility spells exactly. */
-  @container luke-banner (max-width: 479px) {
+  @container luke-banner (width < 480px) {
     .luke-banner-row {
       flex-wrap: wrap;
     }

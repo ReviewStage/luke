@@ -33,6 +33,7 @@ interface Piece {
 let laid: HTMLStyleElement | undefined;
 
 afterEach(() => {
+  delete document.documentElement.dataset.lukeRoom;
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
@@ -96,6 +97,7 @@ function clippedBy(element: Element): Element | undefined {
 /** The stage at a room's width, its sidebar folded and the drawer `overlay` (closed, or open), its list a repository whose head carries visually hidden words, as a pinned one's does. */
 function stage(room: "narrow" | "wide", overlay: "closed" | "open"): void {
   document.documentElement.setAttribute("data-luke-profile", "web");
+  document.documentElement.dataset.lukeRoom = room;
   laid = layContainersAt({}, { touch: room === "narrow" });
   built(document.body, {
     className: "app-root",

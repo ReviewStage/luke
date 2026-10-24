@@ -112,7 +112,7 @@
   padding-top: var(--luke-space-2);
 }
 
-@container integration-tools (max-width: 480px) {
+@container integration-tools (width < 480px) {
   .integration-tools-split {
     height: 560px;
     grid-template-columns: minmax(0, 1fr);

@@ -17,6 +17,7 @@ import { layContainersAt, shown } from "../testing/container-width.js";
 let laid: HTMLStyleElement | undefined;
 
 afterEach(() => {
+  delete document.documentElement.dataset.lukeRoom;
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
@@ -28,6 +29,7 @@ function topicHead(room: string) {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const section = shell.appendChild(document.createElement("section"));
   section.className = "chat-stream";
   const head = section.appendChild(document.createElement("header"));
@@ -72,6 +74,7 @@ function foldedBarStart(single: boolean): string {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = "wide";
+  document.documentElement.dataset.lukeRoom = "wide";
   shell.dataset.sidebarCollapsed = "true";
   const main = shell.appendChild(document.createElement("main"));
   main.className = "desktop-main";
