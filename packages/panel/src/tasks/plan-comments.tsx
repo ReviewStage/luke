@@ -52,6 +52,7 @@ import {
   MenuSurface,
   MoreButton,
   moreLabel,
+  PaneBar,
   SCROLL_FADE,
   ScrollArea,
   Skeleton,
@@ -2155,24 +2156,20 @@ export function PlanCommentsTab({
   return (
     <Fill className="comments-tab">
       <WordsDatePickerRoom>
-        <div className="comments-head">
-          <span className="comments-head-title">
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {COMMENTS_FILTER_WORDS[filter]}
-            </Text>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {listed.length}
-            </Text>
-          </span>
-          <ResolvedOnly
-            shown={filter === COMMENTS_FILTER.RESOLVED}
-            onShown={(shown) => {
-              setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
-              // Note that the other list starts at its top, not where the one it replaces was scrolled to.
-              if (list.current !== null) list.current.scrollTop = 0;
-            }}
-          />
-        </div>
+        <PaneBar
+          title={COMMENTS_FILTER_WORDS[filter]}
+          detail={listed.length}
+          actions={
+            <ResolvedOnly
+              shown={filter === COMMENTS_FILTER.RESOLVED}
+              onShown={(shown) => {
+                setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
+                // Note that the other list starts at its top, not where the one it replaces was scrolled to.
+                if (list.current !== null) list.current.scrollTop = 0;
+              }}
+            />
+          }
+        />
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
           <div
             className="comments-list"

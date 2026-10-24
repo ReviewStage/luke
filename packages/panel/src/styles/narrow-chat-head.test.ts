@@ -13,7 +13,7 @@ import { layContainersAt, shown } from "../testing/container-width.js";
  * thread insets, stays inside a 360px window, and keeps the width every
  * box's `@` menu keeps (`mention-picker.tsx`) over a wide one. jsdom lays nothing out, so the sheets are laid for a
  * touch screen (`testing/container-width.ts`) and the head is built in the
- * markup `chat-pane.tsx`'s `PlaceHead` draws.
+ * markup `chat-pane.tsx`'s `PlaceHead` draws (a `PaneBar`).
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -30,20 +30,24 @@ function topicHead(room: string) {
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
-  const head = shell.appendChild(document.createElement("header"));
-  head.className = "desktop-toolbar chat-head";
-  const back = head.appendChild(document.createElement("button"));
+  const section = shell.appendChild(document.createElement("section"));
+  section.className = "chat-stream";
+  const head = section.appendChild(document.createElement("header"));
+  head.className = "luke-pane-bar";
+  const lead = head.appendChild(document.createElement("div"));
+  lead.className = "luke-pane-bar-lead";
+  const mark = lead.appendChild(document.createElement("span"));
+  mark.className = "luke-pane-bar-mark";
+  const back = mark.appendChild(document.createElement("button"));
   back.setAttribute("aria-label", "Back to Chat");
-  const heading = head.appendChild(document.createElement("div"));
-  heading.className = "desktop-toolbar-heading";
-  const title = heading.appendChild(document.createElement("h1"));
-  title.className = "desktop-toolbar-title";
+  const title = lead.appendChild(document.createElement("span"));
+  title.className = "luke-pane-bar-title";
   title.textContent = "#design";
-  const meta = heading.appendChild(document.createElement("span"));
-  meta.className = "chat-head-meta";
+  const meta = lead.appendChild(document.createElement("span"));
+  meta.className = "luke-pane-bar-detail";
   meta.textContent = "Where the design is talked through";
   const actions = head.appendChild(document.createElement("div"));
-  actions.className = "desktop-toolbar-actions";
+  actions.className = "luke-pane-bar-actions";
   const menu = actions.appendChild(document.createElement("button"));
   menu.setAttribute("aria-label", "#design actions");
   return { back, meta, menu };
@@ -60,6 +64,35 @@ test("in a wide room a topic's head shows its purpose and its menu", () => {
   const { meta, menu } = topicHead("wide");
   assert.ok(shown(meta), "the purpose");
   assert.ok(shown(menu), "the topic's menu");
+});
+
+/**
+ * The padding a place's bar starts with, in a shell whose sidebar is folded, where the chat stands as one column or beside its rail: the bar is read through the title-bar buttons' clearance or not.
+ */
+function foldedBarStart(single: boolean): string {
+  laid = layContainersAt({}, { touch: false });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = "wide";
+  shell.dataset.sidebarCollapsed = "true";
+  const main = shell.appendChild(document.createElement("main"));
+  main.className = "desktop-main";
+  const find = main.appendChild(document.createElement("div"));
+  find.className = "page-find";
+  const view = find.appendChild(document.createElement("div"));
+  view.className = "chat-view";
+  view.dataset.single = String(single);
+  const stream = view.appendChild(document.createElement("section"));
+  stream.className = "chat-stream";
+  const bar = stream.appendChild(document.createElement("header"));
+  bar.className = "luke-pane-bar";
+  return getComputedStyle(bar).paddingLeft;
+}
+
+test("a place standing alone under a folded sidebar starts its bar past the title-bar buttons, and beside its rail keeps the bar's own inset", () => {
+  assert.match(foldedBarStart(true), /sidebar-toggle-clearance/u);
+  document.body.replaceChildren();
+  assert.doesNotMatch(foldedBarStart(false), /sidebar-toggle-clearance/u);
 });
 
 /** How wide a phone's window stands, in CSS pixels: the narrowest the web app is laid out for. */

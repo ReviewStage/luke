@@ -190,7 +190,7 @@ body,
 /* A place standing alone in a narrow room leads its head with the way back,
    so its name keeps the room left and what is said beside it gives way; its
    menu stays at the head's end, the only way to edit or archive a topic. */
-.desktop-shell[data-room="narrow"] .chat-head-meta {
+.desktop-shell[data-room="narrow"] .chat-stream > .luke-pane-bar .luke-pane-bar-detail {
   display: none;
 }
 
@@ -3625,6 +3625,25 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex: 0 1000 auto;
+}
+
+/* The place's head is a `PaneBar`, whose detail keeps its width; here it is
+   the purpose, which gives way before the name does. */
+.chat-stream > .luke-pane-bar .luke-pane-bar-detail {
+  display: flex;
+  min-width: 0;
+  flex: 0 1000 auto;
+}
+
+/* A place standing alone under a folded sidebar's title-bar buttons starts
+   past them, where its way back stands, as a toolbar does (shell.css). */
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .chat-view[data-single="true"]
+  .chat-stream
+  > .luke-pane-bar {
+  padding-left: var(--sidebar-toggle-clearance);
 }
 
 /* A task's channel is named by its task's glyph before its name, wherever
