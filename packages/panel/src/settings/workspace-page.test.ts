@@ -12,6 +12,7 @@ import {
   type GitHubAccess,
   type WorkspaceTokenRepository,
 } from "@luke/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
@@ -42,13 +43,14 @@ import {
 } from "@luke/host/contract";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
-import { SETTINGS_SECTION } from "@luke/settings/settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { ProviderMark, SettingsPage } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { OpenPersonProvider } from "../person-door.js";
 import {
   type AnyAct,
@@ -166,6 +168,19 @@ function listedRepository(fullName: string, access: GitHubAccess) {
   return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1, access };
 }
 
+/** A token the reader saved, as the token's read answers it. */
+const SAVED_TOKEN = {
+  login: "octo-member",
+  hint: "ghp_…wxyz",
+  status: GITHUB_TOKEN_STATUS.VERIFIED,
+  statusAt: 1,
+  addedAt: 1,
+  expiresAt: null,
+};
+
+/** Every place in Settings the page was asked to open, in order. */
+let opened: SettingsLink[] = [];
+
 /** The repositories the reader's own token may push to that the picker's listing answers as addable, by full name. */
 let tokenReach: string[] = [];
 /** Whether the listing answers as a service older than `addable`, the token's repositories among its own. */
@@ -176,6 +191,8 @@ let tokenRepositories: WorkspaceTokenRepository[] = [];
 let tokenReadHeld: Promise<void> | undefined;
 /** Whether the token repositories' read is refused rather than answered. */
 let tokenReadFails = false;
+/** Whether the reader has a GitHub token saved, as the token's read answers it. */
+let tokenSaved = true;
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -387,6 +404,8 @@ function answer(request: Asked): Promise<Answered> {
           },
         }),
       );
+    case ACT_KIND.GITHUB_TOKEN_READ:
+      return Promise.resolve(done({ token: tokenSaved ? SAVED_TOKEN : null }));
     case ACT_KIND.MAC_REPOSITORIES:
       return Promise.resolve(done({ repositories: macRepositories }));
     case ACT_KIND.MAC_REPOSITORY_SET: {
@@ -447,6 +466,7 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
   const kinds: readonly PortActKind[] = [
     ...Object.values(TASKS_ACT_KIND),
     ...Object.values(WORKSPACE_ACT_KIND),
+    ACT_KIND.GITHUB_TOKEN_READ,
     ACT_KIND.MAC_REPOSITORIES,
     ACT_KIND.MAC_REPOSITORY_SET,
   ];
@@ -538,6 +558,8 @@ beforeEach(() => {
   tokenRepositories = [];
   tokenReadHeld = undefined;
   tokenReadFails = false;
+  tokenSaved = true;
+  opened = [];
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
   peopleStreams = [];
@@ -612,13 +634,17 @@ async function mount(
           createElement(
             Fragment,
             null,
-            openPerson === undefined
-              ? createElement(WorkspacePage, { control, readerId: READER_ID })
-              : createElement(
-                  OpenPersonProvider,
-                  { value: openPerson },
-                  createElement(WorkspacePage, { control, readerId: READER_ID }),
-                ),
+            createElement(
+              OpenSettingsProvider,
+              { value: (link: SettingsLink) => opened.push(link) },
+              openPerson === undefined
+                ? createElement(WorkspacePage, { control, readerId: READER_ID })
+                : createElement(
+                    OpenPersonProvider,
+                    { value: openPerson },
+                    createElement(WorkspacePage, { control, readerId: READER_ID }),
+                  ),
+            ),
             createElement(ToastHost),
           ),
         ),
@@ -1840,6 +1866,32 @@ test("Add repository offers the token's repositories from a service older than a
   assert.deepEqual([...document.querySelectorAll('[role="option"]')].map(optionWords), [
     ["side", "octo-member"],
   ]);
+});
+
+test("with no token saved, Add repository says to add a token and links to the Account page, rather than saying there are no repositories", async () => {
+  tokenSaved = false;
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+  const menu = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("no menu");
+
+  assert.match(
+    menu.textContent ?? "",
+    /Add a GitHub token in Account settings to add repositories\./u,
+  );
+  assert.doesNotMatch(menu.textContent ?? "", /No repositories/u);
+  act(() => button(menu, "Account").click());
+  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.ACCOUNT }]);
+});
+
+test("with a token saved and nothing left to add, Add repository still says there are no repositories", async () => {
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+
+  assert.match(document.querySelector('[role="dialog"]')?.textContent ?? "", /No repositories/u);
 });
 
 /** A picker option's name and its muted owner, as the repository chip's menu draws a repository. */

@@ -4,6 +4,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   ANNOUNCE,
   Badge,
@@ -29,6 +30,7 @@ import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
+import { SettingsPageLink } from "../open-settings.js";
 import { repositoryMenuRow } from "../repository-row.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 
@@ -60,6 +62,8 @@ const WORDS = {
   SEARCH: "Search repositories",
   NO_MATCH: noMatchWords(TERM.REPOSITORY),
   NONE: "No repositories",
+  NO_TOKEN_BEFORE: "Add a GitHub token in",
+  NO_TOKEN_AFTER: "settings to add repositories.",
   READING: readingWords(TERM.REPOSITORY.many),
   NOT_READ: readFailedWords("the repositories"),
   ROWS_READING: readingWords("token repositories"),
@@ -135,6 +139,7 @@ export function useTokenRepositories(workspaceId: string): TokenRepositories {
 type Candidates =
   | { readonly kind: "reading" }
   | { readonly kind: "failed" }
+  | { readonly kind: "no-token" }
   | { readonly kind: "read"; readonly rows: readonly MenuRow[] };
 
 /**
@@ -164,8 +169,17 @@ export function AddTokenRepository({
   const read = () => {
     setCandidates({ kind: "reading" });
     const added = new Set(repositories.listed.map((one) => one.fullName.toLowerCase()));
-    act(ACT_KIND.TASKS_REPOSITORIES, { workspaceId }).then(
-      (answer) => {
+    // Note that a token read that fails is taken for no word on the token, because the list alone says what the token may reach.
+    const noToken = act(ACT_KIND.GITHUB_TOKEN_READ).then(
+      (answer) => !("failure" in answer) && answer.token === null,
+      () => false,
+    );
+    Promise.all([act(ACT_KIND.TASKS_REPOSITORIES, { workspaceId }), noToken]).then(
+      ([answer, tokenless]) => {
+        if (tokenless) {
+          setCandidates({ kind: "no-token" });
+          return;
+        }
         if ("failure" in answer) {
           setCandidates({ kind: "failed" });
           return;
@@ -183,13 +197,18 @@ export function AddTokenRepository({
   };
   const rows = candidates.kind === "read" ? candidates.rows : [];
   const note =
-    candidates.kind === "reading"
-      ? WORDS.READING
-      : candidates.kind === "failed"
-        ? WORDS.NOT_READ
-        : rows.length === 0
-          ? WORDS.NONE
-          : undefined;
+    candidates.kind === "reading" ? (
+      WORDS.READING
+    ) : candidates.kind === "failed" ? (
+      WORDS.NOT_READ
+    ) : candidates.kind === "no-token" ? (
+      <>
+        {WORDS.NO_TOKEN_BEFORE} <SettingsPageLink page={SETTINGS_VIEW.ACCOUNT} onLeave={close} />{" "}
+        {WORDS.NO_TOKEN_AFTER}
+      </>
+    ) : rows.length === 0 ? (
+      WORDS.NONE
+    ) : undefined;
   return (
     <span className="settings-picker" ref={holder}>
       <Button

@@ -33,6 +33,10 @@ import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
 
+/** What the row says while no token is saved, so what the token is for is told before it is asked for. */
+const TOKEN_PURPOSE =
+  "Lets agents work in repositories Luke's GitHub App does not reach, and open pull requests as you.";
+
 /** What the row says where the token could not be read, so what stands is unknown. */
 const TOKEN_READ_FAILED = "The token could not be read.";
 
@@ -55,7 +59,7 @@ export async function signOutSayingFailure(onSignOut: () => Promise<void>): Prom
 
 /**
  * The member's own GitHub personal access token: its hint, login, and
- * expiry once one is saved, nothing while none is, and Manage or Add, which
+ * expiry once one is saved, what it is for while none is, and Manage or Add, which
  * opens the token's dialog (`github-dialog.tsx`). The token is read as the
  * row is drawn, again for each account it is drawn for (the section keys it
  * by the account); a read that fails says so under the row in a
@@ -95,7 +99,9 @@ function GitHubTokenRow(): React.JSX.Element {
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
         }
         label="GitHub personal access token"
-        description={token ? <TokenFacts token={token} /> : undefined}
+        description={
+          token ? <TokenFacts token={token} /> : token === null ? TOKEN_PURPOSE : undefined
+        }
         // Note that a row with nothing below draws no `below` at all, since its box keeps a margin.
         below={
           token === undefined && readFailed
