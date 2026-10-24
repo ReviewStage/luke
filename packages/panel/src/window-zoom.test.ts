@@ -54,11 +54,12 @@ async function drawOn(
 }
 
 /** Presses ⌘ and `key`, answering the event, so a test reads whether the window took it. */
-function pressCommand(key: string, code: string): KeyboardEvent {
+function pressCommand(key: string, code: string, repeat = false): KeyboardEvent {
   const event = new KeyboardEvent("keydown", {
     key,
     code,
     metaKey: true,
+    repeat,
     bubbles: true,
     cancelable: true,
   });
@@ -92,3 +93,10 @@ for (const { name, key, code, zoom } of ZOOM_KEYS) {
     assert.deepEqual(writes, [zoom]);
   });
 }
+
+// Note that this test is the file's only one that presses a repeat and so the only one to read the window's capabilities outside React, which its one registry answers for every test after it.
+test("a held ⌘+ keeps stepping the browser's zoom on the web, its repeats left alone too", async () => {
+  await drawOn(WEB_CAPABILITIES, []);
+  assert.equal(pressCommand("+", "Equal").defaultPrevented, false);
+  assert.equal(pressCommand("+", "Equal", true).defaultPrevented, false);
+});
