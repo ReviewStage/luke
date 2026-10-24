@@ -180,7 +180,8 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
 
 /**
  * A cloud Browser tab's bar: back, forward, and reload where `onStep` takes
- * them, and the address,
+ * them, else off with `whyOff` said by their hints, which the keyboard
+ * reaches too, and the address,
  * which opens what is typed as a browser's address bar reads it, then
  * whatever the caller hands it. What is typed is put back on a blur, unless
  * `holdTyped`; Escape answers `onEscape` where given, and leaves the bar
@@ -189,6 +190,7 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
 function CloudBrowserBar({
   address,
   onStep,
+  whyOff,
   onOpen,
   onEscape,
   holdTyped = false,
@@ -198,6 +200,8 @@ function CloudBrowserBar({
 }: {
   address: string;
   onStep: ((step: BrowserLiveHistory) => void) | undefined;
+  /** Why the steps are off, which their hints say. */
+  whyOff: string;
   onOpen: (address: string) => void;
   onEscape?: (() => void) | undefined;
   holdTyped?: boolean;
@@ -217,33 +221,38 @@ function CloudBrowserBar({
     }
     onOpen(opened);
   };
+  // Note that a step's hint is its name while it works, and the name with the reason while it is off.
+  const hintOf = (name: string) => (onStep === undefined ? `${name}: ${whyOff}` : name);
   return (
     <PaneBar
       middle={
         <>
           <div className="file-view-history">
-            <Tooltip label="Back">
+            <Tooltip label={hintOf("Back")}>
               <IconButton
                 icon={<ArrowLeftIcon aria-hidden="true" />}
                 label="Back"
                 disabled={onStep === undefined}
+                focusableWhenDisabled
                 onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
               />
             </Tooltip>
-            <Tooltip label="Forward">
+            <Tooltip label={hintOf("Forward")}>
               <IconButton
                 icon={<ArrowRightIcon aria-hidden="true" />}
                 label="Forward"
                 disabled={onStep === undefined}
+                focusableWhenDisabled
                 onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
               />
             </Tooltip>
-            <Tooltip label="Reload">
+            <Tooltip label={hintOf("Reload")}>
               <IconButton
                 icon={<RotateCwIcon aria-hidden="true" />}
                 label="Reload"
                 turns
                 disabled={onStep === undefined}
+                focusableWhenDisabled
                 onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
               />
             </Tooltip>
@@ -304,6 +313,17 @@ function noticeOf(view: CloudBrowserView): Notice | undefined {
     return { waiting: true, label: "Reconnecting" };
   }
   return view.painted ? undefined : { waiting: true, label: "Waiting for the page" };
+}
+
+/** Why the bar's steps are off while the view is not live, the wait or the act that brings them back. */
+function stepsOffOf(view: CloudBrowserView): string {
+  if (view.phase === CLOUD_BROWSER_PHASE.ENDED) {
+    return view.ended === BROWSER_LIVE_CLOSE_REASON.GONE
+      ? "this tab has closed"
+      : "watch again to use it";
+  }
+  if (view.phase === CLOUD_BROWSER_PHASE.RECONNECTING) return "reconnecting";
+  return "the browser is not live yet";
 }
 
 /** Paints a decoded frame over the canvas, scaled to it whole. */
@@ -546,6 +566,7 @@ export function CloudBrowserPane({
       <CloudBrowserBar
         address={address}
         onStep={isLive ? live.step : undefined}
+        whyOff={stepsOffOf(view)}
         onOpen={live.navigate}
         disabled={!isLive}
       />
@@ -673,6 +694,7 @@ export function CloudBrowserDraftPane({
       <CloudBrowserBar
         address=""
         onStep={undefined}
+        whyOff="no page is open yet"
         onOpen={open}
         onEscape={onDiscard}
         holdTyped

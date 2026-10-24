@@ -425,7 +425,7 @@ export function PagePane({
                   onClick={() => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE)}
                 />
               </Tooltip>
-              <Tooltip label="Reload">
+              <Tooltip label="Reload page">
                 <IconButton
                   icon={<RotateCwIcon aria-hidden="true" />}
                   label="Reload page"

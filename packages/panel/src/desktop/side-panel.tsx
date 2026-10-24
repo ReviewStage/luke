@@ -1378,11 +1378,13 @@ export function ActivityList({
                       : { Hint: RowHint, label: entry.look.label }
                   }
                   actions={
-                    <IconButton
-                      icon={<CloseIcon />}
-                      label={`Close ${entry.look.label}`}
-                      onClick={entry.close}
-                    />
+                    <Tooltip label={`Close ${entry.look.label}`}>
+                      <IconButton
+                        icon={<CloseIcon />}
+                        label={`Close ${entry.look.label}`}
+                        onClick={entry.close}
+                      />
+                    </Tooltip>
                   }
                   onPress={() => {
                     onListed(false);
