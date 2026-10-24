@@ -145,6 +145,7 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
+import { useHeldOrder } from "../tasks/use-held-order.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
@@ -1139,6 +1140,73 @@ function drawnTasks(
   }
 }
 
+/** What decides where the Tasks section stands its rows: the workspace listed, the grouping, the order, and the filters. */
+interface TaskOrderView {
+  readonly workspaceId: string | undefined;
+  readonly grouping: TaskSections["grouping"];
+  readonly order: TaskOrder;
+  readonly statuses: readonly TaskStatus[];
+  readonly createdBy: string | undefined;
+  readonly assignedTo: string | undefined;
+}
+
+/** Whether the Tasks section drawn under one view stands its rows as it would under another. */
+function sameTaskOrder(was: TaskOrderView, now: TaskOrderView): boolean {
+  return (
+    was.workspaceId === now.workspaceId &&
+    was.grouping === now.grouping &&
+    was.order === now.order &&
+    was.createdBy === now.createdBy &&
+    was.assignedTo === now.assignedTo &&
+    was.statuses.length === now.statuses.length &&
+    was.statuses.every((status, at) => status === now.statuses[at])
+  );
+}
+
+/** The sections with each row drawn as it is now, wherever its held place stood it. */
+function liveSections(sections: TaskSections, live: ReadonlyMap<string, TaskRow>): TaskSections {
+  const now = (rows: readonly TaskRow[]) => rows.map((row) => live.get(taskRowKey(row)) ?? row);
+  switch (sections.grouping) {
+    case TASK_GROUPING.REPOSITORY:
+      return {
+        ...sections,
+        groups: sections.groups.map((group) => ({ ...group, rows: now(group.rows) })),
+      };
+    case TASK_GROUPING.ASSIGNEE:
+      return {
+        ...sections,
+        groups: sections.groups.map((group) => ({ ...group, rows: now(group.rows) })),
+      };
+    case TASK_GROUPING.CREATOR:
+      return {
+        ...sections,
+        groups: sections.groups.map((group) => ({ ...group, rows: now(group.rows) })),
+      };
+    case TASK_GROUPING.NONE:
+      return { ...sections, rows: now(sections.rows) };
+  }
+}
+
+/**
+ * Where each row stands, as the sections order and group it: the row as it
+ * was first drawn while the sidebar is in sight (`use-held-order.ts`), or as
+ * it is now where it is new to the list or a press here gave it a name or a
+ * status the view has yet to carry, so the reader's own act moves it at once.
+ */
+function taskPlaces(
+  rows: readonly TaskRow[],
+  held: ReadonlyMap<string, TaskRow>,
+  pending: ReadonlySet<string> | undefined,
+): ReadonlyMap<string, TaskRow> {
+  const moved = (row: TaskRow) => row.kind === TASK_ROW.TASK && pending?.has(row.task.id) === true;
+  return new Map(
+    rows.map((row) => {
+      const key = taskRowKey(row);
+      return [key, moved(row) ? row : (held.get(key) ?? row)] as const;
+    }),
+  );
+}
+
 /**
  * The Tasks section's groups as the view draws them. A row says what its
  * group does not: under a repository's header a teammate's face; in one run
@@ -1892,20 +1960,37 @@ function SidebarColumn({
   const hidden = hiddenStatuses([...sectionRows, ...rows], statuses);
   const statusRows = taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
-  const sections = taskSections(
-    statusRows,
-    drawnGrouping(grouping, shared),
+  const orderView: TaskOrderView = {
+    workspaceId: tasks.workspace?.id,
+    grouping: drawnGrouping(grouping, shared),
     order,
-    tasks,
-    // A creator's or an assignee's group is ordered by the name its header says.
-    (row) => actorName(creatorActor(creatorOf(row), reader, undefined)),
-    (row) => {
-      const assignee = assigneeOf(row);
-      return assignee === undefined
-        ? UNASSIGNED_WORDS
-        : actorName(personActor(assignee, reader.members, reader.readerId, reader.former));
+    statuses,
+    createdBy,
+    assignedTo,
+  };
+  // While the sidebar is in sight each task keeps the place it was first drawn in, so one an update would sort elsewhere stays under the reader's eye.
+  const sections = useHeldOrder(orderView, tasks.shown && overlay.inSight, {
+    sameOrder: sameTaskOrder,
+    draw: (places: ReadonlyMap<string, TaskRow>) => {
+      const placed = taskPlaces(statusRows, places, tasks.pendingTasks);
+      const held = taskSections(
+        [...placed.values()],
+        orderView.grouping,
+        order,
+        tasks,
+        // A creator's or an assignee's group is ordered by the name its header says.
+        (row) => actorName(creatorActor(creatorOf(row), reader, undefined)),
+        (row) => {
+          const assignee = assigneeOf(row);
+          return assignee === undefined
+            ? UNASSIGNED_WORDS
+            : actorName(personActor(assignee, reader.members, reader.readerId, reader.former));
+        },
+      );
+      return liveSections(held, new Map(statusRows.map((row) => [taskRowKey(row), row])));
     },
-  );
+    placesOf: (_drawn, held) => taskPlaces(statusRows, held, tasks.pendingTasks),
+  });
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
   const repositoryOf = (row: TaskRow) => {

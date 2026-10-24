@@ -638,6 +638,8 @@ export interface TasksControl {
     inbox: readonly AppInboxTask[];
     inboxTasks: readonly AppInboxTaskHolding[];
   };
+  /** The tasks a name or status given here stands over until the view carries it (`@luke/ui/pending-values`), which a list held still moves at once; none where nothing waits. */
+  pendingTasks?: ReadonlySet<string>;
   /** The chosen workspace's agents an automation started with no plan, newest started first, which the sidebar lists among the plans, and those archived, which its Archived view lists among the archived plans. */
   listedAgents: {
     readonly standing: readonly TasklessAgent[];
@@ -1456,6 +1458,10 @@ export function useTasksTab(input: {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
   const renamed = useMemo(() => renamedView(viewed, pendingShown(renames)), [viewed, renames]);
+  const pendingTasks = useMemo(
+    () => new Set([...renames.keys(), ...statuses.keys()]),
+    [renames, statuses],
+  );
   const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
   const marked = useMemo(
     () => statusedView(markedView(drafted, marks), statuses),
@@ -2585,7 +2591,8 @@ export function useTasksTab(input: {
       voiceLost: voiceLostNow(),
     });
     // Note that a call runs on the OpenAI key, which Codex's row holds.
-    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys(MODEL_PROVIDER.OPENAI);
+    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY)
+      input.onOpenApiKeys(MODEL_PROVIDER.OPENAI);
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
       tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
     }
@@ -3508,6 +3515,7 @@ export function useTasksTab(input: {
       inboxTasks: listedInbox.inboxTasks,
     },
     listedAgents,
+    pendingTasks,
     workspaces: viewed.workspaces,
     workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
     // A failed read is taken as stale, so the refresh reads the workspaces again at once.
