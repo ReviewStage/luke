@@ -51,6 +51,7 @@ import { relayout } from "../testing/resize-observer.js";
 import "../file-tree/index.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 const TASK: Task = {
@@ -988,8 +989,11 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   container.remove();
 });
 
-/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`. */
-async function chatTabMounted(ownChannel: boolean) {
+/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`, its view as `view` changes it. */
+async function chatTabMounted(
+  ownChannel: boolean,
+  view: Partial<ReturnType<typeof tasksControl>["chatView"]> = {},
+) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -1030,7 +1034,7 @@ async function chatTabMounted(ownChannel: boolean) {
               open: true,
               tab: SIDE_PANEL_TAB.CHAT,
             },
-            chatView: { ...tasksControl().chatView, available: true, chat },
+            chatView: { ...tasksControl().chatView, available: true, chat, ...view },
           }),
         }),
       ),
@@ -1064,6 +1068,52 @@ test("a task's Chat tab in the side panel shows its task channel at reading size
   );
   act(() => none.root.unmount());
   none.container.remove();
+});
+
+test("a task's Chat tab whose chat could not be read says so with Retry, never that nothing is posted, nor a loading placeholder, and Retry reads again; an unavailable chat says it is unavailable", async () => {
+  let retried = 0;
+  const failed = await chatTabMounted(true, {
+    chat: undefined,
+    failed: true,
+    onRetry: () => {
+      retried += 1;
+    },
+  });
+  const tab = failed.container.querySelector("section.desktop-task-chat");
+  assert.equal(
+    tab?.querySelector('[role="alert"]')?.textContent,
+    "The workspace's chat could not be read.Retry",
+  );
+  assert.equal(tab?.querySelector('[role="status"]'), null, "no loading placeholder");
+  assert.doesNotMatch(tab?.textContent ?? "", /Nothing is posted/u);
+  const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+  act(() => failed.root.unmount());
+  failed.container.remove();
+
+  // Note that the column draws the tab only where the chat is available, so the tab itself is mounted here.
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TaskChatTab, {
+          tasks: tasksControl({
+            chatView: { ...tasksControl().chatView, available: false, chat: undefined },
+          }),
+          taskId: TASK.id,
+        }),
+      ),
+    ),
+  );
+  assert.match(container.textContent ?? "", /Chat is not available yet\./u);
+  assert.doesNotMatch(container.textContent ?? "", /Nothing is posted/u);
+  act(() => root.unmount());
+  container.remove();
 });
 
 test("with Chat off for the account, a Chat tab kept in the side panel draws nothing", async () => {

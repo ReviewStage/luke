@@ -1,7 +1,7 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState, PageToolbar, useMinute } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, PageToolbar, useMinute } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
@@ -18,7 +18,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
-import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
+import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -180,8 +180,7 @@ function InboxShown({
     choices,
     folds,
     openAutomation,
-    read,
-    taskless,
+    failed,
     asked,
     chosenTask,
     taskId,
@@ -427,7 +426,7 @@ function InboxShown({
                     reading={reading}
                     note={
                       <InboxListNote
-                        failed={read.failed || taskless.failed}
+                        failed={failed}
                         reading={reading}
                         empty={listedItems(list).length === 0}
                         alone={columns.shown === INBOX_COLUMNS.LIST}
@@ -502,6 +501,13 @@ function InboxShown({
                             : { label: BACK_TO_INBOX, onClick: columns.onBack }
                         }
                       />
+                    ) : failed ? (
+                      // Note that the list beside says the read failed, so only a pane standing alone draws it, never the empty state.
+                      paneOnly ? (
+                        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+                          {INBOX_NOT_READ}
+                        </ErrorState>
+                      ) : null
                     ) : reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
                       <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>

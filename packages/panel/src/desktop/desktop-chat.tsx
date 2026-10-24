@@ -3,6 +3,7 @@ import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { CodeRef } from "@luke/features/task-wire";
+import { readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -474,7 +475,7 @@ const NEW_CHANNEL = "New channel";
 const NO_CHAT = "Chat is not available yet.";
 
 /** What the view says where the workspace's chat could not be read. */
-const CHAT_FAILED = "The workspace's chat could not be read.";
+const CHAT_FAILED = readFailedWords("the workspace's chat");
 
 /** Whether a row stands for the place shown. */
 function shows(place: ChatPlace, row: ChatRailRow): boolean {
@@ -1418,7 +1419,10 @@ export function TaskChatTab({
         ) : read === undefined && view.available ? (
           <SpinnerRegion delay label="Loading chat" />
         ) : (
-          <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
+          // Note that a chat nothing could be read of says so, rather than that nothing is posted in it.
+          <EmptyState icon={<MessagesSquareIcon />}>
+            {read === undefined ? NO_CHAT : NO_TASK_CHANNEL}
+          </EmptyState>
         )}
       </section>
     );

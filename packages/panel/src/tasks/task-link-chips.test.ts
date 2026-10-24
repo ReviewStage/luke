@@ -191,6 +191,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
   const document = { body: `## Rollout\n\n${LINKS}\n`, assumptions: [] };
   const container = drawn(
     createElement(VersionView, {
+      onRetry: () => undefined,
       viewing: {
         line: {
           seq: 2,

@@ -94,6 +94,7 @@ function versionHistoryControl(
     onList: ignore,
     onStand: ignore,
     onRetry: ignore,
+    onRetryVersion: ignore,
     onLoadEarlier: () => Promise.resolve(false),
     onRestore: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     ...overrides,

@@ -48,8 +48,7 @@ export function SidebarInbox({
     filteredOut,
     search,
     searched,
-    read,
-    taskless,
+    failed,
     onRetry,
     openAutomation,
     compose,
@@ -85,7 +84,7 @@ export function SidebarInbox({
         reading={reading}
         note={
           <InboxListNote
-            failed={read.failed || taskless.failed}
+            failed={failed}
             reading={reading}
             empty={listedItems(list).length === 0}
             alone={false}

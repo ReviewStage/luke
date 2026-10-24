@@ -297,9 +297,12 @@ export function useInboxListing(
   }, [standIn, choose]);
   // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
+  // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.
+  const failed = read.failed || taskless.failed || tasks.listFailed;
   const onRetry = () => {
     read.onRetry();
     taskless.onRetry();
+    if (tasks.listFailed) tasks.onRetryList();
   };
   return {
     view,
@@ -328,6 +331,7 @@ export function useInboxListing(
     searched,
     missing,
     reading,
+    failed,
     choose,
     closeItem,
     onRetry,
