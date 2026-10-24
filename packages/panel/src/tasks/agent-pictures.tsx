@@ -435,46 +435,37 @@ export function CallPictures({
   if (door === undefined || (called.length === 0 && recorded.length === 0)) return null;
   const videos = recorded.length === 0 ? null : <ShownSet door={door} shown={recorded} />;
   if (called.length === 0) return <>{videos}</>;
-  // Note that the kept pictures stand first, each holding its place among the call's as its key, because a set draws six and a kept one past six omitted would be one no tile opens.
-  const placed = called.map((each, place) => ({ each, place }));
-  const ordered = [
-    ...placed.filter(({ each }) => each.kept),
-    ...placed.filter(({ each }) => !each.kept),
-  ];
   const kept = called.flatMap((each) =>
     each.kept ? [{ picture: each.picture, words: each.name }] : [],
   );
   const openAt = (id: string) => open(kept, id);
+  // Note that a call's set draws every picture it answered, never six and a count, because one not kept says why only on its own tile and the viewer walks none of those.
   return (
     <>
       <div className="call-pictures">
         <PictureSet label={CALLED_LABEL} count={called.length} thumbnails>
-          {ordered
-            .slice(0, PICTURE_SET_SHOWN)
-            .map(({ each, place }) =>
-              each.kept ? (
-                <KeptTile
-                  key={place}
-                  door={door}
-                  picture={each.picture}
-                  words={each.name}
-                  caption=""
-                  onOpen={openAt}
-                />
-              ) : (
-                <PictureSetTile
-                  key={place}
-                  state={{ kind: PICTURE_STATE.MISSING }}
-                  words={each.name}
-                  why={notKeptWords(each.byteCount)}
-                />
-              ),
-            )}
+          {called.map((each, index) =>
+            each.kept ? (
+              <KeptTile
+                // Note that a picture's place among its call's is its identity: an answer never reorders.
+                key={index}
+                door={door}
+                picture={each.picture}
+                words={each.name}
+                caption=""
+                onOpen={openAt}
+              />
+            ) : (
+              <PictureSetTile
+                // Note that a picture's place among its call's is its identity: an answer never reorders.
+                key={index}
+                state={{ kind: PICTURE_STATE.MISSING }}
+                words={each.name}
+                why={notKeptWords(each.byteCount)}
+              />
+            ),
+          )}
         </PictureSet>
-        <UnseenPictures
-          door={door}
-          pictures={ordered.map(({ each }) => (each.kept ? each.picture : undefined))}
-        />
         {viewer}
       </div>
       {videos}

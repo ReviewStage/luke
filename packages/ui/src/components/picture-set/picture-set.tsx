@@ -205,7 +205,7 @@ export function PictureSet({
   count: number;
   /** Whether it is thumbnails however few it holds, rather than a few at the column's width. */
   thumbnails?: boolean | undefined;
-  /** The tiles drawn, at most `PICTURE_SET_SHOWN`. */
+  /** The tiles drawn: at most `PICTURE_SET_SHOWN` where the rest are left to a viewer, or every one. */
   children: ReactNode;
 }): React.JSX.Element {
   const many = thumbnails || count > SET_FEW;

@@ -214,7 +214,7 @@ test("an integration's call keeps its row and gains its pictures as tiles, one l
   assert.equal(tiles[1]?.querySelector("button"), null, "a picture not kept opens nothing");
 });
 
-test("a call whose first six pictures were not kept still draws the kept one after them first, which opens", async () => {
+test("a call draws every picture it answered in its order, so a kept one after six not kept opens and none hides behind a count", async () => {
   const kept = picture(390, 700);
   const omitted = {
     type: "image",
@@ -235,10 +235,12 @@ test("a call whose first six pictures were not kept still draws the kept one aft
   const tiles = [
     ...answered.container.querySelectorAll('ul[aria-label="Pictures the call answered"] > li'),
   ];
-  const open = tiles[0]?.querySelector<HTMLButtonElement>("button");
+  const open = tiles.at(-1)?.querySelector<HTMLButtonElement>("button");
 
-  assert.equal(tiles.length, 6);
+  assert.equal(tiles.length, 7);
+  assert.match(tiles[0]?.textContent ?? "", /not kept · 6\.4 MB/u);
   assert.equal(open?.getAttribute("aria-label"), "Enlarge extract_images-7");
+  assert.doesNotMatch(answered.container.textContent ?? "", /\+\d/u, "no count hides a picture");
   await act(async () => open?.click());
   assert.ok(document.querySelector('[role="dialog"] img'), "the viewer opens on the kept picture");
 });
