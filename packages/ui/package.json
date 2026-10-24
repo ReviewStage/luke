@@ -10,6 +10,7 @@
     "./appearance": "./src/tokens/appearance.js",
     "./actor-model": "./src/actor-model.js",
     "./choice-keys": "./src/components/choice/choice-keys.js",
+    "./composing-key": "./src/composing-key.js",
     "./accounts-sort": "./src/accounts-sort.js",
     "./activity-calendar": "./src/activity-calendar.js",
     "./admin-animations": "./src/admin-animations.js",
