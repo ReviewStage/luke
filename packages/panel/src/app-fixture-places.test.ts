@@ -231,7 +231,7 @@ it.effect(
       yield* Effect.promise(settle);
 
       assert.match(drawn(), /Assigned to you/u);
-      assert.match(drawn(), /Waiting on you/u);
+      assert.match(drawn(), /Needs you/u);
       assert.doesNotMatch(drawn(), /Waiting on their answer/u);
     }),
 );
