@@ -1,4 +1,6 @@
 import {
+  ANNOUNCE,
+  Announcer,
   ArrowLeftIcon,
   BUTTON_VARIANT,
   COMMAND_LINK_ELEMENT,
@@ -9,14 +11,15 @@ import {
   IconButton,
   Inline,
   MARK_STRIP_LOOK,
-  MARK_STRIP_TONE,
   MarkStrip,
   Menu,
   PlayIcon,
   SplitButton,
+  STATUS_TONE,
   type StripMark,
   TEXT_TONE,
   Text,
+  useAnnounce,
   useMenu,
 } from "@luke/ui";
 import { useRef, useState } from "react";
@@ -78,7 +81,8 @@ function HeardSplit({ onDone }: { onDone: (what: string) => void }): React.JSX.E
     <SplitButton
       variant={BUTTON_VARIANT.OUTLINE}
       icon={<PlayIcon />}
-      busy="Starting"
+      busy
+      busyLabel="Starting"
       onClick={() => onDone("Started")}
       onMainPress={() => onDone("Heard a press of Start")}
       menu={{ label: "Choose a model to start with", ...menu.trigger() }}
@@ -89,32 +93,30 @@ function HeardSplit({ onDone }: { onDone: (what: string) => void }): React.JSX.E
 }
 
 const MARKS: readonly StripMark[] = [
-  { tone: MARK_STRIP_TONE.DANGER, viewed: true },
-  { tone: MARK_STRIP_TONE.ATTENTION, current: true },
-  { tone: MARK_STRIP_TONE.COMPLETE },
-  { tone: MARK_STRIP_TONE.ATTENTION },
+  { tone: STATUS_TONE.DANGER, viewed: true },
+  { tone: STATUS_TONE.ATTENTION, current: true },
+  { tone: STATUS_TONE.COMPLETE },
+  { tone: STATUS_TONE.ATTENTION },
   {},
 ];
 
 /** A changed file's bar for each of a pull request's files, a renamed one in the working tone, the file shown standing wider. */
 const BARS: readonly StripMark[] = [
-  { tone: MARK_STRIP_TONE.COMPLETE, viewed: true },
-  { tone: MARK_STRIP_TONE.ATTENTION },
-  { tone: MARK_STRIP_TONE.ATTENTION, current: true },
-  { tone: MARK_STRIP_TONE.WORKING },
-  { tone: MARK_STRIP_TONE.DANGER },
-  ...Array.from({ length: 40 }, () => ({ tone: MARK_STRIP_TONE.ATTENTION })),
+  { tone: STATUS_TONE.COMPLETE, viewed: true },
+  { tone: STATUS_TONE.ATTENTION },
+  { tone: STATUS_TONE.ATTENTION, current: true },
+  { tone: STATUS_TONE.WORKING },
+  { tone: STATUS_TONE.DANGER },
+  ...Array.from({ length: 40 }, () => ({ tone: STATUS_TONE.ATTENTION })),
 ];
 
 function PressShortcuts(): React.JSX.Element {
   const [done, setDone] = useState("Nothing yet");
-  const said = (
-    <Text tone={TEXT_TONE.MUTED} aria-live="polite">
-      {done}
-    </Text>
-  );
+  const said = <Text tone={TEXT_TONE.MUTED}>{done}</Text>;
+  useAnnounce(ANNOUNCE.POLITE, done);
   return (
     <>
+      <Announcer />
       <CatalogSection id="press-hold" title="Held, or right-clicked: Back lists its steps">
         <Inline gap={GAP.CONTROL}>
           <HeldBack onDone={setDone} />

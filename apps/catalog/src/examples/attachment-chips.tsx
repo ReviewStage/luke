@@ -37,7 +37,7 @@ interface SampleFile {
 
 const FILES: readonly SampleFile[] = [
   { name: "screenshot.png", image: PICTURE, openable: true },
-  { name: "spec.pdf", detail: "48 KB", openable: true },
+  { name: "spec.pdf", detail: "48 kB", openable: true },
   {
     name: "quarterly-revenue-forecast-with-every-region-broken-out.csv",
     detail: "1.2 MB",
@@ -109,7 +109,7 @@ function UploadingRow(): React.JSX.Element {
     <>
       <ul className="catalog-attachments" aria-label="Files going up">
         <AttachmentChip name="screenshot.png" image={PICTURE} state={state} progress={64} />
-        <AttachmentChip name="spec.pdf" icon={<ImageIcon />} detail="48 KB" state={state} />
+        <AttachmentChip name="spec.pdf" icon={<ImageIcon />} detail="48 kB" state={state} />
       </ul>
       <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setLanded((now) => !now)}>
         {landed ? "Send again" : "Land them"}

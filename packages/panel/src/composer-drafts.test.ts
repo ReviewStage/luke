@@ -860,6 +860,7 @@ async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
       kind: INBOX_SCOPE_KIND.AGENT,
       shown: true,
       waiting: true,
+      readerId: undefined,
       agents: {
         heldIds: [agentId],
         inboxFollower: main.follower,

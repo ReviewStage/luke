@@ -101,13 +101,34 @@ test("while a check runs, its press stays focusable, says so, and asks for no se
   assert.equal(asked(), 0);
 });
 
-test("a check that failed is said in the row's announced line, not among its details", () => {
-  const { page } = about({
+test("a check that failed reads as an alert under the row, whose Retry checks again", () => {
+  const { page, asked } = about({
     status: UPDATE_STATUS.ERROR,
     currentVersion: "0.17.0",
     installSupported: true,
   });
-  const announced = page.querySelector('[aria-live="polite"]');
-  assert.equal(announced?.textContent, "Couldn't check for updates");
+  const alerts = page.querySelectorAll('[role="alert"]');
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0]?.textContent, "Couldn't check for updatesRetry");
   assert.equal(page.textContent?.split("Couldn't check for updates").length, 2, "said once");
+  assert.equal(button(page, "Try again"), undefined, "no second button of the row's own");
+
+  act(() => button(page, "Retry")?.click());
+
+  assert.equal(asked(), 1);
+  assert.match(page.textContent ?? "", /Checking for updates…/);
+  assert.equal(page.querySelector('[role="alert"]'), null, "the failure goes once a check runs");
+});
+
+test("an install that failed reads as an alert with no Retry, beside the Download that mends it", () => {
+  const { page } = about({
+    status: UPDATE_STATUS.ERROR,
+    currentVersion: "0.17.0",
+    latestVersion: "0.18.0",
+    installSupported: true,
+  });
+
+  assert.equal(page.querySelector('[role="alert"]')?.textContent, "Couldn't install 0.18.0");
+  assert.equal(button(page, "Retry"), undefined);
+  assert.ok(button(page, "Download"), "the browser is the way to the release");
 });

@@ -2,9 +2,11 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_BOUNDS,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
@@ -13,6 +15,7 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
+import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
@@ -25,8 +28,10 @@ import { useAppKeymap } from "../app-commands.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
+  composerEditor,
   editorBundleLanded,
   installEditorLayout,
+  pasteInComposer,
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
@@ -135,13 +140,15 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  // Note that a comment's unsent words are kept in the window's storage, so each test starts with none.
+  window.localStorage.clear();
 });
 
 /** The plan's page, or its Comments tab, drawn over the threads, with every write asked kept. */
 function drawn(
   view: "page" | "tab" | "other",
   threads: readonly PlanCommentThread[] = THREADS,
-  landing: () => boolean = () => true,
+  landing: () => boolean | Promise<boolean> = () => true,
   plan: Task = PLAN,
   reveal?: { readonly thread: string; readonly ask: number },
   mentions?: TaskMentionsValue,
@@ -184,7 +191,7 @@ function drawn(
           ...(view === "page" ? { sectionLinks: PAGE_LINKS } : undefined),
           ...(me === undefined ? undefined : { reader: { readerId: me } }),
         });
-  // Note that a page with mentions draws on a registry of its own, so the editor bundle installed for it is read afresh.
+  // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
   const registry = AtomRegistry.make();
   const tree = createElement(
     PlanCommentsProvider,
@@ -197,7 +204,7 @@ function drawn(
           : createElement(TaskMentions, { value: mentions, children: page }),
     }),
   );
-  act(() => root.render(mentions === undefined ? tree : onRegistry(registry, tree)));
+  act(() => root.render(onRegistry(registry, tree)));
   return { container, asked, started, documentsShown };
 }
 
@@ -215,6 +222,16 @@ function wide<Drawn>(draw: () => Drawn): Drawn {
     if (width !== undefined) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
     else Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
   }
+}
+
+/** Types `words` into a plain field, as a keyboard's input lands. */
+function typeInto(field: HTMLTextAreaElement | null | undefined, words: string): void {
+  assert.ok(field, "the field stands");
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 }
 
 /** The words marked for a thread, joined as drawn. */
@@ -284,7 +301,7 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   const { container, asked } = drawn("tab");
 
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
-  assert.ok(container.querySelector(".comments-head")?.textContent?.startsWith("Resolved"));
+  assert.ok(container.querySelector(".luke-pane-bar")?.textContent?.startsWith("Resolved"));
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="Reopen"]')?.click();
   });
@@ -292,6 +309,24 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   assert.deepEqual(asked, [
     { thread: ID.RESOLVED, action: { action: PLAN_COMMENT_ACTION.REOPEN } },
   ]);
+});
+
+test("the Comments tab opens on the list its reader last chose, Resolved until they show the open ones again", () => {
+  const heading = (container: HTMLElement) =>
+    container.querySelector(".luke-pane-bar")?.textContent?.split(/\d/u)[0];
+  const toggle = (container: HTMLElement) =>
+    container.querySelector<HTMLButtonElement>(".luke-pane-bar button[aria-pressed]")?.click();
+
+  const first = drawn("tab");
+  assert.equal(heading(first.container), "Open", "no choice kept lists the open threads");
+  act(() => toggle(first.container));
+  assert.equal(heading(first.container), "Resolved");
+
+  const again = drawn("tab");
+  assert.equal(heading(again.container), "Resolved", "the tab drawn again lists the resolved ones");
+  act(() => toggle(again.container));
+
+  assert.equal(heading(drawn("tab").container), "Open", "and the open ones once chosen again");
 });
 
 test("the Comments tab's Resolved toggle starts the other list at its top", () => {
@@ -309,7 +344,7 @@ test("the Comments tab's Resolved toggle starts the other list at its top", () =
   });
 
   act(() =>
-    container.querySelector<HTMLButtonElement>(".comments-head button[aria-pressed]")?.click(),
+    container.querySelector<HTMLButtonElement>(".luke-pane-bar button[aria-pressed]")?.click(),
   );
 
   assert.equal(top, 0);
@@ -355,7 +390,7 @@ test("a comment's time reads as chat's does, a few letters, with the full moment
     { ...open, entries: [{ ...open.entries[0], at }], createdAt: at, updatedAt: at },
   ]);
 
-  const time = container.querySelector<HTMLElement>(".comment-time time");
+  const time = container.querySelector<HTMLElement>(".luke-comment-time time");
   assert.equal(time?.textContent, "3h");
 
   restOn(time as HTMLElement);
@@ -441,7 +476,9 @@ test("deleting a thread asks first, and only the confirm deletes it", async () =
       ?.click(),
   );
   const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
-  act(() => card?.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() =>
+    card?.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]')?.click(),
+  );
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
     (each) => each.textContent === "Delete thread",
   );
@@ -571,7 +608,7 @@ test("a thread at rest opens from a press anywhere on its card", () => {
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
   assert.equal(card()?.dataset.open, "false");
 
-  act(() => card()?.querySelector<HTMLElement>(".comment-head")?.click());
+  act(() => card()?.querySelector<HTMLElement>(".luke-comment-head")?.click());
   assert.equal(card()?.dataset.open, "true", "the card's head opens it");
 });
 
@@ -700,6 +737,39 @@ test("on a plan's page a reply is written in the agent box's editor, its words p
   );
 });
 
+test("a reply pasted past the comment's cap is cut to the room left and the card says so, until the words change, and the counter stands from four fifths of the cap", () => {
+  installEditorLayout();
+  const { container } = drawn(
+    "page",
+    [THREADS[0] as PlanCommentThread],
+    () => true,
+    PLAN,
+    undefined,
+    PAGE_MENTIONS,
+  );
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.ok(card);
+  const cap = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS;
+  const note = () => card.querySelector(".luke-composer-foot-note")?.textContent;
+  assert.equal(card.querySelector(".luke-length-counter"), null);
+
+  pasteInComposer(card, "x".repeat(cap + 100));
+  assert.equal(note(), pasteCutWords(cap));
+  assert.equal(card.querySelector(".luke-length-counter")?.textContent, `${cap}/${cap}`);
+
+  const editor = composerEditor(card).editor;
+  assert.ok(editor);
+  act(() => {
+    editor.view.dispatch(editor.state.tr.delete(1, 2));
+  });
+  assert.equal(note(), undefined, "the note goes once the words change again");
+});
+
 test("a thread at rest draws its comment's mentions as their chips, as it does open, and a press on one opens the thread too", async () => {
   installEditorLayout();
   const mentioned = threadOn(ID.OPEN, "**single-use link** that expires", "", {
@@ -797,7 +867,7 @@ test("a finger's arrival on a block shows no button, so iOS spends no tap on one
   assert.ok(button() !== null, "the tap shows it");
 });
 
-test("a thread being started goes on a press away while empty, and stays holding a draft", () => {
+test("a thread being started goes on a press away and on Esc, and its words come back as it is started on the same words again", () => {
   const { container } = wide(() => drawn("page", []));
   const startOn = () => {
     const paragraph = [...container.querySelectorAll("p")].find((p) =>
@@ -808,24 +878,86 @@ test("a thread being started goes on a press away while empty, and stays holding
     act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
   };
   const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
+  const field = () => pending()?.querySelector<HTMLTextAreaElement>("textarea");
   const away = () =>
     act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
 
   startOn();
   assert.ok(pending(), "the thread is being started");
   away();
-  assert.equal(pending(), null, "empty, it goes");
+  assert.ok(pending() === null, "empty, it goes");
 
   startOn();
-  const field = pending()?.querySelector<HTMLTextAreaElement>("textarea");
-  assert.ok(field);
-  act(() => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(field, "Worth a setting?");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  typeInto(field(), "Worth a setting?");
   away();
-  assert.ok(pending(), "holding a draft, it stays");
+  assert.ok(pending() === null, "holding words, it goes too");
+
+  startOn();
+  assert.equal(field()?.value, "Worth a setting?", "its words come back");
+  act(() => {
+    field()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.ok(pending() === null, "Esc lets it go");
+
+  startOn();
+  assert.equal(field()?.value, "Worth a setting?", "and keeps its words");
+});
+
+test("a reply's words outlast its thread closing, and come back as it opens again", () => {
+  const { container } = drawn("page");
+  const open = () =>
+    act(() =>
+      container
+        .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+        ?.click(),
+    );
+  const field = () =>
+    container.querySelector<HTMLTextAreaElement>(
+      `.comment-card[data-thread="${ID.OPEN}"][data-open="true"] textarea`,
+    );
+
+  open();
+  typeInto(field(), "Not for v1.");
+  act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.ok(field() === null, "the thread is closed");
+
+  open();
+  assert.equal(field()?.value, "Not for v1.");
+});
+
+test("on a finger's keyboard Return in a comment's field breaks the line, and ⌘Return sends it", async () => {
+  answerPointer(true);
+  try {
+    const { container, asked } = drawn("page");
+    act(() =>
+      container
+        .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+        ?.click(),
+    );
+    const field = container.querySelector<HTMLTextAreaElement>(
+      `.comment-card[data-thread="${ID.OPEN}"] textarea`,
+    );
+    typeInto(field, "Not for v1.");
+
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    await act(async () => {
+      field?.dispatchEvent(enter);
+    });
+    assert.equal(asked.length, 0, "Return sends nothing");
+    assert.equal(enter.defaultPrevented, false, "and types its line");
+
+    await act(async () => {
+      field?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+      );
+    });
+    assert.deepEqual(
+      asked.map(({ action }) => ("words" in action ? action.words : undefined)),
+      ["Not for v1."],
+    );
+  } finally {
+    answerMouse();
+  }
 });
 
 test("on a plan's page a comment's field offers dictation, and the plain field none", async () => {
@@ -846,7 +978,7 @@ test("on a plan's page a comment's field offers dictation, and the plain field n
 
   const dictate = (container: HTMLElement) =>
     container.querySelector(
-      `.comment-card[data-thread="${ID.OPEN}"] .comment-field-tools button[aria-label^="Dictate"]`,
+      `.comment-card[data-thread="${ID.OPEN}"] .luke-composer-foot button[aria-label^="Dictate"]`,
     );
   assert.ok(dictate(withMentions.container), "the editor's field takes a dictation");
   assert.equal(dictate(plain.container), null, "the plain field does not");
@@ -917,6 +1049,36 @@ test("a reply's field empties as it is sent, and takes the words back where the 
   assert.equal(field.value, "Not for v1.", "and takes them back where the send fails");
 });
 
+test("a reply's Send stands in the box's foot, busy from the press until the service answers", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const { container, asked } = drawn("page", THREADS, () => answer.promise);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.ok(card);
+  typeInto(card.querySelector<HTMLTextAreaElement>("textarea"), "Not for v1.");
+  const send = () =>
+    card.querySelector<HTMLButtonElement>(
+      '.luke-composer-foot button[aria-label="Reply"], .luke-composer-foot button[aria-label="Sending"]',
+    );
+  assert.equal(send()?.getAttribute("aria-label"), "Reply");
+
+  act(() => send()?.click());
+  assert.equal(send()?.getAttribute("aria-label"), "Sending");
+  assert.equal(send()?.getAttribute("aria-busy"), "true");
+  assert.deepEqual(
+    asked.map((each) => each.action.action),
+    [PLAN_COMMENT_ACTION.REPLY],
+  );
+
+  await act(async () => answer.resolve(true));
+  assert.equal(send()?.getAttribute("aria-label"), "Reply");
+  assert.equal(send()?.getAttribute("aria-busy"), null);
+});
+
 test("a thread being started keeps its card through a press away while its words are sent, and takes them back where the send fails", async () => {
   const { container } = wide(() => drawn("page", []));
   const paragraph = [...container.querySelectorAll("p")].find((p) =>
@@ -953,11 +1115,7 @@ test("in the Comments tab a thread's quote stands under its first comment's writ
   const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
   const entry = card?.querySelector(".comment-entry");
 
-  assert.ok(
-    entry?.querySelector(
-      ":scope > .comment-head + * .comment-quote, :scope > .comment-head + .comment-quote",
-    ),
-  );
+  assert.ok(entry?.querySelector(".luke-comment-head + .luke-comment-body .comment-quote"));
   assert.equal(card?.firstElementChild?.classList.contains("comment-entry"), true);
 });
 
@@ -983,7 +1141,7 @@ test("a thread's resolve reads as its writer's own line, drawn as a comment's he
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
   const event = container.querySelector<HTMLElement>(".comment-event[data-kind='resolved']");
   assert.ok(
-    event?.firstElementChild?.classList.contains("comment-head"),
+    event?.querySelector(":scope > .luke-comment > .luke-comment-head"),
     "drawn as a comment's head",
   );
   assert.ok(event?.textContent?.includes("Dean Stratakos resolved this"));
@@ -1104,6 +1262,14 @@ test("a press on the line's count while the editor's caret holds its thread open
   assert.equal(opened(), false);
 });
 
+/** The suite's own answer to a media query, a mouse's, which a test answering for a finger puts back. */
+const MOUSE_MEDIA = Object.getOwnPropertyDescriptor(window, "matchMedia");
+
+/** Puts back the suite's mouse, which every field's send key asks after. */
+function answerMouse(): void {
+  if (MOUSE_MEDIA !== undefined) Object.defineProperty(window, "matchMedia", MOUSE_MEDIA);
+}
+
 /** The device's main pointer answered as a finger's or a mouse's, which jsdom answers no media query for. */
 function answerPointer(coarse: boolean): void {
   Object.defineProperty(window, "matchMedia", {
@@ -1140,7 +1306,7 @@ function bubbleOver(words: string, box: { top: number; bottom: number }): HTMLEl
   } finally {
     if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
     else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
-    Reflect.deleteProperty(window, "matchMedia");
+    answerMouse();
   }
 }
 
@@ -1222,7 +1388,7 @@ test("⌥⌘M starts a thread on the words selected, as the bubble over them doe
   } finally {
     if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
     else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
-    Reflect.deleteProperty(window, "matchMedia");
+    answerMouse();
   }
   assert.equal(
     container.querySelector(".comment-bubble button")?.getAttribute("aria-keyshortcuts"),
@@ -1269,7 +1435,7 @@ test("words selected in a plan whose tab is then hidden take the bubble and ⌥�
   } finally {
     if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
     else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
-    Reflect.deleteProperty(window, "matchMedia");
+    answerMouse();
   }
   assert.ok(container.querySelector(".comment-bubble"), "the bubble stands by the selection");
 
@@ -1306,7 +1472,7 @@ test("words selected in a plan whose tab is then hidden take the bubble and ⌥�
   } finally {
     if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
     else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
-    Reflect.deleteProperty(window, "matchMedia");
+    answerMouse();
   }
   assert.ok(container.querySelector(".comment-bubble"), "the bubble stands again by the words");
 });
@@ -1483,7 +1649,7 @@ test("on the plan's page the date chip in the reader's own comment, its thread o
   await act(async () => undefined);
   act(() =>
     container
-      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .comment-head`)
+      .querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"] .luke-comment-head`)
       ?.click(),
   );
 
@@ -1573,4 +1739,140 @@ test("the margin drawn again for the pointer on a thread's words measures none o
   } finally {
     restore();
   }
+});
+
+/** The reader's own comment in the Comments tab, with presses that open its Edit and the field it opens. */
+function ownComment(landing?: () => boolean | Promise<boolean>) {
+  const drawnTab = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })], landing);
+  const { container } = drawnTab;
+  const edit = () => {
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]')?.click(),
+    );
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Edit",
+    );
+    assert.ok(item, "the menu offers Edit");
+    act(() => item.click());
+  };
+  const field = () => container.querySelector<HTMLTextAreaElement>(".comment-editing textarea");
+  const press = (label: string) =>
+    act(() =>
+      [...container.querySelectorAll<HTMLButtonElement>(".comment-editing button")]
+        .find((each) => each.textContent === label)
+        ?.click(),
+    );
+  return { ...drawnTab, edit, field, press };
+}
+
+test("an edit's words outlast Cancel and Esc, come back as Edit opens it again, and go once it is saved", async () => {
+  const { edit, field, press, asked } = ownComment();
+
+  edit();
+  assert.equal(field()?.value, "Ship by [@Oct 23, 2026](luke://date/2026-10-23).");
+  typeInto(field(), "Ship by Friday.");
+  press("Cancel");
+  assert.ok(field() === null, "Cancel closes the field");
+
+  edit();
+  assert.equal(field()?.value, "Ship by Friday.", "its words come back");
+  act(() => {
+    field()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.ok(field() === null, "Esc closes the field");
+
+  edit();
+  assert.equal(field()?.value, "Ship by Friday.", "and keeps them too");
+  await act(async () => press("Save"));
+  assert.deepEqual(
+    asked.map(({ action }) => ("words" in action ? action.words : undefined)),
+    ["Ship by Friday."],
+  );
+
+  edit();
+  assert.equal(
+    field()?.value,
+    "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
+    "saved, its draft is let go",
+  );
+});
+
+test("a comment's Save is busy from the press, shows its ring once the answer has waited the settle delay, and is a button again when the service answers", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const { container, edit, field, asked } = ownComment(() => answer.promise);
+
+  edit();
+  typeInto(field(), "Ship by Friday.");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const save = () =>
+      [...container.querySelectorAll<HTMLButtonElement>(".comment-editing button")].find(
+        (each) => each.textContent === "Save" || each.getAttribute("aria-label") === "Saving",
+      );
+    act(() => save()?.click());
+    assert.equal(save()?.getAttribute("aria-label"), "Saving");
+    assert.equal(save()?.querySelector(".luke-spinner-ring") != null, false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
+    assert.equal(save()?.querySelector(".luke-spinner-ring") != null, true);
+
+    // A press while it is out asks nothing more.
+    act(() => save()?.click());
+    assert.equal(asked.length, 1);
+
+    // The service refuses: the field stays, and Save is a button again.
+    await act(async () => answer.resolve(false));
+    assert.equal(save()?.getAttribute("aria-busy"), null);
+    assert.ok(field() !== null);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a thread's check shows busy while its Resolve is out, and stops when the service answers", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const { container, asked } = drawn("tab", THREADS, () => answer.promise);
+  const card = () =>
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  const check = () =>
+    card()?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Resolve"], button[aria-label="Resolving"]',
+    );
+  act(() => card()?.querySelector<HTMLElement>(".comment-entry")?.click());
+
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => check()?.click());
+    assert.equal(check()?.getAttribute("aria-label"), "Resolving");
+    assert.equal(check()?.querySelector(".luke-spinner-ring") != null, false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
+    assert.equal(check()?.querySelector(".luke-spinner-ring") != null, true);
+    act(() => check()?.click());
+    assert.equal(asked.length, 1);
+
+    await act(async () => answer.resolve(false));
+    assert.equal(check()?.getAttribute("aria-label"), "Resolve");
+    assert.equal(check()?.getAttribute("aria-busy"), null);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an edit emptied and saved asks to delete the comment, and only the confirm deletes it", async () => {
+  const { edit, field, press, asked } = ownComment();
+
+  edit();
+  typeInto(field(), "");
+  await act(async () => press("Save"));
+
+  assert.equal(asked.length, 0, "nothing is saved yet");
+  const confirm = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[role="alertdialog"] button, [role="dialog"] button',
+    ),
+  ].find((each) => each.textContent === "Delete thread");
+  assert.ok(confirm, "the delete is asked");
+  await act(async () => confirm.click());
+  assert.deepEqual(asked, [
+    { thread: ID.OPEN, action: { action: PLAN_COMMENT_ACTION.DELETE_THREAD } },
+  ]);
 });

@@ -1,7 +1,7 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState, PageToolbar, useMinute } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, Toolbar, useMinute } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
@@ -15,10 +15,10 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
-import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
+import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -180,8 +180,7 @@ function InboxShown({
     choices,
     folds,
     openAutomation,
-    read,
-    taskless,
+    failed,
     asked,
     chosenTask,
     taskId,
@@ -232,7 +231,12 @@ function InboxShown({
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
+  // K and J choose the item above or below, the keyboard following it to its row.
+  const step = (listed: InboxListed) => {
+    choose(listed);
+    columns.onStep();
+  };
+  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown: tasks.shown,
     folded: folds.folded,
   });
@@ -427,7 +431,7 @@ function InboxShown({
                     reading={reading}
                     note={
                       <InboxListNote
-                        failed={read.failed || taskless.failed}
+                        failed={failed}
                         reading={reading}
                         empty={listedItems(list).length === 0}
                         alone={columns.shown === INBOX_COLUMNS.LIST}
@@ -446,7 +450,21 @@ function InboxShown({
                 )}
                 {compose.on ? (
                   <InboxCompose
+                    // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
+                    key={listedWorkspace?.id}
                     hidden={columns.shown === INBOX_COLUMNS.LIST}
+                    workspace={
+                      listedWorkspace === undefined
+                        ? undefined
+                        : {
+                            workspace: listedWorkspace.slug ?? listedWorkspace.id,
+                            workspaceId: listedWorkspace.id,
+                          }
+                    }
+                    repositoryOf={(id) =>
+                      tasks.tasks.find((each) => each.id === id)?.repository ?? null
+                    }
+                    onShowMention={tasks.onShowMention}
                     onBack={columns.onBack}
                     readAgents={readWorkspaceAgents}
                     to={chosen?.item.agentId}
@@ -464,6 +482,7 @@ function InboxShown({
                     }}
                     onDiscard={compose.onEnd}
                     phone={room === SHELL_ROOM.NARROW}
+                    onRestore={() => onCompose?.()}
                   />
                 ) : chosen === undefined ? (
                   <section
@@ -478,7 +497,7 @@ function InboxShown({
                           : columns.shown !== INBOX_COLUMNS.BOTH
                     }
                   >
-                    <PageToolbar />
+                    <Toolbar />
                     {missing ? (
                       <NotFound
                         thing={NOT_FOUND_THING.INBOX_ITEM}
@@ -488,6 +507,13 @@ function InboxShown({
                             : { label: BACK_TO_INBOX, onClick: columns.onBack }
                         }
                       />
+                    ) : failed ? (
+                      // Note that the list beside says the read failed, so only a pane standing alone draws it, never the empty state.
+                      paneOnly ? (
+                        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+                          {INBOX_NOT_READ}
+                        </ErrorState>
+                      ) : null
                     ) : reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says what the filter or its search left out, so the pane beside it stands bare.
                       <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
@@ -669,7 +695,7 @@ function InboxSidePanel({
       <TaskMentions value={mentions}>
         <AgentPane
           call={calls}
-          label={agent === undefined ? undefined : agentTabLabel(agent, agents.models)}
+          label={agent === undefined ? undefined : agentName(agent, agents.models)}
           tabbed={false}
           tab={{ agent: agentId }}
           agents={agents}

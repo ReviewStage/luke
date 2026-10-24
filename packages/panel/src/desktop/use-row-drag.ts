@@ -50,7 +50,7 @@
  * draw the copy of one even though the copy stands outside it.
  */
 
-import { CARD_DROP_TARGET } from "@luke/ui";
+import { CARD_DROP_TARGET, MOTION_TOKEN, tokenTiming } from "@luke/ui";
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";
@@ -380,13 +380,6 @@ function lower(press: RowPress, list: HTMLElement, settle: boolean): void {
   for (const row of press.rows) row.style.transition = "";
 }
 
-/** A motion token's length, in milliseconds: none for a token unset or held still. */
-function lengthOf(token: string): number {
-  const value = Number.parseFloat(token);
-  if (!Number.isFinite(value)) return 0;
-  return token.trim().endsWith("ms") ? value : value * 1000;
-}
-
 /**
  * Lands the copy: plays it from where it was let go, on both axes, into the
  * place the row now stands, on the rows' own timing, then takes it down,
@@ -395,9 +388,8 @@ function lengthOf(token: string): number {
  * run, which hold the tokens there, land it at once.
  */
 function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
-  const look = getComputedStyle(list);
-  const duration = lengthOf(look.getPropertyValue("--luke-duration-fast"));
-  if (duration <= 0) {
+  const timing = tokenTiming(list, MOTION_TOKEN.DURATION_FAST, MOTION_TOKEN.SPRING_FAST);
+  if (timing === undefined) {
     copy.remove();
     return;
   }
@@ -405,10 +397,9 @@ function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
   const across = home.left - Number.parseFloat(copy.style.left);
   const down = home.top - Number.parseFloat(copy.style.top);
   row.setAttribute(DRAGGING_ATTRIBUTE, "true");
-  const easing = look.getPropertyValue("--luke-spring-fast").trim() || "ease-out";
   const landed = copy.animate(
     [{ transform: copy.style.transform }, { transform: `translate(${across}px, ${down}px)` }],
-    { duration, easing, fill: "forwards" },
+    { ...timing, fill: "forwards" },
   );
   landed.onfinish = () => {
     copy.remove();

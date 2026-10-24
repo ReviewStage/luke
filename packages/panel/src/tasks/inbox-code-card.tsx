@@ -1,17 +1,10 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import {
-  CARD_CORNER,
-  CARD_ELEMENT,
-  CARD_LOOK,
-  CARD_PADDING,
-  Card,
-  ErrorState,
-  SpinnerRegion,
-} from "@luke/ui";
-import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
+import { ANNOUNCE, ErrorState, SpinnerRegion } from "@luke/ui";
+import { copiedLines } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
-import { CodeCardHeader } from "./code-pane.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
+import { FileCodeCard } from "./code-pane.js";
 import { CodeSnippet } from "./code-snippet.js";
 import type { ReadFileWindow } from "./file-tab.js";
 import {
@@ -31,8 +24,8 @@ import {
  * that commit through the File tab's own read, with a few around them, the
  * named ones lit, drawn as a Code tab card's are (`code-snippet.tsx`). Lines the task cannot read, another repository's or a
  * range past the bound, say why and open nothing. The card shows the
- * repository's lines, so it is out of the session recording
- * (`ph-no-capture`).
+ * repository's lines, so it is out of the session recording, which
+ * `CodeCard` sees to (`ph-no-capture`).
  */
 
 /** What a code block reads its lines through and opens its file with. */
@@ -89,36 +82,35 @@ export function InboxCodeCard({
 
   const shown: CodeRead =
     unread === undefined ? read : { kind: CODE_READ.NOTICE, line: unread, again: false };
+  // Note that a failure that offers Retry is said by its `ErrorState`, so only a notice with none is said here.
+  useAnnounceShown(
+    ANNOUNCE.ALERT,
+    shown.kind === CODE_READ.NOTICE && !shown.again ? shown.line : "",
+  );
   return (
-    <Card
-      as={CARD_ELEMENT.ARTICLE}
-      look={CARD_LOOK.CODE}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.FLUSH}
-      className="code-card ph-no-capture"
-      aria-label={fileRefText(codeRef)}
-      data-inbox-code=""
-    >
-      <CodeCardHeader
-        codeRef={codeRef}
-        note={undefined}
-        copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
-        // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
-        onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
-      />
-      {shown.kind === CODE_READ.READY ? (
-        <CodeSnippet code={shown.code} />
-      ) : shown.kind === CODE_READ.READING ? (
-        <SpinnerRegion delay label="Loading lines" />
-      ) : (
-        <div className="file-tab-notice">
-          {shown.again ? (
-            <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
-          ) : (
-            <p role="alert">{shown.line}</p>
-          )}
-        </div>
-      )}
-    </Card>
+    <FileCodeCard
+      codeRef={codeRef}
+      data={{ "data-inbox-code": "" }}
+      repository={block.repo}
+      note={undefined}
+      copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
+      // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
+      onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
+      body={
+        shown.kind === CODE_READ.READY ? (
+          <CodeSnippet code={shown.code} />
+        ) : shown.kind === CODE_READ.READING ? (
+          <SpinnerRegion delay label="Loading lines" />
+        ) : (
+          <div className="file-tab-notice">
+            {shown.again ? (
+              <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
+            ) : (
+              <p>{shown.line}</p>
+            )}
+          </div>
+        )
+      }
+    />
   );
 }

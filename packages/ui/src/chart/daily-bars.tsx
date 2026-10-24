@@ -1,7 +1,7 @@
+import { formatDayTick } from "@luke/features/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "../admin-format.js";
 import { partialDayKey } from "../daily-series.js";
-import { formatDayTick } from "../time-format.js";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "./chart.js";
 
 /**

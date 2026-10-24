@@ -18,6 +18,7 @@ import type { PortActKind } from "@luke/host/contract";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -194,6 +195,8 @@ let nameTaken = false;
 let sourcePreview: InstalledSkillPreview = SOURCE;
 /** How many of the next file reads go unanswered. */
 let unansweredFiles = 0;
+/** How many of the next previews the service never answers, which the port refuses. */
+let unreachedPreviews = 0;
 
 const roots: Root[] = [];
 
@@ -206,6 +209,7 @@ beforeEach(() => {
   nameTaken = false;
   sourcePreview = SOURCE;
   unansweredFiles = 0;
+  unreachedPreviews = 0;
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([
@@ -257,6 +261,10 @@ beforeEach(() => {
     },
     [ACT_KIND.INSTALLED_SKILLS_PREVIEW]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_PREVIEW, payload });
+      if (unreachedPreviews > 0) {
+        unreachedPreviews -= 1;
+        return Promise.reject(new Error("offline"));
+      }
       return Promise.resolve(
         /^(?:npx|https:)/u.test(payload.text)
           ? { ...sourcePreview, missing: missingNames }
@@ -340,13 +348,16 @@ async function mountPage(shown = workspace()): Promise<void> {
   await settle();
 }
 
-async function mountDialog(shown = workspace()): Promise<InstalledSkillSummary[]> {
+async function mountDialog(
+  shown = workspace(),
+  onClose: () => void = () => undefined,
+): Promise<InstalledSkillSummary[]> {
   const installed: InstalledSkillSummary[] = [];
   mount(
     createElement(AddSkillDialog, {
       workspace: shown,
       onInstalled: (made) => installed.push(...made),
-      onClose: () => undefined,
+      onClose,
       pause: () => Promise.resolve(),
     }),
   );
@@ -535,9 +546,9 @@ test("View reads the skill and draws its text as written and every file with its
   assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u);
   assert.deepEqual(
     [...shown.querySelectorAll("dt, dd")].map((each) => each.textContent),
-    ["SKILL.md", "48 B", "examples/good.md", "2.0 KB"],
+    ["SKILL.md", "48 B", "examples/good.md", "2.0 kB"],
   );
-  act(() => button("Close", shown).click());
+  act(() => button("Done", shown).click());
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
 
@@ -611,7 +622,7 @@ test("a command that names a skill is confirmed as its card, with no list, and I
   const text = document.body.textContent ?? "";
   assert.match(text, /Add web-design-guidelines/u);
   assert.match(text, /From vercel-labs\/agent-skills @ 3f9c2e1/u);
-  assert.match(text, /4 files · 21 KB · skills\/web/u);
+  assert.match(text, /4 files · 22 kB · skills\/web/u);
   assert.match(text, /2 other skills in this repo/u);
   assert.equal(document.querySelector("textarea"), null);
   assert.equal(document.querySelector('input[type="checkbox"]'), null);
@@ -801,6 +812,7 @@ test("only what a paste would install scrolls: the box's folded line, the search
 test("a refused install says which skill and why in words, keeps the dialog, and marks that skill so it no longer installs", async () => {
   refuseInstall = true;
   await mountDialog();
+  mountAnnouncer();
   await paste(COMMAND);
 
   act(() => primary().click());
@@ -809,7 +821,11 @@ test("a refused install says which skill and why in words, keeps the dialog, and
     document.body.textContent ?? "",
     /web-design-guidelines holds more than 64 files\./u,
   );
-  assert.ok(document.querySelector('[role="alert"]'));
+  assert.equal(
+    announcedAsAlert(),
+    "More than 64 files",
+    "the skill's mark is announced as an alert",
+  );
   assert.match(document.body.textContent ?? "", /More than 64 files/u);
   assert.equal(primary().textContent, "Install");
   assert.equal(primary().disabled, true);
@@ -872,4 +888,49 @@ test("a description typed for one paste is never sent with the next", async () =
   assert.equal(fieldOf("When should agents use it?").value, "");
   assert.equal(fieldOf("Name").value, "review-style");
   assert.equal(primary().disabled, true);
+});
+
+/** Presses Escape in the dialog's box, as a member does with the caret in it. */
+function escapeInBox(): void {
+  act(() => {
+    (
+      document.querySelector("textarea") ??
+      document.querySelector('[role="dialog"]') ??
+      assert.fail("no box")
+    ).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+test("Escape with pasted text in the box holds the dialog open, and the next one closes it", async () => {
+  let closed = 0;
+  await mountDialog(workspace(), () => {
+    closed += 1;
+  });
+  await paste(TEXT);
+  escapeInBox();
+  assert.equal(closed, 0, "pasted text is held, not put away");
+  assert.ok(document.querySelector('[role="dialog"]'), "the dialog stands");
+
+  escapeInBox();
+  assert.equal(closed, 1, "the next Escape puts it away");
+});
+
+test("a preview the service never answers says it could not be read, and Retry asks again", async () => {
+  unreachedPreviews = 1;
+  await mountDialog();
+  await paste(COMMAND);
+
+  const text = document.body.textContent ?? "";
+  assert.match(text, /That paste could not be read\./u);
+  assert.doesNotMatch(text, /Reading/u, "a failed preview is no longer being read");
+
+  act(() => button("Retry").click());
+  await settle();
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), [
+    { workspaceId: "workspace-stage", text: COMMAND },
+    { workspaceId: "workspace-stage", text: COMMAND },
+  ]);
+  assert.match(document.body.textContent ?? "", /Add web-design-guidelines/u);
 });

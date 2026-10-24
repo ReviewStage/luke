@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { AUTOMATION_PRESET } from "@luke/features/automation-code-review";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -35,7 +35,7 @@ import {
 } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { handState, stateWith } from "./testing/app-state.js";
+import { deliveryOf, handState, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
@@ -774,7 +774,8 @@ test("a reloaded window whose saved step is the Admin place opens it once the ac
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(unread),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       deliver = listener;
       return () => undefined;
     },

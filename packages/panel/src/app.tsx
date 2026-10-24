@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -15,8 +15,9 @@ import type { ChatShown } from "@luke/host/contract";
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { cssCustomProperties } from "@luke/ui";
+import { cssCustomProperties, STATUS_TONE } from "@luke/ui";
 import { callBarAgentId } from "@luke/ui/call-card-model";
+import { isComposingKey } from "@luke/ui/composing-key";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
@@ -70,8 +71,9 @@ import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/re
 import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
+import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
+import { TOAST_HOLD, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
@@ -293,8 +295,13 @@ function AppWindow(): React.JSX.Element {
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, so its own ways out of the page ask first.
+  // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
+  // covers, so its own ways out of the page and the app ask first.
   const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
+  const planWordsUnsaved = usePlanWordsUnsaved();
+  useEffect(() => {
+    appPlatform().unsavedPlanWords?.(planWordsUnsaved);
+  }, [planWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>
@@ -479,7 +486,7 @@ function AppWindow(): React.JSX.Element {
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
-      toast({ words: EXPERIMENT_OFF_LINK, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: EXPERIMENT_OFF_LINK, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
@@ -618,8 +625,13 @@ function AppWindow(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // Muting an open microphone comes before any of it. Closing the panel
+      if (event.key !== "Escape" || isComposingKey(event)) return;
+      // A field or dialog that took the press for itself is the nearest layer
+      // of all, ahead of the call, the sign-in wait, and every page: an Escape
+      // that clears a search or withdraws a question has been answered, and
+      // an input method's own is never the window's.
+      if (event.defaultPrevented) return;
+      // Muting an open microphone comes before the layers below. Closing the panel
       // or a sheet mid-sentence would strand the microphone open, and the
       // same press asks Luke for quiet mid-sentence: a reply being spoken is
       // the most open thing there is, and Escape ends it without opening a
@@ -643,8 +655,6 @@ function AppWindow(): React.JSX.Element {
         signIn.cancelSignIn();
         return;
       }
-      // A dialog that took the press for itself is the nearest layer of all.
-      if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings, a plan's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
@@ -684,9 +694,14 @@ function AppWindow(): React.JSX.Element {
   useEffect(() => installPressIntent(window), []);
 
   // The doors the window hands every page are held across draws, each part that reads one holding while it does.
+  // Note that the request answers once the host has handed it on, which is how Allow knows to stop waiting; the system's own prompt follows, and its answer arrives as the microphone's status.
   const requestMicrophone = useCallback(
-    () => tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }),
-    [tell],
+    () =>
+      act(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }).then(
+        () => undefined,
+        () => undefined,
+      ),
+    [act],
   );
   const leftWorkspace = useSteadyDoor((workspaceId: string) => {
     tasks.onLeftWorkspace(workspaceId);
@@ -699,15 +714,16 @@ function AppWindow(): React.JSX.Element {
       workspaceId: settingsWorkspace.shownId,
       // A leave closes Settings onto the Tasks tab, which rests on its page with no task open.
       onLeft: leftWorkspace,
-      listFailed: tasks.listFailed,
-      onRetryList: tasks.onRetryList,
+      // Note that the workspaces are followed apart from the tasks, so a task list that read says nothing of them.
+      listFailed: tasks.workspacesFailed,
+      onRetryList: tasks.onRetryWorkspaces,
     }),
     [
       tasks.workspaces,
       settingsWorkspace.shownId,
       leftWorkspace,
-      tasks.listFailed,
-      tasks.onRetryList,
+      tasks.workspacesFailed,
+      tasks.onRetryWorkspaces,
     ],
   );
   // What Settings and ⌘K answer through; the settings themselves they read where they draw them.

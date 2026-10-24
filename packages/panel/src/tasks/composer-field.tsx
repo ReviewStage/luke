@@ -1,4 +1,4 @@
-import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { TEXT_AREA_SUBMIT, TEXT_ELEMENT, TEXT_VARIANT, Text, type TextAreaSubmit } from "@luke/ui";
 import {
   type ReactNode,
   type Ref,
@@ -122,7 +122,9 @@ export function ComposerField({
   aria,
   onKey,
   onEnter,
+  submitKey,
   onPasteFiles,
+  onPasteCut,
   onTrigger,
   chip,
   quote,
@@ -147,7 +149,11 @@ export function ComposerField({
   aria: Readonly<Record<string, string | undefined>>;
   onKey: (event: KeyboardEvent) => boolean;
   onEnter: () => void;
+  /** The key that sends: Enter, or ⌘ or Ctrl with Enter where Enter must break the line; Enter where none is given. */
+  submitKey?: TextAreaSubmit | undefined;
   onPasteFiles: (files: readonly File[]) => boolean;
+  /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
+  onPasteCut?: (() => void) | undefined;
   onTrigger: (trigger: ComposerTrigger | undefined) => void;
   chip: (chip: ComposerChip) => ReactNode;
   /** How a quote block the editor holds is drawn; its words alone where none is given. */
@@ -187,7 +193,9 @@ export function ComposerField({
     skills,
     onKey,
     onEnter,
+    submitKey,
     onPasteFiles,
+    onPasteCut,
     onTrigger,
     mentions,
     takesFocus,
@@ -200,7 +208,9 @@ export function ComposerField({
     skills,
     onKey,
     onEnter,
+    submitKey,
     onPasteFiles,
+    onPasteCut,
     onTrigger,
     mentions,
     takesFocus,
@@ -232,7 +242,9 @@ export function ComposerField({
       },
       onKey: (event) => latest.current.onKey(event),
       onEnter: () => latest.current.onEnter(),
+      submitKey: () => latest.current.submitKey ?? TEXT_AREA_SUBMIT.ENTER,
       onPasteFiles: (files) => latest.current.onPasteFiles(files),
+      onPasteCut: () => latest.current.onPasteCut?.(),
       onTrigger: (trigger) => latest.current.onTrigger(trigger),
       drawChip: (element, drawnChip) => draw(element, drawnChip),
       drawQuote: (element, drawnQuote) => draw(element, { quote: drawnQuote }),

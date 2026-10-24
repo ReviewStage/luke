@@ -110,6 +110,7 @@ export function useComposerPickers({
         ? undefined
         : {
             known: skillPicker.known,
+            unread: skillPicker.unread,
             ask: skillPicker.ask,
             onChoose: (name) => editor.current?.chooseSkillAtMention(name),
           },

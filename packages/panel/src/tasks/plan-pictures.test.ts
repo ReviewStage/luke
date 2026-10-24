@@ -4,9 +4,8 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useConfirmDialog } from "@luke/ui";
 import { forgetPictures } from "@luke/ui/picture-cache";
-import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -16,6 +15,7 @@ import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { PlanBody } from "./plan-body.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -46,6 +46,7 @@ const HOUR = 60 * 60 * 1000;
 let root: Root | undefined;
 
 afterEach(() => {
+  releaseMotion();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -205,10 +206,9 @@ test("a version draws the picture it struck and the one it wrote in, each in its
   const before = `## Approach\n\n![First mock](${picture(taskId, MOCK)})\n`;
   const after = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})\n`;
   function Version(): React.JSX.Element {
-    const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-      Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-    );
+    const restore = { busy: false, onRestore: () => undefined };
     return createElement(VersionView, {
+      onRetry: () => undefined,
       viewing: {
         line: {
           seq: 2,
@@ -278,7 +278,8 @@ test("a picture whose read went unanswered says so alone, and the picture drawn 
   const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, first), live: false }));
   assert.equal(view.querySelector(".picture-block")?.textContent, "First mock · not available");
 
-  // A plan drawn again asks the window whether motion is reduced, which a page with no layout cannot say.
+  // A plan drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
+  holdMotion();
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({

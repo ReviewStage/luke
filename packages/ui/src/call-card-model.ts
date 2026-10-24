@@ -8,7 +8,7 @@
  * the bar can never disagree about the call they draw.
  */
 
-import { agentTabLabel } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import type { TasksView } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
 import {
@@ -36,7 +36,7 @@ export interface CallCardModel {
 export function callTaskName(tasks: TasksView, call: VoiceCallAbout | undefined): string {
   if (call !== undefined && call.taskId === undefined) {
     const agent = tasks.tasklessAgents?.find((each) => each.id === call.agentId);
-    return agent === undefined ? CALL_CARD_UNNAMED : agentTabLabel(agent);
+    return agent === undefined ? CALL_CARD_UNNAMED : agentName(agent);
   }
   const taskId = call?.taskId;
   const open = tasks.document.task;

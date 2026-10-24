@@ -143,9 +143,6 @@ body {
 
 .catalog-example-title {
   margin: 0 0 var(--luke-space-24);
-  font-size: var(--luke-type-title-size);
-  line-height: var(--luke-type-title-leading);
-  font-weight: var(--luke-weight-bold);
 }
 
 .catalog-section + .catalog-section {
@@ -154,9 +151,6 @@ body {
 
 .catalog-section-title {
   margin: 0 0 var(--luke-space-12);
-  font-size: var(--luke-type-section-size);
-  line-height: var(--luke-type-section-leading);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .catalog-face {
@@ -471,7 +465,7 @@ body {
   gap: var(--luke-control-gap);
 }
 
-.catalog-settings-key > .luke-text-field {
+.catalog-settings-key > [data-slot="input"] {
   flex: 1 1 var(--luke-select-field-width);
 }
 
@@ -628,8 +622,6 @@ body {
   flex: 1;
   margin: 0;
   overflow: hidden;
-  font-size: 15px;
-  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -775,7 +767,7 @@ body {
   text-transform: none;
 }
 
-.catalog-width .luke-text-field {
+.catalog-width [data-slot="input"] {
   inline-size: 10ch; /* four digits and the spinner, at either profile's size */
 }
 
@@ -995,6 +987,12 @@ body {
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
+}
+
+.catalog-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--luke-space-12);
 }
 
 .catalog-glyph-line-top {

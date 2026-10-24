@@ -16,7 +16,7 @@ import {
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
-import { CHIP_WIDTH, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -29,7 +29,6 @@ import {
   useDraftWriter,
 } from "../composer-drafts.js";
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
-import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
 import type { MentionMenuSide } from "./mention-picker.js";
@@ -465,7 +464,7 @@ export function NewTaskComposer({
       key={repositories.scope}
       place={CHIP_PLACE.FIELD}
       width={CHIP_WIDTH.AUTO}
-      align={PICKER_ALIGN.START}
+      align={POPOVER_ALIGN.START}
       value={repository}
       chooser={repositories}
       onChoose={setChosen}
@@ -507,7 +506,7 @@ export function NewTaskComposer({
       full={full}
       disabled={starting}
       openRequest={issueAsks}
-      align={PICKER_ALIGN.END}
+      align={POPOVER_ALIGN.END}
       onChoose={chooseIssue}
       onChooseGitHub={chooseGitHub}
     />
@@ -551,6 +550,7 @@ export function NewTaskComposer({
         sendable={!blocked && (!forAutomation || said !== "")}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
+        modelsFailed={newTask.modelsFailed}
         readModels={newTask.readModels}
         usage={undefined}
         servers={undefined}

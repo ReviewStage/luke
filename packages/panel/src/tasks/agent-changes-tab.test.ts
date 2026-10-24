@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DURATION_MS } from "@luke/brand";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentPullRequestViewedAnswerView,
@@ -48,6 +49,8 @@ import {
 } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
+import { rendererRegistry } from "../renderer-runtime.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -60,11 +63,14 @@ import {
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import type { ChangesThreads } from "./agent-changes-tab.js";
 import { blobShaOf } from "./changes-model.js";
 import type { TreeShown } from "./file-view.js";
@@ -267,6 +273,9 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  for (const style of document.head.querySelectorAll("style")) style.remove();
+  document.body.style.removeProperty("--luke-duration-pane");
 });
 
 /** The window's keymap with the Inbox's J offered, as the Inbox offers it while it stands, counting each run. */
@@ -633,12 +642,16 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
       ["attention", false, false],
     ],
   );
-  assert.equal(document.querySelector(".file-tree-pane"), null);
+  assert.equal(document.querySelector('[aria-label="Changed files"]'), null);
 
   act(() => strip.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
   await flush();
   assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "peek");
-  assert.notEqual(document.querySelector(".file-tree-pane"), null, "the tree peeks out");
+  assert.notEqual(
+    document.querySelector('[aria-label="Changed files"]'),
+    null,
+    "the tree peeks out",
+  );
 });
 
 test("J and K step through the files inside the view, ; and ⇧; fold, and Escape lets go of the file", async () => {
@@ -1115,25 +1128,23 @@ test("a write answered while a later one to the same setting is out leaves the l
   assert.equal(lastDrawn().look.layout, "split");
 });
 
-test("a refused write is said under its row, and the row can be pressed again", async () => {
-  await drawTab();
+test("a refused write flips the switch back and is said in a toast, and the switch can be pressed again", async () => {
+  await drawTab({ beside: onRegistry(rendererRegistry, createElement(ToastHost)) });
   const held = holdSettingWrites();
   const popover = openSettings();
 
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  assert.equal(
+    settingControl(popover, '[role="switch"]', "Ligatures").getAttribute("aria-checked"),
+    "true",
+    "the switch flips before the write answers",
+  );
   held[0]?.("Could not save that setting.");
   await flush();
 
   const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
-  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
-  assert.match(
-    (ligatures.getAttribute("aria-describedby") ?? "")
-      .split(" ")
-      .map((id) => document.getElementById(id)?.textContent ?? "")
-      .join(" "),
-    /Could not save that setting/u,
-    "under its own row",
-  );
+  assert.equal(ligatures.getAttribute("aria-checked"), "false");
+  assert.equal(newestToastSays(), "Could not save that setting on this system.");
   assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
 });
@@ -1203,6 +1214,69 @@ test("Refresh changes reads the review threads again with the files, so the two 
   act(() => refresh?.click());
 
   assert.equal(threadReads, 1);
+});
+
+test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
+  let failing = false;
+  const flaky = {
+    ...control,
+    readChanges: (...args: Parameters<typeof control.readChanges>) =>
+      failing ? Promise.reject(new Error("offline")) : control.readChanges(...args),
+  };
+  /** The alert that says the refresh did not land, none while it did. */
+  const refreshNote = () =>
+    [...document.querySelectorAll('[role="alert"]')].find((each) =>
+      each.textContent?.includes("Could not refresh"),
+    );
+  let threadReads = 0;
+  await drawTab({
+    control: flaky,
+    threads: {
+      list: [],
+      draw: () => null,
+      refresh: () => {
+        threadReads += 1;
+      },
+    },
+  });
+  assert.equal(refreshNote(), undefined);
+
+  const refresh = async () => {
+    const options = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Changes actions"]',
+    );
+    act(() => options?.click());
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent?.includes("Refresh changes"),
+    );
+    act(() => item?.click());
+    await flush();
+  };
+  failing = true;
+  await refresh();
+
+  const note = refreshNote();
+  assert.ok(note, "the refresh says it did not land");
+  assert.ok(document.querySelector(".file-view"), "the view stands");
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/seats.ts"],
+  );
+
+  failing = false;
+  const retry = [...note.querySelectorAll("button")].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  const readsBefore = threadReads;
+  act(() => retry?.click());
+  await flush();
+
+  assert.equal(threadReads, readsBefore + 1, "Retry reads the review threads with the files");
+  assert.equal(refreshNote(), undefined);
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/seats.ts"],
+  );
 });
 
 /** What an intersection observer is told of an element coming into view, as far as the view reads it. */
@@ -1495,7 +1569,7 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
 /** What the bar's count of the files viewed says. */
 function viewedCount(): string {
   return (
-    document.querySelector(".file-view-bar .files-viewed")?.textContent ??
+    document.querySelector(".luke-pane-bar .files-viewed")?.textContent ??
     assert.fail("the bar counts the files viewed")
   );
 }
@@ -1540,6 +1614,19 @@ test("the member's viewed marks tick their files, count toward the bar's progres
   assert.equal(viewedCount(), "1 / 3 files viewed");
 });
 
+test("the count of files viewed is announced politely as a tick changes it", async () => {
+  viewedAnswer = MARKED;
+  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  mountAnnouncer();
+  assert.equal(announcedPolitely(), "", "the count first drawn is not read out");
+
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(announcedPolitely(), "2 / 3 files viewed");
+});
+
 test("ticking a file's box marks it viewed on GitHub at once and folds it; one GitHub refuses goes back and says why", async () => {
   viewedAnswer = MARKED;
   let refuse = false;
@@ -1576,11 +1663,11 @@ test("the bar leads with the count of files viewed in the crumbs' place, polite 
   files = [changed("src/billing/a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab({ treeOpen: true });
 
-  const bar = document.querySelector(".file-view-bar") ?? assert.fail("a bar");
+  const bar = document.querySelector(".luke-pane-bar") ?? assert.fail("a bar");
   assert.equal(bar.querySelector(".luke-breadcrumbs"), null, "no crumbs");
   assert.doesNotMatch(bar.textContent ?? "", /billing/u, "the bar names no file");
   const count = bar.querySelector(".files-viewed") ?? assert.fail("a count");
-  assert.equal(count.getAttribute("aria-live"), "polite");
+  assert.equal(count.hasAttribute("aria-live"), false, "it is said through the announcer");
   assert.equal(count.querySelector("button, input"), null, "the count is words, not a control");
   assert.doesNotMatch(
     document.body.textContent ?? "",
@@ -2494,4 +2581,81 @@ test("a file's header draws the whole file on Expand full file, read once, and b
     2,
     "each file is read once",
   );
+});
+
+/** The tree's pane over the list, as it floats where the panel has no room for it beside, named as the view names it. */
+function floatedTree(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[aria-label="Changed files"]');
+}
+
+/** The toggle that floats the tree, which the stylesheet draws in a narrow panel alone. */
+function overToggle(): HTMLButtonElement {
+  return (
+    document.querySelector<HTMLButtonElement>('.file-tree-toggle[data-place="over"] button') ??
+    assert.fail("the toggle that floats the tree is drawn")
+  );
+}
+
+/** A narrow panel with the tree's toggle pressed, the pane's slide left to play out. */
+async function narrowTreeOpened(): Promise<void> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  document.body.style.setProperty("--luke-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
+  layContainersAt({ "side-panel": 300 });
+  files = [changed("a.ts"), changed("b.ts")];
+  const { tree } = heldTree(false);
+  await drawTab({ tree });
+  assert.equal(floatedTree(), null, "the tree is away until its toggle is pressed");
+  act(() => overToggle().focus());
+  act(() => overToggle().click());
+}
+
+test("in a narrow panel the tree opens over the list, stays drawn through its exit once its toggle is pressed again, then is let go", async () => {
+  await narrowTreeOpened();
+  const pane = floatedTree() ?? assert.fail("the tree opens over the list");
+  assert.equal(pane.getAttribute("data-state"), "open");
+  assert.equal(pane.classList.contains("luke-over-pane"), true);
+
+  act(() => overToggle().click());
+  const leaving = floatedTree() ?? assert.fail("the tree stays through its exit");
+  assert.equal(leaving.getAttribute("data-state"), "leaving");
+  assert.equal(leaving.hasAttribute("inert"), true);
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE - 1));
+  assert.notEqual(floatedTree(), null, "the exit has not finished");
+  act(() => vi.advanceTimersByTime(1));
+  assert.equal(floatedTree(), null, "the tree is let go once its exit has played");
+});
+
+test("Escape in the tree floated over the list puts it away and gives the keyboard back to its toggle", async () => {
+  await narrowTreeOpened();
+  const field =
+    floatedTree()?.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search takes the keyboard as it opens");
+  assert.equal(document.activeElement, field);
+
+  assert.equal(press(field, { key: "Escape" }), true);
+  assert.equal(floatedTree()?.getAttribute("data-state"), "leaving");
+  assert.equal(document.activeElement, overToggle());
+  act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE));
+  assert.equal(floatedTree(), null);
+});
+
+test("the pointer leaving the strip for the tree it peeked keeps the tree, and leaving it for anywhere else puts it away", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  const { tree } = heldTree(false);
+  await drawTab({ tree });
+  const strip =
+    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    assert.fail("a strip");
+  const leave = (to: Element) =>
+    act(() =>
+      strip.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: to })),
+    );
+
+  act(() => strip.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+  await flush();
+  leave(floatedTree() ?? assert.fail("the tree peeks out"));
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "peek");
+
+  leave(document.body);
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "closed");
 });

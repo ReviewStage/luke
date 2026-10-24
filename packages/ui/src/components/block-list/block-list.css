@@ -15,8 +15,8 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: var(--luke-space-6);
-    padding: var(--luke-space-8);
+    gap: var(--luke-item-gap);
+    padding: var(--luke-row-inset);
   }
 
   .luke-block-list-item + .luke-block-list-item {

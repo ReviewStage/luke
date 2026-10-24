@@ -2,33 +2,27 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
+  BACK_BUTTON_LOOK,
+  BackButton,
   COLLECTION_STATE,
   CollectionPage,
-  commandKeyshortcuts,
   DrawerScrim,
   IconButton,
-  NavItem,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
   PAGE_FRAME,
   PANE_PIN_ELEMENT,
-  PageToolbar,
   PanePin,
   ScrollArea,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_SKELETON_CONTROL,
   SettingsPageSkeleton,
   type SettingsSectionSkeletonShape,
-  Shortcut,
   SidebarIcon,
+  Toolbar,
   Tooltip,
   useDrawerSwipe,
 } from "@luke/ui";
-import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
@@ -59,14 +53,13 @@ import {
   useCapability,
   useExperiment,
 } from "../use-app-state.js";
-import { useCallingAgent } from "../use-voice-view.js";
-import { WindowVoiceNotice } from "../window-voice.js";
 import {
   AutomationListSkeleton,
   AutomationsActsSkeleton,
   AutomationsToolbar,
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
+import { backPlaceOf } from "./back-place.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 import { DesktopChat, useChatSurface } from "./desktop-chat.js";
@@ -124,19 +117,7 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Tasks"
-      toolbar={
-        <PageToolbar
-          heading={
-            <OneLine
-              as={ONE_LINE_ELEMENT.H1}
-              end={ONE_LINE_END.ELLIPSIS}
-              className="desktop-toolbar-title"
-            >
-              Tasks
-            </OneLine>
-          }
-        />
-      }
+      toolbar={<Toolbar title="Tasks" />}
       state={COLLECTION_STATE.LOADING}
       loadingLabel="Reading tasks"
     />
@@ -162,19 +143,7 @@ function AdminLoading({
         <CollectionPage
           frame={PAGE_FRAME.TOOLBAR}
           label="Admin"
-          toolbar={
-            <PageToolbar
-              heading={
-                <OneLine
-                  as={ONE_LINE_ELEMENT.H1}
-                  end={ONE_LINE_END.ELLIPSIS}
-                  className="desktop-toolbar-title"
-                >
-                  Overview
-                </OneLine>
-              }
-            />
-          }
+          toolbar={<Toolbar title="Overview" />}
           state={COLLECTION_STATE.LOADING}
           loadingLabel="Reading the dashboard…"
         />
@@ -195,6 +164,9 @@ function PersonLoading({
   return <PersonPageSkeleton name={name} />;
 }
 
+/** Where a version history's way out leads where no step stands behind it, as a hint names it. */
+const HISTORY_EXIT_PLACE = "plan";
+
 /**
  * What stands while a version history's chunk loads: its frame, the list's
  * column where the sidebar stood, and its own way out, its Back row and
@@ -202,9 +174,12 @@ function PersonLoading({
  */
 function VersionHistoryLoading({
   onExit,
+  place,
   hidden,
 }: {
   onExit: () => void;
+  /** Where the way out leads, as its hint names it. */
+  place: string;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
@@ -212,14 +187,13 @@ function VersionHistoryLoading({
     <div className="desktop-version-history">
       <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
+        <BackButton
+          look={BACK_BUTTON_LOOK.COLUMN}
+          label="Back"
+          place={place}
+          command={APP_COMMAND.EXIT_VERSION_HISTORY}
+          onBack={onExit}
+        />
       </nav>
       <section className="version-page" aria-label="Version" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
@@ -306,7 +280,7 @@ function SettingsLoading({
         <div className="desktop-drag-strip" />
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
-        <div className="desktop-drag-strip" />
+        {/* Note that the page draws its own bar, the window's drag handle, as Settings' page does once drawn. */}
         <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
       </section>
     </div>
@@ -474,27 +448,6 @@ function usePlaceCommands(
   );
 }
 
-/** The voice's notice line, one element for every draw, which reads the line where it is drawn (`WindowVoiceNotice`). */
-const NOTICE_STRIP = <WindowVoiceNotice />;
-
-/**
- * Whether the tab of the agent the call speaks into is on screen, where its
- * transcript streams the call's words as they are said and its foot draws
- * the call bar. A tab standing behind another chosen tab, or under a side
- * panel filling the window, is not on screen.
- */
-function callingTabShown(tasks: TasksControl, calling: string | undefined): boolean {
-  const { mainTabs, sidePanel } = tasks;
-  const tab = mainTabs.tab;
-  return (
-    calling !== undefined &&
-    !sidePanel.fullScreen &&
-    tab !== undefined &&
-    isAgentTab(tab) &&
-    tab.agent === calling
-  );
-}
-
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever task its item is
@@ -559,9 +512,7 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
  * stands behind it. New task's dialog stands over the tasks or a version
- * history, whichever is drawn (`new-task-dialog.tsx`). The voice's notice line rides the foot of the call's
- * agent's tab while it is drawn, and floats at the window's foot wherever
- * else a call can still be heard.
+ * history, whichever is drawn (`new-task-dialog.tsx`).
  */
 export function DesktopShell({
   gates,
@@ -688,11 +639,8 @@ export function DesktopShell({
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
-  const calling = useCallingAgent();
   // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
   const chatSurface = useChatSurface(tasks);
-  const callShown = taskDrawn && callingTabShown(tasks, calling);
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
@@ -742,7 +690,6 @@ export function DesktopShell({
             onExit={exitSettings}
           />
         </Suspense>
-        {NOTICE_STRIP}
       </div>
     );
   }
@@ -759,6 +706,7 @@ export function DesktopShell({
               fallback={
                 <VersionHistoryLoading
                   onExit={exitHistory}
+                  place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
                   hidden={hiddenColumns(room, tasks.history.listed)}
                 />
               }
@@ -775,7 +723,6 @@ export function DesktopShell({
             </Suspense>
           </ChipCards>
         </MentionedAgents>
-        {NOTICE_STRIP}
         {newTaskDialog}
       </div>
     );
@@ -791,7 +738,6 @@ export function DesktopShell({
       return (
         <div className="desktop-shell" data-room={room}>
           {loading}
-          {NOTICE_STRIP}
         </div>
       );
     }
@@ -809,7 +755,6 @@ export function DesktopShell({
             onExit={exitAdmin}
           />
         </Suspense>
-        {NOTICE_STRIP}
       </div>
     );
   }
@@ -824,16 +769,6 @@ export function DesktopShell({
     (planToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
     (inboxOpen && tasks.inboxView.chosen !== undefined);
-  // Note that the notice line rides the foot of the call's agent's
-  // tab, or its own page, while that is on screen, and floats at the
-  // window's foot otherwise.
-  const pageCallShown =
-    !inboxOpen &&
-    !chatOpen &&
-    pageAgent !== undefined &&
-    pageAgent === calling &&
-    !tasks.sidePanel.fullScreen;
-  const noticeInColumn = callShown || pageCallShown;
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it
@@ -888,7 +823,6 @@ export function DesktopShell({
                 key={pageAgent}
                 tasks={tasks}
                 agentId={pageAgent}
-                notice={pageCallShown ? NOTICE_STRIP : undefined}
                 away={room === SHELL_ROOM.NARROW ? away : undefined}
               />
             ) : pagePerson !== undefined ? (
@@ -933,14 +867,7 @@ export function DesktopShell({
                 </Suspense>
               </PageFind>
             ) : (
-              <DesktopTasks
-                tasks={tasks}
-                looks={looks}
-                notice={noticeInColumn ? NOTICE_STRIP : undefined}
-                summary={summary}
-                room={room}
-                away={away}
-              />
+              <DesktopTasks tasks={tasks} looks={looks} summary={summary} room={room} away={away} />
             )}
           </ChipCards>
         </MentionedAgents>
@@ -948,7 +875,6 @@ export function DesktopShell({
       {barShown ? (
         <MobileBar tasks={tasks} chatOn={chatOn} sidebar={sidebar} onPressMore={keepOverlay} />
       ) : null}
-      {noticeInColumn ? null : NOTICE_STRIP}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
       <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;

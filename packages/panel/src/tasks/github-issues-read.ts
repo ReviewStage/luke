@@ -24,7 +24,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * GitHub for that one issue instead, in the repository it names, which
  * need not be the chosen one, or none chosen at all. An installation that
  * has not granted the App issues answers so, with where its owner grants
- * them, rather than an empty list. A read refused finds nothing.
+ * them, rather than an empty list. A read refused or never answered is a
+ * standing of its own (`FAILED`), never an empty list, so the menu says the
+ * issues could not be read and offers Retry.
  */
 
 /** How long the typing rests before GitHub is searched for the words as typed. */
@@ -36,6 +38,8 @@ export const GITHUB_ISSUES_STANDING = {
   NONE: "none",
   LISTED: "listed",
   UNGRANTED: "ungranted",
+  /** The read was refused or never answered, so what the repository holds is not known. */
+  FAILED: "failed",
 } as const;
 
 export type GitHubIssuesStanding =
@@ -49,16 +53,23 @@ export type GitHubIssuesStanding =
       readonly kind: typeof GITHUB_ISSUES_STANDING.UNGRANTED;
       readonly repository: string;
       readonly settingsUrl: string;
-    };
+    }
+  | { readonly kind: typeof GITHUB_ISSUES_STANDING.FAILED; readonly repository: string };
 
 const NONE: GitHubIssuesStanding = { kind: GITHUB_ISSUES_STANDING.NONE };
+
+/** A read refused, or never answered, which is not an empty repository. */
+const FAILED_READ = { failed: true } as const;
+
+/** What a read answered, or that it failed. */
+type IssuesAnswer = GitHubRepositoryIssuesAnswer | typeof FAILED_READ;
 
 /** One read's answer, and the workspace, repository, and words it was for. */
 interface ReadAnswer {
   readonly workspaceId: string | undefined;
   readonly repository: string;
   readonly typed: string;
-  readonly answer: GitHubRepositoryIssuesAnswer;
+  readonly answer: IssuesAnswer;
 }
 
 /** One ask of GitHub for the words as typed, and the read that asks it. */
@@ -73,9 +84,6 @@ interface IssueAsk {
   ) => Promise<GitHubRepositoryIssuesAnswer>;
 }
 
-/** A read refused, or never answered, finds nothing. */
-const FOUND_NOTHING: GitHubRepositoryIssuesAnswer = { issues: [] };
-
 /**
  * A search once the typing has rested, as an atom whose work is the wait and
  * then the read: setting it again starts the wait over and lets go of the
@@ -86,7 +94,7 @@ const issueAskAtom = () =>
     Effect.gen(function* () {
       yield* Effect.sleep(SEARCH_PAUSE);
       const answer = yield* Effect.tryPromise(() => asked.read(asked.repository, asked.ask)).pipe(
-        Effect.orElseSucceed(() => FOUND_NOTHING),
+        Effect.orElseSucceed((): IssuesAnswer => FAILED_READ),
       );
       const read: ReadAnswer = {
         workspaceId: asked.workspaceId,
@@ -120,7 +128,7 @@ function useOpenIssues(
         if (current) setListed({ workspaceId, repository, typed: "", answer });
       },
       () => {
-        if (current) setListed({ workspaceId, repository, typed: "", answer: FOUND_NOTHING });
+        if (current) setListed({ workspaceId, repository, typed: "", answer: FAILED_READ });
       },
     );
     // Note that each opening reads afresh, and a read let go answers nothing, so an older read never stands over a newer one.
@@ -136,10 +144,8 @@ function useOpenIssues(
 }
 
 /** An answer as the section stands for a repository. */
-function standingOf(
-  repository: string,
-  answer: GitHubRepositoryIssuesAnswer,
-): GitHubIssuesStanding {
+function standingOf(repository: string, answer: IssuesAnswer): GitHubIssuesStanding {
+  if ("failed" in answer) return { kind: GITHUB_ISSUES_STANDING.FAILED, repository };
   return "ungranted" in answer
     ? {
         kind: GITHUB_ISSUES_STANDING.UNGRANTED,
@@ -218,7 +224,9 @@ export function useGitHubIssues(
       ask,
     ];
   }
-  if ("ungranted" in open || words === "") return [standingOf(place, open), ask];
+  if ("failed" in open || "ungranted" in open || words === "") {
+    return [standingOf(place, open), ask];
+  }
   const issues =
     ref === undefined
       ? filtered(open.issues, words)

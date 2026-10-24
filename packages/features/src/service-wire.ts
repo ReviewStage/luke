@@ -88,6 +88,19 @@ export const HOSTED_API_ERROR = {
    */
   OPENAI_KEY_MISSING: "openai-key-missing",
   /**
+   * What was asked runs on the account's own OpenAI key, and OpenAI refused
+   * that key as none of its own: revoked, deleted, or mistyped. Nothing of
+   * OpenAI's answer travels beside the slug. A new key is saved in Settings.
+   */
+  OPENAI_KEY_REFUSED: "openai-key-refused",
+  /**
+   * What was asked runs on the account's own OpenAI key, and OpenAI answered
+   * that the key's account has no credit left (its `insufficient_quota`).
+   * Nothing of OpenAI's answer travels beside the slug. Credit is added on
+   * OpenAI's own billing page.
+   */
+  OPENAI_KEY_UNFUNDED: "openai-key-unfunded",
+  /**
    * The agent runs on its starter's plan (a ChatGPT plan, on Codex), and the
    * starter's sign-in cannot launch it: none is kept, the provider signed it
    * out, or the service cannot open it. The starter signs in again in

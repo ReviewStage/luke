@@ -146,7 +146,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
             tasks,
             layout: PINNED,
             cardId: "summary-card",
-            inbox: { open: [], settled: [] },
+            inbox: { open: [], waiting: [], settled: [] },
             held: HELD,
             repository: "acme/relay",
             onOpenAgent: (agentId) => opened.push(agentId),
@@ -198,7 +198,7 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
           tasks,
           layout: PINNED,
           cardId: "summary-card",
-          inbox: { open: [], settled: [] },
+          inbox: { open: [], waiting: [], settled: [] },
           held: HELD,
           repository: "acme/relay",
           onOpenAgent: () => undefined,
@@ -264,7 +264,7 @@ test("the plan's row hangs the task's card, as the Plan tab does", () => {
             tasks,
             layout: PINNED,
             cardId: "summary-card",
-            inbox: { open: [], settled: [] },
+            inbox: { open: [], waiting: [], settled: [] },
             held: HELD,
             repository: "acme/relay",
             onOpenAgent: () => undefined,
@@ -306,7 +306,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
 });
 
-test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive agent", async () => {
+test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
@@ -323,12 +323,12 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
   assert.ok(copy);
   await act(async () => copy.click());
 
-  assert.deepEqual(labels, ["Copy link", "Archive agent"]);
+  assert.deepEqual(labels, ["Copy link", "Archive"]);
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
 });
 
 /** What the plan's own inbox holds in these tests: nothing. */
-const NO_INBOX = { open: [], settled: [] };
+const NO_INBOX = { open: [], waiting: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
 function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
@@ -400,6 +400,22 @@ test("Escape takes the card the toolbar's button hung back down and hands the fo
   });
   assert.equal(toggle.getAttribute("aria-expanded"), "false", "the card is taken down");
   assert.equal(document.activeElement, toggle, "the toolbar's button has the focus back");
+});
+
+test("a press outside the card the toolbar's button hung takes it down, and a press inside it leaves it", () => {
+  const column = columnAt(280);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
+    assert.fail("the toolbar's button stands");
+  act(() => toggle.click());
+  const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
+  assert.ok(card, "the card hangs");
+
+  act(() => card.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.equal(toggle.getAttribute("aria-expanded"), "true", "a press inside leaves it hung");
+
+  act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.equal(toggle.getAttribute("aria-expanded"), "false", "a press outside takes it down");
 });
 
 test("where the summary pins beside the document, the toolbar's button says whether it stands pinned", () => {

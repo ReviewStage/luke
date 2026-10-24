@@ -38,7 +38,7 @@ import {
   inboxReplyRefusal,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
@@ -46,7 +46,7 @@ import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { matchesTokens } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import type { CountNoun } from "../desktop/sidebar-group-header.js";
+import type { CountNoun } from "../desktop/sidebar-fold.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
 import { plainWords } from "./tool-call-model.js";
@@ -194,15 +194,22 @@ export function inboxCommentFiles(
 /** The board as the tab draws it. */
 export interface InboxBoardView {
   readonly open: readonly InboxItem[];
+  /** The open items that wait on the reader (`readersItem`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate. */
+  readonly waiting: readonly InboxItem[];
   readonly settled: readonly InboxItem[];
 }
 
-/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
-export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` says which of what waits waits on the reader. */
+export function inboxBoard(
+  items: readonly InboxItem[],
+  readerId: string | undefined,
+): InboxBoardView {
+  const open = items
+    .filter((item) => item.status === INBOX_STATUS.OPEN)
+    .toSorted((a, b) => a.postedAt - b.postedAt);
   return {
-    open: items
-      .filter((item) => item.status === INBOX_STATUS.OPEN)
-      .toSorted((a, b) => a.postedAt - b.postedAt),
+    open,
+    waiting: open.filter((item) => readersItem(item, readerId)),
     settled: items
       .filter((item) => item.status !== INBOX_STATUS.OPEN)
       .toSorted((a, b) => b.updatedAt - a.updatedAt),
@@ -411,6 +418,15 @@ export type InboxDoAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DO }>;
 /** Whether an ask read off the wire is one this build knows, which its type decides. */
 export function knownAsk(ask: InboxReadAsk): ask is InboxKnownAsk {
   return Object.values<string>(INBOX_ASK).includes(ask.type);
+}
+
+/**
+ * Whether an ask is a form of several fields, which Enter alone must not
+ * send: it only picks, or breaks a line, since the rest may not be filled in
+ * yet, and ⌘ or Ctrl with Enter sends.
+ */
+export function severalFields(ask: InboxAsk): boolean {
+  return ask.type === INBOX_ASK.ANSWER && (ask.fields?.length ?? 0) > 1;
 }
 
 /** The message whose ask waits on an answer, and the ask; none where nothing waits. */

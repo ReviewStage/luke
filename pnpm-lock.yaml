@@ -144,6 +144,9 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -942,9 +945,6 @@ importers:
       '@xterm/xterm':
         specifier: 6.0.0
         version: 6.0.0
-      cmdk:
-        specifier: 1.1.1
-        version: 1.1.1(@types/react-dom@19.2.4)(@types/react@19.2.18)(react-dom@19.2.8)(react@19.2.8)
       diff:
         specifier: 9.0.0
         version: 9.0.0
@@ -1228,9 +1228,15 @@ importers:
       clsx:
         specifier: 2.1.1
         version: 2.1.1
+      cmdk:
+        specifier: 1.1.1
+        version: 1.1.1(@types/react-dom@19.2.4)(@types/react@19.2.18)(react-dom@19.2.8)(react@19.2.8)
       effect:
         specifier: 'catalog:'
         version: 4.0.4
+      lucide-react:
+        specifier: 1.53.0
+        version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
       mdast-util-from-markdown:
         specifier: 2.0.3
         version: 2.0.3
@@ -1357,6 +1363,12 @@ importers:
       '@oxlint/plugins':
         specifier: 1.79.0
         version: 1.79.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
+      oxc-parser:
+        specifier: 0.152.0
+        version: 0.152.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

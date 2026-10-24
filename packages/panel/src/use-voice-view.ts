@@ -1,3 +1,4 @@
+import type { VoiceFailure } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -5,6 +6,7 @@ import { AVATAR_OFF, type AvatarState } from "@luke/voice/avatar";
 import {
   callInProgress,
   IDLE_VOICE_VIEW,
+  noticeLinesHidden,
   VOICE_COMMAND,
   type VoiceCallAbout,
   type VoiceCallTranscript,
@@ -55,21 +57,27 @@ const voiceViewAtom: Atom.Atom<VoiceView> = Atom.map(
   (voice) => voice?.view ?? IDLE_VOICE_VIEW,
 );
 
-/**
- * What was said on the standing call so far, as the document holds it
- * beside the view, which tells its one reader as a line grows and the view's
- * readers not at all; none for no call.
- */
-const callTranscriptAtom: Atom.Atom<VoiceCallTranscript | undefined> = Atom.map(
-  APP_SLICE.VOICE,
-  (voice) => voice?.callTranscript,
-);
-
 /** Luke's avatar on the call as main holds it, which tells its readers only as the avatar moves, not as the words do. */
 const voiceAvatarAtom: Atom.Atom<AvatarState> = Atom.map(
   APP_SLICE.VOICE,
   (voice) => voice?.avatar ?? AVATAR_OFF,
 );
+
+/** Whether the voice window was given up on for this run, which redraws its reader only as it turns. */
+const voiceLostAtom: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.unavailable === true,
+);
+
+/** Whether the voice window was given up on for this run, so no call can run until Luke is reopened. */
+export function useVoiceLost(): boolean {
+  return useAppSlice(voiceLostAtom);
+}
+
+/** The same, read as a press lands. */
+export function voiceLostNow(): boolean {
+  return appStateNow()?.voice?.unavailable === true;
+}
 
 /** Whether the microphone is granted, which redraws its reader only as it turns. */
 const microphoneGrantedAtom: Atom.Atom<boolean> = Atom.map(
@@ -87,11 +95,9 @@ const microphoneGrantedAtom: Atom.Atom<boolean> = Atom.map(
 export function voiceErrorToShow(input: {
   fixtureSpeaking: boolean;
   speakers: VoiceSpeakers;
-  error: string | undefined;
-}): string | undefined {
-  if (input.fixtureSpeaking || input.speakers.listening || input.speakers.lukeSpeaking) {
-    return undefined;
-  }
+  error: VoiceFailure | undefined;
+}): VoiceFailure | undefined {
+  if (input.fixtureSpeaking || noticeLinesHidden(input.speakers).error) return undefined;
   return input.error;
 }
 
@@ -104,9 +110,9 @@ export function voiceErrorToShow(input: {
 export function voiceNoticeToShow(input: {
   fixtureSpeaking: boolean;
   speakers: VoiceSpeakers;
-  notice: string | undefined;
-}): string | undefined {
-  if (input.fixtureSpeaking || input.speakers.lukeSpeaking) return undefined;
+  notice: VoiceFailure | undefined;
+}): VoiceFailure | undefined {
+  if (input.fixtureSpeaking || noticeLinesHidden(input.speakers).notice) return undefined;
   return input.notice;
 }
 
@@ -191,5 +197,5 @@ export function useVoiceAvatar(): AvatarState {
 
 /** What was said on the standing call so far, which its agent's tab's live transcript draws; none for no call. */
 export function useCallTranscript(): VoiceCallTranscript | undefined {
-  return useAppSlice(callTranscriptAtom);
+  return useAppSlice(APP_SLICE.CALL_TRANSCRIPT);
 }

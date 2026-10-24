@@ -142,9 +142,9 @@ async function browserRows(): Promise<HTMLElement[]> {
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
-  return [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].filter(
-    (row) => row.closest('[role="group"]')?.textContent?.startsWith("Browser") === true,
-  );
+  return [
+    ...document.querySelectorAll<HTMLElement>('.luke-searchable-menu [role="option"]'),
+  ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Browser") === true);
 }
 
 test("on a task with no coding agent, the panel's + offers no Browser tab, and none with the experiment off", async () => {
@@ -193,7 +193,9 @@ test("on a task with one coding agent, the panel's + New Browser tab drafts a ta
 
 /** The choices of the submenu standing open beside a row of the "+". */
 function submenuChoices(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>('.task-compose-submenu [role="option"]')];
+  return [
+    ...document.querySelectorAll<HTMLElement>('.luke-searchable-menu-submenu [role="option"]'),
+  ];
 }
 
 test("on a task with several coding agents, the panel's + New Browser tab opens a submenu of the agents alone, the one viewed first, and an agent drafts a tab in its browser and opens nothing", async () => {

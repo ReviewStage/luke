@@ -9,7 +9,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

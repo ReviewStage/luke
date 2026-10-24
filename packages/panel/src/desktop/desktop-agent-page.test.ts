@@ -28,7 +28,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
@@ -910,11 +910,11 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
   assert.ok(add, "the panel offers its +");
   act(() => add.click());
   await settle();
-  const offered = [...document.querySelectorAll(".tab-add-menu [role='option']")].map(
+  const offered = [...document.querySelectorAll(".luke-searchable-menu [role='option']")].map(
     (each) => each.textContent,
   );
-  const headings = [...document.querySelectorAll(".tab-add-menu [role='group']")].map((each) =>
-    each.getAttribute("aria-label"),
+  const headings = [...document.querySelectorAll(".luke-searchable-menu [role='group']")].map(
+    (each) => each.getAttribute("aria-label"),
   );
   act(() => add.click());
   await settle();
@@ -1061,8 +1061,8 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.deepEqual(openedOnGitHub, [other]);
 
   // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
-  const more = container.querySelector<HTMLButtonElement>(
-    "aside.side-panel .pull-request-earlier button",
+  const more = container.querySelector<HTMLAnchorElement>(
+    "aside.side-panel .pull-request-earlier a",
   );
   assert.ok(more, "the tab counts the earlier comments");
   act(() => more.click());
@@ -1198,6 +1198,11 @@ test("an agent the service will not hand the reader, as a link to another worksp
     /Not foundThis agent doesn't exist, or you don't have access to it\./u,
   );
   assert.equal(page.querySelector("h1"), null);
+  // The window's bar stands over the words saying so, as it stands over every page.
+  assert.equal(
+    page.querySelector("section[aria-label='Not found']")?.firstElementChild?.tagName,
+    "HEADER",
+  );
   assert.equal(
     [...page.querySelectorAll("button")].some((each) => /Retry/u.test(each.textContent ?? "")),
     false,
@@ -1343,7 +1348,9 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender [data-actor-ref]");
+  const sender = page.querySelector(
+    ".is-user:not(.agent-origin) .luke-message-line-sender [data-actor-ref]",
+  );
   assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
@@ -1384,7 +1391,7 @@ function origin(page: HTMLElement): OpenedOrigin {
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
   const head = card.querySelector<HTMLElement>("[data-task-card] > summary");
   act(() => head?.click());
-  return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
+  return { card, sender: card.querySelector<HTMLElement>(".luke-message-line-sender") };
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
@@ -1573,7 +1580,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal, Copy link, the transcript's two copies, Archive agent, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show terminal, Copy link, the transcript's two copies, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1585,11 +1592,11 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
   );
   assert.deepEqual(offered, [
     "Rename",
-    "Open terminal⌘J",
+    "Show terminal⌘J",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
-    "Archive agent",
+    "Archive",
     "Permanently delete",
   ]);
 });
@@ -1607,7 +1614,7 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Open terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+    ["Show terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
   );
 });
 
@@ -1646,10 +1653,10 @@ function mountHearingPanel() {
   return { page, chosen };
 }
 
-test("Open terminal on the page's ⋯, and ⌘J, show the agent's own Terminal tab in the side panel beside its page, as on a task", async () => {
+test("Show terminal on the page's ⋯, and ⌘J, show the agent's own Terminal tab in the side panel beside its page, as on a task", async () => {
   const { page, chosen } = mountHearingPanel();
   await settle();
-  const open = pageMenuItem(page, "Open terminal⌘J");
+  const open = pageMenuItem(page, "Show terminal⌘J");
   act(() => open.click());
   await settle();
   let offered = false;
@@ -1679,7 +1686,7 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   });
   await settle();
 
-  assert.ok(!offered.includes("Open terminal⌘J"), `no Open terminal: ${offered.join(", ")}`);
+  assert.ok(!offered.includes("Show terminal⌘J"), `no Show terminal: ${offered.join(", ")}`);
   assert.equal(ran, false, "⌘J is not offered");
   assert.deepEqual(chosen, []);
 });
@@ -1823,10 +1830,10 @@ test("a fork's Pull request tab offers no Run, since its head's branch name woul
   );
 });
 
-test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
+test("Archive on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
   const page = mount();
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -1838,16 +1845,16 @@ test("Archive agent on the page's ⋯ reads an agent at rest again and archives 
   );
 });
 
-test("Archive agent on the page's ⋯ asks first while the agent works, and archives nothing until asked", async () => {
+test("Archive on the page's ⋯ archives the reader's own agent at once while it works, asking nothing", async () => {
   pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
   const page = mount();
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
-  assert.match(document.body.textContent ?? "", /Stop and archive Sweep the flaky tests\?/u);
-  assert.deepEqual(archives, []);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
 test("an archived agent's ⋯ offers Unarchive in Archive's place, and no Rename", async () => {
@@ -1872,7 +1879,7 @@ test("an archive the service refuses says why and leaves the automation's prompt
   archiveRefused = true;
   const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
-  const archive = pageMenuItem(page, "Archive agent");
+  const archive = pageMenuItem(page, "Archive");
   await act(async () => archive.click());
   await settle();
 
@@ -2127,7 +2134,9 @@ test("a delete the service refused for an agent still starting says why in the d
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
-  const reason = document.querySelector('[role="alertdialog"] [role="alert"]');
+  const reason = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  );
   assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
   assert.equal(closed, 0);
 });
@@ -2216,8 +2225,8 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   assert.ok(panel, "the panel stands beside the page");
   assert.match(panel.textContent ?? "", /src\/relay\.ts/u);
   // No File tab reads a repository no task names, so the card offers no way into one.
-  assert.ok(panel.querySelector(".code-card"), "the code's card stands");
-  assert.equal(panel.querySelector(".code-card [aria-label^='Open ']"), null);
+  assert.ok(panel.querySelector(".luke-code-card"), "the code's card stands");
+  assert.equal(panel.querySelector(".luke-code-card [aria-label^='Open ']"), null);
 });
 
 test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
@@ -2230,13 +2239,15 @@ test("on a phone the page is headed by its way back's glyph, the agent's name ce
   const head = page.querySelector<HTMLElement>(".agent-head");
   assert.ok(head, "the phone's head stands");
   assert.deepEqual(
-    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    ["Back to Inbox", "Agent actions"],
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Inbox", "Agent actions"],
     "one control a corner",
   );
   assert.ok(head.querySelector("h1")?.textContent, "the agent's name is the title");
   assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
-  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Back to Inbox"]')?.click());
+  act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(left, ["away"], "the way back goes where the shell says");
 });
 

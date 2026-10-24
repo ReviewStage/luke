@@ -25,13 +25,16 @@ import {
   integrationAccountLabel,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
+import { readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_VARIANT,
   Button,
   ChevronDownIcon,
   ChevronRightIcon,
+  CONFIRM_LOSS,
   ConfirmDialog,
   commandKeyshortcuts,
   ErrorState,
@@ -40,6 +43,7 @@ import {
   InlineEdit,
   type InlineEditEnd,
   ProviderMark,
+  RetryButton,
   ScrollArea,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
@@ -84,8 +88,9 @@ import {
   IntegrationToolList,
   keepInView,
 } from "../integration-tool-list.js";
-import { useIntegrationTools } from "../integration-tools.js";
+import { useIntegrationToolReads } from "../integration-tools.js";
 import { focusSearchField, Highlighted } from "../search-field.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -169,6 +174,7 @@ const FILTER_PLACEHOLDER = "Search integrations and tools";
 const PAGE_LINE = {
   CONNECTED: "Connected",
   CHECKING: "Checking…",
+  TOOLS_NOT_READ: readFailedWords("the tools"),
   SIGNED_OUT: "Sign in to connect integrations.",
   READ_FAILED: "Your integrations could not be read.",
   NONE_OFFERED: "No integrations are available for this account.",
@@ -251,8 +257,8 @@ function connectedLine(health: ConnectionHealth): RowLine {
       return { text: health.problem, state: LINE_STATE.ATTENTION };
     case CONNECTION_HEALTH.CHECKING:
       return { text: PAGE_LINE.CHECKING, state: LINE_STATE.PLAIN };
-    case CONNECTION_HEALTH.UNKNOWN:
-      return { text: PAGE_LINE.CONNECTED, state: LINE_STATE.CONNECTED };
+    case CONNECTION_HEALTH.FAILED:
+      return { text: PAGE_LINE.TOOLS_NOT_READ, state: LINE_STATE.ATTENTION };
   }
 }
 
@@ -357,15 +363,6 @@ function ToolsLine({
   );
 }
 
-/** The keys that move the list's tool, by how far each moves it in a list of `count`. */
-function movedTo(key: string, at: number, count: number): number | undefined {
-  if (key === "ArrowDown") return Math.min(at + 1, count - 1);
-  if (key === "ArrowUp") return Math.max(at - 1, 0);
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return undefined;
-}
-
 /** A row's tools, opened in place under it: the list, and beside it the page of the tool it holds. */
 function RowToolsPanel({
   id,
@@ -392,17 +389,20 @@ function RowToolsPanel({
     keepInView(list.current, row?.closest("li") ?? null);
   };
 
+  // The list's own arrows move the focus (`List`), and the tool held follows it, as a press on a row holds it.
+  const onRowFocus = (event: React.FocusEvent) => {
+    const stepped = [...rows.current].some(([, row]) => row === event.relatedTarget);
+    const landed = [...rows.current].find(([, row]) => row === event.target);
+    if (!stepped || landed === undefined) return;
+    setHeld(landed[0]);
+    keepInView(list.current, landed[1].closest("li"));
+  };
+
   const onRowKey = (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => {
-    const at = shown.indexOf(tool);
-    const to = movedTo(event.key, at, shown.length);
-    if (to !== undefined) {
-      event.preventDefault();
-      hold(shown[to]);
-    } else if (event.key === "Enter" || event.key === "ArrowRight") {
-      event.preventDefault();
-      setHeld(tool.name);
-      body.current?.focus();
-    }
+    if (event.key !== "Enter" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    setHeld(tool.name);
+    body.current?.focus();
   };
 
   const onBodyKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -417,7 +417,8 @@ function RowToolsPanel({
     <div id={id} className="integration-tools-panel">
       <div className="integration-tools-split">
         <ScrollArea ref={list}>
-          <div className="integration-tools-list">
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
+          <div className="integration-tools-list" onFocus={onRowFocus}>
             <IntegrationToolList
               server={name}
               tools={shown}
@@ -523,6 +524,7 @@ function IntegrationRow({
   health,
   statuses,
   tools,
+  onRetryTools,
 }: {
   row: ServerRow;
   /** Where the connection stands, or nothing while it has not been read; the row offers nothing until it has. */
@@ -531,6 +533,8 @@ function IntegrationRow({
   health: ConnectionHealth;
   statuses: IntegrationStatuses;
   tools: RowTools;
+  /** Asks the account's server for its tools again, offered where the read failed. */
+  onRetryTools: () => void;
 }): React.JSX.Element {
   const panelId = useId();
   const { act } = useAct();
@@ -541,6 +545,8 @@ function IntegrationRow({
   const github = useGitHubConnection();
   const signIn = statuses.signInOf(connection);
   const [connecting, setConnecting] = useState(false);
+  // Note that the sign-in's own Cancel is the one busy while it is called off, as Connect is while one begins.
+  const [cancelling, setCancelling] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   // Several accounts at a provider each name themselves; one alone is the provider, as ever.
@@ -569,9 +575,11 @@ function IntegrationRow({
 
   const cancel = useCallback(() => {
     setConnecting(true);
+    setCancelling(true);
     setRejection(undefined);
     void cancelSignIn(connection).then((cancelled) => {
       setConnecting(false);
+      setCancelling(false);
       if (!cancelled)
         setRejection(`Luke could not cancel connecting ${name}. Try again in a moment.`);
     });
@@ -637,7 +645,7 @@ function IntegrationRow({
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
-        label={`${name} actions`}
+        thing={name}
         actions={actions}
         anchor={connection}
         {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}
@@ -668,17 +676,36 @@ function IntegrationRow({
           error: rejection,
           control: waiting ? (
             <>
-              <Button variant={BUTTON_VARIANT.QUIET} disabled={connecting} onClick={connect}>
+              <Button
+                variant={BUTTON_VARIANT.QUIET}
+                busy={connecting && !cancelling}
+                busyLabel="Reopening the sign-in"
+                disabled={cancelling}
+                onClick={connect}
+              >
                 {SIGN_IN_ACTION.REOPEN}
               </Button>
-              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={cancel}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={cancelling}
+                busyLabel="Canceling the sign-in"
+                disabled={connecting && !cancelling}
+                onClick={cancel}
+              >
                 {SIGN_IN_ACTION.CANCEL}
               </Button>
             </>
+          ) : connected && health.kind === CONNECTION_HEALTH.FAILED ? (
+            <RetryButton onRetry={onRetryTools} />
           ) : status === undefined ||
             status === INTEGRATION_STATUS.UNAVAILABLE ||
             (connected && !broken) ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={connect}>
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              busy={connecting}
+              busyLabel="Connecting"
+              onClick={connect}
+            >
               {grantLabel(status, signIn)}
             </Button>
           ),
@@ -688,6 +715,7 @@ function IntegrationRow({
         <RowToolsPanel id={panelId} name={name} tools={tools} />
       ) : null}
       <ConfirmDialog
+        open
         confirm={disconnect}
         question={{
           title: `Disconnect ${name}?`,
@@ -700,6 +728,7 @@ function IntegrationRow({
               : undefined),
           verb: "Disconnect",
           running: "Disconnecting…",
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
     </Stack>
@@ -751,6 +780,13 @@ function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
   return next;
 }
 
+/** What stands where the search finds nothing, said politely as it lands and as the query changes. */
+function NoMatchNote({ query }: { query: string }): React.JSX.Element {
+  const words = `No integrations or tools match “${query.trim()}”`;
+  useAnnounceShown(ANNOUNCE.POLITE, words);
+  return <PageNote>{words}</PageNote>;
+}
+
 /**
  * Every offered provider's row, once where they stand has been read, so each
  * row is drawn whole at once, under the page's search; a read that failed
@@ -762,7 +798,7 @@ function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
  */
 function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
-  const reads = useIntegrationTools(
+  const { reads, retry } = useIntegrationToolReads(
     namedServers({
       statusOf: statuses.statusOf,
       accountsOf: statuses.accountsOf,
@@ -833,11 +869,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
         </SettingsSection>
       ) : null}
       {groups.length === 0 ? <PageNote>{PAGE_LINE.NONE_OFFERED}</PageNote> : null}
-      {groups.length > 0 && found.length === 0 ? (
-        <div role="status">
-          <PageNote>{`No integrations or tools match “${query.trim()}”`}</PageNote>
-        </div>
-      ) : null}
+      {groups.length > 0 && found.length === 0 ? <NoMatchNote query={query} /> : null}
       {found.map((group) => (
         <SettingsSection key={group.heading ?? "unread"} title={group.heading}>
           {group.rows.map((found) => (
@@ -855,6 +887,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
                 onToggle: () => toggle(found.row.connection),
                 tokens,
               }}
+              onRetryTools={() => retry(found.row.connection)}
             />
           ))}
         </SettingsSection>
@@ -866,7 +899,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
 /** A line the page says in its sections' place, in a description's muted words. */
 function PageNote({ children }: { children: string }): React.JSX.Element {
   return (
-    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
       {children}
     </Text>
   );

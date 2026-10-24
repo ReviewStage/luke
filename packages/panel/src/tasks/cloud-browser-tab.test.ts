@@ -19,6 +19,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -305,10 +306,7 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
   assert.ok(listener, "the pane opened its view");
   // The window's own spinner stands while the page is on its way, its words for a screen reader alone.
   await vi.waitFor(() => assert.equal(status(), "Waiting for the page"));
-  assert.ok(
-    document.querySelector(".cloud-browser-notice .luke-spinner-ring"),
-    "the spinner is drawn",
-  );
+  assert.ok(document.querySelector(".cloud-browser-notice .luke-spinner"), "the spinner is drawn");
   assert.ok(
     document.querySelector("section.ph-no-capture"),
     "the pane is left out of the recording",
@@ -470,6 +468,7 @@ async function pressEnter(): Promise<void> {
 }
 
 test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays in words, and Escape discards it", async () => {
+  mountAnnouncer();
   const asked: TasksBrowserTabOpenParams[] = [];
   let answer: WireBoundaryInput = { failure: BROWSER_TAB_OPEN_FAILURE.NOT_READY };
   fakeActPort({
@@ -507,7 +506,13 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   await pressEnter();
   assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: "http://localhost:3000/" }]);
   assert.ok(
-    document.querySelector('[role="alert"]')?.textContent?.includes("hasn't opened its sandbox"),
+    announcedAsAlert().includes("hasn't opened its sandbox"),
+    "a refusal is announced as an alert",
+  );
+  assert.ok(
+    document
+      .querySelector(".cloud-browser-standing")
+      ?.textContent?.includes("hasn't opened its sandbox"),
     "a refusal is said under the bar",
   );
   assert.deepEqual(handed, []);

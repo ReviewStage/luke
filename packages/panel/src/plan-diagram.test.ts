@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { useConfirmDialog } from "@luke/ui";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
@@ -10,7 +9,6 @@ import {
   type DiagramDrawing,
   type DiagramModule,
 } from "@luke/ui/diagram-contract";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
@@ -138,10 +136,9 @@ function toggle(container: HTMLElement): HTMLButtonElement {
 
 /** A version of the plan drawn against the one before it, as the version history draws it. */
 function Version({ previous, now }: { previous: string; now: string }): ReactNode {
-  const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-  );
+  const restore = { busy: false, onRestore: () => undefined };
   return createElement(VersionView, {
+    onRetry: () => undefined,
     viewing: {
       line: {
         seq: 2,

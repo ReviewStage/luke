@@ -4,9 +4,10 @@ import {
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
-import { readLink } from "@luke/features/luke-link";
+import { readLink } from "@luke/features/link-grammar";
 import { mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { formatBytes } from "@luke/features/number-format";
 import { planAttachmentOf } from "@luke/features/plan-attachment-link";
 import {
   agentCallLine,
@@ -30,6 +31,7 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  FailureNote,
   GAP,
   GLYPH_ARRIVAL,
   GLYPH_INK,
@@ -53,6 +55,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
+import { GLYPH } from "@luke/ui/icons";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   MARKDOWN_HTML_STEP,
@@ -114,6 +117,7 @@ import {
 } from "lucide-react";
 import {
   type ComponentProps,
+  type ComponentType,
   createContext,
   Fragment,
   type MouseEvent,
@@ -592,7 +596,10 @@ function remarkPluginsFor(
  * task's page it is drawn on, or the window's doors off one; a link as any
  * other is where it names none.
  */
-function MentionElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
+function MentionElement({
+  node,
+  children,
+}: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
   const words = node === undefined ? "" : wordsOf(node);
@@ -607,7 +614,10 @@ function MentionElement({ node, children }: MarkdownNodeProps & { children?: Rea
 }
 
 /** A link standing alone in its paragraph of a document: the card of what it names, or the paragraph as it was where it earns none (`lone-link-card.tsx`). */
-function LoneLinkElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
+function LoneLinkElement({
+  node,
+  children,
+}: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const target = String(node?.properties[LONE_LINK_ELEMENT.TARGET] ?? "");
   const words = String(node?.properties[LONE_LINK_ELEMENT.WORDS] ?? "");
   return <LoneLinkCard target={target} words={words} fallback={<p>{children}</p>} />;
@@ -883,15 +893,9 @@ const CUT_WORDS = {
   OUTPUT: "Reading the whole output…",
 } as const;
 
-/** A size in bytes as a reader says it. */
-function sizeWords(bytes: number): string {
-  const kilobytes = bytes / 1024;
-  return kilobytes < 1024 ? `${Math.round(kilobytes)} kB` : `${(kilobytes / 1024).toFixed(1)} MB`;
-}
-
 /** A cut part's two ends, the middle that could not be read said between them. */
 function cutText(cut: CutBody): string {
-  return `${cut.head}\n\n… ${sizeWords(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
+  return `${cut.head}\n\n… ${formatBytes(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
 }
 
 /**
@@ -982,9 +986,20 @@ const CALL_ICON = {
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
+  [CALL_KIND.OPEN_PULL_REQUEST]: () => <GLYPH.PULL_REQUEST />,
   [CALL_KIND.SLEEP]: TimerIcon,
+  [CALL_KIND.LIST_TASKS]: () => <GLYPH.TASK />,
+  [CALL_KIND.REMEMBER]: () => <GLYPH.MEMORY />,
+  [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
+  [CALL_KIND.LIST_OPEN_ASKS]: () => <GLYPH.INBOX />,
+  [CALL_KIND.READ_COMMENTS]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.REPLY_TO_COMMENT]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.SETTLED />,
+  [CALL_KIND.REOPEN_THREAD]: () => <GLYPH.COMMENT />,
+  [CALL_KIND.SEARCH_TOOLS]: () => <GLYPH.MCP_SERVER />,
+  [CALL_KIND.MCP_TOOL]: () => <GLYPH.MCP_SERVER />,
   [CALL_KIND.OTHER]: WrenchIcon,
-} as const satisfies Record<CallKind, LucideIcon>;
+} as const satisfies Record<CallKind, ComponentType<{ "aria-hidden"?: "true" }>>;
 
 /**
  * The coding agent a call about one names, drawn on its row in the place of
@@ -1082,6 +1097,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     kind: CallKind;
     /** For a call of an integration's own tool, the integration, whose mark the row wears in its kind's icon's place. */
     provider?: IntegrationProvider | undefined;
+    /** For a call of an MCP server's tool, the server's name, which the row says it ran on beside its line. */
+    server?: string | undefined;
     /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     /** For a call about one coding agent, the agent, whose chip the row names it by in the place of "the coding agent"; none where the agent is not known. */
@@ -1107,6 +1124,7 @@ export function TranscriptTool({
   state,
   kind,
   provider,
+  server,
   subject,
   description,
   agent,
@@ -1145,11 +1163,11 @@ export function TranscriptTool({
               {" Mac"}
             </ActorLine>
           ) : (
-            callPlace(kind)
+            callPlace(kind, server)
           )
         }
       />
-      <ToolContent>
+      <ToolContent bare>
         <ToolInput block={input} />
         {cut === undefined ? (
           <ToolOutput block={output} errorText={errorText} />
@@ -1430,11 +1448,7 @@ export function TranscriptTodos({
       />
       <FoldBody className="todos-body">
         <TodoItems todos={todos} live={live} />
-        {errorText === undefined ? null : (
-          <p className="todos-error" role="alert">
-            {errorText}
-          </p>
-        )}
+        {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
       </FoldBody>
     </Tool>
   );
@@ -1576,7 +1590,7 @@ export function TranscriptSubagent({
         <LineSummary data-subagent-row="" data-call-id={callId}>
           {line}
         </LineSummary>
-        <ToolContent>
+        <ToolContent bare>
           <ToolInput block={body.input} />
           <ToolOutput block={body.output} errorText={undefined} />
         </ToolContent>
@@ -1595,11 +1609,7 @@ export function TranscriptSubagent({
   return (
     <div className="subagent-row">
       {row}
-      {errorText === undefined ? null : (
-        <p className="subagent-error" role="alert">
-          {errorText}
-        </p>
-      )}
+      {errorText === undefined ? null : <FailureNote>{errorText}</FailureNote>}
     </div>
   );
 }

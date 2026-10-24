@@ -15,12 +15,14 @@ import { BROWSER_TAB_OPEN_FAILURE, type BrowserTabOpenFailure } from "@luke/feat
 import { ACT_KIND } from "@luke/host/acts";
 import {
   AddressField,
+  ANNOUNCE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
   FILL_ELEMENT,
   Fill,
   IconButton,
+  PaneBar,
   REMOTE_KEY_ACTION,
   REMOTE_POINTER_ACTION,
   type RemoteKey,
@@ -34,6 +36,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useAnnounce,
 } from "@luke/ui";
 import { Duration } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -49,6 +52,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
@@ -214,52 +218,56 @@ function CloudBrowserBar({
     onOpen(opened);
   };
   return (
-    <header className="file-view-bar browser-view-bar cloud-browser-bar">
-      <div className="file-view-history">
-        <Tooltip label="Back">
-          <IconButton
-            icon={<ArrowLeftIcon aria-hidden="true" />}
-            label="Back"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+    <PaneBar
+      middle={
+        <>
+          <div className="file-view-history">
+            <Tooltip label="Back">
+              <IconButton
+                icon={<ArrowLeftIcon aria-hidden="true" />}
+                label="Back"
+                disabled={onStep === undefined}
+                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+              />
+            </Tooltip>
+            <Tooltip label="Forward">
+              <IconButton
+                icon={<ArrowRightIcon aria-hidden="true" />}
+                label="Forward"
+                disabled={onStep === undefined}
+                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
+              />
+            </Tooltip>
+            <Tooltip label="Reload">
+              <IconButton
+                icon={<RotateCwIcon aria-hidden="true" />}
+                label="Reload"
+                turns
+                disabled={onStep === undefined}
+                onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
+              />
+            </Tooltip>
+          </div>
+          <AddressField
+            ref={field}
+            value={typed ?? address}
+            autoFocus={autoFocus}
+            disabled={disabled}
+            onChange={setTyped}
+            onOpen={go}
+            onBlur={holdTyped ? undefined : () => setTyped(undefined)}
+            onEscape={
+              onEscape ??
+              (() => {
+                setTyped(undefined);
+                field.current?.blur();
+              })
+            }
           />
-        </Tooltip>
-        <Tooltip label="Forward">
-          <IconButton
-            icon={<ArrowRightIcon aria-hidden="true" />}
-            label="Forward"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
-          />
-        </Tooltip>
-        <Tooltip label="Reload">
-          <IconButton
-            icon={<RotateCwIcon aria-hidden="true" />}
-            label="Reload"
-            turns
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
-          />
-        </Tooltip>
-      </div>
-      <AddressField
-        ref={field}
-        value={typed ?? address}
-        autoFocus={autoFocus}
-        disabled={disabled}
-        onChange={setTyped}
-        onOpen={go}
-        onBlur={holdTyped ? undefined : () => setTyped(undefined)}
-        onEscape={
-          onEscape ??
-          (() => {
-            setTyped(undefined);
-            field.current?.blur();
-          })
-        }
-      />
-      {children}
-    </header>
+        </>
+      }
+      actions={children}
+    />
   );
 }
 
@@ -518,11 +526,16 @@ export function CloudBrowserPane({
   const driver = view.driver?.driver ?? tab.driver;
   const driven = driver !== null;
   // A refusal says why first, then who has the tab.
-  const said = view.takeoverRefused
+  const refusal = view.takeoverRefused
     ? "Only whoever started this agent can drive its tab."
     : view.stepRefused
       ? `${(driver === null ? undefined : memberName(driver.userId)) ?? "A teammate"} is driving this tab. Wait until they hand it back.`
-      : standing;
+      : undefined;
+  const said = refusal ?? standing;
+  // Note that who has the tab is said politely as it changes, and a refusal as an alert, since it answers a press.
+  useAnnounce(ANNOUNCE.POLITE, refusal === undefined ? (standing ?? "") : "");
+  useAnnounceShown(ANNOUNCE.ALERT, refusal ?? "");
+  useAnnounceShown(ANNOUNCE.POLITE, notice?.waiting === false ? notice.words : "");
   const isLive = view.phase === CLOUD_BROWSER_PHASE.LIVE;
   return (
     <Fill
@@ -537,7 +550,7 @@ export function CloudBrowserPane({
         disabled={!isLive}
       />
       <div className="cloud-browser-standing">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} role="status" truncate>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
           {said ?? ""}
         </Text>
         {yours ? (
@@ -587,7 +600,7 @@ export function CloudBrowserPane({
             <Spinner delay label={notice.label} size={SPINNER_SIZE.REGION} />
           </div>
         ) : (
-          <div className="cloud-browser-notice" role="status">
+          <div className="cloud-browser-notice">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {notice.words}
             </Text>
@@ -630,6 +643,7 @@ export function CloudBrowserDraftPane({
   const { act } = useAct();
   const [opening, setOpening] = useState(false);
   const [refused, setRefused] = useState<string | undefined>(undefined);
+  useAnnounceShown(ANNOUNCE.ALERT, refused ?? "");
   const open = (address: string) => {
     if (opening) return;
     setOpening(true);
@@ -666,7 +680,7 @@ export function CloudBrowserDraftPane({
         disabled={opening}
       />
       {refused === undefined ? null : (
-        <div className="cloud-browser-standing" role="alert">
+        <div className="cloud-browser-standing">
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             {refused}
           </Text>

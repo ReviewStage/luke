@@ -20,7 +20,7 @@ import { SidebarFoot } from "./sidebar-foot.js";
 /**
  * The sidebar's foot as the developer meets it: the account's menu in
  * Cursor's order, Settings, what the menu bar's Help menu offers, Contact
- * us, and Log out, which asks first.
+ * us, and Sign out, which asks first.
  */
 
 const DEAN: AccountSnapshot = {
@@ -178,7 +178,7 @@ function dialogButton(label: string): HTMLButtonElement {
   return button ?? assert.fail(`the dialog offers ${label}`);
 }
 
-test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Log out, parted by rules", async () => {
+test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Sign out, parted by rules", async () => {
   const button = mount(DEAN);
   await stateArrived();
   act(() => button.click());
@@ -194,7 +194,7 @@ test("the account opens its menu: who is signed in, then Settings, the Help menu
     "Keyboard shortcuts ⌘/",
     "Contact us",
     "—",
-    "Log out",
+    "Sign out",
   ]);
 });
 
@@ -297,7 +297,9 @@ test("in the window's bottom-left corner, Contact us's menu opens rightward and 
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return menuBox(this) ? DOMRect.fromRect({ x: 0, y: 0, width: 196, height: 74 }) : measured.call(this);
+    return menuBox(this)
+      ? DOMRect.fromRect({ x: 0, y: 0, width: 196, height: 74 })
+      : measured.call(this);
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
     this: HTMLElement,
@@ -324,7 +326,7 @@ test("in the window's bottom-left corner, Contact us's menu opens rightward and 
   assert.equal(at?.[2], "602px", "its foot level with Contact us's");
 });
 
-test("Log out asks first, and only its answer signs the account out", async () => {
+test("Sign out asks first, and only its answer signs the account out", async () => {
   let signOuts = 0;
   const button = mount(DEAN, {
     onSignOut: () => {
@@ -334,31 +336,34 @@ test("Log out asks first, and only its answer signs the account out", async () =
   });
   const logOut = () => {
     act(() => button.click());
-    act(() => accountItem("Log out").click());
+    act(() => accountItem("Sign out").click());
   };
 
   logOut();
-  assert.equal(dialog()?.querySelector("h2")?.textContent, "Log out of dean@example.com?");
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Sign out of dean@example.com?");
   act(() => dialogButton("Cancel").click());
   assert.equal(dialog(), null);
   assert.equal(signOuts, 0);
 
   logOut();
-  await act(async () => dialogButton("Log out").click());
+  await act(async () => dialogButton("Sign out").click());
   assert.equal(signOuts, 1);
 });
 
-test("a Log out that fails keeps the dialog up saying so, and the account still signed in", async () => {
+test("a Sign out that fails keeps the dialog up saying so, and the account still signed in", async () => {
   const button = mount(DEAN, { onSignOut: () => Promise.reject(new Error("refused")) });
   act(() => button.click());
-  act(() => accountItem("Log out").click());
+  act(() => accountItem("Sign out").click());
 
-  await act(async () => dialogButton("Log out").click());
+  await act(async () => dialogButton("Sign out").click());
 
-  assert.match(dialog()?.querySelector('[role="alert"]')?.textContent ?? "", /could not log out/u);
+  assert.match(
+    dialog()?.querySelector('[data-slot="field-error"]:not(:empty)')?.textContent ?? "",
+    /could not log out/u,
+  );
 });
 
-test("signed out, the account says so and its menu names no one and offers no Log out", async () => {
+test("signed out, the account says so and its menu names no one and offers no Sign out", async () => {
   const button = mount({ status: ACCOUNT_STATUS.SIGNED_OUT });
   await stateArrived();
 
@@ -438,7 +443,7 @@ test("the Mac offline says so in the foot, and nothing does while it is online",
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const mark = document.querySelector('[role="status"][aria-label="Offline"]');
+    const mark = document.querySelector('.offline-mark[aria-label="Offline"]');
     const words = mark?.textContent ?? null;
     for (const root of roots.splice(0)) act(() => root.unmount());
     return words;

@@ -8,7 +8,7 @@ import {
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   claimCodingAgentRunnerLease,
   releaseCodingAgentRunnerLease,
@@ -50,6 +50,7 @@ import {
   Deferred,
   Duration,
   Effect,
+  Exit,
   Fiber,
   Layer,
   Logger,
@@ -61,6 +62,7 @@ import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { keptAfterResponse } from "../../http/after-response.js";
 import {
   connectWorkspaceGitHub,
@@ -94,6 +96,7 @@ import {
   RUNNER_ENDED,
   RUNNER_TAG,
   type RunnerSessionsOptions,
+  retireWarmRunner,
   runnerEnded,
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
@@ -346,6 +349,7 @@ const repositoryAgent = (
           method: sent.method,
           headers: sent.headers,
           body: sent.body,
+          ...(sent.signal === undefined ? {} : { signal: sent.signal }),
         });
       }
       seams.onGitHub?.(sent);
@@ -504,6 +508,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: [LINEAR_SERVER],
           allowedDomains: config.allowedDomains,
           installedSkills: "/opt/luke/installed-skills",
+          warm: true,
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,
@@ -1286,13 +1291,16 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(first !== undefined);
         first.exitCode = 0;
         sequence.next = 42;
-        const lateEnds: string[] = [];
-        // The first launch's END lands just as the relaunch's command has started, before its answer.
+        const lateEnds: Promise<string>[] = [];
+        // The test's own database, which the END's lease is taken in beside the relaunch's.
+        const context = yield* Effect.context<DatabaseServices>();
+        // The first launch's END lands just as the relaunch's command has started, before its answer,
+        // and waits out the relaunch's lease.
         api.hooks.onStart = async () => {
           lateEnds.push(
-            await Effect.runPromise(
+            Effect.runPromiseWith(context)(
               runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
-                Effect.provide(Layer.mergeAll(api.layer, getTestDB())),
+                Effect.provide(api.layer),
               ),
             ),
           );
@@ -1301,7 +1309,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.deepEqual(lateEnds, [RUNNER_ENDED.STALE]);
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
+        assert.deepEqual(yield* Effect.promise(() => Promise.all(lateEnds)), [RUNNER_ENDED.STALE]);
         assert.equal(api.sandboxes[0]?.status, "running");
       }),
   );
@@ -1549,7 +1563,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a runner Vercel would not read is neither relaunched beside itself nor stopped in silence",
+    "a message reaches a running runner with no read of its exit, and a Stop or a retune Vercel would not read is neither relaunched beside the runner nor taken in silence",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1561,18 +1575,52 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const turnId = yield* turnUnderWay(userId, agent);
-        const before = linesOf(api.commands[0]).length;
         api.failCommandReads.remaining = 3;
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
+        const before = linesOf(api.commands[0]).length;
         const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
         const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(api.commands[0]?.stdin.includes("Again."));
         assert.deepEqual(cancelled, { outcome: "failed", status: 503 });
         assert.equal(retuned, RUNNER_CHOICE.FAILED);
         assert.equal(api.commands.length, 1);
         assert.equal(linesOf(api.commands[0]).length, before);
+      }),
+  );
+
+  it.effect(
+    "a message to a running runner is written at once, never waiting out a read of its exit",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // A read that waits for the running command's exit is held until its reader gives up.
+        api.waits.hold = true;
+
+        const sending = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Now the emails.")),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 200; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+
+        // The clock never moved, so a send that read the exit first would still be waiting on it.
+        const sent = sending.pollUnsafe();
+        assert.ok(sent !== undefined && Exit.isSuccess(sent));
+        assert.equal(sent.value.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(api.commands.length, 1);
       }),
   );
 
@@ -1662,6 +1710,125 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(ended, RUNNER_ENDED.HELD);
       assert.equal(api.sandboxes[0]?.status, "running");
     }),
+  );
+
+  it.effect(
+    "a launch's END waits out a call holding the agent's runner lease, and stops nothing once that call relaunched the runner",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [sandbox] = api.sandboxes;
+        assert.ok(sandbox !== undefined);
+        // A send elsewhere holds the lease, as it does while it relaunches the runner.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+
+        const ending = yield* Effect.forkChild(
+          runnerEnded({
+            target: { userId, conversationId: agent.conversationId },
+            sessionId: opened.sessionId,
+            sequence: 5,
+          }).pipe(Effect.provide(api.layer)),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        yield* TestClock.adjust("5 seconds");
+        assert.equal(sandbox.status, "running");
+        // The send's relaunch writes its launch's tag, past the END's sequence, and lets go.
+        sandbox.tags[RUNNER_TAG.LAUNCH] = "42";
+        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
+
+        assert.equal(yield* Fiber.join(ending), RUNNER_ENDED.STALE);
+        assert.equal(sandbox.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a message sent once the sweep retired a warm runner relaunches it rather than landing behind the retire",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [sandbox] = api.sandboxes;
+        assert.ok(sandbox !== undefined);
+        const retired = yield* retireWarmRunner({
+          sessionId: opened.sessionId,
+          agentId: agent.id,
+          running: sandbox.currentSessionId,
+        }).pipe(Effect.provide(api.layer));
+        assert.equal(retired, true);
+        sequence.next = 5;
+
+        // The retired runner has not exited yet: Vercel still reads its command as running.
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [first, second] = api.commands;
+        assert.ok(first !== undefined && second !== undefined);
+        assert.deepEqual(linesOf(first).at(-1), { type: INPUT_LINE.RETIRE });
+        assert.ok(!first.stdin.includes("Now the emails."));
+        assert.ok(second.stdin.includes("Now the emails."));
+      }),
+  );
+
+  it.effect(
+    "a warm runner whose integrations changed since its launch is ended and relaunched for the next message, and one at work keeps going on what it has",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const handed = { servers: [LINEAR_SERVER] };
+        const sessions = yield* claudeCodeSessions({
+          userId,
+          eventsUrl: EVENTS_URL,
+          mcpUrl: MCP_URL,
+          integrations: () => Effect.sync(() => handed.servers),
+          instructions: () => Effect.succeed(INSTRUCTIONS),
+          nextSequence: () => Effect.succeed(0),
+          run: (effect) => Effect.runPromise(effect),
+        }).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        handed.servers = [LINEAR_SERVER, { name: "notion", url: `${MCP_URL}/integrations/notion` }];
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Use Notion now."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [first, second] = api.commands;
+        assert.ok(first !== undefined && second !== undefined);
+        assert.notEqual(first.exitCode, null);
+        assert.ok(!first.stdin.includes("Use Notion now."));
+        const [config] = linesOf(second);
+        assert.ok(typeof config === "object" && config !== null && "integrations" in config);
+        assert.deepEqual(config.integrations, handed.servers);
+        assert.ok(second.stdin.includes("Use Notion now."));
+
+        // A turn under way keeps its runner, which goes on with the servers it has.
+        handed.servers = [LINEAR_SERVER];
+        yield* turnUnderWay(userId, agent);
+        yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
+        assert.equal(api.commands.length, 2);
+        assert.ok(second.stdin.includes("Also the docs."));
+      }),
   );
 
   it.effect(
@@ -2066,6 +2233,101 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.commands.length, 1);
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
         assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
+      }),
+  );
+  it.effect(
+    "a message to a running runner is written ahead of its credential's renewal, and a renewal Vercel refused leaves the message standing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const policiesBefore = api.policies.length;
+        api.failPolicy.remaining = 1;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        const later = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+
+        assert.deepEqual(
+          [sent.outcome, later.outcome],
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(api.commands.length, 1);
+        // The refused renewal set nothing; the next message's renewal set the credential afresh.
+        assert.equal(api.policies.length, policiesBefore + 1);
+      }),
+  );
+  it.effect(
+    "a renewal Vercel never answers is given up at its bound, well inside the store's dispatch deadline, and the message written ahead of it stands",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        api.holdPolicy.remaining = 1;
+
+        const sending = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Now the emails.")),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 200; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(sending.pollUnsafe(), undefined, "the renewal is still held");
+        yield* TestClock.adjust(CODER.CREDENTIAL_RENEWAL);
+
+        const sent = yield* Fiber.join(sending);
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+      }),
+  );
+  it.effect(
+    "each message counts how it reached the runner: written to the runner up, relaunched in a sandbox still up, or resumed from its snapshot",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const analytics = recordingProductAnalytics();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(
+          Effect.provide(Layer.merge(services(api), analytics.layer)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+
+        yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
+        // The runner exited, its sandbox still up.
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        sequence.next = 10;
+        yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+        // The launch ended, and its END stopped the sandbox.
+        sequence.next = 20;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 19,
+        }).pipe(Effect.provide(api.layer));
+        yield* sessions.send(opened.sessionId, message(agent, "And the changelog."));
+
+        assert.deepEqual(
+          analytics.recorded
+            .filter((event) => event.name === SERVER_EVENT.AGENT_HANDOFF)
+            .map((event) => ({ userId: event.userId, ...event.properties })),
+          [
+            { userId, harness: "claude_code", path: "warm", turn_running: false },
+            { userId, harness: "claude_code", path: "relaunched", turn_running: false },
+            { userId, harness: "claude_code", path: "resumed", turn_running: false },
+          ],
+        );
       }),
   );
 });

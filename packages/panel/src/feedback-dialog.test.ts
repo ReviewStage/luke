@@ -7,15 +7,17 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { useAppCommand, useMenuCommands } from "./app-commands.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { holdMotion, releaseMotion } from "./testing/motion-held.js";
 import { ToastHost } from "./toast.js";
 
 /** The two Help items that open the dialog, one per kind of note. */
@@ -63,6 +65,9 @@ afterEach(() => {
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
+  releaseMotion();
+  vi.useRealTimers();
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 /** The dialog, wired the way the app wires it to the menu bar's Help items. */
@@ -273,4 +278,38 @@ test("a refused send says why and keeps the note, and sending again delivers it"
   await act(async () => button("Send").click());
   assert.equal(dialog(), null);
   assert.equal(sent.length, 2, "the kept note went again");
+});
+
+test("a note sent fades out still drawn, in its ending state and with its words and title on it, then goes", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  write("The board missed a plan.");
+
+  await act(async () => button("Send").click());
+  const fading = dialog();
+  const ending = fading?.hasAttribute("data-ending-style");
+  const words = fading?.querySelector("textarea")?.value;
+  const title = fading?.querySelector("h2")?.textContent;
+  act(() => vi.advanceTimersToNextFrame());
+  await act(async () => exits.finish());
+
+  assert.ok(fading, "the card stands while it fades");
+  assert.equal(ending, true, "it is in its ending state");
+  assert.equal(words, "The board missed a plan.", "the words do not vanish mid-fade");
+  assert.equal(title, "Send feedback");
+  assert.equal(dialog(), null, "it goes once its fade has run");
+});
+
+test("a note sent takes its card away at once where motion is held", async () => {
+  holdExits();
+  holdMotion();
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  write("The board missed a plan.");
+
+  await act(async () => button("Send").click());
+
+  assert.equal(dialog(), null);
 });

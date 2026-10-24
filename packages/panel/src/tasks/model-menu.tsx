@@ -1,8 +1,16 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { Spinner } from "@luke/ui";
+import {
+  ErrorState,
+  type FootRow,
+  type MenuRow,
+  type PopoverAlign,
+  type PopoverBounds,
+  type PopoverWidth,
+  SearchableMenu,
+  Spinner,
+} from "@luke/ui";
 import { HarnessMark } from "../harness-marks.js";
-import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import {
   CONTEXT_WORD,
   choiceModelId,
@@ -16,6 +24,7 @@ import {
   fastRestingNote,
   longWindowNote,
   MODEL_NOT_CONNECTED,
+  MODELS_READ_FAILED,
   type ModelChoiceRead,
   modelLabel,
   offeredModels,
@@ -110,9 +119,18 @@ export function settledChoice(
 export function ModelMenu(props: {
   /** The menu's id, which its trigger's `aria-controls` names. */
   id: string;
-  className?: string | undefined;
+  /** The button's edge the menu hangs from. */
+  align: PopoverAlign;
+  /** What it keeps within: its marked room unless its owner asks for the window. */
+  bounds?: PopoverBounds | undefined;
+  /** How wide it stands: regular where none is named. */
+  width?: PopoverWidth | undefined;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
+  /** Whether the last read of the catalog did not land; the menu says so, with Retry, where there is no catalog to list. */
+  failed: boolean;
+  /** Reads the catalog again: Retry's press. */
+  onRetry: () => void;
   /** The choice standing now, settled against the catalog (`settledChoice`). */
   chosen: ModelChoice | undefined;
   /** A choice made; the menu has already closed where the row closes it. */
@@ -231,12 +249,18 @@ export function ModelMenu(props: {
       id={props.id}
       label="Model"
       placeholder="Search models"
-      {...(props.className === undefined ? undefined : { className: props.className })}
+      align={props.align}
+      bounds={props.bounds}
+      width={props.width}
       rows={models === undefined ? [] : modelRows(models, chosen)}
       value={read?.base}
       note={
         models === undefined ? (
-          <Spinner delay label="Loading models" />
+          props.failed ? (
+            <ErrorState onRetry={props.onRetry}>{MODELS_READ_FAILED}</ErrorState>
+          ) : (
+            <Spinner delay label="Loading models" />
+          )
         ) : models.length === 0 ? (
           MENU_NOTE.NONE
         ) : undefined

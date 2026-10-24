@@ -71,7 +71,8 @@ function draw(busy?: string, hint: FoldingButtonHint = Hint): HTMLButtonElement 
       createElement(FoldingButton, {
         label: "Run now",
         icon: createElement(PlusIcon),
-        busy,
+        busy: busy !== undefined,
+        busyLabel: busy ?? "",
         onClick: () => {
           presses += 1;
         },

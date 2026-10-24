@@ -184,7 +184,7 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   );
   assert.equal(
     automation.querySelector(".luke-hover-card-sub")?.textContent,
-    "Weekdays at 9:00 · UTC",
+    "Weekdays at 9:00 AM · UTC",
   );
   assert.equal(automation.querySelector(".luke-hover-card-corner")?.textContent, "Acme");
   const notes = [...automation.querySelectorAll(".luke-hover-card-note")].map(

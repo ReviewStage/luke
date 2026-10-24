@@ -39,7 +39,7 @@
 
   .luke-rolling-number-digit[data-roll] {
     animation:
-      luke-rolling-number-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-rolling-number-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-rolling-number-in-up var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 

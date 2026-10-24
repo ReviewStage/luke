@@ -97,6 +97,7 @@ function Owned(): React.JSX.Element {
   return createElement(AgentModelChip, {
     model: { choice, note: undefined, choose: setChoice },
     models: MODELS,
+    modelsFailed: false,
     readModels: () => undefined,
     usage: undefined,
   });
@@ -198,6 +199,7 @@ function openMenuOn(
           runtime,
         },
         models,
+        modelsFailed: false,
         readModels: () => undefined,
         usage,
         payer,
@@ -209,7 +211,7 @@ function openMenuOn(
   act(() => chip.click());
   const menu = view.querySelector('[role="dialog"]');
   assert.ok(menu, "the menu is open");
-  const foot = menu.querySelector(".task-compose-menu-foot")?.textContent ?? "";
+  const foot = menu.querySelector(".luke-searchable-menu-foot")?.textContent ?? "";
   const listed = [...menu.querySelectorAll('[role="listbox"] [role="option"]')].map(
     (row) => row.textContent ?? "",
   );

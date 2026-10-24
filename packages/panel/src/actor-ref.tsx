@@ -13,6 +13,7 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
+  type CommentAuthor,
   GAP,
   HoverCard,
   HoverCardHead,
@@ -50,10 +51,12 @@ import {
 } from "@luke/ui/actor-model";
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
+import { useAutomation } from "./automation-directory.js";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
 import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
+import { AgentHoverCard } from "./tasks/agent-ref.js";
 import { AgentMark } from "./tasks/tab-look.js";
 
 /**
@@ -277,6 +280,67 @@ function Face({
           size={size}
         />
       );
+  }
+}
+
+/**
+ * An actor as `Comment` draws its writer's face: a person on a circle by
+ * their picture or letter, Luke, an agent, an automation and an App's bot
+ * by their glyph on a square, and someone unnamed by the glyph for why.
+ * The name `Comment` says is the caller's, as `ActorRef` says it.
+ */
+export function commentAuthor(actor: Actor): CommentAuthor {
+  const picture = (url: string | undefined) => pictureAt(url, ACTOR_SIZE.ROW);
+  switch (actor.kind) {
+    case ACTOR_KIND.PERSON:
+      return { name: actor.name, id: actor.userId, picture: picture(actor.pictureUrl) };
+    case ACTOR_KIND.LUKE:
+      return { name: actorName(actor), shape: AVATAR_SHAPE.SQUARE, glyph: <WingFace /> };
+    case ACTOR_KIND.AGENT:
+      return {
+        name: actorName(actor),
+        shape: AVATAR_SHAPE.SQUARE,
+        glyph: (
+          <StateGlyph
+            glyph={<AgentMark provider={actor.provider} />}
+            state={GLYPH_OF_STATE[actor.state]}
+          />
+        ),
+      };
+    case ACTOR_KIND.AUTOMATION:
+      return {
+        name: actorName(actor),
+        shape: AVATAR_SHAPE.SQUARE,
+        glyph: <StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />,
+      };
+    case ACTOR_KIND.GITHUB:
+      return actor.bot
+        ? {
+            name: actor.login,
+            shape: AVATAR_SHAPE.SQUARE,
+            glyph: <BotIcon />,
+            picture: picture(actor.avatarUrl),
+          }
+        : { name: actor.login, picture: picture(actor.avatarUrl) };
+    case ACTOR_KIND.SOMEONE:
+      if (leftWithFace(actor)) {
+        return {
+          name: actorName(actor),
+          id: actor.userId ?? actorName(actor),
+          picture: picture(actor.pictureUrl),
+        };
+      }
+      return {
+        name: actorName(actor),
+        glyph:
+          actor.reason === SOMEONE_REASON.FORMER ? (
+            <UserRoundXIcon />
+          ) : actor.reason === SOMEONE_REASON.EARLIER ? (
+            <HistoryIcon />
+          ) : (
+            <UserRoundIcon />
+          ),
+      };
   }
 }
 
@@ -592,6 +656,7 @@ const ACTOR_STATE_OF_RUN = {
 export function automationActor(automation: AutomationSummary): Actor {
   return {
     kind: ACTOR_KIND.AUTOMATION,
+    automationId: automation.id,
     name: automation.name,
     state: ACTOR_STATE_OF_RUN[automationRunStanding(automation.lastRun)],
   };
@@ -639,18 +704,48 @@ export function AutomationCard({
   );
 }
 
-/** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
+/** An actor of the kind given. */
+type ActorOf<K extends Actor["kind"]> = Extract<Actor, { readonly kind: K }>;
+
+/** An automation's card, as the directory around the place naming it knows it; none where it knows no such automation. */
+function KnownAutomationActorCard({ automationId }: { automationId: string }): ReactNode {
+  const known = useAutomation(automationId);
+  return known === undefined ? undefined : (
+    <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+  );
+}
+
+/**
+ * The card each kind of actor hangs where the place naming it adds
+ * nothing, one entry per kind, so a kind added fails to compile until it
+ * says: Luke his own, an agent its tab's (`AgentHoverCard`), read as it is
+ * hung, and an automation its own, as the directory around it knows it.
+ * An agent or an automation named by its name alone hangs none, its name
+ * standing as a pill.
+ */
+const ACTOR_CARD: { readonly [K in Actor["kind"]]: (actor: ActorOf<K>) => ReactNode } = {
+  [ACTOR_KIND.PERSON]: (actor) => <PersonCard actor={actor} />,
+  [ACTOR_KIND.SOMEONE]: (actor) => <SomeoneCard actor={actor} />,
+  [ACTOR_KIND.GITHUB]: (actor) => <GitHubCard actor={actor} />,
+  [ACTOR_KIND.LUKE]: () => <LukeCard />,
+  [ACTOR_KIND.AGENT]: (actor) =>
+    actor.agentId === undefined ? undefined : (
+      <AgentHoverCard actor={actor} agentId={actor.agentId} />
+    ),
+  [ACTOR_KIND.AUTOMATION]: (actor) =>
+    actor.automationId === undefined ? undefined : (
+      <KnownAutomationActorCard automationId={actor.automationId} />
+    ),
+};
+
+/** An actor's card drawn through its kind's own entry. */
+function actorCardOf<K extends Actor["kind"]>(kind: K, actor: ActorOf<K>): ReactNode {
+  return ACTOR_CARD[kind](actor);
+}
+
+/** The card an actor hangs where the place naming it adds nothing, by its kind's entry. */
 export function actorCard(actor: Actor): ReactNode {
-  switch (actor.kind) {
-    case ACTOR_KIND.PERSON:
-      return <PersonCard actor={actor} />;
-    case ACTOR_KIND.SOMEONE:
-      return <SomeoneCard actor={actor} />;
-    case ACTOR_KIND.GITHUB:
-      return <GitHubCard actor={actor} />;
-    default:
-      return undefined;
-  }
+  return actorCardOf(actor.kind, actor);
 }
 
 /**

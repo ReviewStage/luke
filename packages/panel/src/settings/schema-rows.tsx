@@ -7,71 +7,18 @@ import {
   settingFromOption,
   settingRowsForPage,
 } from "@luke/settings";
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SettingsRow, Switch } from "@luke/ui";
-import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
-import { SettingMarks } from "./marks.js";
 import { PictureChoiceRow } from "./picture-choice-row.js";
 import { SampledChoiceRow } from "./sampled-choice-row.js";
 import { SelectRow } from "./select-row.js";
+import { SwitchRow } from "./switch-row.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** One value a choice's control offers, as the schema hands it. */
 type SettingOption = NonNullable<
   ReturnType<typeof settingRowsForPage>[number]["control"]
 >["options"][number];
-
-/** Where a pressed search result lands: the row's one control, for a row the schema names. */
-function anchorOf(id: string) {
-  return isAppSettingId(id) ? searchAnchorProps(id) : undefined;
-}
-
-/**
- * A toggle's row: the shared row and switch. The write and its refusal live
- * here, so two switches can be in flight at once and a refusal stands under
- * the row that asked, in the row's own error line.
- */
-function SchemaSwitchRow({
-  id,
-  label,
-  detail,
-  changed,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  detail: string | undefined;
-  changed: boolean;
-  checked: boolean;
-  onChange: (enabled: boolean) => Promise<ActionResult>;
-}): React.JSX.Element {
-  const { busy, rejection, saves, run } = useSettingWrite(onChange);
-  return (
-    <SettingsRow
-      label={label}
-      adornment={<SettingMarks changed={changed} saves={saves} />}
-      description={detail}
-      error={rejection}
-      labelsControl
-    >
-      {(control) => (
-        <Switch
-          id={control.controlId}
-          {...anchorOf(id)}
-          checked={checked}
-          label={label}
-          describedBy={control["aria-describedby"]}
-          aria-invalid={control["aria-invalid"]}
-          disabled={busy}
-          onChange={(next) => run(next)}
-        />
-      )}
-    </SettingsRow>
-  );
-}
 
 /**
  * A choice's row: the shared pop-up (`select-row.tsx`), whose menu searches
@@ -139,9 +86,9 @@ export function SchemaSettingRows({
     const { field, entry, changed, control } = row;
     if (entry.kind === APP_SETTING_KIND.TOGGLE) {
       return [
-        <SchemaSwitchRow
+        <SwitchRow
           key={entry.id}
-          id={entry.id}
+          {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
           label={entry.label}
           detail={entry.detail}
           changed={changed}

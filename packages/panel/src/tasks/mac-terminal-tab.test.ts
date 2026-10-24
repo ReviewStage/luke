@@ -9,18 +9,21 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
+import { rendererRegistry } from "../renderer-runtime.js";
 import {
   type AnyAct,
   fakeActPortAnswering,
   fakeAppBridge,
+  refusedOnPort,
   type SentPortAct,
 } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
+import { ToastHost } from "../toast.js";
 import { MacTerminalTab } from "./mac-terminal-tab.js";
 import { OpenHereProvider } from "./use-open-link.js";
 
@@ -57,12 +60,15 @@ const OTHER = {
 
 /** Every act the tab sent, on the act channel or the act port, by kind and payload, in order. */
 let sent: (AnyAct | SentPortAct)[];
+/** The sentence main refuses a stop in, while it does. */
+let stopRefusal: string | undefined;
 const roots: Root[] = [];
 
 beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
 
 beforeEach(() => {
   sent = [];
+  stopRefusal = undefined;
   const published = {
     repository: "acme/app",
     branch: "luke/add-thing",
@@ -81,6 +87,9 @@ beforeEach(() => {
   // Note that the acts main answers itself, a run's among them, and what the agent published, ride the act port.
   fakeActPortAnswering((request) => {
     sent.push(request);
+    if (request.kind === ACT_KIND.MAC_TERMINAL_STOP && stopRefusal !== undefined) {
+      return Promise.reject(refusedOnPort(stopRefusal));
+    }
     if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST) return Promise.resolve(undefined);
     // SAFETY: the tab asks for a pull request with the agent and, for another's, its number.
     const asked = request.payload as { readonly number?: number };
@@ -125,19 +134,25 @@ async function mount(asked: number, number?: number) {
   const registry = AtomRegistry.make();
   act(() =>
     root.render(
-      onRegistry(
-        registry,
-        onSideBundles(
-          SIDE_BUNDLES,
-          createElement(MacTerminalTab, {
-            tab: {
-              macTerminal: AGENT,
-              repository: "acme/app",
-              asked,
-              ...(number === undefined ? undefined : { number }),
-            },
-          }),
+      createElement(
+        Fragment,
+        null,
+        onRegistry(
+          registry,
+          onSideBundles(
+            SIDE_BUNDLES,
+            createElement(MacTerminalTab, {
+              tab: {
+                macTerminal: AGENT,
+                repository: "acme/app",
+                asked,
+                ...(number === undefined ? undefined : { number }),
+              },
+            }),
+          ),
         ),
+        // Note that a press's toast is raised on the window's own registry.
+        onRegistry(rendererRegistry, createElement(ToastHost)),
       ),
     ),
   );
@@ -145,6 +160,11 @@ async function mount(asked: number, number?: number) {
   const buttons = () => [...container.querySelectorAll<HTMLButtonElement>("button")];
   return {
     unmount: () => act(() => root.unmount()),
+    /** What each toast standing says, oldest first. */
+    toasts: () =>
+      [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
+        (words) => words.textContent ?? "",
+      ),
     /** Where the bar says the run stands. */
     bar: () => container.querySelector(".terminal-tab-standing")?.textContent ?? "",
     /** The words on each button the bar offers, and whether it can be pressed. */
@@ -203,6 +223,25 @@ test("a press reads the branch and starts a run; Stop ends it, and Run starts it
   await tab.press("Run");
   assert.equal(opens().length, 2);
   assert.equal(opens()[1]?.again, true);
+});
+
+test("a Stop main refuses returns the tab to running and says why, and a later Stop still works", async () => {
+  const tab = await mount(9);
+  const say = tab.post();
+  await settle();
+  stopRefusal = "Luke can't stop that run right now.";
+
+  await tab.press("Stop");
+
+  assert.match(tab.bar(), /Running/u);
+  assert.deepEqual(tab.offered(), ["Open in Terminal", "Stop"]);
+  assert.ok(tab.toasts().includes(stopRefusal), `toasts stood: ${tab.toasts().join(" | ")}`);
+
+  stopRefusal = undefined;
+  await tab.press("Stop");
+  assert.match(tab.bar(), /Stopping…/u);
+  say({ type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 143 });
+  assert.match(tab.bar(), /Stopped/u);
 });
 
 test("a run that ends on its own says how it ended", async () => {

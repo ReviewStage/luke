@@ -12,7 +12,7 @@ import {
   Button,
   GAP,
   Inline,
-  TOAST_TONE,
+  STATUS_TONE,
   Toast,
   ToastActions,
   ToastStack,
@@ -33,12 +33,15 @@ function Acting({
   words,
   detail,
   label,
+  href,
   countdown,
 }: {
   tone: ToastTone;
   words: string;
   detail?: string;
   label: string;
+  /** The page the action opens, drawn as a link in the action's look. */
+  href?: string;
   countdown?: number;
 }): React.JSX.Element {
   return (
@@ -48,7 +51,13 @@ function Acting({
       detail={detail}
       countdown={countdown}
       actions={
-        <ToastActions label={label} onPress={noop} dismissLabel="Dismiss" onDismiss={noop} />
+        <ToastActions
+          label={label}
+          href={href}
+          onPress={href === undefined ? noop : () => window.open(href, "_blank", "noreferrer")}
+          dismissLabel="Dismiss"
+          onDismiss={noop}
+        />
       }
     />
   );
@@ -64,23 +73,29 @@ function Toasts(): React.JSX.Element {
           polite="Link copied. Task archived. Should withdrawn invitations count?"
           alert="Couldn't save the plan"
         >
-          <Toast tone={TOAST_TONE.DONE} words="Link copied" />
+          <Toast tone={STATUS_TONE.COMPLETE} words="Link copied" />
           <Toast
-            tone={TOAST_TONE.FAILED}
+            tone={STATUS_TONE.DANGER}
             words="Couldn't save the plan"
             detail="Your change is kept here until you are back online."
           />
           <Acting
-            tone={TOAST_TONE.DONE}
+            tone={STATUS_TONE.COMPLETE}
             words="Task archived"
             label="Undo"
             countdown={ACTION_HOLD_MS}
           />
           <Acting
-            tone={TOAST_TONE.ASK}
+            tone={STATUS_TONE.ATTENTION}
             words="Should withdrawn invitations count?"
             detail="Relay · Retry the webhook"
             label="View"
+          />
+          <Acting
+            tone={STATUS_TONE.DANGER}
+            words="Your OpenAI account is out of credit."
+            label="Add credit"
+            href="https://platform.openai.com/settings/organization/billing/overview"
           />
         </ToastStack>
       </div>
@@ -90,26 +105,26 @@ function Toasts(): React.JSX.Element {
 
 /** What the working toast says, by what came of its work. */
 const SAYING = {
-  [TOAST_TONE.WORKING]: "Adding to the plan…",
-  [TOAST_TONE.DONE]: "Added to the plan",
-  [TOAST_TONE.FAILED]: "The plan could not be saved just now.",
+  [STATUS_TONE.WORKING]: "Adding to the plan…",
+  [STATUS_TONE.COMPLETE]: "Added to the plan",
+  [STATUS_TONE.DANGER]: "The plan could not be saved just now.",
 } as const;
 
 type Outcome = keyof typeof SAYING;
 
 /** A working toast, turned in place by a press into what came of its work. */
 function Working(): React.JSX.Element {
-  const [tone, setTone] = useState<Outcome>(TOAST_TONE.WORKING);
+  const [tone, setTone] = useState<Outcome>(STATUS_TONE.WORKING);
   return (
     <CatalogSection id="toast-working" title="Working, then done in place">
       <Inline gap={GAP.CONTROL}>
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setTone(TOAST_TONE.WORKING)}>
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setTone(STATUS_TONE.WORKING)}>
           Start
         </Button>
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setTone(TOAST_TONE.DONE)}>
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setTone(STATUS_TONE.COMPLETE)}>
           Succeed
         </Button>
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setTone(TOAST_TONE.FAILED)}>
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setTone(STATUS_TONE.DANGER)}>
           Fail
         </Button>
       </Inline>
@@ -138,7 +153,7 @@ function Swiped(): React.JSX.Element {
         <ToastStack label="Swipeable notifications" polite="Task archived" alert="">
           <Toast
             key={shown.count}
-            tone={TOAST_TONE.DONE}
+            tone={STATUS_TONE.COMPLETE}
             words="Task archived"
             detail="Drag or sweep it sideways"
             leaving={shown.leaving}

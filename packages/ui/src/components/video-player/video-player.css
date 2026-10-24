@@ -76,7 +76,7 @@
     padding: var(--luke-space-24) var(--luke-space-6) var(--luke-space-4);
     background: linear-gradient(transparent, rgba(0, 0, 0, 0.72)); /* off-scale: a player's shade */
     color: #fff; /* off-scale: over any frame, light or dark */
-    transition: opacity var(--luke-duration-fast) ease;
+    transition: opacity var(--luke-duration-fast) var(--luke-motion-exit);
   }
 
   .luke-video-player-time {

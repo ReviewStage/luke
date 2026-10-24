@@ -506,7 +506,7 @@ function chooseItem(label: string): Promise<void> {
   return act(async () => item.click());
 }
 
-test("the title's ⋯ is a section's: in its row, shown while the keyboard is on the title, the Tab stop after it, and its menu takes focus and hands it back on Escape", () => {
+test("the title's ⋯ is a section's: at the end of the title's line, shown while the keyboard is on the title, the Tab stop after it, and its menu takes focus and hands it back on Escape", () => {
   const { block, more } = drawnTitled();
   // The unit whose hover or focus shows its ⋯, as a section's does.
   const unit = more.closest(".plan-unit-attributed");
@@ -518,7 +518,7 @@ test("the title's ⋯ is a section's: in its row, shown while the keyboard is on
 
   assert.equal(before, false);
   assert.equal(unit.matches(":focus-within"), true, "the ⋯ stands while the title is selected");
-  assert.equal(more.closest(".plan-unit-row")?.parentElement, block.parentElement);
+  assert.ok(more.closest(".luke-page-header-actions"), "the ⋯ ends the title's line");
   assert.equal(block.tabIndex, 0);
   assert.equal(more.tabIndex, 0);
   assert.ok(block.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING);

@@ -1,4 +1,4 @@
-import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapshot";
+import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@luke/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import {
   ADMIN_UNANSWERED,
@@ -366,6 +366,7 @@ import {
   terminalStateEventSchema,
   terminalsActAnswerSchema,
 } from "@luke/features/terminal-view";
+import { isSignInFailure } from "@luke/features/words";
 import {
   carried,
   GATEWAY_EVENT,
@@ -470,7 +471,8 @@ export interface HostOperator {
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
+  /** The account a sign-in settled on, or the key of why it ended without landing. */
+  beginSignIn(provider: AccountProvider): Effect.Effect<SignInAnswer>;
   /** The sign-in taken again over the session that stands: whether a new session landed. */
   signInAgain(provider: AccountProvider): Effect.Effect<boolean>;
   cancelSignIn(): Effect.Effect<void>;
@@ -504,6 +506,8 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** The Tasks tab shows: the host reads the task list and the active document now and follows both until it is paused. */
   tasksRefresh(): Effect.Effect<void>;
+  /** The Mac woke, unlocked, or found its network again: the host follows the task list again from a fresh seal. */
+  tasksResync(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
   /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
@@ -1068,7 +1072,6 @@ function record(result: GatewayCallResult): WireRecord | undefined {
 /** One answered value of the host's, as the domain type its method documents. */
 function answered<Value>(value: UnparsedWireValue): Value | undefined {
   // SAFETY: the host is Luke's own authenticated process answering the shape the method documents; the act's own answer guard re-checks it before a renderer sees it.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The protocol carries JSON; the domain type is restored at this one boundary.
   return value === undefined ? undefined : (value as unknown as Value);
 }
 
@@ -1239,9 +1242,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         Option.fromUndefinedOr(answered<AccountSnapshot>(record(answer)?.account)),
       ),
     beginSignIn: (provider) =>
-      accountResult(
-        GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN,
+      Effect.flatMap(
         client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider }),
+        (answer): Effect.Effect<SignInAnswer> => {
+          const failure = record(answer)?.failure;
+          if (isSignInFailure(failure)) return Effect.succeed({ failure });
+          return Effect.map(
+            accountResult(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, Effect.succeed(answer)),
+            (account) => ({ account }),
+          );
+        },
       ),
     signInAgain: (provider) =>
       Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, { provider }), (answer) => {
@@ -1310,6 +1320,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
+    tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     tasksOpen: (taskId) =>
       Effect.map(

@@ -457,7 +457,11 @@ const composedWeb = (
       });
       // No voice window stands beside the panel.
       operator.link({ sendToVoice: () => undefined });
-      yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
+      yield* linkNetworkWatch({
+        state,
+        isOnline: () => navigator.onLine,
+        regained: operator.host.tasksResync(),
+      });
       // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });
 
@@ -506,7 +510,11 @@ const composedWeb = (
         actPort,
         actPortClient: tabs.portClient,
         platform: webPlatform(
-          { recordSurfaceEvent: count, unsavedWork: tab.unsavedWork },
+          {
+            recordSurfaceEvent: count,
+            unsavedWork: tab.unsavedWork,
+            unsavedPlanWords: tab.unsavedPlanWords,
+          },
           linkPlatform,
         ),
         operator,

@@ -20,19 +20,24 @@ import {
   ComposeIcon,
   commandKeyshortcuts,
   dropBelowStart,
-  EllipsisIcon,
+  ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
   FolderIcon,
   GAP,
+  GROUP_ACTIONS,
+  GROUP_HEADING,
+  GroupHeader,
   HoldPress,
   IconButton,
+  joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
   MarkDoneIcon,
+  MoreButton,
   motionKey,
   motionRows,
-  NAV_COUNT_TONE,
+  NAV_COUNT_SHOWN,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
@@ -50,6 +55,7 @@ import {
   Shortcut,
   Skeleton,
   SkeletonRegion,
+  STATUS_TONE,
   Stack,
   Tooltip,
   UNASSIGNED_WORDS,
@@ -58,6 +64,7 @@ import {
   useMenu,
   useMinute,
   useResizeEdge,
+  useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
@@ -112,7 +119,7 @@ import {
   ShieldUserIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
@@ -146,11 +153,11 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
-import { RowPlaced } from "./row-moves.js";
+import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
+import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
@@ -165,7 +172,6 @@ import {
 } from "./sidebar-sections.js";
 import {
   HiddenStatusesLine,
-  SidebarSectionHead,
   TaskStatusFilter,
   TaskViewOptions,
   useTaskViewCommands,
@@ -641,6 +647,7 @@ function PinnedRows({
             if (row !== undefined) onDropOut(row, zone, at);
           },
   });
+  const keys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.
   const listedAt = new Map(rows.map((row, at) => [pinnedRowKey(row), at]));
   const placeOf = (key: string) => {
@@ -659,6 +666,7 @@ function PinnedRows({
       data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
       moves
       onPointerDown={drag}
+      {...keys}
     >
       {drawn.map(({ key, value: row }) => {
         if (row.kind === TASK_ROW.AGENT) {
@@ -741,35 +749,44 @@ function PinnedSection({
   onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
 }): React.JSX.Element {
   const folded = folds.pinnedFolded;
-  const drawn = folded ? rows.filter(shown) : rows;
+  const standing = rows.filter(shown);
   return (
     <nav
       className="sidebar-group"
       aria-label="Pinned"
       data-row-drop={onDropOut === undefined ? undefined : PINNED_DROP_ZONE}
     >
-      <SidebarSectionHead
-        name="Pinned"
-        folded={folded}
-        count={rows.length}
-        noun={PIN_NOUN}
-        onToggle={folds.togglePinned}
-      />
-      {drawn.length === 0 ? (
-        folded ? null : (
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
+        label="Pinned"
+        fold={sidebarFold(folded, folds.togglePinned)}
+        count={foldedCount(folded, rows.length, PIN_NOUN, NAV_COUNT_SHOWN.ALWAYS)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <PinnedRows
+              rows={standing}
+              context={context}
+              onOpenTab={onOpenTab}
+              movable={false}
+              onDropOut={onDropOut}
+            />
+          )
+        }
+      >
+        {rows.length === 0 ? (
           <div className="sidebar-section-slot">
             <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
           </div>
-        )
-      ) : (
-        <PinnedRows
-          rows={drawn}
-          context={context}
-          onOpenTab={onOpenTab}
-          movable={!folded}
-          onDropOut={onDropOut}
-        />
-      )}
+        ) : (
+          <PinnedRows
+            rows={rows}
+            context={context}
+            onOpenTab={onOpenTab}
+            movable
+            onDropOut={onDropOut}
+          />
+        )}
+      </GroupHeader>
     </nav>
   );
 }
@@ -859,7 +876,7 @@ function RepositorySection({
   const { repository } = group;
   const folded = folds.folded(repository);
   const named = repository === null ? NO_REPOSITORY : label;
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
   // The menu is drawn over the window rather than inside the sidebar, so it
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
@@ -867,7 +884,8 @@ function RepositorySection({
   const actionGroups = repositoryActionGroups(group, context.tasks);
   return (
     <div className="sidebar-repository" {...motionKey(repositoryGroupKey(group))}>
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={
           repository === null ? (
             <FolderIcon />
@@ -880,10 +898,10 @@ function RepositorySection({
             />
           )
         }
-        name={named}
-        folded={folded}
-        count={group.rows.length}
-        trailing={
+        label={named}
+        fold={sidebarFold(folded, () => folds.toggle(repository))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
             <span className="sidebar-repository-pinned">
               <PinIcon />
@@ -894,19 +912,18 @@ function RepositorySection({
         tooltip={repository === null || label === repository ? undefined : repository}
         menuOpen={menu.open !== undefined}
         contextMenu={actionGroups.length === 0 ? undefined : menu.contextMenu(ellipsis)}
-        onToggle={() => folds.toggle(repository)}
+        standing={
+          standing.length === 0 ? undefined : <TaskRows rows={standing} context={context} />
+        }
         actions={
           <>
             {actionGroups.length === 0 ? null : (
-              <Tooltip label="Repository actions">
-                <IconButton
-                  ref={ellipsis}
-                  icon={<EllipsisIcon />}
-                  label={`Actions for ${named}`}
-                  size={BUTTON_SIZE.COMPACT}
-                  {...menu.trigger()}
-                />
-              </Tooltip>
+              <MoreButton
+                ref={ellipsis}
+                thing={named}
+                size={BUTTON_SIZE.COMPACT}
+                {...menu.trigger()}
+              />
             )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
@@ -920,7 +937,9 @@ function RepositorySection({
             )}
           </>
         }
-      />
+      >
+        {group.rows.length === 0 ? null : <TaskRows rows={group.rows} context={context} />}
+      </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${named} actions`}
@@ -929,7 +948,6 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
 }
@@ -954,20 +972,27 @@ function CreatorSection({
   const first = group.rows[0];
   const actor = creatorActor(first === undefined ? {} : creatorOf(first), reader, undefined);
   const folded = folds.creatorFolded(group.creatorId);
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
+  const faces = { ...context.faces, creator: false };
   return (
     <div className="sidebar-repository" {...motionKey(creatorGroupKey(group))}>
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
-        name={actorName(actor)}
+        label={actorName(actor)}
         card={actorCard(actor)}
-        folded={folded}
-        count={group.rows.length}
-        onToggle={() => folds.toggleCreator(group.creatorId)}
-      />
-      {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, creator: false }} />
-      )}
+        fold={sidebarFold(folded, () => folds.toggleCreator(group.creatorId))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <TaskRows rows={standing} context={context} faces={faces} />
+          )
+        }
+      >
+        {group.rows.length === 0 ? null : (
+          <TaskRows rows={group.rows} context={context} faces={faces} />
+        )}
+      </GroupHeader>
     </div>
   );
 }
@@ -1001,10 +1026,12 @@ function AssigneeSection({
       ? undefined
       : personActor(assignee, reader.members, reader.readerId, reader.former);
   const folded = folds.assigneeFolded(group.assigneeId);
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
+  const faces = { ...context.faces, assignee: false };
   return (
     <div className="sidebar-repository">
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={
           actor === undefined ? (
             <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />
@@ -1012,15 +1039,20 @@ function AssigneeSection({
             <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />
           )
         }
-        name={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
+        label={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
         card={actor === undefined ? undefined : actorCard(actor)}
-        folded={folded}
-        count={group.rows.length}
-        onToggle={() => folds.toggleAssignee(group.assigneeId)}
-      />
-      {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, assignee: false }} />
-      )}
+        fold={sidebarFold(folded, () => folds.toggleAssignee(group.assigneeId))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <TaskRows rows={standing} context={context} faces={faces} />
+          )
+        }
+      >
+        {group.rows.length === 0 ? null : (
+          <TaskRows rows={group.rows} context={context} faces={faces} />
+        )}
+      </GroupHeader>
     </div>
   );
 }
@@ -1203,11 +1235,11 @@ function ListSkeleton(): React.JSX.Element {
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
  * task at its end, the sum of the counts the Inbox's rows show, in even
- * figures and the accent's blue, since they wait on the developer, and
- * nothing at none. Its chord takes the count's place while the row is hovered or
- * reached from the keyboard, as New task's and Search's show theirs. A press
- * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
- * shown while it stands.
+ * figures and the needs-you tone the rows it counts wear, since they wait on
+ * the developer, and nothing at none. Its chord takes the count's place
+ * while the row is hovered or reached from the keyboard, as New task's and
+ * Search's show theirs. A press opens the window's Inbox
+ * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
  */
 function SidebarInboxRow({
   waiting,
@@ -1227,7 +1259,7 @@ function SidebarInboxRow({
       count={{
         value: waiting,
         noun: needsYouNoun(waiting),
-        tone: NAV_COUNT_TONE.ACCENT,
+        tone: STATUS_TONE.ATTENTION,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
@@ -1242,8 +1274,8 @@ function SidebarInboxRow({
 /**
  * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
  * how many messages wait on the developer in For you at its end, in the
- * Inbox's even figures and its accent, since both count what waits on the
- * reader, nothing at none. A press opens the window's Chat
+ * Inbox's even figures and its needs-you tone, since both count what waits on
+ * the reader, nothing at none. A press opens the window's Chat
  * (`desktop-chat.tsx`), and the row is the place shown while it stands.
  */
 function SidebarChatRow({
@@ -1262,7 +1294,7 @@ function SidebarChatRow({
       count={{
         value: waiting,
         noun: needsYouNoun(waiting),
-        tone: NAV_COUNT_TONE.ACCENT,
+        tone: STATUS_TONE.ATTENTION,
       }}
       onClick={onOpen}
     >
@@ -1574,6 +1606,9 @@ function SidebarColumn({
   const coarse = useCoarsePointer();
   const overlay = useFloatingSidebar(sidebar);
   const body = useRef<HTMLDivElement>(null);
+  // The column's rows, Luke's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
+  const roving = useRovingKeys<HTMLDivElement>();
+  const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
@@ -1955,7 +1990,7 @@ function SidebarColumn({
       <Fill className="sidebar-section">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <ListMotion root={body}>
-            <div ref={body} className="sidebar-section-body" {...motionRows()}>
+            <div {...roving} ref={bodyRef} className="sidebar-section-body" {...motionRows()}>
               {narrow ? places : null}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">
@@ -2046,27 +2081,34 @@ function SidebarColumn({
                     {...motionRows()}
                   >
                     {tasks.signedIn ? (
-                      <SidebarSectionHead name="Tasks">
-                        {sectionsShown && tasks.workspace !== undefined ? (
-                          <NewSectionButton
-                            onNew={chosen(() => {
-                              const { workspace } = tasks;
-                              if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
-                            })}
-                          />
-                        ) : null}
-                        <TaskStatusFilter
-                          menu={statusMenu}
-                          statuses={statuses}
-                          onStatuses={taskView.onStatuses}
-                        />
-                        <TaskViewOptions
-                          shown={tasks.shown && overlay.inSight}
-                          control={taskView}
-                          shared={shared}
-                          filtered={createdBy !== undefined || assignedTo !== undefined}
-                        />
-                      </SidebarSectionHead>
+                      <GroupHeader
+                        heading={GROUP_HEADING.NONE}
+                        label="Tasks"
+                        actionsShown={GROUP_ACTIONS.AT_REST}
+                        actions={
+                          <>
+                            {sectionsShown && tasks.workspace !== undefined ? (
+                              <NewSectionButton
+                                onNew={chosen(() => {
+                                  const { workspace } = tasks;
+                                  if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+                                })}
+                              />
+                            ) : null}
+                            <TaskStatusFilter
+                              menu={statusMenu}
+                              statuses={statuses}
+                              onStatuses={taskView.onStatuses}
+                            />
+                            <TaskViewOptions
+                              shown={tasks.shown && overlay.inSight}
+                              control={taskView}
+                              shared={shared}
+                              filtered={createdBy !== undefined || assignedTo !== undefined}
+                            />
+                          </>
+                        }
+                      />
                     ) : null}
                     {tasks.signedIn ? (
                       <ViewChips
@@ -2082,16 +2124,17 @@ function SidebarColumn({
                     !unlisted &&
                     tasks.listRead &&
                     !tasks.listFailed ? (
-                      <p className="sidebar-note">
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>
                         {NONE_MATCH} <Button onClick={taskView.onEveryone}>Show all</Button>
-                      </p>
+                      </NoteLine>
                     ) : null}
                     {tasks.listFailed ? (
-                      <div className="sidebar-note sidebar-failure">
-                        <ErrorState onRetry={tasks.onRetryList}>
-                          Your tasks could not be read.
-                        </ErrorState>
-                      </div>
+                      <ErrorState
+                        onRetry={tasks.onRetryList}
+                        placement={ERROR_STATE_PLACEMENT.ROWS}
+                      >
+                        Your tasks could not be read.
+                      </ErrorState>
                     ) : null}
                     {/* The list is empty before its first read lands, so that it
               holds none says nothing until the service has answered. */}
@@ -2099,10 +2142,10 @@ function SidebarColumn({
                       <ListSkeleton />
                     ) : null}
                     {tasks.signedIn && unlisted && tasks.listRead && !tasks.listFailed ? (
-                      <p className="sidebar-note">No tasks yet.</p>
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>No tasks yet.</NoteLine>
                     ) : null}
                     {tasks.signedIn ? null : (
-                      <p className="sidebar-note">Sign in to start a task.</p>
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>Sign in to start a task.</NoteLine>
                     )}
                     <TaskGroups
                       sections={sections}

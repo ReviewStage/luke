@@ -17,6 +17,7 @@ import {
 import { useDisclosure } from "../../use-disclosure.js";
 import { visibleViewport } from "../../visible-viewport.js";
 import { OneLine } from "../one-line/one-line.js";
+import { ROVING_STOP, rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { SwitchMark } from "../switch/switch.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { MenuGlyph } from "./menu-surface.js";
@@ -390,42 +391,6 @@ export function useMenu(shown: boolean) {
   return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu, keyMenu };
 }
 
-/** The item a navigation key moves to from the focused one, or nothing for any other key. */
-function itemAfter(key: string, at: number, count: number): number | undefined {
-  switch (key) {
-    case "ArrowDown":
-      return (at + 1) % count;
-    case "ArrowUp":
-      return (at <= 0 ? count : at) - 1;
-    case "Home":
-      return 0;
-    case "End":
-      return count - 1;
-    default:
-      return undefined;
-  }
-}
-
-/**
- * Moves focus between the items of the menu the key was heard on, its own
- * and not a submenu's, by a navigation key (Up, Down, Home, End), passing
- * over every item that does not apply now, which Base UI's own keys would
- * stop on; answers whether the key was one.
- */
-function moveMenuFocus(event: BaseUIEvent<React.KeyboardEvent<HTMLDivElement>>): boolean {
-  const items = itemsOf(event.currentTarget);
-  const next = itemAfter(
-    event.key,
-    items.findIndex((item) => item.matches(":focus")),
-    items.length,
-  );
-  if (next === undefined) return false;
-  event.preventDefault();
-  event.preventBaseUIHandler();
-  items[next]?.focus();
-  return true;
-}
-
 /** A point in the window as the box of no size a menu hangs from. */
 function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect } {
   const box = { x, y, left: x, top: y, right: x, bottom: y, width: 0, height: 0 };
@@ -435,7 +400,12 @@ function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect }
 /** What can be seen of the window, as the rectangle a menu is held inside. */
 function seenRect() {
   const seen = visibleViewport();
-  return { x: seen.left, y: seen.top, width: seen.right - seen.left, height: seen.bottom - seen.top };
+  return {
+    x: seen.left,
+    y: seen.top,
+    width: seen.right - seen.left,
+    height: seen.bottom - seen.top,
+  };
 }
 
 /** The items of one menu, its own and not a submenu's within it, that the keys move between now. */
@@ -475,7 +445,7 @@ function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[])
 /** The slot at a row's end, one glyph wide, after any hint; a setting's check in the text's own ink. */
 function endSlot(afterHint: boolean, setting: boolean): string {
   return cn(
-    "luke-menu-item-end grid size-menu-glyph flex-none place-items-center text-subtle-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
+    "luke-menu-item-end grid size-menu-glyph flex-none place-items-center text-muted-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
     !afterHint && "ml-auto",
     setting && "text-foreground",
   );
@@ -484,11 +454,7 @@ function endSlot(afterHint: boolean, setting: boolean): string {
 /** What an item prints at its end: its hint, and after it a setting's switch, the chevron of a list it opens, or a setting's check while it is on. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   const hint =
-    action.hint === undefined ? null : (
-      <span className="luke-menu-item-hint">
-        {action.hint}
-      </span>
-    );
+    action.hint === undefined ? null : <span className="luke-menu-item-hint">{action.hint}</span>;
   if (action.mark === MENU_ITEM_MARK.SWITCH && action.checked !== undefined) {
     return (
       <>
@@ -550,7 +516,9 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
         )}
         data-place={beside ? MENU_DETAIL.BESIDE : undefined}
       >
-        <OneLine className={cn("luke-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}>
+        <OneLine
+          className={cn("luke-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}
+        >
           {action.label}
         </OneLine>
         <OneLine className={cn("luke-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}>
@@ -612,8 +580,9 @@ export function MenuItem({
     nativeButton: true,
     // Note that a dimmed item is a disabled button outright, as it was,
     // rather than Base UI's focusable `aria-disabled` one, so neither the
-    // keys (`moveMenuFocus`) nor a press stop on it.
+    // keys (`useRovingKeys`) nor a press stop on it.
     render: <button type="button" disabled={action.disabled} />,
+    ...rovingItem(),
     label: action.label,
     "aria-label": heard,
     className: "luke-menu-item",
@@ -734,7 +703,8 @@ function besideMenu(item: HTMLElement | null, side: string): number {
  * window leaves no room, its first item level with the item that opened
  * it, or its last where the window's foot leaves no room below. Whether it
  * stands is the menu's (`open`), so resting on another item, Left, or
- * Escape closes it alone, and a finger's arrival opens nothing: iOS plays a
+ * Escape closes it alone, fading out as its menu does (`DROPDOWN_MENU_SURFACE`
+ * on Base UI's ending state), and a finger's arrival opens nothing: iOS plays a
  * tap's arrival as a hover and spends the tap on what comes in with it, so
  * the tap itself opens it, the keyboard taken into it.
  */
@@ -791,6 +761,7 @@ function Submenu({
     focusInto.current = true;
     onOpen(true);
   };
+  const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const keyDown = (event: BaseUIEvent<React.KeyboardEvent<HTMLDivElement>>) => {
     if (event.key === "Escape" || event.key === "ArrowLeft") {
       event.preventDefault();
@@ -800,7 +771,9 @@ function Submenu({
       trigger.current?.focus();
       return;
     }
-    if (moveMenuFocus(event)) event.stopPropagation();
+    if (!roving.onKeyDown(event)) return;
+    event.stopPropagation();
+    event.preventBaseUIHandler();
   };
   return (
     <DropdownMenuSub open={open} onOpenChange={() => undefined}>
@@ -811,6 +784,7 @@ function Submenu({
         openOnHover={false}
         label={entry.label}
         className="luke-menu-item"
+        {...rovingItem()}
         data-open={open ? "true" : undefined}
         endClassName={endSlot(false, false)}
         onPointerEnter={(event) => {
@@ -847,6 +821,7 @@ function Submenu({
         data-leaving={leaving ? "true" : undefined}
         inert={leaving}
         finalFocus={false}
+        data-roving={roving["data-roving"]}
         onKeyDown={keyDown}
       >
         {entry.items.map((action) => (
@@ -904,6 +879,8 @@ export function Menu({
     [hold],
   );
   const [submenu, setSubmenu] = useState<string | undefined>(undefined);
+  // Note that the keys walk the items the menu draws, and the tab order is Base UI's, since Tab closes a menu.
+  const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const submenuElement = useRef<HTMLDivElement | null>(null);
   // Opened again while it was leaving, the menu stands with no submenu, as one opened anew does.
   const [wasLeaving, setWasLeaving] = useState(leaving);
@@ -971,7 +948,9 @@ export function Menu({
       return;
     }
     // Walking the menu's own items leaves a submenu the pointer opened behind.
-    if (moveMenuFocus(event)) setSubmenu(undefined);
+    if (!roving.onKeyDown(event)) return;
+    event.preventBaseUIHandler();
+    setSubmenu(undefined);
   };
 
   // Note that a value a filter toggles leaves the menu standing, so several are chosen in one visit.
@@ -1005,13 +984,14 @@ export function Menu({
         data-leaving={leaving ? "true" : undefined}
         inert={leaving}
         finalFocus={false}
+        data-roving={roving["data-roving"]}
         onKeyDown={keyDown}
         onPointerOver={pointerOver}
       >
         {heading === undefined ? null : (
           <>
             <div
-              className="luke-menu-heading flex flex-col gap-luke-2 px-luke-8 py-luke-4 text-caption leading-[inherit]"
+              className="luke-menu-heading flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit]"
               role="none"
             >
               {heading}
@@ -1046,7 +1026,7 @@ export function Menu({
           <>
             <DropdownMenuSeparator className="luke-menu-rule" />
             <div
-              className="luke-menu-footer flex flex-col gap-luke-2 px-luke-8 py-luke-4 text-caption leading-[inherit] text-subtle-foreground"
+              className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground"
               role="none"
             >
               {footer}

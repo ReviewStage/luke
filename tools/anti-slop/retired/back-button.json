@@ -1,0 +1,33 @@
+{
+  "instead": "Draw the way back with BackButton from @luke/ui, or the toolbar's crumbs lead; the back arrow glyph is imported only there. A history step's Back, a chapter's Previous, a row's Move left and a calendar's previous month are not a way back and name their files.",
+  "glyphs": [
+    { "glyph": "GLYPH.BACK", "allow": ["packages/ui/src/components/back-button/"] },
+    { "glyph": "ArrowLeft", "allow": ["packages/ui/src/components/back-button/"] }
+  ],
+  "patterns": [
+    {
+      "import": "@luke/ui",
+      "names": ["BackIcon", "ArrowLeftIcon"],
+      "allow": [
+        "apps/catalog/src/examples/keep-focus.tsx",
+        "apps/catalog/src/examples/pane-bars.tsx",
+        "apps/catalog/src/examples/press-shortcuts.tsx",
+        "packages/panel/src/desktop/desktop-sidebar.tsx",
+        "packages/panel/src/desktop/row-moves.tsx",
+        "packages/panel/src/tasks/agent-chapters-tab.tsx",
+        "packages/panel/src/tasks/cloud-browser-pane.tsx",
+        "packages/panel/src/tasks/file-view.tsx"
+      ]
+    },
+    {
+      "import": "../../face/glyphs.js",
+      "names": ["BackIcon", "ArrowLeftIcon"],
+      "allow": ["packages/ui/src/components/calendar/"]
+    },
+    {
+      "import": "../face/glyphs.js",
+      "names": ["BackIcon", "ArrowLeftIcon"],
+      "allow": ["packages/ui/src/icons/glyph-registry.tsx"]
+    }
+  ]
+}

@@ -11,12 +11,14 @@ import {
 } from "@luke/features/github-token-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
+import { holdExits } from "@luke/ui/testing/held-exits";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AccountSection } from "./account-section.js";
 
 /**
@@ -81,6 +83,9 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  releaseMotion();
+  vi.useRealTimers();
+  Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
 async function settle(): Promise<void> {
@@ -118,8 +123,13 @@ async function mountAndOpen(open = true): Promise<void> {
 
 const dialog = () => document.querySelector('[role="dialog"]') ?? assert.fail("no dialog");
 
-const tokenField = () =>
-  document.querySelector<HTMLInputElement>('input[aria-label="Personal access token"]');
+/** The field its visible label names, as a reader finds it. */
+const tokenField = () => {
+  const label = [...document.querySelectorAll("label")].find(
+    (each) => each.textContent === "Personal access token",
+  );
+  return label?.control instanceof HTMLInputElement ? label.control : null;
+};
 
 const button = (words: string, within: ParentNode = document) =>
   [...within.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -177,24 +187,63 @@ test("a saved token's Manage opens it with Remove, which asks first, then takes 
   assert.ok(tokenField(), "the field stands again");
 });
 
-test("a refused save says why in a short label and keeps the field", async () => {
-  refuseSave = GITHUB_TOKEN_REJECTION.FINE_GRAINED;
+test("each refused save says why and what to do next, and keeps the field", async () => {
   await mountAndOpen();
-  await paste(PASTED);
+  const said = new Map<string, string | undefined>();
+  for (const rejection of Object.values(GITHUB_TOKEN_REJECTION)) {
+    refuseSave = rejection;
+    await paste(PASTED);
+    said.set(
+      rejection,
+      document.getElementById(tokenField()?.getAttribute("aria-describedby") ?? "")?.textContent ??
+        undefined,
+    );
+    assert.ok(tokenField(), "the field stands as pasted");
+  }
 
-  assert.equal(document.querySelector('[role="alert"]')?.textContent, "Not a classic token");
-  assert.ok(tokenField(), "the field stands as pasted");
+  assert.deepEqual(Object.fromEntries(said), {
+    fine_grained: "This isn't a classic token. Create a classic token and paste that.",
+    invalid: "GitHub rejected this token. Check that you copied all of it, or create a new one.",
+    no_repo_scope: "This token is missing the repo scope. Create a new token with repo ticked.",
+    no_github_account:
+      "No GitHub account is connected to your Luke account. Connect GitHub in Settings › Integrations, then save the token again.",
+    other_user:
+      "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.",
+    unreachable: "Couldn't reach GitHub. Try again.",
+    too_many_tries: "Too many tokens tried in the last hour. Try again later.",
+  });
 });
 
-test("a read that went unanswered offers Try again in place of Add, which reads the token again", async () => {
+test("a saved token GitHub rejected says to remove it and add a new one", async () => {
+  stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.INVALID };
+  await mountAndOpen();
+
+  assert.match(
+    dialog().textContent ?? "",
+    /GitHub rejected this token\. Remove it and add a new one\./u,
+  );
+});
+
+test("a saved token Luke can no longer read says to remove it and add it again", async () => {
+  stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.UNREADABLE };
+  await mountAndOpen();
+
+  assert.match(dialog().textContent ?? "", /Can no longer be read\. Remove it and add it again\./u);
+});
+
+test("a read that went unanswered says so as an alert with Retry in place of Add, which reads the token again", async () => {
   unansweredReads = 1;
   await mountAndOpen(false);
   assert.equal(
     [...document.querySelectorAll("button")].some((each) => each.textContent === "Add"),
     false,
   );
+  assert.equal(
+    document.querySelector('[role="alert"]')?.textContent,
+    "Couldn't read the token.Retry",
+  );
 
-  act(() => button("Try again").click());
+  act(() => button("Retry").click());
   await settle();
   button("Add");
 });
@@ -230,4 +279,42 @@ test("the row reads the token again when Profile is drawn for another account", 
   await settle();
   button("Add");
   assert.ok(!(container.textContent ?? "").includes("octo-member"), "Ada's token is gone");
+});
+
+/** The token dialog opened from the row's Add, which held focus as it was pressed, and then put away by its Done. */
+async function openedThenDone(): Promise<HTMLButtonElement> {
+  await mountAndOpen(false);
+  const opener = button("Add");
+  opener.focus();
+  act(() => opener.click());
+  await settle();
+  act(() => button("Done").click());
+  return opener;
+}
+
+test("Done fades the token dialog out, still drawn and in its ending state with focus already back on its button, then takes it away", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  const exits = holdExits();
+  const opener = await openedThenDone();
+  const fading = document.querySelector('[role="dialog"]');
+  const ending = fading?.hasAttribute("data-ending-style");
+  const focused = document.activeElement === opener;
+  act(() => vi.advanceTimersToNextFrame());
+  const stillDrawn = document.querySelector('[role="dialog"]') !== null;
+  await act(async () => exits.finish());
+
+  assert.ok(fading, "the dialog stands while it fades");
+  assert.equal(ending, true, "it is in its ending state");
+  assert.equal(focused, true, "focus is back on the button that opened it");
+  assert.equal(stillDrawn, true, "it stays until its fade has run");
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+});
+
+test("Done takes the token dialog away at once where motion is held", async () => {
+  holdExits();
+  holdMotion();
+  const opener = await openedThenDone();
+
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, opener);
 });

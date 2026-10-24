@@ -14,6 +14,9 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import {
+  CALL_VIDEO_FIT,
+  CallBar,
+  CallVideoTile,
   IconButton,
   KEEP_FOCUS,
   KEEP_FOCUS_ELEMENT,
@@ -21,6 +24,7 @@ import {
   OneLine,
   ReturnIcon,
   Tooltip,
+  VideoToggle,
 } from "@luke/ui";
 import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
@@ -34,10 +38,8 @@ import {
   useState,
 } from "react";
 import type { ActHandle } from "../act.js";
-import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts.js";
 import { useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
-import { CallVideoTile, VideoToggle } from "./call-video-tile.js";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
 function returnLabel(taskName: string): string {
@@ -176,7 +178,12 @@ export function CallCard({
       onAnimationEnd={left}
     >
       {tiled ? (
-        <CallVideoTile video={video.track} status={video.status} onSetVideo={video.onSetVideo} />
+        <CallVideoTile
+          video={video.track}
+          status={video.status}
+          fit={CALL_VIDEO_FIT.CARD}
+          onSetVideo={video.onSetVideo}
+        />
       ) : null}
       <div className="call-card-head">
         <p className="call-card-title">
@@ -199,14 +206,9 @@ export function CallCard({
       <div>
         <CallBar
           status={card.status}
-          microphone={{
-            label: CALL_CONTROL_LABEL.MUTE_MICROPHONE,
-            enabled: true,
-            muted: card.microphoneMuted,
-            onPress: controls.onToggleMicrophone,
-          }}
+          microphone={{ muted: card.microphoneMuted, onPress: controls.onToggleMicrophone }}
           speaker={{ muted: speakerMuted, onPress: controls.onToggleSpeaker }}
-          stop={{ shown: true, onPress: controls.onEnd }}
+          onEnd={controls.onEnd}
           titled={inWindow}
         />
       </div>

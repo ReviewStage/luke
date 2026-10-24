@@ -9,8 +9,10 @@ import type { ReactNode } from "react";
  * (`CENTRED`, a combobox's "Nothing matches"), or at the start of that room
  * in a caption's size and the faintest ink (`LIST`, a section's "Drag tasks
  * here"), or the same words unpadded for a container that insets them
- * (`INSET`, a sidebar section's, set at its rows' inset), and fills the room a column leaves it where `fill` says so. A
- * line a reader should hear arrive is a `status`.
+ * (`INSET`, a sidebar section's, set at its rows' inset), or the same words
+ * standing at the rows' inset by a margin of their own (`ROWS`, a list's
+ * "No tasks yet." among a sidebar's rows), and fills the room a column leaves
+ * it where `fill` says so. A line a reader should hear arrive is a `status`.
  */
 
 /** Where a note stands in its room. */
@@ -18,6 +20,7 @@ export const NOTE_LINE_LOOK = {
   CENTRED: "centred",
   LIST: "list",
   INSET: "inset",
+  ROWS: "rows",
 } as const;
 
 export type NoteLineLook = (typeof NOTE_LINE_LOOK)[keyof typeof NOTE_LINE_LOOK];

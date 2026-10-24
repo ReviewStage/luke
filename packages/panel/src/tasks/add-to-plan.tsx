@@ -12,13 +12,13 @@ import {
   type TasksEditAnswer,
 } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { isVideoDataUrl } from "@luke/ui";
+import { isVideoDataUrl, STATUS_TONE } from "@luke/ui";
 import { keepPictureRead } from "@luke/ui/picture-cache";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
 import { useAct } from "../act.js";
 import { encodeImage } from "../feedback-images.js";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast, useWorkingToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { useTaskMentions } from "./task-mentions.js";
 
@@ -135,7 +135,7 @@ export function useAddToPlan(): ViewerAction | undefined {
     const add = async (chip: FileChip) => {
       const settle = working(ADD_WORDS.ADDING);
       const failed = (words: string) =>
-        settle({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        settle({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       const keeping = await keptUrlOf(chip);
       if ("refused" in keeping) return failed(keeping.refused);
       const { url } = keeping;
@@ -168,15 +168,11 @@ export function useAddToPlan(): ViewerAction | undefined {
         const undone = await edited(save, (text) => withoutPictureLine(text, added), saved);
         toast(
           undone === undefined
-            ? { words: ADD_WORDS.NOT_UNDONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }
-            : { words: ADD_WORDS.UNDONE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE },
+            ? { words: ADD_WORDS.NOT_UNDONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }
+            : { words: ADD_WORDS.UNDONE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE },
         );
       };
-      settle({
-        words: ADD_WORDS.ADDED,
-        tone: TOAST_TONE.DONE,
-        action: { label: UNDO_LABEL, onPress: () => void undo() },
-      });
+      settle(undoToast(ADD_WORDS.ADDED, () => void undo()));
     };
     return {
       label: ADD_LABEL,

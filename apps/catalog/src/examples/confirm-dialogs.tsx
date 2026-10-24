@@ -1,8 +1,8 @@
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   Inline,
   TextField,
@@ -16,8 +16,9 @@ import { CatalogSection } from "../section";
  * confirm-dialogs.tsx -- an irreversible act's question, opened from its
  * button: one refused the first time it is answered and accepted when tried
  * again, its card shaking at the refusal and its act wearing a check as it
- * lands, one in the accent for an act that can be undone, a long one, one
- * that asks for a field to be filled, and one gated on the subject's name.
+ * lands, one in the accent for an act that can be undone but reaches someone
+ * else, a long one, one that asks for a field to be filled, and one gated on
+ * the subject's name. Only an act past undoing is red.
  */
 
 /** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@luke/ui`. */
@@ -51,7 +52,7 @@ function Asking({
       <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={confirm.ask}>
         {label}
       </Button>
-      <ConfirmDialog confirm={confirm} question={question} gate={gate} />
+      <ConfirmDialog open confirm={confirm} question={question} gate={gate} />
     </>
   );
 }
@@ -67,6 +68,7 @@ function RefusedOnce(): React.JSX.Element {
         body: "Luke stops using it at once. Agents that are running finish on it.",
         verb: "Delete",
         running: "Deleting",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
       }}
       answer={() => {
         if (triedOnce) return ACCEPTED;
@@ -97,13 +99,14 @@ function Named(): React.JSX.Element {
         New workspace…
       </Button>
       <ConfirmDialog
+        open
         confirm={confirm}
         field={field}
         question={{
           title: "New workspace",
           verb: "Create workspace",
           running: "Creating workspace",
-          tone: DIALOG_TONE.PRIMARY,
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       >
         <TextField
@@ -127,13 +130,13 @@ function ConfirmDialogs(): React.JSX.Element {
       <Inline>
         <RefusedOnce />
         <Asking
-          label="Restore version…"
+          label="Remove member…"
           question={{
-            title: "Restore this version?",
-            body: "The plan goes back to how it read on 3 October. The current version stays in its history.",
-            verb: "Restore",
-            running: "Restoring",
-            tone: DIALOG_TONE.PRIMARY,
+            title: "Remove Ada Lovelace from the workspace?",
+            body: "Ada loses access to its tasks at once, and can be invited again later.",
+            verb: "Remove",
+            running: "Removing",
+            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           }}
         />
         <Asking
@@ -144,6 +147,7 @@ function ConfirmDialogs(): React.JSX.Element {
             body: "The task, its plan, and every agent’s transcript under it go for good. Anyone in the workspace who opened it sees it gone the next time they look, and links to it from other tasks, from Linear issues, and from pull requests stop resolving.",
             verb: "Delete",
             running: "Deleting",
+            loss: CONFIRM_LOSS.IRREVERSIBLE,
           }}
         />
         <Named />
@@ -155,6 +159,7 @@ function ConfirmDialogs(): React.JSX.Element {
             body: "This cannot be undone.",
             verb: "Delete account",
             running: "Deleting account",
+            loss: CONFIRM_LOSS.IRREVERSIBLE,
           }}
         />
       </Inline>

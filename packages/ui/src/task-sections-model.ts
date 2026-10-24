@@ -311,6 +311,58 @@ export function placeAllWrites(
   return writes;
 }
 
+/**
+ * The writes an Undo of moving `members` into `movedTo`, or out of every
+ * section under null, asks: each member still standing where the move put
+ * it goes back where it stood in `before`, in its section after the rows
+ * that stood above it there and still do, or in none. One moved anywhere
+ * since stays, since that was chosen anew. Note that each is given a
+ * position, as `placeAllWrites` gives one, because one put back by its
+ * instant alone would stand above the rows it stood under.
+ */
+export function restoreWrites(
+  before: TaskSections,
+  current: TaskSections,
+  members: readonly SectionMember[],
+  movedTo: string | null,
+  now: number,
+): TaskSectionWrite[] {
+  const due = members.filter((member) => (memberSection(current, member) ?? null) === movedTo);
+  const writes: TaskSectionWrite[] = [];
+  const orders = new Map<string, SectionEntry[]>();
+  const back = due.map((member) => {
+    const from = memberSection(before, member);
+    const was = from === undefined ? [] : sectionOrder(before, from);
+    return { member, from, was, at: was.findIndex((entry) => keeps(entry, member)) };
+  });
+  // Note that each section's rows go back from the top down, so each lands under those put back before it.
+  for (const { member, from, was, at } of back.sort((a, b) => a.at - b.at)) {
+    if (from === undefined) {
+      writes.push(placeWrite(member, null));
+      continue;
+    }
+    const order = orders.get(from) ?? sectionOrder(current, from);
+    const above = was
+      .slice(0, at)
+      .filter((entry) => order.some((each) => keeps(each, memberOf(entry)))).length;
+    const entry = entryFor(member, from, now);
+    const positions = pinPositionsForInsert(order, entry, above, entryPlace);
+    const next = [...order];
+    next.splice(Math.min(above, order.length), 0, entry);
+    orders.set(
+      from,
+      next.map((each) => {
+        const position = positions.get(each);
+        return position === undefined ? each : { ...each, position };
+      }),
+    );
+    for (const [each, position] of positions) {
+      writes.push(placeWrite(memberOf(each), from, position));
+    }
+  }
+  return writes;
+}
+
 /** The writes that take `members`, tasks and agents, out of every section, as a section's Remove tasks from section asks. */
 export function unplaceAllWrites(members: readonly SectionMember[]): TaskSectionWrite[] {
   return members.map((member) => placeWrite(member, null));

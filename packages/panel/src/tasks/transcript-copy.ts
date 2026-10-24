@@ -142,6 +142,8 @@ type CopiedBlock =
       readonly subject: string;
       /** For a command, the plain words the model said it is for, which the line leads with in place of the verb. */
       readonly description: string | undefined;
+      /** For a call of an MCP server's tool, the server it ran on. */
+      readonly server?: string | undefined;
       readonly input: ToolBlock | undefined;
       /** Nothing while the call has not answered. */
       readonly output: ToolBlock | undefined;
@@ -213,8 +215,19 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
     ];
   }
   const view = toolCallView(part);
-  const { input, output, subject, description } = view;
-  return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, description, input, output, error }];
+  const { input, output, subject, description, server } = view;
+  return [
+    {
+      kind: COPIED_BLOCK.CALL,
+      call: view.kind,
+      subject,
+      description,
+      server,
+      input,
+      output,
+      error,
+    },
+  ];
 }
 
 /**
@@ -333,10 +346,11 @@ function oneLine(text: string): string {
 function callParts(call: CopiedCall) {
   const worker = call.call === CALL_KIND.WORKER;
   const said = call.description ?? CALL_WORDS[call.call].verb;
-  const place = callPlace(call.call);
+  const place = callPlace(call.call, call.server);
+  // Note that a server's name keeps its own capitals ("PostHog"), where the other places read as words in a sentence.
+  const named = call.server === undefined ? place?.replace(/^./u, (c) => c.toLowerCase()) : place;
   return {
-    verb:
-      place === undefined ? said : `${said} (${place.charAt(0).toLowerCase()}${place.slice(1)})`,
+    verb: named === undefined ? said : `${said} (${named})`,
     subject: oneLine(call.subject),
     joiner: worker || call.description !== undefined ? ": " : " ",
     code: !worker && CALL_WORDS[call.call].code,

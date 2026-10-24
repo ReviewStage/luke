@@ -77,32 +77,19 @@ function ContextRing({ share }: { share: number }): React.JSX.Element {
   );
 }
 
-function ContextPopover({
-  id,
+/** What the popover holds: the summary, the bar, each part's row and the stats, which tick on for as long as it is drawn. */
+function ContextBody({
   context,
   brief,
-  onClose,
-  onLeave,
 }: {
-  id: string;
   context: CodingAgentContext;
   brief: CodingAgentBrief | undefined;
-  /** Closes the popover and hands focus back to the ring. */
-  onClose: () => void;
-  /** Focus left the popover for `left`; the owner closes unless that is still its own. */
-  onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
   const now = useMinute();
   const rows = contextRows(context, brief);
 
   return (
-    <PopoverPanel
-      id={id}
-      title={CONTEXT_LABEL}
-      closeLabel="Close"
-      onDismiss={onClose}
-      onLeave={onLeave}
-    >
+    <>
       <p className="agent-context-summary">
         <span className="agent-context-full">{contextFullLine(context)}</span>
         <span className="agent-context-total">{contextTotalLine(context)}</span>
@@ -134,6 +121,38 @@ function ContextPopover({
         ))}
       </Facts>
       <p className="agent-context-note">As of the agent's last step. ~ marks an estimate.</p>
+    </>
+  );
+}
+
+function ContextPopover({
+  open,
+  id,
+  context,
+  brief,
+  onClose,
+  onLeave,
+}: {
+  /** Whether it stands; closed, it fades out. */
+  open: boolean;
+  id: string;
+  context: CodingAgentContext;
+  brief: CodingAgentBrief | undefined;
+  /** Closes the popover and hands focus back to the ring. */
+  onClose: () => void;
+  /** Focus left the popover for `left`; the owner closes unless that is still its own. */
+  onLeave: (left: EventTarget | null) => void;
+}): React.JSX.Element {
+  return (
+    <PopoverPanel
+      open={open}
+      id={id}
+      title={CONTEXT_LABEL}
+      closeLabel="Close"
+      onDismiss={onClose}
+      onLeave={onLeave}
+    >
+      <ContextBody context={context} brief={brief} />
     </PopoverPanel>
   );
 }
@@ -182,19 +201,18 @@ export function AgentContextRing({
           />
         </Tooltip>
       </span>
-      {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <ContextPopover
-            id={popoverId}
-            context={context}
-            brief={brief}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
-      ) : null}
+      <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
+        <ContextPopover
+          open={open}
+          id={popoverId}
+          context={context}
+          brief={brief}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
+      </AnchoredPopover>
     </div>
   );
 }

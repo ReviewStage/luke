@@ -1,64 +1,20 @@
-/* badge.css -- a capsule on the chip's own opaque face inside its hairline,
-   holding its words at a caption's type, so it sits on a line of body words
-   without lifting it; its tone is said in its glyph, or a dot before its
-   words, as a compact chip's is, never as a tint the ground shows through. */
+/* badge.css -- what the badge's utilities cannot say (`badge.tsx`, drawn by
+   `../../shadcn/badge.tsx` in the shared Tailwind theme): its words given up
+   under a room's width, a filled label's fade, and its figures.
+
+   Note that its tabular figures stay a rule here rather than a utility,
+   because the type roles' check reads every counting surface's sheet for
+   them (`../../tokens/roles.test.ts`). */
 
 @layer components {
+  /* A badge often holds a count or a time, which must not shift as it ticks. */
   .luke-badge {
-    --luke-badge-ink: var(--luke-color-text-muted);
-    display: inline-flex;
-    /* Note that a badge may shrink below its words and wrap them, because a
-       label wider than its row must stay inside it rather than paint past
-       its edge; a row that wraps its items moves the badge to a line of its
-       own first. */
-    flex: 0 1 auto;
-    min-width: 0;
-    align-items: center;
-    gap: var(--luke-space-4);
-    max-width: 100%;
-    padding: var(--luke-space-2) var(--luke-space-8);
-    /* Note that the corners are half a one-line badge's height rather than
-       a full round, so a badge that does wrap stands as a rounded box
-       rather than a bubble, while one on a line is the same capsule. */
-    border-radius: calc(var(--luke-type-caption-leading) / 2 + var(--luke-space-2));
-    /* Note that the hairline is drawn inside, because a border would make
-       the badge a step taller than the compact chip it stands beside. */
-    background: var(--luke-color-chip);
-    box-shadow: inset 0 0 0 1px var(--luke-color-chip-edge);
-    color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-medium);
-  }
-
-  /* A neutral badge says nothing in particular, so its words are muted. */
-  .luke-badge[data-tone="neutral"] {
-    color: var(--luke-color-text-muted);
-  }
-
-  /* A badge in a tone that holds its words alone leads them with a dot of
-     the tone's ink; one with a glyph or a swatch says it there instead. */
-  .luke-badge:not([data-tone="neutral"]):not(:has(> :not(.luke-badge-words)))::before {
-    content: "";
-    flex: none;
-    width: 7px; /* off-scale: a status dot */
-    height: 7px; /* off-scale: a status dot */
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-badge-ink);
-  }
-
-  /* Note that the words are an element of their own that may shrink below
-     its longest word, because text left loose in the badge keeps that word's
-     width and paints past the pill; it breaks a word only where the word
-     alone overflows, never where wrapping at a space would do. */
-  .luke-badge-words {
-    min-width: 0;
-    overflow-wrap: break-word;
+    font-variant-numeric: tabular-nums;
   }
 
   /* A badge given a step in a header too narrow for its words keeps them for
-     a reader, as `VisuallyHidden`'s `under` does. */
+     a reader, as `VisuallyHidden`'s `under` does. Note that these stay here,
+     because they answer a `luke-room` container the badge's caller draws. */
   @container luke-room (max-width: 520px) {
     .luke-badge-words[data-under="snug"] {
       position: absolute;
@@ -81,75 +37,16 @@
     }
   }
 
-  /* A provider's colour, a GitHub label's, as a dot before the words, in the
-     subtle ink until the badge names one it can paint. */
-  .luke-badge-swatch {
-    width: 8px;
-    height: 8px;
-    flex: none;
-    border-radius: var(--luke-radius-full);
-    background: var(--luke-color-text-subtle);
-  }
-
-  .luke-badge svg {
-    flex: none;
-    width: 12px;
-    height: 12px;
-    color: var(--luke-badge-ink);
-  }
-
-  .luke-badge[data-tone="working"] {
-    --luke-badge-ink: var(--luke-color-working);
-  }
-
-  .luke-badge[data-tone="attention"] {
-    --luke-badge-ink: var(--luke-color-attention);
-  }
-
-  .luke-badge[data-tone="complete"] {
-    --luke-badge-ink: var(--luke-color-complete);
-  }
-
-  .luke-badge[data-tone="merged"] {
-    --luke-badge-ink: var(--luke-color-merged);
-  }
-
-  .luke-badge[data-tone="danger"] {
-    --luke-badge-ink: var(--luke-color-danger-text);
-  }
-
-  /* Filled with a provider's colour, a GitHub label as GitHub draws one: a
-     solid fill edged a shade darker in the light, a tint edged a little
-     stronger in the dark, its words in the ink the badge worked out for
-     each (`badge.tsx`), on one line. */
-  .luke-badge[data-fill="true"] {
-    background: light-dark(var(--luke-badge-fill-light), var(--luke-badge-fill-dark));
-    box-shadow: inset 0 0 0 1px
-      light-dark(var(--luke-badge-edge-light), var(--luke-badge-edge-dark));
-    color: light-dark(var(--luke-badge-words-light), var(--luke-badge-words-dark));
-    white-space: nowrap;
-  }
-
-  .luke-badge-line {
-    display: block;
-    overflow: hidden;
-  }
-
   /* A filled badge's words cut short fade out over their last few pixels,
-     at their own end: the left, where they read right to left. */
+     at their own end: the left, where they read right to left. Note that
+     the fade stays here, because it turns on the writing direction
+     (`:dir()`), and Tailwind's mask utilities compose the gradient through
+     variables rather than drawing it, which the label fade's test reads. */
   .luke-badge-line[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   .luke-badge-line[data-overflow="true"]:dir(rtl) {
     mask-image: linear-gradient(to right, transparent, #000 var(--luke-label-fade));
-  }
-
-  /* Lit, the reader's own, it stands in the ink as a pressed filter chip
-     does, its words in the ground's colour. */
-  .luke-badge[data-lit="true"] {
-    background: var(--luke-color-ink);
-    box-shadow: inset 0 0 0 1px var(--luke-color-ink);
-    color: var(--luke-color-ink-inverse);
   }
 }

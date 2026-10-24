@@ -362,8 +362,21 @@ function sections(page: HTMLElement): Record<string, string[]> {
   );
 }
 
+/** What an element says to a reader: its words without its marks, which are hidden from one. */
+function said(element: Element): string {
+  const copy = element.cloneNode(true) as Element;
+  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  return copy.textContent ?? "";
+}
+
+/** The page's header: its title, and the line under it. */
 function head(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".person-head p")].map((line) => line.textContent ?? "");
+  return [...page.querySelectorAll(".luke-page-header-heading > *")].map(said);
+}
+
+/** The page's headings of the first level. */
+function titles(page: HTMLElement): string[] {
+  return [...page.querySelectorAll("h1")].map(said);
 }
 
 /** What each placeholder on the page says it is waiting on, in order. */
@@ -395,11 +408,19 @@ test("a teammate's page names them as the members read does and lists their work
   });
 });
 
+test("the page names its person once: exactly one h1, their name, and no second heading saying it", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  assert.deepEqual(titles(page), ["Charles Pan"]);
+  assert.equal(said(page).split("Charles Pan").length - 1, 1);
+});
+
 test("the reader's own page says You and what waits on them", async () => {
   const { page } = mount(DEAN.userId);
   await settle();
 
-  assert.deepEqual(head(page), ["Dean StratakosYou", "Owner · dean@example.com"]);
+  assert.deepEqual(head(page), ["Dean Stratakos", "You Owner · dean@example.com"]);
   assert.deepEqual(sections(page), {
     "Working now": ["Limiter flag"],
     "Waiting on you": ["Ship the limiter at 10%?"],
@@ -438,14 +459,20 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
-test("a waiting item is the Inbox's own row: its task named in a chip before its preview, the marks of its Inbox row and its time at the end, and its card hung beside it", async () => {
+test("a waiting item is the Inbox's own row: its task named on a line of its own over its preview, its time at the end, and its card hung beside it, which names the agent its row leaves out", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
 
   const row = button(page, "Retry 429s too?");
   assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
-  assert.equal(row.querySelector(".luke-list-row-lead")?.textContent, RETRIES.name);
-  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  const lead = row.querySelector('.luke-list-row-lead[data-at="line"]');
+  assert.equal(lead?.textContent, RETRIES.name);
+  assert.equal(
+    lead?.closest(".luke-list-row-description"),
+    null,
+    "the task stands on its own line",
+  );
+  assert.equal(row.querySelector('.actor-mark[data-kind="agent"]'), null, "no agent's tile leads");
   assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
 
   restOn(row);
@@ -538,7 +565,7 @@ test("Their tasks in sidebar lists every task assigned to them, letting go of a 
   assert.deepEqual([kept?.assignedTo, kept?.createdBy], [CHARLES.userId, undefined]);
 });
 
-test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and Show all lists every one assigned in the sidebar", async () => {
+test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and its foot counts the two it leaves out and lists every one assigned in the sidebar", async () => {
   // Six tasks Dean created for Charles, one more than the page draws, and one Charles made for himself.
   const handed = [5, 6, 7, 8, 9, 10].map((n) =>
     task(n, `Handed over ${n}`, DEAN, n * MINUTE, [], CHARLES),
@@ -561,7 +588,7 @@ test("a person's tasks assigned to them stand above those they created, a task b
   // Each section wears no face, the page's head saying whose they are.
   assert.equal(page.querySelector('section[aria-label="Assigned"] .actor-mark'), null);
 
-  button(page, "Show all 7 in sidebar").click();
+  button(page, "Show 2 more").click();
   assert.equal(keptViews()[ACME.id]?.assignedTo, CHARLES.userId);
 });
 
@@ -596,23 +623,23 @@ test("a workspace of one offers no sidebar filter, since its sidebar filters by 
   assert.doesNotMatch(page.textContent ?? "", /tasks in sidebar/u);
 });
 
-test("the reader's own page offers nothing to edit: its toolbar lists their tasks in the sidebar and ⋯ alone", async () => {
+test("the reader's own page offers nothing to edit: its header lists their tasks in the sidebar and ⋯ alone", async () => {
   const { page } = mount(DEAN.userId);
   await settle();
 
   assert.deepEqual(
-    [...page.querySelectorAll(".desktop-toolbar-actions button")].map(
+    [...page.querySelectorAll(".luke-page-header-actions button")].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
-    ["My tasks in sidebar", "More"],
+    ["My tasks in sidebar", "Person actions"],
   );
 });
 
-test("More offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
+test("Person actions offers their page's link and a member's email to copy and, to an owner, the workspace's members in Settings", async () => {
   const { page, opened } = mount(CHARLES.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
   assert.deepEqual(
     items.map((item) => item.textContent),
@@ -624,11 +651,11 @@ test("More offers their page's link and a member's email to copy and, to an owne
   ]);
 });
 
-test("someone who left offers only their page's link in More: no email to copy, and no row in Settings to manage", async () => {
+test("someone who left offers only their page's link in Person actions: no email to copy, and no row in Settings to manage", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
     ["Copy link"],
@@ -649,7 +676,7 @@ test("Copy link copies their page's link under the slug of the workspace it stan
   );
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   act(() => button(document.body, "Copy link").click());
   await settle();
 
@@ -660,7 +687,7 @@ test("a page whose workspace is not known offers no Copy link, rather than a lin
   const { page } = mountWith({ workspace: undefined, workspaces: [] }, CHARLES.userId);
   await settle();
 
-  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Person actions"]')?.click());
   assert.doesNotMatch(document.body.textContent ?? "", /Copy link/u);
 });
 
@@ -669,14 +696,14 @@ test("a page for someone neither the members nor those who left name, as a link 
   await settle();
 
   assert.match(page.textContent ?? "", /Not found/u);
-  assert.equal(page.querySelector('button[aria-label="More"]'), null);
+  assert.equal(page.querySelector('button[aria-label="Person actions"]'), null);
 });
 
 test("someone who left heads their page with their own picture", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  const face = page.querySelector<HTMLElement>(".person-head .actor-mark");
+  const face = page.querySelector<HTMLElement>(".luke-page-header .actor-mark");
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });
 
@@ -781,7 +808,7 @@ test("a members read that was refused says so and offers Retry in the head's pla
 
   assert.match(page.textContent ?? "", /Their profile could not be read\./u);
   assert.deepEqual(waits(page), []);
-  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Profile");
+  assert.deepEqual(titles(page), ["Profile"]);
   assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace|Nothing of theirs/u);
 
   membersRefused = false;
@@ -790,7 +817,7 @@ test("a members read that was refused says so and offers Retry in the head's pla
 
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
-  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Sam Ortiz");
+  assert.deepEqual(titles(page), ["Sam Ortiz"]);
 });
 
 test("a read of who left that was refused says so and offers Retry, and Retry names them as a former member", async () => {
@@ -845,18 +872,20 @@ test("on a phone the page is headed by its way back's glyph, their name centred,
   const head = page.querySelector<HTMLElement>(".person-page-head");
   assert.ok(head, "the phone's head stands");
   assert.deepEqual(
-    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    ["Back to Chat", "More"],
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Chat", "Person actions"],
     "one control a corner",
   );
-  act(() => head.querySelector<HTMLButtonElement>('[aria-label="More"]')?.click());
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Person actions"]')?.click());
   assert.ok(
     [...document.querySelectorAll('[role="menuitem"]')].some(
       (each) => each.textContent === "Their tasks in sidebar",
     ),
     "the filter is in the ⋯",
   );
-  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Back to Chat"]')?.click());
+  act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(left, ["away"]);
 });
 
@@ -868,8 +897,8 @@ test("on a phone a page for someone nobody names still leads with its way back",
   });
   await settle();
   assert.match(page.textContent ?? "", /Not found/u);
-  const back = page.querySelector<HTMLButtonElement>(
-    '.person-page-head [aria-label="Back to Chat"]',
+  const back = [...page.querySelectorAll<HTMLButtonElement>(".person-page-head button")].find(
+    (each) => each.textContent?.trim() === "Chat",
   );
   assert.ok(back, "the way back stands");
   act(() => back.click());

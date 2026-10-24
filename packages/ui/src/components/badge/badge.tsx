@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cssCustomProperties } from "../../css.js";
+import { Badge as ShadcnBadge } from "../../shadcn/badge.js";
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js";
 
@@ -18,7 +20,7 @@ import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js"
  * colour as a dot before its words (`swatch`) rather than on them, because a
  * provider lets its colour be anything, a dark one among them, which the
  * badge's words could not be read in. The colour is six hex digits, the
- * spelling GitHub and Linear answer; any other is drawn in the subtle ink.
+ * spelling GitHub and Linear answer; any other is drawn in the muted ink.
  * Where the colour is how a reader tells one from another, a pull request's
  * labels in its header, the badge is filled with it instead (`fill`), as
  * GitHub draws a label: a solid fill in the light appearance, its words dark
@@ -34,22 +36,25 @@ import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js"
  * (`hideWordsUnder`) a badge gives its words up to a reader alone wherever
  * something else says its state in their place: its glyph, its swatch, or
  * its tone's dot.
+ *
+ * It is drawn by shadcn/ui's badge (`../../shadcn/badge.tsx`), whose tones
+ * are this badge's, in the shared Tailwind theme; `badge.css` keeps what
+ * utilities cannot say: the words given up under a room's width, and a
+ * filled label's fade.
  */
 
 /** The one spelling of a provider's colour a swatch paints: six hex digits, with or without its `#`. */
 const SWATCH_COLOUR = /^#?([0-9a-f]{6})$/iu;
 
-/** What a badge says about where something stands. */
-export const BADGE_TONE = {
-  NEUTRAL: "neutral",
-  WORKING: "working",
-  ATTENTION: "attention",
-  COMPLETE: "complete",
-  MERGED: "merged",
-  DANGER: "danger",
+/** The face a badge stands on: the chip's own, a provider's colour, or the ink. */
+const BADGE_FACE = {
+  PLAIN: "plain",
+  FILLED: "filled",
+  LIT: "lit",
 } as const;
 
-export type BadgeTone = (typeof BADGE_TONE)[keyof typeof BADGE_TONE];
+/** A provider's colour as a dot before the words, in the muted ink until the badge names one it can paint. */
+const SWATCH = "luke-badge-swatch size-badge-swatch flex-none rounded-full bg-muted-foreground";
 
 /** How light a fill reads, past which GitHub writes on it in dark words rather than white. */
 const LIGHT_FILL = 0.453;
@@ -118,7 +123,11 @@ function fillColours(colour: string): CSSProperties | undefined {
 function FilledWords({ children }: { children: string }): React.JSX.Element {
   const [measured, clipped] = useClipped(children);
   return (
-    <bdi ref={measured} className="luke-badge-line" data-overflow={String(clipped)}>
+    <bdi
+      ref={measured}
+      className="luke-badge-line block overflow-hidden"
+      data-overflow={String(clipped)}
+    >
       {children}
     </bdi>
   );
@@ -126,7 +135,7 @@ function FilledWords({ children }: { children: string }): React.JSX.Element {
 
 /** A state in `tone`, said by its words. */
 export function Badge({
-  tone = BADGE_TONE.NEUTRAL,
+  tone = STATUS_TONE.NEUTRAL,
   icon,
   swatch,
   fill,
@@ -135,10 +144,10 @@ export function Badge({
   hideWordsUnder,
   children,
 }: {
-  tone?: BadgeTone;
+  tone?: StatusTone;
   /** A glyph before the words, saying the state again. */
   icon?: ReactNode;
-  /** A provider's colour for what the badge names, drawn as a dot before its words; any colour but six hex digits is drawn subtle. */
+  /** A provider's colour for what the badge names, drawn as a dot before its words; any colour but six hex digits is drawn muted. */
   swatch?: string | undefined;
   /** A provider's colour the badge is filled with, its words on one line; any colour but six hex digits draws it neutral. */
   fill?: string | undefined;
@@ -153,10 +162,16 @@ export function Badge({
 }): React.JSX.Element {
   const colour = swatch === undefined ? undefined : SWATCH_COLOUR.exec(swatch)?.[1];
   const filled = fill === undefined ? undefined : fillColours(fill);
-  const marked = icon != null || swatch !== undefined || dot || tone !== BADGE_TONE.NEUTRAL;
+  const marked = icon != null || swatch !== undefined || dot || tone !== STATUS_TONE.NEUTRAL;
+  // Note that the tone's dot stands only where the words stand alone, because a glyph, a swatch, or a marker dot already says the state.
+  const toneDot = tone !== STATUS_TONE.NEUTRAL && icon == null && swatch === undefined && !dot;
+  const face = lit ? BADGE_FACE.LIT : filled === undefined ? BADGE_FACE.PLAIN : BADGE_FACE.FILLED;
   return (
-    <span
-      className="luke-badge"
+    <ShadcnBadge
+      className={lit && filled !== undefined ? "luke-badge whitespace-nowrap" : "luke-badge"}
+      variant={tone}
+      face={face}
+      dot={toneDot}
       data-tone={tone}
       data-fill={filled === undefined ? undefined : "true"}
       data-lit={lit ? "true" : undefined}
@@ -164,20 +179,23 @@ export function Badge({
     >
       {swatch === undefined ? null : (
         <span
-          className="luke-badge-swatch"
+          className={SWATCH}
           aria-hidden="true"
           style={colour === undefined ? undefined : { background: `#${colour}` }}
         />
       )}
-      {dot ? <span className="luke-badge-swatch" aria-hidden="true" /> : null}
+      {dot ? <span className={SWATCH} aria-hidden="true" /> : null}
       {icon}
-      <span className="luke-badge-words" data-under={marked ? hideWordsUnder : undefined}>
+      <span
+        className="luke-badge-words min-w-0 wrap-break-word"
+        data-under={marked ? hideWordsUnder : undefined}
+      >
         {filled !== undefined && typeof children === "string" ? (
           <FilledWords>{children}</FilledWords>
         ) : (
           children
         )}
       </span>
-    </span>
+    </ShadcnBadge>
   );
 }

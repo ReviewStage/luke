@@ -64,8 +64,10 @@ function OpenPicture({
   const titleId = useId();
   const zoom = useImageZoom(words, url);
   const expand = usePictureExpand(true);
+  // Note that the card stands while it is mounted, because its exit is the flight back into its tile, which `expand.close` plays before the owner unmounts it.
   return (
     <Dialog
+      open
       size={DIALOG_SIZE.MEDIA}
       labelledBy={titleId}
       onDismiss={() => expand.close(onClose)}

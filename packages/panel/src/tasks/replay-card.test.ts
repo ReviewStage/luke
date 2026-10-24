@@ -13,7 +13,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -194,10 +194,12 @@ function headOf(container: Element): string {
 
 /** The line under the replay card as a reader reads it: whom it names, if anyone, and the moment its time stands for. */
 function cardMeta(container: Element) {
-  const meta = container.querySelector("[data-replay-card] ~ .message-meta");
+  const meta = container.querySelector("[data-replay-card] ~ .luke-message-line");
   assert.ok(meta !== null);
   return {
-    sender: meta.querySelector(".message-sender .luke-inline-ref-label")?.textContent ?? undefined,
+    sender:
+      meta.querySelector(".luke-message-line-sender .luke-inline-ref-label")?.textContent ??
+      undefined,
     at: meta.querySelector("time")?.getAttribute("dateTime") ?? undefined,
   };
 }
@@ -248,7 +250,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
   // The reader started it, and the message's time is unknown, so the card names nobody under it.
-  assert.equal(cards[1]?.querySelector(":scope > .message-meta"), null);
+  assert.equal(cards[1]?.querySelector(":scope > .luke-message-line"), null);
   // The note is the developer's own bubble after the card.
   const bubbles = [...container.querySelectorAll(".is-user")].filter(
     (each) => !each.classList.contains("agent-origin"),
@@ -293,7 +295,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   const [line, call, said] = steps;
   assert.ok(line?.classList.contains("is-user"));
   assert.match(line?.textContent ?? "", /Use seven days\./u);
-  assert.equal(line?.querySelector(".message-sender")?.textContent, "Charles Pan");
+  assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Charles Pan");
   assert.match(said?.textContent ?? "", /Seven days it is\./u);
   // A call is a call's row, its verb and subject on the line, folded until opened.
   const head = call?.querySelector("summary");
@@ -353,7 +355,7 @@ test("an agent continued from an automation's run opens on the run's Prompt card
   const prompt = container.querySelector(".agent-origin [data-task-card]");
   assert.equal(prompt?.getAttribute("aria-label"), "Prompt");
   assert.match(
-    container.querySelector(".agent-origin .message-sender")?.textContent ?? "",
+    container.querySelector(".agent-origin .luke-message-line-sender")?.textContent ?? "",
     /Nightly triage/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
@@ -457,7 +459,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
   const senders = [...container.querySelectorAll("[data-replay-step]")].map((step) => {
-    const sender = step.querySelector(".message-sender");
+    const sender = step.querySelector(".luke-message-line-sender");
     if (sender === null) return null;
     const ref = sender.querySelector<HTMLElement>("[data-actor-ref]");
     const name = ref?.querySelector(".luke-inline-ref-label")?.textContent ?? sender.textContent;
@@ -495,7 +497,7 @@ test("the line under the card says when the reader's own agent was started, nami
     at: new Date(SENT_AT).toISOString(),
   });
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] ~ .message-meta")?.textContent ?? "",
+    container.querySelector("[data-replay-card] ~ .luke-message-line")?.textContent ?? "",
     /You|·/u,
   );
 });
@@ -518,8 +520,8 @@ test("the line under the card names a teammate who started the agent by their fa
     at: new Date(SENT_AT).toISOString(),
   });
   assert.match(
-    container.querySelector("[data-replay-card] ~ .message-meta .message-sent-at")?.textContent ??
-      "",
+    container.querySelector("[data-replay-card] ~ .luke-message-line .luke-message-line-time")
+      ?.textContent ?? "",
     /^·/u,
   );
 });

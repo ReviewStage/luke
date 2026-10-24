@@ -1,5 +1,9 @@
 import { type ReactNode, useId } from "react";
-import { AlertIcon, CheckIcon } from "../../face/glyphs.js";
+import { CheckIcon } from "../../face/glyphs.js";
+import { AlertIcon } from "../../icons/lucide-glyphs.js";
+import { ANNOUNCE } from "../announcer/announcer.js";
+import { ErrorLine } from "../error-line/error-line.js";
+import { LANDED, landedMark } from "../landed/landed.js";
 import { GAP, type Gap, Inline } from "../layout/layout.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
@@ -9,9 +13,9 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  *
  * The row mints the ids and hands its controls what they need to be read
  * with its words: the label's id, for a control named by `aria-labelledby`,
- * and the description and the error, which describe it. The error stands in
- * a polite live region from the first render, empty until it says
- * something, as a form field's does. The row is its own inline-size
+ * and the description and the error, which describe it. The error is the
+ * one `ErrorLine` a form field's is too, said as an alert, since a write
+ * that was refused is one the developer believes landed. The row is its own inline-size
  * container, so where its controls stand is decided by the row's width and
  * not the window's: under 380px they drop below the words to the row's end.
  * The row owns its padding, the least height its profile gives a row (the
@@ -59,9 +63,9 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * control wears the id the row hands it (`controlId`).
  *
  * A row that just arrived, a skill just installed, says so (`landed`): it
- * lights once, a wash over it fading out on the motion tokens, so the eye
- * finds it among the rest; reduced motion and a capture run, which zero the
- * tokens, leave it unlit.
+ * is lit as every place landed on is (`../landed/landed.ts`), its wash a
+ * step inside the card it stands flush in, so the eye finds it among the
+ * rest; reduced motion keeps the wash, still, for as long.
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -179,7 +183,7 @@ export function SettingsRow({
       data-density={density}
       data-indent={indent}
       data-labels-control={labelsControl}
-      data-landed={landed ? "" : undefined}
+      {...landedMark(landed, LANDED.WITHIN)}
     >
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">
@@ -212,9 +216,9 @@ export function SettingsRow({
             {below(control)}
           </div>
         )}
-        <p className="luke-settings-row-error" id={errorId} aria-live="polite">
+        <ErrorLine id={errorId} level={ANNOUNCE.ALERT}>
           {failed ? error : null}
-        </p>
+        </ErrorLine>
       </div>
     </div>
   );

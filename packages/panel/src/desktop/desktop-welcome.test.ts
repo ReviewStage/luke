@@ -289,7 +289,7 @@ test("the welcome's composer is drawn as the dialog's: New task's title with the
   const drawn = (card: HTMLElement) => ({
     title: card.querySelector(".new-task-head h2")?.textContent,
     chip: card.querySelector(".new-task-head .repository-chip")?.textContent,
-    footChips: card.querySelectorAll(".prompt-input-tools .repository-chip").length,
+    footChips: card.querySelectorAll(".luke-composer-foot-tools .repository-chip").length,
   });
 
   const welcome = drawn(page.welcome());

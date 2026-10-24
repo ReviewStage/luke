@@ -13,13 +13,13 @@
        keycaps; a gap rather than letter-spacing, which would leave the hair
        after the last key too and push a right-aligned chord off its edge. */
     gap: 0.04em;
-    color: var(--luke-shortcut-ink, var(--luke-color-text-subtle));
+    color: var(--luke-shortcut-ink, var(--luke-color-text-muted));
     /* The window's own type rather than the user agent's monospace for `kbd`:
        the glyphs are the menu bar's, and a menu prints them in the system face,
        whose ⌘, ⇧, ⌥, arrows, ⌫, and ⏎ stand on the capitals' line. */
     font-family: inherit;
     font-size: var(--luke-shortcut-text, var(--luke-type-caption-size));
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     /* Digits and letters at one advance, so ⌘1 and ⌘5 are one width. */
     font-variant-numeric: tabular-nums;
     line-height: 1;

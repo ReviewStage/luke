@@ -567,6 +567,12 @@ export const WINDOW_SURFACE_ACT_KIND = {
    * tab it left: answered to that panel alone and kept nowhere else.
    */
   WINDOW_CAPTURE: "window.capture",
+  /**
+   * Whether the asking panel holds work it has not saved, told each time
+   * that changes, so a quit, a restart to update, and a sign-out ask first
+   * while it does.
+   */
+  WINDOW_UNSAVED_WORK: "window.unsavedWork",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 

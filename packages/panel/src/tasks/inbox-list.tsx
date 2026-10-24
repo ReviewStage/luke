@@ -1,5 +1,6 @@
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { readFailedWords, TERM } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -11,25 +12,32 @@ import {
   EMPTY_STATE_ACTION_LOOK,
   EmptyState,
   type EmptyStateAction,
+  ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
+  GROUP_ACTIONS,
+  GROUP_HEADING,
+  GROUP_SURFACE,
+  GroupHeader,
   HoverCard,
   HoverCardHead,
   IconButton,
+  joinRefs,
   LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
+  LIST_ROW_LEAD,
   LIST_ROW_META,
   List,
   ListMotion,
   ListRow,
   motionKey,
   motionRows,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  OneLine,
+  NOTE_LINE_LOOK,
+  NoteLine,
+  PaneBar,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   RowHint,
@@ -37,15 +45,21 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SearchField,
-  SKELETON_SHAPE,
+  SelectionRegion,
   Skeleton,
   SkeletonRegion,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
   useLeaving,
   useMenu,
   useMinute,
   useResizeEdge,
+  useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -80,13 +94,13 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
+import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop/action-menu.js";
 import {
   INBOX_LIST_WIDTH,
   type InboxShowChoice,
@@ -102,8 +116,7 @@ import {
   useAskedMenu,
   useMenuAsk,
 } from "../desktop/phone-head.js";
-import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
-import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
+import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { TaskChipCard } from "./chip-cards.js";
@@ -116,13 +129,7 @@ import {
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
 import { NEW_THREAD } from "./inbox-compose.js";
-import {
-  HolderGlyph,
-  InboxItemCard,
-  InboxItemEnd,
-  ItemMark,
-  useInboxStanding,
-} from "./inbox-item-parts.js";
+import { HolderGlyph, InboxItemCard, InboxItemEnd, useInboxStanding } from "./inbox-item-parts.js";
 import {
   EVERYONES,
   holderKey,
@@ -163,6 +170,7 @@ import {
   useRowMediaAsks,
   useRowMediaReads,
 } from "./inbox-row-media.js";
+import { InboxSelectionBar } from "./inbox-selection.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -172,7 +180,7 @@ import { cardTitle } from "./tool-call-model.js";
  *
  * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
  * sidebar does. A task's items stand under the sidebar's own group header
- * (`sidebar-group-header.tsx`), the task's glyph giving way to its chevron
+ * (`GroupHeader`), the task's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
  * launches as a sidebar group's is; an automation's agents stand under its
  * clock tile, which hangs its card. An item is a row of two lines, as a
@@ -227,11 +235,16 @@ import { cardTitle } from "./tool-call-model.js";
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
  * draws its list the whole Inbox wide, with no edge, and hides it while an
- * item stands in its place (`inbox-columns.ts`).
+ * item stands in its place (`inbox-columns.ts`). A list on a page chooses
+ * rows as a Mac's list does (`SelectionRegion`): ⌘-click one in or out,
+ * ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn, and Esc none, across
+ * every group, while a plain press still opens its item; while any is
+ * chosen, a bar at the list's foot marks them all read or unread, or
+ * resolves them, at once (`inbox-selection.tsx`).
  */
 
-/** What an item's row's right-click menu is called. */
-const ITEM_ACTIONS = "Inbox item actions";
+/** What an item's row is, which names its ⋯ and its menu "Inbox item actions". */
+const ITEM_THING = "Inbox item";
 
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
@@ -268,9 +281,6 @@ const SKELETON_ROWS = [
 
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
-
-/** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
-const SKELETON_MARK = "16px";
 
 /** What each scope is called, in the view's menu and, but for To do, after the Inbox's name at its head, and its glyph in the menu. */
 const SCOPE_WORDS = {
@@ -363,18 +373,22 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
 }
 
 /**
- * One item as a `ListRow` of two lines, as a mail app lists a thread: the
- * agent's mark, the title, its task's status (`TaskStatusChip`), and how
- * long ago it changed, then the last word
- * in its thread, muted, led on a thread by what its open ask asks, the
- * steps its draft ticks counted (`inboxPreview`). One that needs the developer wears
- * the attention mark before its time, and a teammate's item their face
- * there where `face` allows it, the mark of their open item being theirs to
- * wear. The title hangs in the window's pill, since a narrow list cuts it
- * short. An unread item, changed since the developer last read it or marked
- * unread, wears the blue dot in a gutter before its tile, its title in the
- * unread weight and its preview in the body's ink; the gutter stands on
- * every row, so the tiles line up whether a row wears a dot or not. Where
+ * One item as a `ListRow` of up to three lines, as a mail app lists a
+ * thread, one thing to a line so nothing is cut short to make room for
+ * another: the title and how long ago it changed; then, in a list its tasks
+ * do not head, what holds it, its task's status and whole name (`chip`);
+ * then the last word in its thread, muted, led on a thread by what its open
+ * ask asks, the steps its draft ticks counted (`inboxPreview`). The agent
+ * that asked, and whether it needs the developer, are its card's to say
+ * (`InboxItemCard`), a reader still hearing the latter, since an open item
+ * nearly always does and a mark on every row would say nothing. A
+ * teammate's item wears their face before its time where `face` allows it,
+ * the mark of their open item being theirs to wear. The title hangs in the
+ * window's pill, since a narrow list cuts it short. An unread item, changed
+ * since the developer last read it or marked unread, wears the blue dot in
+ * a gutter before its words, its title in the unread weight and its
+ * preview in the body's ink; the gutter stands on every row, so the words
+ * line up whether a row wears a dot or not. Where
  * an answer or a message waits unsent in the item's box and that box is not
  * the one standing beside the list, which shows its own words, the row wears
  * the Draft pencil before its marks, as a sidebar task's row does
@@ -382,13 +396,13 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * Where the list hands down `onMark`, the row offers to mark it read or unread:
  * a press over its time while the pointer rests on it or it holds the
  * keyboard, the time and its marks stepping aside, and the first item of
- * its right-click menu, which names the key that does the same to the
+ * its menu, which names the key that does the same to the
  * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
- * do not head, the person page's or the Inbox's own grouped by anything but
- * task, names the item's task in a chip before the preview (`chip`), its
- * glyph and its name cut short, so the title keeps its whole line. Its right-click offers
+ * do not head is the person page's, or the Inbox's own grouped by anything
+ * but task. Its menu, opened by the row's ⋯, a right-click, and the menu key
+ * alike (`ListRow`'s `menu`), offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list hands
  * down its media reads (`media`), the row shows the pictures and pages its
@@ -396,7 +410,7 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * hands down `onClose`, an open item's row offers to close it without an
  * answer, asked first (`inbox-close.tsx`): a press beside its mark while
  * the pointer rests on it or it holds the keyboard, and the last item of
- * its right-click menu.
+ * its menu.
  */
 export function InboxItemRow({
   listed,
@@ -411,6 +425,7 @@ export function InboxItemRow({
   muted = false,
   media,
   ref,
+  selectKey,
   onChoose,
   onMark,
   onClose,
@@ -425,7 +440,7 @@ export function InboxItemRow({
   readerId: string | undefined;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
+  /** Whether the row names its task, or its automation, on a line of its own over its preview, as a list its tasks do not head does. */
   chip?: boolean;
   /** Whether the row draws its second line, what its item asks or how it ended; off, the row is its title's line alone, as the view's menu may choose. */
   line?: boolean;
@@ -435,6 +450,8 @@ export function InboxItemRow({
   media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
+  /** What the row is chosen by where its list chooses rows (`SelectionRegion`); none where it is never chosen. */
+  selectKey?: string | undefined;
   onChoose: (listed: InboxListed) => void;
   /** Marks the item read or unread; none where the row offers no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
@@ -452,7 +469,6 @@ export function InboxItemRow({
   const preview = inboxPreview(item, nameOf, ticked);
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
-  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
@@ -471,12 +487,10 @@ export function InboxItemRow({
     copyLink === undefined ? [] : [copyLink],
     close.action === undefined ? [] : [close.action],
   ].filter((group) => group.length > 0);
-  const press = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const region = useRef<HTMLElement | null>(null);
   const hold = useCallback(
     (element: HTMLElement | null) => {
-      press.current = element;
       region.current = element?.parentElement ?? null;
       ref?.(element);
     },
@@ -493,20 +507,7 @@ export function InboxItemRow({
           ref={hold}
           motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
-          leading={
-            <>
-              {/* Note that the tile hangs no card of its own, as a sidebar task's mark hangs none: the row's card names the agent. */}
-              <InboxRowLeading unread={unread}>
-                <ItemMark
-                  holder={holder}
-                  agentId={item.agentId}
-                  models={models}
-                  readerId={readerId}
-                  plain
-                />
-              </InboxRowLeading>
-            </>
-          }
+          leading={<InboxRowLeading unread={unread} />}
           title={title}
           description={
             line ? (
@@ -521,6 +522,7 @@ export function InboxItemRow({
               ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) }
               : undefined
           }
+          leadAt={LIST_ROW_LEAD.LINE}
           attachments={
             !line || media === undefined || carried.length === 0 ? undefined : (
               <RowMedia media={carried} reads={media} />
@@ -533,6 +535,7 @@ export function InboxItemRow({
               readerId={readerId}
               open={open}
               face={face}
+              standing={false}
               before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
             />
           }
@@ -577,16 +580,28 @@ export function InboxItemRow({
           unread={unread}
           muted={muted}
           hint={{ Hint: RowHint, label: title }}
+          selectKey={selectKey}
           onPress={() => onChoose(listed)}
-          contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
+          menu={rowMenu(ITEM_THING, groups)}
         />
       </RowHintOptions>
-      {menu.drawn === undefined || groups.length === 0 ? null : (
-        <ActionMenu label={ITEM_ACTIONS} menu={menu.drawn} groups={groups} onClose={menu.close} />
-      )}
       {close.dialog}
     </>
   );
+}
+
+/**
+ * What every group head of the list is handed beside its glyph and name: its
+ * fold, as the list keeps it, and how many of its items need the reader, which
+ * a narrow column counts only while the group is folded or the head is under
+ * the pointer, and leaves out at none, since "0 need you" is no news.
+ */
+function groupHead(folded: boolean, count: number, onToggle: () => void) {
+  return {
+    fold: sidebarFold(folded, onToggle),
+    count: count === 0 ? undefined : groupCount(count, NEEDS_YOU.COUNT),
+    surface: GROUP_SURFACE.NARROW,
+  };
 }
 
 /**
@@ -594,23 +609,26 @@ export function InboxItemRow({
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the factory glyph for the
  * agents no automation names, since that group names no one actor.
- * A press folds the group, as every group header's does.
+ * A press folds the group, which then fades its rows out, as every group
+ * header's does.
  */
 function HolderHeader({
   holder,
   folded,
   count,
   onToggle,
+  children,
 }: {
   holder: InboxHolder;
   folded: boolean;
   count: number;
   onToggle: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
-  const shared = { folded, count, noun: NEEDS_YOU.COUNT, steady: true, onToggle };
+  const shared = { ...groupHead(folded, count, onToggle), children };
   if (holder.kind === INBOX_HOLDER.TASK) {
     const glyph = <PlanGlyph status={holder.task.status} />;
     const fallback = (
@@ -619,9 +637,9 @@ function HolderHeader({
       </HoverCard>
     );
     return (
-      <SidebarGroupHeader
+      <GroupHeader
         glyph={glyph}
-        name={holder.task.name}
+        label={holder.task.name}
         card={<TaskChipCard taskId={holder.task.id} fallback={fallback} />}
         {...shared}
       />
@@ -629,11 +647,7 @@ function HolderHeader({
   }
   if (holder.automationId === null) {
     return (
-      <SidebarGroupHeader
-        glyph={<FactoryIcon aria-hidden="true" />}
-        name={holder.name}
-        {...shared}
-      />
+      <GroupHeader glyph={<FactoryIcon aria-hidden="true" />} label={holder.name} {...shared} />
     );
   }
   const actor =
@@ -641,9 +655,9 @@ function HolderHeader({
       ? { kind: ACTOR_KIND.AUTOMATION, name: holder.name, state: ACTOR_STATE.REST }
       : automationActor(known.automation);
   return (
-    <SidebarGroupHeader
+    <GroupHeader
       glyph={<ActorMark actor={actor} />}
-      name={holder.name}
+      label={holder.name}
       card={known === undefined ? undefined : <AutomationCard {...known} />}
       {...shared}
     />
@@ -653,18 +667,20 @@ function HolderHeader({
 /**
  * A status's group header: Needs you by the attention mark, Waiting on
  * others by the hourglass, and Answered by a check. A press folds the
- * group, as every group header's does.
+ * group, which then fades its rows out, as every group header's does.
  */
 function StatusHeader({
   status,
   folded,
   count,
   onToggle,
+  children,
 }: {
   status: InboxStatusGroupKind;
   folded: boolean;
   count: number;
   onToggle: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
   const glyph =
     status === INBOX_STATUS_GROUP.NEEDS_YOU ? (
@@ -675,15 +691,9 @@ function StatusHeader({
       <CircleCheckIcon />
     );
   return (
-    <SidebarGroupHeader
-      glyph={glyph}
-      name={STATUS_WORDS[status]}
-      folded={folded}
-      count={count}
-      noun={NEEDS_YOU.COUNT}
-      steady
-      onToggle={onToggle}
-    />
+    <GroupHeader glyph={glyph} label={STATUS_WORDS[status]} {...groupHead(folded, count, onToggle)}>
+      {children}
+    </GroupHeader>
   );
 }
 
@@ -691,7 +701,8 @@ function StatusHeader({
  * A person's group header: their face and name, the reader's own as You, a
  * member who left on the quiet outline, as the sidebar's group by creator
  * heads its groups, hanging their card as an automation's header hangs its
- * own. A press folds the group, as every group header's does.
+ * own. A press folds the group, which then fades its rows out, as every
+ * group header's does.
  */
 function PersonHeader({
   person,
@@ -699,12 +710,14 @@ function PersonHeader({
   folded,
   count,
   onToggle,
+  children,
 }: {
   person: InboxPerson | undefined;
   readerId: string | undefined;
   folded: boolean;
   count: number;
   onToggle: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
   const { members, former, readerId: known } = useMemberDirectory();
   const reader = known ?? readerId;
@@ -716,16 +729,14 @@ function PersonHeader({
         ? memberActor(you, reader)
         : { kind: ACTOR_KIND.PERSON, userId: reader ?? "", name: "", you: true };
   return (
-    <SidebarGroupHeader
+    <GroupHeader
       glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
-      name={actorName(actor)}
+      label={actorName(actor)}
       card={person === undefined && you === undefined ? undefined : actorCard(actor)}
-      folded={folded}
-      count={count}
-      noun={NEEDS_YOU.COUNT}
-      steady
-      onToggle={onToggle}
-    />
+      {...groupHead(folded, count, onToggle)}
+    >
+      {children}
+    </GroupHeader>
   );
 }
 
@@ -982,31 +993,22 @@ export function ShowEmpty({
 
 /**
  * An item row's leading: the gutter the unread dot stands in, on every row so
- * the tiles line up whether a row wears the dot or not, and the tile after
- * it. The list's rows and its placeholder rows both lead with it, so a tile
- * lands where its block stood.
+ * the words line up whether a row wears the dot or not. The list's rows and
+ * its placeholder rows both lead with it, so a title lands where its block
+ * stood.
  */
-function InboxRowLeading({
-  unread,
-  children,
-}: {
-  unread: boolean;
-  children: ReactNode;
-}): React.JSX.Element {
+function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
   return (
-    <>
-      <span className="inbox-row-gutter">
-        {unread ? <span className="inbox-row-unread" /> : null}
-      </span>
-      <span className="inbox-row-mark">{children}</span>
-    </>
+    <span className="inbox-row-gutter">
+      {unread ? <span className="inbox-row-unread" /> : null}
+    </span>
   );
 }
 
 /**
  * The list while its items are first read: rows in an item's own row, a
- * block where its agent's tile, its title, its time, and the line under
- * them will stand, so the
+ * block where its title, its time, and the line under them will stand,
+ * so the
  * items land where the blocks stood rather than a lone ring in the list's
  * corner. The rows open nothing and the region says what is being read. A
  * short list asks for fewer rows than the five a whole Inbox stands.
@@ -1029,11 +1031,7 @@ export function InboxListSkeleton({
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
-            leading={
-              <InboxRowLeading unread={false}>
-                <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
-              </InboxRowLeading>
-            }
+            leading={<InboxRowLeading unread={false} />}
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={<Skeleton width={SKELETON_TIME} />}
@@ -1102,9 +1100,18 @@ function ListHead({
         <PhoneHead
           place="inbox"
           start={head.phone.start}
-          title={<h1 className="desktop-toolbar-title">{title}</h1>}
+          title={
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TOOLBAR_TITLE}
+              className="luke-toolbar-title"
+            >
+              {title}
+            </Text>
+          }
           end={
             <PlaceMore
+              thing="Inbox"
               shown={shown}
               groups={(opener) => [
                 [
@@ -1156,30 +1163,25 @@ function ListHead({
     <>
       {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
       {sidebar ? (
-        <SidebarSectionHead
-          name={title}
+        <GroupHeader
+          heading={GROUP_HEADING.NONE}
+          label={title}
+          actionsShown={GROUP_ACTIONS.AT_REST}
+          actions={options}
           search={
             head.search === undefined
               ? undefined
               : { label: SEARCH_INBOX, value: head.search.query, onChange: head.search.onQuery }
           }
-        >
-          {options}
-        </SidebarSectionHead>
+        />
       ) : (
         <>
-          <header className="desktop-toolbar inbox-tasks-bar">
-            <div className="desktop-toolbar-heading">
-              <OneLine
-                as={ONE_LINE_ELEMENT.H1}
-                end={ONE_LINE_END.ELLIPSIS}
-                className="desktop-toolbar-title"
-              >
-                {title}
-              </OneLine>
-            </div>
-            <div className="desktop-toolbar-actions">{options}</div>
-          </header>
+          {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
+          {view === undefined ? (
+            <PaneBar title={title} actions={options} />
+          ) : (
+            <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
+          )}
           {search}
         </>
       )}
@@ -1190,11 +1192,11 @@ function ListHead({
 
 /** What a list its search left empty says, under its rows, on the window's Inbox and a task's own alike. */
 export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
-  return <p className="sidebar-note">{`No items match “${searched.trim()}”.`}</p>;
+  return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{`No items match “${searched.trim()}”.`}</NoteLine>;
 }
 
-/** What the list says where a task's read did not answer. */
-const NOT_READ = "Some items could not be read.";
+/** What the Inbox says where a read of its items, or of the tasks holding them, did not answer. */
+export const INBOX_NOT_READ = readFailedWords(`some ${TERM.INBOX_ITEM.many}`);
 
 /** The words of the way on from an Inbox with nothing in it. */
 const NEW_TASK_LABEL = "New task";
@@ -1248,9 +1250,9 @@ export function InboxListNote({
 }): React.JSX.Element | null {
   if (failed) {
     return (
-      <div className="sidebar-note">
-        <ErrorState onRetry={onRetry}>{NOT_READ}</ErrorState>
-      </div>
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
+        {INBOX_NOT_READ}
+      </ErrorState>
     );
   }
   if (!empty) return null;
@@ -1266,7 +1268,7 @@ export function InboxListNote({
       </EmptyState>
     );
   }
-  return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
+  return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{NEEDS_YOU.NONE}</NoteLine>;
 }
 
 /** Where a list of the window's Inbox stands: a column of its own on the Inbox's page, or the sidebar, which the inbox-first sidebar makes it. */
@@ -1356,6 +1358,20 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   };
 }
 
+/** The items whose rows the list draws, in their order: every item listed but those of a group folded. */
+function drawnItems(view: InboxListView, folded: (key: string) => boolean): readonly InboxListed[] {
+  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
+  if (view.grouping === INBOX_GROUPING.PERSON) {
+    return view.groups.flatMap(({ key, items }) => (folded(key) ? [] : items));
+  }
+  if (view.grouping === INBOX_GROUPING.STATUS) {
+    return view.groups.flatMap(({ key, items }) => (folded(key) ? [] : items));
+  }
+  return view.groups.flatMap(({ holder, items }) =>
+    folded(holderKey(holder)) ? [] : items.map((item) => ({ holder, item })),
+  );
+}
+
 /** A group's key, by which it leaves the list (`ListMotion`). */
 function groupKey({ key }: { readonly key: string }): string {
   return key;
@@ -1370,8 +1386,9 @@ function InboxRows({
   row: (listed: InboxListed, leaving: boolean) => React.ReactNode;
 }): React.JSX.Element {
   const drawn = useLeaving(items, (listed) => listed.item.id);
+  // Note that the rows stand a step further apart than a list's, because a row of three lines standing clear on its ground is told from the next by the room between them alone.
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks" moves>
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="sidebar-tasks" moves>
       {drawn.map(({ value, leaving }) => row(value, leaving))}
     </Stack>
   );
@@ -1426,15 +1443,27 @@ export function InboxList({
   /** Where the list stands: its own column on the Inbox's page, or the sidebar, which scrolls it with the rest and draws the chosen item's open beside it. */
   placement?: InboxListPlacement;
   onChoose: (listed: InboxListed) => void;
-  /** Marks an item read or unread from its row; none where the rows offer no mark. */
-  onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
-  /** Closes an open item without an answer from its row; none where the rows offer no close. */
+  /** Marks an item read or unread from its row or the selection's bar, answering whether the service took it; none where the rows offer no mark. */
+  onMark?: ((listed: InboxListed, unread: boolean) => Promise<boolean>) | undefined;
+  /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
   onClose?: InboxCloser | undefined;
 }): React.JSX.Element {
   const now = useMinute();
+  const regionId = useId();
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  // Note that only the list on a page chooses rows; the sidebar's leaves its rows to open alone.
+  const choosing = placement === INBOX_LIST_PLACEMENT.PAGE;
+  const drawn = choosing ? drawnItems(view, (key) => head.view?.folds.folded(key) ?? false) : [];
+  // Note that only rows drawn stay chosen, so an item gone from the list, filtered out, or folded away is never acted on, and stays unchosen once back.
+  const picks = drawn.filter(({ item }) => picked.has(item.id));
+  if (picks.length !== picked.size) setPicked(new Set(picks.map(({ item }) => item.id)));
+  const unpick = () => setPicked(new Set());
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Note that the rows of every group are one Tab stop that ↑↓ walk on a page, and in the sidebar join the sidebar's own walk, a box around them.
+  const roving = useRovingKeys<HTMLDivElement>();
+  const rovingBody = useMemo(() => joinRefs(bodyRef, roving.ref), [roving.ref]);
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
   // The reads hold the pictures of the items listed alone, and none while the rows show no media.
   const previews = head.view?.choices.mediaPreviews === true;
@@ -1469,6 +1498,7 @@ export function InboxList({
       muted={isDone(listed.item)}
       media={media}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
+      selectKey={choosing && !leaving ? listed.item.id : undefined}
       onChoose={onChoose}
       onMark={onMark}
       onClose={onClose}
@@ -1485,8 +1515,9 @@ export function InboxList({
           folded={folded}
           count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
-        />
-        {folded ? null : <InboxRows items={items} row={row} />}
+        >
+          <InboxRows items={items} row={row} />
+        </StatusHeader>
       </div>
     );
   };
@@ -1500,15 +1531,17 @@ export function InboxList({
           folded={folded}
           count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
-        />
-        {folded ? null : <InboxRows items={items} row={row} />}
+        >
+          <InboxRows items={items} row={row} />
+        </PersonHeader>
       </div>
     );
   };
   // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's.
   const body = (
     <div
-      ref={bodyRef}
+      {...(sidebar ? {} : roving)}
+      ref={sidebar ? bodyRef : rovingBody}
       className="inbox-tasks-body"
       data-empty={String(listedItems(view).length === 0)}
       {...motionRows()}
@@ -1544,10 +1577,9 @@ export function InboxList({
                   folded={folded}
                   count={needingYou(items.map((item) => ({ holder, item })))}
                   onToggle={() => head.view?.folds.toggle(key)}
-                />
-                {folded ? null : (
+                >
                   <InboxRows items={items.map((item) => ({ holder, item }))} row={row} />
-                )}
+                </HolderHeader>
               </div>
             );
           }}
@@ -1570,8 +1602,25 @@ export function InboxList({
     >
       <ListHead head={head} readerId={readerId} placement={placement} />
       <ListMotion root={bodyRef} change={view} reading={reading}>
-        {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
+        {sidebar ? (
+          body
+        ) : (
+          <SelectionRegion id={regionId} selection={{ selected: picked, onChange: setPicked }}>
+            <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>
+          </SelectionRegion>
+        )}
       </ListMotion>
+      {/* Note that the bar stands at the list's foot rather than over its rows, so choosing a row moves none under the pointer. */}
+      {choosing ? (
+        <InboxSelectionBar
+          listed={picks}
+          controls={regionId}
+          shown={head.shown}
+          onClear={unpick}
+          onMark={onMark}
+          onClose={onClose}
+        />
+      ) : null}
       {!sidebar && columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );

@@ -12,11 +12,13 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import {
   focusedSegment,
   pressKeyIn,
@@ -24,6 +26,8 @@ import {
   segment,
   segmentedGroup,
 } from "../testing/segmented.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 
 /**
@@ -68,6 +72,8 @@ let stored: ModelChoice = { model: OPUS.id, effort: "high" };
 let sent: AnyAct[] = [];
 /** Whether the service refuses the next write. */
 let refuseWrite = false;
+/** Whether the service answers that it could not read the models. */
+let refuseModels = false;
 
 const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
   status: FAKE_ANSWER.DONE,
@@ -79,6 +85,9 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_MODELS:
+      if (refuseModels) {
+        return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      }
       return Promise.resolve(done({ models }));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
@@ -113,6 +122,7 @@ beforeEach(() => {
   keys = [];
   sent = [];
   refuseWrite = false;
+  refuseModels = false;
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeActs({ act: answer });
 });
@@ -133,7 +143,16 @@ async function mount(): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(CodingAgentsPage, { signedIn: true })));
+  act(() =>
+    root.render(
+      createElement(
+        Fragment,
+        null,
+        createElement(CodingAgentsPage, { signedIn: true }),
+        onRegistry(rendererRegistry, createElement(ToastHost)),
+      ),
+    ),
+  );
   await settle();
   return container;
 }
@@ -142,16 +161,9 @@ const fastSwitch = (page: HTMLElement) =>
   page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Fast"]') ??
   assert.fail("no Fast switch");
 
-/** The words that describe a control, in the order it names them. */
-const descriptionOf = (control: HTMLElement) =>
-  (control.getAttribute("aria-describedby") ?? "")
-    .split(" ")
-    .map((id) => document.getElementById(id)?.textContent ?? "")
-    .join(" ");
-
-/** What the page announces now: its alerts and its live regions that say something. */
+/** What the page announces now: its alerts and its error lines that say something. */
 const announced = (page: HTMLElement) =>
-  [...page.querySelectorAll('[role="alert"], [aria-live]')]
+  [...page.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
     .map((each) => each.textContent ?? "")
     .filter((words) => words !== "");
 
@@ -185,20 +197,15 @@ test("while the default and the keys are read, placeholder rows stand in each gr
   assert.ok(fastSwitch(page));
 });
 
-test("a Fast the service refuses says so under Fast's own row, the switch left off and pressable again, as every settings switch's refusal does", async () => {
+test("a Fast the service refuses flips back and says so in a toast, the switch pressable again", async () => {
   const page = await mount();
   refuseWrite = true;
 
   act(() => fastSwitch(page).click());
   await settle();
 
-  assert.deepEqual(announced(page), ["The default could not be saved. Try again."]);
-  assert.equal(fastSwitch(page).getAttribute("aria-invalid"), "true");
-  assert.match(
-    descriptionOf(fastSwitch(page)),
-    /The default could not be saved\. Try again\./u,
-    "the refusal describes the Fast switch, not the rows after it",
-  );
+  assert.equal(newestToastSays(), "The default could not be saved. Try again.");
+  assert.deepEqual(announced(page), []);
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
   assert.equal(fastSwitch(page).disabled, false);
   assert.deepEqual(written(), [{ model: OPUS_FAST.id, effort: "high" }]);
@@ -237,7 +244,7 @@ test("Effort and Context are each a radio group, the stored value checked and th
   ]);
 });
 
-test("a refusal goes once any row's save lands, Fast's after an effort is kept and the effort's after Fast is, since every row writes the one default", async () => {
+test("an effort's refusal stands under the rows until a save lands, and Fast's refusal is a toast that leaves no line behind", async () => {
   const page = await mount();
   const alerts = () => announced(page);
 
@@ -248,7 +255,6 @@ test("a refusal goes once any row's save lands, Fast's after an effort is kept a
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
-  const afterEffort = alerts();
 
   refuseWrite = true;
   act(() => segment(segmentedGroup(page, "Effort"), "Medium").click());
@@ -258,8 +264,7 @@ test("a refusal goes once any row's save lands, Fast's after an effort is kept a
   act(() => fastSwitch(page).click());
   await settle();
 
-  assert.deepEqual(fastRefused, ["The default could not be saved. Try again."]);
-  assert.deepEqual(afterEffort, []);
+  assert.deepEqual(fastRefused, []);
   assert.deepEqual(effortRefused, ["The default could not be saved. Try again."]);
   assert.deepEqual(alerts(), []);
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");
@@ -339,9 +344,11 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
       assert.fail("no Edit key")
     ).click(),
   );
-  const field =
-    document.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
-    assert.fail("no Anthropic field");
+  const label =
+    [...document.querySelectorAll("label")].find(
+      (each) => each.textContent === "Anthropic API key",
+    ) ?? assert.fail("no Anthropic field");
+  const field = label.control instanceof HTMLInputElement ? label.control : assert.fail();
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
       field,
@@ -353,4 +360,36 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
   await settle();
 
   assert.equal(fastSwitch(page).disabled, false);
+});
+
+test("a catalog that could not be read says so in the Model menu with Retry, and Retry reads it again", async () => {
+  refuseModels = true;
+  const page = await mount();
+  assert.equal(placeholders(page).length, 0, "the page does not read for ever");
+
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label^="Model: "]') ?? assert.fail()
+    ).click(),
+  );
+  const menu = document.querySelector('[role="dialog"][aria-label="Model"]') ?? assert.fail();
+  assert.equal(
+    menu.querySelector('[role="alert"]')?.textContent,
+    "The models could not be read.Retry",
+  );
+  assert.doesNotMatch(menu.textContent ?? "", /Open Settings again/u);
+  const reads = () => sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_MODELS);
+  const before = reads().length;
+
+  refuseModels = false;
+  act(() =>
+    (
+      menu.querySelector<HTMLButtonElement>('[role="alert"] button') ?? assert.fail("no Retry")
+    ).click(),
+  );
+  await settle();
+
+  assert.equal(reads().length, before + 1, "Retry asks the service for the models again");
+  assert.equal(menu.querySelector('[role="alert"]'), null);
+  assert.ok(menu.querySelectorAll('[role="option"]').length > 0, "the models are listed");
 });

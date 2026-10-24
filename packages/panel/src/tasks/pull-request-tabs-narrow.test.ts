@@ -26,14 +26,14 @@ function rowAt(width: number) {
   laid = layContainersAt({ "pull-request-tab": width });
   document.body.innerHTML = [
     '<div class="file-view pull-request-tab">',
-    '<div class="pull-request-tabs">',
+    '<div class="luke-pane-bar">',
     '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="together"></div>',
     '<div class="pull-request-review"><span class="luke-folding-button"><button class="luke-button">',
     '<span class="luke-button-words">Review</span>',
     "</button></span></div>",
     "</div></div>",
   ].join("");
-  const row = document.querySelector(".pull-request-tabs") ?? assert.fail("the row stands");
+  const row = document.querySelector(".luke-pane-bar") ?? assert.fail("the row stands");
   const review =
     document.querySelector(".luke-folding-button") ?? assert.fail("Review's press stands");
   return {
@@ -70,7 +70,7 @@ function phoneRowAt(room: "narrow" | "wide") {
   const glyph = room === "narrow" ? "" : '<span class="luke-choice-bar-icon"><svg></svg></span>';
   document.body.innerHTML = [
     `<div class="desktop-shell" data-room="${room}"><div class="file-view pull-request-tab">`,
-    '<div class="pull-request-tabs"><div class="pull-request-tab-bar">',
+    '<div class="luke-pane-bar"><div class="luke-pane-bar-middle">',
     bar,
     '<button class="luke-choice-bar-option" role="tab" aria-selected="true">',
     `${glyph}<span class="luke-choice-bar-label">Conversation</span>`,

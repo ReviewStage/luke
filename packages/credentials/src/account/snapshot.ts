@@ -1,3 +1,4 @@
+import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Schema } from "effect";
 
@@ -56,4 +57,17 @@ export const accountSnapshotSchema = Schema.Union([
     pictureUrl: Schema.optionalKey(Schema.String),
     provider: Schema.Literals(Object.values(ACCOUNT_PROVIDER)),
   }),
+]);
+
+/**
+ * What a sign-in begun from a window answers: the account it settled on, or
+ * the key of why it ended without landing, which the window says in words of
+ * its own. No sentence a provider or a client wrote ever rides it.
+ */
+export type SignInAnswer = { account: AccountSnapshot } | { failure: SignInFailure };
+
+/** A sign-in's answer as it crosses to the window that began it, the type above as a schema. */
+export const signInAnswerSchema = Schema.Union([
+  Schema.Struct({ account: accountSnapshotSchema }),
+  Schema.Struct({ failure: Schema.Literals(Object.values(SIGN_IN_FAILURE)) }),
 ]);

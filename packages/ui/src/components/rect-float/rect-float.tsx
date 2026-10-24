@@ -1,12 +1,16 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
 import { visibleViewport } from "../../visible-viewport.js";
+import { askedStyleWidth } from "../anchored-popover/anchored-popover.js";
 import {
   type Box,
   POPOVER_ALIGN,
   POPOVER_SIDE,
   type PopoverSide,
+  type PopoverWidth,
   popoverPlace,
 } from "../anchored-popover/popover-place.js";
+import { type PressAway, usePressAway } from "../anchored-popover/press-away.js";
 
 /**
  * rect-float.tsx -- the layer that stands by a box in the window rather than by a button: words selected, or a caret, with a toolbar, a list, or a field floated over or under it.
@@ -22,16 +26,23 @@ import {
  * stands by and a field in it is still inside the owner's box when it takes
  * the focus. It is measured as it is drawn, before it is painted, each time
  * it is drawn again, whenever it resizes or the window does, and whenever
- * anything scrolls, since a scroll may leave its side no room. What it
- * holds draws its own surface (`MenuSurface`).
+ * anything scrolls, since a scroll may leave its side no room. The height
+ * its side leaves it is handed to what it holds as `--luke-popover-room`,
+ * as the anchored popover's is, which a tall list bounds itself by. A press
+ * outside it is handed to its owner, who closes it unless the press lands
+ * on what it `holds`, the field whose caret it stands by say
+ * (`../anchored-popover/press-away.ts`). It stands at one of the popover's
+ * three widths where its owner names one (`POPOVER_WIDTH`), never at a
+ * width of the owner's own. What it holds draws its own surface (`MenuSurface`).
  */
 
-/** Where the layer stands in its owner's box: its corner, and the widest the room it keeps inside leaves it. */
+/** Where the layer stands in its owner's box: its corner, the widest the room it keeps inside leaves it, and the height its side leaves it. */
 interface FloatPlace {
   readonly side: PopoverSide;
   readonly left: number;
   readonly top: number;
   readonly width: number;
+  readonly room: number;
 }
 
 /** Whether two places draw the layer alike, so a scroll that moves nothing renders nothing. */
@@ -41,7 +52,8 @@ function samePlace(a: FloatPlace | undefined, b: FloatPlace): boolean {
     a.side === b.side &&
     a.left === b.left &&
     a.top === b.top &&
-    a.width === b.width
+    a.width === b.width &&
+    a.room === b.room
   );
 }
 
@@ -102,6 +114,7 @@ function placeIn(
       frame.scrollTop -
       (Number.parseFloat(margin.marginTop) || 0),
     width: place.width,
+    room: place.room,
   };
 }
 
@@ -114,16 +127,22 @@ function placeIn(
 export function RectFloat({
   anchor,
   side = POPOVER_SIDE.ABOVE,
+  width,
+  onPressAway,
+  holds,
   children,
-}: {
+}: PressAway & {
   /** The box to stand by, in window coordinates, as it stands now; none where it cannot be measured. */
   anchor: () => Box | undefined;
   side?: PopoverSide | undefined;
+  /** One of the three widths a popover asks for, drawn from its token; as wide as what it holds where none is named. */
+  width?: PopoverWidth | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<FloatPlace | undefined>(undefined);
   const measure = useRef<() => void>(() => undefined);
+  usePressAway(layer, () => undefined, { onPressAway, holds });
   measure.current = () => {
     const drawn = layer.current;
     const frame = drawn?.offsetParent;
@@ -159,11 +178,17 @@ export function RectFloat({
       ref={layer}
       className="luke-rect-float"
       data-side={place?.side ?? side}
-      style={
-        place === undefined
+      style={{
+        ...(width === undefined ? undefined : { width: askedStyleWidth(width) }),
+        ...(place === undefined
           ? undefined
-          : { left: place.left, top: place.top, maxWidth: place.width }
-      }
+          : {
+              left: place.left,
+              top: place.top,
+              maxWidth: place.width,
+              ...cssCustomProperties({ "--luke-popover-room": `${place.room}px` }),
+            }),
+      }}
     >
       {children}
     </div>

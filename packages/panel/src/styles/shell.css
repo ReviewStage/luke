@@ -2,8 +2,9 @@
    ground, insets, and width, its slide away and back, its float over the
    work and its drawer in a narrow room, the title bar's row and the toggle
    that stands in it, Luke's head over the column, the places under it, and
-   the foot under them; and the work column beside it, with the toolbar that
-   heads a page there and the room it leaves the title bar's buttons.
+   the foot under them; and the work column beside it, with the height of
+   the toolbar that heads a page there (`@luke/ui`'s `Toolbar`, which draws
+   itself) and the room it leaves the title bar's buttons.
 
    The panel lays it just before desktop.css (index.css), which restages
    these elements for each of the window's own screens. Anything else that
@@ -13,13 +14,15 @@
    a name below built from them (docs/DESIGN.md). */
 
 :root {
-  /* A top row and its hairline, its middle level with the title bar's. */
+  /* A top row and its hairline, its middle level with the title bar's, which
+     a page's toolbar (`@luke/ui`'s `Toolbar`) stands at. */
   --desktop-bar-height: calc(2 * var(--title-bar-middle) + 1px);
+  --luke-toolbar-height: var(--desktop-bar-height);
   /* A column's edge to the rows and controls it holds: the sidebar's rows, a
      top row's first and last control, Settings' page list. */
   --column-inset: var(--luke-space-12);
   /* A row's own edge to its glyph or words: a sidebar row, a tab, a menu item. */
-  --row-inset: var(--luke-space-8);
+  --row-inset: var(--luke-row-inset);
   /* Where a column's glyphs and words start, which is where a row's padding
      puts them; words drawn on no row (a page's title, the transcript, the
      code's path) start there too, so a column reads down one edge. */
@@ -96,6 +99,12 @@
   background: var(--luke-color-sidebar);
 }
 
+/* Full bleed, the sheet stands no gap in, which what is measured from the
+   window's edge reads (`--panel-toggle-clearance`). */
+.desktop-shell[data-room="narrow"] {
+  --sheet-gap: 0px;
+}
+
 /* Note that the sheet rounds its corners without clipping what it holds,
    because a menu hung in it may stand past its edge over the next column
    (an AnchoredPopover bounded by the window), and a clip would cut it off;
@@ -143,9 +152,11 @@
    padded, so the shorter row still holds them. */
 .desktop-shell:not([data-room="narrow"]) > .desktop-main {
   --desktop-bar-height: calc(2 * (var(--title-bar-middle) - var(--sheet-gap)) + 1px);
+  --luke-toolbar-height: var(--desktop-bar-height);
+  --luke-toolbar-block-inset: 0px;
 }
 
-.desktop-shell:not([data-room="narrow"]) > .desktop-main :is(.desktop-toolbar, .side-panel-bar) {
+.desktop-shell:not([data-room="narrow"]) > .desktop-main .side-panel-bar {
   padding-block: 0;
 }
 
@@ -407,44 +418,12 @@
   flex-direction: column;
 }
 
-/* A page's toolbar: one row at the one bar height the side panel's bar
-   shares, so the two bars' bottom borders are one line across the window,
-   its title or its way back at the start and the page's acts at the end. */
-.desktop-toolbar {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  min-height: var(--desktop-bar-height);
-  padding: var(--luke-space-8) var(--content-inset);
-}
-
-/* While the sidebar is folded, or a narrow room's drawer is away, the title
-   bar's buttons stand over the toolbar's start, so it starts past them. */
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
-  padding-left: var(--sidebar-toggle-clearance);
-}
-
-.desktop-toolbar-heading {
-  min-width: 0;
-  flex: 1;
-}
-
-/* Its room reaches 6px left of the words, so the title's own hover fill and
-   field ring, which start there, are not clipped. */
-.desktop-toolbar-title {
-  margin: 0 0 0 calc(-1 * var(--luke-space-6));
-  padding-left: var(--luke-space-6);
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: -0.01em;
-}
-
-.desktop-toolbar-actions {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
+/* A page's toolbar is `@luke/ui`'s `Toolbar`, which draws itself
+   (toolbar.css) at the bar height set above, the one the side panel's bar
+   shares, so the two bars' bottom borders are one line across the window.
+   While the sidebar is folded, or a narrow room's drawer is away, the title
+   bar's buttons stand over the toolbar's start, so it starts past them: the
+   room the bar reads its start from (`--luke-toolbar-start-at`). */
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main {
+  --luke-toolbar-start-at: var(--sidebar-toggle-clearance);
 }

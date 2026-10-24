@@ -1,0 +1,11 @@
+{
+  "packages/panel/src/styles/desktop.css": 1,
+  "packages/panel/src/styles/tasks.css": 2,
+  "packages/ui/src/components/button/button.css": 1,
+  "packages/ui/src/components/list-row/list-row.css": 4,
+  "packages/ui/src/components/prose/prose.css": 1,
+  "packages/ui/src/components/scroll-area/scroll-area.css": 1,
+  "packages/ui/src/components/settings-page/settings-page.css": 1,
+  "packages/ui/src/components/tabs/tabs.css": 1,
+  "packages/ui/src/components/toast/toast.css": 2
+}

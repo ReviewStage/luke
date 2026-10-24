@@ -20,23 +20,28 @@ import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { countWords, readFailedWords, TERM } from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
-  ArrowLeftIcon,
+  BackButton,
   type ComboboxGroup,
   ComboboxList,
   comboboxOptionId,
   DocumentIcon,
-  IconButton,
+  ErrorState,
   KeepFocus,
   MENU_SURFACE_INSET,
   MenuGlyph,
   type MenuKey,
   MenuKeys,
+  type MenuRow,
   MenuSurface,
+  NO_BACK_KEY,
+  POPOVER_WIDTH,
   ProviderMark,
+  RectFloat,
   Spinner,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -48,10 +53,10 @@ import {
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
+import { commandScore } from "@luke/ui/command";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
-import { defaultFilter } from "cmdk";
 import * as Atom from "effect/reactivity/Atom";
 import {
   AppWindowIcon,
@@ -69,7 +74,6 @@ import { type IntegrationToolsReads, useIntegrationTools } from "../integration-
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
-import type { MenuRow } from "../searchable-menu.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {
@@ -98,7 +102,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * highlighted row as its mention, and Escape closes the list until the caret
  * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
- * as ⌘K scores them (cmdk's own filter), files and folders first, each
+ * as ⌘K scores them (`commandScore`), files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
  * Once the words run past a space and nothing matches them, the list
  * stands aside, since they are the developer's own words rather than a
@@ -289,6 +293,8 @@ const TOOL_JOIN = " · ";
 /** The repository's skills as an `@` list offers them: as read, the ask to read them, and the pick that writes one as its `/name` chip. */
 export interface MentionSkills {
   readonly known: readonly SkillOption[] | undefined;
+  /** Whether the read came back unread, which the list says could not be read, with Retry, rather than that it is reading. */
+  readonly unread: boolean;
   readonly ask: () => void;
   readonly onChoose: (name: string) => void;
 }
@@ -339,16 +345,11 @@ const BACK_LABEL = {
   UP: "Up",
 } as const;
 
-/** The gap between the word's line and the list under it. */
-const MENU_GAP = 4;
-
-/** The list's width, as the stylesheet sets it (`.mention-menu`). */
-const MENU_WIDTH = 360;
-
-/** Where the list stands in its room: its left edge, and its top, or its foot over the word with its top left to it. */
-type MenuPlace =
-  | { readonly left: number; readonly top: number }
-  | { readonly left: number; readonly top: "auto"; readonly bottom: number };
+/** Where the crumb's way back leads, as its hint says it. */
+const BACK_PLACE = {
+  WIDEN: "all kinds",
+  UP: "the folder above",
+} as const;
 
 /** One row the list offers: what it mentions, or the skill it names, the name it is written with, and a muted detail. */
 type MentionRow = {
@@ -487,14 +488,9 @@ function backFrom(
   return typed ? undefined : { to: undefined };
 }
 
-/** A count and its noun, as a kind's row says it. */
-function counted(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 /** What the plan's row says of its sections: how many, where it holds any. */
 function sectionCount(count: number): string | undefined {
-  return count === 0 ? undefined : counted(count, "section", "sections");
+  return count === 0 ? undefined : countWords(count, TERM.SECTION);
 }
 
 /** Whether → opens the row: a kind's, which narrows the list, or a folder's, which walks into it. */
@@ -785,7 +781,7 @@ function keyed(row: MentionRow, query: string): boolean {
 function best(rows: readonly MentionRow[], query: string, most: number): readonly MentionRow[] {
   if (query.trim() === "") return rows.slice(0, most);
   return rows
-    .map((row) => ({ row, score: keyed(row, query) ? KEY_SCORE : defaultFilter(row.terms, query) }))
+    .map((row) => ({ row, score: keyed(row, query) ? KEY_SCORE : commandScore(row.terms, query) }))
     .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, most)
@@ -1038,11 +1034,12 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
     <KeepFocus className="agent-servers-page-head mention-menu-crumb">
       {back === undefined ? null : (
-        <IconButton
-          icon={<ArrowLeftIcon />}
+        <BackButton
           label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
+          place={folder === undefined ? BACK_PLACE.WIDEN : BACK_PLACE.UP}
+          command={NO_BACK_KEY}
           tabbable={false}
-          onClick={back}
+          onBack={back}
         />
       )}
       <MenuGlyph>
@@ -1060,6 +1057,22 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   );
 }
 
+/** The reads the list draws rows from that can fail, each named as its failure says it. */
+const MENTION_READ = {
+  MEMBERS: "members",
+  AGENTS: "agents",
+  FILES: "the repository's files",
+  SKILLS: "skills",
+} as const;
+
+type MentionRead = (typeof MENTION_READ)[keyof typeof MENTION_READ];
+
+/** A read of the list that failed, and the press that reads it again. */
+interface MentionReadFailure {
+  readonly read: MentionRead;
+  readonly retry: () => void;
+}
+
 /** The list itself: a narrowed list's crumb, each group's heading and rows, the highlighted one washed, and the keys it hears at its foot. */
 function MentionMenu({
   id,
@@ -1067,8 +1080,8 @@ function MentionMenu({
   groups,
   at,
   keys,
-  place,
   reading,
+  failures,
   fileCard,
   onHover,
   onChoose,
@@ -1078,20 +1091,18 @@ function MentionMenu({
   groups: readonly MentionGroup[];
   at: number;
   keys: readonly MenuKey[];
-  place: MenuPlace;
   /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
   reading: boolean;
+  /** The reads that failed, which the list says could not be read, with Retry, in place of "no match". */
+  failures: readonly MentionReadFailure[];
   fileCard: FileCardOf;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
   const rows = groups.flatMap((group) => group.rows);
+  const noted = reading || failures.length > 0;
   return (
-    <MenuSurface
-      className="searchable-menu mention-menu"
-      inset={MENU_SURFACE_INSET.NONE}
-      style={place}
-    >
+    <MenuSurface className="mention-menu" inset={MENU_SURFACE_INSET.NONE}>
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
       <ComboboxList
         id={id}
@@ -1105,8 +1116,19 @@ function MentionMenu({
         }}
         // A narrowed list's one group is named by its crumb.
         headed={crumb === undefined}
-        empty={reading ? undefined : NO_MATCH}
-        note={reading ? <Spinner delay label="Reading" /> : undefined}
+        empty={noted ? undefined : NO_MATCH}
+        note={
+          noted ? (
+            <>
+              {reading ? <Spinner delay label="Reading" /> : null}
+              {failures.map((failure) => (
+                <ErrorState key={failure.read} onRetry={failure.retry}>
+                  {readFailedWords(failure.read)}
+                </ErrorState>
+              ))}
+            </>
+          ) : undefined
+        }
       />
       <MenuKeys keys={keys} />
     </MenuSurface>
@@ -1131,6 +1153,17 @@ export const MENTION_MENU_SIDE = {
 } as const;
 
 export type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
+
+/** The box a word's list hangs by, in window coordinates: the line its first letter stands on, as the editor reported it. */
+export function wordBox(word: ComposerTrigger): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} {
+  const { left, top, bottom } = word.rect;
+  return { left, top, right: left, bottom };
+}
 
 /** A page an agent showed on the plan, as the list offers it: as the plan lists it, its id, its newest version's title and number, and when that version was written, which its row and its card say. */
 export type MentionablePage = PageLine;
@@ -1188,8 +1221,8 @@ export interface MentionablePullRequest
 /**
  * Reads the workspace's coding agents: the newest where no words are given,
  * or, found by the service, those whose title or task's name holds the
- * words, the archived ones among them; settles with none where the read
- * failed.
+ * words, the archived ones among them; rejects where the read failed, so
+ * the list says it could not read them rather than that none match.
  */
 export type MentionAgentsReader = (
   words: string | undefined,
@@ -1293,7 +1326,7 @@ function kindsOf(
           {
             from: MENTION_FROM.TASKS,
             name: MENTION_GROUP.TASKS,
-            detail: counted(tasks, "task", "tasks"),
+            detail: countWords(tasks, TERM.TASK),
           },
         ]),
     ...(pages === 0
@@ -1302,7 +1335,7 @@ function kindsOf(
           {
             from: MENTION_FROM.PAGES,
             name: MENTION_GROUP.PAGES,
-            detail: counted(pages, "page", "pages"),
+            detail: countWords(pages, TERM.PAGE),
           },
         ]),
     ...(agents
@@ -1314,7 +1347,9 @@ function kindsOf(
             detail:
               members === undefined
                 ? source.workspace || undefined
-                : counted(members.agents.length, "agent", "agents"),
+                : members.agents.length === 0
+                  ? undefined
+                  : countWords(members.agents.length, TERM.AGENT),
           },
         ]
       : []),
@@ -1324,7 +1359,7 @@ function kindsOf(
           {
             from: MENTION_FROM.PEOPLE,
             name: MENTION_GROUP.PEOPLE,
-            detail: counted(people, "member", "members"),
+            detail: countWords(people, TERM.MEMBER),
           },
         ]),
     ...(pullRequests === 0
@@ -1333,7 +1368,7 @@ function kindsOf(
           {
             from: MENTION_FROM.PULL_REQUESTS,
             name: MENTION_GROUP.PULL_REQUESTS,
-            detail: counted(pullRequests, "pull request", "pull requests"),
+            detail: countWords(pullRequests, TERM.PULL_REQUEST),
           },
         ]),
     ...(known.length === 0
@@ -1342,7 +1377,7 @@ function kindsOf(
           {
             from: MENTION_FROM.SKILLS,
             name: MENTION_GROUP.SKILLS,
-            detail: counted(known.length, "skill", "skills"),
+            detail: countWords(known.length, TERM.SKILL),
           },
         ]),
     { from: MENTION_FROM.DATES, name: MENTION_GROUP.DATES, detail: DATES_DETAIL },
@@ -1367,9 +1402,10 @@ function kindsOf(
 
 /**
  * The `@` list for an editor on a task's page: its rows read from the
- * plan's words as they stand and the repository's paths, placed by the word
- * in `room`, and a pick handed to `onChoose` as the mention's node; a list
- * that never opens where there is no task to offer. Where channels are
+ * plan's words as they stand and the repository's paths, hung by the word
+ * (`@luke/ui`'s `RectFloat`) and closed by a press outside it and `room`,
+ * and a pick handed to `onChoose` as the mention's node; a list that never
+ * opens where there is no task to offer. Where channels are
  * handed, a `#` word opens the same list on them.
  */
 export function useMentionPicker({
@@ -1394,7 +1430,7 @@ export function useMentionPicker({
   members?: MentionMembers | undefined;
   /** The channels a `#` word names, where the words are a chat message's; none elsewhere, where a `#` opens nothing. */
   channels?: MentionChannels | undefined;
-  /** The element the list is placed in, by the word. */
+  /** The box the editor stands in: a press in it is the editor's, and the date picker hangs in it. */
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
@@ -1412,7 +1448,8 @@ export function useMentionPicker({
     planId: string;
     workspaceId: string | undefined;
     repository: string | null;
-    paths: readonly RepositoryPath[];
+    /** The paths read; none where the read failed, which Retry clears to read again. */
+    paths: readonly RepositoryPath[] | undefined;
   }>();
 
   const taskId = source?.taskId ?? NO_TASK;
@@ -1445,36 +1482,44 @@ export function useMentionPicker({
     setNarrowing(undefined);
   }, [inWord]);
 
-  // The repository's paths are read the first time the list opens on the task, and again once its repository changes.
-  const read =
+  // The repository's paths are read the first time the list opens on the task, and again once its repository changes or Retry asks.
+  const readOf =
     paths?.planId === taskId && paths.workspaceId === workspaceId && paths.repository === repository
-      ? paths.paths
+      ? paths
       : undefined;
+  const read = readOf?.paths;
+  const pathsFailed = readOf !== undefined && readOf.paths === undefined;
   useEffect(() => {
-    if (!open || read !== undefined) return;
+    if (!open || readOf !== undefined) return;
     const key = treeKey(taskId, workspaceId, repository);
     if (key === undefined) return;
     let live = true;
-    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then(
-      (answer) => {
-        if (!live) return;
-        const entries = "folder" in answer ? answer.folder.entries : [];
-        setPaths({
-          planId: taskId,
-          workspaceId,
-          repository,
-          paths: entries.map((entry) => ({
-            path: entry.name,
-            folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
-          })),
-        });
-      },
-      () => undefined,
-    );
+    // Note that a refusal and a rejection both leave the paths unread and the read failed, never an empty repository.
+    const failed = () => {
+      if (live) setPaths({ planId: taskId, workspaceId, repository, paths: undefined });
+    };
+    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then((answer) => {
+      if (!live) return;
+      if (!("folder" in answer)) return failed();
+      setPaths({
+        planId: taskId,
+        workspaceId,
+        repository,
+        paths: answer.folder.entries.map((entry) => ({
+          path: entry.name,
+          folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
+        })),
+      });
+    }, failed);
     return () => {
       live = false;
     };
-  }, [open, read, act, taskId, workspaceId, repository]);
+  }, [open, readOf, act, taskId, workspaceId, repository]);
+
+  // A failed read of the paths is read again by the next word that opens the list.
+  useEffect(() => {
+    if (!open && pathsFailed) setPaths(undefined);
+  }, [open, pathsFailed]);
 
   // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
   // that answered is kept, and one that failed is asked again by the next word.
@@ -1521,19 +1566,27 @@ export function useMentionPicker({
     readonly reader: MentionAgentsReader;
     readonly wordAt: number;
     readonly words: string | undefined;
-    readonly agents: readonly MentionableAgent[];
+    /** The agents read; none where the read failed, which Retry clears to read again. */
+    readonly agents: readonly MentionableAgent[] | undefined;
   }>();
   const agentsRead =
     workspaceAgents?.reader === readAgents && workspaceAgents?.wordAt === wordAt
       ? workspaceAgents
       : undefined;
   const wantsAgents = agentsRead === undefined || agentsRead.words !== words;
+  const agentsFailed =
+    agentsRead !== undefined && agentsRead.words === words && agentsRead.agents === undefined;
   useEffect(() => {
     if (!wantsAgents || readAgents === undefined || wordAt === undefined) return;
     let live = true;
-    readAgents(words).then((agents) => {
-      if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents });
-    });
+    readAgents(words).then(
+      (agents) => {
+        if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents });
+      },
+      () => {
+        if (live) setWorkspaceAgents({ reader: readAgents, wordAt, words, agents: undefined });
+      },
+    );
     return () => {
       live = false;
     };
@@ -1590,8 +1643,23 @@ export function useMentionPicker({
     open &&
     ((members === undefined && directory.membersReading) ||
       (readAgents !== undefined && wantsAgents) ||
-      (read === undefined && treeKey(taskId, workspaceId, repository) !== undefined) ||
-      (skills !== undefined && skills.known === undefined));
+      (read === undefined &&
+        !pathsFailed &&
+        treeKey(taskId, workspaceId, repository) !== undefined) ||
+      (skills !== undefined && skills.known === undefined && !skills.unread));
+  // The list says a read could not be read, never that nothing matches, and Retry reads it again.
+  const failures: readonly MentionReadFailure[] = open
+    ? [
+        ...(members === undefined && directory.membersRefused
+          ? [{ read: MENTION_READ.MEMBERS, retry: directory.retry }]
+          : []),
+        ...(readAgents !== undefined && agentsFailed
+          ? [{ read: MENTION_READ.AGENTS, retry: () => setWorkspaceAgents(undefined) }]
+          : []),
+        ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => setPaths(undefined) }] : []),
+        ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
+      ]
+    : [];
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
   const shown = naming || (open && (rows.length > 0 || !/\s/u.test(term.trim())));
   const held =
@@ -1659,6 +1727,11 @@ export function useMentionPicker({
     } else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
   };
 
+  // The list closed by Escape or a press away stays closed until the caret leaves its word.
+  const closeList = () => {
+    if (said !== undefined) setClosed({ word: said.word, start: said.trigger.start });
+  };
+
   // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
   // ⌘Enter writes the highlighted row as a bare Enter does.
   const activeId = rows.length === 0 ? undefined : comboboxOptionId(listId, at);
@@ -1680,9 +1753,7 @@ export function useMentionPicker({
       const row = rows[at];
       if (row !== undefined) choose(row);
     },
-    onEscape: () => {
-      if (said !== undefined) setClosed({ word: said.word, start: said.trigger.start });
-    },
+    onEscape: () => closeList(),
   });
 
   // The list's own keys come first: ⌫ widens, → opens, Tab writes, and a
@@ -1721,16 +1792,6 @@ export function useMentionPicker({
     MENU_KEY.CLOSE,
   ];
 
-  // The list stands by the word's line, on the side asked, inside the room's width.
-  // Note that the room is measured only while the list is shown, since a measure in a draw lays out the whole window.
-  const box = room.current;
-  const placed = shown ? box?.getBoundingClientRect() : undefined;
-  const placeOf = (word: ComposerTrigger, at: DOMRect, width: number): MenuPlace => {
-    const left = Math.max(0, Math.min(word.rect.left - at.left, width - MENU_WIDTH));
-    return side === MENTION_MENU_SIDE.BELOW
-      ? { left, top: word.rect.bottom - at.top + MENU_GAP }
-      : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
-  };
   // Note that a file's card is made as its row is drawn, because the repository's paths are thousands and only the few listed hang one.
   const shownCode = source?.shownCode ?? NO_SHOWN_CODE;
   const openFiles = source?.openFiles ?? NO_OPEN_FILES;
@@ -1741,8 +1802,15 @@ export function useMentionPicker({
     const commit = openFiles.find((file) => file.path === path)?.commit;
     return <FileCard path={path} note={newestFileNote(shownCode, path, { repository, commit })} />;
   };
-  const list =
-    !shown || box === null || placed === undefined ? null : (
+  // The list hangs by the word's line, on the side asked; a press outside it and the room closes it as Escape does.
+  const list = !shown ? null : (
+    <RectFloat
+      anchor={() => wordBox(trigger)}
+      side={side}
+      width={POPOVER_WIDTH.REGULAR}
+      onPressAway={closeList}
+      holds={(target) => room.current?.contains(target) === true}
+    >
       <MentionMenu
         id={listId}
         crumb={
@@ -1753,13 +1821,14 @@ export function useMentionPicker({
         groups={groups}
         at={at}
         keys={keys}
-        place={placeOf(trigger, placed, box.clientWidth)}
         reading={reading}
+        failures={failures}
         fileCard={fileCard}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}
       />
-    );
+    </RectFloat>
+  );
 
   const menu = (
     <>

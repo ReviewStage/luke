@@ -13,10 +13,10 @@ import type {
   SettingsResetScope,
 } from "@luke/settings/wire";
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
-import { BUTTON_VARIANT, Button, ResetIcon } from "@luke/ui";
+import { BUTTON_VARIANT, Button, ResetIcon, STATUS_TONE } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** What the toast says once a page's reset landed, by the group it reset. */
@@ -119,7 +119,7 @@ function ResetPageButton({
     );
     return writes.reset(asked, unseen).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         return result;
       }
       // Note that a kept row never enters the Undo, because another window may have changed it since this page read it.
@@ -129,13 +129,9 @@ function ResetPageButton({
       const undo = () =>
         writeBack(writes, held).then((taken) => {
           if (taken) return;
-          toast({ words: UNDO_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+          toast({ words: UNDO_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         });
-      toast({
-        words: RESET_NOTES[asked],
-        tone: TOAST_TONE.DONE,
-        action: { label: UNDO_LABEL, onPress: undo },
-      });
+      toast(undoToast(RESET_NOTES[asked], undo));
       return result;
     });
   };
@@ -144,7 +140,8 @@ function ResetPageButton({
     <Button
       variant={BUTTON_VARIANT.QUIET}
       icon={<ResetIcon />}
-      disabled={busy}
+      busy={busy}
+      busyLabel="Resetting"
       onClick={() => run(scope)}
     >
       Reset to defaults

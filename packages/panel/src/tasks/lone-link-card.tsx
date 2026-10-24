@@ -1,8 +1,8 @@
 import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
 import { INBOX_BLOCK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { LONE_LINK, type LoneLink, loneLinkOf } from "@luke/features/lone-link";
-import { LINK_PLACE } from "@luke/features/luke-link";
 import {
   decodeMention,
   isBareLink,
