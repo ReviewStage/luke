@@ -1,23 +1,32 @@
-import { Button, GAP, ReadableControls, Stack, Text } from "@luke/ui";
+import { Checkbox, GAP, ReadableControls, Stack, Text } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * readable-controls.tsx -- a control whose words may be selected: a press
- * that selected words holds back its press, and one that did not presses
- * as any control does.
+ * readable-controls.tsx -- a checkbox whose words may be selected: a drag
+ * across them selects them and holds back the toggle, and a plain click
+ * toggles as any checkbox does, the count under it saying which happened.
  */
 
 function ReadableControlsExample(): React.JSX.Element {
-  const [pressed, setPressed] = useState(0);
+  const [checked, setChecked] = useState(false);
+  const [toggles, setToggles] = useState(0);
   return (
-    <CatalogSection id="readable-controls" title="Select the words, or press">
+    <CatalogSection id="readable-controls" title="Select the words, or toggle">
       <Stack gap={GAP.CONTROL}>
         <ReadableControls>
-          <Button onClick={() => setPressed((count) => count + 1)}>Open the pull request</Button>
+          <Checkbox
+            checked={checked}
+            onChange={(next) => {
+              setChecked(next);
+              setToggles((count) => count + 1);
+            }}
+          >
+            Open the pull request when the checks pass
+          </Checkbox>
         </ReadableControls>
-        <Text>Pressed {pressed} times.</Text>
+        <Text>Toggled {toggles} times.</Text>
       </Stack>
     </CatalogSection>
   );
