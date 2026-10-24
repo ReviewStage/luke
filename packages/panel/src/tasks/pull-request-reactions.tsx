@@ -24,6 +24,7 @@
  */
 
 import type { GitHubPerson, ReactionGroup } from "@luke/features/coding-agent-wire";
+import { formatCount } from "@luke/features/number-format";
 import {
   PULL_REQUEST_ACTION,
   REACTION,
@@ -46,7 +47,6 @@ import {
   Tooltip,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
-import { formatLocaleCount } from "@luke/ui/time-format";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useMemberDirectory } from "../member-directory.js";
@@ -176,7 +176,7 @@ function ReactionPill({
     <>
       <span aria-hidden="true">{face.emoji}</span>
       <span className="pull-request-reaction-count" aria-hidden="true">
-        {formatLocaleCount(reaction.count)}
+        {formatCount(reaction.count)}
       </span>
     </>
   );

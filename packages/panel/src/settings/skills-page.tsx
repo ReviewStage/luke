@@ -7,6 +7,7 @@ import {
   type InstalledSkillFailedView,
 } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { formatBytes } from "@luke/features/number-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -67,7 +68,6 @@ import {
   type SkillRow,
   shareFailureLine,
   shareQuestion,
-  sizeText,
   skillActions,
   skillGroups,
   withSkill,
@@ -225,7 +225,7 @@ function SkillFileDialog({
             <Facts>
               {read.content.files.map((file) => (
                 <Fact key={file.path} label={file.path}>
-                  {sizeText(file.bytes)}
+                  {formatBytes(file.bytes)}
                 </Fact>
               ))}
             </Facts>

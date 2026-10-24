@@ -50,7 +50,7 @@ test("a weekday is the next one after today; next is the one in next week, last 
 test("next week, next month, and a count from today are counted from today", () => {
   assert.equal(startOf("next week"), "2026-10-26");
   assert.equal(startOf("next month"), "2026-11-01");
-  assert.equal(startOf("in 3 days"), "2026-10-22");
+  assert.equal(startOf("in 3d"), "2026-10-22");
   assert.equal(startOf("in 2w"), "2026-11-02");
   assert.equal(startOf("in 4 months"), "2027-02-19");
   assert.equal(startOf("10 days ago"), "2026-10-09");
@@ -187,14 +187,11 @@ test("a card says the date in full and how far it stands from now", () => {
     "Tuesday, October 20, 2026 at 3:00 PM PDT",
   );
   assert.equal(dateDistance({ start: "2026-10-19" }, NOW, LOS_ANGELES), "today");
-  assert.equal(dateDistance({ start: "2026-10-23" }, NOW, LOS_ANGELES), "in 4 days");
-  assert.equal(dateDistance({ start: "2026-10-16" }, NOW, LOS_ANGELES), "3 days ago");
-  assert.equal(
-    dateDistance({ start: "2026-10-19T10:30-07:00" }, NOW, LOS_ANGELES),
-    "in 30 minutes",
-  );
-  assert.equal(dateDistance({ start: "2026-10-19T07:00-07:00" }, NOW, LOS_ANGELES), "3 hours ago");
-  assert.equal(dateDistance({ start: "2026-10-22T07:00-07:00" }, NOW, LOS_ANGELES), "in 3 days");
+  assert.equal(dateDistance({ start: "2026-10-23" }, NOW, LOS_ANGELES), "in 4d");
+  assert.equal(dateDistance({ start: "2026-10-16" }, NOW, LOS_ANGELES), "3d ago");
+  assert.equal(dateDistance({ start: "2026-10-19T10:30-07:00" }, NOW, LOS_ANGELES), "in 30m");
+  assert.equal(dateDistance({ start: "2026-10-19T07:00-07:00" }, NOW, LOS_ANGELES), "3h ago");
+  assert.equal(dateDistance({ start: "2026-10-22T07:00-07:00" }, NOW, LOS_ANGELES), "in 3d");
 });
 
 test("a list narrowed to dates offers today, tomorrow, and next Monday", () => {

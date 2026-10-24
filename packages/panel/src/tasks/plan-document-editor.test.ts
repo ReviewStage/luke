@@ -22,6 +22,7 @@ import {
 } from "../plan-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -114,7 +115,8 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  // A document arriving is drawn at once under reduced motion, which jsdom has no answer to.
+  // A document arriving is drawn at once where motion is held still.
+  holdMotion();
   const ignore = () => undefined;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -123,6 +125,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
   vi.restoreAllMocks();

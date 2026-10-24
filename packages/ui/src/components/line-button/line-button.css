@@ -22,9 +22,9 @@
     user-select: none;
     cursor: pointer;
     transition:
-      color var(--luke-duration-hover) ease,
-      background-color var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease;
+      color var(--luke-duration-hover) var(--luke-motion-exit),
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* A summary draws no marker of its own: a row's chevron, where it has

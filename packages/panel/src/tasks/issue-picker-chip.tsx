@@ -3,6 +3,7 @@ import { type GitHubIssuePick, isOutsideAuthor } from "@luke/features/github-rep
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { sinceText } from "@luke/features/time-format";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
   Badge,
@@ -19,7 +20,6 @@ import {
   useMinute,
 } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
-import { sinceText } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";

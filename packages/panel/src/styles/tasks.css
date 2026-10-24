@@ -134,16 +134,16 @@
 }
 
 /* The caret waiting where the last word went in, blinking as an editor's
-   idle cursor does, and held by `--loop-motion` like every animation with no
+   idle cursor does, and held by `--luke-loop-motion` like every animation with no
    end of its own. */
 .plan-caret-resting .markdown-caret {
   animation: plan-caret-blink 1060ms steps(1, end) infinite;
-  animation-play-state: var(--loop-motion);
+  animation-play-state: var(--luke-loop-motion);
 }
 
 /* The unit the caret is typing in: a small ring in the accent turning after
    its heading on the window's one spinner turn (`spinner.tsx`), held by
-   `--loop-motion` like every animation with no end of its own and still
+   `--luke-loop-motion` like every animation with no end of its own and still
    reading as work under way while held. */
 .plan-writing > .luke-markdown-heading:first-child::after {
   display: inline-block;
@@ -156,7 +156,7 @@
   border-radius: 50%;
   vertical-align: 0.05em;
   animation: luke-spinner-turn 900ms linear infinite;
-  animation-play-state: var(--loop-motion);
+  animation-play-state: var(--luke-loop-motion);
   content: "";
 }
 
@@ -174,7 +174,7 @@
   inset: -2px;
   border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) ease-out both;
+  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) var(--luke-motion-exit) both;
   content: "";
   pointer-events: none;
 }
@@ -192,7 +192,7 @@
   inset: -4px;
   border-radius: var(--luke-radius-8);
   background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
-  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) ease-out both;
+  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) var(--luke-motion-exit) both;
   content: "";
   pointer-events: none;
 }
@@ -331,7 +331,7 @@
   line-height: var(--luke-type-caption-leading);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--luke-duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .plan-unit-attributed:focus-within .plan-unit-byline {
@@ -354,7 +354,7 @@
   flex: none;
   opacity: 0;
   pointer-events: auto;
-  transition: opacity var(--luke-duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .plan-unit-attributed:focus-within .plan-unit-more,
@@ -1638,7 +1638,7 @@
    typing bobs it. It is a compact neutral arrowhead on a soft neutral halo,
    lighter over a dark page, so it reads on any page, an accent button
    included. The rock and the bob are endless loops held by
-   --loop-motion, so their periods may be literals (docs/DESIGN.md). */
+   --luke-loop-motion, so their periods may be literals (docs/DESIGN.md). */
 .cloud-browser-stage {
   position: relative;
   flex: none;
@@ -1653,7 +1653,7 @@
   translate: var(--cloud-browser-cursor-x) var(--cloud-browser-cursor-y);
   transition:
     translate var(--luke-duration-fast) var(--luke-spring-fast),
-    opacity var(--luke-duration-quick) ease;
+    opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .cloud-browser-cursor[data-shown] {
@@ -1661,7 +1661,7 @@
 }
 
 .cloud-browser-cursor[data-still] {
-  transition: opacity var(--luke-duration-quick) ease;
+  transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .cloud-browser-cursor-rock {
@@ -1684,7 +1684,7 @@
 
 .cloud-browser-cursor[data-shown]:not([data-still]) .cloud-browser-cursor-rock {
   animation: cloud-browser-cursor-rock 1.2s ease-in-out infinite;
-  animation-play-state: var(--loop-motion);
+  animation-play-state: var(--luke-loop-motion);
 }
 
 .cloud-browser-cursor-arrow {
@@ -1721,13 +1721,13 @@
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
-  animation: cloud-browser-cursor-press var(--luke-duration-fast) ease-in-out
+  animation: cloud-browser-cursor-press var(--luke-duration-fast) var(--luke-motion-exit)
     var(--luke-duration-fast) backwards;
 }
 
 .cloud-browser-cursor[data-shown][data-kind="type"]:not([data-still]) .cloud-browser-cursor-arrow {
   animation: cloud-browser-cursor-type 0.6s ease-in-out infinite;
-  animation-play-state: var(--loop-motion);
+  animation-play-state: var(--luke-loop-motion);
 }
 
 .cloud-browser-cursor-ripple {
@@ -1740,7 +1740,7 @@
   border: calc(var(--luke-space-2) / 2) solid var(--agent-pointer);
   border-radius: 50%;
   opacity: 0;
-  animation: cloud-browser-cursor-ripple var(--luke-duration-shape) ease-out
+  animation: cloud-browser-cursor-ripple var(--luke-duration-shape) var(--luke-motion-exit)
     var(--luke-duration-fast) backwards;
 }
 
@@ -1910,7 +1910,7 @@
 
 .diff-list-fold {
   transform: rotate(90deg);
-  transition: transform var(--luke-duration-quick) ease;
+  transition: transform var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .diff-list-head[data-collapsed] .diff-list-fold {
@@ -2847,7 +2847,7 @@
   inset: calc((var(--luke-scroll-band) - var(--luke-control-height)) / 2) 0;
   border-radius: var(--luke-control-radius);
   content: "";
-  transition: background-color var(--luke-duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .pull-request-section-fold
@@ -2859,7 +2859,7 @@
   flex: 1 1 auto;
   margin: 0;
   padding: 0;
-  transition: color var(--luke-duration-hover) ease;
+  transition: color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .pull-request-section-fold
@@ -3590,7 +3590,7 @@
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   white-space: nowrap;
-  transition: background-color var(--luke-duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .annotation-card-fold > .luke-disclosure-summary:hover {
@@ -4732,7 +4732,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todo-words {
   min-width: 0;
   overflow-wrap: anywhere;
-  transition: color var(--luke-duration-quick) var(--luke-motion-pane);
+  transition: color var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .todo-item[data-todo-status="done"] > .todo-words {
@@ -6489,7 +6489,7 @@ svg.lucide {
   background: var(--comment-mark);
   color: inherit;
   cursor: pointer;
-  transition: background var(--luke-duration-hover) ease;
+  transition: background var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .plan-comment-mark:hover,
@@ -6540,7 +6540,7 @@ svg.lucide {
   top: 0;
   right: 0;
   left: 0;
-  animation: luke-menu-arrive var(--luke-duration-quick) ease-out backwards;
+  animation: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards;
 }
 
 /* A card already in the margin travels to its next place, as threads above
@@ -6558,7 +6558,7 @@ svg.lucide {
   position: absolute;
   left: calc(100% + var(--luke-space-2));
   opacity: 0;
-  transition: opacity var(--luke-duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .comment-block-button:focus-within {
@@ -6742,11 +6742,11 @@ svg.lucide {
   display: flex;
   margin-right: calc(var(--luke-space-6) * -1);
   opacity: 0;
-  transition: opacity var(--luke-duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .comment-head-end > .comment-time {
-  transition: opacity var(--luke-duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .comment-tools:focus-within,

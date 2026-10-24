@@ -44,8 +44,8 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   [data-luke-profile="desktop"] .luke-choice-bar-option {

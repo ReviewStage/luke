@@ -19,6 +19,7 @@ import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
 } from "@luke/features/tasks-view";
+import { dayAndTimeText } from "@luke/features/time-format";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_PHOTO_BOUNDS,
@@ -43,7 +44,6 @@ import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, SettingsPage } from "@luke/ui";
-import { dayAndTimeText } from "@luke/ui/time-format";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";

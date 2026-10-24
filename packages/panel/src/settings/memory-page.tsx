@@ -1,4 +1,5 @@
 import type { MemorySummary } from "@luke/features/memory-wire";
+import { dayText } from "@luke/features/time-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
@@ -18,7 +19,6 @@ import {
   TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
-import { dayText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";

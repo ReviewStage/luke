@@ -639,18 +639,30 @@ export function AutomationCard({
   );
 }
 
+/** An actor of the kind given. */
+type ActorOf<K extends Actor["kind"]> = Extract<Actor, { readonly kind: K }>;
+
+/** An actor with no card of its own, whose name stands as a pill. */
+const NO_ACTOR_CARD = (): undefined => undefined;
+
+/** The card each kind of actor hangs where the place naming it adds nothing, one entry per kind, so a kind added fails to compile until it says. */
+const ACTOR_CARD: { readonly [K in Actor["kind"]]: (actor: ActorOf<K>) => ReactNode } = {
+  [ACTOR_KIND.PERSON]: (actor) => <PersonCard actor={actor} />,
+  [ACTOR_KIND.SOMEONE]: (actor) => <SomeoneCard actor={actor} />,
+  [ACTOR_KIND.GITHUB]: (actor) => <GitHubCard actor={actor} />,
+  [ACTOR_KIND.LUKE]: NO_ACTOR_CARD,
+  [ACTOR_KIND.AGENT]: NO_ACTOR_CARD,
+  [ACTOR_KIND.AUTOMATION]: NO_ACTOR_CARD,
+};
+
+/** An actor's card drawn through its kind's own entry. */
+function actorCardOf<K extends Actor["kind"]>(kind: K, actor: ActorOf<K>): ReactNode {
+  return ACTOR_CARD[kind](actor);
+}
+
 /** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
 export function actorCard(actor: Actor): ReactNode {
-  switch (actor.kind) {
-    case ACTOR_KIND.PERSON:
-      return <PersonCard actor={actor} />;
-    case ACTOR_KIND.SOMEONE:
-      return <SomeoneCard actor={actor} />;
-    case ACTOR_KIND.GITHUB:
-      return <GitHubCard actor={actor} />;
-    default:
-      return undefined;
-  }
+  return actorCardOf(actor.kind, actor);
 }
 
 /**

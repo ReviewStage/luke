@@ -83,6 +83,7 @@
     "./picture-wire": "./src/picture-wire.js",
     "./pin-order": "./src/pin-order.js",
     "./place-chip-model": "./src/place-chip-model.js",
+    "./thing-kind": "./src/thing-kind.js",
     "./plan-attachment-link": "./src/plan-attachment-link.js",
     "./inbox-attachment-link": "./src/inbox-attachment-link.js",
     "./lone-link": "./src/lone-link.js",
@@ -156,7 +157,9 @@
     "./automation-list-model": "./src/automation-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
     "./terminal-store": "./src/terminal-store.js",
-    "./trigger-catalog": "./src/trigger-catalog.js"
+    "./trigger-catalog": "./src/trigger-catalog.js",
+    "./time-format": "./src/time-format.js",
+    "./number-format": "./src/number-format.js"
   },
   "types": "./src/index.ts",
   "scripts": {

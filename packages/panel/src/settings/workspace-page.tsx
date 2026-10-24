@@ -3,6 +3,7 @@ import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
 } from "@luke/features/sentry-install-wire";
+import { dayAndTimeText } from "@luke/features/time-format";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
@@ -70,7 +71,6 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
-import { dayAndTimeText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,

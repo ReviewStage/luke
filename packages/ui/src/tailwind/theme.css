@@ -99,25 +99,25 @@
   --radius-control-compact: calc(var(--luke-control-radius) - var(--luke-space-2));
   --radius-inline-edit: calc(var(--luke-radius-6) - 1px);
   --shadow-selected-edge: inset 0 0 0 1px var(--luke-color-border-selected);
-  --ease-plain: ease;
+  --ease-plain: var(--luke-motion-exit);
   /* A field turning wrong shakes once; an arriving part fades in, a clear
      grows in and shrinks out, an error drops into its line, and a count
      ticks in the way it moved. */
   --animate-field-shake: field-shake var(--luke-duration-fast) var(--luke-motion-exit);
-  --animate-arrive: arrive-fade var(--luke-duration-quick) ease-out backwards;
+  --animate-arrive: arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
   --animate-leave: leave-fade var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   --animate-pop-in:
-    arrive-fade var(--luke-duration-quick) ease-out backwards,
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
     pop-grow var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   --animate-pop-out: pop-out var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   --animate-drop-in:
-    arrive-fade var(--luke-duration-quick) ease-out,
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit),
     drop-in var(--luke-duration-fast) var(--luke-spring-fast);
   --animate-tick-up:
-    arrive-fade var(--luke-duration-quick) ease-out backwards,
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
     tick-up var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   --animate-tick-down:
-    arrive-fade var(--luke-duration-quick) ease-out backwards,
+    arrive-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
     tick-down var(--luke-duration-fast) var(--luke-spring-fast) backwards;
 
   @keyframes field-shake {
@@ -243,7 +243,7 @@
      dropped and named again replays); a hung panel arrives and drops as a
      menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
      out once seen. */
-  --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) ease-out;
+  --animate-dialog-scrim: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
   --animate-dialog-in:
     luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
     luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast);

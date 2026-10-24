@@ -1,4 +1,5 @@
 import type { PlanEditor } from "@luke/features/task-wire";
+import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
 import {
   Badge,
@@ -10,7 +11,6 @@ import {
   useMinute,
   WaveformIcon,
 } from "@luke/ui";
-import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/ui/time-format";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { PhoneOffIcon } from "lucide-react";
 import type { ReactNode } from "react";

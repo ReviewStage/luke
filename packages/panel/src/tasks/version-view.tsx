@@ -1,3 +1,4 @@
+import { dayAndTimeText, momentText } from "@luke/features/time-format";
 import {
   BUTTON_VARIANT,
   Button,
@@ -19,7 +20,6 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
-import { dayAndTimeText, momentText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, UNDO_LABEL } from "../toast.js";

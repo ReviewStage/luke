@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
-import { AlertIcon, CircleCheckIcon, InboxIcon } from "../../face/glyphs.js";
+import { AlertIcon, CircleCheckIcon, InboxIcon } from "../../icons/lucide-glyphs.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";

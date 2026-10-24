@@ -121,7 +121,7 @@ const HINT_REST = Duration.millis(MOTION_DELAY_MS.HINT);
  * that a pointer moving on has it gone before it looks for it, as Radix's
  * and GitHub's hover cards wait.
  */
-const CARD_LINGER = Duration.millis(180);
+const CARD_LINGER = Duration.millis(MOTION_DELAY_MS.SETTLE);
 
 /**
  * What a press may land on that is a control of its own: a tap works it

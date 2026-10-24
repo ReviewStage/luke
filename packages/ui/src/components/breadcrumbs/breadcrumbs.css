@@ -92,8 +92,8 @@
     color: var(--luke-color-text-muted);
     font: inherit;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-breadcrumb-button:hover,
@@ -112,7 +112,7 @@
      rise, and its tokens hold the fade still. */
   .luke-breadcrumbs li[data-motion="arriving"] {
     animation:
-      luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-breadcrumb-rise var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
@@ -122,7 +122,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .luke-breadcrumbs li[data-motion="arriving"] {
-      animation: luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards;
+      animation: luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards;
     }
   }
 

@@ -1,3 +1,4 @@
+import { formatCount } from "@luke/features/number-format";
 import { Fragment, type ReactNode } from "react";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 
@@ -56,7 +57,7 @@ export function CountParts({ parts }: { parts: readonly CountPart[] }): React.JS
 /** The parts of a diff's line count: `+additions` in the complete tone and `−deletions` in the danger tone. */
 export function linesCount(additions: number, deletions: number): readonly CountPart[] {
   return [
-    { text: `+${additions.toLocaleString()}`, tone: STATUS_TONE.COMPLETE },
-    { text: `−${deletions.toLocaleString()}`, tone: STATUS_TONE.DANGER },
+    { text: `+${formatCount(additions)}`, tone: STATUS_TONE.COMPLETE },
+    { text: `−${formatCount(deletions)}`, tone: STATUS_TONE.DANGER },
   ];
 }

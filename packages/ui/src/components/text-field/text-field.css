@@ -24,8 +24,8 @@
     line-height: var(--luke-type-body-leading);
     font-weight: var(--luke-type-body-weight);
     transition:
-      border-color var(--luke-duration-hover) ease,
-      background-color var(--luke-duration-hover) ease;
+      border-color var(--luke-duration-hover) var(--luke-motion-exit),
+      background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-text-field::placeholder {

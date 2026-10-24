@@ -1,5 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { callHeading, WORKED_SEPARATOR } from "@luke/features/time-format";
 import {
   CARD_CORNER,
   CARD_ELEMENT,
@@ -12,7 +13,6 @@ import {
   SCROLL_FADE_INSET,
   Tooltip,
 } from "@luke/ui";
-import { callHeading, WORKED_SEPARATOR } from "@luke/ui/time-format";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,

@@ -62,6 +62,7 @@ import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN, TURN_STATUS } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { keptAfterResponse } from "../../http/after-response.js";
 import {
   connectWorkspaceGitHub,
@@ -2284,6 +2285,49 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const sent = yield* Fiber.join(sending);
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+      }),
+  );
+  it.effect(
+    "each message counts how it reached the runner: written to the runner up, relaunched in a sandbox still up, or resumed from its snapshot",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const analytics = recordingProductAnalytics();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(
+          Effect.provide(Layer.merge(services(api), analytics.layer)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+
+        yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
+        // The runner exited, its sandbox still up.
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        sequence.next = 10;
+        yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+        // The launch ended, and its END stopped the sandbox.
+        sequence.next = 20;
+        yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 19,
+        }).pipe(Effect.provide(api.layer));
+        yield* sessions.send(opened.sessionId, message(agent, "And the changelog."));
+
+        assert.deepEqual(
+          analytics.recorded
+            .filter((event) => event.name === SERVER_EVENT.AGENT_HANDOFF)
+            .map((event) => ({ userId: event.userId, ...event.properties })),
+          [
+            { userId, harness: "claude_code", path: "warm", turn_running: false },
+            { userId, harness: "claude_code", path: "relaunched", turn_running: false },
+            { userId, harness: "claude_code", path: "resumed", turn_running: false },
+          ],
+        );
       }),
   );
 });

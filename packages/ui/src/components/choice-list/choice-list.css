@@ -88,7 +88,7 @@
     line-height: var(--luke-type-body-leading);
     text-align: left;
     cursor: pointer;
-    transition: background-color var(--luke-duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   [data-luke-profile="desktop"] .luke-choice {
@@ -198,8 +198,8 @@
     border: 1.5px solid var(--luke-color-text-muted);
     border-radius: var(--luke-space-4);
     transition:
-      background-color var(--luke-duration-hover) ease,
-      border-color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      border-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-choice-control[data-shape="radio"] {
@@ -292,7 +292,7 @@
     border-radius: 50%;
     background: var(--luke-color-border);
     box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
-    transition: box-shadow var(--luke-duration-hover) ease;
+    transition: box-shadow var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-choice-list[data-look="picture"] .luke-choice-mark img {
