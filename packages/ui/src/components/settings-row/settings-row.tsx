@@ -17,7 +17,10 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * one `ErrorLine` a form field's is too, said as an alert, since a write
  * that was refused is one the developer believes landed. The row is its own inline-size
  * container, so where its controls stand is decided by the row's width and
- * not the window's: under 380px they drop below the words to the row's end.
+ * not the window's: under 380px they stay on the name's line, the name
+ * fading where it is cut and only the description wrapping, and they drop
+ * below the words to the row's end only where the words would be left with
+ * too little room beside them.
  * The row owns its padding, the least height its profile gives a row (the
  * window's rows stand even whether or not they carry a description), and the
  * room between its parts; its edges and the rules between rows are its
@@ -36,8 +39,8 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  *
  * A list row (`SETTINGS_ROW_DENSITY.LIST`) is a card's row read rather than
  * set, a line of a reference list such as the window's keyboard shortcuts:
- * padded at the card's inline inset, ruled, and stacking under 380px as a
- * card's row is, but at a list's tighter block inset and least height and
+ * padded at the card's inline inset, ruled, and narrowing under 380px as a
+ * card's row does, but at a list's tighter block inset and least height and
  * with its label at body weight.
  *
  * What rides the label's line without being its name, a Modified word or a
