@@ -28,6 +28,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import {
+  LIVE_POLL_URL,
   LIVE_SIGNED_OUT,
   type TaskBoardLiveAnswer,
   type TaskBrowserTabsLiveAnswer,
@@ -172,6 +173,10 @@ interface FakeService extends TasksClient {
   boardSeals: Record<string, TaskBoardLiveAnswer>;
   /** Each task's pages and calls sealed for following, by task id; a task with none is not found, as the service answers one the account does not reach. */
   recordSeals: Record<string, TaskRecordLiveAnswer>;
+  /** Whether each task's record is answered polled, Realtime off, its rows as `tasks` holds them now, in place of `recordSeals`. */
+  recordPolled: boolean;
+  /** How many opens the service leaves unanswered before it answers again. */
+  opensUnanswered: number;
   /** What the service seals for following each task's pages; none answers unanswered. */
   pageSeals: Record<string, TaskPagesLiveAnswer>;
   /** What the service seals for following each task's Browser tabs; none answers unanswered. */
@@ -498,6 +503,8 @@ function fakeService(tasks: Task[]): FakeService {
     boards: {},
     boardSeals: {},
     recordSeals: {},
+    recordPolled: false,
+    opensUnanswered: 0,
     pageSeals: {},
     browserTabSeals: {},
     historySeals: {},
@@ -1035,6 +1042,7 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     recordLive: (taskId) =>
       Effect.sync(() => {
+        if (service.recordPolled) return { ok: true, answer: polledRecord(service, taskId) };
         const sealed = service.recordSeals[taskId];
         return sealed === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
@@ -1066,6 +1074,10 @@ function fakeService(tasks: Task[]): FakeService {
     open: (taskId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
         service.reads.push(`open:${taskId}`);
+        if (service.opensUnanswered > 0) {
+          service.opensUnanswered -= 1;
+          return { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
+        }
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         return found === undefined
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
@@ -3945,7 +3957,34 @@ function sealedRecord(round: number): TaskRecordLiveAnswer {
   });
   return {
     url: "wss://realtime.example/v1",
-    queries: { pages: query("pages"), calls: query("calls"), code: query("code") },
+    queries: {
+      plan: query("plan"),
+      pages: query("pages"),
+      calls: query("calls"),
+      code: query("code"),
+    },
+  };
+}
+
+/** A task's record as the service answers it polled, Realtime off: each part's rows inline, the plan marked by its last save as `tasks` holds it. */
+function polledRecord(service: FakeService, taskId: string): TaskRecordLiveAnswer {
+  const query = (part: string, rows: readonly unknown[]) => ({
+    capability: part,
+    queryFingerprint: part,
+    expiresAt: 3_600_000,
+    rows,
+  });
+  const plan = service.tasks
+    .filter((each) => each.id === taskId)
+    .map((each) => ({ taskId, savedAt: each.updatedAt }));
+  return {
+    url: LIVE_POLL_URL,
+    queries: {
+      plan: query("plan", plan),
+      pages: query("pages", []),
+      calls: query("calls", []),
+      code: query("code", []),
+    },
   };
 }
 
@@ -3976,12 +4015,18 @@ it.effect(
       yield* tasks.lifetime;
       yield* openTask(INVITES);
       yield* boardSettled;
-      assert.deepEqual(realtime.subscribed().toSorted(), ["calls-0", "code-0", "pages-0"]);
+      assert.deepEqual(realtime.subscribed().toSorted(), [
+        "calls-0",
+        "code-0",
+        "pages-0",
+        "plan-0",
+      ]);
       const taken = () => service.recordReads.splice(0).toSorted();
       taken();
       const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
         Effect.andThen(
           Effect.sync(() => {
+            realtime.deliver("plan-0", []);
             realtime.deliver("pages-0", pages);
             realtime.deliver("calls-0", calls);
             realtime.deliver("code-0", []);
@@ -4033,6 +4078,7 @@ it.effect(
       const deliver = (code: readonly unknown[]) =>
         Effect.andThen(
           Effect.sync(() => {
+            realtime.deliver("plan-0", []);
             realtime.deliver("pages-0", []);
             realtime.deliver("calls-0", []);
             realtime.deliver("code-0", code);
@@ -4087,6 +4133,65 @@ it.effect(
       // A later step of the same turn rewrites its journal and leaves its calls as they stood.
       yield* deliver(journals);
       assert.deepEqual(service.recordReads.splice(0), []);
+    }),
+);
+
+it.effect(
+  "a plan saved by someone else reaches the open document as its polled mark moves, a read of it that went unanswered asked again, and the window's own save, which the mark only confirms, reads nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", INVITES_TEXT, 10)]);
+      service.codes[INVITES] = [];
+      service.recordPolled = true;
+      const { call, tasks, last, viewLands, openTask } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* openTask(INVITES);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* boardSettled;
+      const opens = () => service.reads.filter((read) => read === `open:${INVITES}`).length;
+      const opened = opens();
+      // The first poll's mark is the save the open read already holds, so nothing reads it again.
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* boardSettled;
+      assert.equal(opens(), opened);
+
+      // A teammate saves the plan, which the next poll carries.
+      const theirs = `${INVITES_TEXT}\n\nInvites expire after a week.`;
+      const [held] = service.tasks;
+      assert.ok(held !== undefined);
+      service.tasks = [
+        {
+          ...held,
+          updatedAt: 20,
+          document: { ...held.document, body: theirs },
+          lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 20, duringCall: false },
+        },
+      ];
+      // The first read of it goes unanswered, and is asked again, since the mark it read for stands still.
+      service.opensUnanswered = 1;
+      const reached = yield* viewLands((view) => view.document.task?.document.body === theirs);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* boardSettled;
+      assert.equal(opens(), opened + 1);
+      assert.equal(last()?.document.task?.document.body, INVITES_TEXT, "the copy held stands");
+      yield* TestClock.adjust(Duration.seconds(2));
+      yield* boardSettled;
+      yield* reached;
+      assert.equal(opens(), opened + 2);
+
+      // The window's own save is drawn from its answer, which the next poll's mark only confirms.
+      const mine = `${theirs}\n\nOnly members invite.`;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_EDIT, {
+          taskId: INVITES,
+          edit: { document: { base: theirs, value: mine } },
+        }),
+        { saved: true },
+      );
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* boardSettled;
+      assert.equal(last()?.document.task?.document.body, mine);
+      assert.equal(opens(), opened + 2);
     }),
 );
 

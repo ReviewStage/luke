@@ -444,7 +444,7 @@ test("a press on a video in a section, on its frame, its scrubber, Play, Full sc
   }
 });
 
-test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused, and opens no editor", async () => {
+test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused and says so, and opens no editor", async () => {
   const body = [
     "## Goal",
     "Invite a *teammate*.",
@@ -486,16 +486,19 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     await settle();
   }
 
+  // Note that the plan is not drawn again here, so each tick is written over the text the one before it saved.
+  const written = body.replace("  - [ ] Write", "  - [x] Write");
   assert.deepEqual(
     sent.map((request) => request.document),
     [
-      { base: body, value: body.replace("  - [ ] Write", "  - [x] Write") },
-      { base: body, value: body.replace("* [X] Pick", "* [ ] Pick") },
-      { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
+      { base: body, value: written },
+      { base: written, value: written.replace("* [X] Pick", "* [ ] Pick") },
+      { base: written, value: written.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
   assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
   assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
@@ -521,13 +524,16 @@ test("a press on the label around a task's checkbox, which takes a finger's pres
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
-test("a press while a tick is out sends nothing and goes back, and a box is named by its item's words or its picture's", async () => {
+test("a press while a tick is out waits its turn, and both land, the second over the text the first saved", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] ![Upload screenshot](shot.png)\n";
-  const first = Promise.withResolvers<TasksEditAnswer>();
+  const answers = [
+    Promise.withResolvers<TasksEditAnswer>(),
+    Promise.withResolvers<TasksEditAnswer>(),
+  ];
   const sent: PlanEditRequest[] = [];
   const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
     sent.push(request);
-    return first.promise;
+    return answers[sent.length - 1]?.promise ?? Promise.resolve({ saved: true });
   };
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
@@ -541,17 +547,121 @@ test("a press while a tick is out sends nothing and goes back, and a box is name
   act(() => {
     for (const box of boxes) box.click();
   });
-  first.resolve({ saved: true });
+  await settle();
+  assert.equal(sent.length, 1, "the second waits for the first");
+  answers[0]?.resolve({ saved: true });
+  await settle();
+  answers[1]?.resolve({ saved: true });
   await settle();
 
+  const first = body.replace("[ ] One", "[x] One");
   assert.deepEqual(
     sent.map((request) => request.document),
-    [{ base: body, value: body.replace("[ ] One", "[x] One") }],
+    [
+      { base: body, value: first },
+      { base: first, value: first.replace("[ ] ![Upload", "[x] ![Upload") },
+    ],
   );
   assert.deepEqual(
     boxes.map((box) => box.getAttribute("aria-checked") === "true"),
-    [true, false],
+    [true, true],
   );
+  assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
+});
+
+test("a tick saved on one task is not carried into another whose plan reads the same", async () => {
+  const body = "## Steps\n- [ ] One\n- [ ] Two\n";
+  const { container, sent, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const one = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(one, "One is drawn");
+  act(() => one.click());
+  await settle();
+
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  render({ ...other, document: { body, assumptions: [] } });
+  await settle();
+  const two = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="Two"]');
+  assert.ok(two, "Two is drawn");
+  act(() => two.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1)?.document, {
+    base: body,
+    value: body.replace("[ ] Two", "[x] Two"),
+  });
+});
+
+test("a plan drawn anew while a tick is out is what the next tick is written over", async () => {
+  const body = "## Steps\n- [ ] One\n- [ ] Two\n";
+  const lukes = `${body}\nLuke's line.\n`;
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: PlanEditRequest[] = [];
+  const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return sent.length === 1 ? first.promise : Promise.resolve({ saved: true });
+  };
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
+  await settle();
+  const one = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(one, "One is drawn");
+  act(() => one.click());
+  await settle();
+
+  render({ ...DOCUMENT_TASK, document: { body: lukes, assumptions: [] } }, door);
+  first.resolve({ saved: true });
+  await settle();
+  const two = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="Two"]');
+  assert.ok(two, "Two is drawn");
+  act(() => two.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1)?.document, {
+    base: lukes,
+    value: lukes.replace("[ ] Two", "[x] Two"),
+  });
+});
+
+test("a tick the service did not answer goes back and says the plan could not be saved", async () => {
+  const body = "## Steps\n- [ ] One\n";
+  const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  await settle();
+
+  assert.equal(sent.length, 1);
+  assert.equal(box.getAttribute("aria-checked"), "false", "the box goes back");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
+});
+
+test("a box pressed twice while its first tick is out, whose first is refused, stands as last pressed", async () => {
+  const body = "## Steps\n- [ ] One\n";
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: PlanEditRequest[] = [];
+  const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return first.promise;
+  };
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  act(() => box.click());
+  first.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+  await settle();
+
+  assert.equal(sent.length, 1, "the second asks for what the plan already holds, so sends nothing");
+  assert.equal(box.getAttribute("aria-checked"), "false");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
@@ -1100,4 +1210,70 @@ test("words left by an editor closed as another plan opens move nothing in it", 
 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
   assert.equal(scroller.scrollTop, 500);
+});
+
+/** The plan as a teammate's save left it: their text, saved after the one the page opened on, by them. */
+function savedBy(body: string, updatedAt: number, by = CHARLES): Task {
+  return {
+    ...DOCUMENT_TASK,
+    updatedAt,
+    document: { ...DOCUMENT_TASK.document, body },
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by, at: updatedAt, duringCall: false },
+  };
+}
+
+test("a teammate's save reaching an open editor holding nothing unsaved is laid into it, and the editor's next save is a change from their text", async () => {
+  const theirs = `${BODY}Charles's.\n`;
+  const { container, sent, render } = mount();
+  act(() => block(container, "Goal").click());
+  const [editor] = mounted;
+
+  render(savedBy(theirs, 3));
+  await settle();
+
+  assert.deepEqual(editor?.took, [[BODY, theirs]]);
+  act(() => open().onDraft(`${theirs}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+  assert.deepEqual(sent, [{ document: { base: theirs, value: `${theirs}Mine.\n` } }]);
+});
+
+test("an open editor holding unsaved words keeps them as a teammate saves, saves them as a change from what it opened on, and takes the merged answer", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const mine = `${BODY}Mine.\n`;
+    const merged = `${BODY}Charles's.\n\nMine.\n`;
+    const sent: PlanEditRequest[] = [];
+    let answer: (answered: TasksEditAnswer) => void = () => undefined;
+    const door = (request: PlanEditRequest) => {
+      sent.push(request);
+      return new Promise<TasksEditAnswer>((resolve) => {
+        answer = resolve;
+      });
+    };
+    const { container, render } = mount();
+    render(DOCUMENT_TASK, door);
+    act(() => block(container, "Goal").click());
+    const [editor] = mounted;
+    act(() => open().onDraft(mine));
+    // The editor hands its words over once the typing pauses.
+    act(() => vi.advanceTimersByTime(200));
+
+    render(savedBy(`${BODY}Charles's.\n`, 3), door);
+    await settle();
+    assert.deepEqual(editor?.took, [], "nothing is laid over words not yet saved");
+
+    // The words save a beat later, as a change from the text they were typed over, which the service lays over Charles's.
+    act(() => vi.advanceTimersByTime(1_000));
+    await settle();
+    assert.deepEqual(sent, [{ document: { base: BODY, value: mine } }]);
+
+    // The host draws the plan the save answered, the developer's last, before the save's answer arrives.
+    render(savedBy(merged, 4, { userId: "user-me", name: "Me" }), door);
+    answer({ saved: true });
+    await settle();
+    assert.deepEqual(editor?.took, [[mine, merged]]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

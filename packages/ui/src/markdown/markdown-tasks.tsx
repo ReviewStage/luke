@@ -19,9 +19,11 @@ interface TaskItem {
 
 /**
  * Ticks or clears the task item whose marker starts at an offset in the
- * words, answering whether the change was saved.
+ * words, as `ticked` says, answering whether the change was saved. Note that
+ * it names the state the box was pressed to rather than a flip, so a press
+ * waiting behind one that failed still asks for what the reader saw.
  */
-export type MarkdownTaskToggler = (at: number) => Promise<boolean>;
+export type MarkdownTaskToggler = (at: number, ticked: boolean) => Promise<boolean>;
 
 /** Each task item's checkbox, by the tree's own node. */
 const TASK_ITEMS = new WeakMap<Element, TaskItem>();
@@ -63,7 +65,8 @@ export const placeTaskItems = () => (tree: Root) => placeTasks(tree, undefined);
 /**
  * A task item's checkbox that ticks or clears its item. It flips at the
  * press, since the words come back changed only once the change is saved,
- * and flips back where it was not. Note that its caller keys it by the
+ * and flips back to where that press found it where it was not, whatever a
+ * later press of it is still waiting on. Note that its caller keys it by the
  * words' own state, so a change arriving from anyone redraws it from them.
  */
 function TaskBox({
@@ -85,9 +88,12 @@ function TaskBox({
         checked={shown}
         onChange={(next) => {
           setShown(next);
-          toggle(item.at).then((saved) => {
-            if (!saved) setShown(checked);
-          });
+          toggle(item.at, next).then(
+            (saved) => {
+              if (!saved) setShown(!next);
+            },
+            () => setShown(!next),
+          );
         }}
       />
     </span>

@@ -102,7 +102,7 @@ import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
  *
  * The bound is a transaction filter, so no keystroke, pick, or command
  * carries the words past it; a paste past it is cut to the room left, as a
- * textarea cuts one. Enter with no Shift is the owner's send, unless an
+ * textarea cuts one, and the owner is told it was (`onPasteCut`). Enter with no Shift is the owner's send, unless an
  * input method is composing, when the key is the input method's. On a
  * coarse pointer, a phone's or a tablet's, Enter is a new line, since its
  * keyboard has no Shift+Enter to type one, and the visible Send beside the
@@ -741,7 +741,7 @@ function caretInCode(text: string, caret: number): boolean {
   return caret > 0 && text[caret - 1] !== NEWLINE && insideCode(text, caret - 1);
 }
 
-/** A paste taken: files the owner takes kept out of the words, and words past the bound cut to the room left. */
+/** A paste taken: files the owner takes kept out of the words, and words past the bound cut to the room left, which the owner is told. */
 function pasted(
   view: EditorView,
   event: ClipboardEvent,
@@ -775,6 +775,8 @@ function pasted(
   if (kept !== "") {
     view.dispatch(view.state.tr.replaceSelection(sliceOf(schema, kept, state)).scrollIntoView());
   }
+  // Note that the owner is told after the words land, so what it says of the cut is never cleared by the change that made it.
+  props.onPasteCut?.();
   return true;
 }
 

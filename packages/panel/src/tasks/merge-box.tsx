@@ -38,7 +38,7 @@ import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "luc
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { readKept, writeKept } from "../kept-storage.js";
-import type { PullRequestWrites } from "./pull-request-writes.js";
+import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
 /**
  * merge-box.tsx -- the merge control at the end of an open pull request's title row, as stage-cli's merge status is: a chip saying what holds the merge up, and beside it the one press that may be made now.
@@ -396,7 +396,7 @@ function MethodPress({
 /** The question Remove from queue asks first, as stage-cli's does. */
 const DEQUEUE_QUESTION: DialogQuestion = {
   title: "Remove from the merge queue?",
-  body: "Removing this pull request from the queue could impact other pull requests in the queue.",
+  body: QUEUE_WARNING,
   verb: BOX_WORDS.DEQUEUE,
   running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
   tone: DIALOG_TONE.DANGER,

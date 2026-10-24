@@ -21,6 +21,7 @@ import {
   IconButton,
   motionHeld,
   SavedTick,
+  STATUS_TONE,
   TEXT_BUTTON_LINES,
   TextButton,
   Tooltip,
@@ -47,6 +48,7 @@ import {
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { centreWithin } from "./code-pane.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
@@ -630,18 +632,89 @@ const NO_DRAFT = (_name: string | undefined): void => undefined;
 /** A task item's opening as written: its list marker, then its box, unticked or ticked. */
 const TASK_ITEM = /^(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ \txX])\]/u;
 
-/**
- * The text with the task item whose marker starts at `at` ticked or
- * cleared, every other character as it was; nothing where no task item
- * starts there.
- */
-function toggledTask(text: string, at: number): string | undefined {
+/** The task item whose marker starts at `at`: where its box stands, and its line with the box blanked, which reads the same ticked or not; nothing where no task item starts there. */
+function taskItemAt(text: string, at: number): { box: number; line: string } | undefined {
   const item = TASK_ITEM.exec(text.slice(at));
   if (item === null) return undefined;
   const box = at + item[0].length - 2;
-  const ticked = item[1] === "x" || item[1] === "X";
-  return `${text.slice(0, box)}${ticked ? " " : "x"}${text.slice(box + 1)}`;
+  const end = text.indexOf("\n", at);
+  return {
+    box,
+    line: `${text.slice(at, box)} ${text.slice(box + 1, end === -1 ? undefined : end)}`,
+  };
 }
+
+/**
+ * The text with the task item whose marker starts at `at` ticked or cleared
+ * as `ticked` says, every other character as it was; nothing where no task
+ * item starts there, or where its line no longer reads `line`.
+ */
+function taskSet(text: string, at: number, line: string, ticked: boolean): string | undefined {
+  const item = taskItemAt(text, at);
+  if (item === undefined || item.line !== line) return undefined;
+  return `${text.slice(0, item.box)}${ticked ? "x" : " "}${text.slice(item.box + 1)}`;
+}
+
+/**
+ * A plan's writes from its words at rest, ticks and dates, in the order they
+ * were made: the last one out, which the next waits on, and the text the last
+ * one saved left, with the task and the drawn text it was written over, which
+ * stands until the saved plan is drawn.
+ */
+interface PlanWrites {
+  last: Promise<boolean>;
+  saved: { readonly taskId: string; readonly over: string; readonly text: string } | undefined;
+}
+
+/** The plan as drawn when a write is sent: its task and its text. */
+interface DrawnPlan {
+  readonly id: string;
+  readonly body: string;
+}
+
+/** The plan's text as it stands: the text a write saved while its task's plan drawn is still the one it was written over, or the plan drawn. */
+function planTextNow(writes: PlanWrites, drawn: DrawnPlan): string {
+  const saved = writes.saved;
+  return saved !== undefined && saved.taskId === drawn.id && saved.over === drawn.body
+    ? saved.text
+    : drawn.body;
+}
+
+/** `write` sent once every write before it settles, answering whether it saved. */
+function queuedWrite(
+  writes: PlanWrites,
+  write: () => Promise<boolean> | boolean,
+): Promise<boolean> {
+  const sent = writes.last.then(write);
+  writes.last = sent;
+  return sent;
+}
+
+/**
+ * The plan saved from `base` to `value` while `drawn` stands, answering
+ * whether it saved; once saved, `kept` stands as the plan's text until the
+ * plan drawn moves, or nothing does where it is not known.
+ */
+function savedOver(
+  writes: PlanWrites,
+  save: PlanEditDoor,
+  drawn: DrawnPlan,
+  edit: { readonly base: string; readonly value: string },
+  kept: string | undefined,
+): Promise<boolean> {
+  return save({ document: edit }).then(
+    (answer) => {
+      if (!("saved" in answer)) return false;
+      writes.saved =
+        kept === undefined ? undefined : { taskId: drawn.id, over: drawn.body, text: kept };
+      return true;
+    },
+    () => false,
+  );
+}
+
+/** What a toast says where a tick or a date written from the plan at rest was not saved. */
+const PLAN_NOT_SAVED = "The plan could not be saved.";
 
 /** A list item with a box, as anywhere in a unit's words it may stand: under a quote's marker, say. */
 const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
@@ -1139,8 +1212,8 @@ export const PlanBody = memo(function PlanBody({
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
-  /** Whether a task item's tick is out, while which another press does nothing. */
-  const ticking = useRef(false);
+  /** The ticks and dates written from the words at rest, each sent once the one before it settles. */
+  const writes = useRef<PlanWrites>({ last: Promise.resolve(true), saved: undefined });
 
   useEffect(() => {
     const element = scroller.current;
@@ -1244,54 +1317,78 @@ export const PlanBody = memo(function PlanBody({
     const words = views[section]?.words;
     return onEdit !== undefined && words !== undefined && cut[section]?.text === words;
   };
-  // Note that one tick is out at a time, from the plan as drawn, so a door
-  // that keeps one text (the plan template's) is never asked from another;
-  // a press while one is out, or before the saved plan comes back, does nothing.
-  const tick = (section: number, at: number): Promise<boolean> => {
-    const unit = cut[section];
-    const base = task.document.body;
-    const value =
-      ticking.current || unit === undefined || !tickable(section)
-        ? undefined
-        : toggledTask(base, unit.from + at);
-    if (onEdit === undefined || value === undefined) return Promise.resolve(false);
-    ticking.current = true;
-    return onEdit({ document: { base, value } })
-      .then(
-        (answer) => "saved" in answer,
-        () => false,
-      )
-      .finally(() => {
-        ticking.current = false;
-      });
+  // A tick or a date that did not save goes back, and says so here, since nothing beside the box or the chip does.
+  const toast = useToast();
+  const sayNotSaved = useCallback(
+    () => toast({ words: PLAN_NOT_SAVED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    [toast],
+  );
+  // The plan as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
+  const latestPlan = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
+  latestPlan.current = { cut, views, id: task.id, body: task.document.body, onEdit };
+  // Note that ticks are sent one at a time, in the order pressed, each over
+  // the text the one before it saved, since that plan may not be drawn yet;
+  // so a door that keeps one text (the plan template's) is never asked from
+  // another. A tick is placed by its item's offset and line as drawn at the
+  // press, and writes nothing where the text no longer holds that line.
+  const tick = (section: number, at: number, ticked: boolean): Promise<boolean> => {
+    const unit = tickable(section) ? cut[section] : undefined;
+    const item = unit === undefined ? undefined : taskItemAt(unit.text, at);
+    const save = onEdit;
+    const pressedOn = task.id;
+    const queue = writes.current;
+    const sent = queuedWrite(queue, () => {
+      const now = latestPlan.current;
+      if (save === undefined || unit === undefined || item === undefined) return false;
+      if (now.id !== pressedOn) return false;
+      const base = planTextNow(queue, now);
+      const value = taskSet(base, unit.from + at, item.line, ticked);
+      if (value === undefined) return false;
+      if (value === base) return true;
+      return savedOver(queue, save, now, { base, value }, value);
+    });
+    return sent.then((saved) => {
+      if (!saved) sayNotSaved();
+      return saved;
+    });
   };
   const latestTick = useRef(tick);
   latestTick.current = tick;
   // A date changed from the plan at rest is written over the text as it then stands, read as the picker closes.
-  const latestDates = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
-  latestDates.current = { cut, views, id: task.id, body: task.document.body, onEdit };
   const planDates = useMemo<PlanDates | undefined>(
     () =>
       editable
         ? {
-            taskId: () => latestDates.current.id,
-            text: () => latestDates.current.body,
+            taskId: () => latestPlan.current.id,
+            text: () => planTextNow(writes.current, latestPlan.current),
             from: (section) => {
-              const { cut: now, views: drawn } = latestDates.current;
+              const { cut: now, views: drawn } = latestPlan.current;
               const unit = now[section];
               return unit !== undefined && unit.text === drawn[section]?.words
                 ? unit.from
                 : undefined;
             },
             write: (value, base) => {
-              const save = latestDates.current.onEdit;
+              const { onEdit: save, id: pickedOn } = latestPlan.current;
               if (save === undefined) return;
-              // Note that a save not taken leaves the date as it was, as an unticked box flips back.
-              save({ document: { base, value } }).catch(() => undefined);
+              const queue = writes.current;
+              // Note that a date waits its turn behind the ticks out, and that
+              // one saved since the picker read the plan is not under its text,
+              // so nothing after it is written over that text. A save not
+              // taken leaves the date as it was, as an unticked box flips back, and says so.
+              const sent = queuedWrite(queue, () => {
+                const now = latestPlan.current;
+                if (now.id !== pickedOn) return false;
+                const kept = planTextNow(queue, now) === base ? value : undefined;
+                return savedOver(queue, save, now, { base, value }, kept);
+              });
+              sent.then((saved) => {
+                if (!saved) sayNotSaved();
+              });
             },
           }
         : undefined,
-    [editable],
+    [editable, sayNotSaved],
   );
   // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
   const togglers = useRef(new Map<number, MarkdownTaskToggler>());
@@ -1302,7 +1399,7 @@ export const PlanBody = memo(function PlanBody({
     }
     const held = togglers.current.get(section);
     if (held !== undefined) return held;
-    const toggler: MarkdownTaskToggler = (at) => latestTick.current(section, at);
+    const toggler: MarkdownTaskToggler = (at, ticked) => latestTick.current(section, at, ticked);
     togglers.current.set(section, toggler);
     return toggler;
   };

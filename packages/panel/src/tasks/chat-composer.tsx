@@ -1,10 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { pasteCutWords } from "@luke/features/words";
 import {
   ErrorState,
   GAP,
   Inline,
+  LengthCounter,
   SUBMIT_STATE,
   TEXT_AREA_GROW_LIMIT,
   TEXT_AREA_LOOK,
@@ -249,11 +251,14 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
   // How many hand-offs of files are still being read, during which the post waits.
   const [reading, setReading] = useState(0);
   const [note, setNote] = useState<ComposerNote | undefined>(undefined);
+  // Whether the last paste was cut to the room the box has left, until the words change again.
+  const [cut, setCut] = useState(false);
   const empty = draft.trim() === "" && attachments.length === 0;
   const send = () => {
     if (empty || reading > 0) return;
     const sent = kept;
     setNote(undefined);
+    setCut(false);
     setSends((count) => count + 1);
     // Note that only what was sent is let go, so words typed meanwhile in another window stay.
     update((now) =>
@@ -270,7 +275,10 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
       return back;
     });
   };
-  const setDraft = (text: string) => update((was) => ({ ...was, text }));
+  const setDraft = (text: string) => {
+    setCut(false);
+    update((was) => ({ ...was, text }));
+  };
   /** Reads the images among the files handed in and takes them after those the box holds; the first that cannot come says why. */
   const attach = (files: readonly File[]) => {
     if (files.length === 0) return;
@@ -307,8 +315,14 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
     sends,
     reading: reading > 0,
     empty,
-    note,
+    // Note that a note of the box's own, a refusal or a dictation's, is said before the cut paste's.
+    note: note ?? (cut ? plainNote(pasteCutWords(CHAT_BOUNDS.MAX_TEXT_CHARS)) : undefined),
     setNote,
+    // Note that a paste that was cut takes down the file's or the dictation's note, which was said of what came before, but never a refused post's, whose Retry stands.
+    cutPaste: () => {
+      setCut(true);
+      setNote((was) => (was?.retries === true ? was : undefined));
+    },
     send,
   };
 }
@@ -439,6 +453,7 @@ function EditorChatComposer({
     empty,
     note,
     setNote,
+    cutPaste,
     send,
   } = useChatSend(chatPlace(channelId, replyTo), onSend);
   const dictation = useDictation({
@@ -531,6 +546,7 @@ function EditorChatComposer({
             attach(pasted);
             return true;
           }}
+          onPasteCut={cutPaste}
           onTrigger={() => undefined}
           chip={() => null}
           quote={(quote) => <ComposerQuoteView quote={quote} held={dictating} />}
@@ -563,6 +579,7 @@ function EditorChatComposer({
             empty={empty || reading}
             lead={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={attach} />}
           >
+            <LengthCounter length={draft.length} limit={CHAT_BOUNDS.MAX_TEXT_CHARS} />
             <DictateButton dictation={dictation} disabled={module === undefined} />
           </ComposerFoot>
         )}

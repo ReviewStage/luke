@@ -464,6 +464,7 @@ test("GitHub connected stands quiet with the same ⋯ as every row, under a line
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
   githubConnected = true;
+  listed.set(INTEGRATION_PROVIDER.GITHUB, [{ name: "get_me", description: "Reads the account." }]);
   const page = await mount();
   const row = rowNamed(page, "GitHub");
 
@@ -479,6 +480,7 @@ test("GitHub's Disconnect is the account's GitHub disconnect, which asks first a
     (provider) => provider !== INTEGRATION_PROVIDER.GITHUB,
   );
   githubConnected = true;
+  listed.set(INTEGRATION_PROVIDER.GITHUB, [{ name: "get_me", description: "Reads the account." }]);
   refuseGitHubDisconnect = true;
   const refusedPage = await mount();
   await choose(rowNamed(refusedPage, "GitHub"), "Disconnect");
@@ -554,9 +556,37 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
 
   assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired.");
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
-  assert.equal(refused.querySelector(".luke-settings-row-state")?.textContent, "Slack refused the sign-in.");
+  assert.equal(
+    refused.querySelector(".luke-settings-row-state")?.textContent,
+    "Slack refused the sign-in.",
+  );
   assert.deepEqual(rowButtons(refused), ["Reconnect"]);
   assert.deepEqual(menuOf(refused), { items: ["Disconnect"], heading: undefined });
+});
+
+test("a connection whose tools could not be read says so in the attention tint, never Connected, and Retry reads them again", async () => {
+  withheld = INTEGRATION_PROVIDER_LIST.filter(
+    (provider) => provider !== INTEGRATION_PROVIDER.LINEAR,
+  );
+  standing.set(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_STATUS.CONNECTED);
+  toolReads.set(INTEGRATION_PROVIDER.LINEAR, { failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
+  const page = await mount();
+  const row = rowNamed(page, "Linear");
+  const state = row.querySelector(".luke-settings-row-state");
+
+  assert.equal(state?.textContent, "The tools could not be read.");
+  assert.equal(state?.getAttribute("data-state"), "attention");
+  assert.deepEqual(rowButtons(row), ["Retry"]);
+
+  toolReads.delete(INTEGRATION_PROVIDER.LINEAR);
+  listed.set(INTEGRATION_PROVIDER.LINEAR, [{ name: "list_issues", description: "Lists issues." }]);
+  const retry = [...row.querySelectorAll("button")].find((each) => each.textContent === "Retry");
+  act(() => retry?.click());
+  await settle();
+
+  const mended = rowNamed(page, "Linear");
+  assert.equal(mended.querySelector(".luke-settings-row-state")?.textContent, "Connected · 1 tool");
+  assert.deepEqual(rowButtons(mended), []);
 });
 
 test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends the sign-in at the service and leaves Connect", async () => {
@@ -578,12 +608,13 @@ test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends t
 });
 
 test("a Cancel that lands after the sign-in finished leaves the provider connected", async () => {
+  listed.set(GRANOLA, [{ name: "list_meetings", description: "Lists meetings." }]);
   const page = await mount();
   await pressOnGranola(page, "Connect");
   touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
 
   await pressOnGranola(page, "Cancel");
-  assert.equal(granolaRow(page).line, "Connected");
+  assert.equal(granolaRow(page).line, "Connected · 1 tool");
 });
 
 test("a sign-in cancelled on Vercel Connect's own page says so plainly, with Try again", async () => {
@@ -645,6 +676,7 @@ it.effect(
   "a sign-in still pending once its wait runs out says it did not finish, with Try again, and connects after all if the browser finishes it later",
   () =>
     Effect.gen(function* () {
+      listed.set(GRANOLA, [{ name: "list_meetings", description: "Lists meetings." }]);
       const registry = registryOn(yield* Clock.Clock);
       const page = yield* Effect.promise(() => mount(registry));
       yield* Effect.promise(() => pressOnGranola(page, "Connect"));
@@ -658,7 +690,7 @@ it.effect(
 
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
       yield* Effect.promise(focusWindow);
-      assert.equal(granolaRow(page).line, "Connected");
+      assert.equal(granolaRow(page).line, "Connected · 1 tool");
     }),
 );
 
@@ -951,8 +983,9 @@ test("a query that finds an integration by its own name opens nothing by itself,
   assert.deepEqual(shownTools(page), []);
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
-      assert.fail("Vercel's row opens onto its tools")
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
+        ".luke-settings-row-state button",
+      ) ?? assert.fail("Vercel's row opens onto its tools")
     ).click(),
   );
   assert.equal(shownTools(page).length, 3);
@@ -966,8 +999,9 @@ test("a row closed under one query opens again when that query comes back after 
 
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".luke-settings-row-state button") ??
-      assert.fail("Vercel's row closes")
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(
+        ".luke-settings-row-state button",
+      ) ?? assert.fail("Vercel's row closes")
     ).click(),
   );
   assert.deepEqual(shownTools(page), []);
@@ -1329,7 +1363,10 @@ test("an added account whose first sign-in Connect refused keeps its row with th
     [...page.querySelectorAll(".luke-settings-row")].find(
       (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
-  assert.match(added.querySelector(".luke-settings-row-state")?.textContent ?? "", /access_denied/u);
+  assert.match(
+    added.querySelector(".luke-settings-row-state")?.textContent ?? "",
+    /access_denied/u,
+  );
 
   sent = [];
   act(() =>

@@ -25,6 +25,7 @@ import {
   integrationAccountLabel,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
+import { readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -40,6 +41,7 @@ import {
   InlineEdit,
   type InlineEditEnd,
   ProviderMark,
+  RetryButton,
   ScrollArea,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
@@ -84,7 +86,7 @@ import {
   IntegrationToolList,
   keepInView,
 } from "../integration-tool-list.js";
-import { useIntegrationTools } from "../integration-tools.js";
+import { useIntegrationToolReads } from "../integration-tools.js";
 import { focusSearchField, Highlighted } from "../search-field.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -169,6 +171,7 @@ const FILTER_PLACEHOLDER = "Search integrations and tools";
 const PAGE_LINE = {
   CONNECTED: "Connected",
   CHECKING: "Checking…",
+  TOOLS_NOT_READ: readFailedWords("the tools"),
   SIGNED_OUT: "Sign in to connect integrations.",
   READ_FAILED: "Your integrations could not be read.",
   NONE_OFFERED: "No integrations are available for this account.",
@@ -251,8 +254,8 @@ function connectedLine(health: ConnectionHealth): RowLine {
       return { text: health.problem, state: LINE_STATE.ATTENTION };
     case CONNECTION_HEALTH.CHECKING:
       return { text: PAGE_LINE.CHECKING, state: LINE_STATE.PLAIN };
-    case CONNECTION_HEALTH.UNKNOWN:
-      return { text: PAGE_LINE.CONNECTED, state: LINE_STATE.CONNECTED };
+    case CONNECTION_HEALTH.FAILED:
+      return { text: PAGE_LINE.TOOLS_NOT_READ, state: LINE_STATE.ATTENTION };
   }
 }
 
@@ -523,6 +526,7 @@ function IntegrationRow({
   health,
   statuses,
   tools,
+  onRetryTools,
 }: {
   row: ServerRow;
   /** Where the connection stands, or nothing while it has not been read; the row offers nothing until it has. */
@@ -531,6 +535,8 @@ function IntegrationRow({
   health: ConnectionHealth;
   statuses: IntegrationStatuses;
   tools: RowTools;
+  /** Asks the account's server for its tools again, offered where the read failed. */
+  onRetryTools: () => void;
 }): React.JSX.Element {
   const panelId = useId();
   const { act } = useAct();
@@ -675,6 +681,8 @@ function IntegrationRow({
                 {SIGN_IN_ACTION.CANCEL}
               </Button>
             </>
+          ) : connected && health.kind === CONNECTION_HEALTH.FAILED ? (
+            <RetryButton onRetry={onRetryTools} />
           ) : status === undefined ||
             status === INTEGRATION_STATUS.UNAVAILABLE ||
             (connected && !broken) ? null : (
@@ -762,7 +770,7 @@ function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
  */
 function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
-  const reads = useIntegrationTools(
+  const { reads, retry } = useIntegrationToolReads(
     namedServers({
       statusOf: statuses.statusOf,
       accountsOf: statuses.accountsOf,
@@ -855,6 +863,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
                 onToggle: () => toggle(found.row.connection),
                 tokens,
               }}
+              onRetryTools={() => retry(found.row.connection)}
             />
           ))}
         </SettingsSection>

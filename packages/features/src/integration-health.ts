@@ -22,8 +22,8 @@ import {
  * changed keeps failing); a server that never answered is an outage a
  * reconnect would not mend, so it keeps its switch and offers nothing. A read
  * not answered yet is still being checked; one Luke's own service could not
- * answer says nothing of the server, so the connection stands as the
- * service says.
+ * answer says nothing of the server, so a surface says the tools could not be
+ * read and offers to read them again, never that the connection works.
  */
 
 /**
@@ -47,8 +47,8 @@ export const CONNECTION_HEALTH = {
   BROKEN: "broken",
   /** Its tools have not been read yet. */
   CHECKING: "checking",
-  /** Luke's own service could not ask the server, so nothing is known of it. */
-  UNKNOWN: "unknown",
+  /** Luke's own service could not ask the server, so nothing is known of it: a read that failed, which asking again may mend. */
+  FAILED: "failed",
 } as const;
 
 export type ConnectionHealth =
@@ -59,7 +59,7 @@ export type ConnectionHealth =
       /** Whether reconnecting mends it: a refusal or the server's own error, never an outage. */
       readonly reconnect: boolean;
     }
-  | { readonly kind: typeof CONNECTION_HEALTH.CHECKING | typeof CONNECTION_HEALTH.UNKNOWN };
+  | { readonly kind: typeof CONNECTION_HEALTH.CHECKING | typeof CONNECTION_HEALTH.FAILED };
 
 /** How a connected server's count of tools reads. */
 export function toolsCount(count: number): string {
@@ -84,7 +84,7 @@ export function connectionHealth(
   read: IntegrationToolsView | undefined,
 ): ConnectionHealth {
   if (read === undefined) return { kind: CONNECTION_HEALTH.CHECKING };
-  if ("failure" in read) return { kind: CONNECTION_HEALTH.UNKNOWN };
+  if ("failure" in read) return { kind: CONNECTION_HEALTH.FAILED };
   if ("problem" in read) {
     const reason = read.problem.reason;
     return {

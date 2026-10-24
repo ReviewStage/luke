@@ -121,7 +121,7 @@ test("a sign-in that cannot start is announced and gives the choices back", asyn
 
   await vi.waitFor(() =>
     expect(page.querySelector('[role="alert"]')?.textContent).toBe(
-      "Sign-in could not start. Try again.",
+      "Sign-in didn't finish. Try again.",
     ),
   );
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);

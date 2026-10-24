@@ -18,9 +18,11 @@ import { ACTION_RESULT_STATUS, TOOL_PART_STATE } from "../core.js";
 import { SHOW_CODE_TOOL } from "./show-code.js";
 
 /**
- * task-record-live.ts -- where an open task's pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move rather than when a call's activity or end suggests they might have.
+ * task-record-live.ts -- where an open task's plan, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move rather than when a call's activity or end suggests they might have.
  *
- * Three parts, each a mark and none of the words it marks: the pages agents
+ * Four parts, each a mark and none of the words it marks: the plan's text
+ * (`plan`), one row marked by its last save, which only a save of the text
+ * moves, whoever wrote it; the pages agents
  * showed (`pages`), one row a page at its newest version; the task's
  * calls (`calls`), one row a call that has words, which moves as its words
  * land, as it closes, and as its metering and the rows the voice wrote for
@@ -37,6 +39,7 @@ import { SHOW_CODE_TOOL } from "./show-code.js";
 
 /** The statements an open task's record is followed by, one a part. */
 export interface TaskRecordLiveStatements {
+  readonly plan: LiveStatement;
   readonly pages: LiveStatement;
   readonly calls: LiveStatement;
   readonly code: LiveStatement;
@@ -55,6 +58,19 @@ const ANSWERED_SHOW_CODE_IDS = `$[*] ? (@.type == "${ANSWERED_SHOW_CODE.type}" &
 /** The account's membership of the task's workspace, which a live read joins rather than asks, as Neon's guide authorizes one. */
 function memberOfTask(userId: string) {
   return and(eq(member.organizationId, task.organizationId), eq(member.userId, userId));
+}
+
+/**
+ * The plan marked by its last save, as the open document reads it
+ * (`Task.updatedAt`): a rename, a status, or a pin is no save, so none of
+ * them moves it, and a save by anyone does.
+ */
+function planStatement(userId: string, taskId: string) {
+  return queryBuilder
+    .select(liveSelection({ taskId: task.id }, { savedAt: task.updatedAt }))
+    .from(task)
+    .innerJoin(member, memberOfTask(userId))
+    .where(and(eq(task.id, taskId), taskSeenBy(userId)));
 }
 
 /** Each page as `listPages` reads it, marked by its newest version's number: a version is written once and never changed. */
@@ -146,6 +162,7 @@ export function taskRecordLiveStatements(
   taskId: string,
 ): Option.Option<TaskRecordLiveStatements> {
   return Option.all({
+    plan: liveStatementOf(planStatement(userId, taskId)),
     pages: liveStatementOf(pagesStatement(userId, taskId)),
     calls: liveStatementOf(callsStatement(userId, taskId)),
     code: liveStatementOf(codeStatement(userId, taskId)),

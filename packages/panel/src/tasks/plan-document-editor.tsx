@@ -632,6 +632,7 @@ interface DraftDoors {
 function useDraftHandOver(
   editing: PlanEditing,
   hostOf: (section: number) => EditorHost,
+  handed: React.RefObject<string>,
 ): DraftDoors {
   const [pause, restartPause] = useAtom(draftPauseAtom);
   const pending = useRef<{ markdown: string; anchors: EditorAnchors | undefined } | undefined>(
@@ -643,7 +644,9 @@ function useDraftHandOver(
   const flush = () => {
     const next = pending.current;
     pending.current = undefined;
-    if (next !== undefined) door.current.typeText(next.markdown, next.anchors);
+    if (next === undefined) return;
+    handed.current = next.markdown;
+    door.current.typeText(next.markdown, next.anchors);
   };
   // A pause that ran out on the newest text hands it over.
   useEffect(() => {
@@ -679,35 +682,66 @@ function useDraftHandOver(
 }
 
 /**
- * A save's merged answer taken into the open editor. A save that landed shows
- * as the model's base moving to the text it sent; the host draws the plan
- * the service answered before the save's answer arrives, so the plan whose
- * last save is the developer's, and newer than the one last taken, holds
- * the merged text. Then Luke's part of it is laid in and the model's base
- * becomes what the service holds. A draft never moves the last save, and a
- * save of Luke's is not the developer's, so neither reaches the editor.
+ * Text the open editor did not type taken into it, the caret kept where it
+ * stood, since the editor mounts once on its words and never follows them.
+ * Three kinds reach it. A save's merged answer: a save that landed shows as
+ * the model's base moving to the text it sent; the host draws the plan the
+ * service answered before the save's answer arrives, so the plan whose last
+ * save is the developer's, and newer than the one last taken, holds the
+ * merged text, whose other part is laid in and the model's base becomes
+ * what the service holds. A save someone else made, a teammate's, an
+ * agent's, or Luke's, reaching an editor holding nothing unsaved: their text
+ * is laid in and becomes the base. An editor holding words not yet saved
+ * keeps them instead, and its next save is laid over the service's text,
+ * whose merged answer then reaches it as the first kind. And words the
+ * model moved itself, as Keep mine's merged words: laid in place of the
+ * blocks they changed. `handed` is the last text the editor handed over or
+ * was laid with, which tells the model's own moves from the editor's.
  */
-function useMergedAnswers(
+function useTakenText(
   editor: DocumentEditor,
   editing: PlanEditing,
   task: Task,
   handle: React.RefObject<PlanEditorHandle | undefined>,
+  handed: React.RefObject<string>,
 ): void {
-  const seen = useRef({ base: editor.base, updatedAt: task.updatedAt });
+  const seen = useRef({ base: editor.base, draft: editor.draft, updatedAt: task.updatedAt });
   const landed = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const { base, sending, state } = editor;
+    const { base, draft, sending, state } = editor;
     const settled = sending === undefined && state.kind === DOCUMENT_EDITOR_STATE.EDITING;
     if (settled && base !== seen.current.base) landed.current = base;
     seen.current.base = base;
+    // Note that words handed over in this commit reach the draft only in the next, so only a draft that moved is the model's.
+    const moved = draft !== seen.current.draft;
+    seen.current.draft = draft;
+    const mounted = handle.current;
+    // Note that an editor still loading mounts on the newest words, which then need no laying in.
+    if (moved && draft !== handed.current) {
+      handed.current = mounted === undefined ? draft : mounted.take(handed.current, draft).text;
+      return;
+    }
+    if (task.updatedAt === seen.current.updatedAt) return;
     const sent = landed.current;
-    if (sent === undefined || task.updatedAt === seen.current.updatedAt) return;
-    if (task.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
-    landed.current = undefined;
+    if (sent !== undefined) {
+      if (task.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
+      landed.current = undefined;
+      seen.current.updatedAt = task.updatedAt;
+      const taken = mounted?.take(sent, task.document.body);
+      if (taken === undefined) return;
+      seen.current.base = taken.base;
+      handed.current = taken.text;
+      editing.rebase(taken.base, taken.text);
+      return;
+    }
+    if (!settled || editor.closing || draft !== base) return;
     seen.current.updatedAt = task.updatedAt;
-    const taken = handle.current?.take(sent, task.document.body);
-    if (taken === undefined) return;
+    const theirs = task.document.body;
+    if (theirs === base) return;
+    const taken =
+      mounted === undefined ? { base: theirs, text: theirs } : mounted.take(base, theirs);
     seen.current.base = taken.base;
+    handed.current = taken.text;
     editing.rebase(taken.base, taken.text);
   });
 }
@@ -776,7 +810,9 @@ export function PlanDocumentEditor({
   /** Starts a thread on the words selected, as the toolbar's Comment over them does; none where the plan takes no comments here. */
   onComment?: (() => void) | undefined;
 }): React.JSX.Element {
-  const doors = useDraftHandOver(editing, hostOf);
+  // The words the editor last handed over, or was laid with, which it holds unless the model moved them.
+  const handed = useRef(editor.draft);
+  const doors = useDraftHandOver(editing, hostOf, handed);
   // Note that this runs before the editor itself is taken down, so its caret is still measured.
   useLayoutEffect(
     () => () => {
@@ -794,7 +830,7 @@ export function PlanDocumentEditor({
             ? []
             : [{ thread: thread.id, ...thread.anchor }],
         );
-  useMergedAnswers(editor, editing, task, handle);
+  useTakenText(editor, editing, task, handle, handed);
   // Whether the editor's bundle has landed, which mounts the editor in the room.
   const ready = AsyncResult.isSuccess(useAtomValue(useSideBundles().planEditor));
   const room = useRef<HTMLElement>(null);
