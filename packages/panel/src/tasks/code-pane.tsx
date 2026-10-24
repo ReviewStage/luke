@@ -1,18 +1,7 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { callHeading, WORKED_SEPARATOR } from "@luke/features/time-format";
-import {
-  CARD_CORNER,
-  CARD_ELEMENT,
-  CARD_LOOK,
-  CARD_PADDING,
-  Card,
-  FILL_ELEMENT,
-  Fill,
-  IconButton,
-  SCROLL_FADE_INSET,
-  Tooltip,
-} from "@luke/ui";
+import { CodeCard, FILL_ELEMENT, Fill, IconButton, SCROLL_FADE_INSET, Tooltip } from "@luke/ui";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -21,14 +10,14 @@ import {
   fileRefText,
 } from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint.js";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import { copyThroughShell } from "../copy-feedback.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { CodeSnippet, useSnippetNote } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
@@ -56,10 +45,9 @@ import { FileRef } from "./file-ref.js";
  * it where it is until the developer scrolls back down. Every line here is
  * the repository's, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
+ * Each card is `@luke/ui`'s `CodeCard`, its header and its Copy the one
+ * every block of code in the window has (`FileCodeCard`).
  */
-
-/** What a card's copy is called, which is its accessible name and its hint. */
-const COPY_LABEL = "Copy lines";
 
 /** What a card's button that opens the whole file in a tab is called. */
 const OPEN_FILE_LABEL = "Open file";
@@ -91,53 +79,45 @@ export function scrollerOf(element: HTMLElement): HTMLElement | undefined {
 }
 
 /**
- * The copy of a card's lines, answered as every copy button in the window is
- * (`copy-feedback.tsx`): the glyph turns to a check for a moment, and the
- * button's name stays its own.
+ * A file's code as a `CodeCard`: the file and the lines pointed at in its
+ * header, named as every place names them (`file-ref.tsx`), hanging the
+ * file's card and opening it in its tab where the card's file can be; the
+ * file's opening again as a button of its own, and the copy of the lines
+ * pointed at, where the card holds them; over `body`, the lines themselves.
+ * The Code tab's cards and an inbox item's code are both drawn by it.
  */
-function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
-  const { state, copy } = useCopyFeedback();
-  return (
-    <Tooltip label={copyHint(state, COPY_LABEL)}>
-      <IconButton
-        icon={<CopyGlyph state={state} />}
-        label={COPY_LABEL}
-        onClick={() => copy(lines)}
-      />
-    </Tooltip>
-  );
-}
-
-/**
- * A card's header: the file and the lines pointed at, named as every place
- * names them (`file-ref.tsx`), hanging the file's card and opening it in its
- * tab where the card's file can be; their copy, where the card holds them;
- * and the file's opening again as a button of its own. The Code tab's cards
- * and an inbox item's code are both headed by it.
- */
-export function CodeCardHeader({
+export function FileCodeCard({
   codeRef,
   repository,
   note,
   copied,
   onOpen,
+  body,
+  data,
 }: {
   codeRef: CodeRef;
   /** The repository the lines were read from, `owner/name`, which the file's card names. */
   repository: string;
   /** The agent's note on the lines, which the file's card says; none where the card has none. */
   note: string | undefined;
-  /** The lines a copy carries; none where the card holds no lines yet. */
+  /** The lines a copy carries; none where the card holds no lines yet, which draws no copy. */
   copied: string | undefined;
   /** Opens the file on the card's lines; none where the card's file cannot be opened, its path then plain words. */
   onOpen: (() => void) | undefined;
+  /** What stands under the header: the lines, or why there are none. */
+  body: ReactNode;
+  /** Data attributes the card is found by: the call that showed the lines, or an Inbox item's code. */
+  data?: Readonly<Record<`data-${string}`, string>> | undefined;
 }): React.JSX.Element {
   return (
-    <header className="code-card-header">
-      <FileRef codeRef={codeRef} repository={repository} note={note} onOpen={onOpen} />
-      <span className="code-card-actions">
-        {copied === undefined ? null : <CopyLinesButton lines={copied} />}
-        {onOpen === undefined ? null : (
+    <CodeCard
+      title={<FileRef codeRef={codeRef} repository={repository} note={note} onOpen={onOpen} />}
+      label={fileRefText(codeRef)}
+      data={data}
+      copied={copied}
+      copy={copyThroughShell}
+      actions={
+        onOpen === undefined ? null : (
           <Tooltip label={OPEN_FILE_LABEL}>
             <IconButton
               icon={<FileInputIcon aria-hidden="true" />}
@@ -145,14 +125,15 @@ export function CodeCardHeader({
               onClick={onOpen}
             />
           </Tooltip>
-        )}
-      </span>
-    </header>
+        )
+      }
+      body={body}
+    />
   );
 }
 
 /** One snippet: its header, then the lines themselves with the agent's note under the last it pointed at, where code shown before notes were asked for has none. */
-function CodeCardContent({
+function ShownCodeContent({
   showing,
   taskId,
   agentLabel,
@@ -178,24 +159,15 @@ function CodeCardContent({
     agentLabel,
   );
   return (
-    <Card
-      as={CARD_ELEMENT.ARTICLE}
-      look={CARD_LOOK.CODE}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.FLUSH}
-      className="code-card"
-      data-call-id={showing.callId}
-      aria-label={fileRefText(code.ref)}
-    >
-      <CodeCardHeader
-        codeRef={code.ref}
-        repository={code.repository}
-        note={code.note}
-        copied={copiedLines(code)}
-        onOpen={onOpenFile === undefined ? undefined : () => onOpenFile(code.ref, code.commit)}
-      />
-      <CodeSnippet code={code} notes={notes} />
-    </Card>
+    <FileCodeCard
+      codeRef={code.ref}
+      repository={code.repository}
+      note={code.note}
+      copied={copiedLines(code)}
+      onOpen={onOpenFile === undefined ? undefined : () => onOpenFile(code.ref, code.commit)}
+      body={<CodeSnippet code={code} notes={notes} />}
+      data={{ "data-call-id": showing.callId }}
+    />
   );
 }
 
@@ -207,8 +179,8 @@ function CodeCardContent({
  * otherwise redraw each of them several times a second. Its opening of a
  * file is the panel's own, which is the same door from one draw to the next.
  */
-const CodeCard = memo(
-  CodeCardContent,
+const ShownCode = memo(
+  ShownCodeContent,
   (was, now) => was.showing.callId === now.showing.callId && was.taskId === now.taskId,
 );
 
@@ -262,7 +234,7 @@ function CodeFeedRun({
         />
       )}
       {call.showings.map((showing) => (
-        <CodeCard
+        <ShownCode
           key={showing.callId}
           showing={showing}
           taskId={taskId}

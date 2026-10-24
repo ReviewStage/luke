@@ -941,7 +941,7 @@
 }
 
 /* A code card's failure stands at its foot, so it draws no rule under it. */
-.code-card > .file-tab-notice {
+.luke-code-card > .file-tab-notice {
   border-bottom: 0;
 }
 
@@ -1098,28 +1098,6 @@
   box-sizing: border-box;
   padding-block: 0;
   background: var(--luke-color-well);
-}
-
-/* A Code card is `@luke/ui`'s Card on the code's ground, clipped at its
-   rounded edge, against which its header's actions stand flush: the file
-   at the left and the card's actions at its right edge, so the header is
-   the buttons' height and no more, as a transcript fence's is. */
-.code-card-header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding-left: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A card's copy and its file's opening keep to the header's right. */
-.code-card-actions {
-  display: flex;
-  flex: 0 0 auto;
-  margin-left: auto;
 }
 
 /* A File tab: its file, or the lines Luke showed of it under why the file
@@ -3879,13 +3857,6 @@
   height: calc(var(--snippet-rows) * var(--snippet-row));
 }
 
-/* A transcript's fenced block: each run carries its colour in both
-   appearances (`transcript-markdown.tsx`); a run in the theme's own
-   foreground carries neither and takes the pane's. */
-.transcript-code-body span {
-  color: light-dark(var(--run-light, var(--code-text)), var(--run-dark, var(--code-text)));
-}
-
 /* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
    selectable, breaking a long path anywhere rather than widening the
    column. Its headings are a note's, a step above the words around them and
@@ -4166,82 +4137,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   white-space: pre-wrap;
 }
 
-/* A transcript's fenced block (transcript-markdown.tsx), on `@luke/ui`'s
-   code card as a Code tab card is: a header naming the language with the
-   copy at its right, and the lines in the cards' type. The copy is the
-   window's own icon button, flush with the header's right edge, so the
-   header is the button's height and no more. The lines keep whole and
-   scroll sideways inside the block, so a long one never widens the
-   transcript. */
-.transcript-code-header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  padding-left: var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.transcript-code-language {
-  font-family: var(--luke-font-mono);
-  text-transform: lowercase;
-}
-
-/* A suggested change's header names it in words rather than as a language. */
-.transcript-code-suggestion {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
-}
-
-.transcript-code-body {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  color: var(--code-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
-  overflow-wrap: normal;
-  tab-size: 2;
-  white-space: pre;
-}
-
-.transcript-code-body > code {
-  font: inherit;
-}
-
-/* A block drawn as rows, a suggestion's or a diff's: each row as wide as
-   the widest and inset as the block's lines are, so its tint runs edge to
-   edge; a line removed on the diff's removed ground, one added on its added
-   ground, as Files changed tints them. */
-.transcript-code-body[data-rows] {
-  padding-inline: 0;
-}
-
-.transcript-code-body[data-rows] > code {
-  display: block;
-  min-width: fit-content;
-}
-
-.transcript-code-row {
-  display: block;
-  padding-inline: var(--luke-space-12);
-}
-
-.transcript-code-row[data-row="removed"] {
-  background: var(--diff-removed-ground);
-}
-
-.transcript-code-row[data-row="added"] {
-  background: var(--diff-added-ground);
-}
-
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */
 .transcript-inline-code {
   padding: 0.1em 0.35em;
@@ -4279,7 +4174,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    cut at its edge fade the same way, so a line cut short reads as one to
    scroll. */
 .transcript-table,
-.desktop-shell[data-room="narrow"] :is(.luke-markdown pre, .transcript-code-body) {
+.desktop-shell[data-room="narrow"] :is(.luke-markdown pre, .luke-code-card-body) {
   mask-image: linear-gradient(
     to right,
     transparent,
