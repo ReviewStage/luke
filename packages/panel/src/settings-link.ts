@@ -64,8 +64,16 @@ export function useSettingsWorkspace(input: {
   workspaces: readonly { readonly id: string }[];
   /** Whether Settings is the tab on screen. */
   settingsShown: boolean;
+  /** The workspace a fixture run's profile opens Settings on at launch, as a link would have named it. */
+  launched?: string | undefined;
 }): SettingsWorkspace {
-  const [linked, setLinked] = useState<{ workspaceId: string; over: string | undefined }>();
+  const [linked, setLinked] = useState<
+    { workspaceId: string; over: string | undefined } | undefined
+  >(() =>
+    input.launched === undefined
+      ? undefined
+      : { workspaceId: input.launched, over: input.listedId },
+  );
   // A link's workspace gives way once Settings is left or the sidebar lists another.
   if (linked !== undefined && (!input.settingsShown || linked.over !== input.listedId)) {
     setLinked(undefined);
@@ -92,10 +100,10 @@ export interface SettingsPlace {
   readonly onList: () => void;
 }
 
-/** Where Settings stands, entered on its list at Profile. */
-export function useSettingsPlace(): SettingsPlace {
-  const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ACCOUNT);
-  const [listed, setListed] = useState(true);
+/** Where Settings stands, entered on its list at Profile, or on the page a fixture run's profile opens at launch. */
+export function useSettingsPlace(launched?: SettingsView): SettingsPlace {
+  const [view, setView] = useState<SettingsView>(launched ?? SETTINGS_VIEW.ACCOUNT);
+  const [listed, setListed] = useState(launched === undefined);
   const onEnter = useCallback(() => {
     setView(SETTINGS_VIEW.ACCOUNT);
     setListed(true);
