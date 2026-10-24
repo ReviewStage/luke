@@ -14,13 +14,16 @@
  * background command runs or a `ScheduleWakeup` is set, and starts another
  * when either comes back (P00's first turn does both). The Stop hook, which
  * runs before each `result`, reports that work (`background_tasks`,
- * `session_crons`), so the runner ends the launch at a `result` only when
- * the last Stop hook reported none, and otherwise posts a WAITING event and
- * keeps the CLI up. Nor does a launch end while a message Luke sent during
- * a turn is still unanswered: the CLI runs it as its next turn. A `result`
- * after a stop ends the launch whatever is pending, and so does one no Stop
- * hook came before, such as an error's. A stop interrupts whichever turn is
- * running, a wakeup's included, and ends a launch with none at once.
+ * `session_crons`), so the agent's turn is over at a `result` only when
+ * the last Stop hook reported none, and otherwise the runner posts a WAITING
+ * event and keeps the CLI up. Nor is it over while a message Luke sent during
+ * a turn is still unanswered: the CLI runs it as its next turn. A turn that
+ * is over ends the launch, or, where the config asks it to stay `warm`,
+ * posts IDLE and keeps the CLI up (`RUNNER_WARM`) for Luke's next message,
+ * until Luke retires it or its cap ends it. A `result` after a stop
+ * ends the launch whatever is pending, and so does one no Stop hook came
+ * before, such as an error's. A stop interrupts whichever turn is running, a
+ * wakeup's included, and ends a launch with none at once.
  */
 
 import { randomUUID, type UUID } from "node:crypto";
@@ -72,6 +75,7 @@ import {
   RUNNER_EVENT,
   RUNNER_HARNESS,
   RUNNER_RELEASE,
+  RUNNER_WARM,
   RunnerConfigSchema,
   type RunnerEnd,
   type RunnerEndEvent,
@@ -235,6 +239,10 @@ interface Launch {
   readonly stopping: Ref.Ref<boolean>;
   /** How many waits the launch has posted, so a wait's release is dropped once a newer one began. */
   readonly waits: Ref.Ref<number>;
+  /** Whether the config asked the launch to stay warm once the agent's turn is over. */
+  readonly warmable: boolean;
+  /** Whether the launch is warm: its turn over at an IDLE, and nothing taken or begun since. */
+  readonly warm: Ref.Ref<boolean>;
   /** The wakeups a released wait left for Luke to deliver; none until it is released. */
   readonly released: Ref.Ref<readonly RunnerWakeup[] | undefined>;
   /** Held while a message is taken into the launch and while a wait is released, so no message lands in a launch a release ends. */
@@ -274,6 +282,7 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
             );
           }
           const running = yield* Ref.getAndSet(launch.turnRunning, true);
+          yield* Ref.set(launch.warm, false);
           yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
           // Posted ahead of the hand-off, so it is numbered before anything the CLI says of the message.
           yield* launch.sink.emit({ type: RUNNER_EVENT.ACCEPTED, uuid });
@@ -297,6 +306,17 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
         await launch.session.interrupt();
       });
       return;
+    }
+    case INPUT_LINE.RETIRE: {
+      // Decided under the admission, so a message taken ahead of the line keeps the launch.
+      return yield* launch.admission.withPermit(
+        Effect.gen(function* () {
+          if (!(yield* stillWarm(launch))) {
+            return yield* Effect.logWarning("agent-runner: skipped a retire for a launch at work");
+          }
+          yield* Deferred.succeed(launch.ended, RUNNER_END.IDLED);
+        }),
+      );
     }
     case INPUT_LINE.MODEL: {
       const { model, effort, fast } = value;
@@ -358,7 +378,9 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   // Marked before the message is posted, which may yield, and under the admission a release
   // takes, so a wait is not released once the CLI has begun a turn of its own.
   if (TURN_OUTPUT.has(message.type)) {
-    yield* launch.admission.withPermit(Ref.set(launch.turnRunning, true));
+    yield* launch.admission.withPermit(
+      Effect.andThen(Ref.set(launch.turnRunning, true), Ref.set(launch.warm, false)),
+    );
   }
   yield* launch.sink.emit(message);
   if (message.type !== SDK_MESSAGE.RESULT) return;
@@ -374,11 +396,61 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   const waiting =
     inFlight !== undefined &&
     (inFlight.background_tasks.length > 0 || inFlight.session_crons.length > 0);
-  if (!waiting) return yield* Deferred.succeed(launch.ended, RUNNER_END.TURN_ENDED);
+  // A `result` no Stop hook came before, such as an error's, ends the launch rather than trusting its CLI warm.
+  if (inFlight === undefined) return yield* Deferred.succeed(launch.ended, RUNNER_END.TURN_ENDED);
+  if (!waiting) {
+    return launch.warmable
+      ? yield* warmed(launch)
+      : yield* Deferred.succeed(launch.ended, RUNNER_END.TURN_ENDED);
+  }
   yield* Ref.set(launch.turnRunning, false);
   yield* launch.sink.emit({ type: RUNNER_EVENT.WAITING, ...inFlight });
   const wait = yield* Ref.updateAndGet(launch.waits, (count) => count + 1);
   yield* Effect.forkScoped(watchWait(launch, wait, inFlight));
+});
+
+/** Whether the launch is still warm, with nothing taken, begun, stopped, or ended since its IDLE. Read under the admission. */
+const stillWarm = Effect.fn("agent-runner/stillWarm")(function* (launch: Launch) {
+  return (
+    (yield* Ref.get(launch.warm)) &&
+    !(yield* Ref.get(launch.turnRunning)) &&
+    (yield* Ref.get(launch.unanswered)).size === 0 &&
+    !(yield* Ref.get(launch.stopping)) &&
+    !(yield* Deferred.isDone(launch.ended))
+  );
+});
+
+/**
+ * The agent's turn over, and the launch kept warm rather than ended: its
+ * IDLE posted, so Luke settles the turn, and a watch armed that ends it at
+ * `RUNNER_WARM.IDLE_CAP_MS` where Luke never retires it. Decided under the
+ * admission, so a message taken since the `result` starts the CLI's next
+ * turn instead, and posts no IDLE for a turn that is not over.
+ */
+const warmed = Effect.fn("agent-runner/warmed")(function* (launch: Launch) {
+  const wait = yield* launch.admission.withPermit(
+    Effect.gen(function* () {
+      if ((yield* Ref.get(launch.unanswered)).size > 0) return undefined;
+      yield* Ref.set(launch.turnRunning, false);
+      yield* Ref.set(launch.warm, true);
+      yield* launch.sink.emit({ type: RUNNER_EVENT.IDLE });
+      // Counted as a wait, so a release a wait before armed is dropped.
+      return yield* Ref.updateAndGet(launch.waits, (count) => count + 1);
+    }),
+  );
+  if (wait === undefined) return;
+  yield* Effect.forkScoped(watchWarm(launch, wait));
+});
+
+/** A warm launch's own bound: ended once it stayed warm for `RUNNER_WARM.IDLE_CAP_MS`. */
+const watchWarm = Effect.fn("agent-runner/watchWarm")(function* (launch: Launch, wait: number) {
+  yield* Effect.sleep(Duration.millis(RUNNER_WARM.IDLE_CAP_MS));
+  yield* launch.admission.withPermit(
+    Effect.gen(function* () {
+      if ((yield* Ref.get(launch.waits)) !== wait || !(yield* stillWarm(launch))) return;
+      yield* Deferred.succeed(launch.ended, RUNNER_END.IDLED);
+    }),
+  );
 });
 
 /** The wakeups a wait's one-shot tasks come due at, earliest first; none where one's time cannot be told, which holds the wait. */
@@ -483,6 +555,8 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
     stopping: yield* Ref.make(false),
     waits: yield* Ref.make(0),
+    warmable: config.warm === true,
+    warm: yield* Ref.make(false),
     released: yield* Ref.make<readonly RunnerWakeup[] | undefined>(undefined),
     admission: yield* Semaphore.make(1),
     ended: yield* Deferred.make<RunnerEnd>(),
