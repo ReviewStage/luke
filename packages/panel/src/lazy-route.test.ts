@@ -62,36 +62,54 @@ test("a route prefetched before its draw stands the page at once", async () => {
   assert.equal(host.textContent, "Page of Ada");
 });
 
-test("a route whose chunk failed says so with Reload, and its chunk is read again on Reload", async () => {
-  // Note that React says the failure its boundary caught on the console, as it would in the window.
-  vi.spyOn(console, "error").mockImplementation(() => undefined);
-  const Page = ({ name }: { name: string }) => createElement("p", null, `Page of ${name}`);
-  const chunks = [Promise.withResolvers<typeof Page>(), Promise.withResolvers<typeof Page>()];
-  let reads = 0;
-  const route = lazyRoute<{ name: string }>(() => {
-    const chunk = chunks[reads];
-    reads += 1;
-    if (chunk === undefined) throw new Error("read a third time");
-    return chunk.promise;
-  });
-  await act(async () => root.render(routeIn(route)));
-  await act(async () => {
-    chunks[0]?.reject(new TypeError("Failed to fetch dynamically imported module"));
-  });
-
-  const alert = host.querySelector('[role="alert"]');
+/** The Reload a route's failure stands with, once it stands. */
+function reloadButton(): HTMLButtonElement {
   const reload = [...host.querySelectorAll("button")].find(
     (button) => button.textContent === "Reload",
   );
-  assert.ok(alert !== null && reload !== undefined, "the failure stands with Reload");
+  assert.ok(
+    host.querySelector('[role="alert"]') !== null && reload !== undefined,
+    "the failure stands with Reload",
+  );
+  return reload;
+}
+
+test("a route whose chunk failed says so with Reload, which reloads the window to read the chunk again", async () => {
+  // Note that React says the failure its boundary caught on the console, as it would in the window.
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const chunk = Promise.withResolvers<() => React.JSX.Element>();
+  const reloads: string[] = [];
+  const route = lazyRoute<{ name: string }>(
+    () => chunk.promise,
+    () => reloads.push("window"),
+  );
+  await act(async () => root.render(routeIn(route)));
+  await act(async () => {
+    chunk.reject(new TypeError("Failed to fetch dynamically imported module"));
+  });
   assert.doesNotMatch(host.textContent ?? "", /Page of Ada/u);
 
+  act(() => reloadButton().click());
+  assert.deepEqual(reloads, ["window"]);
+});
+
+test("a route that landed and threw while drawing is drawn again in place on Reload, the window left standing", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const broken = { now: true };
+  const Page = ({ name }: { name: string }) => {
+    if (broken.now) throw new Error("The page could not draw.");
+    return createElement("p", null, `Page of ${name}`);
+  };
+  const reloads: string[] = [];
+  const route = lazyRoute<{ name: string }>(
+    () => Promise.resolve(Page),
+    () => reloads.push("window"),
+  );
+  await act(async () => root.render(routeIn(route)));
+  const reload = reloadButton();
+
+  broken.now = false;
   act(() => reload.click());
-  // Note that Suspense hides what stood before, the failure, rather than taking it out while the chunk is read again.
-  assert.match(host.textContent ?? "", new RegExp(LOADING, "u"));
-  await act(async () => {
-    chunks[1]?.resolve(Page);
-  });
   assert.equal(host.textContent, "Page of Ada");
-  assert.equal(reads, 2);
+  assert.deepEqual(reloads, []);
 });

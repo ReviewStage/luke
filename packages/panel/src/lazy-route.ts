@@ -21,12 +21,13 @@ import { type ComponentType, createElement, type ReactPromise } from "react";
  * is marked settled as React marks a thenable it reads, before React hears
  * of it, so the draw React retries on finds it settled.
  *
- * Note too that a failed import is not kept, as `lazy` keeps one, because a
- * chunk that failed once on a dropped connection is most often there the
- * next time: Reload, or a prefetch, starts it again. A draw does not,
- * because React draws a failed surface more than once before it hands the
- * failure to the boundary, and each draw would start a read that could fail
- * in turn.
+ * Note too that Reload after a failed import reloads the window, rather
+ * than start the import again in place, because Chromium keeps a module
+ * whose fetch failed in the document's module map and answers the same
+ * failure to every later import of it, and a chunk a deploy since replaced
+ * is gone under its old name for good; a new document reads both afresh.
+ * A surface that landed and then threw while drawing is drawn again in
+ * place.
  */
 
 /** A drawn surface reached through a dynamic import, and the door that starts that import early. */
@@ -35,8 +36,20 @@ export interface LazyRoute<P> {
   readonly prefetch: () => void;
 }
 
-/** The surface `load` answers, imported once whether its draw or a prefetch asks first, and again after it failed. */
-export function lazyRoute<P extends object>(load: () => Promise<ComponentType<P>>): LazyRoute<P> {
+/** The window's own reload: its document read again from the start, every chunk among it. */
+function reloadDocument(): void {
+  location.reload();
+}
+
+/**
+ * The surface `load` answers, imported once whether its draw or a prefetch
+ * asks first; `reload` is what Reload does once that import failed, the
+ * window's own reload unless a test stands in for it.
+ */
+export function lazyRoute<P extends object>(
+  load: () => Promise<ComponentType<P>>,
+  reload: () => void = reloadDocument,
+): LazyRoute<P> {
   let loading: ReactPromise<ComponentType<P>> | undefined;
   const imported = (): ReactPromise<ComponentType<P>> => {
     if (loading !== undefined) return loading;
@@ -52,9 +65,9 @@ export function lazyRoute<P extends object>(load: () => Promise<ComponentType<P>
     loading = Object.assign(started, { status: "pending" as const });
     return loading;
   };
-  // A failed import is let go of, so the next to ask starts it again.
-  const forgetFailed = (): void => {
-    if (loading?.status === "rejected") loading = undefined;
+  // Only a new document reads a failed chunk again; a surface that landed is drawn again in place.
+  const reloadFailed = (): void => {
+    if (loading?.status === "rejected") reload();
   };
   const Imported = (props: P): React.JSX.Element => {
     const module = imported();
@@ -63,11 +76,10 @@ export function lazyRoute<P extends object>(load: () => Promise<ComponentType<P>
     throw module;
   };
   const Route = (props: P): React.JSX.Element =>
-    createElement(ErrorBoundary, { onReload: forgetFailed }, createElement(Imported, props));
+    createElement(ErrorBoundary, { onReload: reloadFailed }, createElement(Imported, props));
   return {
     Route,
     prefetch: () => {
-      forgetFailed();
       imported();
     },
   };
