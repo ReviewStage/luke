@@ -55,17 +55,6 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
-import { GLYPH } from "@luke/ui/icons";
-import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
-import {
-  MARKDOWN_HTML_STEP,
-  type MarkdownComponents,
-  type MarkdownNodeProps,
-  type MarkdownSteps,
-  markdownStep,
-  TRANSCRIPT_REMARK_STEPS,
-} from "@luke/ui/markdown";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -78,7 +67,7 @@ import {
   CalendarPlusIcon,
   CalendarXIcon,
   CircleCheckIcon,
-  CircleDotIcon,
+  CircleDotDashedIcon,
   CircleIcon,
   CirclePlusIcon,
   CircleStopIcon,
@@ -91,6 +80,7 @@ import {
   FolderInputIcon,
   FolderMinusIcon,
   FolderPlusIcon,
+  GLYPH,
   GlobeIcon,
   HashIcon,
   HourglassIcon,
@@ -98,7 +88,6 @@ import {
   InboxIcon,
   LaptopIcon,
   LayoutListIcon,
-  ListTodoIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
   MessageCircleXIcon,
@@ -113,7 +102,17 @@ import {
   TerminalIcon,
   TimerIcon,
   WrenchIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import {
+  MARKDOWN_HTML_STEP,
+  type MarkdownComponents,
+  type MarkdownNodeProps,
+  type MarkdownSteps,
+  markdownStep,
+  TRANSCRIPT_REMARK_STEPS,
+} from "@luke/ui/markdown";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   type ComponentProps,
   type ComponentType,
@@ -946,7 +945,7 @@ const CALL_ICON = {
   [CALL_KIND.QUEUE_QUESTION]: MessageCircleQuestionIcon,
   [CALL_KIND.WITHDRAW_QUESTION]: MessageCircleXIcon,
   [CALL_KIND.EDIT_PLAN]: FilePenIcon,
-  [CALL_KIND.TODOS]: ListTodoIcon,
+  [CALL_KIND.TODOS]: () => <GLYPH.TODOS />,
   [CALL_KIND.INBOX_POST]: InboxIcon,
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
   [CALL_KIND.INBOX_READ]: InboxIcon,
@@ -978,8 +977,8 @@ const CALL_ICON = {
   [CALL_KIND.RUN_AUTOMATION]: CalendarCheckIcon,
   [CALL_KIND.MOVE_TASK]: FolderInputIcon,
   [CALL_KIND.UPDATE_TASK]: FilePenIcon,
-  [CALL_KIND.LIST_ISSUES]: ListTodoIcon,
-  [CALL_KIND.READ_ISSUE]: CircleDotIcon,
+  [CALL_KIND.LIST_ISSUES]: () => <GLYPH.ISSUE />,
+  [CALL_KIND.READ_ISSUE]: () => <GLYPH.ISSUE />,
   [CALL_KIND.CREATE_ISSUE]: CirclePlusIcon,
   [CALL_KIND.UPDATE_ISSUE]: FilePenIcon,
   [CALL_KIND.CREATE_TASK]: FilePlusIcon,
@@ -1338,7 +1337,7 @@ function SentCall({
  */
 const TODO_LOOK = {
   [CODING_AGENT_TODO_STATUS.PENDING]: { Icon: CircleIcon, label: "Pending" },
-  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotIcon, label: "In progress" },
+  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotDashedIcon, label: "In progress" },
   [CODING_AGENT_TODO_STATUS.DONE]: { Icon: CircleCheckIcon, label: "Done" },
 } as const satisfies Record<CodingAgentTodoStatus, { Icon: LucideIcon; label: string }>;
 
@@ -1443,7 +1442,7 @@ export function TranscriptTodos({
     <Tool data-todos="" {...props}>
       <ToolHeader
         state={state}
-        icon={<ListTodoIcon aria-hidden="true" />}
+        icon={<GLYPH.TODOS />}
         label={words.verb}
         subject={subject}
         subjectIsCode={words.code}
@@ -1483,7 +1482,7 @@ export function TranscriptTodosDock({
       <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
         <DisclosureChevron />
         <GlyphSlot>
-          <ListTodoIcon />
+          <GLYPH.TODOS />
         </GlyphSlot>
         <span className="todos-dock-summary">
           <RollingNumber value={done} /> of <RollingNumber value={total} /> done

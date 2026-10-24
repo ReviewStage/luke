@@ -4,8 +4,8 @@ import {
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
 import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
-import { PencilIcon, Undo2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { MessageAction } from "../ai-elements/message.js";
 import type { EditComposerDoors } from "./edit-composer.js";
@@ -155,7 +155,7 @@ export function EditMessageAction({ messageId }: { messageId: string }): ReactNo
       tooltip={REWIND_WORDS.EDIT}
       onClick={() => doors.onEdit(messageId)}
     >
-      <PencilIcon />
+      <GLYPH.RENAME />
     </MessageAction>
   );
 }
@@ -177,7 +177,7 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
         tooltip={REWIND_WORDS.REVERT}
         onClick={confirm.ask}
       >
-        <Undo2Icon />
+        <GLYPH.GO_BACK />
       </MessageAction>
       <ConfirmDialog open confirm={confirm} question={REVERT_QUESTION} />
     </>

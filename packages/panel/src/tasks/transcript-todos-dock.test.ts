@@ -2,8 +2,10 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/coding-agent-wire";
+import { GLYPH } from "@luke/ui/icons";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 import { TranscriptTodosDock } from "./transcript-blocks.js";
@@ -113,4 +115,14 @@ test("in a short window, an open list stops growing at under a third of what is 
   assert.ok(share !== undefined, `${maxHeight} is a share of the stage`);
   assert.ok(Number(share) < 1 / 3, `${share} of ${stage}px is under a third`);
   assert.equal(overflowY, "auto");
+});
+
+test("the dock's line wears the to-do list's glyph, never the Tasks one", () => {
+  const { view } = docked(steps(1));
+  const glyphs = [...view.querySelectorAll("summary svg, [data-todos-dock] svg")].map(
+    (svg) => svg.outerHTML,
+  );
+
+  assert.ok(glyphs.includes(renderToStaticMarkup(createElement(GLYPH.TODOS))));
+  assert.ok(!glyphs.includes(renderToStaticMarkup(createElement(GLYPH.TASK))));
 });
