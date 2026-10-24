@@ -1,10 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "587fb773-7b11-4a5b-b269-04434312cc09",
+  "id": "7ed0a6ea-64a7-4798-b08b-24b2f2653db0",
   "prevIds": [
-    "bb339946-7323-42d1-bc5c-a21897e988be",
-    "fd52c607-b016-4d69-a59c-1476aa3cde9d"
+    "36726b58-f012-43ff-90c1-561393d9c1ff"
   ],
   "ddl": [
     {
@@ -5616,32 +5615,6 @@
       "table": "inbox_item"
     },
     {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "blocks",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_item"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "response",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_item"
-    },
-    {
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -5663,19 +5636,6 @@
       "generated": null,
       "identity": null,
       "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_item"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "answer",
       "entityType": "columns",
       "schema": "public",
       "table": "inbox_item"
@@ -11585,6 +11545,62 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "fired_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "automation_run_status_fired",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "automation_run"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "settled_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"coding_agent_id\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "automation_run_unrecorded_settled",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "automation_run"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "organization_id",
           "isExpression": false,
           "asc": true,
@@ -12866,6 +12882,34 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "kind",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"read_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_notice_unread_kind_at",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "operator_id",
           "isExpression": false,
           "asc": true,
@@ -13398,6 +13442,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "parent_conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"parent_conversation_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "conversations_parent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "conversation_id",
           "isExpression": false,
           "asc": true,
@@ -13446,6 +13511,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "messages_awaiting_line",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "turn_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"turn_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "messages_turn",
       "entityType": "indexes",
       "schema": "public",
       "table": "messages"
@@ -13860,6 +13946,34 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "next_poll_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "token_pull_request_poll_due",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "voice_session_id",
           "isExpression": false,
           "asc": true,
@@ -13943,6 +14057,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "voice_sessions_detached",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "task_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"task_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "voice_sessions_task",
       "entityType": "indexes",
       "schema": "public",
       "table": "voice_sessions"
