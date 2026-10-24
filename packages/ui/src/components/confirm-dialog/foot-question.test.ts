@@ -52,26 +52,32 @@ function KeyDialog({ answers, onDone }: { answers: Answers; onDone: () => void }
       return result;
     }),
   );
-  return createElement(
-    Dialog,
-    {
-      open: true,
-      title: "OpenAI",
-      onDismiss: onDone,
-      actions: createElement(DialogActions, { onDone }),
-    },
-    key ? createElement("button", { type: "button", onClick: confirm.ask }, "Delete key") : null,
-    createElement(FootQuestion, {
-      confirm,
-      question: {
-        title: "Delete the OpenAI key?",
-        body: "Luke stops using it at once.",
-        verb: "Delete",
-        running: "Deleting",
-        loss: CONFIRM_LOSS.IRREVERSIBLE,
-      },
-    }),
-  );
+  return createElement(Dialog, {
+    open: true,
+    title: "OpenAI",
+    onDismiss: onDone,
+    actions: createElement(DialogActions, { onDone }),
+    children: [
+      key
+        ? createElement(
+            "button",
+            { key: "key", type: "button", onClick: confirm.ask },
+            "Delete key",
+          )
+        : null,
+      createElement(FootQuestion, {
+        key: "question",
+        confirm,
+        question: {
+          title: "Delete the OpenAI key?",
+          body: "Luke stops using it at once.",
+          verb: "Delete",
+          running: "Deleting",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
+        },
+      }),
+    ],
+  });
 }
 
 /** The button whose accessible name is `name`, wherever it stands. */

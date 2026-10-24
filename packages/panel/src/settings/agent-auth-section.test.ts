@@ -242,8 +242,8 @@ async function pasteAndSave(field: HTMLInputElement, value: string): Promise<voi
 function question(): HTMLElement {
   const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
   assert.equal(dialogs.length, 1, "the question opens no card over the dialog");
-  const [dialog] = dialogs;
-  assert.ok(dialog?.querySelector('[data-slot="dialog-body"][inert]'), "the dialog stands still");
+  const dialog = dialogs[0] ?? assert.fail("no dialog");
+  assert.ok(dialog.querySelector('[data-slot="dialog-body"][inert]'), "the dialog stands still");
   assert.ok(
     [...dialog.querySelectorAll("button")].every((each) => each.textContent !== "Done"),
     "the foot's own answer gives way to the question",
