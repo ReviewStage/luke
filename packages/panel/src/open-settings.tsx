@@ -39,7 +39,14 @@ export function useOpenSettings(): (link: SettingsLink) => void {
  * and that a right-click offers the page's own link where the surface hands
  * down the workspace its links are written under.
  */
-export function SettingsPageLink({ page }: { page: SettingsView }): React.JSX.Element {
+export function SettingsPageLink({
+  page,
+  onLeave,
+}: {
+  page: SettingsView;
+  /** Called as the press leaves for the page, before it opens, as a modal over it is answered and put away. */
+  onLeave?: (() => void) | undefined;
+}): React.JSX.Element {
   const openSettings = useOpenSettings();
   const workspace = useLinkWorkspace();
   const href =
@@ -48,7 +55,10 @@ export function SettingsPageLink({ page }: { page: SettingsView }): React.JSX.El
     <TextButton
       tone={TEXT_BUTTON_TONE.ACCENT}
       linkHref={href}
-      onClick={() => openSettings({ page })}
+      onClick={() => {
+        onLeave?.();
+        openSettings({ page });
+      }}
     >
       {settingsPageOf(page).title}
     </TextButton>
