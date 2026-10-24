@@ -220,18 +220,22 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
-test("while Settings is still loading its frame stands, a page of placeholder sections beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
+test("while Settings is still loading its frame stands, a page of placeholder sections under the one bar Settings stands under beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
   const tabs: PanelTab[] = [];
   const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
+  const bars = page.querySelectorAll(
+    'section[aria-label="Settings"] :is(.desktop-drag-strip, .luke-toolbar)',
+  );
 
   assert.deepEqual(
     [
       page.querySelector('nav[aria-label="Settings pages"]') !== null,
       placeholder?.textContent,
       placeholder?.querySelectorAll(".luke-settings-section-card").length,
+      bars.length,
     ],
-    [true, "Loading Settings", 1],
+    [true, "Loading Settings", 1, 1],
   );
 
   act(() => {

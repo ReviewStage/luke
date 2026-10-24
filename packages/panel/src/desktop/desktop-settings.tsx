@@ -122,14 +122,15 @@ function SettingsPageRow({
   );
 }
 
-/** The head of a page's column: the window's drag strip, or under it in a narrow room the way back to the page list. */
+/** The way back to the page list, which leads a page's bar in a narrow room. */
+function ListBack({ onList }: { onList: () => void }): React.JSX.Element {
+  return <FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />;
+}
+
+/** The head of the plan template's column: the window's drag strip, or under it in a narrow room the way back to the page list. */
 function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.Element {
   if (onList === undefined) return <div className="desktop-drag-strip" />;
-  return (
-    <PageToolbar
-      lead={<FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />}
-    />
-  );
+  return <PageToolbar lead={<ListBack onList={onList} />} />;
 }
 
 /** A group's heading: the listed workspace's tile and name over its own group, the group's words otherwise. */
@@ -163,9 +164,9 @@ function GroupHeading({
  * tasks' sidebar lists, by its tile and name, over its Members and GitHub;
  * Account, over what is the account's whichever workspace is listed; and
  * This Mac. Settings opens on Profile, Account's first page, with the caret
- * in the search. The page has
- * no top bar: its title heads its column, under the window's drag strip,
- * and a page's reset ends the title's line. The Workspace page's title is
+ * in the search. The page is a document: its title heads its column, under
+ * the page's bar (`SettingsPage`), which picks up the title once it scrolls
+ * away, and a page's reset ends the title's line. The Workspace page's title is
  * the listed workspace's name, since that is the workspace it shows. The
  * plan template is the one page drawn apart from the panel: it is a plan's
  * page, document and all
@@ -276,7 +277,8 @@ export function DesktopSettings({
   const edge = useSidebarEdge(sidebar);
   const hidden = hiddenColumns(room, step.listed);
   const screen = useNarrowFocus(room, step.listed);
-  const bar = <PageBar onList={room === SHELL_ROOM.NARROW ? step.onList : undefined} />;
+  const onList = room === SHELL_ROOM.NARROW ? step.onList : undefined;
+  const bar = <PageBar onList={onList} />;
   // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
@@ -370,9 +372,13 @@ export function DesktopSettings({
         />
       ) : (
         <section className="settings-page" aria-label={title} hidden={hidden.item}>
-          {bar}
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          <SettingsPage key={settings.view} title={title} actions={reset}>
+          <SettingsPage
+            key={settings.view}
+            title={title}
+            actions={reset}
+            lead={onList === undefined ? undefined : <ListBack onList={onList} />}
+          >
             <SettingsPanel
               {...settings}
               integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
