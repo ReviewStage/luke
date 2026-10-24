@@ -88,6 +88,8 @@ import {
 import { RENAME_FAILED_NOTE, TASK_MARK } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
+  LIST_FOLD_ORDER,
+  listPropertiesFitting,
   TASK_PROPERTY,
   TASK_PROPERTY_ORDER,
   TASKS_GROUP,
@@ -101,7 +103,7 @@ import {
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { Schema } from "effect";
-import { type ReactNode, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
@@ -188,7 +190,10 @@ import { useRowDrag } from "./use-row-drag.js";
  * a phone, whose rows are changed by their chips alone. A phone's List has no room for
  * most columns beside a name, nor a drag beside its scrolling,
  * so it draws only a row's chips, its name, and its time, its rows changed
- * by their chips and menus, the rest on its card.
+ * by their chips and menus, the rest on its card. A wider List narrowed,
+ * beside a side panel or in a small window, folds those same columns away
+ * by its own width, one by one in a fixed order, before its names are
+ * squeezed (`listPropertiesFitting`).
  *
  * Rows are chosen together as a Mac's list chooses them (`SelectionRegion`):
  * ⌘-click one in or out, ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn,
@@ -227,15 +232,6 @@ const SELECTION_ACT = {
 
 /** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
 const ROW_HANDLE = CARD_PRESS_SELECTOR;
-
-/** The properties a phone's List has no room for beside a name: all but the chips and the time. */
-const NARROW_LEFT_OUT: readonly TaskProperty[] = [
-  TASK_PROPERTY.KEY,
-  TASK_PROPERTY.WAITING,
-  TASK_PROPERTY.REPOSITORY,
-  TASK_PROPERTY.CREATOR,
-  TASK_PROPERTY.AGENTS,
-];
 
 /** The drop zone Pinned is, the zone of the run of every task, and No assignee's; a section's is its id, a status's or a priority's its value, and an assignee's their account id. */
 const DROP_ZONE = {
@@ -1037,6 +1033,45 @@ function gridColumns(properties: readonly TaskProperty[]): string {
   return [...before, "minmax(0, 1fr)", ...after, "auto"].join(" ");
 }
 
+/** Whether two runs of properties are the same, in the same order. */
+function sameProperties(one: readonly TaskProperty[], other: readonly TaskProperty[]): boolean {
+  return one.length === other.length && one.every((property, at) => property === other[at]);
+}
+
+/**
+ * The properties the List draws of those its display chose, at its own
+ * width rather than the window's: those `listPropertiesFitting` folds away
+ * for the room the list stands in, measured as it resizes, and on a phone
+ * every property that folds. Only what is folded is state, never the width,
+ * so a window being dragged draws the rows again only where a column comes
+ * or goes. Note that the first measure lands before the list paints, so no
+ * row is ever drawn with its name squeezed first, and that a list not laid
+ * out yet, which measures nothing, folds nothing.
+ */
+function useFittedProperties(
+  list: HTMLElement | null,
+  properties: readonly TaskProperty[],
+  narrow: boolean,
+): readonly TaskProperty[] {
+  const [folded, setFolded] = useState<readonly TaskProperty[]>([]);
+  useLayoutEffect(() => {
+    if (list === null || narrow) return undefined;
+    const measure = () => {
+      const { width } = list.getBoundingClientRect();
+      if (width <= 0) return;
+      const fitting = listPropertiesFitting(properties, width);
+      const next = properties.filter((property) => !fitting.includes(property));
+      setFolded((was) => (sameProperties(was, next) ? was : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [list, properties, narrow]);
+  const left = narrow ? LIST_FOLD_ORDER : folded;
+  return properties.filter((property) => !left.includes(property));
+}
+
 /** The List: the listed workspace's tasks under their pins, sections, and the grouping chosen, in one grid whose columns line up down the page. */
 export function TasksList({
   tasks,
@@ -1055,9 +1090,8 @@ export function TasksList({
   const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const narrow = room === SHELL_ROOM.NARROW;
-  const properties = narrow
-    ? display.properties.filter((property) => !NARROW_LEFT_OUT.includes(property))
-    : display.properties;
+  const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
+  const properties = useFittedProperties(listElement, display.properties, narrow);
   const listed = tasks.listed.tasks;
   const pinned = inPinOrder(
     listed.filter((task) => task.pinnedAt !== undefined),
@@ -1108,7 +1142,7 @@ export function TasksList({
   const list = useRef<HTMLDivElement>(null);
   // The rows of every group are one Tab stop that ↑↓ walk, a folded group's passed by, as they are not drawn.
   const roving = useRovingKeys<HTMLDivElement>();
-  const listRef = useMemo(() => joinRefs(list, roving.ref), [roving.ref]);
+  const listRef = useMemo(() => joinRefs(list, roving.ref, setListElement), [roving.ref]);
   const toast = useToast();
   const regionId = useId();
   const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());

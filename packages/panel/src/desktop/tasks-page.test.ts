@@ -28,6 +28,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { relayout } from "../testing/resize-observer.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
@@ -1544,4 +1545,58 @@ test("a row's pull request link and its count take the pointer over the row's pr
   assert.equal(getComputedStyle(count ?? assert.fail("the count stands")).pointerEvents, "auto");
   assert.equal(getComputedStyle(cell ?? assert.fail("the cell stands")).pointerEvents, "none");
   laid.remove();
+});
+
+test("a List narrowed in a wide window folds its columns by its own width, agents first, then the repository, and draws them again once it widens", async () => {
+  let listWidth = 800;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return DOMRect.fromRect({ width: this.classList.contains("tasks-list") ? listWidth : 0 });
+  });
+  const page = await mountPage();
+  const cells = () =>
+    [...rowOf(page, "ACME-44").querySelectorAll("[data-cell]")].map((cell) =>
+      cell.getAttribute("data-cell"),
+    );
+  const resizeTo = (width: number) => {
+    listWidth = width;
+    act(() => relayout());
+  };
+
+  assert.deepEqual(cells(), [
+    "name",
+    "priority",
+    "key",
+    "status",
+    "waiting",
+    "repository",
+    "assignee",
+    "updated",
+    "more",
+  ]);
+  resizeTo(700);
+  assert.deepEqual(cells(), [
+    "name",
+    "priority",
+    "key",
+    "status",
+    "waiting",
+    "assignee",
+    "updated",
+    "more",
+  ]);
+  resizeTo(1200);
+  assert.deepEqual(cells(), [
+    "name",
+    "priority",
+    "key",
+    "status",
+    "waiting",
+    "repository",
+    "assignee",
+    "agents",
+    "updated",
+    "more",
+  ]);
 });
