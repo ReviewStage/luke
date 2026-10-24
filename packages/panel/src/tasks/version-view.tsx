@@ -28,7 +28,7 @@ import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { type MentionedTask, useMentionLink } from "./task-mentions.js";
-import { TaskTitle } from "./task-title.js";
+import { TextTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history.js";
 
@@ -145,7 +145,7 @@ function VersionBody({
   const picture = usePlanPictureDrawer();
   return (
     <VersionText>
-      {title === undefined || section !== undefined ? null : <TaskTitle name={title} />}
+      {title === undefined || section !== undefined ? null : <TextTitle name={title} />}
       {units.map((unit, at) => (
         <MarkdownMessage
           // A unit's heading may stand twice, struck and written again, so its place keys it.
@@ -179,7 +179,7 @@ function VersionSkeleton({
   return (
     <SkeletonRegion label="Reading the version…">
       <VersionText>
-        {title === undefined || section !== undefined ? null : <TaskTitle name={title} />}
+        {title === undefined || section !== undefined ? null : <TextTitle name={title} />}
         {PAGE_SKELETON.map((unit) => (
           <NoteUnit key={unit.heading} heading={<Skeleton width={unit.heading} />}>
             {unit.lines.map((width, at) => (

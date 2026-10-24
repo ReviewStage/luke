@@ -1485,22 +1485,19 @@ export const PlanBody = memo(function PlanBody({
               <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
             )}
             {titled ? (
-              attributed(
-                // Keyed by the plan, so words typed for one are saved to it as another opens.
-                <EditableTitle
-                  key={task.id}
-                  name={task.name}
-                  entry={entry === EDITOR_PLACE.TITLE}
-                  editing={editing}
-                  renaming={renaming}
-                  onRename={onRename}
-                  onDraft={onDraftName}
-                />,
-                null,
-                titleMenu,
-              )
+              // Keyed by the plan, so words typed for one are saved to it as another opens.
+              <EditableTitle
+                key={task.id}
+                name={task.name}
+                entry={entry === EDITOR_PLACE.TITLE}
+                editing={editing}
+                renaming={renaming}
+                actions={titleMenu}
+                onRename={onRename}
+                onDraft={onDraftName}
+              />
             ) : page === undefined ? (
-              attributed(<TaskTitle name={task.name} />, null, titleMenu)
+              <TaskTitle name={task.name} actions={titleMenu} />
             ) : (
               <PlanPageHead
                 name={task.name}
