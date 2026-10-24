@@ -134,6 +134,9 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   unset), and a component's own glyph slot sets it for the glyph an app
   hands it, a tab's or a tab card's, so a container whose glyphs stand
   larger or smaller, a review card's face, says so once.
+  `--luke-call-video-height` sets the height a `CallVideoTile` drawn at
+  `CALL_VIDEO_FIT.CARD` stands at (the card's width at 16:9 where unset),
+  for a window whose own height is fixed around it.
 
 ## Built on shadcn/ui
 
@@ -273,6 +276,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `FileText`, `GlyphSlot` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `RetryButton`, `MoreButton` (a header's ⋯; a row's is `ListRow`'s `menu`), `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
+| Calls | `CallBar`, `CallMute`, `VideoToggle`, `EndCallButton` (the one red End call), `CallVideoTile` (with `AvatarVoice`) |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click) |
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |
