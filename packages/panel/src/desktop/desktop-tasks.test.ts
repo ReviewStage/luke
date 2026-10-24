@@ -525,6 +525,14 @@ async function narrowTaskInbox(
       );
       return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
     },
+    /** What the list's foot says of a refresh that did not land, and whether it offers Retry. */
+    refreshFailure: () => {
+      const alert = tab.querySelector('.inbox-tasks [role="alert"]');
+      const retry = [...tab.querySelectorAll(".inbox-tasks button")].some((button) =>
+        button.textContent?.includes("Retry"),
+      );
+      return [alert?.firstElementChild?.nextElementSibling?.textContent ?? null, retry];
+    },
     back: () =>
       [...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .luke-toolbar button")].find(
         (button) => button.textContent === "Inbox",
@@ -816,6 +824,23 @@ test("a task's Inbox whose read failed offers Retry though To do lists nothing i
   assert.deepEqual(inbox.rows(), [], "For you, kept from before, lists nothing");
   await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.failure(), [true, true]);
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+test("a task's Inbox whose refresh failed keeps the rows it holds and says Could not refresh with Retry at their foot", async () => {
+  window.localStorage.clear();
+  showEverything();
+  const items = [
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  const refresh = heldAnswer();
+  const inbox = await narrowTaskInbox(items, 1_200, refresh.promise);
+  assert.deepEqual(inbox.refreshFailure(), [null, false], "nothing is said while the read stands");
+  await refresh.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  assert.deepEqual(inbox.refreshFailure(), ["Could not refresh", true]);
   window.localStorage.clear();
   inbox.unmount();
 });
