@@ -188,6 +188,33 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an operator's ensure carries its Reset, the archived operator its Undo brings back, and the reader's zone to the host, and a plain ensure none of them",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const workspaceId = "workspace-acme";
+      const timeZone = "America/New_York";
+
+      yield* operator.codingAgentEnsureOperator({ workspaceId });
+      yield* operator.codingAgentEnsureOperator({ workspaceId, reset: true, timeZone });
+      yield* operator.codingAgentEnsureOperator({ workspaceId, restore: "operator-old", timeZone });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, { workspaceId }],
+          [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, { workspaceId, reset: true, timeZone }],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR,
+            { workspaceId, restore: "operator-old", timeZone },
+          ],
+        ],
+      );
+    }),
+);
+
 it.effect("a nod on an inbox notice travels to the host as its revision and its key alone", () =>
   Effect.gen(function* () {
     const { client, requests } = recordingClient();
