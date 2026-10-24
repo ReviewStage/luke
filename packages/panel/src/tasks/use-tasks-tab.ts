@@ -15,7 +15,7 @@ import type {
   RepositoryIssuesAsk,
 } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
@@ -49,7 +49,13 @@ import {
 import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import {
+  DIALOG_TONE,
+  type DialogConfirm,
+  type DialogQuestion,
+  STATUS_TONE,
+  useConfirmDialog,
+} from "@luke/ui";
 import { callTaskName } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
@@ -149,7 +155,7 @@ import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-span
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, UNDO_LABEL, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { useStandingCall, voiceViewNow } from "../use-voice-view.js";
 import type { AgentCallPlace, AgentCallPress } from "./agent-call.js";
@@ -164,9 +170,9 @@ import {
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
+  agentName,
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
-  agentTabLabel,
   choiceRequest,
   openingLineOf,
   type SentLine,
@@ -1750,7 +1756,7 @@ export function useTasksTab(input: {
   const pinLabels = useMemo(
     () => ({
       agents: new Map(
-        (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
+        (agents.agents ?? []).map((agent) => [agent.id, agentName(agent, agents.models)]),
       ),
       pullRequests: new Map(
         [...agents.pullRequests].map(([agentId, pullRequest]) => [
@@ -2058,7 +2064,7 @@ export function useTasksTab(input: {
         };
         toast({
           words: switchedNote(target.name),
-          tone: TOAST_TONE.DONE,
+          tone: STATUS_TONE.COMPLETE,
           action: { label: backNote(from.name), onPress: back },
         });
       });
@@ -2076,11 +2082,11 @@ export function useTasksTab(input: {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
     if (deleted) {
-      toast({ words: TASK_DELETED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      toast({ words: TASK_DELETED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     }
     if (!shownNow.current) {
-      toast({ words: DELETE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: DELETE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     }
     return DELETE_REFUSED;
   };
@@ -2124,7 +2130,7 @@ export function useTasksTab(input: {
           );
           toast({
             words: MARK_FAILED_NOTES[mark],
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         }
@@ -2149,7 +2155,7 @@ export function useTasksTab(input: {
         );
         toast({
           words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });
       });
@@ -2196,7 +2202,7 @@ export function useTasksTab(input: {
       );
       toast({
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
-        tone: TOAST_TONE.FAILED,
+        tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
       });
     });
@@ -2252,7 +2258,7 @@ export function useTasksTab(input: {
     Promise.all(asked).then((answers) => {
       if (!answers.includes(false)) return;
       putBack?.();
-      toast({ words: PIN_MOVE_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: PIN_MOVE_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
   };
 
@@ -2279,7 +2285,7 @@ export function useTasksTab(input: {
         if (changed === false) {
           toast({
             words: SECTION_WRITE_FAILED_NOTE,
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           });
         }
@@ -2343,14 +2349,14 @@ export function useTasksTab(input: {
       if (landed.length === 0) {
         toast({
           words: settleFailedNote(status, refused),
-          tone: TOAST_TONE.FAILED,
+          tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });
         return;
       }
       toast({
         words: settledNote(status, landed.length, refused),
-        tone: TOAST_TONE.DONE,
+        tone: STATUS_TONE.COMPLETE,
         action: {
           label: UNDO_LABEL,
           onPress: () =>
@@ -2381,7 +2387,7 @@ export function useTasksTab(input: {
       if (refused === 0) return;
       toast({
         words: STATUS_RESTORE_FAILED_NOTE,
-        tone: TOAST_TONE.FAILED,
+        tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
       });
     });
@@ -2666,7 +2672,7 @@ export function useTasksTab(input: {
     return act(kind).then(
       () => true,
       (refused: Error) => {
-        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: refused.message, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         return false;
       },
     );
@@ -2735,7 +2741,7 @@ export function useTasksTab(input: {
           return true;
         }
         if (told?.quiet !== true) {
-          toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+          toast({ words: MOVE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         }
         return false;
       });

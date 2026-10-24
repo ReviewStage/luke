@@ -119,6 +119,33 @@ function slashAt(view: EditorView): SlashWord | undefined {
   };
 }
 
+/** A document's own blocks laid in after the top-level block the selection ends in, or in place of it where the caret stands alone on an empty line, so nothing written is split or replaced. */
+function ownBlockAtCaret(editor: Editor, content: readonly JSONContent[]): void {
+  const { $to, empty } = editor.state.selection;
+  if ($to.depth < 1) {
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(editor.state.doc.content.size, [...content])
+      .run();
+    return;
+  }
+  const line = $to.node(1);
+  if (empty && line.isTextblock && line.content.size === 0) {
+    editor
+      .chain()
+      .focus()
+      .insertContent([...content])
+      .run();
+    return;
+  }
+  editor
+    .chain()
+    .focus()
+    .insertContentAt($to.after(1), [...content])
+    .run();
+}
+
 /** The `/` word found again, and reported where it changed. */
 function reported(view: EditorView, state: SlashState, blocks: PlanEditorBlocks): void {
   state.found = slashAt(view);
@@ -154,10 +181,18 @@ export function planSlash(
       },
     },
   });
-  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in, or a document's own Markdown laid in there. */
+  /**
+   * The `/` word the caret ends deleted, and `block` run on the block the
+   * caret stands in, or a document's own Markdown laid in there. With no `/`
+   * word, as a press beside the editor lays one in, a document's own block
+   * goes after the block the caret stands in, or in place of it where empty.
+   */
   const insert = (editor: Editor, block: SlashChoice): void => {
     const word = state.found;
-    if (word === undefined) return;
+    if (word === undefined) {
+      if (typeof block !== "string") ownBlockAtCaret(editor, parse(block.markdown));
+      return;
+    }
     editor.chain().focus().deleteRange({ from: word.from, to: word.to }).run();
     if (typeof block === "string") INSERTS[block](editor);
     else editor.commands.insertContent([...parse(block.markdown)]);

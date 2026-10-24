@@ -34,6 +34,7 @@ import {
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
   SpinnerRegion,
+  STATUS_TONE,
   Stack,
   Switch,
   TEXT_ELEMENT,
@@ -53,7 +54,7 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -467,7 +468,8 @@ function ShownSkills({
       );
       setLanded(new Set(made.map((each) => each.id)));
       const notice = installedNotice(made, workspace);
-      if (notice !== undefined) toast({ ...notice, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      if (notice !== undefined)
+        toast({ ...notice, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     },
     [toast, workspace],
   );

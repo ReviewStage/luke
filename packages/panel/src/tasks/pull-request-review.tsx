@@ -21,8 +21,8 @@ import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
-import { MarkdownField } from "./markdown-field.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -30,7 +30,7 @@ import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-wri
  *
  * The panel asks what the review says of the pull request, Comment,
  * Approve, or Request changes, and its optional words, written as
- * Markdown with a preview (`markdown-field.tsx`), and sends both as one change
+ * Markdown on the plan's editor (`comment-editor.tsx`), and sends both as one change
  * (`PULL_REQUEST_ACTION.SUBMIT_REVIEW`), which the service submits on
  * GitHub as the member pressing it: their own pending review where they
  * hold one, else a new one (`pull-request-writes.ts`). Nothing is refused
@@ -142,7 +142,7 @@ function ReviewPanel({
   onClose: () => void;
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const field = useRef<HTMLTextAreaElement>(null);
+  const field = useRef<HTMLElement>(null);
   const sending = writes.pending !== undefined;
 
   const onKey = (event: React.KeyboardEvent) => {
@@ -168,13 +168,17 @@ function ReviewPanel({
           : ` ${REVIEW_WORDS.pending(pending.comments)}`}
       </p>
       {pendingList}
-      <MarkdownField
+      <CommentEditor
         label={REVIEW_WORDS.BODY}
         placeholder={placeholderOf(draft.event)}
         value={draft.body}
         onChange={draft.setBody}
         busy={sending}
+        focus
         fieldRef={field}
+        onSubmit={() => {
+          if (!sending) draft.submit();
+        }}
       />
       <ChoiceList<ReviewEvent>
         legend={REVIEW_WORDS.EVENTS}
@@ -200,6 +204,7 @@ function ReviewPanel({
         <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
+          disabled={overCommentBound(draft.body)}
           busy={sending}
           busyLabel={REVIEW_WORDS.SUBMITTING}
           onClick={draft.submit}
@@ -265,12 +270,14 @@ export function PullRequestReview({
     setOpen(false);
     trigger.current?.focus();
   };
-  const submit = () =>
+  const submit = () => {
+    if (overCommentBound(body)) return;
     writes.write({ action: PULL_REQUEST_ACTION.SUBMIT_REVIEW, event, body }, () => {
       setBody("");
       setEvent(REVIEW_EVENT.COMMENT);
       close();
     });
+  };
 
   return (
     <div className="pull-request-review" ref={root}>

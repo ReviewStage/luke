@@ -38,7 +38,7 @@ import {
   type InboxReadAsk,
   inboxReadAskSchema,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";

@@ -1,3 +1,5 @@
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
+
 /**
  * banner.tsx -- the one strip a notice about a place is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where the strip is narrow.
  *
@@ -34,24 +36,16 @@ export const BANNER_LOOK = {
 
 export type BannerLook = (typeof BANNER_LOOK)[keyof typeof BANNER_LOOK];
 
-/** What a banner's tint says: nothing in particular, or that something needs the reader. */
-export const BANNER_TONE = {
-  NEUTRAL: "neutral",
-  ATTENTION: "attention",
-} as const;
-
-export type BannerTone = (typeof BANNER_TONE)[keyof typeof BANNER_TONE];
-
 /** A notice: its look and tone, its glyph, its words, which name it to a reader, and the presses that answer it, if any. */
 export function Banner({
   look,
-  tone = BANNER_TONE.NEUTRAL,
+  tone = STATUS_TONE.NEUTRAL,
   glyph,
   actions,
   children,
 }: {
   look: BannerLook;
-  tone?: BannerTone;
+  tone?: StatusTone;
   glyph: ReactNode;
   /** The presses, in reading order; the last is the banner's primary one. */
   actions?: ReactNode;

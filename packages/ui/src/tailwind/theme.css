@@ -180,7 +180,6 @@
   --color-popover: var(--luke-color-overlay);
   --color-popover-foreground: var(--luke-color-text);
   --color-border-strong: var(--luke-color-border-strong);
-  --color-subtle-foreground: var(--luke-color-text-subtle);
   --color-fill-strong: var(--luke-color-fill-strong);
   --color-danger: var(--luke-color-danger-text);
   --color-tooltip: var(--luke-color-tooltip);

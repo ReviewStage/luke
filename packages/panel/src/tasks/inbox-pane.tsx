@@ -13,11 +13,10 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE, markdownLink } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
   BackIcon,
   Badge,
   Breadcrumbs,
@@ -36,6 +35,7 @@ import {
   LAYOUT_ELEMENT,
   ONE_LINE_END,
   PageToolbar,
+  STATUS_TONE,
   Stack,
   SteppedBack,
   TEXT_TONE,
@@ -221,16 +221,6 @@ const BackHint: FoldingButtonHint = ({ children }) => (
   </Tooltip>
 );
 
-/** A link's label as the text of a markdown link: its brackets and backslashes escaped, its line breaks folded to spaces. */
-function linkText(label: string): string {
-  return label.replace(/\s+/gu, " ").replace(/[\\[\]]/gu, "\\$&");
-}
-
-/** An address as a markdown link's destination, in angle brackets so a parenthesis or a space in it breaks nothing. */
-function linkDestination(url: string): string {
-  return `<${url.replace(/[<>\s]/gu, encodeURIComponent)}>`;
-}
-
 /**
  * A link block, drawn as a link alone in its paragraph of the item's own words is: the card of what it names where it earns one (`lone-link-card.tsx`), else its chip. Note that it is handed to the words as a markdown link, because that one path is what gives a link its mark, its live label, its card, and the door it opens; an address that opens nowhere keeps its label with the address beside it to copy.
  */
@@ -238,7 +228,7 @@ export function LinkBlock({ url, label }: { url: string; label: string }): React
   if (opensAsLink(url)) {
     return (
       <div className="inbox-words">
-        <TranscriptWords text={`[${linkText(label)}](${linkDestination(url)})`} asDocument />
+        <TranscriptWords text={markdownLink(label, url)} asDocument />
       </div>
     );
   }
@@ -587,7 +577,7 @@ const REPLACED = {
 function AnsweredMarker(): React.JSX.Element {
   return (
     <span data-inbox-settled="answered">
-      <Badge tone={BADGE_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
+      <Badge tone={STATUS_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
         {ANSWERED}
       </Badge>
     </span>

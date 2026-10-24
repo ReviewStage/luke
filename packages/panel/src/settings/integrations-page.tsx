@@ -866,7 +866,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
 /** A line the page says in its sections' place, in a description's muted words. */
 function PageNote({ children }: { children: string }): React.JSX.Element {
   return (
-    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
       {children}
     </Text>
   );

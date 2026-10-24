@@ -13,7 +13,8 @@ import { mountPlanEditor } from "./plan-editor.js";
  * nothing handed over and the text written as it was; reported where they
  * stand as words are typed before them; gone from the report, though still
  * carried, once deleted; back with their words on undo, and gone again on
- * redo. Synthetic plan.
+ * redo; and all of it counted in a text saved with Windows line endings as
+ * it was given. Synthetic plan.
  */
 
 const THREAD = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
@@ -148,4 +149,20 @@ test("the editor's block button measures one bullet, a parent's own words withou
   );
   assert.equal(child?.quote, "nested two");
   assert.equal(child === undefined ? "" : child.text.slice(child.from, child.to), "nested two");
+});
+
+test("a text saved with Windows line endings marks a thread's words by offsets in it as given, and reports and measures them in the text it hands over, its line endings kept", () => {
+  const crlf = TEXT.replaceAll("\n", "\r\n");
+  const { editor, handle, host, spanOf, select, anchored, last } = mounted(crlf);
+  assert.equal(host.querySelector(`mark[data-threads~="${THREAD}"]`)?.textContent, WORDS);
+
+  editor.view.dispatch(editor.state.tr.insertText("Note: ", spanOf("Admins").from));
+  assert.equal(anchored(), WORDS);
+  assert.ok(last().markdown.includes(`\r\n\r\nNote: ${WORDS}`));
+
+  select(spanOf("withdrawn link"));
+  const span = handle.selectionSpan();
+  assert.ok(span, "the selection is measured");
+  assert.equal(span.text, handle.markdown());
+  assert.equal(span.text.slice(span.from, span.to), "withdrawn link");
 });

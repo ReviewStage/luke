@@ -28,9 +28,7 @@ import { formatCount, formatPercent } from "@luke/features/number-format";
 import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { formatInstant } from "@luke/features/time-format";
 import {
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
@@ -39,7 +37,9 @@ import {
   GAP,
   Inline,
   Skeleton,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   TEXT_ELEMENT,
   TEXT_TONE,
   Text,
@@ -63,30 +63,30 @@ const SKELETON_EXPERIMENTS_WIDTH = "192px";
 
 /** A coding agent's status words, by the tone the panel's own pills would draw them in. */
 const AGENT_STATUS_TONE = {
-  [CODING_AGENT_STATUS.STARTING]: BADGE_TONE.WORKING,
-  [CODING_AGENT_STATUS.RUNNING]: BADGE_TONE.WORKING,
-  [CODING_AGENT_STATUS.COMPLETED]: BADGE_TONE.COMPLETE,
-  [CODING_AGENT_STATUS.FAILED]: BADGE_TONE.DANGER,
-  [CODING_AGENT_STATUS.CANCELLED]: BADGE_TONE.NEUTRAL,
-} as const satisfies Record<AdminAccountAgent["status"], BadgeTone>;
+  [CODING_AGENT_STATUS.STARTING]: STATUS_TONE.WORKING,
+  [CODING_AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
+  [CODING_AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
+  [CODING_AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
+  [CODING_AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<AdminAccountAgent["status"], StatusTone>;
 
 const PULL_REQUEST_TONE = {
-  [ADMIN_PULL_REQUEST.NONE]: BADGE_TONE.NEUTRAL,
-  [ADMIN_PULL_REQUEST.OPEN]: BADGE_TONE.WORKING,
-  [ADMIN_PULL_REQUEST.MERGED]: BADGE_TONE.MERGED,
-  [ADMIN_PULL_REQUEST.CLOSED]: BADGE_TONE.NEUTRAL,
-} as const satisfies Record<AdminAccountAgent["pullRequest"], BadgeTone>;
+  [ADMIN_PULL_REQUEST.NONE]: STATUS_TONE.NEUTRAL,
+  [ADMIN_PULL_REQUEST.OPEN]: STATUS_TONE.WORKING,
+  [ADMIN_PULL_REQUEST.MERGED]: STATUS_TONE.MERGED,
+  [ADMIN_PULL_REQUEST.CLOSED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<AdminAccountAgent["pullRequest"], StatusTone>;
 
 const GITHUB_TONE = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: BADGE_TONE.COMPLETE,
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: BADGE_TONE.ATTENTION,
-  [GITHUB_INSTALLATION_STATUS.DELETED]: BADGE_TONE.DANGER,
-} as const satisfies Record<AdminAccountWorkspace["github"][number], BadgeTone>;
+  [GITHUB_INSTALLATION_STATUS.ACTIVE]: STATUS_TONE.COMPLETE,
+  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: STATUS_TONE.ATTENTION,
+  [GITHUB_INSTALLATION_STATUS.DELETED]: STATUS_TONE.DANGER,
+} as const satisfies Record<AdminAccountWorkspace["github"][number], StatusTone>;
 
 /** A connection's status words by tone; a status this build does not know reads as needing attention. */
-const CONNECTION_TONE: ReadonlyMap<string, BadgeTone> = new Map([
-  [INTEGRATION_ROW_STATUS.CONNECTED, BADGE_TONE.COMPLETE],
-  [INTEGRATION_ROW_STATUS.EXPIRED, BADGE_TONE.DANGER],
+const CONNECTION_TONE: ReadonlyMap<string, StatusTone> = new Map([
+  [INTEGRATION_ROW_STATUS.CONNECTED, STATUS_TONE.COMPLETE],
+  [INTEGRATION_ROW_STATUS.EXPIRED, STATUS_TONE.DANGER],
 ]);
 
 /** What each kind of failure is called on the timeline. */
@@ -227,7 +227,7 @@ interface CredentialRow {
   kind: string;
   provider: string;
   status: string;
-  tone: BadgeTone;
+  tone: StatusTone;
   detail: string | undefined;
   at: number;
 }
@@ -239,7 +239,7 @@ function credentialRows(support: AdminAccountSupport): CredentialRow[] {
       kind: "Provider key",
       provider: key.provider,
       status: key.status,
-      tone: key.status === PROVIDER_KEY_STATUS.VERIFIED ? BADGE_TONE.COMPLETE : BADGE_TONE.DANGER,
+      tone: key.status === PROVIDER_KEY_STATUS.VERIFIED ? STATUS_TONE.COMPLETE : STATUS_TONE.DANGER,
       detail: key.fastAccess === null ? undefined : FAST_ACCESS_WORDS[key.fastAccess],
       at: key.statusAt,
     }),
@@ -249,7 +249,7 @@ function credentialRows(support: AdminAccountSupport): CredentialRow[] {
       kind: "Connection",
       provider: connection.provider,
       status: connection.status,
-      tone: CONNECTION_TONE.get(connection.status) ?? BADGE_TONE.ATTENTION,
+      tone: CONNECTION_TONE.get(connection.status) ?? STATUS_TONE.ATTENTION,
       detail: undefined,
       at: connection.at,
     }),
@@ -295,7 +295,7 @@ const FAILURE_COLUMNS: readonly DataTableColumn<FailureRow>[] = [
       failure.reason === null ? (
         <Text tone={TEXT_TONE.MUTED}>no reason recorded</Text>
       ) : (
-        <Badge tone={BADGE_TONE.DANGER}>{failure.reason}</Badge>
+        <Badge tone={STATUS_TONE.DANGER}>{failure.reason}</Badge>
       ),
   },
 ];

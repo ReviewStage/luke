@@ -20,8 +20,9 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
+import { GITHUB_PAGE, gitHubPageLink, markdownLink } from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import { agentName, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
@@ -372,7 +373,7 @@ function agentMemberName(name: string | undefined): string {
 
 /**
  * A member by its id, the way every line names it: an agent as every place
- * of the window names it (`agentTabLabel`), its title,
+ * of the window names it (`agentName`), its title,
  * else its model's name, a person by their account's name, the reader by
  * their own.
  */
@@ -388,7 +389,7 @@ export function chatWho(
     member?.kind === MEMBER_KIND.AGENT
       ? agent === undefined
         ? agentMemberName(member.name)
-        : agentTabLabel(agent)
+        : agentName(agent)
       : memberId === chat.self && names.selfName !== undefined
         ? names.selfName
         : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
@@ -616,19 +617,16 @@ function blockMarkdown(block: ChatReadBlock): string | undefined {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       return block.text;
-    case CHAT_BLOCK.LINK: {
-      // Its label's brackets and its address's parentheses escaped, so the link reads back as written.
-      const label = block.label.replace(/[\\[\]]/gu, (mark) => `\\${mark}`);
-      return `[${label}](${block.url.replaceAll("(", "%28").replaceAll(")", "%29")})`;
-    }
-    case CHAT_BLOCK.CODE: {
-      const path = block.path.split("/").map(encodeURIComponent).join("/");
-      const lines =
-        block.endLine > block.startLine
-          ? `#L${block.startLine}-L${block.endLine}`
-          : `#L${block.startLine}`;
-      return `https://github.com/${block.repo}/blob/${block.sha}/${path}${lines}`;
-    }
+    case CHAT_BLOCK.LINK:
+      return markdownLink(block.label, block.url);
+    case CHAT_BLOCK.CODE:
+      return gitHubPageLink({
+        kind: GITHUB_PAGE.FILE,
+        repository: block.repo,
+        ref: block.sha,
+        path: block.path,
+        lines: { startLine: block.startLine, endLine: Math.max(block.startLine, block.endLine) },
+      });
     case CHAT_BLOCK.IMAGE:
       return undefined;
   }

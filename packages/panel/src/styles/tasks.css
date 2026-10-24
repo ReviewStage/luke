@@ -590,7 +590,7 @@
 .plan-document-text > .is-empty::before {
   float: left;
   height: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   content: attr(data-placeholder);
   pointer-events: none;
 }
@@ -660,7 +660,7 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--luke-space-8);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
@@ -916,7 +916,7 @@
 
   /* How long ago a thread's line says something happened. */
   .thread-time {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-variant-numeric: tabular-nums;
@@ -1257,7 +1257,7 @@
 /* The commit a pinned read is at, quiet beside the path. */
 .file-view-commit {
   flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   white-space: nowrap;
 }
@@ -1997,7 +1997,7 @@
 .diff-list-refused {
   margin: 0;
   padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-40);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -2232,7 +2232,7 @@
 
 [data-review-state="commented"],
 [data-review-state="dismissed"] {
-  --review-tone: var(--luke-color-text-subtle);
+  --review-tone: var(--luke-color-text-muted);
 }
 
 .review-state {
@@ -2285,7 +2285,7 @@
 }
 
 .changes-comment-time {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
@@ -2916,68 +2916,60 @@
   color: var(--luke-color-text-muted);
 }
 
-/* Words sent to GitHub as Markdown (`markdown-field.tsx`): Write and
-   Preview over the field, the preview drawn in the field's own box. */
-.markdown-field {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-space-8);
-}
-
-/* Write and Preview at the start of the field's head, and the formatting
-   presses at its end while the words are written, as GitHub's own box
-   draws them; a narrow field wraps the presses under the choice. */
-.markdown-field-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  align-self: stretch;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-}
-
-.markdown-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* The hairline between groups of presses. */
-.markdown-toolbar-rule {
-  width: 1px;
-  height: var(--luke-control-icon);
-  margin: 0 var(--luke-space-4);
-  background: var(--luke-color-border);
-}
-
-/* The box is the preview's frame, its words scrolling inside it in
-   `@luke/ui`'s `ScrollArea`; the frame clips the scroll bar to its corners,
-   as the box that scrolled itself did. */
-/* The panel Write and Preview show, as wide as the field so the words
-   and their preview fill it as they did before the tabs held them. */
-.markdown-field-panel {
+/* Words sent to GitHub as Markdown (`comment-editor.tsx`): the plan's
+   editor in a text field's frame, a suggestion's press over it where the
+   comment offers one, and a note under it where the words run past
+   GitHub's bound. */
+.comment-editor {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  align-self: stretch;
+  gap: var(--luke-space-6);
 }
 
-.markdown-field-preview {
+/* The words grow with what is written from a few lines' height, as a text
+   area that grows does; the frame clips nothing, since the `/` menu and the
+   format toolbar open past its edge. A suggestion's press stands in its
+   corner, the words kept clear of it. */
+.comment-editor-frame {
+  position: relative;
   box-sizing: border-box;
-  display: flex;
-  width: 100%;
-  min-height: 96px;
-  max-height: 240px;
-  flex-direction: column;
+  min-height: calc(3lh + 2 * var(--luke-space-6));
+  padding: var(--luke-space-6) var(--luke-control-inset);
 }
 
-.markdown-field-preview-words {
-  padding: var(--luke-space-8) var(--luke-space-12);
+.comment-editor-frame:has(> .comment-editor-head) {
+  padding-inline-end: calc(var(--luke-control-height) + var(--luke-space-4));
 }
 
-.markdown-field-preview-words > p:only-child {
+.comment-editor-head {
+  position: absolute;
+  top: var(--luke-space-2);
+  right: var(--luke-space-2);
+}
+
+.comment-editor-text {
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-reading-leading);
+}
+
+/* A suggested change is GitHub's ```suggestion block, drawn under its name
+   rather than as code in a language, as the transcript heads one. */
+.comment-editor-text pre:has(> code.language-suggestion)::before {
+  display: block;
+  margin-bottom: var(--luke-space-4);
+  color: var(--luke-color-text);
+  content: "Suggested change";
+  font-family: var(--luke-font-sans);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.comment-editor-note {
   margin: 0;
+  color: var(--luke-color-danger);
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-review-foot {
@@ -3012,7 +3004,7 @@
 
 .pull-request-branches-arrow {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A branch's glyph: the branch at rest, the copy glyph under the pointer
@@ -3023,7 +3015,7 @@
   flex: none;
   width: 12px;
   height: 12px;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .pull-request-branch-glyph > *,
@@ -3089,7 +3081,7 @@
 
 /* "Stack 2/4", an outlined button whose menu lists the stack: its count quieter. */
 .pull-request-stack-count {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3207,7 +3199,7 @@
 }
 
 .pull-request-number {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-weight: var(--luke-weight-regular);
 }
 
@@ -3243,7 +3235,7 @@
 }
 
 .pull-request-quiet {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The merge control at the title row's end (`merge-box.tsx`), as
@@ -3280,7 +3272,7 @@
 }
 
 .pull-request-count {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
   font-weight: var(--luke-weight-regular);
 }
@@ -3342,12 +3334,13 @@
   --check-tone: var(--luke-color-danger);
 }
 
+/* A check still running is work under way, not something that needs you. */
 [data-check-state="pending"] {
-  --check-tone: var(--luke-color-attention);
+  --check-tone: var(--luke-color-working);
 }
 
 [data-check-state="skipped"] {
-  --check-tone: var(--luke-color-text-subtle);
+  --check-tone: var(--luke-color-text-muted);
 }
 
 /* Words written on GitHub, drawn at the transcript's own size, a step over
@@ -3359,6 +3352,65 @@
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-reading-leading);
   user-select: text;
+}
+
+/* A description open in its editor (`pull-request-description.tsx`) in the
+   drawn description's own type and rhythm, so nothing moves as it opens or
+   closes: its blocks a step apart as the transcript's are, a heading opening
+   the text standing where the drawn one does, its lists in the transcript's
+   indent, and a task's box standing before its words, as GitHub draws it,
+   rather than in the plan's gutter. */
+/* A description with no words, where the member may write them, says so
+   where the editor's placeholder will, in its type. */
+.pull-request-description-empty {
+  margin: 0;
+  color: var(--luke-color-text-subtle);
+}
+
+.pull-request-description-text.plan-document-text > * {
+  margin-block: 0;
+}
+
+.pull-request-description-text.plan-document-text > * + * {
+  margin-top: var(--luke-space-16);
+}
+
+.pull-request-description-text.plan-document-text > :is(h1, h2):first-child {
+  margin-top: var(--luke-space-12);
+}
+
+.pull-request-description-text.plan-document-text > :is(h3, h4, h5, h6):first-child {
+  margin-top: var(--luke-space-8);
+}
+
+.pull-request-description-text :is(ul, ol) {
+  padding-left: var(--luke-space-20);
+}
+
+.pull-request-description-text li + li {
+  margin-top: var(--luke-space-2);
+}
+
+.pull-request-description-text :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  font-family: var(--luke-font-mono);
+  font-size: 0.9em;
+}
+
+.pull-request-description-text ul[data-type="taskList"] {
+  padding-left: 0;
+}
+
+.pull-request-description-text.plan-document-text li[data-checked] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+}
+
+.pull-request-description-text.plan-document-text li[data-checked] > label {
+  position: static;
 }
 
 /* The comments and reviews, oldest first, each boxed under its head. */
@@ -3480,7 +3532,7 @@
 
 /* A comment being written on lines of a file (`line-comment.tsx`), under
    the last of them as a review thread stands: a card of the thread's own
-   face, its head naming the lines, the words with their preview, GitHub's
+   face, its head naming the lines, the words as they are drawn, GitHub's
    refusal, and what GitHub's own line comment offers at its foot. Its frame
    is `@luke/ui`'s Card, which leaves its room to it. */
 .line-comment {
@@ -3572,7 +3624,7 @@
 .annotation-where-lines {
   flex: none;
   margin-inline-start: var(--luke-space-8);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The head: one line that never wraps, the name giving way first, its whole
@@ -3625,7 +3677,7 @@
 
 .annotation-card-time {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A state the card is in, `@luke/ui`'s Badge, never giving way. */
@@ -3639,7 +3691,7 @@
   flex: none;
   align-items: center;
   gap: var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .annotation-card-count > svg {
@@ -3831,7 +3883,7 @@
 .file-tab-snippet-label {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -4428,7 +4480,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    doing. */
 .agent-end-line {
   margin: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -4471,7 +4523,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   align-items: baseline;
   gap: var(--luke-space-4);
   margin: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -4560,7 +4612,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   align-items: center;
   gap: var(--luke-space-4);
   margin: var(--luke-space-2) 0 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -5612,7 +5664,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .terminal-bar-busy {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   letter-spacing: 1px;
 }
 
@@ -5624,7 +5676,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .terminal-bar-note {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The action's key, after its words, in the action's own ink. */
@@ -5730,7 +5782,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .agent-servers-count {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -5894,7 +5946,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .agent-context-note {
   margin: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -5930,7 +5982,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 [data-pull-request-state="draft"] {
-  --pull-request-tone: var(--luke-color-text-subtle);
+  --pull-request-tone: var(--luke-color-text-muted);
 }
 
 [data-pull-request-state="merged"] {
@@ -5942,9 +5994,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* An open pull request GitHub holds in its merge queue, as its Pull request
-   tab's pill says it: in the attention tone. */
+   tab's pill says it: in the working tone, since it is on its way in. */
 [data-pull-request-state="queued"] {
-  --pull-request-tone: var(--luke-color-attention);
+  --pull-request-tone: var(--luke-color-working);
 }
 
 .pull-request-mark {
@@ -5977,7 +6029,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .issue-mark[data-issue-state="not-planned"] {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A task's linked issues under its status and priority
@@ -6004,12 +6056,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .task-issue-link-unread {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .task-issue-link-key {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
@@ -6031,7 +6083,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .task-issue-link-heading-state {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -6689,7 +6741,7 @@ svg.lucide {
 }
 
 .comment-time {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   font-weight: 400;

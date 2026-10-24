@@ -1,5 +1,5 @@
 import { TASK_SKILL_SOURCE, type TaskSkillSource } from "@luke/features/task-wire";
-import { BADGE_TONE, Badge } from "@luke/ui";
+import { Badge, STATUS_TONE } from "@luke/ui";
 
 /**
  * skill-source-badge.tsx -- the short word saying where a skill the `/` list offers comes from: Repo, Workspace, or Personal.
@@ -22,5 +22,5 @@ const SKILL_SOURCE_WORD = {
 
 /** Where the skill comes from, as a neutral badge. */
 export function SkillSourceBadge({ source }: { source: TaskSkillSource }): React.JSX.Element {
-  return <Badge tone={BADGE_TONE.NEUTRAL}>{SKILL_SOURCE_WORD[source]}</Badge>;
+  return <Badge tone={STATUS_TONE.NEUTRAL}>{SKILL_SOURCE_WORD[source]}</Badge>;
 }

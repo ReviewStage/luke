@@ -21,7 +21,6 @@
 
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
-  BADGE_TONE,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -38,6 +37,7 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   SettingsRow,
+  STATUS_TONE,
   StopIcon,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -211,7 +211,7 @@ function SampledChoiceDialog({
                     value: token,
                     label,
                     badge: tag,
-                    badgeTone: BADGE_TONE.NEUTRAL,
+                    badgeTone: STATUS_TONE.NEUTRAL,
                   }))}
                   value={holdsPick ? [picked] : []}
                   focusRef={holdsPick ? pickedRow : undefined}

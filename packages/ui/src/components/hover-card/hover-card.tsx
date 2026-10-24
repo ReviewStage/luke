@@ -60,7 +60,7 @@ const NAME =
 const SUB =
   "luke-hover-card-sub flex min-w-0 items-center gap-1 text-caption leading-[inherit] text-muted-foreground tabular-nums [&>span]:min-w-0 [&>span]:wrap-anywhere";
 const CORNER =
-  "luke-hover-card-corner flex-none whitespace-nowrap text-caption leading-[inherit] text-subtle-foreground tabular-nums";
+  "luke-hover-card-corner flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
 const NOTE =
   "luke-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-caption";
 const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border";
@@ -72,9 +72,9 @@ const ROW_GLYPH =
   "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
 const ROW_END =
-  "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-subtle-foreground tabular-nums";
+  "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
 const MORE =
-  "luke-hover-card-more flex h-hover-card-more items-center whitespace-nowrap pl-hover-card-indent text-caption leading-[inherit] text-subtle-foreground tabular-nums";
+  "luke-hover-card-more flex h-hover-card-more items-center whitespace-nowrap pl-hover-card-indent text-caption leading-[inherit] text-muted-foreground tabular-nums";
 
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };

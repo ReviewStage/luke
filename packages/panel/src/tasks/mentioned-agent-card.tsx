@@ -5,8 +5,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE, pullRequestAddressOf } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { listedPullRequestOf, pullRequestAgentOf } from "@luke/ui/pull-request-link";

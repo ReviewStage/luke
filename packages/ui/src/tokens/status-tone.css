@@ -1,0 +1,40 @@
+/* status-tone.css -- each status tone's ink and tint (`../status-tone.ts`), set once on whatever wears its `data-tone`.
+
+   A component that says where something stands writes its tone into
+   `data-tone` and draws in `--luke-tone-ink` and `--luke-tone-tint`, so the
+   colours a status is drawn in live here and in the palettes alone. The ink
+   is the tone's colour for words and marks alike: the danger tone's is the
+   red words read in (`--luke-color-danger-text`), which holds a mark as well.
+   Only the custom properties are set, at no specificity, so a `data-tone`
+   that names no status here, or that a component reads its own way, draws
+   nothing differently. */
+
+:where([data-tone="neutral"]) {
+  --luke-tone-ink: var(--luke-color-text-muted);
+  --luke-tone-tint: var(--luke-color-neutral-tint);
+}
+
+:where([data-tone="working"]) {
+  --luke-tone-ink: var(--luke-color-working);
+  --luke-tone-tint: var(--luke-color-working-tint);
+}
+
+:where([data-tone="attention"]) {
+  --luke-tone-ink: var(--luke-color-attention);
+  --luke-tone-tint: var(--luke-color-attention-tint);
+}
+
+:where([data-tone="complete"]) {
+  --luke-tone-ink: var(--luke-color-complete);
+  --luke-tone-tint: var(--luke-color-complete-tint);
+}
+
+:where([data-tone="merged"]) {
+  --luke-tone-ink: var(--luke-color-merged);
+  --luke-tone-tint: var(--luke-color-merged-tint);
+}
+
+:where([data-tone="danger"]) {
+  --luke-tone-ink: var(--luke-color-danger-text);
+  --luke-tone-tint: var(--luke-color-danger-tint);
+}

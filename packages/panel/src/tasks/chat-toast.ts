@@ -18,9 +18,10 @@
  */
 
 import type { ChatShown } from "@luke/host/contract";
+import { STATUS_TONE } from "@luke/ui";
 import { useEffect, useRef } from "react";
 import { appBridge } from "../app-bridge.js";
-import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast.js";
+import { TOAST_HOLD, useToast, useWithdrawToast } from "../toast.js";
 import { appStateNow } from "../use-app-state.js";
 
 /** What a waiting message's toast offers, to open the message's channel. */
@@ -75,7 +76,7 @@ export function useChatToasts(
           waits: true,
           hold: TOAST_HOLD.NEWS,
           subject: messageId,
-          tone: TOAST_TONE.ASK,
+          tone: STATUS_TONE.ATTENTION,
           action: { label: VIEW_LABEL, onPress: () => viewing.current(workspaceId, messageId) },
         });
       }),

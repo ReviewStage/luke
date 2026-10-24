@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { agentTabLabel } from "@luke/features/model-label";
+import { agentName } from "@luke/features/model-label";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { TASKS_READ } from "@luke/features/tasks-view";
@@ -19,7 +19,7 @@ import { appStateDerivedAtom } from "../use-app-state.js";
  *
  * Read from main's document, which every window holds: every task's title,
  * the agents each task's row names, as their tabs name them
- * (`agentTabLabel`, so an operator is Luke and an untitled agent goes by its
+ * (`agentName`, so an operator is Luke and an untitled agent goes by its
  * model), and the models they run on, the agents with no task the list
  * carries, theirs, and the automations that started them, the active task's
  * pages, each task's key, the Inbox items waiting, and the agents an
@@ -57,13 +57,13 @@ const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, ({ planni
   const agentModels = new Map<string, string>();
   for (const task of planning?.tasks ?? []) {
     for (const agent of task.agents?.agents ?? []) {
-      agents.set(agent.id, agentTabLabel(agent));
+      agents.set(agent.id, agentName(agent));
       agentModels.set(agent.id, agent.model);
     }
   }
   const automations = new Map<string, string>();
   for (const agent of planning?.tasklessAgents ?? []) {
-    agents.set(agent.id, agentTabLabel(agent));
+    agents.set(agent.id, agentName(agent));
     agentModels.set(agent.id, agent.model);
     if (agent.automationId !== null && agent.automationName !== undefined) {
       automations.set(agent.automationId, agent.automationName);
@@ -74,7 +74,7 @@ const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, ({ planni
     if (item.agentTitle === null && agents.has(item.agentId)) continue;
     agents.set(
       item.agentId,
-      agentTabLabel({
+      agentName({
         title: item.agentTitle,
         model: item.agentModel,
         automationName: item.automationName ?? undefined,

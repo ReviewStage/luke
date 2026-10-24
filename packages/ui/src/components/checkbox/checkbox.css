@@ -47,7 +47,7 @@
   }
 
   .luke-checkbox[data-disabled="true"] {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   /* A read-only box takes no press, so nothing about it says it does. */

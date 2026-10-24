@@ -2,7 +2,7 @@ import type { Replay, ReplayStep } from "@luke/features/agent-replay";
 import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-agent-view";
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   BUTTON_VARIANT,
   Button,

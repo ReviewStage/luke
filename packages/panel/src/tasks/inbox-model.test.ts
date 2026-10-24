@@ -15,7 +15,7 @@ import {
   type InboxMessage,
   type InboxResponse,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";

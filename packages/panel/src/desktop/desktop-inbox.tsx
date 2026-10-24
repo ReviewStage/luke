@@ -15,7 +15,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
 import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
@@ -653,7 +653,7 @@ function InboxSidePanel({
       <TaskMentions value={mentions}>
         <AgentPane
           call={calls}
-          label={agent === undefined ? undefined : agentTabLabel(agent, agents.models)}
+          label={agent === undefined ? undefined : agentName(agent, agents.models)}
           tabbed={false}
           tab={{ agent: agentId }}
           agents={agents}

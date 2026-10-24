@@ -79,13 +79,15 @@ interface NamedAgent {
   readonly title: string | null;
   readonly model: string;
   /** The name of the automation whose run started the agent, as the run started it; none for one started by hand. */
-  readonly automationName?: string | undefined;
+  readonly automationName?: string | null | undefined;
+  /** The automation's origin as the service's own row keeps it, whose name is that same name. */
+  readonly automationOrigin?: { readonly name: string } | null | undefined;
 }
 
 /**
  * The name an agent goes by apart from its title: Luke for an operator,
  * and none for any other agent, which goes by its title. Every place that names an agent
- * goes through this, `agentTabLabel` among them, so an operator is Luke in
+ * goes through this, `agentName` among them, so an operator is Luke in
  * every one; a query names it as `agentGivenNameSql` does.
  */
 export function agentGivenName(agent: Pick<NamedAgent, "kind">): string | undefined {
@@ -93,12 +95,19 @@ export function agentGivenName(agent: Pick<NamedAgent, "kind">): string | undefi
 }
 
 /**
- * An agent as every place names it, its tab, a sidebar row, a card, a
- * notification: the name it goes by (`agentGivenName`), or its title, or until it has one the name of the
- * automation whose run started it, or else its model's name (`modelLabel`).
+ * An agent as every place names it, the window's and the service's alike:
+ * its tab, a sidebar row, a card, a notification, a mention Luke or an
+ * agent writes, and the name one agent is introduced to another by. The
+ * name it goes by (`agentGivenName`), or its title, or until it has one the
+ * name of the automation whose run started it, or else its model's name
+ * (`modelLabel`), never its bare id.
  */
-export function agentTabLabel(agent: NamedAgent, models?: readonly CatalogModel[]): string {
+export function agentName(agent: NamedAgent, models?: readonly CatalogModel[]): string {
   return (
-    agentGivenName(agent) ?? agent.title ?? agent.automationName ?? modelLabel(agent.model, models)
+    agentGivenName(agent) ??
+    agent.title ??
+    agent.automationName ??
+    agent.automationOrigin?.name ??
+    modelLabel(agent.model, models)
   );
 }

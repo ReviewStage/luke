@@ -66,7 +66,7 @@ import {
   githubRepositoryFullNameSchema,
 } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { agentGivenName, modelLabel } from "@luke/features/model-label";
+import { agentGivenName, agentName, modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -1280,11 +1280,6 @@ export function choiceRefusal(
       : `no offered model is ${choice.model} at effort ${choice.effort}`;
   const choices = offered.map((model) => `${model.id} (${model.efforts.join(", ")})`).join("; ");
   return `${lead}: ${refused}. The choices are: ${choices}.`;
-}
-
-/** An agent by the name its tab shows: Luke for an operator, else its title, or its model's id where it has none yet. */
-function agentName(agent: CodingAgent): string {
-  return agentGivenName(agent) ?? agent.title ?? agent.model;
 }
 
 /** The name an answer names an agent by apart from its title: Luke for an operator, none for any other agent. */

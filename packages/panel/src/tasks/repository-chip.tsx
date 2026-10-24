@@ -283,7 +283,7 @@ export function RepositoryChip(props: {
             key={words}
             as={TEXT_ELEMENT.P}
             variant={TEXT_VARIANT.CAPTION}
-            tone={TEXT_TONE.SUBTLE}
+            tone={TEXT_TONE.MUTED}
           >
             {words}
           </Text>

@@ -1,4 +1,3 @@
-import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -6,8 +5,13 @@ import {
   dateWhole,
   readerZone,
 } from "@luke/features/date-mention";
-import { issueAddressOf, pullRequestAddressOf } from "@luke/features/github-repositories-wire";
-import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
+import {
+  issueAddressOf,
+  LINK_PLACE,
+  type LinkPlace,
+  pullRequestAddressOf,
+  readLink,
+} from "@luke/features/link-grammar";
 import {
   decodeMention,
   encodeMention,
@@ -29,69 +33,32 @@ import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import { THING_KIND, thingName, thingOfMention, thingOfPlace } from "@luke/features/thing-kind";
 import { isGitHubAddress } from "@luke/host/acts";
 import {
-  CommentsIcon,
-  DocumentIcon,
-  GearIcon,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   INLINE_REF_LOOK,
   InlineRef,
-  ProviderMark,
-  UserIcon,
   useMinute,
 } from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import type { Actor } from "@luke/ui/actor-model";
+import { CalendarIcon } from "@luke/ui/icons";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { fileName } from "@luke/voice/code-pane-model";
-import {
-  AppWindowIcon,
-  BotIcon,
-  CalendarIcon,
-  FileDiffIcon,
-  FolderIcon,
-  HashIcon,
-  InboxIcon,
-  MessageSquareIcon,
-  MessagesSquareIcon,
-  ShieldUserIcon,
-  ZapIcon,
-} from "lucide-react";
 import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
-import { useAutomation } from "../automation-directory.js";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
-import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
-import { APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
 import { useSectionHeading } from "./chip-cards.js";
-import { providerOf } from "./coding-agent-model.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
   type DatePickerOpening,
   dateMentionNode,
 } from "./date-picker.js";
-import { FileTypeIcon } from "./file-type-icon.js";
-import { InboxItemChipGlyph, useInboxItemTitle } from "./inbox-item-chip.js";
-import { IssueMark } from "./issue-mark.js";
-import { ReadAgentModel } from "./mentioned-agent-card.js";
+import { useInboxItemTitle } from "./inbox-item-chip.js";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
-import { PullRequestMark } from "./pull-request-mark.js";
-import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { branchNote, thingCard } from "./thing-card.js";
-import {
-  useKnownNames,
-  useTaskKeyTargets,
-  useTaskNameCatchUp,
-  useTaskStatus,
-} from "./use-known-names.js";
-import {
-  type ChipWhere,
-  type LinkStanding,
-  useLinkStanding,
-  useWordsWorkspaceId,
-} from "./use-link-standing.js";
+import { type AgentTiles, thingMark } from "./thing-mark.js";
+import { useKnownNames, useTaskKeyTargets, useTaskNameCatchUp } from "./use-known-names.js";
+import { type LinkStanding, useLinkStanding, useWordsWorkspaceId } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 import { useWordsDates } from "./words-dates.js";
 
@@ -142,7 +109,7 @@ import { useWordsDates } from "./words-dates.js";
  * having left, as the workspace's members around the chip say
  * (`../member-directory.tsx`), and opens their page in the workspace. A
  * link to any other place in Luke, an Inbox item, an
- * automation, an agent's message (`@luke/features/luke-link`), is drawn as
+ * automation, an agent's message (`@luke/features/link-grammar`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
  * with, else the place's own name, else its kind. A plan, a section, a
@@ -308,114 +275,39 @@ function pressOf(
   }
 }
 
-/** The harness an agent runs in, read off its model; the mark of no known harness where no model is known. */
-function harnessMark(model: string | undefined): React.JSX.Element {
-  return <AgentMark provider={model === undefined ? undefined : providerOf(model)} />;
+/** The tile an agent of the plan drawn wears, as its tab wears it; none where the place knows the plan's agents not. */
+function agentTiles(doors: MentionDoors): AgentTiles | undefined {
+  const { agentOf } = doors;
+  if (agentOf === undefined) return undefined;
+  return { taskId: doors.taskId, tileOf: (agentId) => agentOf(agentId).actor };
 }
 
-/**
- * The mark of an agent the place holds no tile of: the harness the window
- * last read it running on, and where the window holds no model of it, an
- * archived agent's or one past the few its task's row names, the one read
- * for it (`ReadAgentModel`).
- */
-function KnownAgentMark({
-  agentId,
-  taskId,
-  name,
-  where,
-  known,
-}: {
-  agentId: string;
-  taskId: string | undefined;
-  /** The name the chip calls it by, which an agent on no task is found by. */
-  name: string;
-  /** Where the chip stands, whose workspace an agent on no task is found in. */
-  where: ChipWhere;
-  known: KnownNames;
-}): React.JSX.Element {
-  const workspaceId = useWordsWorkspaceId(where);
-  const held = useAppSlice(APP_STATE_HELD);
-  const model = known.agentModels.get(agentId);
-  // Note that nothing is read before main's document lands, because the agent may be among those it lists.
-  if (model !== undefined || !held) return harnessMark(model);
-  return (
-    <ReadAgentModel agentId={agentId} taskId={taskId} workspaceId={workspaceId} name={name}>
-      {harnessMark}
-    </ReadAgentModel>
-  );
-}
-
-/** A person as the workspace's members around the chip draw them: their picture, or grayed where they left. */
-function PersonGlyph({ userId, name }: { userId: string; name: string }): React.JSX.Element {
-  const person = usePerson({ userId, name });
-  return <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />;
-}
-
+/** The mark a mention's chip leads with: its thing's (`thing-mark.tsx`), as a link to the same thing leads with it. */
 function MentionGlyph({
   mention,
+  target,
   name,
   doors,
   known,
   standing,
 }: {
   mention: Mention;
+  /** Its link's target as written, whose workspace a person is drawn as of. */
+  target: string;
   /** The name the chip calls it by, which a person not among the members read is drawn by. */
   name: string;
   doors: MentionDoors;
   known: KnownNames;
   standing?: LinkStanding | undefined;
-}): React.JSX.Element {
-  const taskStatus = useTaskStatus(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
-  // A pull request its provider answered for wears its own mark for where it stands, as everywhere the window draws one.
-  if (standing?.pullRequest !== undefined) {
-    return (
-      <PullRequestMark pullRequest={{ ...standing.pullRequest, checks: CHECK_SUMMARY.NONE }} />
-    );
-  }
-  // And a GitHub issue its own, as GitHub draws it.
-  if (standing?.issue !== undefined) return <IssueMark issue={standing.issue} />;
-  switch (mention.kind) {
-    case MENTION_KIND.SECTION:
-      return <HashIcon aria-hidden="true" />;
-    case MENTION_KIND.TASK:
-      return <PlanGlyph status={taskStatus} />;
-    case MENTION_KIND.FILE:
-      return <FileTypeIcon name={fileName(mention.path)} />;
-    case MENTION_KIND.FOLDER:
-      return <FolderIcon aria-hidden="true" />;
-    case MENTION_KIND.SERVER:
-    case MENTION_KIND.TOOL:
-      return <ProviderMark provider={mention.provider} />;
-    case MENTION_KIND.LINK:
-      return <ProviderMark provider={"site" in mention ? mention.site : mention.provider} />;
-    case MENTION_KIND.PAGE:
-      return <AppWindowIcon aria-hidden="true" />;
-    case MENTION_KIND.AGENT: {
-      const look = mention.taskId === doors.taskId ? doors.agentOf?.(mention.agentId) : undefined;
-      // Note that a tile the page knows no harness of, its agents not yet read say, gives way to the mark read for it.
-      const harnessless =
-        look === undefined ||
-        (look.actor.kind === ACTOR_KIND.AGENT && look.actor.provider === undefined);
-      return harnessless ? (
-        <KnownAgentMark
-          agentId={mention.agentId}
-          taskId={mention.taskId}
-          name={name}
-          where={{ taskId: doors.taskId, workspace: doors.place.workspace }}
-          known={known}
-        />
-      ) : (
-        <ActorMark actor={look.actor} size={ACTOR_SIZE.INLINE} />
-      );
-    }
-    case MENTION_KIND.PERSON:
-      return <PersonGlyph userId={mention.userId} name={name} />;
-    case MENTION_KIND.LUKE:
-      return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
-    case MENTION_KIND.DATE:
-      return <CalendarIcon aria-hidden="true" />;
-  }
+}): ReactNode {
+  return thingMark(thingOfMention(mention), {
+    name,
+    known,
+    where: { taskId: doors.taskId, workspace: doors.place.workspace },
+    workspace: readLink(target)?.workspace ?? doors.place.workspace,
+    tiles: agentTiles(doors),
+    standing,
+  });
 }
 
 /** What a chip's card says of what it names, beside its name, where the name alone does not say it: a link's address only while its provider has answered nothing, since its key and state say it then. */
@@ -472,7 +364,14 @@ function MentionCard({
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state, doors.taskId, standing);
   const glyph = (
-    <MentionGlyph mention={mention} name={name} doors={doors} known={known} standing={standing} />
+    <MentionGlyph
+      mention={mention}
+      target={target}
+      name={name}
+      doors={doors}
+      known={known}
+      standing={standing}
+    />
   );
   const card = (
     <HoverCard data-mention-card="">
@@ -658,6 +557,7 @@ function MentionChip({
       glyph={
         <MentionGlyph
           mention={mention}
+          target={target}
           name={name}
           doors={doors}
           known={known}
@@ -761,90 +661,29 @@ function WrittenDateChip({
   );
 }
 
-/** An automation's clock tile on a chip, wearing how its newest run went where the window reads the automation, and at rest where it does not. */
-function AutomationTile({
-  automationId,
-  name,
-}: {
-  automationId: string;
-  name: string;
-}): React.JSX.Element {
-  const known = useAutomation(automationId);
-  return (
-    <ActorMark
-      actor={
-        known === undefined
-          ? { kind: ACTOR_KIND.AUTOMATION, name, state: ACTOR_STATE.REST }
-          : automationActor(known.automation)
-      }
-      size={ACTOR_SIZE.INLINE}
-    />
-  );
-}
-
-/** The glyph a place in Luke wears, the one its tab or its row in the window wears: an agent's its harness's mark, where the window holds the agent. */
+/** The mark a place in Luke leads with: its thing's (`thing-mark.tsx`), as a mention of the same thing leads with it. */
 function PlaceGlyph({
   place,
   name,
   workspace,
   known,
+  doors,
 }: {
   place: LinkPlace;
   name: string;
   /** The slug of the workspace the link was written under. */
   workspace: string;
   known: KnownNames;
-}): React.JSX.Element {
-  const planned = place.kind === LINK_PLACE.TASK || place.kind === LINK_PLACE.VERSION;
-  const taskStatus = useTaskStatus(planned ? place.planId : undefined);
-  switch (place.kind) {
-    case LINK_PLACE.TASK:
-    case LINK_PLACE.VERSION:
-      return <PlanGlyph status={taskStatus} />;
-    case LINK_PLACE.TURN:
-      return <DocumentIcon />;
-    case LINK_PLACE.SECTION:
-      return <HashIcon aria-hidden="true" />;
-    case LINK_PLACE.COMMENT:
-      return <CommentsIcon />;
-    case LINK_PLACE.PAGE:
-      return <AppWindowIcon aria-hidden="true" />;
-    case LINK_PLACE.AGENT:
-      return (
-        <KnownAgentMark
-          agentId={place.agentId}
-          taskId={place.planId}
-          name={name}
-          where={{ taskId: place.planId ?? NO_TASK_ID, workspace }}
-          known={known}
-        />
-      );
-    case LINK_PLACE.WORKER:
-      return <BotIcon aria-hidden="true" />;
-    case LINK_PLACE.CHANGES:
-      return <FileDiffIcon aria-hidden="true" />;
-    case LINK_PLACE.PULL_REQUEST_THREAD:
-      return <CommentsIcon />;
-    case LINK_PLACE.MESSAGE:
-      return <MessageSquareIcon aria-hidden="true" />;
-    case LINK_PLACE.INBOX_ITEM:
-      return <InboxItemChipGlyph place={place} />;
-    case LINK_PLACE.INBOX:
-      return <InboxIcon aria-hidden="true" />;
-    case LINK_PLACE.AUTOMATIONS:
-      return <ZapIcon aria-hidden="true" />;
-    case LINK_PLACE.AUTOMATION:
-    case LINK_PLACE.AUTOMATION_RUN:
-      return <AutomationTile automationId={place.automationId} name={name} />;
-    case LINK_PLACE.SETTINGS:
-      return <GearIcon />;
-    case LINK_PLACE.PERSON:
-      return <UserIcon />;
-    case LINK_PLACE.CHAT:
-      return <MessagesSquareIcon aria-hidden="true" />;
-    case LINK_PLACE.ADMIN:
-      return <ShieldUserIcon aria-hidden="true" />;
-  }
+  doors: MentionDoors;
+}): ReactNode {
+  return thingMark(thingOfPlace(place), {
+    name,
+    known,
+    where: { taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID, workspace },
+    workspace,
+    tiles: agentTiles(doors),
+    standing: undefined,
+  });
 }
 
 /**
@@ -858,6 +697,7 @@ function PlaceChip({
   place,
   workspace,
   label,
+  doors,
   read,
 }: {
   href: string;
@@ -866,6 +706,8 @@ function PlaceChip({
   workspace: string;
   /** The words it was labelled with, without an `@`; none where it was written bare. */
   label: string | undefined;
+  /** The doors of the words the link is written in, whose plan's agents wear their tabs' tiles. */
+  doors: MentionDoors;
   /** The names the window holds beyond its own, an Inbox item's read as its chip stands say. */
   read?: ((known: KnownNames) => KnownNames) | undefined;
 }): React.JSX.Element {
@@ -875,7 +717,9 @@ function PlaceChip({
   const planned = place.kind === LINK_PLACE.TASK || place.kind === LINK_PLACE.VERSION;
   useTaskNameCatchUp(planned ? place.planId : undefined);
   const { name, under } = placeChipLook(place, label, known);
-  const glyph = <PlaceGlyph place={place} name={name} workspace={workspace} known={known} />;
+  const glyph = (
+    <PlaceGlyph place={place} name={name} workspace={workspace} known={known} doors={doors} />
+  );
   const own = (
     <HoverCard data-mention-card="">
       <HoverCardHead glyph={glyph} name={name} />
@@ -951,6 +795,7 @@ function InboxItemChip({
   place: InboxItemLinkPlace;
   workspace: string;
   label: string | undefined;
+  doors: MentionDoors;
 }): React.JSX.Element {
   const title = useInboxItemTitle(place);
   const read =
@@ -1017,10 +862,24 @@ export function linkChip(
   const written = bare ? undefined : mentionName(label.trim());
   if (read.place.kind === LINK_PLACE.INBOX_ITEM) {
     return (
-      <InboxItemChip href={href} place={read.place} workspace={read.workspace} label={written} />
+      <InboxItemChip
+        href={href}
+        place={read.place}
+        workspace={read.workspace}
+        label={written}
+        doors={placed}
+      />
     );
   }
-  return <PlaceChip href={href} place={read.place} workspace={read.workspace} label={written} />;
+  return (
+    <PlaceChip
+      href={href}
+      place={read.place}
+      workspace={read.workspace}
+      label={written}
+      doors={placed}
+    />
+  );
 }
 
 /** What draws a link in Markdown as its chip through the doors given (`linkChip`); a link where it names nothing. */

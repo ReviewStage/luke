@@ -44,7 +44,7 @@
     align-items: center;
     margin-left: auto;
     padding-left: var(--luke-space-16);
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     white-space: nowrap;
   }

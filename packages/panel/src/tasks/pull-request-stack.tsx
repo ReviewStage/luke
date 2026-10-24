@@ -3,7 +3,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestStackEntry,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@luke/ui";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";

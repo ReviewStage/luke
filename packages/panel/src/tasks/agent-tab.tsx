@@ -32,6 +32,7 @@ import {
   LineSummary,
   MESSAGE_ACTIONS_PLACEMENT,
   OneLine,
+  STATUS_TONE,
   TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
@@ -85,7 +86,7 @@ import { useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import {
   AgentCallControls,
   type AgentCallDoors,
@@ -116,11 +117,11 @@ import {
   type AgentPartCut,
   agentLines,
   agentListCallIds,
+  agentName,
   agentPart,
   agentParts,
   agentRows,
   agentStillWriting,
-  agentTabLabel,
   agentWorkingPhase,
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
@@ -2313,7 +2314,7 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <AgentTabFrame ref={tab} label={agentTabLabel(agent, models)}>
+    <AgentTabFrame ref={tab} label={agentName(agent, models)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2660,7 +2661,7 @@ function AgentTabBody({
     settled: !agentStillWriting(agent.status),
     drawn: (messageId) => messages.some((message) => message.id === messageId),
     bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
-    gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    gone: () => toast({ words: MESSAGE_GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
   });
   const starter = teammateStarter(agent.startedBy, control.me);
   const openAgent =

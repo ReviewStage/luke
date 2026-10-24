@@ -1,5 +1,6 @@
 import { formatCount } from "@luke/features/number-format";
 import { Fragment, type ReactNode } from "react";
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 
 /**
  * count-part.tsx -- what an option of a row where you choose one counts, as parts each in its own tone, which every such row draws alike.
@@ -14,16 +15,6 @@ import { Fragment, type ReactNode } from "react";
  * one way (`linesCount`) and no caller can draw them grey.
  */
 
-/** The tone a count part is drawn in: quiet, or one of the state palette's. */
-export const COUNT_TONE = {
-  QUIET: "quiet",
-  COMPLETE: "complete",
-  ATTENTION: "attention",
-  DANGER: "danger",
-} as const;
-
-export type CountTone = (typeof COUNT_TONE)[keyof typeof COUNT_TONE];
-
 /** A part's glyph and the words that say it, required beside one. */
 type CountGlyph =
   | { glyph?: undefined; glyphLabel?: undefined }
@@ -32,13 +23,13 @@ type CountGlyph =
 /** One part of a count: what it says, its tone, and a glyph before it. */
 export type CountPart = {
   readonly text: string;
-  readonly tone?: CountTone | undefined;
+  readonly tone?: StatusTone | undefined;
 } & Readonly<CountGlyph>;
 
 /** One part, its glyph named for a reader who cannot see it. */
 function CountPartView({ part }: { part: CountPart }): React.JSX.Element {
   return (
-    <span className="luke-count-part" data-tone={part.tone ?? COUNT_TONE.QUIET}>
+    <span className="luke-count-part" data-tone={part.tone ?? STATUS_TONE.NEUTRAL}>
       {part.glyph === undefined ? null : (
         <span className="luke-count-glyph" role="img" aria-label={part.glyphLabel}>
           {part.glyph}
@@ -66,7 +57,7 @@ export function CountParts({ parts }: { parts: readonly CountPart[] }): React.JS
 /** The parts of a diff's line count: `+additions` in the complete tone and `−deletions` in the danger tone. */
 export function linesCount(additions: number, deletions: number): readonly CountPart[] {
   return [
-    { text: `+${formatCount(additions)}`, tone: COUNT_TONE.COMPLETE },
-    { text: `−${formatCount(deletions)}`, tone: COUNT_TONE.DANGER },
+    { text: `+${formatCount(additions)}`, tone: STATUS_TONE.COMPLETE },
+    { text: `−${formatCount(deletions)}`, tone: STATUS_TONE.DANGER },
   ];
 }

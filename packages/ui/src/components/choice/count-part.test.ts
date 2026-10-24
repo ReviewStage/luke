@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { COUNT_TONE, CountParts, linesCount } from "./count-part.js";
+import { STATUS_TONE } from "../../status-tone.js";
+import { CountParts, linesCount } from "./count-part.js";
 
 /**
  * count-part.test.ts -- a diff's line count is two parts, the lines added
@@ -35,12 +36,12 @@ function render(element: ReactElement): HTMLElement {
 
 test("a diff's lines are added in the complete tone and removed in the danger tone", () => {
   assert.deepEqual(linesCount(214, 38), [
-    { text: "+214", tone: COUNT_TONE.COMPLETE },
-    { text: "−38", tone: COUNT_TONE.DANGER },
+    { text: "+214", tone: STATUS_TONE.COMPLETE },
+    { text: "−38", tone: STATUS_TONE.DANGER },
   ]);
   assert.deepEqual(
     linesCount(0, 0).map((part) => part.tone),
-    [COUNT_TONE.COMPLETE, COUNT_TONE.DANGER],
+    [STATUS_TONE.COMPLETE, STATUS_TONE.DANGER],
     "an empty diff's count still carries its colours",
   );
 });
@@ -53,7 +54,7 @@ test("a count's parts read as one count, a space between each", () => {
 test("a part's glyph says its state in words beside its text", () => {
   const page = render(
     createElement(CountParts, {
-      parts: [{ text: "1", tone: COUNT_TONE.DANGER, glyph: "×", glyphLabel: "failing" }],
+      parts: [{ text: "1", tone: STATUS_TONE.DANGER, glyph: "×", glyphLabel: "failing" }],
     }),
   );
   assert.equal(page.querySelector('[role="img"]')?.getAttribute("aria-label"), "failing");

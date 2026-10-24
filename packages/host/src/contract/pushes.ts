@@ -11,7 +11,7 @@
  */
 
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
-import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { isLinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";

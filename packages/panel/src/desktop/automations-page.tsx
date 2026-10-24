@@ -14,7 +14,7 @@ import {
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText } from "@luke/features/time-format";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -39,6 +39,7 @@ import {
   PageToolbar,
   RowHint,
   RowHintOptions,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -60,7 +61,7 @@ import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
@@ -415,7 +416,7 @@ function ListPage({
     toggle(automation.id, enabled).then((answer) => {
       const refusal = toggleRefusal(answer, enabled);
       if (refusal !== undefined) {
-        toast({ words: refusal, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: refusal, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     });
   };

@@ -84,13 +84,13 @@
   }
 
   /* A provider's colour, a GitHub label's, as a dot before the words, in the
-     subtle ink until the badge names one it can paint. */
+     muted ink until the badge names one it can paint. */
   .luke-badge-swatch {
     width: 8px;
     height: 8px;
     flex: none;
     border-radius: var(--luke-radius-full);
-    background: var(--luke-color-text-subtle);
+    background: var(--luke-color-text-muted);
   }
 
   .luke-badge svg {
@@ -100,24 +100,9 @@
     color: var(--luke-badge-ink);
   }
 
-  .luke-badge[data-tone="working"] {
-    --luke-badge-ink: var(--luke-color-working);
-  }
-
-  .luke-badge[data-tone="attention"] {
-    --luke-badge-ink: var(--luke-color-attention);
-  }
-
-  .luke-badge[data-tone="complete"] {
-    --luke-badge-ink: var(--luke-color-complete);
-  }
-
-  .luke-badge[data-tone="merged"] {
-    --luke-badge-ink: var(--luke-color-merged);
-  }
-
-  .luke-badge[data-tone="danger"] {
-    --luke-badge-ink: var(--luke-color-danger-text);
+  /* Its glyph and its dot are in its status tone's ink (`tokens/status-tone.css`). */
+  .luke-badge[data-tone] {
+    --luke-badge-ink: var(--luke-tone-ink);
   }
 
   /* Filled with a provider's colour, a GitHub label as GitHub draws one: a
