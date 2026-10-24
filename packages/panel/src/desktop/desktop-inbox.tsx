@@ -1,4 +1,5 @@
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
+import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -287,12 +288,24 @@ function InboxShown({
         columns.onOpen(COMPOSE_COLUMN);
       }
     : undefined;
+  const listedWorkspace = tasks.workspace;
+  const { sidePanel } = tasks;
+  // A file the item names opens beside the Inbox as the panel's preview; pressed with ⌘, it goes to the item's task, opened there.
+  const openFile = (ref: CodeRef, commit: string | undefined) => {
+    const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
+    if (going === undefined) return sidePanel.onPreviewFile(ref, commit);
+    if (commit !== undefined) return tasks.onShowFile(going, ref, commit);
+    // A file read at no commit is drawn on the task it is browsed on, so it is opened here first, on the item's task, and then shown there.
+    sidePanel.onOpenFile(ref);
+    tasks.onShowPanelTab(going, { file: ref.path });
+  };
   const mentions =
     place === undefined
       ? undefined
-      : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
-  const listedWorkspace = tasks.workspace;
-  const { sidePanel } = tasks;
+      : itemMentions(
+          tasklessMentions(place, tasks.onShowMention, readMentionAgents),
+          taskId === undefined ? undefined : openFile,
+        );
   const drawing = useSidePanelDrawing(sidePanel);
   const views = useTabViews();
   const { onArea, focus } = useColumnFocus();
@@ -343,22 +356,9 @@ function InboxShown({
     // standing on its task but the one last read.
     const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
     switch (target.kind) {
-      case INBOX_PANEL_TARGET.FILE: {
-        const { path, lines } = target;
-        const ref =
-          lines === undefined
-            ? { path }
-            : { path, startLine: lines.startLine, endLine: lines.endLine };
-        if (going !== undefined) {
-          if (lines?.commit !== undefined) tasks.onShowFile(going, ref, lines.commit);
-          else {
-            // A file read at no commit is drawn on the task it is browsed on, so it is opened here first, on the item's task, and then shown there.
-            sidePanel.onOpenFile(ref);
-            tasks.onShowPanelTab(going, { file: path });
-          }
-        } else sidePanel.onPreviewFile(ref, lines?.commit);
+      case INBOX_PANEL_TARGET.FILE:
+        openFile(fileRef(target.path, target.lines), target.lines?.commit);
         return true;
-      }
       case INBOX_PANEL_TARGET.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move.
         if (going !== undefined) tasks.onShowPanelTab(going, { page: target.pageId });
@@ -538,34 +538,37 @@ function InboxShown({
                     >
                       {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
                       <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-                        <InboxPane
-                          holder={chosen.holder}
-                          item={chosen.item}
-                          control={live}
-                          agents={named}
-                          hidden={columns.shown === INBOX_COLUMNS.LIST}
-                          onBack={columns.onBack}
-                          pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-                          next={next}
-                          mentions={mentions}
-                          phone={
-                            room === SHELL_ROOM.NARROW
-                              ? {
-                                  onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
-                                }
-                              : undefined
-                          }
-                          doors={{
-                            ...paneDoors(tasks, chosen.holder, {
-                              act,
-                              now,
-                              panelFor,
-                              besideAgents: named.agentIds,
-                            }),
-                            onMark: markItem,
-                            onClose: closeItem,
-                          }}
-                        />
+                        {/* Its thread's words read their mentions where its box does, so a file it names opens as its code does. */}
+                        <TaskMentions value={mentions}>
+                          <InboxPane
+                            holder={chosen.holder}
+                            item={chosen.item}
+                            control={live}
+                            agents={named}
+                            hidden={columns.shown === INBOX_COLUMNS.LIST}
+                            onBack={columns.onBack}
+                            pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+                            next={next}
+                            mentions={mentions}
+                            phone={
+                              room === SHELL_ROOM.NARROW
+                                ? {
+                                    onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
+                                  }
+                                : undefined
+                            }
+                            doors={{
+                              ...paneDoors(tasks, chosen.holder, {
+                                act,
+                                now,
+                                panelFor,
+                                besideAgents: named.agentIds,
+                              }),
+                              onMark: markItem,
+                              onClose: closeItem,
+                            }}
+                          />
+                        </TaskMentions>
                       </LinkWorkspaceProvider>
                     </SkillFiles>
                   </OpenHereProvider>
@@ -596,6 +599,29 @@ function InboxShown({
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
+}
+
+/** A file the item names as its code names it: its path, and its lines where it names them. */
+function fileRef(path: string, lines: MentionLines | undefined): CodeRef {
+  return lines === undefined
+    ? { path }
+    : { path, startLine: lines.startLine, endLine: lines.endLine };
+}
+
+/**
+ * The mentions of the chosen item's words and box, read where `answerPlace`
+ * says: a file or its lines an item of a task names opens through
+ * `openFile`, as its code and its links do; an item of an agent with no
+ * task has no File tab to open it in, so its file stays GitHub's.
+ */
+function itemMentions(
+  taskless: TaskMentionsValue,
+  openFile: ((ref: CodeRef, commit: string | undefined) => void) | undefined,
+): TaskMentionsValue {
+  if (openFile === undefined) return taskless;
+  const onOpenFile = (path: string, lines: MentionLines | undefined) =>
+    openFile(fileRef(path, lines), lines?.commit);
+  return { ...taskless, doors: { ...taskless.doors, onOpenFile } };
 }
 
 /**
