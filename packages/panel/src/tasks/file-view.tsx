@@ -25,6 +25,7 @@ import {
   type ComponentProps,
   Fragment,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -32,15 +33,10 @@ import {
   useState,
 } from "react";
 import { FILE_TREE_WIDTH, type FileTreeWidth } from "../desktop/folded-groups.js";
-import {
-  type FloatingBox,
-  PANE_FLOAT,
-  type PaneFloat,
-  useFloatDismiss,
-  useHoverPane,
-} from "../desktop/hover-pane.js";
+import { KEY_LAYERS, PANE_FLOAT, type PaneFloat } from "../desktop/hover-pane.js";
 import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion.js";
 import type { ReadFolder } from "../file-tree/contract.js";
+import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { useFileMenu } from "./file-menu.js";
 import type { FileNotes } from "./file-note.js";
@@ -111,11 +107,10 @@ const PANE_PLACE = { BESIDE: "beside", OVER: "over" } as const;
 
 type PanePlace = (typeof PANE_PLACE)[keyof typeof PANE_PLACE];
 
-/** What the toggle that floats a pane over the tab answers besides its press: the pointer resting on it peeks the pane, and its press is no press outside the pane. */
+/** What the toggle that floats a pane over the tab answers besides its press: the pointer resting on it peeks the pane. */
 interface FloatToggle {
   readonly onPointerEnter: (event: React.PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerLeave: (event: React.PointerEvent<HTMLButtonElement>) => void;
-  readonly onPointerDown: () => void;
 }
 
 /** One of a pane's toggles: the pane open or shut in its place, as `open` says, and a peek offering to open it. */
@@ -125,6 +120,7 @@ function PlaceToggle({
   peeked,
   onToggle,
   float,
+  box,
   words,
 }: {
   place: PanePlace;
@@ -132,13 +128,15 @@ function PlaceToggle({
   peeked: boolean;
   onToggle: () => void;
   float: FloatToggle | undefined;
+  /** The box around the button, which the pane it floats takes as its toggle: a press on it is no press outside the pane. */
+  box?: RefObject<HTMLSpanElement | null> | undefined;
   words: ToggleWords;
 }): React.JSX.Element {
   const label = open && !peeked ? words.open : words.closed;
   // Note that the place is the box around the button, because the stylesheet
   // shows one place by the panel's width and a barrel button wears no mark.
   return (
-    <span className="file-tree-toggle" data-place={place}>
+    <span ref={box} className="file-tree-toggle" data-place={place}>
       <Tooltip label={label}>
         <IconButton
           icon={<SidePanelIcon />}
@@ -147,7 +145,6 @@ function PlaceToggle({
           onClick={onToggle}
           onPointerEnter={float?.onPointerEnter}
           onPointerLeave={float?.onPointerLeave}
-          onPointerDown={float?.onPointerDown}
         />
       </Tooltip>
     </span>
@@ -164,6 +161,8 @@ export interface PaneToggles {
   readonly peeked: boolean;
   readonly onToggleOver: () => void;
   readonly float: FloatToggle;
+  /** The box around the toggle that floats the pane. */
+  readonly overBox: RefObject<HTMLSpanElement | null>;
 }
 
 /**
@@ -196,6 +195,7 @@ export function TreeToggle({
         peeked={toggles.peeked}
         onToggle={toggles.onToggleOver}
         float={toggles.float}
+        box={toggles.overBox}
         words={words}
       />
     </>
@@ -206,8 +206,14 @@ export function TreeToggle({
 export interface PaneRoom {
   /** The pane beside the tab, open or shut as the panel holds it for every tab of its kind. */
   readonly beside: PaneSlide;
-  /** Whether the pane is drawn at all, beside the tab or over it. */
+  /** Whether the pane stands beside the tab: the panel holds it open, or it is sliding out, and the panel has room for it there. */
+  readonly docked: boolean;
+  /** Whether the pane is drawn at all now, beside the tab or over it. */
   readonly drawn: boolean;
+  /** Whether the pane floats over the tab whenever it is shown, the panel having no room for the two side by side. */
+  readonly narrow: boolean;
+  /** What the pane floating over the tab is handed (`OverPane`); it stands there whenever the pane is not docked. */
+  readonly over: PaneOver;
   readonly toggles: PaneToggles;
   /** Takes down the pane floating over the tab, as a file or a shell chosen in it does, to show it. */
   readonly closeOver: () => void;
@@ -227,8 +233,18 @@ export interface PaneRoom {
   };
   /** What the box the pane stands in wears: the pointer resting at its right edge peeks the pane. */
   readonly body: { readonly onPointerMove: (event: React.PointerEvent<HTMLElement>) => void };
-  /** What the pane's own box wears: a press in it is no press outside it, the pointer leaving a peek puts it away, and Escape in it hands the keyboard back. */
-  readonly pane: FloatingBox;
+}
+
+/** What the pane floating over the tab is handed: whether it stands there, whether as a peek, and the doors that put it away. */
+export interface PaneOver {
+  readonly open: boolean;
+  readonly peek: boolean;
+  /** Escape, or a press outside the pane and its toggle. */
+  readonly onClose: () => void;
+  /** The box around the toggle that floats it. */
+  readonly toggle: RefObject<HTMLElement | null>;
+  /** The pointer leaving a peek puts it away, though not for its toggle, nor a menu or a dialog the pane raised. */
+  readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
 }
 
 /** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--luke-space-6`. */
@@ -243,20 +259,6 @@ const OVER_TOGGLE = '.file-tree-toggle[data-place="over"]';
 /** The strip a closed pane may leave in its place, which peeks the pane over the tab (`changes-strip.tsx`). */
 const PANE_STRIP = ".file-tree-strip";
 
-/** What takes the keyboard in a pane opened over the tab: its chosen row, else its first field or button. */
-function paneFocus(pane: HTMLElement): HTMLElement | null {
-  return (
-    pane.querySelector<HTMLElement>('[aria-current="true"] button') ??
-    pane.querySelector<HTMLElement>("input, button")
-  );
-}
-
-/** Whether an element of the view is drawn, which is the stylesheet's to say. */
-function drawnIn(view: Element | null, selector: string): boolean {
-  const element = view?.querySelector(selector);
-  return element !== null && element !== undefined && getComputedStyle(element).display !== "none";
-}
-
 /**
  * Whether the view floats its pane over the tab rather than beside it,
  * which is the stylesheet's to say: its over toggle is drawn, or a strip
@@ -266,24 +268,19 @@ function floats(view: Element | null): boolean {
   return drawnIn(view, OVER_TOGGLE) || drawnIn(view, PANE_STRIP);
 }
 
-/** Whether the pane's own view floats it now, a panel widened past its line having docked it. */
-function floatsAround(pane: HTMLElement): boolean {
-  return floats(pane.closest(".file-view"));
-}
-
 /**
  * The pane's room. Beside the tab it is open or shut as the panel holds it
  * (`usePaneSlide`); where the panel is too narrow for the tab and the pane
  * side by side (`@container side-panel`), the stylesheet floats it over the
  * tab's right edge instead, as the main sidebar floats over the work in a
  * narrow window (`hover-pane.ts`), and only for this tab. The pointer
- * resting on its toggle or at the body's right edge peeks it, a beat later
- * (planning.css), and leaving puts it away; a press of the toggle opens it,
- * and opened from away it takes the keyboard and holds it. A choice in it,
- * Escape, or a press outside puts it away. It is never kept open past
- * those, and never floats where it has room beside the tab. Which of the
- * two places is drawn is the stylesheet's alone, so the panel crossing its
- * width moves the pane without a render.
+ * resting on its toggle or at the body's right edge peeks it, a beat later,
+ * and leaving puts it away; a press of the toggle opens it, which takes the
+ * keyboard and holds it. A choice in it, Escape, or a press outside puts it
+ * away. It is never kept open past those, and never floats where it has
+ * room beside the tab. Which of the two places stands is the stylesheet's
+ * to say, read off the toggle it draws (`useFloatsOver`); the pane over the tab
+ * is an `OverPane`, which slides out as it slides in.
  */
 export function usePaneRoom(shown: {
   readonly open: boolean;
@@ -291,16 +288,11 @@ export function usePaneRoom(shown: {
 }): PaneRoom {
   const beside = usePaneSlide(shown.open);
   const [over, setOver] = useState<PaneFloat>(PANE_FLOAT.CLOSED);
-  const float = { state: over, onState: setOver };
-  const keep = useFloatDismiss(float);
-  const pane = useHoverPane(float, {
-    focusAt: paneFocus,
-    stays: OVER_TOGGLE,
-    ref: beside.pane,
-    floatsNow: floatsAround,
-  });
-  const closeOver = pane.close;
-  const view = useRef<HTMLElement | null>(null);
+  const [view, setView] = useState<HTMLElement | null>(null);
+  const overBox = useRef<HTMLSpanElement | null>(null);
+  const narrow = useFloatsOver(view, OVER_TOGGLE, BESIDE_TOGGLE);
+  const floating = over !== PANE_FLOAT.CLOSED;
+  const closeOver = useCallback(() => setOver(PANE_FLOAT.CLOSED), []);
   // Note that a finger's arrival peeks nothing, because iOS plays a tap's
   // arrival as a hover and spends the tap on a pane that comes in with it:
   // a finger opens the pane with its toggle's tap alone.
@@ -309,19 +301,38 @@ export function usePaneRoom(shown: {
     setOver((was) => (was === PANE_FLOAT.CLOSED ? PANE_FLOAT.PEEK : was));
   };
   const unpeek = () => setOver((was) => (was === PANE_FLOAT.PEEK ? PANE_FLOAT.CLOSED : was));
-  const toggleOver = () => (over === PANE_FLOAT.OPEN ? closeOver() : pane.open());
+  const toggleOver = () => setOver(over === PANE_FLOAT.OPEN ? PANE_FLOAT.CLOSED : PANE_FLOAT.OPEN);
   // A pane opened beside the tab floats over it no more.
   useEffect(() => {
     if (shown.open) setOver(PANE_FLOAT.CLOSED);
   }, [shown.open]);
+  const docked = !narrow && beside.drawn;
   return {
     beside,
-    drawn: beside.drawn || pane.floating,
+    docked,
+    drawn: docked || floating,
+    narrow,
+    over: {
+      open: floating,
+      peek: over === PANE_FLOAT.PEEK,
+      onClose: closeOver,
+      toggle: overBox,
+      onPointerLeave: (event) => {
+        if (over !== PANE_FLOAT.PEEK) return;
+        const to = event.relatedTarget;
+        // A menu or a dialog the pane raised stands outside it, and is no way out either.
+        if (to instanceof Element && (to.closest(OVER_TOGGLE) ?? to.closest(KEY_LAYERS)) !== null) {
+          return;
+        }
+        closeOver();
+      },
+    },
     toggles: {
       ...shown,
-      over: pane.floating,
+      over: floating,
       peeked: over === PANE_FLOAT.PEEK,
       onToggleOver: toggleOver,
+      overBox,
       float: {
         onPointerEnter: peek,
         onPointerLeave: (event) => {
@@ -329,13 +340,12 @@ export function usePaneRoom(shown: {
           if (event.clientY >= event.currentTarget.getBoundingClientRect().bottom - 1) return;
           unpeek();
         },
-        onPointerDown: keep,
       },
     },
     closeOver,
     // Note that the pane is shown beside the tab wherever it has room there,
     // a strip in its place being no float of its own.
-    toggle: () => (drawnIn(view.current, BESIDE_TOGGLE) ? shown.onToggle() : toggleOver()),
+    toggle: () => (drawnIn(view, BESIDE_TOGGLE) ? shown.onToggle() : toggleOver()),
     strip: {
       onPointerEnter: peek,
       onPointerLeave: (event) => {
@@ -345,16 +355,14 @@ export function usePaneRoom(shown: {
       },
     },
     root: {
-      ref: (element) => {
-        view.current = element;
-      },
+      ref: setView,
       "data-pane-beside": String(beside.drawn),
       "data-pane-over": over,
       onKeyDown: (event) => {
-        if (!pane.floating || event.key !== "Escape" || event.nativeEvent.isComposing) return;
+        if (!floating || event.key !== "Escape" || event.nativeEvent.isComposing) return;
         // Note that the Escape is stopped here, because the window's own would leave the view.
         event.stopPropagation();
-        setOver(PANE_FLOAT.CLOSED);
+        closeOver();
       },
     },
     body: {
@@ -366,7 +374,8 @@ export function usePaneRoom(shown: {
         const atEdge = event.clientX >= box.right - PEEK_EDGE;
         const onPane =
           event.target instanceof Element &&
-          (beside.pane.current?.contains(event.target) === true ||
+          (event.target.closest(".luke-over-pane") !== null ||
+            beside.pane.current?.contains(event.target) === true ||
             event.target.closest(PANE_STRIP) !== null);
         if (over === PANE_FLOAT.CLOSED && atEdge && event.buttons === 0) {
           if (floats(event.currentTarget.parentElement)) peek(event);
@@ -374,12 +383,6 @@ export function usePaneRoom(shown: {
         }
         if (over === PANE_FLOAT.PEEK && !atEdge && !onPane) unpeek();
       },
-    },
-    pane: {
-      floating: pane.floating,
-      onPressWithin: keep,
-      onPointerLeave: pane.onPointerLeave,
-      onKeyDown: pane.onKeyDown,
     },
   };
 }
@@ -726,15 +729,16 @@ export function FileView({
             onRead={onRead}
           />
         </Fragment>
-        {browsing && tree.drawn ? (
+        {browsing ? (
           <FileTreePane
             file={file.path}
             shown={shown}
             listFolder={readFolderListing}
             readWhole={listWhole}
             onOpen={browse}
+            over={tree.docked ? undefined : tree.over}
+            narrow={tree.narrow}
             pane={tree.beside.pane}
-            float={tree.pane}
             leaving={tree.beside.leaving}
             width={treeWidth?.width}
             edge={edge}
