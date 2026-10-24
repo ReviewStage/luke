@@ -8,10 +8,10 @@
  * rearranges by it the line it reads: the room (`shell-room.ts`) and the
  * sidebar's fold (`sidebar-collapse.ts`).
  *
- * The room is written on the document's root too, as `data-luke-room`, for
- * the layers the panel portals out of the stage, a dialog and the toasts,
- * which stand outside the shell's own `data-room` and must answer the same
- * room rather than a breakpoint of their own.
+ * The room is written on the document's root as `data-luke-room`, the one
+ * attribute the panel's stylesheets read it off, so the layers the panel
+ * portals out of the stage, a dialog and the toasts, answer the same room as
+ * the shell rather than a breakpoint of their own.
  *
  * Only those lines are state, never the width itself: the root holds the
  * whole shell, so a width in its state would draw the shell again at every

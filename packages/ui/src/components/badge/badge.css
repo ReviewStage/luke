@@ -15,7 +15,8 @@
   /* A badge given a step in a header too narrow for its words keeps them for
      a reader, as `VisuallyHidden`'s `under` does. Note that these stay here,
      because they answer a `luke-room` container the badge's caller draws. */
-  @container luke-room (max-width: 520px) {
+  /* off-scale: 520px, where a snug badge's words stop fitting (visually-hidden.css reads the same line) */
+  @container luke-room (width < 520px) {
     .luke-badge-words[data-under="snug"] {
       position: absolute;
       overflow: hidden;
@@ -26,7 +27,8 @@
     }
   }
 
-  @container luke-room (max-width: 439px) {
+  /* off-scale: 440px, where a tight badge's words stop fitting (visually-hidden.css reads the same line) */
+  @container luke-room (width < 440px) {
     .luke-badge-words[data-under="tight"] {
       position: absolute;
       overflow: hidden;

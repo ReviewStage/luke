@@ -58,6 +58,7 @@ async function mounted(element: ReactElement, room: ShellRoom): Promise<HTMLElem
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
+  document.documentElement.dataset.lukeRoom = room;
   const container = shell.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -123,6 +124,7 @@ beforeAll(() => {
 }, 30_000);
 
 afterEach(() => {
+  delete document.documentElement.dataset.lukeRoom;
   unmountTabs();
   vi.restoreAllMocks();
 });

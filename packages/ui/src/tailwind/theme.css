@@ -603,7 +603,7 @@
   :root[data-luke-room="narrow"] & {
     @slot;
   }
-  @container luke-dialog-room (max-width: 639px) {
+  @container luke-dialog-room (width < 640px) {
     :root:not([data-luke-room]) & {
       @slot;
     }

@@ -30,6 +30,7 @@ afterEach(() => {
   laid?.remove();
   laid = undefined;
   document.body.innerHTML = "";
+  delete document.documentElement.dataset.lukeRoom;
 });
 
 /** The tab's row of tabs, Review at its end, in a tab as wide as given. */
@@ -80,8 +81,9 @@ function phoneRowAt(room: "narrow" | "wide") {
       ? '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="words">'
       : '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="together" data-folded="true">';
   const glyph = room === "narrow" ? "" : '<span class="luke-choice-bar-icon"><svg></svg></span>';
+  document.documentElement.dataset.lukeRoom = room;
   document.body.innerHTML = [
-    `<div class="desktop-shell" data-room="${room}"><div class="file-view pull-request-tab">`,
+    '<div class="desktop-shell"><div class="file-view pull-request-tab">',
     '<div class="luke-pane-bar"><div class="luke-pane-bar-middle">',
     bar,
     '<button class="luke-choice-bar-option" role="tab" aria-selected="true">',

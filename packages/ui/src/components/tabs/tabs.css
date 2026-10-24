@@ -392,6 +392,7 @@
      folded or not, a tab that narrow wears no fade at its end, because the
      fade makes room for a × it no longer has, or is wider than the glyph's
      whole side of the pill. */
+  /* off-scale: 72px, a tab that is only its glyph and a pill's padding */
   @container luke-tab (width < 72px) {
     .luke-tabs[data-fold="glyph"]
       .luke-tab:not([data-selected="true"])

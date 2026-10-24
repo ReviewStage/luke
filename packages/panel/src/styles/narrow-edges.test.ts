@@ -37,6 +37,7 @@ interface Piece {
 let laid: HTMLStyleElement | undefined;
 
 afterEach(() => {
+  delete document.documentElement.dataset.lukeRoom;
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
@@ -84,6 +85,7 @@ function pixels(element: Element, length: string): number {
 
 /** The shell in the room given, its sheet holding its task's column and its side panel standing full screen, each bar with its tabs and its actions. */
 function shell(room: string): void {
+  document.documentElement.dataset.lukeRoom = room;
   const bar = (className: string, tabs: Piece, actions: string, data?: Piece["data"]): Piece => ({
     className,
     ...(data === undefined ? {} : { data }),
