@@ -158,7 +158,6 @@ function mount(tasks: TasksControl) {
           createElement(DesktopTasks, {
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
-            notice: undefined,
             tasks: next,
           }),
         ),

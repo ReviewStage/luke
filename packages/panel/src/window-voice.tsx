@@ -1,5 +1,5 @@
 /**
- * window-voice.tsx -- what the window draws of the voice beside its pages: the call card, the notice line, and the call's chords, each read where it is drawn.
+ * window-voice.tsx -- what the window draws of the voice beside its pages: the call card, the voice's notices, and the call's chords, each read where it is drawn.
  *
  * The voice moves with every word said on a call, and who is heard on it
  * with every breath, so the window's root reads none of it: each part here
@@ -18,16 +18,7 @@ import {
   volumeHintText,
 } from "@luke/voice/volume-hint";
 import * as Atom from "effect/reactivity/Atom";
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { CallCardContext, type CallCardInput, callControls } from "./call/call-card.js";
 import { useCallCardVideo } from "./call/panel-avatar.js";
@@ -37,7 +28,7 @@ import { useOpenLink } from "./tasks/use-open-link.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { useVoiceNotice } from "./use-voice-notice.js";
 import { fixtureVoice, useStandingVoiceView, useVoiceView } from "./use-voice-view.js";
-import { VoiceNoticeStrip, type VoiceNoticeStripProps } from "./voice-notice-strip.js";
+import { useVoiceNoticeToast } from "./voice-notice-toast.js";
 
 /** The Mac's output as last read, which the volume hint answers. */
 const OUTPUT_AUDIO = Atom.map(APP_SLICE.AUDIO, (audio) => audio?.outputAudio);
@@ -47,20 +38,6 @@ const RUN_PROFILE_NAME = Atom.map(APP_SLICE.RUN, (run) => run?.profile);
 
 /** OpenAI's billing page, where the account a saved key belongs to is given credit. */
 const OPENAI_BILLING_URL = "https://platform.openai.com/settings/organization/billing/overview";
-
-/** The line with nothing on it, as a page drawn outside a window reads it. */
-const NO_NOTICE: VoiceNoticeStripProps = {
-  notice: { content: undefined, shown: false },
-  onDismissHint: () => undefined,
-  onRemedy: () => undefined,
-};
-
-const VoiceNoticeContext = createContext<VoiceNoticeStripProps>(NO_NOTICE);
-
-/** The voice's notice line, as the window's voice has it now (`WindowVoice`). */
-export function WindowVoiceNotice(): React.JSX.Element {
-  return <VoiceNoticeStrip {...useContext(VoiceNoticeContext)} />;
-}
 
 /**
  * The call's chords, the menu bar's and the keys': read here, where nothing
@@ -72,11 +49,11 @@ export function CallChords(): null {
 }
 
 /**
- * The window's voice line: a failure, a notice, or the hint that Luke speaks
+ * The window's voice notice: a failure, a notice, or the hint that Luke speaks
  * into a silent Mac, which a "Got it" quiets for the stretch of silence it
- * answered. Handed to the notice line wherever the window floats it.
+ * answered. Stood as a toast in the window's one stack (`voice-notice-toast.ts`).
  */
-function VoiceNoticeLine({ children }: { children: ReactNode }): React.JSX.Element {
+function VoiceNotices({ children }: { children: ReactNode }): React.JSX.Element {
   const view = useStandingVoiceView();
   const outputAudio = useAppSlice(OUTPUT_AUDIO);
   // A capture run stages who is heard, and for the muted run the hint, since no voice window stands in one.
@@ -139,12 +116,8 @@ function VoiceNoticeLine({ children }: { children: ReactNode }): React.JSX.Eleme
     },
     [openApiKeys, openLink, tell],
   );
-  const { content, shown } = notice;
-  const value = useMemo(
-    () => ({ notice: { content, shown }, onDismissHint, onRemedy }),
-    [content, shown, onDismissHint, onRemedy],
-  );
-  return <VoiceNoticeContext.Provider value={value}>{children}</VoiceNoticeContext.Provider>;
+  useVoiceNoticeToast({ notice, onDismissHint, onRemedy });
+  return <>{children}</>;
 }
 
 /**
@@ -181,8 +154,8 @@ function StandingCallCard({
 }
 
 /**
- * The voice the window draws beside its pages, around them: the call card
- * and the notice line, each handed to where it docks. `available` is
+ * The voice the window draws beside its pages, around them: the call card,
+ * handed to where it docks, and the voice's notices, stood as toasts. `available` is
  * whether the window is past the sign-in, and `agentShown` the agent whose
  * call bar the window has on screen, where the card gives way to it.
  */
@@ -197,7 +170,7 @@ export function WindowVoice({
 }): React.JSX.Element {
   return (
     <StandingCallCard available={available} agentShown={agentShown}>
-      <VoiceNoticeLine>{children}</VoiceNoticeLine>
+      <VoiceNotices>{children}</VoiceNotices>
     </StandingCallCard>
   );
 }

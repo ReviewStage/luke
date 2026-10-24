@@ -71,7 +71,6 @@ async function mountOn(
   call: {
     avatar?: AvatarState;
     activity?: TaskActivity;
-    notice?: React.ReactNode;
     unavailable?: true;
   } = {},
 ): Promise<HTMLElement> {
@@ -120,7 +119,6 @@ async function mountOn(
           summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           tasks,
-          notice: call.notice,
         }),
       ),
     ),
@@ -402,27 +400,10 @@ test("hovering the video brings out its resize controls, each named and reached 
   );
 });
 
-test("on a call the voice's notice line floats just over the video's room, never on the video, and no captions stand anywhere in the tab", async () => {
-  const notice = createElement("div", { className: "voice-notice", "data-shown": "true" }, "Lost");
+test("on a call no captions stand anywhere in the tab", async () => {
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
     avatar: { status: AVATAR_STATUS.LIVE },
-    notice,
   });
-  const line = page.querySelector<HTMLElement>(".voice-notice");
-  assert.ok(line, "the notice line rides the call's tab");
-  const room = videoRoom(page);
-  assert.ok(room);
-  assert.equal(room.contains(line), false, "not inside the video's room");
-  const laid = layContainersAt({});
-  try {
-    const holder = line.closest<HTMLElement>(".agent-call-notice");
-    assert.ok(holder);
-    const drawn = getComputedStyle(holder);
-    assert.equal(drawn.position, "absolute");
-    assert.equal(drawn.bottom, "100%", "it stands above the foot's top edge, over the transcript");
-  } finally {
-    laid.remove();
-  }
   const tab = page.querySelector(".agent-tab");
   assert.ok(tab);
   assert.equal(tab.querySelector(".voice-caption, .voice-caption-speaker"), null, "no captions");
