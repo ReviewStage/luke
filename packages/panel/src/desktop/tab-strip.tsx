@@ -36,8 +36,7 @@ import { ROW_RUN, withRowMoves } from "./row-moves.js";
 /**
  * Where a tab of the strip around it stands among the tabs that move, read
  * from the strip as the tab's menu opens, which moves it one place either
- * way (`row-moves.tsx`); none in a strip whose tabs stay put, or for the
- * tab anchored at its start.
+ * way (`row-moves.tsx`); none in a strip whose tabs stay put.
  */
 const TabPlaceContext = createContext<((tab: HTMLElement) => TabPlace | undefined) | undefined>(
   undefined,
@@ -53,7 +52,7 @@ const TabTooltip: TabHint = ({ label, card, children }) => (
 /**
  * The strip of tabs. `onMove`, while given, lets the tabs be moved, and
  * hears each move as the tab's place before and after it; every tab moves,
- * to any place among them all, but one anchored at the strip's start.
+ * to any place among them all.
  */
 export function TabStrip({
   label,
