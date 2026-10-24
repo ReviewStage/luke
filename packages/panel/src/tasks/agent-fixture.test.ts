@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
+import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { TERMINAL_REFUSAL } from "@luke/features/terminal-acts";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -148,6 +149,40 @@ it("every changed file's patch counts the lines its hunks hold, as the diff view
   );
 
   assert.deepEqual(miscounted, []);
+});
+
+/** Every file path the File tab's tree lists under `path`, walking its folders. */
+function listedFiles(path: string): readonly string[] {
+  const listed = answered(RUN_PROFILE.AGENT_FILE, ACT_KIND.TASKS_TREE, {
+    planId: FIXTURE_TASK_ID,
+    path,
+  });
+  assert.ok("folder" in listed, `${path || "the root"} is listed`);
+  return listed.folder.entries.flatMap((entry) => {
+    const at = path === "" ? entry.name : `${path}/${entry.name}`;
+    return entry.kind === TASK_TREE_ENTRY.FOLDER ? listedFiles(at) : [at];
+  });
+}
+
+it("every file the File tab's tree lists, and every file the pull request changed, reads whole on the agent's branch", () => {
+  const changes = answered(RUN_PROFILE.AGENT_FILES, ACT_KIND.CODING_AGENTS_CHANGES, AGENT);
+  assert.ok("pullRequest" in changes && changes.pullRequest !== null);
+  const listed = listedFiles("");
+  const unread = [
+    ...new Set([...listed, ...changes.pullRequest.files.map((file) => file.path)]),
+  ].filter((path) => {
+    const read = answered(RUN_PROFILE.AGENT_FILE, ACT_KIND.TASKS_FILE, {
+      taskId: FIXTURE_TASK_ID,
+      path,
+      firstLine: 1,
+      lastLine: 1,
+      raw: true,
+    });
+    return !("text" in read);
+  });
+
+  assert.ok(listed.includes("src/members/invite.test.ts"));
+  assert.deepEqual(unread, []);
 });
 
 it("each Terminal profile lists the agent's sandbox as the state it stages", () => {

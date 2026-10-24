@@ -138,6 +138,55 @@ const INVITE_TEST_LINES: readonly string[] = [
   "});",
 ];
 
+/** The schema and the removal as the agent left them, which their diffs below end at. */
+const MEMBERSHIPS_LINES: readonly string[] = [
+  'import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";',
+  "",
+  'export const memberships = pgTable("memberships", {',
+  '  id: uuid("id").primaryKey().defaultRandom(),',
+  '  workspaceId: uuid("workspace_id").notNull(),',
+  '  userId: uuid("user_id"),',
+  '  email: text("email"),',
+  '  state: text("state", { enum: ["pending", "active"] }).notNull().default("active"),',
+  '  role: text("role").notNull(),',
+  '  createdAt: timestamp("created_at").notNull().defaultNow(),',
+  "});",
+];
+
+const REMOVE_LINES: readonly string[] = [
+  'import { db } from "../db.js";',
+  'import { MemberError } from "./errors.js";',
+  "",
+  "/**",
+  " * Removes a member from a workspace, a pending invite among them.",
+  " */",
+  "export async function removeMember(workspaceId: string, userId: string) {",
+  "  const membership = await db.memberships.find(workspaceId, userId);",
+  '  if (!membership) throw new MemberError("not-a-member");',
+  "  // A pending invite is a membership too, so withdrawing one is a removal.",
+  "  await db.memberships.delete(membership.id);",
+  "  return membership;",
+  "}",
+];
+
+const PACKAGE_LINES: readonly string[] = [
+  "{",
+  '  "name": "relay",',
+  '  "private": true,',
+  '  "type": "module",',
+  '  "scripts": { "test": "vitest run" }',
+  "}",
+];
+
+/** Every file of the agent's branch a File tab can read, by path, which its tree lists. */
+const FILES: ReadonlyMap<string, readonly string[]> = new Map([
+  ["package.json", PACKAGE_LINES],
+  ["src/db/schema/memberships.ts", MEMBERSHIPS_LINES],
+  ["src/members/invite.test.ts", INVITE_TEST_LINES],
+  ["src/members/invite.ts", INVITE_LINES],
+  ["src/members/remove.ts", REMOVE_LINES],
+]);
+
 /** A whole new file's patch, as GitHub writes one. */
 function addedPatch(lines: readonly string[]): string {
   return [`@@ -0,0 +1,${lines.length} @@`, ...lines.map((line) => `+${line}`)].join("\n");
@@ -518,31 +567,22 @@ const CHAPTERS = {
   },
 };
 
-/** The repository's folders, as a File tab's tree and breadcrumbs read them. */
-const TREE: ReadonlyMap<string, readonly TaskTreeEntry[]> = new Map([
-  [
-    "",
-    [
-      { name: "src", kind: TASK_TREE_ENTRY.FOLDER },
-      { name: "package.json", kind: TASK_TREE_ENTRY.FILE },
-    ],
-  ],
-  [
-    "src",
-    [
-      { name: "db", kind: TASK_TREE_ENTRY.FOLDER },
-      { name: "members", kind: TASK_TREE_ENTRY.FOLDER },
-    ],
-  ],
-  [
-    "src/members",
-    [
-      { name: "invite.test.ts", kind: TASK_TREE_ENTRY.FILE },
-      { name: "invite.ts", kind: TASK_TREE_ENTRY.FILE },
-      { name: "remove.ts", kind: TASK_TREE_ENTRY.FILE },
-    ],
-  ],
-]);
+/** A folder of the agent's branch as a File tab's tree and breadcrumbs read it: what stands in it of the files it holds, its folders first. */
+function treeAt(path: string): readonly TaskTreeEntry[] {
+  const prefix = path === "" ? "" : `${path}/`;
+  const entries = new Map<string, TaskTreeEntry>();
+  for (const file of FILES.keys()) {
+    if (!file.startsWith(prefix)) continue;
+    const [name = "", ...below] = file.slice(prefix.length).split("/");
+    const kind = below.length === 0 ? TASK_TREE_ENTRY.FILE : TASK_TREE_ENTRY.FOLDER;
+    entries.set(name, { name, kind });
+  }
+  return [...entries.values()].sort(
+    (one, other) =>
+      Number(one.kind === TASK_TREE_ENTRY.FILE) - Number(other.kind === TASK_TREE_ENTRY.FILE) ||
+      one.name.localeCompare(other.name),
+  );
+}
 
 /** The file the File profile opens, read from the agent's branch. */
 const OPENED_FILE = "src/members/invite.ts";
@@ -624,15 +664,22 @@ const SHELL_SCREEN = [
 ].join("\r\n");
 
 /**
- * The ports posted for attached shells, held so the end the fixture keeps
- * is not collected while the tab still reads the other.
+ * The end the fixture keeps of the port posted for the shell attached last,
+ * held so it is not collected while the tab still reads the other, and
+ * closed once the tab detaches or attaches again.
  */
-const heldPorts: MessagePort[] = [];
+let heldPort: MessagePort | undefined;
+
+function closeHeldPort(): void {
+  heldPort?.close();
+  heldPort = undefined;
+}
 
 /** Posts a shell's port to the window, as main posts one for an attach, saying what the stage says on it. */
 function postShellPort(stage: Extract<TerminalStage, { kind: typeof TERMINAL_STAGE.PORT }>): void {
+  closeHeldPort();
   const channel = new MessageChannel();
-  heldPorts.push(channel.port1);
+  heldPort = channel.port1;
   const said: TerminalPortOutbound[] = [
     { type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED },
     { type: TERMINAL_PORT_MESSAGE.OUTPUT, data: new TextEncoder().encode(SHELL_SCREEN) },
@@ -710,16 +757,17 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   }),
   [ACT_KIND.CHAPTERS_READ]: () => CHAPTERS,
   [ACT_KIND.TASKS_FILE]: ({ path, firstLine, lastLine, raw }) => {
-    if (path !== OPENED_FILE) return { refusal: TASK_FILE_REFUSAL.MISSING };
+    const lines = FILES.get(path);
+    if (lines === undefined) return { refusal: TASK_FILE_REFUSAL.MISSING };
     const place = { path, repository: REPOSITORY, branch: PULL_REQUEST.head };
-    if (raw === true) return { text: { ...place, text: `${INVITE_LINES.join("\n")}\n` } };
+    if (raw === true) return { text: { ...place, text: `${lines.join("\n")}\n` } };
     return {
       file: {
         ...place,
         commit: PULL_REQUEST.headSha,
         firstLine,
-        lineCount: INVITE_LINES.length,
-        lines: INVITE_LINES.slice(firstLine - 1, lastLine),
+        lineCount: lines.length,
+        lines: lines.slice(firstLine - 1, lastLine),
       },
     };
   },
@@ -728,7 +776,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       path,
       repository: REPOSITORY,
       branch: PULL_REQUEST.head,
-      entries: TREE.get(path) ?? [],
+      entries: treeAt(path),
       truncated: false,
     },
   }),
@@ -745,6 +793,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     const terminal = terminalStage(stage);
     if (terminal?.kind === TERMINAL_STAGE.PORT) postShellPort(terminal);
   },
+  [ACT_KIND.TERMINAL_DETACH]: () => closeHeldPort(),
 };
 
 /**
