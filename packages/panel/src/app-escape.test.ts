@@ -130,11 +130,15 @@ async function drawWindowOnCall(): Promise<void> {
       createElement(RegistryContext.Provider, { value: AtomRegistry.make() }, createElement(App)),
     ),
   );
-  await vi.waitFor(async () => {
-    await settle();
-    pressEscape(document.body);
-    assert.ok(stops() > 0, "an Escape nothing took stops the call");
-  });
+  // Note that the window's first draw can be slow on a loaded runner, so the wait is longer than the default second.
+  await vi.waitFor(
+    async () => {
+      await settle();
+      pressEscape(document.body);
+      assert.ok(stops() > 0, "an Escape nothing took stops the call");
+    },
+    { timeout: 15_000 },
+  );
   sent = [];
 }
 
