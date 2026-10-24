@@ -10,7 +10,7 @@ import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
-import { readingWords } from "@luke/features/words";
+import { type Noun, noMatchWords, noneYetWords, readingWords } from "@luke/features/words";
 import {
   Badge,
   COLLECTION_STATE,
@@ -29,6 +29,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
@@ -57,7 +58,12 @@ import { useAdminRead } from "../use-admin-read.js";
 
 const WORKSPACES_ERROR = "The workspaces endpoint did not answer.";
 
-const WORKSPACES_EMPTY = "No workspace matches.";
+const WORKSPACE: Noun = { one: "workspace", many: "workspaces" };
+
+/** What the table says when no workspace answers the search, and when it holds none. */
+function workspacesEmpty(searched: boolean): string {
+  return searched ? noMatchWords(WORKSPACE) : noneYetWords(WORKSPACE);
+}
 
 /** The table's columns by key; a fixed set, so a heading never carries a free string. */
 const WORKSPACE_COLUMN = {
@@ -263,10 +269,13 @@ function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
 function WorkspacesSections({
   list,
   rows,
+  searched,
   onOpenAccount,
 }: {
   list: AdminWorkspaceList | undefined;
   rows: readonly AdminWorkspaceRow[];
+  /** Whether the box holds a search, which is what an empty table is worded by. */
+  searched: boolean;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
   return (
@@ -288,7 +297,7 @@ function WorkspacesSections({
               columns={workspaceColumns(onOpenAccount)}
               rows={rows}
               rowKey={(row) => row.id}
-              empty={WORKSPACES_EMPTY}
+              empty={workspacesEmpty(searched)}
               minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
               rowPressable={(row) => row.owner !== null}
               onRowPress={(row) => {
@@ -393,16 +402,22 @@ export function WorkspacesScreen({
         state: COLLECTION_STATE.LOADING,
         skeleton: (
           <PageSections>
-            <WorkspacesSections list={undefined} rows={[]} onOpenAccount={onOpenAccount} />
+            <WorkspacesSections
+              list={undefined}
+              rows={[]}
+              searched={false}
+              onOpenAccount={onOpenAccount}
+            />
           </PageSections>
         ),
       }),
     failed: (error) => page({ filters: search, state: COLLECTION_STATE.ERROR, error }),
     ready: (list, refreshed) => {
-      const needle = query.trim().toLowerCase();
-      const rows = needle
-        ? list.rows.filter((row) => row.name.toLowerCase().includes(needle))
-        : list.rows;
+      const tokens = searchTokens(query);
+      const rows =
+        tokens.length > 0
+          ? list.rows.filter((row) => matchesTokens([row.name], tokens))
+          : list.rows;
       return page({
         filters: (
           <>
@@ -417,7 +432,12 @@ export function WorkspacesScreen({
         // under the tiles, as the Users roster's does.
         state: COLLECTION_STATE.READY,
         children: refreshed(
-          <WorkspacesSections list={list} rows={rows} onOpenAccount={onOpenAccount} />,
+          <WorkspacesSections
+            list={list}
+            rows={rows}
+            searched={tokens.length > 0}
+            onOpenAccount={onOpenAccount}
+          />,
         ),
       });
     },
