@@ -783,6 +783,26 @@ function sendOf(card: HTMLElement): HTMLButtonElement {
 const EXPIRY = "Invite links expire after 7 days or 14?";
 const UNIQUE_INDEX = "Add a unique index on (organization_id, email) to memberships?";
 
+test("an ask's note offers the chat's @ list, the members its channel tells but the asking agent, then the channel's task, and its # names the channels, as the channel's box does", () => {
+  const page = mount((chat) => chat, ACME, undefined, undefined, { tasks: [INVITATIONS] });
+  const card = openAsk(page, UNIQUE_INDEX);
+  typeInComposer(card, "@in");
+  // Note that Invite emails asked, so it is not offered, as the Inbox's box never offers the item's agent.
+  assert.deepEqual(menuRows(page), [
+    "# Agents",
+    "Add teammate invitations · This task",
+    "# Plan",
+    "Teammate invitations · The whole plan",
+  ]);
+  pressInComposer(card, "Enter");
+  assert.ok(card.querySelector("[data-mention-ref]"), "the agent stands in the note as its chip");
+  typeInComposer(card, " see #teammate");
+  assert.ok(
+    menuRows(page).some((row) => row.startsWith("teammate-invitations")),
+    "the # word lists the channels",
+  );
+});
+
 test("an open choice is headed as the Inbox heads one, picked by its option's number key and sent by the box's Send, and once answered its pick stands checked under the answerer's comment", async () => {
   const page = mount();
   const card = openAsk(page, EXPIRY);

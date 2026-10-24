@@ -698,6 +698,7 @@ function AskBody({
       answers={postsWhere(message, context.roster)}
       blocks={blocks}
       actorOf={context.actorOf}
+      mentions={context.mentionsIn(message.channelId)}
       keywords={context.keywords}
       now={now}
       onAnswer={context.onAnswer}
