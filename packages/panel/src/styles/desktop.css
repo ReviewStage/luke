@@ -14,7 +14,7 @@
      with --luke-space-4 above and below it. Every tab that leads with a bar, in
      the side panel or in a task's column, stands it this tall, so moving
      between tabs never moves the content under the bar. */
-  --secondary-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px);
+  --secondary-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
   /* The spacing scale, one control's box, corner, and glyph, the gaps
      between controls, list items, and sections, a page's inset and measure, a
      menu's rows, glyph, and shadow, the keyboard's ring, the floating layers,
@@ -254,7 +254,7 @@ body,
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   vertical-align: middle;
 }
 
@@ -270,19 +270,19 @@ body,
 }
 
 .workspace-ref[data-size="row"] {
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .workspace-ref[data-size="head"],
 .workspace-ref:has(> .workspace-ref-copy) {
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 .workspace-ref-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
 }
 
 .workspace-ref-name {
@@ -296,7 +296,7 @@ body,
 .workspace-card-head {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .workspace-card-head > .luke-hover-card-head {
@@ -316,7 +316,7 @@ body,
    above New plan. */
 .sidebar-workspace {
   flex: 0 0 auto;
-  padding-bottom: var(--luke-space-12);
+  padding-bottom: var(--luke-block-gap);
 }
 
 .sidebar-workspace .workspace-ref {
@@ -324,7 +324,7 @@ body,
 }
 
 .sidebar-workspace .workspace-ref-copy {
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
 }
 
 .sidebar-workspace .workspace-ref-name {
@@ -337,7 +337,7 @@ body,
 .sidebar-workspace-shared {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -376,8 +376,8 @@ body,
   display: flex;
   height: var(--luke-control-height);
   align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-4) 0 0;
+  gap: var(--luke-tight-gap);
+  padding: 0 var(--luke-tight-gap) 0 0;
 }
 
 [data-luke-profile="desktop"] .sidebar-section-head {
@@ -442,7 +442,7 @@ body,
 /* The quiet line under the list saying what the status filter leaves out,
    inset as a row's words are. */
 .sidebar-hidden-statuses {
-  margin: var(--luke-space-4) var(--row-inset);
+  margin: var(--luke-tight-gap) var(--row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -453,14 +453,14 @@ body,
 .sidebar-view-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-6) var(--luke-space-6);
+  gap: var(--luke-tight-gap);
+  padding: 0 var(--luke-item-gap) var(--luke-item-gap);
 }
 
 /* A section's name over its rows, in the headings' voice: the sidebar's
    settings search and the plan's summary alike. */
 .section-heading {
-  margin: 0 0 var(--luke-space-4);
+  margin: 0 0 var(--luke-tight-gap);
   padding: 0 var(--row-inset);
 }
 
@@ -474,7 +474,7 @@ body,
 }
 
 .sidebar-skeleton-row {
-  padding: var(--luke-space-6) var(--row-inset);
+  padding: var(--luke-item-gap) var(--row-inset);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-label-leading);
 }
@@ -636,7 +636,7 @@ ul.actor-stack {
 
 /* A pile whose faces wear badges stands them apart, its count too, so each badge reads clear of what comes next. */
 .actor-stack:has(.actor-stack-badge) > :is(.actor-stack-face, .actor-stack-more) {
-  margin-left: var(--luke-space-6);
+  margin-left: var(--luke-item-gap);
 }
 
 .actor-stack:has(.actor-stack-badge) > .actor-stack-face:first-child {
@@ -693,7 +693,7 @@ ul.actor-stack {
 .actor-more-row {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 /* A row's words wrap within the card, a long login anywhere, and a bot's
@@ -714,7 +714,7 @@ ul.actor-stack {
   display: inline-grid;
   height: 18px;
   min-width: 18px;
-  padding: 0 var(--luke-space-4);
+  padding: 0 var(--luke-tight-gap);
   place-items: center;
   border-radius: var(--luke-radius-full);
   background: var(--actor-tile);
@@ -728,7 +728,7 @@ ul.actor-stack {
 .actor-card-head {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .actor-card-head > .luke-hover-card-head {
@@ -739,7 +739,7 @@ ul.actor-stack {
 .actor-card-name {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* Words naming an actor inside a line of their own, a card's note or a
@@ -760,7 +760,7 @@ ul.actor-stack {
 .actor-you,
 .actor-bot {
   flex-shrink: 0;
-  padding: 0 var(--luke-space-4);
+  padding: 0 var(--luke-tight-gap);
   border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text-muted);
@@ -797,7 +797,7 @@ ul.actor-stack {
 .sidebar-task-time .state-glyph {
   --state-glyph-size: 12px;
 
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
   vertical-align: -1.5px; /* off-scale */
 }
 
@@ -809,7 +809,7 @@ ul.actor-stack {
   display: inline-block;
   max-width: 7em;
   overflow: hidden;
-  margin-right: var(--luke-space-6);
+  margin-right: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   vertical-align: bottom;
   white-space: nowrap;
@@ -820,7 +820,7 @@ ul.actor-stack {
    of the name's, and steps out with the time while the row is hovered. */
 .sidebar-task-time > .actor-mark {
   top: -1px; /* off-scale: centres the face on the time's figures */
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
 }
 
 .task-mark-glyph {
@@ -833,7 +833,7 @@ ul.actor-stack {
 }
 
 .sidebar-task-time .task-mark-glyph {
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
 }
 
 /* A row holding a draft wears its pencil at the glyph's size, before the mark
@@ -841,7 +841,7 @@ ul.actor-stack {
 .sidebar-task-time .draft-mark {
   width: 12px;
   height: 12px;
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
   vertical-align: -1.5px; /* off-scale */
 }
 
@@ -850,7 +850,7 @@ ul.actor-stack {
    (`attention-mark.tsx`), a size under the glyph's, so the disc's edge
    reads at the time's height. */
 .task-mark-attention {
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
 }
 
 .task-mark-attention .attention-mark {
@@ -922,7 +922,7 @@ ul.actor-stack {
 .sidebar-repository + .sidebar-repository,
 .sidebar-tasks + .sidebar-repository,
 .chat-rail-body > .luke-list + .sidebar-repository {
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
 }
 
 /* A group leaving is laid over the place it held as it slides out
@@ -934,15 +934,15 @@ ul.actor-stack {
 }
 
 .sidebar-group > .sidebar-repository:not([data-leaving]) ~ .sidebar-repository:not([data-leaving]) {
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
 }
 
 .sidebar-repository-header {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
   margin-bottom: var(--luke-list-gap);
-  padding-right: var(--luke-space-4);
+  padding-right: var(--luke-tight-gap);
   border-radius: var(--luke-control-radius);
   transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
@@ -992,8 +992,8 @@ ul.actor-stack {
 /* An open section with nothing in it says how to fill it, under its header's
    name, which stands at the row's inset where the section wears no icon. */
 .sidebar-section-slot {
-  padding: var(--luke-space-4) var(--row-inset) var(--luke-space-6)
-    calc(var(--row-inset) + var(--luke-control-icon) + var(--luke-space-8));
+  padding: var(--luke-tight-gap) var(--row-inset) var(--luke-item-gap)
+    calc(var(--row-inset) + var(--luke-control-icon) + var(--luke-icon-gap));
 }
 
 .sidebar-own-section[data-iconless="true"] > .sidebar-section-slot {
@@ -1077,8 +1077,8 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: var(--luke-space-12) 0 0;
+  gap: var(--luke-control-gap);
+  margin: var(--luke-block-gap) 0 0;
   padding: 0;
   border: 0;
 }
@@ -1088,11 +1088,11 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .section-icon-legend {
-  margin-bottom: var(--luke-space-4);
+  margin-bottom: var(--luke-tight-gap);
   padding: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -1103,7 +1103,7 @@ ul.actor-stack {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .section-icon-colors,
@@ -1117,7 +1117,7 @@ ul.actor-stack {
 .section-icon-colors {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* The grid's room, which its `ScrollArea` (`@luke/ui`) scrolls. */
@@ -1130,11 +1130,11 @@ ul.actor-stack {
 .section-icon-grid {
   display: grid;
   grid-template-columns: repeat(10, 28px);
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .section-emoji-group + .section-emoji-group {
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
 }
 
 /* An emoji is drawn in the text's own ink, nearly opaque, since Chromium
@@ -1144,7 +1144,7 @@ ul.actor-stack {
 }
 
 .section-emoji-group-name {
-  margin: 0 0 var(--luke-space-4);
+  margin: 0 0 var(--luke-tight-gap);
 }
 
 .section-icon-resting {
@@ -1250,9 +1250,9 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   align-self: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   height: 24px;
-  padding: 0 var(--luke-space-8);
+  padding: 0 var(--luke-row-inset);
   border-radius: var(--luke-radius-full);
   background: var(--luke-color-attention-tint);
   color: var(--luke-color-attention);
@@ -1416,7 +1416,7 @@ ul.actor-stack {
   justify-content: center;
   gap: var(--luke-icon-gap);
   height: var(--luke-control-height);
-  padding: 0 var(--luke-space-8);
+  padding: 0 var(--luke-row-inset);
   border-radius: var(--luke-control-radius);
   background: transparent;
   color: var(--luke-color-text-muted);
@@ -1579,14 +1579,14 @@ ul.actor-stack {
   min-height: var(--luke-space-48);
   align-items: center;
   border-bottom: 1px solid var(--luke-color-border);
-  column-gap: var(--luke-space-12);
+  column-gap: var(--luke-block-gap);
   grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
 }
 
 /* A row that is a FormField stands its label over its control rather than before it. */
 .inbox-compose-row[data-field] {
   display: block;
-  padding-block: var(--luke-space-8);
+  padding-block: var(--luke-row-inset);
 }
 
 .inbox-compose-label {
@@ -1596,7 +1596,7 @@ ul.actor-stack {
 }
 
 .inbox-compose-box {
-  margin-top: var(--luke-space-16);
+  margin-top: var(--luke-section-gap);
 }
 
 /* A line written again where it stands (`edit-composer.tsx`) is already in the
@@ -1635,7 +1635,7 @@ ul.actor-stack {
    each name to its first letters. */
 .agent-origin > .luke-message-line > .luke-message-line-sender > .actor-words {
   flex-wrap: wrap;
-  row-gap: var(--luke-space-2);
+  row-gap: var(--luke-list-gap);
 }
 
 /* A task named as the sender of its plan: its document glyph standing in a
@@ -1708,7 +1708,7 @@ ul.actor-stack {
 /* A line over a version: what it is compared with, or why it is not drawn. */
 .version-note {
   margin-top: 0;
-  margin-bottom: var(--luke-space-16);
+  margin-bottom: var(--luke-section-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);
@@ -1717,12 +1717,12 @@ ul.actor-stack {
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .plan-unit.version-added {
-  padding-left: var(--luke-space-12);
+  padding-left: var(--luke-list-inset);
   border-left: 2px solid color-mix(in srgb, var(--luke-color-complete) 70%, transparent);
 }
 
 .desktop-document .plan-unit.version-removed {
-  padding-left: var(--luke-space-12);
+  padding-left: var(--luke-list-inset);
   border-left: 2px solid color-mix(in srgb, var(--luke-color-danger) 60%, transparent);
   color: var(--luke-color-text-muted);
   text-decoration: line-through;
@@ -1779,15 +1779,15 @@ ul.actor-stack {
    chips close under it, and its linked issues' chips close under those, as
    one head rather than four blocks. */
 .desktop-document .plan-body > .plan-task-key + * {
-  margin-top: var(--luke-space-2);
+  margin-top: var(--luke-list-gap);
 }
 
 .desktop-document .plan-body > .plan-task-standing {
-  margin-top: var(--luke-space-12);
+  margin-top: var(--luke-block-gap);
 }
 
 .desktop-document .plan-body > .plan-task-standing + .task-issue-links {
-  margin-top: var(--luke-space-6);
+  margin-top: var(--luke-item-gap);
 }
 
 .desktop-document .luke-markdown-heading {
@@ -1825,7 +1825,7 @@ ul.actor-stack {
 .agent-call-video {
   display: flex;
   justify-content: center;
-  padding: var(--luke-space-8) var(--luke-space-16);
+  padding: var(--luke-row-inset) var(--luke-space-16);
 }
 
 .agent-call-video-frame {
@@ -1928,7 +1928,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .integration-tool-title {
@@ -1976,12 +1976,12 @@ ul.actor-stack {
   align-items: center;
   gap: var(--luke-icon-gap);
   height: 40px;
-  padding: 0 var(--luke-space-12);
+  padding: 0 var(--luke-list-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
 .integration-tool-detail-head:has(> .luke-button) {
-  padding-left: var(--luke-space-6);
+  padding-left: var(--luke-item-gap);
 }
 
 .integration-tool-detail-title {
@@ -2010,8 +2010,8 @@ ul.actor-stack {
 .integration-tool-detail-body {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  gap: var(--luke-block-gap);
+  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-list-inset);
 }
 
 .integration-tool-description-whole {
@@ -2038,8 +2038,8 @@ ul.actor-stack {
 .integration-tool-section {
   display: flex;
   align-items: baseline;
-  gap: var(--luke-space-6);
-  margin: 0 0 var(--luke-space-4);
+  gap: var(--luke-item-gap);
+  margin: 0 0 var(--luke-tight-gap);
 }
 
 .integration-tool-section-count {
@@ -2055,8 +2055,8 @@ ul.actor-stack {
 .integration-tool-parameter {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-2);
-  padding: var(--luke-space-6) 0;
+  gap: var(--luke-list-gap);
+  padding: var(--luke-item-gap) 0;
   border-top: 1px solid var(--luke-color-border);
 }
 
@@ -2065,7 +2065,7 @@ ul.actor-stack {
   min-width: 0;
   flex-wrap: wrap;
   align-items: baseline;
-  column-gap: var(--luke-space-6);
+  column-gap: var(--luke-item-gap);
 }
 
 .integration-tool-parameter-name {
@@ -2092,7 +2092,7 @@ ul.actor-stack {
 .integration-tool-parameter-body {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   margin: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -2108,12 +2108,12 @@ ul.actor-stack {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
 }
 
 .integration-tool-parameter-values code {
-  padding: 0 var(--luke-space-4);
+  padding: 0 var(--luke-tight-gap);
   border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text-muted);
@@ -2131,7 +2131,7 @@ ul.actor-stack {
   .integration-tool-parameter {
     display: grid;
     grid-template-columns: minmax(150px, 34%) 1fr;
-    column-gap: var(--luke-space-12);
+    column-gap: var(--luke-block-gap);
   }
 
   .integration-tool-parameter-required {
@@ -2178,8 +2178,8 @@ ul.actor-stack {
 .inbox-tasks-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-8) var(--column-inset) 0;
+  gap: var(--luke-tight-gap);
+  padding: var(--luke-row-inset) var(--column-inset) 0;
 }
 
 .inbox-tasks {
@@ -2198,7 +2198,7 @@ ul.actor-stack {
    magnifier instead (`@luke/ui`'s `FoldingSearch`). */
 .inbox-search {
   display: block;
-  padding: 0 var(--column-inset) var(--luke-space-8);
+  padding: 0 var(--column-inset) var(--luke-row-inset);
 }
 
 /* Split beside the item, the list's bar ends at the item's edge rather than
@@ -2254,7 +2254,7 @@ ul.actor-stack {
   /* Held as tall as the scroller shows it while a row leaves, so the rows in
      sight stand still (`ListMotion`). */
   min-height: var(--luke-list-held-height, 0);
-  padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
+  padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
 }
 
 /* A group's room above it counts only the groups still in the layout, so a
@@ -2267,7 +2267,7 @@ ul.actor-stack {
 .inbox-tasks-body
   > .sidebar-repository:not([data-leaving])
   ~ .sidebar-repository:not([data-leaving]) {
-  margin-top: var(--luke-space-8);
+  margin-top: var(--luke-control-gap);
 }
 
 /* The inbox-first sidebar's list (`sidebar-inbox.tsx`): the sidebar's own
@@ -2300,7 +2300,7 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   justify-content: center;
-  margin-inline-end: var(--luke-space-6);
+  margin-inline-end: var(--luke-item-gap);
 
   --inbox-unread-dot: 7px;
 }
@@ -2335,7 +2335,7 @@ ul.actor-stack {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* An Inbox row's card leads with what holds the item on one line, its key
@@ -2367,7 +2367,7 @@ ul.actor-stack {
 .inbox-row-line > svg {
   width: var(--luke-type-caption-size);
   height: var(--luke-type-caption-size);
-  margin-inline-end: var(--luke-space-4);
+  margin-inline-end: var(--luke-tight-gap);
   vertical-align: -0.125em;
   color: var(--luke-color-attention);
 }
@@ -2399,8 +2399,8 @@ ul.actor-stack {
 .inbox-subject {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-4);
-  padding-bottom: var(--luke-space-12);
+  gap: var(--luke-tight-gap);
+  padding-bottom: var(--luke-block-gap);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -2424,7 +2424,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   padding-bottom: var(--luke-space-20);
 }
 
@@ -2451,7 +2451,7 @@ ul.actor-stack {
    down through the faces running on past it. */
 .inbox-thread-earlier {
   position: relative;
-  padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-space-12));
+  padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-list-inset));
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -2473,7 +2473,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   overflow: clip;
   overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text);
@@ -2491,8 +2491,8 @@ ul.actor-stack {
   max-width: 100%;
   align-self: flex-start;
   align-items: flex-start;
-  gap: var(--luke-space-4);
-  padding: 1px var(--luke-space-6); /* off-scale */
+  gap: var(--luke-tight-gap);
+  padding: 1px var(--luke-item-gap); /* off-scale */
   border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text);
@@ -2524,7 +2524,7 @@ ul.actor-stack {
    that may be left empty, a number in a short field, and a select's name
    over its pills in the label's type, as a field's label stands. */
 .inbox-field-optional {
-  margin-left: var(--luke-space-6);
+  margin-left: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
@@ -2534,7 +2534,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .inbox-field-name {
@@ -2552,20 +2552,20 @@ ul.actor-stack {
    a field's frame, its line at the field's insets, growing a line at a time
    to eight. */
 .inbox-field-composer .agent-composer-field {
-  --agent-composer-field-block: calc(2 * var(--luke-space-6));
+  --agent-composer-field-block: calc(2 * var(--luke-item-gap));
 }
 
 .inbox-field-composer .agent-composer-input {
-  padding: var(--luke-space-6) var(--luke-control-inset);
+  padding: var(--luke-item-gap) var(--luke-control-inset);
 }
 
 /* An answered text field holds its words as a sent message draws them, at
    the field's insets, a line tall where it was left empty, in the field's
    own frame rather than a faded one. */
 .inbox-field-words {
-  min-height: calc(var(--luke-type-body-leading) + 2 * var(--luke-space-6));
+  min-height: calc(var(--luke-type-body-leading) + 2 * var(--luke-item-gap));
   box-sizing: border-box;
-  padding: var(--luke-space-6) var(--luke-control-inset);
+  padding: var(--luke-item-gap) var(--luke-control-inset);
   overflow-wrap: anywhere;
 }
 
@@ -2576,7 +2576,7 @@ ul.actor-stack {
   min-width: 0;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--luke-space-2) var(--luke-space-8);
+  gap: var(--luke-list-gap) var(--luke-control-gap);
 }
 
 /* A name too long for the line, one unbroken word, wraps anywhere rather
@@ -2638,7 +2638,7 @@ ul.actor-stack {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* An answered ask's controls stand in the reply itself, at its words' left
@@ -2648,8 +2648,8 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-12);
-  margin-bottom: var(--luke-space-4);
+  gap: var(--luke-block-gap);
+  margin-bottom: var(--luke-tight-gap);
 }
 
 /* A replaced or withdrawn ask keeps its controls in the agent's message as
@@ -2661,14 +2661,14 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .inbox-ask-replaced-controls {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 /* A withdrawn ask's pill holds one word, and its why stands under it as a
@@ -2678,7 +2678,7 @@ ul.actor-stack {
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .inbox-ask-why {
@@ -2728,8 +2728,8 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-4);
+  gap: var(--luke-block-gap);
+  padding: var(--luke-list-inset) var(--luke-list-inset) var(--luke-tight-gap);
 }
 
 /* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
@@ -2746,14 +2746,14 @@ ul.actor-stack {
    its title in the unread weight, cut short at the row's end, and K or J
    where that key reaches it. */
 .inbox-next-dock {
-  padding-bottom: var(--luke-space-12);
+  padding-bottom: var(--luke-block-gap);
 }
 
 .inbox-next-words {
   display: inline-flex;
   max-width: 100%;
   align-items: baseline;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .inbox-next-title {
@@ -2783,7 +2783,7 @@ ul.actor-stack {
 }
 
 .inbox-pager-count {
-  margin-right: var(--luke-space-6);
+  margin-right: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
@@ -2820,7 +2820,7 @@ ul.actor-stack {
   .inbox-item-bar {
     --luke-fold: folded;
     flex-wrap: wrap;
-    row-gap: var(--luke-space-4);
+    row-gap: var(--luke-tight-gap);
   }
 
   .inbox-item-bar > .inbox-crumbs {
@@ -2831,7 +2831,7 @@ ul.actor-stack {
 
 .desktop-shell[data-room="narrow"] .inbox-item-bar {
   flex-wrap: wrap;
-  row-gap: var(--luke-space-4);
+  row-gap: var(--luke-tight-gap);
 }
 
 .desktop-shell[data-room="narrow"] .inbox-item-bar > .inbox-crumbs {
@@ -2865,7 +2865,7 @@ ul.actor-stack {
    unfilled, so it names the page's state without asking for a look. */
 .experiment-tag {
   flex: none;
-  padding: 0 var(--luke-space-6);
+  padding: 0 var(--luke-item-gap);
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-full);
   color: var(--luke-color-text-muted);
@@ -2896,7 +2896,7 @@ ul.actor-stack {
    Settings card, and an automation's page its toolbar over its setup (a
    `DetailPage`) and its Runs panel beside it. */
 .automation-group + .automation-group {
-  margin-top: var(--luke-space-24);
+  margin-top: var(--luke-page-section-gap);
 }
 
 /* The suggested automations, a group's gap below the list, their heading a
@@ -2905,7 +2905,7 @@ ul.actor-stack {
   display: flex;
   width: 100%;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .automation-suggestions-head,
@@ -2914,7 +2914,7 @@ ul.actor-stack {
 }
 
 .automation-group + .automation-suggestions {
-  margin-top: var(--luke-space-24);
+  margin-top: var(--luke-page-section-gap);
 }
 
 /* An empty list stands its empty state with the suggestions under it, the
@@ -2945,7 +2945,7 @@ ul.actor-stack {
 }
 
 .automations-empty > .automation-suggestions {
-  margin-top: var(--luke-space-16);
+  margin-top: var(--luke-section-gap);
 }
 
 /* An automation's or a run's metadata at its row's end (`ListRow`'s meta):
@@ -2954,7 +2954,7 @@ ul.actor-stack {
 .automation-row-meta {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
   vertical-align: top;
 }
 
@@ -2971,7 +2971,7 @@ ul.actor-stack {
   width: 112px; /* off-scale */
   flex: none;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   overflow: hidden;
   white-space: nowrap;
 }
@@ -2991,14 +2991,14 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   overflow: hidden;
 }
 
 /* A narrow room's row says when it runs next in the line under its name,
    a failure's mark leading the line as it leads an agent's end line. */
 .automation-group .luke-list-row-description > .failed-mark {
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
   vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
 }
 
@@ -3008,7 +3008,7 @@ ul.actor-stack {
    press (`CardPress`), lifting to the raised fill under the pointer. */
 .automation-suggestion-cards {
   display: grid;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* off-scale */
 }
 
@@ -3017,7 +3017,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: var(--luke-space-16);
+  padding: var(--luke-card-inset-compact);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-surface);
@@ -3034,14 +3034,14 @@ ul.actor-stack {
 .automation-suggestion-face {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .automation-suggestion-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--luke-space-6);
+  margin-bottom: var(--luke-item-gap);
 }
 
 /* What fires a suggestion, on a tile. */
@@ -3092,7 +3092,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   overflow: clip;
   overflow-clip-margin: var(--luke-focus-ring-reach);
   color: var(--luke-color-text-muted);
@@ -3143,7 +3143,7 @@ ul.actor-stack {
 .automation-toolbar .luke-toolbar-heading:has(> .experiment-tag) {
   display: flex;
   align-items: last baseline;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 @container automation-toolbar (max-width: 879px) {
@@ -3178,7 +3178,7 @@ ul.actor-stack {
 .automation-editor {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 /* The form, drawn as a Settings page: each group's name over a card of
@@ -3206,7 +3206,7 @@ ul.actor-stack {
 .automation-servers {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* A picker here grows from a Settings picker's width to name its whole
@@ -3289,7 +3289,7 @@ ul.actor-stack {
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   padding: var(--luke-space-16);
 }
 
@@ -3346,7 +3346,7 @@ ul.actor-stack {
 
 /* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
 .chat-rail-body {
-  padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
+  padding: var(--luke-row-inset) var(--column-inset) var(--column-inset);
 }
 
 .chat-stream {
@@ -3417,9 +3417,9 @@ ul.actor-stack {
   position: relative;
   display: grid;
   grid-template-columns: var(--chat-face) minmax(0, 1fr);
-  column-gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--luke-space-8);
-  margin: 0 calc(-1 * var(--luke-space-8));
+  column-gap: var(--luke-control-gap);
+  padding: var(--luke-item-gap) var(--luke-row-inset);
+  margin: 0 calc(-1 * var(--luke-row-inset));
   border-radius: var(--luke-menu-row-radius);
   transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
@@ -3481,14 +3481,14 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
 }
 
 .chat-byline {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  column-gap: var(--luke-space-8);
+  column-gap: var(--luke-control-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -3518,7 +3518,7 @@ ul.actor-stack {
 .chat-byline-action {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   margin-left: auto;
   opacity: 0;
 }
@@ -3565,8 +3565,8 @@ ul.actor-stack {
 .chat-unread-line {
   display: flex;
   align-items: center;
-  gap: var(--luke-space-8);
-  margin-block: var(--luke-space-8);
+  gap: var(--luke-control-gap);
+  margin-block: var(--luke-control-gap);
   color: var(--luke-color-accent-text);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-bold);
@@ -3587,15 +3587,15 @@ ul.actor-stack {
    column's foot (`column-dock.ts`) where this box scrolls with the
    messages. */
 .chat-ask {
-  margin-top: var(--luke-space-4);
+  margin-top: var(--luke-tight-gap);
 }
 
 .chat-ask-body {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-12);
+  gap: var(--luke-block-gap);
+  padding: var(--luke-tight-gap) var(--luke-list-inset) var(--luke-list-inset);
 }
 
 .chat-ask-box {
@@ -3603,11 +3603,11 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .chat-thread {
-  margin-top: var(--luke-space-4);
+  margin-top: var(--luke-tight-gap);
 }
 
 /* A folded thread's press follows its repliers' faces, each hanging its
@@ -3620,7 +3620,7 @@ ul.actor-stack {
 }
 
 .chat-thread-toggle .actor-stack {
-  margin-inline-end: var(--luke-space-6);
+  margin-inline-end: var(--luke-item-gap);
   vertical-align: middle;
 }
 
@@ -3639,13 +3639,13 @@ ul.actor-stack {
       2
     );
     padding-top: var(--chat-thread-press-block);
-    padding-right: var(--luke-space-8);
+    padding-right: var(--luke-row-inset);
     padding-bottom: var(--chat-thread-press-block);
-    padding-left: var(--luke-space-8);
+    padding-left: var(--luke-row-inset);
     margin-top: calc(-1 * var(--chat-thread-press-block));
-    margin-right: calc(-1 * var(--luke-space-8));
+    margin-right: calc(-1 * var(--luke-row-inset));
     margin-bottom: calc(-1 * var(--chat-thread-press-block));
-    margin-left: calc(-1 * var(--luke-space-8));
+    margin-left: calc(-1 * var(--luke-row-inset));
     max-width: none;
     line-height: var(--luke-type-label-leading);
   }
@@ -3656,7 +3656,7 @@ ul.actor-stack {
    the box takes with the round send at its end. */
 .chat-composer {
   width: calc(100% - 2 * var(--column-inset));
-  margin: var(--luke-space-12) auto var(--luke-space-16);
+  margin: var(--luke-block-gap) auto var(--luke-space-16);
   padding: 0;
 }
 
@@ -3664,13 +3664,13 @@ ul.actor-stack {
    between two others), its foot says why, where the box would stand. */
 .chat-closed-foot {
   width: calc(100% - 2 * var(--column-inset));
-  margin: var(--luke-space-12) auto var(--luke-space-16);
+  margin: var(--luke-block-gap) auto var(--luke-space-16);
   text-align: center;
 }
 
 .chat-thread .chat-composer {
   width: 100%;
-  margin: var(--luke-space-6) 0 0;
+  margin: var(--luke-item-gap) 0 0;
 }
 
 /* The plain box in the card (`PlainChatComposer`), bare at the agent
@@ -3691,21 +3691,21 @@ ul.actor-stack {
 }
 
 .chat-composer[data-compact="true"] .agent-composer-field {
-  --agent-composer-field-block: calc(var(--luke-space-8) + var(--luke-space-4));
+  --agent-composer-field-block: calc(var(--luke-row-inset) + var(--luke-tight-gap));
 }
 
 .chat-composer[data-compact="true"] .agent-composer-input {
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+  padding: var(--luke-row-inset) var(--luke-list-inset) var(--luke-tight-gap);
 }
 
 .chat-composer[data-compact="true"] .agent-composer-placeholder {
-  padding: var(--luke-space-8) var(--luke-space-12) 0;
+  padding: var(--luke-row-inset) var(--luke-list-inset) 0;
 }
 
 /* A picture a message carries (`chat-pane.tsx`'s ChatPicture): a plan's
    picture block, kept to a chat's height so the stream reads on past it. */
 .chat-picture > .picture-block {
-  margin: var(--luke-space-6) 0;
+  margin: var(--luke-item-gap) 0;
 }
 
 .chat-picture .picture-image {
@@ -3715,7 +3715,7 @@ ul.actor-stack {
 /* The line under the box where its words name more members than a post
    tells: a live region that stands empty, and so takes no room, until then. */
 .chat-composer-crowded:not(:empty) {
-  margin: var(--luke-space-6) 0 0;
+  margin: var(--luke-item-gap) 0 0;
 }
 
 /* Settings ------------------------------------------------------------------- */
@@ -3744,7 +3744,7 @@ ul.actor-stack {
 .settings-pages-title,
 .version-log-title,
 .admin-sections-title {
-  margin: var(--luke-space-12) var(--row-inset);
+  margin: var(--luke-block-gap) var(--row-inset);
 }
 
 .settings-pages-title {
@@ -3821,14 +3821,14 @@ ul.actor-stack {
    `.side-panel-keeps`, which lays nothing out but stands between the scope
    and the tab, so the tab is looked for there too. */
 .find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
-  top: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px + var(--luke-space-8));
+  top: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px + var(--luke-space-8));
 }
 
 /* The field keeps one width whatever is typed or tallied, so the buttons
    beside it never move. */
 .find-bar-field {
   width: 240px;
-  margin-right: var(--luke-space-2);
+  margin-right: var(--luke-list-gap);
 }
 
 /* Each match, then the one the find is at over it (`find-matches.ts`). */
@@ -3862,7 +3862,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   color: var(--luke-color-text);
 }
 
@@ -3891,13 +3891,13 @@ ul.actor-stack {
 }
 
 .task-page-head .plan-edit-note {
-  margin: var(--luke-space-4) 0 0;
+  margin: var(--luke-tight-gap) 0 0;
 }
 
 /* A search landing on the note keeps the name over it in view. */
 .task-page-head .template-note {
   width: auto;
-  margin: var(--luke-space-16) 0 0;
+  margin: var(--luke-section-gap) 0 0;
   scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
 }
 
@@ -3974,9 +3974,9 @@ ul.actor-stack {
   min-width: 0;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-8);
-  margin: var(--luke-space-8) 0;
-  padding: var(--luke-space-6) var(--row-inset);
+  gap: var(--luke-control-gap);
+  margin: var(--luke-control-gap) 0;
+  padding: var(--luke-item-gap) var(--row-inset);
   white-space: nowrap;
 }
 
@@ -3991,8 +3991,8 @@ ul.actor-stack {
 /* The list's foot, a row in the caption's type whose failure wraps under
    its words rather than being cut short. */
 .version-earlier {
-  margin: var(--luke-space-8) 0 0;
-  padding: var(--luke-space-8) var(--row-inset);
+  margin: var(--luke-control-gap) 0 0;
+  padding: var(--luke-row-inset) var(--row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -4163,7 +4163,8 @@ ul.actor-stack {
   display: flex;
   flex-direction: column;
   gap: var(--luke-section-gap);
-  padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
+  padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset)
+    var(--luke-list-inset);
 }
 
 /* The pinned summary's chevron and the card's stand on the rail's own, and
@@ -4449,7 +4450,8 @@ ul.actor-stack {
   justify-content: space-between;
   gap: var(--luke-control-gap);
   min-height: var(--desktop-bar-height);
-  padding: var(--luke-space-8) var(--panel-toggle-clearance) var(--luke-space-8) var(--column-inset);
+  padding: var(--luke-row-inset) var(--panel-toggle-clearance) var(--luke-row-inset)
+    var(--column-inset);
 }
 
 [data-luke-profile="desktop"] .side-panel-bar {
@@ -4504,7 +4506,7 @@ ul.actor-stack {
 /* Its "No tabs open" stands over the rows, in from the column's edge as a
    row's words are, and so does each section's heading. */
 .side-panel-no-tabs-line {
-  margin-bottom: var(--luke-space-8);
+  margin-bottom: var(--luke-control-gap);
   padding: 0 var(--row-inset);
 }
 
@@ -4560,7 +4562,7 @@ ul.actor-stack {
 .card-corner-mark {
   width: 12px;
   height: 12px;
-  margin-right: var(--luke-space-4);
+  margin-right: var(--luke-tight-gap);
   vertical-align: -2px; /* off-scale */
 }
 
@@ -4582,7 +4584,7 @@ ul.actor-stack {
    starter's among them, keeps to its one row. */
 .actor-words:has(> .card-when) {
   flex-wrap: wrap;
-  row-gap: var(--luke-space-2);
+  row-gap: var(--luke-list-gap);
 }
 
 .card-when {
@@ -4593,14 +4595,14 @@ ul.actor-stack {
    number, apart as a row of stats. */
 .card-counts {
   display: flex;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
   font-variant-numeric: tabular-nums;
 }
 
 .card-count {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .card-count > svg {
@@ -4669,7 +4671,7 @@ ul.actor-stack {
   display: flex;
   flex-direction: column;
   gap: var(--luke-section-gap);
-  padding: var(--luke-space-8) var(--column-inset);
+  padding: var(--luke-row-inset) var(--column-inset);
 }
 
 /* The one slot a column's bar keeps for the ⋯ that acts on its chosen tab:
@@ -4719,7 +4721,7 @@ ul.actor-stack {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 /* The signature as one line: the choice at its start, and who the note is
@@ -4749,22 +4751,22 @@ ul.actor-stack {
 /* New task's composer (`new-task-composer.tsx`) under the welcome's line,
    its head row and card as the dialog draws them. */
 .home-composer {
-  margin-bottom: var(--luke-space-32);
+  margin-bottom: var(--luke-page-section-gap);
 }
 
 .home-section {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 .home-section + .home-section {
-  margin-top: var(--luke-space-32);
+  margin-top: var(--luke-page-section-gap);
 }
 
 /* A section's note, nothing waiting or a read refused, on the title's edge. */
 .home-note {
-  margin: var(--luke-space-4) 0;
+  margin: var(--luke-tight-gap) 0;
 }
 
 /* What the row is about keeps a floor beside a long title, so the title is
@@ -4785,7 +4787,7 @@ ul.actor-stack {
 .home-row-meta {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* Note that the context gives way before the marks and the time, because
@@ -4829,19 +4831,19 @@ ul.actor-stack {
    name and who they are here, and each block a section's gap under the
    head. Show all stands close under the section it lists in full. */
 .person-top ~ * {
-  margin-top: var(--luke-space-24);
+  margin-top: var(--luke-page-section-gap);
 }
 
 .person-top ~ .person-section-foot {
-  margin-top: var(--luke-space-4);
+  margin-top: var(--luke-tight-gap);
 }
 
 /* A section's name and count. */
 .person-section-head {
   display: flex;
   align-items: baseline;
-  gap: var(--luke-space-6);
-  margin-bottom: var(--luke-space-2);
+  gap: var(--luke-item-gap);
+  margin-bottom: var(--luke-list-gap);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4859,14 +4861,14 @@ ul.actor-stack {
      clips what stands above its top; the page scrolls instead. */
   justify-content: safe center;
   overflow-y: auto;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
   padding: var(--luke-page-inset);
   text-align: center;
 }
 
 .home-welcome .home-composer {
   width: min(var(--luke-page-measure), 100%);
-  margin: var(--luke-space-8) 0 0;
+  margin: var(--luke-control-gap) 0 0;
   text-align: start;
 }
 
@@ -4876,7 +4878,7 @@ ul.actor-stack {
   height: 56px;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--luke-space-4);
+  margin-bottom: var(--luke-tight-gap);
   border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
@@ -4894,7 +4896,7 @@ ul.actor-stack {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 /* New task's head row (`new-task-composer.tsx`, over the card): the title
@@ -4904,7 +4906,7 @@ ul.actor-stack {
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 /* The title says what starts, "New task", then the repository's chip in
@@ -4913,7 +4915,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`)
@@ -4931,7 +4933,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .new-task-composer .agent-composer {
@@ -4960,7 +4962,7 @@ ul.actor-stack {
    their own, the presses kept at the right. */
 .new-task-composer :is(.luke-composer-foot-bar, .luke-composer-foot-tools) {
   flex-wrap: wrap;
-  row-gap: var(--luke-space-8);
+  row-gap: var(--luke-control-gap);
 }
 
 .new-task-composer .agent-composer-actions {
@@ -5019,9 +5021,9 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
-  margin: var(--luke-space-8) var(--luke-space-8) 0;
-  padding: 0 0 0 var(--luke-space-8);
+  gap: var(--luke-item-gap);
+  margin: var(--luke-control-gap) var(--luke-control-gap) 0;
+  padding: 0 0 0 var(--luke-row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -5036,7 +5038,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .new-task-issue-key {
@@ -5063,8 +5065,8 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  gap: var(--luke-space-6);
-  margin: var(--luke-space-8) var(--luke-space-8) 0;
+  gap: var(--luke-item-gap);
+  margin: var(--luke-control-gap) var(--luke-control-gap) 0;
 }
 
 .new-task-links > .new-task-issue {
@@ -5090,7 +5092,7 @@ ul.actor-stack {
   max-width: 100%;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .issue-picker-github-detail > :not(.issue-picker-github-said) {
@@ -5111,14 +5113,15 @@ ul.actor-stack {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
 }
 
 .move-effects {
   display: grid;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   margin: 0;
-  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-24);
+  padding: var(--luke-card-inset-snug) var(--luke-card-inset-snug) var(--luke-card-inset-snug)
+    var(--luke-space-24);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text-body);
@@ -5166,7 +5169,7 @@ ul.actor-stack {
 .run-card-figures {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
   margin: 0;
   font-size: var(--luke-type-caption-size);
 }
@@ -5174,7 +5177,7 @@ ul.actor-stack {
 .run-card-figure {
   display: flex;
   justify-content: space-between;
-  gap: var(--luke-space-8);
+  gap: var(--luke-control-gap);
 }
 
 .run-card-figure dt {
@@ -5200,7 +5203,7 @@ ul.actor-stack {
   min-width: min-content;
   min-height: 0;
   flex: 1 1 0;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
   line-height: normal;
 }
 
@@ -5212,7 +5215,7 @@ ul.actor-stack {
   min-height: 0;
   flex: 0 0 auto;
   flex-direction: column;
-  padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-6);
+  padding: var(--luke-tight-gap) var(--luke-item-gap) var(--luke-item-gap);
 }
 
 /* A column's head: its status's mark, its name, and how many it holds, on
@@ -5224,13 +5227,13 @@ ul.actor-stack {
   gap: var(--luke-icon-gap);
   min-height: var(--luke-control-height);
   margin: 0;
-  padding: 0 var(--luke-space-6);
+  padding: 0 var(--luke-item-gap);
   font-variant-numeric: tabular-nums;
 }
 
 /* A column with no task says so in one quiet line. */
 .tasks-board-empty {
-  padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+  padding: var(--luke-space-2) var(--luke-item-gap) var(--luke-item-gap);
 }
 
 /* A column's cards scroll under its head, the ring's reach spared at its
@@ -5250,8 +5253,8 @@ ul.actor-stack {
 .tasks-board-card {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-6);
-  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-6) var(--luke-space-12);
+  gap: var(--luke-item-gap);
+  padding: var(--luke-row-inset) var(--luke-row-inset) var(--luke-item-gap) var(--luke-list-inset);
 }
 
 /* The card holding the keyboard, or whose menu is open, stands over its
@@ -5279,7 +5282,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* A card's first line: its key, and at its end what waits on the reader,
@@ -5288,14 +5291,14 @@ ul.actor-stack {
   display: flex;
   min-height: var(--luke-space-20);
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
 }
 
 .tasks-board-card-marks {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   margin-left: auto;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -5314,7 +5317,7 @@ ul.actor-stack {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
 }
 
 /* Who made a card's task where its member did not by hand, Luke or an
@@ -5360,7 +5363,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  gap: var(--luke-space-4);
+  gap: var(--luke-tight-gap);
   pointer-events: none;
 }
 
@@ -5379,8 +5382,8 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-4);
-  margin-left: calc(-1 * var(--luke-space-4));
+  gap: var(--luke-tight-gap);
+  margin-left: calc(-1 * var(--luke-tight-gap));
   pointer-events: none;
 }
 
@@ -5389,7 +5392,7 @@ ul.actor-stack {
 }
 
 .tasks-board-repository {
-  margin-left: var(--luke-space-4);
+  margin-left: var(--luke-tight-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -5399,7 +5402,7 @@ ul.actor-stack {
 /* What the card's agents are doing and their pull requests stand after its
    repository, given up last, so a long repository is cut before a mark. */
 .tasks-board-card-foot > .task-work-marks {
-  margin-left: var(--luke-space-4);
+  margin-left: var(--luke-tight-gap);
   pointer-events: none;
 }
 
@@ -5453,8 +5456,8 @@ ul.actor-stack {
 .tasks-list {
   display: grid;
   grid-template-columns: var(--tasks-list-columns);
-  column-gap: var(--luke-space-12);
-  row-gap: var(--luke-space-16);
+  column-gap: var(--luke-block-gap);
+  row-gap: var(--luke-section-gap);
   padding-bottom: var(--luke-space-24);
 }
 
@@ -5497,7 +5500,7 @@ ul.actor-stack {
 }
 
 .tasks-list-group {
-  row-gap: var(--luke-space-2);
+  row-gap: var(--luke-list-gap);
   border-radius: var(--luke-radius-10);
   transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
@@ -5507,7 +5510,7 @@ ul.actor-stack {
 }
 
 .tasks-list-group-empty {
-  padding: var(--luke-space-4) var(--row-inset);
+  padding: var(--luke-tight-gap) var(--row-inset);
 }
 
 /* The group a row is carried over (use-row-drag.ts) is washed and its head
@@ -5612,7 +5615,7 @@ ul.actor-stack {
 
 .tasks-list-row[data-lifted="true"] {
   display: flex;
-  gap: var(--luke-space-12);
+  gap: var(--luke-block-gap);
   background: var(--luke-color-surface);
   box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
 }
@@ -5636,7 +5639,7 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -5771,7 +5774,7 @@ ul.actor-stack {
   min-width: 0;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -5782,7 +5785,7 @@ ul.actor-stack {
 .task-work-pull-request {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-2);
+  gap: var(--luke-list-gap);
 }
 
 .task-work-pull-request > .task-mark-glyph {
