@@ -78,6 +78,7 @@ function drawn(
   landing: () => Promise<boolean>,
   asked: PlanCommentActionRequest[] = [],
   registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
+  me = "u-dean",
 ): HTMLElement {
   const control: PlanCommentsControl = {
     planId: "plan-1",
@@ -97,7 +98,7 @@ function drawn(
   const root = createRoot(container);
   roots.push(root);
   const tab = createElement(PlanCommentsTab, {
-    doors: { agents: undefined, me: "u-dean" },
+    doors: { agents: undefined, me },
     onShowDocument: () => undefined,
   });
   const tree = createElement(
@@ -189,7 +190,7 @@ async function refusedBesideNewer(refused: string, newer: string) {
   });
   typeInto(field, newer);
   await act(async () => answer.resolve(false));
-  return { card, field, asked, redraw: () => drawn(landing, asked, registry) };
+  return { card, field, asked, redraw: (me?: string) => drawn(landing, asked, registry, me) };
 }
 
 /** The key each comment was sent under, in order. */
@@ -209,6 +210,13 @@ test("a refused reply too long to go back beside the newer words stands apart as
 
   // Note that the field goes with its thread, as a press away closes it, and comes back as it opens again.
   for (const root of roots.splice(0)) act(() => root.unmount());
+  const other = drawnFirst.redraw("u-charles");
+  assert.equal(
+    other.querySelector("[data-unsent]") === null,
+    true,
+    "another reader in the window sees none",
+  );
+  for (const root of roots.splice(0)) act(() => root.unmount());
   const card = drawnFirst.redraw();
   const line = card.querySelector("[data-unsent]") ?? assert.fail("no line marked as not sent");
   assert.ok(line.textContent?.includes("Not for v1."));
@@ -219,7 +227,11 @@ test("a refused reply too long to go back beside the newer words stands apart as
   const [first, again] = keys(drawnFirst.asked);
   assert.ok(first !== undefined);
   assert.equal(again, first, "Retry sends under the refused send's key");
-  assert.equal(card.querySelector("[data-unsent]"), null, "and the line goes once it is sent");
+  assert.equal(
+    card.querySelector("[data-unsent]") === null,
+    true,
+    "and the line goes once it is sent",
+  );
   assert.equal(card.querySelector("textarea")?.value, TOO_LONG.NEWER);
 });
 
@@ -238,7 +250,7 @@ test("words written again after a not-sent reply is discarded go under a new key
     .find((each) => each.textContent === "Discard");
   assert.ok(confirm, "Discard asks first");
   await act(async () => confirm.click());
-  assert.equal(card.querySelector("[data-unsent]"), null, "the line goes once discarded");
+  assert.equal(card.querySelector("[data-unsent]") === null, true, "the line goes once discarded");
 
   typeInto(field, TOO_LONG.REFUSED);
   act(() => {
