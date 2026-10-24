@@ -1034,8 +1034,11 @@ export function mentionLinksIn(text: string): readonly MentionLink[] {
     if (close === undefined || text[close + 1] !== "(" || insideCode(text, at)) continue;
     const targetEnd = text.indexOf(")", close + 2);
     if (targetEnd === -1) continue;
-    const target = text.slice(close + 2, targetEnd);
-    if (/\s/u.test(target)) continue;
+    const written = text.slice(close + 2, targetEnd);
+    if (/\s/u.test(written)) continue;
+    // Note that a destination written between angle brackets is the address inside them, as markdown reads it.
+    const angled = written.length > 2 && written.startsWith("<") && written.endsWith(">");
+    const target = angled ? written.slice(1, -1) : written;
     const label = readLabel(text.slice(at + 1, close));
     found.push({ start: at, end: targetEnd + 1, label, target });
     at = targetEnd;

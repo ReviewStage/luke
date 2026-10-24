@@ -16,7 +16,7 @@ import {
   readLinearIssue,
   readLink,
 } from "./link-grammar.js";
-import { linkLabels, linksIn, mentionsIn } from "./mention-link.js";
+import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.js";
 
 /**
  * A place in Luke as the link a teammate is sent: written under its
@@ -404,4 +404,11 @@ test("a Linear issue's page names its identifier, in capitals, with its slug or 
   ]) {
     assert.equal(readLinearIssue(target), undefined, target);
   }
+});
+
+test("a mention whose destination stands between angle brackets names the address inside them, and is written back as that address", () => {
+  const address = `${HOME}/plan/${TASK}`;
+  const [read] = mentionLinksIn(`See [@Plan](<${address}>) now.`);
+  assert.deepEqual([read?.label, read?.target], ["@Plan", address]);
+  assert.equal(mentionMarkdownLink("Plan", read?.target ?? ""), `[@Plan](${address})`);
 });
