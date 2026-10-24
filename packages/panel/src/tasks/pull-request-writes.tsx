@@ -314,6 +314,12 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   tone: DIALOG_TONE.DANGER,
 };
 
+/** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
+const CLOSE_UNKNOWN_QUESTION: DialogQuestion = {
+  ...CLOSE_QUEUED_QUESTION,
+  body: `Luke could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
+};
+
 /** What the toast says once a pull request is closed, and its one way back. */
 const CLOSED_TOAST = {
   WORDS: "Pull request closed",
@@ -357,7 +363,10 @@ export function PullRequestStateMenu({
   newestWrites.current = writes;
   // Whether Close is being asked about; the question goes once a read finds it out of the queue, so it never closes what no longer stands in it.
   const [asked, setAsked] = useState(false);
-  const confirm = useConfirmDialog({ subject: asked && inQueue, surfaceOpen: shown }, () =>
+  // Note that a place in the queue left unread, as a failed merge read leaves it, may be one, so it is asked about as one is: only a read saying it holds it nowhere lets Close act at once.
+  const unread = queued === undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
+  const mayBeQueued = inQueue || unread;
+  const confirm = useConfirmDialog({ subject: asked && mayBeQueued, surfaceOpen: shown }, () =>
     writes
       .write({ action: PULL_REQUEST_ACTION.CLOSE })
       .then(
@@ -368,7 +377,7 @@ export function PullRequestStateMenu({
       ),
   );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
-  if ((!shown || !inQueue) && asked && !confirm.busy) setAsked(false);
+  if ((!shown || !mayBeQueued) && asked && !confirm.busy) setAsked(false);
   const words = inQueue ? queuedWords(queued) : STATE_WORDS[pullRequest.state];
   const label = `Pull request ${words}`;
   const tone = inQueue ? STATUS_TONE.WORKING : PULL_REQUEST_TONE[pullRequest.state];
@@ -391,10 +400,10 @@ export function PullRequestStateMenu({
       </Badge>
     );
   }
-  // Note that a Close that leaves the queue asks first, and every other change acts at once, a Close offering Reopen in a toast since it can be taken back.
+  // Note that a Close that may leave the queue asks first, and every other change acts at once, a Close offering Reopen in a toast since it can be taken back.
   const select = (action: StateAction) => {
     if (action === PULL_REQUEST_ACTION.REOPEN) withdrawToast(toastSubject);
-    if (action === PULL_REQUEST_ACTION.CLOSE && inQueue) {
+    if (action === PULL_REQUEST_ACTION.CLOSE && mayBeQueued) {
       setAsked(true);
       confirm.ask();
       return;
@@ -443,7 +452,12 @@ export function PullRequestStateMenu({
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
-      {asked ? <ConfirmDialog confirm={confirm} question={CLOSE_QUEUED_QUESTION} /> : null}
+      {asked ? (
+        <ConfirmDialog
+          confirm={confirm}
+          question={inQueue ? CLOSE_QUEUED_QUESTION : CLOSE_UNKNOWN_QUESTION}
+        />
+      ) : null}
     </>
   );
 }

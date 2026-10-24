@@ -3828,7 +3828,14 @@ test("a tab naming another pull request of the agent's repository by its number 
   const control = {
     ...controlAnswering({
       pullRequest: recorded("pull request", {
-        pullRequest: { ...PULL_REQUEST, number: 41, title: earlier.title, url },
+        pullRequest: {
+          ...PULL_REQUEST,
+          number: 41,
+          title: earlier.title,
+          url,
+          merge: MERGE_STATE.CLEAN,
+          merging: MERGING,
+        },
       }),
       conversation: recorded("conversation", { pullRequest: CONVERSATION }),
     }),
@@ -3887,7 +3894,7 @@ test("a numbered pull request nothing published shows how its checks went on its
 });
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
-  const open = await draw(controlAnswering());
+  const open = await draw(merging(MERGE_STATE.CLEAN));
   await pressAction(open, "Close pull request");
   act(() => root?.unmount());
   root = undefined;
@@ -3908,7 +3915,7 @@ test("an open pull request's pill offers Close and a closed one's Reopen, each a
 
 test("Close acts at once on an open pull request and a draft, a toast offering Reopen, which sends the reopen and goes", async () => {
   const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
-  const tab = await draw(controlAnswering());
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
   await pressAction(tab, "Close pull request");
 
   assert.equal(question(), false, "closing is not asked about");
@@ -3926,7 +3933,17 @@ test("Close acts at once on an open pull request and a draft, a toast offering R
   root = undefined;
   changes.length = 0;
 
-  const draft = await draw(controlAnswering({}, PULL_REQUEST_STATE.DRAFT));
+  const draft = await draw(
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.DRAFT },
+          }),
+      },
+      PULL_REQUEST_STATE.DRAFT,
+    ),
+  );
   await pressAction(draft, "Close pull request");
   assert.equal(question(), false, "a draft's Close is not asked about either");
   assert.equal(newestToastSays(), "Pull request closedReopen");
@@ -3934,11 +3951,23 @@ test("Close acts at once on an open pull request and a draft, a toast offering R
 
 test("a Close GitHub would not take offers no Reopen", async () => {
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Not allowed." };
-  const tab = await draw(controlAnswering());
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
   await pressAction(tab, "Close pull request");
 
   assert.equal(newestToastSays(), undefined);
   assert.match(tab.querySelector(".pull-request-write-note")?.textContent ?? "", /Not allowed\./u);
+});
+
+test("Close on an open pull request whose merge status could not be read asks first, since it may be queued, and sends nothing until it is answered", async () => {
+  const tab = await draw(controlAnswering());
+  await pressAction(tab, "Close pull request");
+
+  const question = document.querySelector('[role="dialog"], [role="alertdialog"]');
+  assert.match(
+    question?.textContent ?? "",
+    /could not read whether this pull request is in the merge queue/u,
+  );
+  assert.deepEqual(changes, []);
 });
 
 test("Close on a pull request in the merge queue asks first with the queue's warning, sending nothing until it is answered, and Cancel leaves it queued", async () => {
