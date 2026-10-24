@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { ListMotion } from "../list-motion/list-motion.js";
 import { SettingsSection } from "../settings-section/settings-section.js";
-import { Reveal, RevealChoice } from "./reveal.js";
+import { Reveal, RevealArea, RevealChoice, revealArea } from "./reveal.js";
 
 /**
  * reveal.test.ts -- the rows a setting brings unroll in as it turns on, the
@@ -255,4 +256,36 @@ test("outside a reveal area a setting's rows come and go at once", async () => {
 
   expect(played).toEqual([]);
   expect(rowOf("From")).toBeUndefined();
+});
+
+test("an area that is its own takes its reveals even where an outer area stands, so the rows under a nested motion root glide with them", () => {
+  const nested = ({ on }: { on: boolean }) => {
+    const outer = useRef<HTMLDivElement>(null);
+    const inner = useRef<HTMLDivElement>(null);
+    const rows = createElement(
+      "div",
+      { ref: inner, ...revealArea() },
+      row("Switch"),
+      createElement(Reveal, { shown: on, children: row("From") }),
+      row("Under"),
+    );
+    const motion = createElement(ListMotion, {
+      root: inner,
+      change: 0,
+      children: createElement(RevealArea, { root: inner, own: true, children: rows }),
+    });
+    return createElement(RevealArea, {
+      root: outer,
+      children: createElement("div", { ref: outer, ...revealArea() }, motion),
+    });
+  };
+  const show = draw(nested, { on: false });
+
+  show({ on: true });
+
+  expect(motionsOf(boxOf("From"))).toEqual([
+    [{ opacity: 0 }, { opacity: 1 }],
+    [ROLLED_UP, UNROLLED],
+  ]);
+  expect(motionsOf(rowOf("Under"))).toHaveLength(1);
 });
