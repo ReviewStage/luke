@@ -45,6 +45,10 @@
  * its own press is the retry. The sentence wraps as words do, and the glyph
  * and word stay together after it. The sentence is an alert for the same
  * reason, because it appears in the row's place after a press or a scroll.
+ *
+ * A line is a paragraph of its own, but one standing inside words, as a
+ * picture that failed to read stands inside the paragraph that names it, is
+ * a span (`ERROR_STATE_ELEMENT.SPAN`), since a paragraph holds no other.
  */
 
 import type { ReactNode } from "react";
@@ -65,6 +69,14 @@ export const ERROR_STATE_PLACEMENT = {
 export type ErrorStatePlacement =
   (typeof ERROR_STATE_PLACEMENT)[keyof typeof ERROR_STATE_PLACEMENT];
 
+/** What a failure on a line stands as: a paragraph of its own, or a span inside the words it stands among. */
+export const ERROR_STATE_ELEMENT = {
+  PARAGRAPH: "p",
+  SPAN: "span",
+} as const;
+
+export type ErrorStateElement = (typeof ERROR_STATE_ELEMENT)[keyof typeof ERROR_STATE_ELEMENT];
+
 /** The press that mends a failure where trying again alone cannot: its words and what it does. */
 export interface ErrorStateRemedy {
   /** What it does, as "Connect GitHub". */
@@ -80,6 +92,8 @@ interface LineActions {
   onRemove?: (() => void) | undefined;
   /** Dismiss's press, which puts the line away. */
   onDismiss?: (() => void) | undefined;
+  /** What the line stands as: a paragraph unless it stands inside words. */
+  as?: ErrorStateElement | undefined;
 }
 
 /** Where a failure stands, with what it says and the presses it may offer there. */
@@ -106,6 +120,7 @@ type Placed =
       remedy?: undefined;
       onRemove?: undefined;
       onDismiss?: undefined;
+      as?: undefined;
     };
 
 const WORDS = {
@@ -129,6 +144,7 @@ export function ErrorState(
   } & Placed,
 ): React.JSX.Element {
   const { onRetry, onReload, remedy, onRemove, onDismiss, children } = props;
+  const Line = props.as ?? ERROR_STATE_ELEMENT.PARAGRAPH;
   const placement = props.placement ?? ERROR_STATE_PLACEMENT.INLINE;
   if (placement === ERROR_STATE_PLACEMENT.CENTRED) {
     const again =
@@ -149,7 +165,7 @@ export function ErrorState(
     );
   }
   return (
-    <p className="luke-error-state" data-placement={placement} role="alert">
+    <Line className="luke-error-state" data-placement={placement} role="alert">
       <span className="luke-error-state-glyph">
         <AlertIcon />
       </span>
@@ -188,7 +204,7 @@ export function ErrorState(
           )}
         </span>
       )}
-    </p>
+    </Line>
   );
 }
 

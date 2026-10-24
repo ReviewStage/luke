@@ -16,7 +16,8 @@ import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
  * While its bytes are read it is a quiet box on the section's fill with the
  * window's spinner; a picture this reader cannot reach, or whose bytes are
  * gone, is its alt text and says it is not available, as a tile of a set
- * says it (`@luke/ui`'s `PictureStandIn`). The block is left out
+ * says it (`@luke/ui`'s `PictureStandIn`); one whose read did not land this
+ * time says it could not be read, with Retry, in the same box. The block is left out
  * of the screen recording (`ph-no-capture`), because a picture can hold
  * words and the recording carries none (`session-replay.ts`), and because a
  * `data:` address is megabytes of attribute a recording has no use for even
@@ -121,6 +122,21 @@ export function PictureBlock({
           className="picture-frame picture-pending"
         >
           <PictureStandIn state={PICTURE_STATE.READING} words={alt} />
+        </Card>
+        {said}
+      </span>
+    );
+  }
+  if (state.kind === PICTURE_STATE.FAILED) {
+    return (
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
+        <Card
+          as={CARD_ELEMENT.SPAN}
+          corner={CARD_CORNER.CONTROL}
+          padding={CARD_PADDING.NONE}
+          className="picture-frame picture-missing"
+        >
+          <PictureStandIn state={PICTURE_STATE.FAILED} words={alt} onRetry={state.retry} />
         </Card>
         {said}
       </span>

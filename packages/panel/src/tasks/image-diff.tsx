@@ -1,6 +1,13 @@
 import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { CHOICE_BAR_LOOK, ChoiceBar, NOTE_LINE_LOOK, NoteLine, Slider } from "@luke/ui";
+import {
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
+  NOTE_LINE_LOOK,
+  NoteLine,
+  PictureStandIn,
+  Slider,
+} from "@luke/ui";
 import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
@@ -15,8 +22,11 @@ import { useAct } from "../act.js";
  * `CODING_AGENTS_GITHUB_IMAGE`): the before at the merge base GitHub counts
  * the changes from, the after at the head. So the window asks GitHub nothing
  * itself, holds no token, and draws each from a `data:` URL of its own
- * making, which the panel's policy admits; a side the service will not
- * answer, an image past its bound or no image at all, says so. A side is
+ * making, which the panel's policy admits; a side waits under the window's
+ * spinner, and one the service will not answer, an image past its bound or
+ * no image at all, says so, as a picture of a transcript does
+ * (`@luke/ui`'s `PictureStandIn`), and one whose read did not land this
+ * time says so with Retry, which reads it again. A side is
  * read only once its file is open and Pierre has drawn it near the view,
  * and kept for the window's life (`@luke/ui/picture-cache`), so a list of a
  * hundred images reads only the ones looked at; a side whose read did not
@@ -48,8 +58,6 @@ const IMAGE_WORDS = {
   AFTER: "After",
   ADDED: "Added",
   DELETED: "Deleted",
-  READING: "Reading the image…",
-  MISSING: "This image could not be shown.",
   NO_BEFORE: "Previous version unavailable",
   COMPARE: "Compare images",
   SWIPE: "Swipe between the two",
@@ -102,13 +110,16 @@ function useNearView(element: HTMLElement | null): boolean {
   return near;
 }
 
-/** One side as it stands: its picture, the words saying it is read, or that it cannot be shown. */
+/** One side as it stands: its picture, or what stands in its place, Retry where its read did not land. */
 function SidePicture({ state, label }: { state: PictureState; label: string }) {
   if (state.kind === PICTURE_STATE.READY) {
     return <img className="image-diff-picture" src={state.url} alt={label} />;
   }
-  const words = state.kind === PICTURE_STATE.READING ? IMAGE_WORDS.READING : IMAGE_WORDS.MISSING;
-  return <NoteLine look={NOTE_LINE_LOOK.INSET}>{words}</NoteLine>;
+  // Note that the side's words are its caption's, drawn above it, so what stands in for it says this picture.
+  if (state.kind === PICTURE_STATE.FAILED) {
+    return <PictureStandIn state={state.kind} words="" onRetry={state.retry} />;
+  }
+  return <PictureStandIn state={state.kind} words="" />;
 }
 
 /** One side alone, under the word for what it is, and a note under it where it stands for two. */
@@ -316,7 +327,7 @@ function ImageSidesNear({
   })();
   return (
     <div ref={setBox} className="image-diff">
-      {near ? drawn : <NoteLine look={NOTE_LINE_LOOK.INSET}>{IMAGE_WORDS.READING}</NoteLine>}
+      {near ? drawn : <PictureStandIn state={PICTURE_STATE.READING} words="" />}
     </div>
   );
 }

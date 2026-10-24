@@ -11,21 +11,29 @@ import { useEffect, useReducer, useState, useSyncExternalStore } from "react";
  * arrive in base64 and are drawn from a `data:` URL of the window's own making, which the window's
  * policy allows where it refuses any other address. A picture the reader
  * cannot reach, or whose bytes are gone, is kept as missing; a read that did
- * not land is not kept, so the next place to ask reads it again. Nothing
- * here knows whose pictures they are: the place drawing one hands its read.
+ * not land is not kept, so the next place to ask reads it again, and the
+ * place that asked draws it as failed, with the retry that reads it again
+ * there. Nothing here knows whose pictures they are: the place drawing one
+ * hands its read.
  */
 
-/** Where a picture's read stands: still out, landed as its `data:` URL, or answered as none. */
+/** Where a picture's read stands: still out, landed as its `data:` URL, answered as none, or not landed this time. */
 export const PICTURE_STATE = {
   READING: "reading",
   READY: "ready",
   MISSING: "missing",
+  FAILED: "failed",
 } as const;
 
 export type PictureState =
   | { readonly kind: typeof PICTURE_STATE.READING }
   | { readonly kind: typeof PICTURE_STATE.READY; readonly url: string }
-  | { readonly kind: typeof PICTURE_STATE.MISSING };
+  | { readonly kind: typeof PICTURE_STATE.MISSING }
+  | {
+      readonly kind: typeof PICTURE_STATE.FAILED;
+      /** Reads the picture again, as the place drawing it asked for it the first time. */
+      readonly retry: () => void;
+    };
 
 /** What a read answers: the bytes in base64 under their type, or why there are none, `NOT_FOUND_FAILURE` among them. */
 export type PictureAnswer =
@@ -50,7 +58,8 @@ const MISSING: PictureState = { kind: PICTURE_STATE.MISSING };
 interface KeptPicture {
   readonly owner: string;
   readonly id: string;
-  readonly read: Promise<PictureState>;
+  /** Where the read settled, or none for a read that did not land. */
+  readonly read: Promise<PictureState | undefined>;
   state: PictureState;
   /** How many places drawing it stand now, which the byte budget never lets go of. */
   pins: number;
@@ -139,7 +148,7 @@ function keptPicture(owner: string, id: string, read: () => Promise<PictureAnswe
         // A read that did not land lets go of its own entry, so the next place to ask reads it again.
         if (state === undefined) {
           if (pictures.get(id) === kept) pictures.delete(id);
-          return MISSING;
+          return undefined;
         }
         kept.state = state;
         if (state.kind === PICTURE_STATE.READY) land(kept, state.url);
@@ -181,10 +190,11 @@ function heedForgetting(listener: () => void): () => void {
 /**
  * The picture as the place drawing it sees it: reading until its read
  * lands, then its `data:` URL, or missing. A read that did not land draws
- * as missing here, for this picture alone, and is read again by the next
- * place to mount; once the window lets go of every picture, it is read
- * again here. A place that reads a picture ahead and draws none of it
- * passes `drawn` false, so the byte budget may let its picture go.
+ * as failed here, for this picture alone, until its retry reads it again,
+ * and is read again by the next place to mount; once the window lets go of
+ * every picture, it is read again here. A place that reads a picture ahead
+ * and draws none of it passes `drawn` false, so the byte budget may let its
+ * picture go.
  */
 export function usePicture(
   owner: string,
@@ -193,10 +203,17 @@ export function usePicture(
   drawn = true,
 ): PictureState {
   const [, redraw] = useReducer((count: number) => count + 1, 0);
+  // Note that each retry is an attempt of its own, which reads the picture again and leaves the failure before it behind.
+  const [attempt, retry] = useReducer((count: number) => count + 1, 0);
   const generation = useSyncExternalStore(heedForgetting, () => forgotten);
   const state = pictureNow(owner, id);
   // Note that a failure is this picture's own, so another drawn in its place still reads.
-  const [failed, setFailed] = useState<{ owner: string; id: string; generation: number }>();
+  const [failed, setFailed] = useState<{
+    owner: string;
+    id: string;
+    generation: number;
+    attempt: number;
+  }>();
   useEffect(() => {
     let standing = true;
     const kept = keptPicture(owner, id, () => read(owner, id));
@@ -204,11 +221,8 @@ export function usePicture(
     const unpin = drawn ? pin(kept) : undefined;
     kept.read.then((answered) => {
       if (!standing) return;
-      if (
-        answered.kind === PICTURE_STATE.MISSING &&
-        keptPictures.get(owner)?.get(id) === undefined
-      ) {
-        setFailed({ owner, id, generation });
+      if (answered === undefined && keptPictures.get(owner)?.get(id) === undefined) {
+        setFailed({ owner, id, generation, attempt });
       }
       redraw();
     });
@@ -217,13 +231,16 @@ export function usePicture(
       if (unpin === undefined) trim(undefined);
       else unpin();
     };
-  }, [owner, id, read, generation, drawn]);
+  }, [owner, id, read, generation, drawn, attempt]);
   const mine =
     failed !== undefined &&
     failed.owner === owner &&
     failed.id === id &&
-    failed.generation === generation;
-  return mine && state.kind === PICTURE_STATE.READING ? MISSING : state;
+    failed.generation === generation &&
+    failed.attempt === attempt;
+  return mine && state.kind === PICTURE_STATE.READING
+    ? { kind: PICTURE_STATE.FAILED, retry }
+    : state;
 }
 
 /**
