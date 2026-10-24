@@ -6,6 +6,7 @@ import {
   BUTTON_VARIANT,
   Button,
   GAP,
+  Inline,
   OVER_PANE_EDGE,
   OVER_PANE_WIDTH,
   OverPane,
@@ -37,9 +38,11 @@ function Room({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
+  // Note that the toggle stands above the tab rather than in it, as a tab's
+  // bar does, so the pane it floats never covers it.
   return (
-    <div className="catalog-popover-room">
-      <Stack gap={GAP.TIGHT}>
+    <Stack gap={GAP.TIGHT}>
+      <Inline>
         <Button
           ref={toggle}
           variant={BUTTON_VARIANT.OUTLINE}
@@ -47,27 +50,29 @@ function Room({
         >
           {open ? `Hide ${label}` : `Show ${label}`}
         </Button>
+      </Inline>
+      <div className="catalog-popover-room">
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           The tab's own work stands here, under the pane.
         </Text>
-      </Stack>
-      <OverPane
-        open={open}
-        onClose={() => setOpen(false)}
-        label={label}
-        edge={edge}
-        width={width}
-        toggle={toggle}
-      >
-        <Stack gap={GAP.TIGHT}>
-          {rows.map((row) => (
-            <Button key={row} variant={BUTTON_VARIANT.ROW} onClick={stay}>
-              {row}
-            </Button>
-          ))}
-        </Stack>
-      </OverPane>
-    </div>
+        <OverPane
+          open={open}
+          onClose={() => setOpen(false)}
+          label={label}
+          edge={edge}
+          width={width}
+          toggle={toggle}
+        >
+          <Stack gap={GAP.TIGHT}>
+            {rows.map((row) => (
+              <Button key={row} variant={BUTTON_VARIANT.ROW} onClick={stay}>
+                {row}
+              </Button>
+            ))}
+          </Stack>
+        </OverPane>
+      </div>
+    </Stack>
   );
 }
 
