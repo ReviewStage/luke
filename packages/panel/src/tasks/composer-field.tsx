@@ -80,7 +80,7 @@ export function UnloadedComposerField(): React.JSX.Element {
 }
 
 /** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
-function typingElsewhere(): boolean {
+export function typingElsewhere(): boolean {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || active === document.body) return false;
   return (

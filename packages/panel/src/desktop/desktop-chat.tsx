@@ -889,6 +889,8 @@ function nextUnread(groups: RailGroupsShown, place: ChatPlace): ChatPlace | unde
  * holding anything unread. The row a key lands on takes the keyboard where
  * the rail stands, as the Inbox's row does, so the keys go on from there;
  * where the place stands alone, the narrow focus hands it on instead.
+ * Answers the place the keys last stepped to, whose box leaves the caret
+ * out of it so the keys go on.
  */
 function useChannelKeys({
   groups,
@@ -906,8 +908,11 @@ function useChannelKeys({
   active: boolean;
   railShown: boolean;
   rail: React.RefObject<HTMLDivElement | null>;
-}): void {
+}): ChatPlace | undefined {
   const stepped = useRef(false);
+  const [steppedTo, setSteppedTo] = useState<ChatPlace | undefined>(undefined);
+  // Note that a step is spent once another place is shown, so a press that opens it again later is a press.
+  if (steppedTo !== undefined && !samePlace(steppedTo, place)) setSteppedTo(undefined);
   const steps = groups === undefined ? [] : drawnSteps(groups, folded, place);
   const at = steps.findIndex((each) => samePlace(each, place));
   const go = (to: ChatPlace | undefined) =>
@@ -915,6 +920,7 @@ function useChannelKeys({
       ? undefined
       : () => {
           stepped.current = true;
+          setSteppedTo(to);
           onChoose(to);
         };
   const previous = at > 0 ? steps[at - 1] : undefined;
@@ -932,6 +938,7 @@ function useChannelKeys({
       ?.querySelector<HTMLElement>('.chat-rail [aria-current]:not([aria-current="false"])')
       ?.focus();
   });
+  return steppedTo;
 }
 
 /**
@@ -1024,7 +1031,7 @@ function ChatView({
     rail === undefined
       ? undefined
       : railGroups(rail, showArchived, (each) => shows(view.place, each));
-  useChannelKeys({
+  const steppedTo = useChannelKeys({
     groups,
     folded: folds.folded,
     place: view.place,
@@ -1191,6 +1198,7 @@ function ChatView({
         onAnswer={view.onAnswer}
         channelActions={channelActions}
         onOpen={view.onChoose}
+        takesCaret={steppedTo === undefined || !samePlace(steppedTo, view.place)}
         onBringBack={dialogs.askArchive}
         readPicture={view.readPicture}
         taskDoors={taskDoors}
