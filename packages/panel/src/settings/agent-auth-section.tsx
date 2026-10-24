@@ -54,12 +54,12 @@ import {
   SettingsRow,
   SettingsRowMark,
   type SettingsRowSkeletonShape,
+  type SettingsRowState,
   SettingsRowStateLine,
   SettingsRowsSkeleton,
   SettingsSavedMark,
   SettingsSection,
   Stack,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
   TEXT_FONT,
@@ -67,7 +67,6 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TextButton,
   TextField,
   TextLink,
   Tooltip,
@@ -92,8 +91,9 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  *
  * The account holds up to two credentials per harness: a plan (Claude's
  * `claude setup-token`, or the ChatGPT sign-in) and the provider's API key.
- * A row's button says which of them that harness's new agents use, or that
- * neither is set (Connect), or that the plan in use needs a hand. The
+ * A row's line says which of them that harness's new agents use, or that
+ * the one in use needs a hand, and its button is the act: Connect while
+ * neither is set, Manage once one is. The
  * button opens the harness's dialog: a radio card per credential, each
  * holding its own controls, the checked radio being the default. The
  * default is the plan's `forAgents`: Subscription checked is on, API key
@@ -192,8 +192,9 @@ const WORDS = {
   READ_FAILED: "Your keys could not be read.",
   SIGNED_OUT: SIGNED_OUT_WORDS,
   CONNECT: "Connect",
-  VIA_SUBSCRIPTION: "Connected via subscription",
-  VIA_API_KEY: "Connected via API key",
+  MANAGE: "Manage",
+  VIA_SUBSCRIPTION: "Connected with a subscription",
+  VIA_API_KEY: "Connected with an API key",
   SIGN_IN_EXPIRED: "Sign-in expired",
   PLAN_ATTENTION: "Subscription needs attention",
   KEY_ATTENTION: "API key needs attention",
@@ -211,7 +212,7 @@ const WORDS = {
   ADD_TOKEN: "Add token",
   REPLACE_TOKEN: "Replace token",
   SIGN_IN: "Sign in with ChatGPT",
-  WAITING: "Waiting for ChatGPT…",
+  WAITING: "Waiting for ChatGPT",
   CONNECTED: "Connected",
   USAGE_LIMIT: "Usage limit reached",
   TOKEN_INVALID: "Anthropic rejected this token. Paste a new one.",
@@ -278,25 +279,23 @@ function defaultOf(
   return undefined;
 }
 
-/** What a harness's row button says, and whether it asks for a hand or reports a connection. */
+/** What a harness's row says under its name, connected or needing a hand, or nothing while neither credential is set. */
 function connectionOf(
   plan: SubscriptionKeySummary | undefined,
   key: ProviderKeySummary | undefined,
-): { words: string; connected: boolean; attention: boolean } {
+): { words: string; state: SettingsRowState } | undefined {
   const chosen = defaultOf(plan, key);
   if (chosen === CREDENTIAL.API_KEY && key !== undefined) {
     return keyStanding(key.status)
-      ? { words: WORDS.VIA_API_KEY, connected: true, attention: false }
-      : { words: WORDS.KEY_ATTENTION, connected: false, attention: true };
+      ? { words: WORDS.VIA_API_KEY, state: SETTINGS_ROW_STATE.CONNECTED }
+      : { words: WORDS.KEY_ATTENTION, state: SETTINGS_ROW_STATE.ATTENTION };
   }
-  if (plan !== undefined) {
-    if (plan.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
-      return { words: WORDS.USAGE_LIMIT, connected: false, attention: true };
-    }
-    if (standing(plan)) return { words: WORDS.VIA_SUBSCRIPTION, connected: true, attention: false };
-    return { words: lapsedPlanWords(plan), connected: false, attention: true };
+  if (plan === undefined) return undefined;
+  if (plan.status === PROVIDER_KEY_STATUS.LIMIT_REACHED) {
+    return { words: WORDS.USAGE_LIMIT, state: SETTINGS_ROW_STATE.ATTENTION };
   }
-  return { words: WORDS.CONNECT, connected: false, attention: false };
+  if (standing(plan)) return { words: WORDS.VIA_SUBSCRIPTION, state: SETTINGS_ROW_STATE.CONNECTED };
+  return { words: lapsedPlanWords(plan), state: SETTINGS_ROW_STATE.ATTENTION };
 }
 
 /**
@@ -759,9 +758,9 @@ function ChatGptPanel({
           ) : continueOffered ? (
             <>
               {signingIn ? (
-                <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={cancel}>
+                <Button variant={BUTTON_VARIANT.QUIET} onClick={cancel}>
                   {WORDS.CANCEL}
-                </TextButton>
+                </Button>
               ) : null}
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
@@ -1156,7 +1155,9 @@ export function AgentAuthSection({
           <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
         ) : answer !== undefined ? (
           HARNESSES.map((provider) => {
+            const harness = HARNESS[provider];
             const connection = connectionOf(planOf(answer, provider), keyOf(answer, provider));
+            const verb = connection === undefined ? WORDS.CONNECT : WORDS.MANAGE;
             return (
               <div key={provider} {...searchAnchorProps(HARNESS[provider].anchor)}>
                 <SettingsRow
@@ -1165,23 +1166,32 @@ export function AgentAuthSection({
                       <HarnessMark provider={provider} />
                     </SettingsRowMark>
                   }
-                  label={HARNESS[provider].name}
-                  description={HARNESS[provider].detail}
+                  label={harness.name}
+                  description={
+                    connection === undefined ? (
+                      harness.detail
+                    ) : (
+                      <>
+                        {harness.detail}
+                        <SettingsRowStateLine
+                          state={connection.state}
+                          block={harness.detail !== undefined}
+                        >
+                          {connection.words}
+                        </SettingsRowStateLine>
+                      </>
+                    )
+                  }
                 >
-                  {() => (
+                  {(control) => (
+                    // Note that the act is described by its row's name, since both rows may say Manage.
                     <Button
                       variant={BUTTON_VARIANT.OUTLINE}
                       aria-haspopup="dialog"
+                      aria-describedby={control.labelId}
                       onClick={() => setOpen(provider)}
                     >
-                      {connection.attention ? (
-                        <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
-                          {connection.words}
-                        </SettingsRowStateLine>
-                      ) : (
-                        connection.words
-                      )}
-                      {connection.connected ? <Saved /> : null}
+                      {verb}
                     </Button>
                   )}
                 </SettingsRow>
