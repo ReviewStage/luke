@@ -4,6 +4,7 @@ import {
   formatBytes,
   formatCompact,
   formatCount,
+  formatExactBytes,
   formatPercent,
   formatUsd,
 } from "./number-format.js";
@@ -27,6 +28,11 @@ test("a size counts in thousands and says kB and MB", () => {
   assert.equal(formatBytes(1_500_000), "1.5 MB");
   assert.equal(formatBytes(2_500_000_000), "2.5 GB");
   assert.equal(formatBytes(-5), "0 B");
+});
+
+test("a limit is said to the byte, so no file under it is refused", () => {
+  assert.equal(formatExactBytes(65_536), "65,536 bytes");
+  assert.equal(formatExactBytes(1_048_576), "1,048,576 bytes");
 });
 
 test("a percentage is whole unless asked for places, and a dash where there is no whole", () => {

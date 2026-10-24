@@ -23,7 +23,7 @@ import {
   type InstalledSkillScope,
   type InstalledSkillSource,
 } from "@luke/features/installed-skill-wire";
-import { formatBytes } from "@luke/features/number-format";
+import { formatBytes, formatExactBytes } from "@luke/features/number-format";
 import {
   readSkillFile,
   SKILL_FILE_BOUNDS,
@@ -315,10 +315,10 @@ const FILES_REFUSAL_WORDS = {
   [INSTALLED_SKILL_FILES_REFUSAL.NO_SKILL_FILE]: "has no SKILL.md in its folder.",
   [INSTALLED_SKILL_FILES_REFUSAL.DUPLICATE_PATH]: "holds two files at one path.",
   [INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES]: `holds more than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files.`,
-  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${formatBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
   [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_INVALID]:
     "needs a valid name and a description in its SKILL.md.",
-  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${formatBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
   [INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED]:
     "holds what looks like a credential. A skill must never carry one.",
 } as const satisfies Record<InstalledSkillFilesRefusal, string>;
@@ -363,10 +363,10 @@ const PROBLEM_WORDS = {
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING]: "No description",
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG]: `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
   [INSTALLED_SKILL_PROBLEM.FRONTMATTER_UNCLOSED]: "Frontmatter never closed",
-  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${formatBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
+  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
   [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED]: "Holds what looks like a credential",
   [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES]: `More than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files`,
-  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${formatBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
+  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
 } as const satisfies Record<InstalledSkillProblem, string>;
 
 /** A skill's problems, joined into one line. */

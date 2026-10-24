@@ -67,6 +67,11 @@ export function formatBytes(bytes: number): string {
   return `${figure < WHOLE_FROM ? figure.toFixed(1) : Math.round(figure)} ${unit}`;
 }
 
+/** A size in bytes to the byte, for a limit a file is refused at, which a rounded "66 kB" would misstate: "65,536 bytes". */
+export function formatExactBytes(bytes: number): string {
+  return `${COUNT.format(bytes)} bytes`;
+}
+
 /**
  * A fraction of some whole as a percentage, to `places` decimal places
  * (none unless asked), or a dash where there was no whole to take a share of.
