@@ -1638,7 +1638,7 @@
 
 .diff-list-fold {
   transform: rotate(90deg);
-  transition: transform var(--luke-duration-quick) var(--luke-motion-exit);
+  transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
 .diff-list-head[data-collapsed] .diff-list-fold {
@@ -2810,6 +2810,7 @@
   inset-inline-start: var(--luke-space-2);
   vertical-align: middle;
   opacity: 0;
+  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
 .pull-request-title-edit:has(:focus-visible) {
