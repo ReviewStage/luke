@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
 import {
   readAccountPreferences,
@@ -487,6 +487,8 @@ function fakeEve(
     readonly sends?: SendAnswer;
     /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
     readonly cancelsTogether?: number;
+    /** What eve looks at as it is asked to retire a session, written down beside the retire. */
+    readonly resetSees?: Effect.Effect<boolean>;
   } = {},
 ) {
   const together = Latch.makeUnsafe(options.cancelsTogether === undefined);
@@ -499,6 +501,8 @@ function fakeEve(
   const reset: string[] = [];
   /** Who asked each retire, in order, as `cancelledAs` writes it. */
   const resetAs: string[] = [];
+  /** What `resetSees` saw at each retire, in order. */
+  const resetSaw: boolean[] = [];
   let sessions = 0;
   let deliveries = 0;
   const eve = (authorization: string): AgentSessions => ({
@@ -553,14 +557,17 @@ function fakeEve(
         );
       }),
     reset: (sessionId) =>
-      Effect.sync(() => {
-        reset.push(sessionId);
-        resetAs.push(authorization);
-        return { outcome: EVE_RESET_OUTCOME.RESET };
-      }),
+      Effect.flatMap(options.resetSees ?? Effect.succeed(true), (saw) =>
+        Effect.sync(() => {
+          reset.push(sessionId);
+          resetAs.push(authorization);
+          resetSaw.push(saw);
+          return { outcome: EVE_RESET_OUTCOME.RESET };
+        }),
+      ),
     stream: () => Stream.empty,
   });
-  return { eve, opened, sent, cancelled, cancelledAs, reset, resetAs };
+  return { eve, opened, sent, cancelled, cancelledAs, reset, resetAs, resetSaw };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
@@ -4790,6 +4797,35 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
         assert.deepEqual(eve.reset, [sessionId]);
         assert.deepEqual(eve.resetAs, [deploymentFor(owner)]);
+        assert.ok(Option.isNone(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "a task's delete retires its agent's session with no transaction open, so no lock waits on eve",
+    () =>
+      Effect.gen(function* () {
+        const services = yield* Effect.context<DatabaseServices>();
+        // Two statements in a row share a transaction's id where one stands open around them.
+        const alone = Effect.flatMap(SqlClient.SqlClient, (sql) =>
+          Effect.gen(function* () {
+            const xid = sql<{ readonly xid: string }>`select txid_current()::text as xid`;
+            const [first] = yield* xid;
+            const [second] = yield* xid;
+            return first !== undefined && second !== undefined && first.xid !== second.xid;
+          }),
+        ).pipe(Effect.provide(services), Effect.orDie);
+        const eve = fakeEve({ resetSees: alone });
+        const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
+
+        const deleted = yield* ask(request(TASK(task.id), owner, { method: "DELETE" }));
+
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
+        assert.deepEqual(eve.reset, [sessionId]);
+        assert.deepEqual(eve.resetSaw, [true]);
         assert.ok(Option.isNone(yield* readTask(owner, task.id)));
       }),
   );
