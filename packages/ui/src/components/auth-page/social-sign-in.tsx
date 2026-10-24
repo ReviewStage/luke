@@ -39,8 +39,8 @@ export function SocialProviderButton({
     <ProviderButton
       provider={provider}
       name={label}
-      pending={pending === provider}
-      pendingLabel={`Opening ${label}`}
+      busy={pending === provider}
+      busyLabel={`Opening ${label}`}
       disabled={pending !== undefined && pending !== provider}
       onPress={onPress}
     />

@@ -984,7 +984,8 @@ function EditorToolbar({
           label="Run now"
           icon={<PlayIcon />}
           variant={BUTTON_VARIANT.OUTLINE}
-          busy={running ? "Running" : undefined}
+          busy={running}
+          busyLabel="Running"
           onClick={onRunNow}
         />
       )}

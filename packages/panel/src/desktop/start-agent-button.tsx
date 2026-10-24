@@ -118,7 +118,8 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           icon={<PlayIcon />}
           label="Start a coding agent"
           disabled={unavailable}
-          busy={start.busy ? "Starting" : undefined}
+          busy={start.busy}
+          busyLabel="Starting"
           succeeded={start.succeeded}
           hintLabel={hint}
           onClick={press}

@@ -12,7 +12,7 @@ import {
 
 /**
  * provider-button.test.ts -- a provider's button is named "Continue with"
- * the provider in either size and begins its sign-in when pressed; pending,
+ * the provider in either size and begins its sign-in when pressed; busy,
  * it is named for the act in progress, says it is busy, and refuses another
  * press; disabled, it refuses the press; and the way in taken last is
  * described by its pill without the pill joining its name.
@@ -41,13 +41,14 @@ function mount(element: React.ReactElement): HTMLElement {
 function gitHub(
   size: ProviderButtonSize,
   presses: string[],
-  props: Partial<Parameters<typeof ProviderButton>[0]> = {},
+  props: { busy?: boolean; disabled?: boolean; lastUsed?: boolean } = {},
 ): React.ReactElement {
   return createElement(ProviderButton, {
     provider: MARK_PROVIDER.GITHUB,
     name: "GitHub",
     size,
-    pendingLabel: "Opening GitHub",
+    busy: false,
+    busyLabel: "Opening GitHub",
     onPress: () => presses.push("github"),
     ...props,
   });
@@ -72,10 +73,10 @@ test("a provider's button is named for its provider and begins its sign-in when 
   }
 });
 
-test("a pending button is named for the act in progress, says it is busy, and refuses a press", () => {
+test("a busy button is named for the act in progress, says it is busy, and refuses a press", () => {
   for (const size of SIZES) {
     const presses: string[] = [];
-    const { button, name } = only(mount(gitHub(size, presses, { pending: true })));
+    const { button, name } = only(mount(gitHub(size, presses, { busy: true })));
     expect(name).toBe("Opening GitHub");
     expect(button.getAttribute("aria-busy")).toBe("true");
     act(() => button.click());

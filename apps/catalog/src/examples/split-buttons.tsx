@@ -42,7 +42,8 @@ function StartSplit({
         icon={<PlayIcon />}
         label={`Start on ${model}`}
         disabled={disabled}
-        busy={busy === true ? "Starting" : undefined}
+        busy={busy === true}
+        busyLabel="Starting"
         menu={{ label: "Choose a model to start with", ...menu.trigger() }}
       >
         Start

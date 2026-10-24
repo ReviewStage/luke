@@ -323,30 +323,6 @@
     filter: none;
   }
 
-  /* Busy, its words keep their room hidden under the ring (its face's
-     utilities), so the button neither shrinks nor moves what stands beside it. */
-  .luke-button[aria-busy="true"]::after {
-    position: absolute;
-    inset: 0;
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-    margin: auto;
-    border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
-    border-top-color: currentColor;
-    border-radius: var(--luke-radius-full);
-    /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --luke-loop-motion with every other. */
-    animation: luke-button-turn 0.8s linear infinite;
-    animation-play-state: var(--luke-loop-motion);
-    content: "";
-  }
-
-  @keyframes luke-button-turn {
-    to {
-      transform: rotate(1turn);
-    }
-  }
-
   /* Done, its act landed: its words keep their room and its name, unseen, and a check
      springs in where they stood, at full strength, since nothing is
      unavailable about an act that has landed. The check's one beat is what

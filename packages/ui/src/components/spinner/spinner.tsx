@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { cn } from "../../cn.js";
 import { ShadcnSpinner } from "../../shadcn/spinner.js";
+import { useSettled } from "./settle-wait.js";
 
 /**
  * spinner.tsx -- the one spinner for a wait: a ring turning while something is read or a press is out.
@@ -13,15 +15,16 @@ import { ShadcnSpinner } from "../../shadcn/spinner.js";
  * the ring shows, because a reader announces a line filling more surely than
  * one arriving.
  *
- * A wait that may land at once says `delay`: its ring shows only once it has
- * stood a moment (180ms, a CSS animation delay in `spinner.css`), because a
- * ring that flashes for a read that landed at once is noise. Each mount waits
- * afresh. Its status line stands from the start.
+ * A wait shows its ring only once it has stood a moment (`--luke-settle-delay`,
+ * 180ms, `settle-wait.ts`), because a ring that flashes for a read that
+ * landed at once is noise; each mount waits afresh, and its status line stands
+ * from the start. A wait whose ring must stand at once says `delay={false}`.
  *
  * The ring itself is shadcn/ui's spinner (`../../shadcn/spinner.tsx`), drawn
- * in Tailwind utilities over the theme; `spinner.css` keeps the turn, the
- * stroke a region's ring takes, and the delay, each of which is a keyframe
- * or a custom property one element sets for another.
+ * in Tailwind utilities over the theme; `spinner.css` keeps the turn and the
+ * stroke a region's ring takes, a keyframe and a custom property one element
+ * sets for another. Every ring a wait draws, a busy button's among them, is
+ * this one, turning at its one speed.
  */
 
 /** How large the ring is drawn: on a caption's line, beside words or inside a control, or alone in a region. */
@@ -55,24 +58,20 @@ export function SpinnerRing({ size }: { size?: SpinnerSize }): React.JSX.Element
   );
 }
 
-/** A wait, said to a reader in `label` and drawn as the ring, once it has stood a moment where `delay`. */
+/** A wait, said to a reader in `label` and drawn as the ring, once it has stood a moment unless `delay` is off. */
 export function Spinner({
   label,
   size = SPINNER_SIZE.INLINE,
-  delay = false,
+  delay = true,
 }: {
   label: string;
   size?: SpinnerSize;
   delay?: boolean;
 }): React.JSX.Element {
+  const settled = useSettled(delay);
   return (
-    <span
-      className={SPINNER_BOX}
-      data-size={size}
-      data-delay={delay ? "true" : undefined}
-      role="status"
-    >
-      <SpinnerRing />
+    <span className={SPINNER_BOX} data-size={size} role="status">
+      {delay && !settled ? null : <SpinnerRing />}
       <span className="luke-visually-hidden">{label}</span>
     </span>
   );
@@ -81,7 +80,7 @@ export function Spinner({
 /** A region still being read: the ring at the region's size, centred in the room it fills. */
 export function SpinnerRegion({
   label,
-  delay = false,
+  delay = true,
 }: {
   label: string;
   delay?: boolean;
@@ -94,16 +93,16 @@ export function SpinnerRegion({
 }
 
 /**
- * A control's words, which give way to the ring while `busy`, once the press
- * has been out a moment where `delay`. The words keep their room, hidden under
- * the ring, so the control neither shrinks nor moves what stands beside it, and
- * the control is named by `label` ("Checking for updates") while the ring
- * stands, since hidden words name nothing.
+ * A control's words, which give way to the ring once the press has been out
+ * a moment while `busy`, or at once where `delay` is off. The words keep
+ * their room, hidden under the ring, so the control neither shrinks nor
+ * moves what stands beside it, and the control is named by `label`
+ * ("Checking for updates") from the press on, since hidden words name nothing.
  */
 export function BusyLabel({
   busy,
   label,
-  delay = false,
+  delay = true,
   children,
 }: {
   busy: boolean;
@@ -111,18 +110,24 @@ export function BusyLabel({
   delay?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
+  const settled = useSettled(busy && delay);
   if (!busy) return <>{children}</>;
+  const ringShown = !delay || settled;
   return (
-    <span
-      className="luke-busy-label inline-grid items-center justify-items-center gap-[inherit]"
-      data-delay={delay ? "true" : undefined}
-    >
-      <span className="luke-busy-label-words col-start-1 row-start-1 inline-flex items-center gap-[inherit]">
+    <span className="luke-busy-label inline-grid items-center justify-items-center gap-[inherit]">
+      <span
+        className={cn(
+          "luke-busy-label-words col-start-1 row-start-1 inline-flex items-center gap-[inherit]",
+          ringShown && "invisible",
+        )}
+      >
         {children}
       </span>
-      <span className={BUSY_SPINNER_BOX} data-size={SPINNER_SIZE.INLINE}>
-        <SpinnerRing />
-      </span>
+      {ringShown ? (
+        <span className={BUSY_SPINNER_BOX} data-size={SPINNER_SIZE.INLINE}>
+          <SpinnerRing />
+        </span>
+      ) : null}
       <span className="luke-visually-hidden">{label}</span>
     </span>
   );
