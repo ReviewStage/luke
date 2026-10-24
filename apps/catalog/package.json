@@ -17,6 +17,7 @@
     "@luke/features": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/ui": "workspace:*",
+    "@luke/voice": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

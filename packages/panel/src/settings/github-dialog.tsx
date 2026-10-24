@@ -20,17 +20,15 @@ import {
   JUSTIFY,
   LAYOUT_ELEMENT,
   SETTINGS_ROW_STATE,
+  SecretField,
   SettingsFacts,
   SettingsRowStateLine,
   Stack,
   TEXT_ELEMENT,
-  TEXT_FIELD_AUTO_COMPLETE,
-  TEXT_FIELD_TYPE,
   TEXT_FONT,
   TEXT_LINK_LOOK,
   TEXT_VARIANT,
   Text,
-  TextField,
   TextLink,
   useConfirmDialog,
 } from "@luke/ui";
@@ -175,29 +173,25 @@ function TokenForm({
     });
   };
   return (
-    <Stack gap={GAP.TIGHT}>
-      <Inline
-        as={LAYOUT_ELEMENT.FORM}
-        justify={JUSTIFY.END}
-        growFirst
-        onSubmit={(event) => {
-          event.preventDefault();
-          save();
+    <Stack
+      as={LAYOUT_ELEMENT.FORM}
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <SecretField
+        label="Personal access token"
+        error={problem}
+        placeholder="ghp_…"
+        disabled={saving}
+        value={pasted}
+        onChange={(value) => {
+          setPasted(value);
+          setProblem(undefined);
         }}
-      >
-        <TextField
-          type={TEXT_FIELD_TYPE.PASSWORD}
-          autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-          label="Personal access token"
-          placeholder="ghp_…"
-          spellCheck={false}
-          disabled={saving}
-          value={pasted}
-          onChange={(value) => {
-            setPasted(value);
-            setProblem(undefined);
-          }}
-        />
+      />
+      <Inline justify={JUSTIFY.END}>
         <Button
           type={BUTTON_TYPE.SUBMIT}
           variant={BUTTON_VARIANT.PRIMARY}
@@ -208,7 +202,6 @@ function TokenForm({
           Save
         </Button>
       </Inline>
-      {problem === undefined ? null : <Problem>{problem}</Problem>}
     </Stack>
   );
 }

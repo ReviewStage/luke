@@ -1,14 +1,12 @@
 import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
+  CALL_CONTROL_LABEL,
+  CALL_DEVICE,
+  CallMute,
   CloseIcon,
   IconButton,
-  MicrophoneIcon,
-  MicrophoneOffIcon,
-  SpeakerIcon,
-  SpeakerOffIcon,
   Tooltip,
   VideoIcon,
   VideoOffIcon,
@@ -25,12 +23,10 @@ import {
 } from "@luke/voice/voice-view";
 import { createContext, type ReactNode, useContext } from "react";
 import { useAct } from "../act.js";
-import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
 import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceLost } from "../use-voice-view.js";
-import { CALL_CONTROL_LABEL, CallMute } from "./tasks-parts.js";
 
 /**
  * agent-call.tsx -- an agent's tab taking calls: the call's controls in the composer's row, and while a call into the agent stands, Luke's video centred above the composer and the voice's notice line over it.
@@ -138,7 +134,7 @@ function CallVideoButton({ agentId }: { agentId: string }): React.JSX.Element | 
   const { status, onSetVideo } = useAgentCallVideo(agentId);
   if (status === undefined) return null;
   const on = status !== AVATAR_STATUS.OFF;
-  const label = on ? CALL_VIDEO_LABEL.VIDEO_OFF : CALL_VIDEO_LABEL.VIDEO_ON;
+  const label = on ? CALL_CONTROL_LABEL.VIDEO_OFF : CALL_CONTROL_LABEL.VIDEO_ON;
   return (
     <Tooltip label={label}>
       <IconButton
@@ -210,25 +206,17 @@ export function AgentCallControls({
   return (
     <fieldset className="agent-call-controls" aria-label={CALL_CONTROLS_LABEL}>
       <CallMute
+        device={CALL_DEVICE.SPEAKER}
         shape={BUTTON_SHAPE.SQUARE}
-        on={view.speakerMuted}
-        label={
-          view.speakerMuted ? CALL_CONTROL_LABEL.UNMUTE_SPEAKER : CALL_CONTROL_LABEL.MUTE_SPEAKER
-        }
-        command={APP_COMMAND.TOGGLE_SPEAKER}
-        icon={view.speakerMuted ? <SpeakerOffIcon /> : <SpeakerIcon />}
+        muted={view.speakerMuted}
         onPress={() =>
           command(view.speakerMuted ? VOICE_COMMAND.UNMUTE_SPEAKER : VOICE_COMMAND.MUTE_SPEAKER)
         }
       />
       <CallMute
+        device={CALL_DEVICE.MICROPHONE}
         shape={BUTTON_SHAPE.SQUARE}
-        on={button.muted}
-        label={
-          button.muted ? CALL_CONTROL_LABEL.UNMUTE_MICROPHONE : CALL_CONTROL_LABEL.MUTE_MICROPHONE
-        }
-        command={APP_COMMAND.TOGGLE_MICROPHONE}
-        icon={button.muted ? <MicrophoneOffIcon /> : <MicrophoneIcon />}
+        muted={button.muted}
         onPress={() => doors.onPress(agentId)}
       />
       <CallVideoButton agentId={agentId} />

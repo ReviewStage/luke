@@ -1980,6 +1980,18 @@ test("the invitations the host streams are drawn, another Mac's invitation among
   );
 });
 
+test("the invite form's address field is named by a visible label, and, being required, is not marked Optional", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const address = form.querySelector("input") ?? assert.fail("no address field");
+  assert.deepEqual(
+    [...(address.labels ?? [])].map((each) => each.textContent),
+    ["Email address"],
+  );
+  assert.equal(address.required, true);
+});
+
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });

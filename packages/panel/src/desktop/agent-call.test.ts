@@ -11,7 +11,7 @@ import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { WaveformIcon } from "@luke/ui";
+import { CALL_CONTROL_LABEL, CALL_VIDEO_LABEL, WaveformIcon } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
@@ -20,7 +20,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
-import { CALL_VIDEO_LABEL } from "../call/call-video-tile.js";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { handState } from "../testing/app-state.js";
@@ -197,7 +196,7 @@ function corner(page: HTMLElement, side: "left" | "right"): HTMLElement {
 
 /** The tile inside the video's room, which it must hold. */
 function tileOf(room: HTMLElement): HTMLElement {
-  const tile = room.querySelector<HTMLElement>(".call-video-tile");
+  const tile = room.querySelector<HTMLElement>(`section[aria-label="${CALL_VIDEO_LABEL.TILE}"]`);
   assert.ok(tile);
   return tile;
 }
@@ -224,14 +223,14 @@ test("on a call into the agent, its composer holds the call's four controls in t
   assert.ok(controls, "the call's controls stand in the composer");
   assert.deepEqual(
     [...controls.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    ["Mute speaker", "Mute microphone", CALL_VIDEO_LABEL.VIDEO_OFF, "End call"],
+    ["Mute speaker", "Mute microphone", CALL_CONTROL_LABEL.VIDEO_OFF, "End call"],
   );
   assert.equal(
     composerButtons(page).includes("Dictate"),
     false,
     "the call's microphone stands where Dictate would",
   );
-  assert.equal(page.querySelector(".call-bar"), null, "no call bar stands over the composer");
+  assert.equal(page.querySelector(".luke-call-bar"), null, "no call bar stands over the composer");
   assert.ok(
     page.querySelector('.main-tabs [role="tab"] .agent-calling-glyph'),
     "the agent's tab wears the live mark",
@@ -246,7 +245,7 @@ test("on a call no line says what Luke is doing: no Listening, no Thinking, and 
   assert.ok(tab);
   assert.doesNotMatch(tab.textContent ?? "", /Thinking|Listening|Writing notes/u);
   assert.equal(tab.querySelector(".luke-thinking-dots"), null);
-  assert.equal(tab.querySelector(".call-status"), null);
+  assert.equal(tab.querySelector(".luke-call-status"), null);
 });
 
 test("with video off the video's room goes and the composer's video button turns it on again; with video on it takes a room of its own between the transcript and the composer", async () => {
@@ -255,7 +254,7 @@ test("with video off the video's room goes and the composer's video button turns
   });
   assert.equal(videoTile(off), null);
   assert.equal(videoRoom(off), null, "video off takes the room away");
-  assert.ok(composerButtons(off).includes(CALL_VIDEO_LABEL.VIDEO_ON));
+  assert.ok(composerButtons(off).includes(CALL_CONTROL_LABEL.VIDEO_ON));
   act(() => roots.pop()?.unmount());
 
   const on = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
@@ -276,7 +275,7 @@ test("with video off the video's room goes and the composer's video button turns
   );
   assert.equal(tile.closest(".agent-composer"), null, "not in the composer");
   assert.equal(
-    tile.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_OFF}"]`),
+    tile.querySelector(`button[aria-label="${CALL_CONTROL_LABEL.VIDEO_OFF}"]`),
     null,
     "its Video off is the composer's",
   );

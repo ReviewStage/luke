@@ -1,5 +1,5 @@
 /**
- * call-video-tile.tsx -- Luke's avatar on the call, as a tile with its video's controls, and the voice it plays.
+ * call-video-tile.tsx -- Luke's avatar on a call, as a tile with its video's controls, and the voice it plays.
  *
  * The tile draws what it is handed and decides nothing: the avatar's video
  * track and its status. While the avatar connects, and on until its video's
@@ -9,36 +9,24 @@
  * picture then fades in over the pane's motion as the wait fades out, so no
  * empty frame stands between the two. While it is live it plays the video, or
  * Luke's face as a still frame where no video track is handed, which is what
- * a fixture run draws, since it reaches no avatar; once it has ended it
- * offers Restart video, as a labelled button where the tile has room and as
- * a round one, its words read rather than drawn, where it has not. Video off puts the avatar away and leaves the call
- * going as voice, in every state, and the tile goes; Video on, which puts a
- * fresh avatar up again, is the call's own controls', as ending the call is,
- * which the tile does not repeat. No word of the conversation is drawn
- * here. The avatar's lip-synced voice is played apart
- * from the tile (`AvatarVoice`), because the tile is drawn only while the
- * call's agent's tab or the call card is, and the voice is what the
- * developer hears whatever is shown. The video is drawn whole, never cut:
- * in an agent's tab the tile stands at the picture's own aspect, which it
- * fills; on the call card, where the tile is wider than the avatar's square
- * picture, a blurred copy of the same track fills the sides behind it
- * (call.css).
+ * a fixture run draws, since it reaches no avatar; once it has ended it says
+ * why, and offers Restart video, as a labelled button where the tile has
+ * room and as a round one, its words read rather than drawn, where it has
+ * not. Video off puts the avatar away and leaves the call going as voice, in
+ * every state, and the tile goes; Video on, which puts a fresh avatar up
+ * again, is the call's own controls', as ending the call is, which the tile
+ * does not repeat. No word of the conversation is drawn here. The avatar's
+ * lip-synced voice is played apart from the tile (`AvatarVoice`), because
+ * the tile is drawn only while its owner's surface is, and the voice is what
+ * the developer hears whatever is shown. The video is drawn whole, never
+ * cut: on a card (`CALL_VIDEO_FIT.CARD`) the tile stands 16:9 at the card's
+ * width, or at the height its owner hands `--luke-call-video-height`, and a
+ * blurred copy of the same track fills the sides the picture leaves; in a
+ * frame at the picture's own aspect (`CALL_VIDEO_FIT.PICTURE`) the tile
+ * fills the frame and the picture fills the tile (call.css).
  */
 
 import { FACE_MOTION } from "@luke/brand";
-import {
-  BUTTON_SHAPE,
-  BUTTON_VARIANT,
-  Button,
-  IconButton,
-  ResetIcon,
-  SKELETON_SHAPE,
-  Skeleton,
-  ThinkingDots,
-  VideoIcon,
-  VideoOffIcon,
-  WingFace,
-} from "@luke/ui";
 import {
   AVATAR_END_REASON,
   AVATAR_STATUS,
@@ -46,21 +34,25 @@ import {
   type AvatarStatus,
 } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ResetIcon } from "../../face/glyphs.js";
+import { WingFace } from "../../face/wing-face.js";
+import { BUTTON_SHAPE, BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
+import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
+import { ThinkingDots } from "../thinking-dots/thinking-dots.js";
+import { VideoToggle } from "./call-controls.js";
 
 /** What the tile says, for a reader and on screen. */
 export const CALL_VIDEO_LABEL = {
   TILE: "Video call",
   CONNECTING: "Connecting video",
   ENDED: "Video ended",
-  VIDEO_OFF: "Turn video off",
-  VIDEO_ON: "Turn video on",
   RESTART: "Restart video",
 } as const;
 
 /**
  * Why the avatar went down, in the words the tile says beside "Video ended":
- * what happened, as {@link VOICE_FAILURE_WORDS} says a failure, with no
- * remedy of its own, since Restart video stands beside it.
+ * what happened, as a voice failure is said, with no remedy of its own,
+ * since Restart video stands beside it.
  */
 export const AVATAR_END_WORDS = {
   [AVATAR_END_REASON.USER]: "You turned video off.",
@@ -70,6 +62,18 @@ export const AVATAR_END_WORDS = {
   [AVATAR_END_REASON.ERROR]: "The video session failed.",
   [AVATAR_END_REASON.CALL_ENDED]: "The call ended.",
 } as const satisfies Record<AvatarEndReason, string>;
+
+/**
+ * How the tile fits where it stands: a card's width at 16:9, its picture
+ * whole over a blurred fill; or a frame its owner sizes at the picture's
+ * own aspect, which the picture fills.
+ */
+export const CALL_VIDEO_FIT = {
+  CARD: "card",
+  PICTURE: "picture",
+} as const;
+
+export type CallVideoFit = (typeof CALL_VIDEO_FIT)[keyof typeof CALL_VIDEO_FIT];
 
 /** Plays one track on the element it is handed, for as long as the track stands. */
 function useTrack(
@@ -143,10 +147,10 @@ function AvatarVideo({
   const drawn = useFirstFrame(video);
   return (
     <>
-      <video ref={video} className="call-video-frame" autoPlay muted playsInline />
+      <video ref={video} className="luke-call-video-frame" autoPlay muted playsInline />
       <video
         ref={fill}
-        className="call-video-fill"
+        className="luke-call-video-fill"
         aria-hidden="true"
         tabIndex={-1}
         autoPlay
@@ -168,8 +172,8 @@ function AvatarStill({
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="call-video-still">
-      <span className="call-video-face" aria-hidden="true">
+    <div className="luke-call-video-still">
+      <span className="luke-call-video-face" aria-hidden="true">
         <WingFace
           motion={waiting ? FACE_MOTION.MONITORING : undefined}
           repeat={waiting}
@@ -185,7 +189,7 @@ function AvatarStill({
 /** The block standing where the avatar's picture will, the whole tile under the wait's words. */
 function AvatarGroundSkeleton(): React.JSX.Element {
   return (
-    <span className="call-video-ground-skeleton">
+    <span className="luke-call-video-ground-skeleton">
       <Skeleton shape={SKELETON_SHAPE.BLOCK} />
     </span>
   );
@@ -200,15 +204,57 @@ function AvatarGroundSkeleton(): React.JSX.Element {
  */
 function AvatarWaiting({ gone = false }: { gone?: boolean }): React.JSX.Element {
   return (
-    <div className="call-video-waiting" data-gone={String(gone)} aria-hidden={gone || undefined}>
+    <div
+      className="luke-call-video-waiting"
+      data-gone={String(gone)}
+      aria-hidden={gone || undefined}
+    >
       <AvatarGroundSkeleton />
       <AvatarStill waiting>
-        <span className="call-video-note" role={gone ? undefined : "status"}>
+        <span className="luke-call-video-note" role={gone ? undefined : "status"}>
           <ThinkingDots />
-          <span className="call-video-note-words">{CALL_VIDEO_LABEL.CONNECTING}</span>
+          <span className="luke-call-video-note-words">{CALL_VIDEO_LABEL.CONNECTING}</span>
         </span>
       </AvatarStill>
     </div>
+  );
+}
+
+/** Video ended, why, and Restart video, over Luke's still face. */
+function AvatarEnded({
+  endReason,
+  onRestart,
+}: {
+  endReason: AvatarEndReason | undefined;
+  onRestart: () => void;
+}): React.JSX.Element {
+  // Note that both restarts are drawn and the tile's width shows one
+  // (call.css), because the room is the tile's container's to measure.
+  return (
+    <AvatarStill>
+      <span className="luke-call-video-note">
+        <span className="luke-call-video-note-words">{CALL_VIDEO_LABEL.ENDED}</span>
+      </span>
+      {endReason === undefined ? null : (
+        <span className="luke-call-video-note-reason luke-call-video-note-words">
+          {AVATAR_END_WORDS[endReason]}
+        </span>
+      )}
+      <span className="luke-call-video-restart" data-room="wide">
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onRestart}>
+          {CALL_VIDEO_LABEL.RESTART}
+        </Button>
+      </span>
+      <span className="luke-call-video-restart" data-room="narrow" title={CALL_VIDEO_LABEL.RESTART}>
+        <IconButton
+          icon={<ResetIcon />}
+          label={CALL_VIDEO_LABEL.RESTART}
+          variant={BUTTON_VARIANT.OUTLINE}
+          shape={BUTTON_SHAPE.ROUND}
+          onClick={onRestart}
+        />
+      </span>
+    </AvatarStill>
   );
 }
 
@@ -226,51 +272,22 @@ function TileGround({
   onRestart: () => void;
   onAspect: ((aspect: number) => void) | undefined;
 }): React.JSX.Element {
-  if (status === AVATAR_STATUS.LIVE) {
-    // Note that the video is keyed by its track, because a fresh avatar
-    // (Restart video, Video on) publishes a fresh track whose first frame
-    // the tile waits on again.
-    return video === undefined ? (
-      <AvatarStill />
-    ) : (
-      <AvatarVideo key={video.id} track={video} onAspect={onAspect} />
-    );
-  }
   if (status === AVATAR_STATUS.ENDED) {
-    // Note that both restarts are drawn and the tile's width shows one
-    // (call.css), because the room is the tile's container's to measure.
-    return (
-      <AvatarStill>
-        <span className="call-video-note">
-          <span className="call-video-note-words">{CALL_VIDEO_LABEL.ENDED}</span>
-        </span>
-        {endReason === undefined ? null : (
-          <span className="call-video-note-reason call-video-note-words">
-            {AVATAR_END_WORDS[endReason]}
-          </span>
-        )}
-        <span className="call-video-restart" data-room="wide">
-          <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onRestart}>
-            {CALL_VIDEO_LABEL.RESTART}
-          </Button>
-        </span>
-        <span className="call-video-restart" data-room="narrow" title={CALL_VIDEO_LABEL.RESTART}>
-          <IconButton
-            icon={<ResetIcon />}
-            label={CALL_VIDEO_LABEL.RESTART}
-            variant={BUTTON_VARIANT.OUTLINE}
-            shape={BUTTON_SHAPE.ROUND}
-            onClick={onRestart}
-          />
-        </span>
-      </AvatarStill>
-    );
+    return <AvatarEnded endReason={endReason} onRestart={onRestart} />;
   }
-  return <AvatarWaiting />;
+  if (status !== AVATAR_STATUS.LIVE) return <AvatarWaiting />;
+  // Note that the video is keyed by its track, because a fresh avatar
+  // (Restart video, Video on) publishes a fresh track whose first frame
+  // the tile waits on again.
+  return video === undefined ? (
+    <AvatarStill />
+  ) : (
+    <AvatarVideo key={video.id} track={video} onAspect={onAspect} />
+  );
 }
 
 /**
- * The avatar's voice, on an element drawn for as long as the panel is, so
+ * The avatar's voice, on an element drawn for as long as its owner is, so
  * no change of tab or of the tile's state cuts it, and muted while the
  * developer's speaker toggle is, as the voice window's own element is.
  */
@@ -303,45 +320,19 @@ export function AvatarVoice({
 }
 
 /**
- * Video off or Video on: one button that says which the press will do,
- * named on hover by the system's own hint, since the floating window is too
- * small to hold a tooltip. It is round wherever it stands, as a call's own
- * controls are, so the toggle keeps its shape as it flips; over the tile
- * the disc is the round ground itself, never a square inside a circle.
- */
-export function VideoToggle({
-  on,
-  onSetVideo,
-}: {
-  on: boolean;
-  onSetVideo: (on: boolean) => void;
-}): React.JSX.Element {
-  const label = on ? CALL_VIDEO_LABEL.VIDEO_OFF : CALL_VIDEO_LABEL.VIDEO_ON;
-  return (
-    <span className="call-video-toggle" title={label}>
-      <IconButton
-        icon={on ? <VideoOffIcon /> : <VideoIcon />}
-        label={label}
-        shape={BUTTON_SHAPE.ROUND}
-        onClick={() => onSetVideo(!on)}
-      />
-    </span>
-  );
-}
-
-/**
  * Luke's avatar while it stands or has just ended: the tile, and nothing
  * where the status is `undefined` or video is off, since the call's own
- * controls carry Video on wherever the tile stands (the call card's head,
- * an agent's composer). Where `toggles`, as on the call card, its own Video
- * off stands in its corner; an agent's tab offers it from the composer
- * instead. Where `onAspect` is handed, it is told the picture's own
- * aspect, which an agent's tab draws the tile at (`AgentCallVideo`).
+ * controls carry Video on wherever the tile stands. Where `toggles`, as on
+ * the call card, its own Video off stands in its corner; an agent's tab
+ * offers it from the composer instead. Where `onAspect` is handed, it is
+ * told the picture's own aspect, which an owner drawing the tile at
+ * `CALL_VIDEO_FIT.PICTURE` sizes its frame by.
  */
 export function CallVideoTile({
   video,
   status,
   endReason,
+  fit,
   onSetVideo,
   toggles = true,
   onAspect,
@@ -350,7 +341,8 @@ export function CallVideoTile({
   status: AvatarStatus | undefined;
   /** Why the avatar ended, said beside "Video ended" while the status is `ENDED`. */
   endReason?: AvatarEndReason | undefined;
-  /** Asks main to put the avatar up, a fresh session, or take it down with the developer's own reason. */
+  fit: CallVideoFit;
+  /** Asks to put the avatar up, a fresh session, or take it down with the developer's own reason. */
   onSetVideo: (on: boolean) => void;
   /** Whether the tile offers its own Video off; the call card's does, an agent's tab's does not. */
   toggles?: boolean;
@@ -359,7 +351,12 @@ export function CallVideoTile({
 }): React.JSX.Element | null {
   if (status === undefined || status === AVATAR_STATUS.OFF) return null;
   return (
-    <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
+    <section
+      className="luke-call-video-tile"
+      aria-label={CALL_VIDEO_LABEL.TILE}
+      data-status={status}
+      data-fit={fit}
+    >
       <TileGround
         status={status}
         video={video}
@@ -368,7 +365,7 @@ export function CallVideoTile({
         onAspect={onAspect}
       />
       {toggles ? (
-        <div className="call-video-controls">
+        <div className="luke-call-video-controls">
           <VideoToggle on onSetVideo={onSetVideo} />
         </div>
       ) : null}

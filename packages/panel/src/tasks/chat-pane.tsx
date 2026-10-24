@@ -24,8 +24,8 @@ import {
   type DialogQuestion,
   EmptyState,
   FailureNote,
-  ONE_LINE_ELEMENT,
   OneLine,
+  PaneBar,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -86,7 +86,7 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
-import { ChannelName, channelTitle } from "./chat-channel-name.js";
+import { ChannelGlyph, ChannelName, channelTitle } from "./chat-channel-name.js";
 import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
 import { useChatMentions } from "./chat-mention-source.js";
 import {
@@ -1099,40 +1099,41 @@ function ForYouWhere({
   );
 }
 
-/** The head over a place, a page's toolbar: the way back where it stands alone, its name as the toolbar's title, what it says beside that, and its menu. */
+/** The head over a place, a `PaneBar`: the way back where it stands alone and a task's glyph as its mark, its name as the title, what it says beside that, and its menu. */
 function PlaceHead({
   title,
-  name,
+  channel,
   meta,
   lead,
   actions,
 }: {
-  /** The place's name in words, which the title is measured by. */
+  /** The place's name in words. */
   title: string;
-  /** The place's name as drawn, a task's glyph before it. */
-  name: React.ReactNode;
+  /** The channel the place shows, whose task's glyph marks it; none on For you. */
+  channel: ChatChannel | undefined;
   meta: string | undefined;
   lead: React.ReactNode;
   /** The place's own presses at the head's end, a channel's menu. */
   actions?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <header className="desktop-toolbar chat-head">
-      {lead}
-      <div className="desktop-toolbar-heading">
-        <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={title}>
-          {name}
-        </OneLine>
-        {meta === undefined ? null : (
-          <span className="chat-head-meta">
-            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
-              {meta}
-            </Text>
-          </span>
-        )}
-      </div>
-      {actions === undefined ? null : <div className="desktop-toolbar-actions">{actions}</div>}
-    </header>
+    <PaneBar
+      mark={
+        <>
+          {lead}
+          {channel === undefined ? null : <ChannelGlyph channel={channel} />}
+        </>
+      }
+      title={title}
+      detail={
+        meta === undefined ? undefined : (
+          <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
+            {meta}
+          </Text>
+        )
+      }
+      actions={actions}
+    />
   );
 }
 
@@ -1329,7 +1330,7 @@ function PlaceView({
         aria-label="For you"
         hidden={hidden}
       >
-        <PlaceHead title={FOR_YOU_TITLE} name={FOR_YOU_TITLE} meta={undefined} lead={lead} />
+        <PlaceHead title={FOR_YOU_TITLE} channel={undefined} meta={undefined} lead={lead} />
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NEEDS_YOU.NONE}</EmptyState>
         ) : (
@@ -1366,7 +1367,7 @@ function PlaceView({
     <section ref={section} className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
       <PlaceHead
         title={title}
-        name={<ChannelName chat={chat} names={names} channel={channel} />}
+        channel={channel}
         meta={channelMeta(chat, names, channel)}
         lead={lead}
         actions={channelActions?.(channel)}

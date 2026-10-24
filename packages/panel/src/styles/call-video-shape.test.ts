@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CALL_VIDEO_FIT, type CallVideoFit } from "@luke/ui";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
@@ -15,7 +16,7 @@ import { layContainersAt } from "../testing/container-width.js";
  * otherwise, which grew the tile square around the video, so that least
  * height is zero. jsdom lays nothing out, so the sheets are laid
  * (`testing/container-width.ts`) and the tile is built in the markup
- * `call-video-tile.tsx` draws, on each surface it stands on.
+ * `@luke/ui`'s `CallVideoTile` draws, at the fit each surface hands it.
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -26,15 +27,16 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The tile with live video, inside the parent given, answering the tile and its frame. */
-function liveTile(parent: HTMLElement) {
+/** The tile with live video at `fit`, inside the parent given, answering the tile and its frame. */
+function liveTile(parent: HTMLElement, fit: CallVideoFit) {
   const tile = parent.appendChild(document.createElement("section"));
-  tile.className = "call-video-tile";
+  tile.className = "luke-call-video-tile";
   tile.dataset.status = "live";
+  tile.dataset.fit = fit;
   const frame = tile.appendChild(document.createElement("video"));
-  frame.className = "call-video-frame";
+  frame.className = "luke-call-video-frame";
   const fill = tile.appendChild(document.createElement("video"));
-  fill.className = "call-video-fill";
+  fill.className = "luke-call-video-fill";
   return { tile, frame, fill };
 }
 
@@ -45,7 +47,7 @@ function cardTile() {
   const card = document.body.appendChild(document.createElement("section"));
   card.className = "call-card";
   card.dataset.surface = "sidebar";
-  return liveTile(card);
+  return liveTile(card, CALL_VIDEO_FIT.CARD);
 }
 
 test("the card's tile takes no least height from the square stream inside it", () => {
@@ -81,7 +83,7 @@ function videoRoom() {
   room.className = "agent-call-video";
   const frame = room.appendChild(document.createElement("div"));
   frame.className = "agent-call-video-frame";
-  return { box: frame, ...liveTile(frame) };
+  return { box: frame, ...liveTile(frame, CALL_VIDEO_FIT.PICTURE) };
 }
 
 test("an agent's tab's video is a rectangle at its picture's own aspect, as tall as the developer left it, which the picture fills with no blurred fill beside it", () => {

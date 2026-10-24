@@ -4,6 +4,8 @@ import {
   cssCustomProperties,
   Fill,
   IconButton,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PanePin,
   ResizeEdge,
   type ResizeEdgeHandle,
@@ -266,9 +268,9 @@ export function FileTreePane({
         )}
       </search>
       {module === undefined ? (
-        <p className="file-tree-notice">
+        <NoteLine look={NOTE_LINE_LOOK.LIST}>
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
-        </p>
+        </NoteLine>
       ) : (
         <Fill className="file-tree-host" ref={host} />
       )}

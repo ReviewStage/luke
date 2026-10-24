@@ -190,7 +190,7 @@ async function mount(input: {
 
 /** The picker, while it stands: what its field asks, and its rows' names, details, whether their glyph wears the working mark, and which is chosen. */
 function picker() {
-  const dialog = document.querySelector('[role="dialog"].terminal-picker');
+  const dialog = document.querySelector('[role="dialog"]');
   if (dialog === null) return undefined;
   return {
     question: dialog.querySelector("input")?.getAttribute("placeholder"),
@@ -438,7 +438,7 @@ test("while the plan's agents are still being read, the picker says so and offer
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, []);
   assert.equal(
-    document.querySelector(".terminal-picker .luke-note-line")?.textContent,
+    document.querySelector('[role="dialog"] .luke-note-line')?.textContent,
     "Reading the task’s agents…",
   );
   assert.deepEqual(task.shown, []);
@@ -453,7 +453,7 @@ const FAILED = agent(
 test("the picker marks a failed agent's row as its tab is marked, and no other", async () => {
   const task = await mount({ agents: [WORKING, FAILED] });
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  const marked = [...document.querySelectorAll('.terminal-picker [role="option"]')].map(
+  const marked = [...document.querySelectorAll('[role="dialog"] [role="option"]')].map(
     (row) => row.querySelector('[role="img"][aria-label="Failed"]') !== null,
   );
   assert.deepEqual(marked, [false, true]);
@@ -462,7 +462,7 @@ test("the picker marks a failed agent's row as its tab is marked, and no other",
 test("a row at rest hangs its agent's card beside it, naming the agent", async () => {
   const task = await mount({ agents: [WORKING, DONE] });
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  const row = [...document.querySelectorAll('.terminal-picker [role="option"]')].at(-1);
+  const row = [...document.querySelectorAll('[role="dialog"] [role="option"]')].at(-1);
   assert.ok(row, "a row");
   restOn(row);
   await settle();

@@ -12,6 +12,7 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
+import { modEnterSends } from "../enter-sends.js";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import {
   type EditorSpan,
@@ -459,7 +460,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
           onFinish(caretSection(editor), FINISH.ESCAPE);
           return true;
         }
-        if (event.key === "Enter" && event.metaKey) {
+        if (modEnterSends(event)) {
           onFinish(caretSection(editor), FINISH.SUBMIT);
           return true;
         }

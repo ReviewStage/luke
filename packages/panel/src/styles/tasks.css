@@ -2885,6 +2885,12 @@
   padding: var(--luke-space-6) var(--luke-control-inset);
 }
 
+/* A foot inside the frame (`reply-form.tsx`) reaches the frame's own edge
+   rather than the words' inset, as it does in every other frame. */
+.comment-editor-frame > .luke-composer-foot {
+  margin-inline: calc(-1 * var(--luke-control-inset));
+}
+
 .comment-editor-frame:has(> .comment-editor-head) {
   padding-inline-end: calc(var(--luke-control-height) + var(--luke-space-4));
 }
@@ -3733,18 +3739,6 @@
 .pull-request-thread-actions-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
-}
-
-.pull-request-thread-reply {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-}
-
-.pull-request-thread-reply-foot {
-  display: flex;
   justify-content: flex-end;
   gap: var(--luke-control-gap);
 }
