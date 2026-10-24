@@ -8,9 +8,10 @@ import { MessageActions } from "./message.js";
 import { MESSAGE_LINE_ALIGN, MessageLine } from "./message-line.js";
 
 /**
- * message-line.test.ts -- the line under a message reads who sent it, when,
- * then its actions, whichever of them the message has; a message with none
- * has no line, and the time is a call's day and clock.
+ * message-line.test.ts -- the line under a message keeps who sent it and when
+ * at its column's edge and its actions inside them, whichever of them the
+ * message has; a message with none has no line, and the time is a call's day
+ * and clock.
  */
 
 /** Oct 14, 2026, 3:42 PM, on the machine's own clock. */
@@ -27,14 +28,22 @@ function drawn(props: Parameters<typeof MessageLine>[0]): HTMLElement | null {
 
 const ACTIONS = createElement(MessageActions, null, "Copy");
 
-test("a line reads who sent it, then when, then its actions", () => {
+test("a sent message's line reads its actions, then who sent it, then when, so the time ends at the right", () => {
   const line = drawn({ sender: "Ada", at: AT, actions: ACTIONS });
+  assert.deepEqual(
+    [...(line?.children ?? [])].map((part) => part.className),
+    ["luke-message-actions", "luke-message-line-sender", "luke-message-line-time"],
+  );
+  assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Ada");
+  assert.match(line?.querySelector(".luke-message-line-time")?.textContent ?? "", /·.*3:42/u);
+});
+
+test("a received message's line reads who sent it, then when, then its actions", () => {
+  const line = drawn({ sender: "Ada", at: AT, actions: ACTIONS, align: MESSAGE_LINE_ALIGN.START });
   assert.deepEqual(
     [...(line?.children ?? [])].map((part) => part.className),
     ["luke-message-line-sender", "luke-message-line-time", "luke-message-actions"],
   );
-  assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Ada");
-  assert.match(line?.querySelector(".luke-message-line-time")?.textContent ?? "", /·.*3:42/u);
 });
 
 test("a message from the reader names no one, so its time stands without a dot before it", () => {

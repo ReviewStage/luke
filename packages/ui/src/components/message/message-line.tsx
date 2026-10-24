@@ -1,12 +1,16 @@
 /**
- * message-line.tsx -- the line under a message: who sent it, when, then its actions, in that order wherever a message is read.
+ * message-line.tsx -- the line under a message: who sent it and when, at the edge of the column the message keeps to, and its actions on the side toward the middle.
  *
  * An agent's transcript and a chat notice both end a message on this line,
  * so the name, the time and the buttons never trade places from one
  * message to the next. The time is `Time`'s day and clock, a call's
  * words, after a dot where someone is named; the actions are a
  * `MessageActions` bar, hidden until the pointer rests on the message
- * (`MessageFrame`). A line with nothing to say draws nothing.
+ * (`MessageFrame`). Note that the actions stand inside the name and the
+ * time, before them on a sent message's line and after them on a received
+ * one's, because a bar that shows only on hover would otherwise leave a
+ * gap at the column's edge at rest. A line with nothing to say draws
+ * nothing.
  */
 
 import type { ReactNode } from "react";
@@ -25,7 +29,7 @@ function drawsSomething(node: ReactNode): boolean {
   return node !== undefined && node !== null && typeof node !== "boolean";
 }
 
-/** The line under a message: `sender`, `at`, and `actions`, each left out where the message has none. */
+/** The line under a message: `sender`, `at`, and `actions`, each left out where the message has none, the actions on the side away from `align`'s edge. */
 export function MessageLine({
   sender,
   at,
@@ -45,8 +49,10 @@ export function MessageLine({
 }): React.JSX.Element | null {
   const named = drawsSomething(sender);
   if (!named && at === undefined && !drawsSomething(actions)) return null;
+  const actionsFirst = align === MESSAGE_LINE_ALIGN.END;
   return (
     <div className="luke-message-line" data-align={align} data-wrap={wrap ? "true" : undefined}>
+      {actionsFirst ? actions : null}
       {named ? <span className="luke-message-line-sender">{sender}</span> : null}
       {at === undefined ? null : (
         <span className="luke-message-line-time">
@@ -54,7 +60,7 @@ export function MessageLine({
           <Time at={at} look={TIME_LOOK.DAY} />
         </span>
       )}
-      {actions}
+      {actionsFirst ? null : actions}
     </div>
   );
 }
