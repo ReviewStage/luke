@@ -39,8 +39,7 @@ export type CalendarPlace = (typeof CALENDAR_PLACE)[keyof typeof CALENDAR_PLACE]
 export const CALENDAR = "inline-flex flex-col gap-luke-8";
 
 /** The caption: the month's name at the start, its steps at the end. */
-export const CALENDAR_CAPTION =
-  "flex items-center justify-between gap-control-gap ps-luke-6";
+export const CALENDAR_CAPTION = "flex items-center justify-between gap-control-gap ps-luke-6";
 
 /** The month's name. */
 export const CALENDAR_CAPTION_LABEL = "font-sans text-label font-semibold text-foreground";
