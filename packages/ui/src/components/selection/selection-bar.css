@@ -1,6 +1,7 @@
 /* selection-bar.css -- SelectionBar: one line over a list while rows of it
    are chosen, the count leading it in the label's type, the acts after it,
-   and Clear at the end; a control's gap between each. */
+   and Clear at the end; a control's gap between each. And SelectionRegion,
+   which draws no box of its own. */
 
 @layer components {
   .luke-selection-bar {
@@ -33,5 +34,11 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--luke-control-gap);
+  }
+
+  /* The region stands its rows' lists as they were laid out, so a grid of
+     groups keeps its columns across it. */
+  .luke-selection-region {
+    display: contents;
   }
 }

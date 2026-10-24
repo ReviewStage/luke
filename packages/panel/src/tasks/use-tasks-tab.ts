@@ -27,6 +27,7 @@ import {
   type CodeRef,
   type Task,
   type TaskStanding,
+  type TaskStatus,
   type TaskSummary,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
@@ -114,7 +115,6 @@ import {
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
-  type SettledStatus,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
@@ -155,7 +155,7 @@ import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-span
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { useStandingCall, voiceLostNow, voiceViewNow } from "../use-voice-view.js";
 import type { AgentCallPlace, AgentCallPress } from "./agent-call.js";
@@ -892,12 +892,13 @@ export interface TasksControl {
    */
   onMarkTask: (taskId: string, mark: TaskMark) => void;
   /**
-   * Sets one task or several at Done or Canceled, as Mark done, Cancel task,
-   * and a group's Mark tasks done ask: each drawn there at once, and one
-   * toast for them all once the service answered, whose Undo puts back the
-   * status each stood at. A task already there is left as it stands.
+   * Sets one task or several at a status, as Mark done, Cancel task, a
+   * group's Mark tasks done, and the Tasks page's selection ask: each drawn
+   * there at once, and one toast for them all once the service answered,
+   * naming how many it refused, whose Undo puts back the status each stood
+   * at. A task already there is left as it stands.
    */
-  onSettleTasks: (taskIds: readonly string[], status: SettledStatus) => void;
+  onSettleTasks: (taskIds: readonly string[], status: TaskStatus) => void;
   /** The repositories the account pinned in the sidebar, newest pinned first, whose groups stand above the rest. */
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
@@ -2337,11 +2338,11 @@ export function useTasksTab(input: {
     });
   };
 
-  // Tasks settled by one press answer with one toast rather than one each,
-  // so its Undo puts back the status of every task the service kept, and
-  // says so only where the service refuses that too. The open task stays
-  // open, since a task done or canceled is still read and worked on.
-  const settleTasks = (taskIds: readonly string[], status: SettledStatus) => {
+  // Tasks set at a status by one press answer with one toast rather than
+  // one each, so its Undo puts back the status of every task the service
+  // kept, and says so only where the service refuses that too. The open
+  // task stays open, since a task done or canceled is still read and worked on.
+  const settleTasks = (taskIds: readonly string[], status: TaskStatus) => {
     if (fixture !== undefined) return;
     const { asked, undo } = settleChanges(standingTasksOf(taskIds), status);
     if (asked.length === 0) return;
@@ -2357,29 +2358,25 @@ export function useTasksTab(input: {
         });
         return;
       }
-      toast({
-        words: settledNote(status, landed.length, refused),
-        tone: STATUS_TONE.COMPLETE,
-        action: {
-          label: UNDO_LABEL,
-          onPress: () =>
-            restoreNow.current(
-              undo.filter(
-                ({ taskId }) =>
-                  landed.includes(taskId) &&
-                  statusChoices.current.get(taskId) === choices.get(taskId),
-              ),
-              status,
+      toast(
+        undoToast(settledNote(status, landed.length, refused), () =>
+          restoreNow.current(
+            undo.filter(
+              ({ taskId }) =>
+                landed.includes(taskId) &&
+                statusChoices.current.get(taskId) === choices.get(taskId),
             ),
-        },
-      });
+            status,
+          ),
+        ),
+      );
     });
   };
   // Note that an Undo puts back only the tasks given no status since its
   // press, here or still in flight, and still at the status it undoes, so a
   // status chosen since, on the Board, the task's chip, or another Mac,
   // stands.
-  const restoreStatuses = (changes: readonly StatusChange[], settled: SettledStatus) => {
+  const restoreStatuses = (changes: readonly StatusChange[], settled: TaskStatus) => {
     const due = undoStillDue(
       changes,
       settled,

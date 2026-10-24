@@ -5729,6 +5729,22 @@ ul.actor-stack {
   grid-column: 1 / -1;
 }
 
+/* The selection bar floats at the foot of the page while rows are chosen,
+   centred, over the rows that scroll under it; only the bar takes the
+   pointer, so the rows beside it stay pressable. */
+.tasks-list-selection {
+  position: sticky;
+  z-index: 4;
+  bottom: var(--luke-space-16);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.tasks-list-selection > * {
+  pointer-events: auto;
+}
+
 .tasks-list-group,
 .tasks-list-rows {
   display: grid;
