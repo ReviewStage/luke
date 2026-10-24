@@ -11,6 +11,7 @@ import {
   leaveGate,
   leaveQuestion,
   QUIT_STAGE,
+  reloadGate,
   unsavedWorkHolders,
 } from "./quit.js";
 
@@ -204,4 +205,43 @@ it("the updater's own quit, behind the teardown it runs first, is never held, th
   assert.equal(quit.stage(), QUIT_STAGE.TORN_DOWN);
   assert.equal(quit.held(), false);
   assert.deepEqual(asked, []);
+});
+
+/** A reload over two panels, each telling of its own unsaved work, with every question asked kept for the test to answer. */
+function composedReload() {
+  const unsavedWork = unsavedWorkHolders<string>(() => false);
+  const asked: (Asked & { readonly page: string })[] = [];
+  const askBeforeReload = reloadGate<string>({
+    holds: unsavedWork.holds,
+    ask: (page, question) =>
+      new Promise<boolean>((answer) => {
+        asked.push({ page, question, answer });
+      }),
+  });
+  return { askBeforeReload, asked, tell: unsavedWork.tell };
+}
+
+it("a reload asks first, on that window, only while its own page holds unsaved words", async () => {
+  const { askBeforeReload, asked, tell } = composedReload();
+
+  assert.equal(await askBeforeReload("left"), true);
+  tell("right", true);
+  assert.equal(await askBeforeReload("left"), true);
+  assert.equal(asked.length, 0);
+
+  const reload = askBeforeReload("right");
+  assert.equal(asked.length, 1);
+  const [{ page, question, answer }] = asked as [(typeof asked)[number]];
+  assert.equal(page, "right");
+  assert.equal(question.message, "Reload this window?");
+  assert.equal(question.detail, "Edits that haven't saved will be lost.");
+  assert.equal(question.buttons[LEAVE_ANSWER], "Reload");
+  assert.equal(returnPresses(question), "Cancel");
+
+  // A second ⌘R while the sheet stands reloads nothing and asks nothing more.
+  assert.equal(await askBeforeReload("right"), false);
+  assert.equal(asked.length, 1);
+
+  answer(false);
+  assert.equal(await reload, false);
 });

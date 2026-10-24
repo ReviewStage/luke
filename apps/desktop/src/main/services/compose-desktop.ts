@@ -25,6 +25,7 @@ import {
   type Leave,
   leaveGate,
   leaveQuestion,
+  reloadGate,
   type UnsavedWorkHolders,
   unsavedWorkHolders,
 } from "@luke/host/quit";
@@ -33,7 +34,7 @@ import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
-import { net, type WebContents } from "electron";
+import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
@@ -267,6 +268,23 @@ export function composeDesktop(
       const askFirst = leaveGate({
         atStake,
         ask: (question) => askBeforeLeaving(windows.panels.primaryPanel(), question),
+      });
+      // ⌘R reloads the window chosen over, asking first, as a sheet on that
+      // window, while its page holds edits that haven't saved.
+      const askBeforeReload = reloadGate<BrowserWindow>({
+        holds: (window) => unsavedWork.holds(window.webContents),
+        ask: askBeforeLeaving,
+      });
+      config.showMenuBar({
+        reload: {
+          // Note that only a browser window has a page to reload.
+          onReload: (window) => {
+            if (!(window instanceof BrowserWindow)) return;
+            void askBeforeReload(window).then((reload) => {
+              if (reload && !window.isDestroyed()) window.webContents.reload();
+            });
+          },
+        },
       });
       quit.holdWhile(
         confirmingHold({

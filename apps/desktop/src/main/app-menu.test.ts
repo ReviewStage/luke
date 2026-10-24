@@ -12,7 +12,13 @@ import {
 import { experimentsOn } from "@luke/settings/testing";
 import type { BaseWindow, KeyboardEvent, MenuItem, MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
-import { appMenuTemplate, menuBarDrawer, type PanelMenu, UPDATE_MENU_ACT } from "./app-menu";
+import {
+  appMenuTemplate,
+  menuBarDrawer,
+  type PanelMenu,
+  type ReloadMenu,
+  UPDATE_MENU_ACT,
+} from "./app-menu";
 
 /**
  * The menu bar as a gated feature's experiment decides it: an item whose
@@ -215,15 +221,6 @@ describe("the developer tools", () => {
   });
 });
 
-describe("Reload", () => {
-  test("⌘R reloads the window chosen over, through View's system reload item", () => {
-    const view = appMenuTemplate("Luke").find((item) => item.label === "View");
-    const reload = Array.isArray(view?.submenu) ? view.submenu[0] : undefined;
-    assert.equal(reload?.role, "reload");
-    assert.equal(reload?.accelerator, "Command+R");
-  });
-});
-
 /** A window of Luke's, as the menu is handed the one it was chosen over. */
 function aWindow(): BaseWindow {
   return {} as BaseWindow;
@@ -258,5 +255,38 @@ describe("New Task", () => {
   test("its key over the panel is left to the panel's own keymap", () => {
     const panelWindow = aWindow();
     assert.deepEqual(pressNewTask(panelWindow, panelWindow), []);
+  });
+});
+
+/** View's first item, as the menu bar draws it once main has (or has not) told it of the reload. */
+function viewReload(reload?: ReloadMenu): MenuItemConstructorOptions | undefined {
+  let drawn: MenuItemConstructorOptions[] = [];
+  const show = menuBarDrawer({ appName: "Luke", packaged: true }, (template) => {
+    drawn = template;
+  });
+  show(reload === undefined ? undefined : { reload });
+  const view = drawn.find((item) => item.label === "View");
+  return Array.isArray(view?.submenu) ? view.submenu[0] : undefined;
+}
+
+describe("Reload", () => {
+  test("⌘R hands the window chosen over to main, which reloads it once nothing would be lost", () => {
+    const reloaded: BaseWindow[] = [];
+    const item = viewReload({ onReload: (window) => reloaded.push(window) });
+    assert.equal(item?.label, "Reload");
+    assert.equal(item?.accelerator, "Command+R");
+    if (!item?.click) return assert.fail("View has no Reload item");
+
+    const window = aWindow();
+    item.click({} as MenuItem, window, { triggeredByAccelerator: true } as KeyboardEvent);
+    item.click({} as MenuItem, undefined, { triggeredByAccelerator: true } as KeyboardEvent);
+
+    assert.deepEqual(reloaded, [window]);
+  });
+
+  test("before main is told, ⌘R is the system's own reload, while no page has loaded to hold edits", () => {
+    const item = viewReload();
+    assert.equal(item?.role, "reload");
+    assert.equal(item?.accelerator, "Command+R");
   });
 });
