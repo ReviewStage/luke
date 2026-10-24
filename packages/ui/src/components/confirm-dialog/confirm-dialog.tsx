@@ -1,5 +1,6 @@
 import type { ActionResult } from "@luke/wire";
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { isComposingKey } from "../../composing-key.js";
 import {
   CONFIRM_STAGE,
@@ -11,12 +12,14 @@ import {
 } from "../../confirm-state.js";
 import { DIALOG_ROLE, Dialog, type RestoreTo } from "../dialog/dialog.js";
 import { DIALOG_TONE, DialogActions, type DialogTone } from "../dialog/dialog-actions.js";
+import { DIALOG_ANSWERS, useDialogFoot } from "../dialog/dialog-foot.js";
 import { ErrorLine } from "../error-line/error-line.js";
 import { FormField } from "../form-field/form-field.js";
+import { TEXT_VARIANT, Text } from "../text/text.js";
 import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js";
 
 /**
- * confirm-dialog.tsx -- the question before an act that costs something, as a modal over the window: what goes, then Cancel and the act.
+ * confirm-dialog.tsx -- the question before an act that costs something, as a modal over the window or, asked inside a dialog, at that dialog's foot: what goes, then Cancel and the act.
  *
  * The window asks the way every desktop app does: it dims, a card names what
  * the act takes with it, and the two answers sit at its foot
@@ -228,6 +231,43 @@ function ConfirmCard({
   );
 }
 
+/** Where a question's answer stands, as the card or the foot that asks it draws it. */
+interface AnswerState extends ActState {
+  /** Whether the question is drawn at all: asked, running, refused, or showing its check. */
+  shown: boolean;
+  /** How many times it has been asked, so each asking draws afresh. */
+  openings: number;
+}
+
+/**
+ * Where a question's answer stands: asked, running, refused, or landed and
+ * showing its check until that has been seen.
+ *
+ * Note that an act landing is noticed in the render that sees it leave its
+ * run with no refusal, because a question put away an effect later would
+ * draw one frame with nothing there before its check.
+ */
+function useAnswerState(confirm: DialogConfirm): AnswerState {
+  const { stage, rejection } = confirm;
+  const acting = stage === CONFIRM_STAGE.ACTING;
+  const [wasStage, setWasStage] = useState(stage);
+  const [landed, setLanded] = useState(false);
+  // Whether the landed check has been seen, which puts the question away
+  // still wearing it, so it goes as it stood rather than as a question again.
+  const [seen, setSeen] = useState(false);
+  const [openings, setOpenings] = useState(0);
+  if (stage !== wasStage) {
+    setWasStage(stage);
+    setLanded(wasStage === CONFIRM_STAGE.ACTING && rejection === undefined && confirm.standing);
+    setSeen(false);
+    if (wasStage === CONFIRM_STAGE.RESTING) setOpenings((count) => count + 1);
+  }
+  if (landed && !confirm.standing) setLanded(false);
+  const shown =
+    confirm.standing && (confirmAsked(stage) || rejection !== undefined || (landed && !seen));
+  return { acting, landed, onShown: () => setSeen(true), shown, openings };
+}
+
 /**
  * The question over the window while it is asked, running, or refused, and
  * for the beat its check shows once the act lands, and nothing otherwise,
@@ -259,45 +299,119 @@ export function ConfirmDialog({
   /** What the card holds under its body: the field, where the question asks one. */
   children?: React.ReactNode;
 }): React.JSX.Element {
-  const { stage, rejection } = confirm;
-  const acting = stage === CONFIRM_STAGE.ACTING;
-  // Note that an act landing is noticed in the render that sees it leave
-  // its run with no refusal, because a card closed an effect later would
-  // draw one frame with nothing there before its check.
-  const [wasStage, setWasStage] = useState(stage);
-  const [landed, setLanded] = useState(false);
-  // Whether the landed check has been seen, which puts the card away still
-  // wearing it, so it fades as it stood rather than as a question again.
-  const [seen, setSeen] = useState(false);
-  // Each question asked anew draws a fresh card.
-  const [openings, setOpenings] = useState(0);
-  if (stage !== wasStage) {
-    setWasStage(stage);
-    setLanded(wasStage === CONFIRM_STAGE.ACTING && rejection === undefined && confirm.standing);
-    setSeen(false);
-    if (wasStage === CONFIRM_STAGE.RESTING) setOpenings((count) => count + 1);
-  }
-  if (landed && !confirm.standing) setLanded(false);
+  const answer = useAnswerState(confirm);
   // Note that an answer under way is hidden with its surface rather than
   // drawn over whatever stands in its place, because the window then
   // presents something else; the act itself finishes all the same.
-  const shown =
-    open &&
-    confirm.standing &&
-    (confirmAsked(stage) || rejection !== undefined || (landed && !seen));
-
   return (
     <ConfirmCard
-      key={openings}
-      open={shown}
+      key={answer.openings}
+      open={open && answer.shown}
       confirm={confirm}
       question={question}
       field={field}
       gate={gate}
       restoreTo={restoreTo}
-      act={{ acting, landed, onShown: () => setSeen(true) }}
+      act={answer}
     >
       {children}
     </ConfirmCard>
+  );
+}
+
+/** The question's words at the foot's start, given the room the answers leave, and its answers at the end. */
+const FOOT_QUESTION = "flex min-w-0 flex-1 items-center gap-dialog-action-gap";
+const FOOT_WORDS = "flex min-w-0 flex-1 flex-col";
+
+/**
+ * A question asked inside a dialog about something the dialog holds (a key
+ * it shows, a sign-in it keeps), drawn at that dialog's foot in place of its
+ * answers rather than as a second card over it: the question's title and
+ * what goes at the foot's start, Cancel and the act at its end, coloured by
+ * what it costs as `ConfirmDialog`'s are. It stands in the dialog's body
+ * where the control that asks it is, and draws nothing there; it must stand
+ * inside a `Dialog`.
+ *
+ * While it is asked what the dialog holds stands still and takes no press,
+ * focus is on Cancel, and Escape, a press on the dimmed window, and Cancel
+ * withdraw it, the dialog staying open; focus then goes back to whatever
+ * asked if that still stands. An answer under way stills both buttons and
+ * the dialog, one that lands wears its check until it has been seen and
+ * then hands the foot back, and one that was refused keeps the question up
+ * saying why, shaking the card, so the act can be tried again or let go.
+ */
+export function FootQuestion({
+  confirm,
+  question,
+}: {
+  confirm: DialogConfirm;
+  question: DialogQuestion;
+}): React.JSX.Element | null {
+  const foot = useDialogFoot();
+  const answer = useAnswerState(confirm);
+  const { acting, landed } = answer;
+  const settling = acting || landed;
+  const refused = confirm.rejection !== undefined && !acting;
+  const cancel = useRef<HTMLButtonElement | null>(null);
+  const titleId = useId();
+  const bodyId = useId();
+  const withdraw = (): boolean => {
+    if (settling) return false;
+    if (confirmWithdrawable(confirm.stage)) confirm.keep();
+    confirm.clear();
+    return true;
+  };
+  // Note that the dialog reads the newest withdrawal as Escape lands, so
+  // the foot is claimed again only as what the dialog holds it by changes.
+  const newestWithdraw = useRef(withdraw);
+  newestWithdraw.current = withdraw;
+  const shown = answer.shown && foot !== undefined;
+  useLayoutEffect(() => {
+    if (!shown || foot === undefined) return;
+    return foot.claim({
+      withdraw: () => newestWithdraw.current(),
+      focus: cancel,
+      busy: settling,
+      refused,
+    });
+  }, [shown, foot, settling, refused]);
+
+  if (!shown || foot?.slot == null) return null;
+  return createPortal(
+    // biome-ignore lint/a11y/useSemanticElements: a question is its words and its two answers, not a form's fields, so it is no `<fieldset>`.
+    <div
+      role="group"
+      aria-labelledby={titleId}
+      aria-describedby={question.body ? bodyId : undefined}
+      className={FOOT_QUESTION}
+    >
+      <div className={FOOT_WORDS}>
+        <Text id={titleId} variant={TEXT_VARIANT.LABEL}>
+          {question.title}
+        </Text>
+        {question.body ? (
+          <p id={bodyId} className={BODY}>
+            {question.body}
+          </p>
+        ) : null}
+        <ErrorLine>{refused ? confirm.rejection : null}</ErrorLine>
+      </div>
+      <div className={DIALOG_ANSWERS}>
+        <DialogActions
+          onCancel={withdraw}
+          cancelRef={cancel}
+          act={{
+            verb: question.verb,
+            tone: LOSS_TONE[question.loss],
+            onPress: () => confirm.run(),
+            running: question.running,
+            busy: acting,
+            landed,
+            onShown: answer.onShown,
+          }}
+        />
+      </div>
+    </div>,
+    foot.slot,
   );
 }

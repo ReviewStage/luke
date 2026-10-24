@@ -171,17 +171,35 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
   assert.ok(!document.body.innerHTML.includes(PASTED), "the page holds the token nowhere");
 });
 
-test("a saved token's Manage opens it with Remove, which asks first, then takes it away", async () => {
+test("a saved token's Manage opens it with Remove, which asks at the dialog's foot, then takes it away", async () => {
   stored = KEPT;
   await mountAndOpen();
   assert.equal(tokenField(), null);
+  const asked = () => dialog().querySelector<HTMLElement>('[role="group"]');
+
+  // Note that the press is made from Remove holding focus, as a pointer's or a key's press is.
+  act(() => {
+    button("Remove", dialog()).focus();
+    button("Remove", dialog()).click();
+  });
+  await settle();
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "no card opens over it");
+  const question = asked() ?? assert.fail("no question at the foot");
+  assert.match(question.textContent ?? "", /Remove your GitHub token\?/u);
+  assert.doesNotMatch(dialog().textContent ?? "", /Create token|Done/u, "the foot is the question");
+  assert.ok(document.activeElement === button("Cancel", question), "Cancel takes focus");
+
+  act(() => button("Cancel", question).click());
+  await settle();
+  assert.equal(asked(), null, "Cancel takes the question back");
+  assert.match(dialog().textContent ?? "", /Create token/u, "and the dialog stays");
+  assert.ok(document.activeElement === button("Remove", dialog()), "focus goes back to Remove");
 
   act(() => button("Remove", dialog()).click());
   await settle();
-  assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
-  const question =
-    document.querySelector('[role="alertdialog"]') ?? assert.fail("no confirm dialog");
-  act(() => button("Remove", question).click());
+  assert.equal(button("Remove", asked() ?? assert.fail()).dataset.variant, "danger");
+  act(() => button("Remove", asked() ?? assert.fail()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
   assert.ok(tokenField(), "the field stands again");

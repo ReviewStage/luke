@@ -14,10 +14,10 @@ import {
   BUTTON_VARIANT,
   Button,
   CONFIRM_LOSS,
-  ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
   DialogActions,
+  FootQuestion,
   GAP,
   Inline,
   JUSTIFY,
@@ -45,7 +45,7 @@ import { useAnnounceShown } from "../use-announce-shown.js";
  * github-dialog.tsx -- Settings › Profile › GitHub personal access token: the member's own classic token, added, shown, and removed.
  *
  * The dialog holds the token alone: a password field with Save, or once a token is saved its hint, login, expiry, and Remove, which asks
- * first in the confirm dialog, and at its foot Create token, which opens
+ * first at the dialog's own foot (`FootQuestion`), and at its foot Create token, which opens
  * GitHub's page for a new classic token in the browser. Every refusal and status says what to do
  * next, in a line.
  *
@@ -146,8 +146,7 @@ function SavedToken({
       >
         Remove
       </Button>
-      <ConfirmDialog
-        open
+      <FootQuestion
         confirm={removal}
         question={{
           title: "Remove your GitHub token?",

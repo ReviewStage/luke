@@ -3,8 +3,14 @@ import {
   Button,
   CONFIRM_LOSS,
   ConfirmDialog,
+  DIALOG_SIZE,
+  Dialog,
+  DialogActions,
   type DialogQuestion,
+  FootQuestion,
   Inline,
+  JUSTIFY,
+  Text,
   TextField,
   useConfirmDialog,
 } from "@luke/ui";
@@ -18,7 +24,9 @@ import { CatalogSection } from "../section";
  * again, its card shaking at the refusal and its act wearing a check as it
  * lands, one in the accent for an act that can be undone but reaches someone
  * else, a long one, one that asks for a field to be filled, and one gated on
- * the subject's name. Only an act past undoing is red.
+ * the subject's name. Only an act past undoing is red. A question asked
+ * inside a dialog about what it holds asks at that dialog's foot instead
+ * (`FootQuestion`): a key's Remove, refused the first time.
  */
 
 /** What a confirming act answers, as `useConfirmDialog` takes it, so the catalog needs nothing beyond `@luke/ui`. */
@@ -124,6 +132,69 @@ function Named(): React.JSX.Element {
   );
 }
 
+/** A dialog holding a key whose Remove asks at the dialog's own foot, refused the first time so the refusal can be seen there. */
+function KeyInADialog(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState(true);
+  const [triedOnce, setTriedOnce] = useState(false);
+  const removal = useConfirmDialog({ subject: key, surfaceOpen: open }, () => {
+    if (!triedOnce) {
+      setTriedOnce(true);
+      return Promise.resolve(refused("The keychain is locked. Unlock it and try again."));
+    }
+    setKey(false);
+    return Promise.resolve(ACCEPTED);
+  });
+  return (
+    <>
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        aria-haspopup="dialog"
+        onClick={() => {
+          setKey(true);
+          setTriedOnce(false);
+          setOpen(true);
+        }}
+      >
+        Manage key…
+      </Button>
+      <Dialog
+        open={open}
+        title="OpenAI"
+        size={DIALOG_SIZE.WIDE}
+        onDismiss={() => setOpen(false)}
+        actions={<DialogActions onDone={() => setOpen(false)} />}
+      >
+        {key ? (
+          <Inline justify={JUSTIFY.BETWEEN}>
+            <Text>sk-…wxyz</Text>
+            <Button
+              variant={BUTTON_VARIANT.DANGER_OUTLINE}
+              busy={removal.busy}
+              busyLabel="Removing"
+              onClick={removal.ask}
+            >
+              Remove
+            </Button>
+          </Inline>
+        ) : (
+          <Text>No key saved.</Text>
+        )}
+        <FootQuestion
+          confirm={removal}
+          question={{
+            title: "Remove your OpenAI API key?",
+            body: "Calls and dictation will be off until a key is saved again.",
+            verb: "Remove key",
+            running: "Removing",
+            loss: CONFIRM_LOSS.IRREVERSIBLE,
+          }}
+        />
+      </Dialog>
+    </>
+  );
+}
+
 function ConfirmDialogs(): React.JSX.Element {
   return (
     <CatalogSection id="confirm-dialog-states" title="Confirm dialogs">
@@ -162,6 +233,7 @@ function ConfirmDialogs(): React.JSX.Element {
             loss: CONFIRM_LOSS.IRREVERSIBLE,
           }}
         />
+        <KeyInADialog />
       </Inline>
     </CatalogSection>
   );

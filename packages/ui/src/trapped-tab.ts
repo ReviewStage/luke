@@ -12,7 +12,9 @@ import type { KeyboardEvent } from "react";
  * What Tab may land on inside the box: its enabled controls and links, and
  * anything else given a place in the Tab order. Note that one taken out of
  * that order, as a menu's rows are, is dropped by its `tabIndex` rather than
- * here, because any negative value takes it out.
+ * here, because any negative value takes it out, and one inside an inert
+ * part of the box, a dialog's body while its foot asks, by its ancestor,
+ * because the browser will not focus it.
  */
 const FOCUSABLE = [
   "a[href]",
@@ -32,7 +34,7 @@ function precedes(first: Node, second: Node): boolean {
 export function trappedTab(event: KeyboardEvent<HTMLElement>): void {
   const box = event.currentTarget;
   const controls = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (control) => control.tabIndex >= 0,
+    (control) => control.tabIndex >= 0 && control.closest("[inert]") === null,
   );
   const focused = document.activeElement;
   const at = focused instanceof HTMLElement ? controls.indexOf(focused) : -1;

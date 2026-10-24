@@ -19,19 +19,21 @@ import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
   ANNOUNCE,
+  BANNER_LOOK,
   BUTTON_TYPE,
   BUTTON_VARIANT,
+  Banner,
   Button,
   CHOICE_LOOK,
   ChoiceList,
   type ChoiceOption,
   CONFIRM_LOSS,
-  ConfirmDialog,
   DIALOG_SIZE,
   DIALOG_TONE,
   Dialog,
   DialogActions,
   ErrorState,
+  FootQuestion,
   GAP,
   IconButton,
   Inline,
@@ -74,7 +76,8 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { InfoIcon } from "@luke/ui/icons";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { HarnessMark } from "../harness-marks.js";
@@ -113,8 +116,13 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  * on; elsewhere its card says so and stands unpressable until a sign-in
  * made on the desktop is there to pick or disconnect. The first sign-in on
  * this Mac is met with OpenAI's notice that Luke uses the ChatGPT plan
- * (developers.openai.com/siwc/ui-ux-guidelines), dismissed with Got it and
- * never shown again here, kept in the renderer's own storage.
+ * (developers.openai.com/siwc/ui-ux-guidelines), drawn in its card under the
+ * sign-in, dismissed with Got it and never shown again here, kept in the
+ * renderer's own storage.
+ *
+ * What the dialog asks about a credential it holds, disconnecting a plan or
+ * removing a key, it asks at its own foot (`FootQuestion`), never in a
+ * second card over itself.
  */
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
@@ -611,8 +619,7 @@ function ClaudeTokenPanel({
           />
         </Stack>
       ) : null}
-      <ConfirmDialog
-        open
+      <FootQuestion
         confirm={removal}
         question={{
           title: "Disconnect your Claude plan?",
@@ -626,34 +633,29 @@ function ClaudeTokenPanel({
   );
 }
 
-/** OpenAI's first-sign-in notice: what using the plan means, and Got it. */
-function FirstSignInNotice({
-  open,
-  onDismiss,
-}: {
-  /** Whether the notice stands; falling, it fades out. */
-  open: boolean;
-  onDismiss: () => void;
-}): React.JSX.Element {
+/**
+ * OpenAI's first-sign-in notice, in the ChatGPT card under the sign-in it
+ * meets: what using the plan means, and Got it, which takes focus as the
+ * notice lands, as the sign-in's own button has just gone.
+ */
+function FirstSignInNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
   const gotIt = useRef<HTMLButtonElement | null>(null);
-  const bodyId = useId();
+  useEffect(() => {
+    gotIt.current?.focus({ preventScroll: true });
+  }, []);
   return (
-    <Dialog
-      open={open}
-      title={WORDS.NOTICE_TITLE}
-      describedBy={bodyId}
-      initialFocus={gotIt}
-      onDismiss={onDismiss}
+    <Banner
+      look={BANNER_LOOK.ROW}
+      glyph={<InfoIcon />}
       actions={
         <Button ref={gotIt} variant={BUTTON_VARIANT.PRIMARY} onClick={onDismiss}>
           {WORDS.GOT_IT}
         </Button>
       }
     >
-      <Text id={bodyId} tone={TEXT_TONE.MUTED}>
-        {WORDS.NOTICE_BODY}
-      </Text>
-    </Dialog>
+      <Text variant={TEXT_VARIANT.LABEL}>{WORDS.NOTICE_TITLE}</Text>
+      <Text tone={TEXT_TONE.MUTED}>{WORDS.NOTICE_BODY}</Text>
+    </Banner>
   );
 }
 
@@ -777,18 +779,17 @@ function ChatGptPanel({
           {WORDS.REVOCATION_UNCONFIRMED}
         </Text>
       ) : null}
-      <ConfirmDialog
-        open
+      {notice ? <FirstSignInNotice onDismiss={dismissNotice} /> : null}
+      <FootQuestion
         confirm={removal}
         question={{
           title: "Disconnect your ChatGPT plan?",
           body: "Codex agents will stop running on your ChatGPT plan, and he ends his sign-in with OpenAI.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
-          loss: CONFIRM_LOSS.REVERSIBLE,
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
-      <FirstSignInNotice open={notice} onDismiss={dismissNotice} />
     </>
   );
 }
@@ -941,8 +942,7 @@ function ApiKeyPanel({
           onClose={menu.close}
         />
       )}
-      <ConfirmDialog
-        open
+      <FootQuestion
         confirm={removal}
         question={{
           title: `Remove your ${name} API key?`,

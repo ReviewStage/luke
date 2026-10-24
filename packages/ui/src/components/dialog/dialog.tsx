@@ -1,10 +1,12 @@
 import type { DialogRoot } from "@base-ui/react/dialog";
 import {
   type Ref,
+  useCallback,
   useEffect,
   useId,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -15,6 +17,13 @@ import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import { trappedTab } from "../../trapped-tab.js";
 import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
+import {
+  DIALOG_ANSWERS,
+  DIALOG_FOOT,
+  type DialogFoot,
+  DialogFootContext,
+  type FootClaim,
+} from "./dialog-foot.js";
 import { useHeldFocus } from "./held-focus.js";
 
 /**
@@ -159,10 +168,6 @@ const CARD_LOOK = [
   "data-[nudge=true]:animate-dialog-nudge",
   "data-[refused=true]:animate-dialog-shake",
 ].join(" ");
-
-/** The foot: a tool of the dialog's own at its start, the answers at its end at a common width. */
-const FOOT = "flex min-w-0 shrink-0 items-center gap-dialog-action-gap mt-3";
-const ACTIONS = "ml-auto flex shrink-0 gap-dialog-action-gap [&>.luke-button]:min-w-dialog-action";
 
 /**
  * The middle: what the card holds between its head and its foot, the one part
@@ -393,6 +398,34 @@ function useInvokerFocus(
 }
 
 /**
+ * The card's foot as what it holds may claim it: the slot a question is
+ * drawn into, and the question standing there, if one is.
+ *
+ * Note that what held focus as the question was first asked is kept across
+ * the question claiming the foot again as its answer runs, so the card can
+ * hand focus back to it once the foot is let go.
+ */
+function useFootClaim(): {
+  foot: DialogFoot;
+  claimed: FootClaim | undefined;
+  asker: React.RefObject<Opener | null>;
+  setSlot: (slot: HTMLDivElement | null) => void;
+} {
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const [claimed, setClaimed] = useState<FootClaim | undefined>(undefined);
+  const asker = useRef<Opener | null>(null);
+  const claim = useCallback((next: FootClaim) => {
+    if (asker.current === null && document.activeElement instanceof HTMLElement) {
+      asker.current = { element: document.activeElement, restore: undefined };
+    }
+    setClaimed(next);
+    return () => setClaimed((standing) => (standing === next ? undefined : standing));
+  }, []);
+  const foot = useMemo(() => ({ slot, claim }), [slot, claim]);
+  return { foot, claimed, asker, setSlot };
+}
+
+/**
  * The dimmed window and the card over it, drawn in Base UI's portal over
  * `document.body` so no stacking context of the surface that opened it can
  * clip or cover it.
@@ -441,10 +474,18 @@ export function Dialog({
   useEffect(() => () => heldSaid.current(), []);
 
   const handBackFocus = useInvokerFocus(open, restoreTo, card);
+  const { foot, claimed, asker, setSlot } = useFootClaim();
+  // A question standing at the foot holds the card as the card's own answers would.
+  const still = busy || claimed?.busy === true;
   // Note that a card on its way out holds no focus of its own, which goes back to what opened it once it is gone.
-  useHeldFocus<HTMLElement>(initialFocus ?? card, open && drawn && !busy);
-  useHeldFocus(card, open && drawn && busy);
-  useRefusalShake(card, refused);
+  useHeldFocus<HTMLElement>(claimed?.focus ?? initialFocus ?? card, open && drawn && !still);
+  useHeldFocus(card, open && drawn && still);
+  // Note that this runs after the card takes focus back as the foot is let
+  // go, so what asked the question has it where it still stands.
+  useEffect(() => {
+    if (claimed === undefined) handBack(asker, card.current);
+  }, [claimed, asker]);
+  useRefusalShake(card, refused || claimed?.refused === true);
   // Note that this runs before the card's first paint, so its own entrance
   // is stood down before a frame of it is drawn.
   useLayoutEffect(() => {
@@ -456,6 +497,11 @@ export function Dialog({
   // takes. A draft's hold is the dialog's own, so the owner hears only the
   // dismissal that goes through.
   const dismiss = () => {
+    // A question at the foot is what Escape takes back, the card staying.
+    if (claimed !== undefined) {
+      if (!claimed.withdraw()) nudge(card.current);
+      return;
+    }
     if (busy) {
       nudge(card.current);
       onDismiss();
@@ -559,15 +605,21 @@ export function Dialog({
             {title}
           </Text>
         )}
-        <div data-slot="dialog-body" data-size={size} className={MIDDLE}>
-          {children}
+        <div
+          data-slot="dialog-body"
+          data-size={size}
+          className={MIDDLE}
+          inert={claimed !== undefined}
+        >
+          <DialogFootContext.Provider value={foot}>{children}</DialogFootContext.Provider>
         </div>
-        {actions === undefined && actionsStart === undefined ? null : (
-          <div className={FOOT}>
+        {claimed !== undefined || (actions === undefined && actionsStart === undefined) ? null : (
+          <div className={DIALOG_FOOT}>
             {actionsStart}
-            <div className={ACTIONS}>{actions}</div>
+            <div className={DIALOG_ANSWERS}>{actions}</div>
           </div>
         )}
+        <div ref={setSlot} className={DIALOG_FOOT} hidden={claimed === undefined} />
       </DialogContent>
     </ShadcnDialog>
   );
