@@ -687,7 +687,7 @@ test("a link to a version on a narrow stage opens with the focus on its way back
   assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
 });
 
-test("a link to a chat place on a narrow stage opened while the read is out hands the focus to its way back once the read lands", async () => {
+test("a link to a chat channel on a narrow stage opened while the read is out hands the caret to its box once the read lands", async () => {
   const chat = fixtureChat({ fixtureMode: true }, 1_000_000);
   const channel = chat?.answer.channels[0] ?? assert.fail("the fixture has a channel");
   handState(experimentsOn(EXPERIMENT.CHAT));
@@ -700,5 +700,5 @@ test("a link to a chat place on a narrow stage opened while the read is out hand
   );
   act(() => landChatRead?.());
   assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(controlName(document.activeElement), BACK_TO_CHAT, "the way back to the rail");
+  assert.ok(document.activeElement?.closest(".chat-composer"), "the channel's box");
 });

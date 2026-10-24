@@ -142,6 +142,13 @@ interface ChatComposerProps {
   readonly keywords: readonly string[];
   /** Whether it stands under a thread, a line high, rather than at a place's foot. */
   readonly compact?: boolean;
+  /**
+   * Whether a place's foot takes the caret as it first draws, unless the
+   * developer is typing elsewhere, as it does where a press, ⌘K, or a link
+   * opened its place; none where K and J stepped there. A thread's box is
+   * opened by a press, so it always takes it.
+   */
+  readonly takesCaret?: boolean;
   /** Where the box hands the chat's Reply the door that lays a quote in, answering whether it did; none where nothing replies. */
   readonly replyDoor?: RefObject<((words: string) => boolean) | undefined> | undefined;
   /** A quote to lay in once the box can take it, as a Reply that opened the box hands it, `onQuoted` told once it is in. */
@@ -368,12 +375,15 @@ function EditorChatComposer({
   mentions,
   keywords,
   compact,
+  takesCaret,
   replyDoor,
   pendingQuote,
   onSend,
   module,
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  // Note that how the place was opened is read as the box first draws, since the editor's bundle may land later.
+  const [takes] = useState(takesCaret === true);
   const room = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
   const { draft, setDraft, files, sends, empty, note, setNote, cutPaste, send } = useChatSend(
@@ -479,10 +489,9 @@ function EditorChatComposer({
             ),
             pasted,
           }}
-          // Note that a thread's box is opened by a press, so it takes the caret; a place's foot
-          // leaves it where it is, as the Inbox's box does, because K and J step the chat's places
-          // while the caret is out of the box.
-          takesFocus={false}
+          // Note that a place's foot leaves the caret where K and J stepped to it, since they step
+          // the chat's places only while the caret is out of the box.
+          takesFocus={takes}
           focus={compact === true ? true : undefined}
         >
           {picker.menu}
@@ -511,11 +520,14 @@ function PlainChatComposer({
   label,
   mentions,
   compact,
+  takesCaret,
   replyDoor,
   pendingQuote,
   onSend,
 }: ChatComposerProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
+  // Note that the plain box takes the caret where the editor box would, read as it first draws.
+  const [takes] = useState(compact === true || takesCaret === true);
   const { draft, setDraft, empty, note, send } = useChatSend(chatPlace(channelId, replyTo), onSend);
   // Note that the plain box has no quote block, so a reply's quote is written at its end as the Markdown it sends as.
   useReplyDoor(
@@ -543,11 +555,14 @@ function PlainChatComposer({
             label={label}
             placeholder={label}
             rows={compact === true ? 1 : 2}
+            autoFocus={takes}
             maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
             enterKeyHint={enterKeyHint()}
             submitKey={enterSubmitKey()}
             value={draft}
             onChange={setDraft}
+            // Escape leaves the box and keeps its words, as the editor box's does.
+            onEscape={() => field.current?.blur()}
             // Note that a send goes through the form, whose held submit holds it too.
             onSubmit={() => {
               if (field.current !== null) submitPromptInput(field.current);

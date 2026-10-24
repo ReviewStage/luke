@@ -1186,6 +1186,7 @@ export const ChatPane = memo(function ChatPane({
   lead,
   channelActions,
   onOpen,
+  takesCaret = false,
   onBringBack,
   hidden,
   taskDoors,
@@ -1213,6 +1214,8 @@ export const ChatPane = memo(function ChatPane({
   channelActions?: ((channel: ChatChannel) => React.ReactNode) | undefined;
   /** Shows a place of the chat, as For you's row opens its channel; none where no other place is shown here. */
   onOpen?: ((place: ChatPlace) => void) | undefined;
+  /** Whether the box at a channel's foot takes the caret as the channel opens, as a press, ⌘K, or a link opens it and K and J do not; none takes it where this is left out. */
+  takesCaret?: boolean;
   /** Asks to bring an archived topic back, from its foot; none where it is not offered. */
   onBringBack?: ((channel: ChatChannel) => void) | undefined;
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
@@ -1286,6 +1289,7 @@ export const ChatPane = memo(function ChatPane({
           hidden={hidden}
           channelActions={channelActions}
           onBringBack={onBringBack}
+          takesCaret={takesCaret}
           phone={phone}
         />
       </ChatReplyDoorsContext.Provider>
@@ -1303,6 +1307,7 @@ function PlaceView({
   hidden,
   channelActions,
   onBringBack,
+  takesCaret,
   phone,
 }: {
   chat: ChatAnswer;
@@ -1314,6 +1319,7 @@ function PlaceView({
   hidden: boolean | undefined;
   channelActions: ((channel: ChatChannel) => React.ReactNode) | undefined;
   onBringBack: ((channel: ChatChannel) => void) | undefined;
+  takesCaret: boolean;
   phone: boolean;
 }): React.JSX.Element {
   const { names, keywords, mentionsIn, doorsIn, send } = context;
@@ -1415,6 +1421,7 @@ function PlaceView({
           label={composerLabel(chat, names, channel)}
           mentions={mentionsIn(channel.id)}
           keywords={keywords}
+          takesCaret={takesCaret}
           replyDoor={footDoor}
           onSend={(text, attachments, takeBack) =>
             send(
