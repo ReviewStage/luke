@@ -285,8 +285,7 @@ test("the open text wears every class its drawn sections wear, so a list keeps i
     document: { body: "- reproduce\n  - twice\n- fix\n", assumptions: [] },
   });
   const drawn = container.querySelector<HTMLElement>(".luke-editable-block .plan-unit");
-  // Note that a section's arrival light is left out, since it comes and goes with the reveal's frames and moves nothing.
-  const worn = [...(drawn?.classList ?? [])].filter((name) => name !== "plan-fresh");
+  const worn = [...(drawn?.classList ?? [])];
   assert.ok(worn.includes("plan-unit"), "the plan's words are drawn");
 
   act(() => {

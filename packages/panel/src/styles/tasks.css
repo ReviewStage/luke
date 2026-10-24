@@ -160,43 +160,6 @@
   content: "";
 }
 
-/* A unit as it settles: a tint behind it that fades, on
-   opacity alone so no text re-shapes. Zeroed tokens, as under reduced motion,
-   leave nothing lit. */
-.plan-fresh {
-  position: relative;
-  isolation: isolate;
-}
-
-.plan-fresh::before {
-  position: absolute;
-  z-index: -1;
-  inset: -2px;
-  border-radius: var(--luke-radius-6);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) var(--luke-motion-exit) both;
-  content: "";
-  pointer-events: none;
-}
-
-/* A message a link named, brought into view in its agent's transcript
-   (message-links.tsx): lit once, as a fresh edit of the plan is. */
-[data-message-revealed] {
-  position: relative;
-  isolation: isolate;
-}
-
-[data-message-revealed]::before {
-  position: absolute;
-  z-index: -1;
-  inset: -4px;
-  border-radius: var(--luke-radius-8);
-  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
-  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) var(--luke-motion-exit) both;
-  content: "";
-  pointer-events: none;
-}
-
 @keyframes plan-caret-blink {
   50% {
     opacity: 0;

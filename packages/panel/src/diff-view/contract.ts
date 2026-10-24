@@ -329,9 +329,6 @@ export interface DiffLineRange extends DiffLineSpan {
   readonly path: string;
 }
 
-/** How long lines a list was scrolled to stand lit (`DiffListHandle.revealLines`) before they fade, in milliseconds. */
-export const LINE_FLASH_HOLD_MS = 1_500;
-
 /** The list as mounted: drawn again for new props, scrolled to a file's header, to one of its lines, or to a run of them lit a moment, and taken down. */
 export interface DiffListHandle {
   readonly update: (props: DiffListProps) => void;
@@ -340,9 +337,9 @@ export interface DiffListHandle {
   readonly revealLine: (path: string, side: DiffSelection["side"], line: number) => void;
   /**
    * Scrolls to a run of a file's lines, a few lines under the file's header,
-   * and lights them for `LINE_FLASH_HOLD_MS` before they fade, as a chapter's
-   * key change points at them; the lines lit before stand again once they
-   * fade. Every line of the run is one the file draws.
+   * and lights them once, as every place landed on is (`@luke/ui/landed`),
+   * as a chapter's key change points at them; the lines lit before stand
+   * again once they fade. Every line of the run is one the file draws.
    */
   readonly revealLines: (range: DiffLineRange) => void;
   readonly unmount: () => void;
