@@ -1,3 +1,11 @@
+import {
+  channelInfo,
+  channelItem,
+  chooseChannel,
+  kindTone,
+  THREAD_KIND_WORDS,
+  useChannelsMock,
+} from "./channels-mock.js";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
@@ -56,6 +64,7 @@ import {
 } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
+import { GLYPH } from "@luke/ui/icons";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
 import {
@@ -996,6 +1005,36 @@ function InboxItemMenu({
  * The thread's subject, as a plan or a pull request leads with one: the
  * item's title alone, the thread under it.
  */
+/**
+ * PROTOTYPE ONLY (STAG-547): over a thread's title in the Channels mockup,
+ * its kind, its channel, and whom it waits on where that is someone else.
+ */
+function ChannelsSubjectLine({ item }: { item: InboxItem }): React.JSX.Element | null {
+  const mock = useChannelsMock();
+  const directory = useMemberDirectory();
+  const meta = mock.on ? channelItem(item.id) : undefined;
+  if (meta === undefined) return null;
+  const channel = channelInfo(meta.channel);
+  const open = item.status === INBOX_STATUS.OPEN;
+  const asks =
+    item.thread?.some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN) === true;
+  const waiting = asks ? item.waitsOn : undefined;
+  const words = [
+    channel === undefined ? undefined : `#${channel.name}`,
+    open && waiting !== undefined && waiting.userId !== directory.readerId
+      ? `waiting on ${waiting.name}`
+      : undefined,
+  ].filter((part) => part !== undefined);
+  return (
+    <div className="channels-subject-line">
+      <Badge tone={kindTone(meta.kind, open)}>{THREAD_KIND_WORDS[meta.kind]}</Badge>
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+        {words.join(" · ")}
+      </Text>
+    </div>
+  );
+}
+
 function Subject({
   item,
   heading,
@@ -1006,6 +1045,7 @@ function Subject({
 }): React.JSX.Element {
   return (
     <header className="inbox-subject">
+      <ChannelsSubjectLine item={item} />
       <Text
         as={TEXT_ELEMENT.H2}
         variant={TEXT_VARIANT.DIALOG}
@@ -1138,7 +1178,10 @@ function Crumbs({
   doors,
   title,
   titleShown,
+  itemId,
 }: {
+  /** PROTOTYPE ONLY: the item, whose channel the Channels mockup names first. */
+  itemId: string;
   holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
@@ -1164,7 +1207,20 @@ function Crumbs({
           onPress: () => onOpenHolder?.(),
         }
       : undefined;
+  // PROTOTYPE ONLY (STAG-547): the thread's channel heads its path in the Channels mockup.
+  const meta = useChannelsMock().on ? channelItem(itemId) : undefined;
+  const channel = meta === undefined ? undefined : channelInfo(meta.channel);
+  const channelCrumb: Crumb | undefined =
+    channel === undefined
+      ? undefined
+      : {
+          label: `#${channel.name}`,
+          glyph: <GLYPH.CHANNEL />,
+          hint: channel.purpose,
+          onPress: () => chooseChannel(channel.id),
+        };
   const crumbs: Crumb[] = [
+    channelCrumb,
     task ?? automation,
     {
       label: name,
@@ -1334,6 +1390,7 @@ export function InboxPane({
                 <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
               )}
               <Crumbs
+                itemId={item.id}
                 holder={holder}
                 by={by}
                 doors={doors}

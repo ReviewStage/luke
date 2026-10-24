@@ -21,9 +21,12 @@ import { agentName } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
 import { INBOX_NOT_READ, InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
+import { channelItemIds, MOCK_CHANNEL, useChannelsMock } from "../tasks/channels-mock.js";
 import {
   anyUnread,
+  INBOX_GROUPING,
   INBOX_HOLDER,
+  INBOX_SHOW,
   type InboxHolder,
   type InboxListed,
   itemWorkspaceId,
@@ -156,8 +159,38 @@ export function DesktopInbox({
 
 /** The Inbox page reading its own items, its list and the chosen item side by side. */
 function ListedInbox({ tasks, room }: { tasks: TasksControl; room: ShellRoom }): React.JSX.Element {
-  const listing = useInboxListing(tasks);
+  const listing = useChannelListing(useInboxListing(tasks));
   return <InboxShown tasks={tasks} listing={listing} paneOnly={false} room={room} />;
+}
+
+/**
+ * PROTOTYPE ONLY (STAG-547): the listing as the Channels mockup shows it.
+ * For you is the Inbox's own To do, newest first in one run; a channel is
+ * every thread in it, settled ones included, newest first, its first
+ * thread chosen where the one chosen stands elsewhere.
+ */
+function useChannelListing(listing: InboxListing): InboxListing {
+  const mock = useChannelsMock();
+  const { choices, choose, chosen } = listing;
+  const want = mock.channel === MOCK_CHANNEL.FOR_YOU ? INBOX_SHOW.TO_DO : INBOX_SHOW.ALL;
+  useEffect(() => {
+    if (mock.on && choices.show !== want) choices.onShow(want);
+  }, [mock.on, choices, want]);
+  const ids =
+    mock.on && mock.channel !== MOCK_CHANNEL.FOR_YOU ? channelItemIds(mock.channel) : undefined;
+  const items = listedItems(listing.list)
+    .filter(({ item }) => ids === undefined || ids.has(item.id))
+    .toSorted((a, b) => b.item.updatedAt - a.item.updatedAt);
+  const first = items[0];
+  const stray = chosen === undefined || !items.some(({ item }) => item.id === chosen.item.id);
+  useEffect(() => {
+    if (mock.on && stray && first !== undefined) choose(first);
+  }, [mock.on, stray, first, choose]);
+  if (!mock.on) return listing;
+  return {
+    ...listing,
+    list: { grouping: INBOX_GROUPING.NONE, items, readerId: listing.list.readerId },
+  };
 }
 
 /**

@@ -5663,3 +5663,25 @@ ul.actor-stack {
   align-items: center;
   justify-content: center;
 }
+
+/* PROTOTYPE ONLY (STAG-547): the Channels mockup. A channel's purpose and
+   what is in flight in it stand under the list's name, on the column's inset,
+   and a thread's kind badge leads its row's second line. */
+.channels-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-tight-gap);
+  padding: 0 var(--column-inset) var(--luke-row-inset);
+}
+
+.inbox-row-line > .luke-badge {
+  margin-inline-end: var(--luke-tight-gap);
+  vertical-align: baseline;
+}
+
+.channels-subject-line {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-tight-gap);
+  margin-block-end: var(--luke-tight-gap);
+}

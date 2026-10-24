@@ -50,6 +50,8 @@ export const RUN_PROFILE = {
   CHAT: "chat",
   /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
   INBOX: "inbox",
+  /** PROTOTYPE ONLY: the Channels mockup over a synthetic Luke workspace (`channels-fixture.ts`). */
+  CHANNELS: "channels",
   /** The same account and items, its tasks assigned to it and its agents at work, which its own page lists. */
   PERSON: "person",
   /** The same task on its coding agent, its Pull request tab beside it: checks, reviews, and a merge queued. */

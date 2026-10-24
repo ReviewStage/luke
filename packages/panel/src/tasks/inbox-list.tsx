@@ -1,8 +1,10 @@
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { readFailedWords, TERM } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  Badge,
   BUTTON_SIZE,
   CHIP_LOOK,
   Chip,
@@ -61,6 +63,8 @@ import {
   useMinute,
   useResizeEdge,
   useRovingKeys,
+  STATUS_TONE,
+  TEXT_TONE,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -172,6 +176,14 @@ import {
   NEEDS_YOU,
   needsYou as needsYouOf,
 } from "./inbox-model.js";
+import {
+  channelInfo,
+  channelItem,
+  MOCK_CHANNEL,
+  kindTone,
+  THREAD_KIND_WORDS,
+  useChannelsMock,
+} from "./channels-mock.js";
 import {
   RowMedia,
   type RowMediaReads,
@@ -466,6 +478,9 @@ export function InboxItemRow({
   const { holder, item } = listed;
   const unread = isUnread(item);
   const title = cardTitle(item.title);
+  const mock = useChannelsMock();
+  const meta = mock.on ? channelItem(item.id) : undefined;
+  const channelName = meta === undefined ? undefined : channelInfo(meta.channel)?.name;
   const directory = useMemberDirectory();
   const _reader = directory.readerId ?? readerId;
   const { nameOf } = useInboxStanding(listed, readerId);
@@ -518,14 +533,27 @@ export function InboxItemRow({
           description={
             line ? (
               <span className="inbox-row-line" data-line={lineKind}>
-                {lineGlyph(lineKind)}
+                {meta === undefined ? null : (
+                  <Badge tone={kindTone(meta.kind, item.status === INBOX_STATUS.OPEN)}>
+                    {THREAD_KIND_WORDS[meta.kind]}
+                  </Badge>
+                )}
+                {meta === undefined || item.status === INBOX_STATUS.OPEN
+                  ? lineGlyph(lineKind)
+                  : null}
                 {preview}
               </span>
             ) : undefined
           }
           lead={
             line && chip
-              ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) }
+              ? {
+                  icon: <HolderGlyph holder={holder} />,
+                  label:
+                    channelName !== undefined && mock.channel === MOCK_CHANNEL.FOR_YOU
+                      ? `#${channelName} · ${holderName(holder)}`
+                      : holderName(holder),
+                }
               : undefined
           }
           leadAt={LIST_ROW_LEAD.LINE}
@@ -1124,11 +1152,14 @@ const SEARCH_INBOX = "Search inbox";
  * leaves Escape to the surface behind it.
  */
 function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element {
+  const mock = useChannelsMock();
+  const channel = mock.on ? channelInfo(mock.channel) : undefined;
+  const searchWords = channel === undefined ? SEARCH_INBOX : `Search #${channel.name}`;
   return (
     <search className="inbox-search">
       <SearchField
         label={SEARCH_INBOX}
-        placeholder={SEARCH_INBOX}
+        placeholder={searchWords}
         value={search.query}
         onChange={search.onQuery}
         onClear={() => search.onQuery("")}
@@ -1161,7 +1192,13 @@ function ListHead({
   placement: InboxListPlacement;
 }): React.JSX.Element {
   const { shown, show, view } = head;
-  const title = inboxTitle(show.show);
+  const mock = useChannelsMock();
+  const channel = mock.on ? channelInfo(mock.channel) : undefined;
+  const title = !mock.on
+    ? inboxTitle(show.show)
+    : channel === undefined
+      ? "For you"
+      : `#${channel.name}`;
   const asked = useMenuAsk();
   const search = head.search === undefined ? null : <ListSearch search={head.search} />;
   // A task's own Inbox tab on a phone hands its View options to the task's header, whose title
@@ -1285,6 +1322,18 @@ function ListHead({
             <PaneBar title={title} actions={options} />
           ) : (
             <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
+          )}
+          {channel === undefined ? null : (
+            <div className="channels-head">
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
+                {channel.purpose}
+              </Text>
+              {channel.inFlight === "" ? null : (
+                <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
+                  {`In flight · ${channel.inFlight}`}
+                </Text>
+              )}
+            </div>
           )}
           {search}
         </>

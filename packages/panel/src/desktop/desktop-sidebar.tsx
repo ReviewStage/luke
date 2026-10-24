@@ -71,6 +71,7 @@ import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
 import {
   FolderPlusIcon,
   FolderXIcon,
+  GLYPH,
   InboxIcon,
   ListTodoIcon,
   MessagesSquareIcon,
@@ -161,6 +162,15 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
+import {
+  CHANNELS,
+  type ChannelInfo,
+  channelCount,
+  chooseChannel,
+  MOCK_CHANNEL,
+  type MockChannel,
+  useChannelsMock,
+} from "../tasks/channels-mock.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
@@ -1355,16 +1365,19 @@ function SidebarInboxRow({
   waiting,
   current,
   disabled,
+  forYou = false,
   onOpen,
 }: {
   waiting: number;
   current: boolean;
   disabled: boolean;
+  /** PROTOTYPE ONLY: whether the row is the Channels mockup's For you. */
+  forYou?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
     <NavItem
-      icon={<InboxIcon />}
+      icon={forYou ? <GLYPH.TODOS /> : <InboxIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       count={{
         value: waiting,
@@ -1376,8 +1389,62 @@ function SidebarInboxRow({
       disabled={disabled}
       onClick={onOpen}
     >
-      Inbox
+      {forYou ? "For you" : "Inbox"}
     </NavItem>
+  );
+}
+
+/**
+ * PROTOTYPE ONLY (STAG-547): the Channels mockup's sections, the standing
+ * channels and then the projects', each a row drawn as the places are: the
+ * channel's glyph, its name, a dot while a thread in it is unread, and how
+ * many of its threads need the reader. A press shows the channel in the
+ * Inbox's place.
+ */
+function SidebarChannels({
+  current,
+  onOpen,
+}: {
+  current: MockChannel | undefined;
+  onOpen: (channel: MockChannel) => void;
+}): React.JSX.Element {
+  const row = (channel: ChannelInfo) => {
+    const counted = channelCount(channel.id);
+    return (
+      <NavItem
+        key={channel.id}
+        icon={<GLYPH.CHANNEL />}
+        current={current === channel.id ? NAV_CURRENT.PAGE : undefined}
+        unread={counted.unread && counted.needsYou === 0}
+        count={{
+          value: counted.needsYou,
+          noun: needsYouNoun(counted.needsYou),
+          tone: STATUS_TONE.ATTENTION,
+        }}
+        onClick={() => onOpen(channel.id)}
+      >
+        {channel.name}
+      </NavItem>
+    );
+  };
+  const section = (label: string, project: boolean, add: string) => (
+    <nav className="sidebar-group" aria-label={label}>
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
+        label={label}
+        actionsShown={GROUP_ACTIONS.AT_REST}
+        actions={<IconButton icon={<GLYPH.ADD />} label={add} onClick={() => undefined} />}
+      />
+      <div className="sidebar-places">
+        {CHANNELS.filter((channel) => channel.project === project).map(row)}
+      </div>
+    </nav>
+  );
+  return (
+    <>
+      {section("Channels", false, "New channel")}
+      {section("Projects", true, "New project channel")}
+    </>
   );
 }
 
@@ -1742,6 +1809,7 @@ function SidebarColumn({
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's page, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
+  const mock = useChannelsMock();
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inBoard = onTasks && tasks.boardView.open;
@@ -2090,9 +2158,13 @@ function SidebarColumn({
         {listsInbox ? null : (
           <SidebarInboxRow
             waiting={waiting.inbox}
-            current={inInbox}
+            current={inInbox && (!mock.on || mock.channel === MOCK_CHANNEL.FOR_YOU)}
             disabled={!tasks.signedIn}
-            onOpen={chosen(openInbox)}
+            forYou={mock.on}
+            onOpen={chosen(() => {
+              chooseChannel(MOCK_CHANNEL.FOR_YOU);
+              openInbox();
+            })}
           />
         )}
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
@@ -2158,6 +2230,17 @@ function SidebarColumn({
                   </Stack>
                 </nav>
               )}
+              {mock.on ? (
+                <SidebarChannels
+                  current={inInbox ? mock.channel : undefined}
+                  onOpen={(channel) =>
+                    chosen(() => {
+                      chooseChannel(channel);
+                      openInbox();
+                    })()
+                  }
+                />
+              ) : null}
               {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}
               {tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && !coarse)) ? (
                 <PinnedSection
