@@ -6,7 +6,9 @@ import { afterEach, expect, test } from "vitest";
 import {
   CALL_CONTROL_LABEL,
   CALL_DEVICE,
+  CALL_LIVE_WORD,
   CallBar,
+  CallLive,
   CallMute,
   VideoToggle,
 } from "./call-controls.js";
@@ -15,8 +17,9 @@ import {
  * call-controls.test.ts -- a call's controls as a reader meets them: a mute
  * is named for what its press will do, says so as it toggles, announces
  * itself pressed while on, and carries its chord; End call is the bar's one
- * control that is no toggle and hands its press back; and Video on or off
- * asks for the other. Synthetic call.
+ * control that is no toggle and hands its press back; Video on or off
+ * asks for the other; and a box's call status says the call is live, or
+ * muted, and how long it has run. Synthetic call.
  */
 
 declare global {
@@ -128,4 +131,17 @@ test("Video on or off asks for the other, named for what its press will do", () 
   const off = draw(createElement(VideoToggle, { on: false, onSetVideo: (to) => asked.push(to) }));
   act(() => button(off, CALL_CONTROL_LABEL.VIDEO_ON).click());
   expect(asked).toEqual([false, true]);
+});
+
+test("a box's call status says the call is live and how long it has run, and says Muted while the microphone is", () => {
+  const startedAt = Date.UTC(2026, 9, 24, 15, 0, 0);
+  const now = startedAt + 72_000;
+  const live = draw(createElement(CallLive, { startedAt, muted: false, now }));
+  expect(live.textContent).toBe(`${CALL_LIVE_WORD.LIVE}1m 12s`);
+  const timer = live.querySelector('[role="timer"]');
+  expect(timer?.getAttribute("dateTime")).toBe("PT72S");
+
+  const muted = draw(createElement(CallLive, { startedAt, muted: true, now }));
+  expect(muted.textContent).toBe(`${CALL_LIVE_WORD.MUTED}1m 12s`);
+  expect(muted.textContent).not.toContain(CALL_LIVE_WORD.LIVE);
 });

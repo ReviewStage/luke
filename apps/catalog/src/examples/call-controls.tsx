@@ -1,5 +1,5 @@
 /**
- * call-controls.tsx -- a call's bar at a card's width and at its narrowest, while Luke works and with the microphone muted; each mute round and square, Video on and off, the one red End call; and Luke's video tile connecting and as a still face on a card, and ended with why in a frame at the picture's own aspect, since a card never draws an ended tile.
+ * call-controls.tsx -- a call's bar at a card's width and at its narrowest, while Luke works and with the microphone muted; each mute round and square, Video on and off, the one red End call; a box's call status live and muted; and Luke's video tile connecting and as a still face on a card, and ended with why in a frame at the picture's own aspect, since a card never draws an ended tile.
  */
 
 import {
@@ -8,6 +8,7 @@ import {
   CALL_VIDEO_FIT,
   CallBar,
   type CallDevice,
+  CallLive,
   CallMute,
   type CallVideoFit,
   CallVideoTile,
@@ -27,6 +28,10 @@ import {
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
+
+/** When the catalog's call started, and the moment its count stands still at: 4m 12s in. */
+const CALL_STARTED_AT = Date.UTC(2026, 9, 24, 15, 0, 0);
+const CALL_NOW = CALL_STARTED_AT + 252_000;
 
 /** A press the catalog has nowhere to take. */
 function stay(): void {}
@@ -120,6 +125,12 @@ function CallControls(): React.JSX.Element {
           <OwnedMute device={CALL_DEVICE.MICROPHONE} shape={BUTTON_SHAPE.SQUARE} />
           <OwnedVideo />
           <EndCallButton onPress={stay} />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="call-live" title="A call's status in a box's foot, live and muted">
+        <Inline gap={GAP.SECTION}>
+          <CallLive startedAt={CALL_STARTED_AT} muted={false} now={CALL_NOW} />
+          <CallLive startedAt={CALL_STARTED_AT} muted now={CALL_NOW} />
         </Inline>
       </CatalogSection>
       <CatalogSection id="call-video-card" title="Luke's video on a card">

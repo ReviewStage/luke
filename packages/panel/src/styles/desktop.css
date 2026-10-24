@@ -1850,22 +1850,9 @@ ul.actor-stack {
 /* While a call into an agent stands, its tab's foot holds the call: Luke's
    video in a room of its own between the transcript and the composer, which
    the transcript ends above, so no word is ever drawn under the video. The
-   room goes as video goes off or the call ends. The voice's notice line
-   floats just over the room's top edge, over the transcript's foot, so it
-   never stands on the video; it takes no pointer but its own button, so the
-   transcript under it scrolls. */
+   room goes as video goes off or the call ends. */
 .agent-call-foot {
   position: relative;
-}
-
-.agent-call-notice {
-  position: absolute;
-  z-index: 6;
-  right: 0;
-  bottom: 100%;
-  left: 0;
-  height: 0;
-  pointer-events: none;
 }
 
 /* The video's room: the video centred in it, as tall as the developer left

@@ -1,5 +1,5 @@
 /**
- * call-controls.tsx -- a call's controls: its two mutes, Video on or off, the one red End call, and the bar that lays them out beside the call's status.
+ * call-controls.tsx -- a call's controls: its two mutes, Video on or off, the one red End call, the bar that lays them out beside the call's status, and the status a message box's foot shows while a call stands.
  *
  * Every place a call is steered from draws these, so a mute, the video's
  * toggle, and the way to hang up wear the same words, glyphs, and colours
@@ -21,10 +21,12 @@ import {
   VideoOffIcon,
 } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
+import { STATUS_TONE } from "../../status-tone.js";
 import type { CallStatus } from "../../tasks-model.js";
 import { BUTTON_SHAPE, BUTTON_VARIANT, type ButtonShape, IconButton } from "../button/button.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { ThinkingDots } from "../thinking-dots/thinking-dots.js";
+import { TIME_LOOK, Time } from "../time/time.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
@@ -45,6 +47,12 @@ export const CALL_CONTROL_LABEL = {
   VIDEO_OFF: "Turn video off",
   VIDEO_ON: "Turn video on",
   END_CALL: "End call",
+} as const;
+
+/** What a call's status in a message box's foot says: that it is live, or that the microphone is muted. */
+export const CALL_LIVE_WORD = {
+  LIVE: "On call",
+  MUTED: "Muted",
 } as const;
 
 /** What a mute silences: the developer's microphone, or Luke's voice on this Mac alone. */
@@ -117,6 +125,40 @@ export function EndCallButton({ onPress }: { onPress: () => void }): React.JSX.E
         onClick={onPress}
       />
     </Tooltip>
+  );
+}
+
+/**
+ * A call's status where a message box steers it: a live mark, "On call",
+ * or "Muted" in the danger ink while the microphone is muted, and how long
+ * the call has run, counted each second. It stands beside the call's
+ * controls in the box's foot (`ComposerFoot`'s call), so a call standing
+ * reads as one at a glance from the place it is ended. Given a `now` the
+ * count stands still at it.
+ */
+export function CallLive({
+  startedAt,
+  muted,
+  now,
+}: {
+  /** Epoch milliseconds the call started, which its count runs from. */
+  startedAt: number;
+  /** Whether the call's microphone is muted. */
+  muted: boolean;
+  now?: number | undefined;
+}): React.JSX.Element {
+  return (
+    <span className="luke-call-live" data-muted={String(muted)}>
+      <span
+        className="luke-call-live-mark"
+        data-tone={muted ? STATUS_TONE.DANGER : STATUS_TONE.COMPLETE}
+        aria-hidden="true"
+      />
+      <span className="luke-call-live-word">
+        {muted ? CALL_LIVE_WORD.MUTED : CALL_LIVE_WORD.LIVE}
+      </span>
+      <Time at={startedAt} look={TIME_LOOK.DURATION} now={now} className="luke-call-live-time" />
+    </span>
   );
 }
 

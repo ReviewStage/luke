@@ -88,6 +88,37 @@
     gap: var(--luke-tight-gap);
   }
 
+  /* A call's status in a message box's foot: its live mark, its word, and
+     its count on one line in the caption's type, the word in the danger ink
+     while muted, as the call bar's is. The count's figures are tabular
+     (`Time`), so the controls beside it never shift as it ticks. */
+  .luke-call-live {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-space-6);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    white-space: nowrap;
+  }
+
+  .luke-call-live-mark {
+    width: var(--luke-space-6);
+    height: var(--luke-space-6);
+    flex: none;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-tone-ink);
+  }
+
+  .luke-call-live-word {
+    color: var(--luke-color-text);
+  }
+
+  .luke-call-live[data-muted="true"] .luke-call-live-word {
+    color: var(--luke-color-danger-text);
+  }
+
   /* Too narrow for both of the backend's parts: the notetaker's goes while
      Luke's stands, so what Luke is doing keeps the line. */
   @container luke-call-bar (max-width: 479px) {

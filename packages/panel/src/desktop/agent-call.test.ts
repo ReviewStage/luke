@@ -8,20 +8,29 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { IDLE_TASKS_VIEW, type TaskActivity } from "@luke/features/tasks-view";
 import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
+import { ACT_KIND } from "@luke/host/acts";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { CALL_CONTROL_LABEL, CALL_VIDEO_LABEL, WaveformIcon } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  CALL_CONTROL_LABEL,
+  CALL_LIVE_WORD,
+  CALL_VIDEO_LABEL,
+  WaveformIcon,
+} from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
-import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
+import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -33,8 +42,9 @@ import { DesktopTasks } from "./desktop-tasks.js";
 /**
  * An agent's tab takes calls where the platform has a voice: a Call button,
  * a waveform, beside Dictate, which calls the agent, and while a call into
- * it stands, the call's own controls in the composer's row in the button's
- * place, with no call bar and no line saying what Luke is doing, Luke's
+ * it stands, the call's status and its own controls in the composer's row
+ * in the button's place, with no call bar and no line saying what Luke is
+ * doing, Luke's
  * video as a small tile whose size is kept, and its glyph wearing the live
  * mark. A platform with no voice hands the tab no doors, and it draws none,
  * and nor does the tab of an agent on Claude Code or Codex, since calls run
@@ -168,6 +178,15 @@ function composerButtons(page: HTMLElement): (string | null)[] {
   );
 }
 
+/** The call's group in the agent's box: its status and its controls. */
+function callGroup(page: HTMLElement): HTMLElement {
+  const group = page.querySelector<HTMLElement>(
+    '.agent-composer fieldset[aria-label="Call with Luke"]',
+  );
+  assert.ok(group, "the call stands in the agent's box");
+  return group;
+}
+
 /** The agent tab's video tile, where it stands. */
 function videoTile(page: HTMLElement): HTMLElement | null {
   return page.querySelector<HTMLElement>(`section[aria-label="${CALL_VIDEO_LABEL.TILE}"]`);
@@ -232,6 +251,50 @@ test("on a call into the agent, its composer holds the call's four controls in t
   assert.ok(
     page.querySelector('.main-tabs [role="tab"] .agent-calling-glyph'),
     "the agent's tab wears the live mark",
+  );
+});
+
+test("on a call into the agent, its box's foot says the call is live and how long it has run, Muted while muted, and its red End call with the hang-up glyph ends the call", async () => {
+  const sent: unknown[] = [];
+  const answered = fakeActPortCalls();
+  fakeActPort({
+    ...answered,
+    [ACT_KIND.VOICE_COMMAND]: (payload) => {
+      sent.push(payload);
+      return Promise.resolve();
+    },
+  });
+  onTestFinished(() => fakeActPort(answered));
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL);
+  const call = callGroup(page);
+  assert.ok(call.closest(".luke-composer-foot"), "in the box's foot");
+  assert.match(call.textContent ?? "", new RegExp(`^${CALL_LIVE_WORD.LIVE}\\d+s$`, "u"));
+  assert.match(
+    call.querySelector('time[role="timer"]')?.getAttribute("dateTime") ?? "",
+    /^PT\d+S$/u,
+    "how long the call has run, as a timer",
+  );
+
+  const end = call.querySelector<HTMLButtonElement>(
+    `button[aria-label="${CALL_CONTROL_LABEL.END_CALL}"]`,
+  );
+  assert.ok(end, "End call stands in the foot");
+  assert.equal(end.dataset.variant, BUTTON_VARIANT.DANGER);
+  assert.equal(
+    end.querySelector("svg")?.outerHTML,
+    renderToStaticMarkup(createElement(GLYPH.END_CALL)),
+  );
+  act(() => end.click());
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.deepEqual(sent, [{ command: VOICE_COMMAND.END_CALL }]);
+  act(() => roots.pop()?.unmount());
+
+  const muted = await mountOn({ onPress: () => undefined }, { ...ON_CALL, listening: false });
+  assert.match(
+    callGroup(muted).textContent ?? "",
+    new RegExp(`^${CALL_LIVE_WORD.MUTED}\\d+s$`, "u"),
   );
 });
 

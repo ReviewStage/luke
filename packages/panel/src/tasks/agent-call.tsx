@@ -1,11 +1,11 @@
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_SHAPE,
-  BUTTON_VARIANT,
   CALL_CONTROL_LABEL,
   CALL_DEVICE,
+  CallLive,
   CallMute,
-  CloseIcon,
+  EndCallButton,
   IconButton,
   Tooltip,
   VideoIcon,
@@ -21,7 +21,7 @@ import {
   type VoiceCommand,
   type VoiceView,
 } from "@luke/voice/voice-view";
-import { createContext, type ReactNode, useContext } from "react";
+import { useState } from "react";
 import { useAct } from "../act.js";
 import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
@@ -29,18 +29,21 @@ import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceLost } from "../use-voice-view.js";
 
 /**
- * agent-call.tsx -- an agent's tab taking calls: the call's controls in the composer's row, and while a call into the agent stands, Luke's video centred above the composer and the voice's notice line over it.
+ * agent-call.tsx -- an agent's tab taking calls: the call's status and controls in the composer's foot, and while a call into the agent stands, Luke's video centred above the composer.
  *
  * One call stands on a Mac at a time, into one agent, and the voice window
  * holds it, so the controls and the foot read the voice as every window
  * does and hand each press to it. At rest the composer offers Call, a
  * waveform beside Dictate, which opens a call into the agent, asking first
  * where that hangs another agent's call up. On a call into the agent the
- * same place holds the call itself: the speaker and microphone mutes, Video
- * on or off where video is offered, and End call, the one red control, so
- * the composer is the one place the call is steered from. No line says
- * whether Luke is listening or thinking: the controls and the tab's live
- * mark say a call is up, and the transcript says what is said. A draft's
+ * same place holds the call itself: its status, a live mark, "On call" or
+ * "Muted", and how long it has run, then the speaker and microphone mutes,
+ * Video on or off where video is offered, and End call, the one red
+ * control wearing the hang-up glyph, so the composer is the one place the
+ * call is read and steered from. No line says whether Luke is listening or
+ * thinking: the status and the tab's live mark say a call is up, and the
+ * transcript says what is said. The voice's notices are toasts, as every
+ * window's are (`voice-notice-toast.ts`). A draft's
  * composer offers the same Call (`draft-agent-tab.tsx`), which starts its
  * agent and opens a call into it as it lands. A platform
  * with no voice, the web's, hands the tab no doors, and the tab draws
@@ -80,9 +83,6 @@ export interface AgentCallPlace {
 export interface AgentCallPress {
   readonly onPress: (agentId: string, place: AgentCallPlace) => void;
 }
-
-/** The voice's notice line, which rides the foot of the tab of the agent the call speaks into; none where the window draws it elsewhere. */
-export const CallNotice = createContext<ReactNode>(undefined);
 
 /** What the group of a call's controls is named for a reader, since no line names the call any more. */
 const CALL_CONTROLS_LABEL = "Call with Luke";
@@ -147,6 +147,24 @@ function CallVideoButton({ agentId }: { agentId: string }): React.JSX.Element | 
 }
 
 /**
+ * The call's status, counted from `startedAt`, the moment the transcript's
+ * Call started marker says, where the call's first line has been heard.
+ * Note that before that line the count runs from when this tab first saw
+ * the call, because the voice reports no start of its own, and a status
+ * with no count would not say how long the call has run.
+ */
+function AgentCallStatus({
+  startedAt,
+  muted,
+}: {
+  startedAt: number | undefined;
+  muted: boolean;
+}): React.JSX.Element {
+  const [seen] = useState(Date.now);
+  return <CallLive startedAt={startedAt ?? seen} muted={muted} />;
+}
+
+/**
  * Call at rest, the waveform: for the agent `subject` names, or a draft's
  * key, which no call speaks into, so its look is Call's or the
  * microphone's ask. Unavailable where the voice or the microphone cannot
@@ -180,10 +198,10 @@ export function CallButton({
 
 /**
  * The call's place in an agent's composer row, beside Send. At rest it is
- * Call, the waveform. On a call into the agent it is the call: the speaker
- * and the microphone, each struck through and tinted while muted, Video on
- * or off, and End call apart from them on its red disc, so muting never
- * hangs up. The microphone's press is the Call press itself, which mutes
+ * Call, the waveform. On a call into the agent it is the call: its status,
+ * then the speaker and the microphone, each struck through and tinted while
+ * muted, Video on or off, and End call apart from them on its red disc, so
+ * muting never hangs up. The microphone's press is the Call press itself, which mutes
  * and unmutes the agent's own call, so the talk key and the permission asks
  * answer as they always have; the speaker silences Luke on this Mac alone.
  * The two mutes' chords are not the row's to offer: they answer while any
@@ -192,9 +210,12 @@ export function CallButton({
 export function AgentCallControls({
   agentId,
   doors,
+  startedAt,
 }: {
   agentId: string;
   doors: AgentCallDoors;
+  /** When the call standing into the agent started, as its transcript row says; none before its first line is heard. */
+  startedAt: number | undefined;
 }): React.JSX.Element {
   const { tell } = useAct();
   const { view, button } = useCallButton(agentId);
@@ -205,6 +226,7 @@ export function AgentCallControls({
   const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
   return (
     <fieldset className="agent-call-controls" aria-label={CALL_CONTROLS_LABEL}>
+      <AgentCallStatus startedAt={startedAt} muted={button.muted} />
       <CallMute
         device={CALL_DEVICE.SPEAKER}
         shape={BUTTON_SHAPE.SQUARE}
@@ -220,15 +242,7 @@ export function AgentCallControls({
         onPress={() => doors.onPress(agentId)}
       />
       <CallVideoButton agentId={agentId} />
-      <Tooltip label={CALL_CONTROL_LABEL.END_CALL}>
-        <IconButton
-          variant={BUTTON_VARIANT.DANGER}
-          shape={BUTTON_SHAPE.ROUND}
-          icon={<CloseIcon />}
-          label={CALL_CONTROL_LABEL.END_CALL}
-          onClick={() => command(VOICE_COMMAND.END_CALL)}
-        />
-      </Tooltip>
+      <EndCallButton onPress={() => command(VOICE_COMMAND.END_CALL)} />
     </fieldset>
   );
 }
@@ -237,18 +251,14 @@ export function AgentCallControls({
  * What an agent's tab's foot draws while a call into the agent stands:
  * Luke's video in a room of its own between the transcript and the
  * composer, centred there, which the transcript ends above
- * (`AgentCallVideo`), and the voice's notice line floating just over that
- * room's top edge, so a failure is read where the call is steered from and
- * never stands on the video. Nothing while no call into the agent stands,
- * so the room goes as the call ends, and goes too while video is off.
+ * (`AgentCallVideo`). Nothing while no call into the agent stands, so the
+ * room goes as the call ends, and goes too while video is off.
  */
 export function AgentCallFoot({ agentId }: { agentId: string }): React.JSX.Element | null {
-  const notice = useContext(CallNotice);
   const onCall = useAgentOnCall(agentId);
   if (!onCall) return null;
   return (
     <div className="agent-call-foot">
-      {notice === undefined ? null : <div className="agent-call-notice">{notice}</div>}
       <AgentCallVideo agentId={agentId} />
     </div>
   );
