@@ -356,16 +356,6 @@
   max-width: var(--luke-inline-ref-pill-stated-width);
 }
 
-/* The list an @ opens (`mention-picker.tsx`): `@luke/ui`'s combobox list
-   on a menu's surface, whose field is the editor it was typed in, hung by
-   the word's line (`@luke/ui`'s `RectFloat`), under a narrowed kind's crumb
-   and over the keys it hears at its foot (`@luke/ui`'s `MenuKeys`), never
-   wider than the room the layer leaves it. */
-.mention-menu {
-  width: 360px;
-  max-width: 100%;
-}
-
 /* The date picker (`date-picker.tsx`), hung from a chip or an @ word in
    the room the @ list stands in, over the editor. Its anchor stands over
    the chip and takes no press, so the chip under it still does. */
@@ -4565,14 +4555,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .agent-composer-field:has([aria-disabled="true"]) .agent-composer-placeholder {
   opacity: 0.6;
-}
-
-/* The list a `/` opens: a menu whose field is the composer, hung by the
-   caret's line (`@luke/ui`'s `RectFloat`), never wider than the room the
-   layer leaves it. */
-.skill-menu {
-  width: 320px;
-  max-width: 100%;
 }
 
 /* The foot's right: the model chip, the context ring, the microphone, and
