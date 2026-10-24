@@ -110,6 +110,10 @@ interface FoldingButtonDoors {
   "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
   "aria-expanded"?: boolean | undefined;
   "aria-controls"?: string | undefined;
+  /** Whether a pointer's press leaves the focus where it is (Button's `keepFocus`). */
+  keepFocus?: boolean | undefined;
+  /** Whether it stands in the tab order (Button's `tabbable`). */
+  tabbable?: boolean | undefined;
   ref?: Ref<HTMLButtonElement> | undefined;
 }
 
@@ -173,6 +177,8 @@ function FoldingBox({
         aria-haspopup={doors["aria-haspopup"]}
         aria-expanded={doors["aria-expanded"]}
         aria-controls={doors["aria-controls"]}
+        keepFocus={doors.keepFocus}
+        tabbable={doors.tabbable}
         {...busyProps}
         {...hinted}
       >

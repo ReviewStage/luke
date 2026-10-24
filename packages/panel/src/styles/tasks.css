@@ -386,6 +386,11 @@
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
+/* Its way back draws its glyph alone, named still by its hint. */
+.mention-menu-crumb {
+  --luke-fold: folded;
+}
+
 /* A Markdown document's editor (`markdown-editor.tsx`) is the room its
    toolbar, its / menu, and its @ list hang in. */
 .markdown-editor {

@@ -56,7 +56,7 @@ function draw(element: ReactElement): void {
 /** A way back to chat drawn in `look`, and how many times it went back. */
 function wayBack(
   look: BackButtonLook,
-  keyed: Pick<Parameters<typeof BackButton>[0], "command"> = {},
+  keyed: Pick<Parameters<typeof BackButton>[0], "command" | "tabbable" | "keepFocus"> = {},
 ): { button: HTMLButtonElement; backs: () => number } {
   let backs = 0;
   draw(
@@ -112,3 +112,13 @@ test.each(LOOKS)(
     expect(button.getAttribute("aria-keyshortcuts")).toBeNull();
   },
 );
+
+test("a way back in a bar that is not tabbable leaves the tab order, and one that keeps focus refuses the press's focus move", () => {
+  const { button } = wayBack(BACK_BUTTON_LOOK.HEADER, { tabbable: false, keepFocus: true });
+  expect(button.tabIndex).toBe(-1);
+  const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  act(() => {
+    button.dispatchEvent(press);
+  });
+  expect(press.defaultPrevented).toBe(true);
+});

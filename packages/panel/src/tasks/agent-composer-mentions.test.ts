@@ -1487,8 +1487,10 @@ test("pressing the crumb's back arrow widens the list again and keeps the caret 
   highlightRow(container, "Mention from", "Files and folders");
   pressInComposer(container, "ArrowRight");
   await settle();
-  const back = container.querySelector<HTMLButtonElement>('button[aria-label="All kinds"]');
-  assert.ok(back !== null, "the narrowed list's crumb offers the way back");
+  const back = [
+    ...container.querySelectorAll<HTMLButtonElement>(".mention-menu-crumb button"),
+  ].find((each) => each.textContent === "All kinds");
+  assert.ok(back !== undefined, "the narrowed list's crumb offers the way back");
   const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   back.dispatchEvent(press);
   act(() => back.click());

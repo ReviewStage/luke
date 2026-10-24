@@ -1,8 +1,9 @@
 import {
-  BackIcon,
+  BackButton,
   Badge,
   BUTTON_VARIANT,
   Button,
+  ComposeIcon,
   FoldingButton,
   NOT_FOUND_THING,
   NotFound,
@@ -41,7 +42,7 @@ function Toolbars(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="toolbar-lead" title="Led by a way back, a tag after the title">
         <Toolbar
-          lead={<FoldingButton label="Inbox" icon={<BackIcon />} onClick={stay} />}
+          lead={<BackButton label="Inbox" place="inbox" onBack={stay} />}
           title="New thread"
           tag={<Badge>Experiment</Badge>}
           actions={
@@ -54,7 +55,7 @@ function Toolbars(): React.JSX.Element {
       <CatalogSection id="toolbar-column" title="A control at the column's own edge">
         <Toolbar
           start={TOOLBAR_INSET.COLUMN}
-          lead={<FoldingButton label="Settings" icon={<BackIcon />} onClick={stay} />}
+          lead={<BackButton label="Settings" place="settings" onBack={stay} />}
         />
       </CatalogSection>
       <CatalogSection id="toolbar-narrow" title="A narrow bar cuts its title">
@@ -69,7 +70,7 @@ function Toolbars(): React.JSX.Element {
         <Toolbar
           title="Chat"
           folded
-          actions={<FoldingButton label="Send feedback" icon={<BackIcon />} onClick={stay} />}
+          actions={<FoldingButton label="Send feedback" icon={<ComposeIcon />} onClick={stay} />}
         />
       </CatalogSection>
       <CatalogSection id="toolbar-tabs" title="A tab strip's bar wraps its strip in a narrow room">
@@ -86,7 +87,7 @@ function Toolbars(): React.JSX.Element {
         <div className="catalog-empty-room">
           <NotFound
             thing={NOT_FOUND_THING.AUTOMATION}
-            bar={{ lead: <FoldingButton label="Automations" icon={<BackIcon />} onClick={stay} /> }}
+            bar={{ lead: <BackButton label="Automations" place="automations" onBack={stay} /> }}
           />
         </div>
       </CatalogSection>

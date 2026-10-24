@@ -1,14 +1,12 @@
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import {
-  BackIcon,
+  BackButton,
   DocumentIcon,
-  IconButton,
   InlineEdit,
   type InlineEditEnd,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
-  Tooltip,
 } from "@luke/ui";
 import { BotIcon, ListIcon } from "lucide-react";
 import type { AwayStep } from "../navigation-history.js";
@@ -107,11 +105,6 @@ interface TaskHeadRename {
   readonly onEnd: (end: InlineEditEnd) => void;
 }
 
-/** What the way back is called: where it goes, since its glyph alone says only that it goes back. */
-function backLabel(back: TaskHeadBack): string {
-  return `Back to ${back.label}`;
-}
-
 /**
  * The row heading a task on a phone; see the module's head. It is a phone's
  * header (`phone-head.tsx`): the way back at its start, the ⋯ at its end,
@@ -134,11 +127,7 @@ export function TaskHead({
   return (
     <PhoneHead
       place="task"
-      start={
-        <Tooltip label={backLabel(back)}>
-          <IconButton icon={<BackIcon />} label={backLabel(back)} onClick={back.onPress} />
-        </Tooltip>
-      }
+      start={<BackButton label={back.label} place={back.label} onBack={back.onPress} />}
       title={
         <Text
           as={TEXT_ELEMENT.H1}

@@ -115,6 +115,9 @@ describe("the suppression check", () => {
     expect(namesRetired('import { LucideRetiredExample } from "@luke/ui/icons";')).toBe(true);
     expect(namesRetired("const a = G.RETIRED_EXAMPLE;")).toBe(true);
     expect(namesRetired('import { BotIcon } from "@luke/ui/icons";')).toBe(false);
+    // An import narrowed to names is spelled by them, not by its module, which every file spells.
+    expect(namesRetired('import { BackIcon } from "@luke/ui";')).toBe(true);
+    expect(namesRetired('import { Button } from "@luke/ui";')).toBe(false);
   });
 
   it("refuses a configuration that turns the rule down or overrides it", () => {
