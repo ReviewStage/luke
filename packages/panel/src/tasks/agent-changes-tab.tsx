@@ -1877,23 +1877,22 @@ export function AgentChangesTab({
           }
           flash={flash}
         />
-        {room.drawn ? (
-          <FileTreePane
-            file={shownFile.path}
-            only={changed.paths}
-            marks={marks}
-            label="Changed files"
-            listFolder={changed.folders}
-            search={{ query: list.query, onQuery: list.onQuery }}
-            onOpen={choose}
-            onViewed={list.markViewed}
-            pane={room.beside.pane}
-            float={room.pane}
-            leaving={room.beside.leaving}
-            width={tree.width?.width}
-            edge={edge}
-          />
-        ) : null}
+        <FileTreePane
+          file={shownFile.path}
+          only={changed.paths}
+          marks={marks}
+          label="Changed files"
+          listFolder={changed.folders}
+          search={{ query: list.query, onQuery: list.onQuery }}
+          onOpen={choose}
+          onViewed={list.markViewed}
+          over={room.docked ? undefined : room.over}
+          narrow={room.narrow}
+          pane={room.beside.pane}
+          leaving={room.beside.leaving}
+          width={tree.width?.width}
+          edge={edge}
+        />
         {tree.open ? null : (
           <ChangesStrip
             files={changed.ordered}

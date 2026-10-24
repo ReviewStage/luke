@@ -47,7 +47,7 @@ import { useRef, useState } from "react";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
+import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { useRowDrag } from "./use-row-drag.js";
@@ -418,6 +418,7 @@ function SectionRows({
       if (row !== undefined) context.onDropRow(row, zone, at);
     },
   });
+  const keys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.
   const shown = useLeaving(rows, taskRowKey);
   const listedAt = new Map(rows.map((row, at) => [taskRowKey(row), at]));
@@ -435,6 +436,7 @@ function SectionRows({
       data-row-drop-rows={folded ? undefined : ""}
       moves
       onPointerDown={drag}
+      {...keys}
     >
       {shown.map(({ key, value: row }) => (
         <RowPlaced key={key} place={placeOf(key)}>
@@ -542,6 +544,7 @@ export function SidebarSections({
   const move = (from: number, to: number) =>
     context.tasks.onWriteSections(sectionMoveWrites(order, from, to));
   const drag = useRowDrag(move, { handle: SECTION_HANDLE });
+  const keys = useRowMoveKeys(move);
   return (
     <nav className="sidebar-group" aria-label="Sections">
       <Stack
@@ -550,6 +553,7 @@ export function SidebarSections({
         className="sidebar-sections"
         moves
         onPointerDown={drag}
+        {...keys}
       >
         {sections.map((drawn, at) => (
           <li key={drawn.section.id} className="sidebar-sections-item">

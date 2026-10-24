@@ -22,6 +22,8 @@ import {
   ListRow,
   NOTE_LINE_LOOK,
   NoteLine,
+  OVER_PANE_WIDTH,
+  OverPane,
   PaneBar,
   PanePin,
   PlusIcon,
@@ -35,8 +37,8 @@ import {
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
 import { rowMenu } from "../desktop/action-menu.js";
-import type { FloatingBox } from "../desktop/hover-pane.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
+import type { PaneOver } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { TerminalSession } from "./use-terminal-session.js";
 
@@ -281,8 +283,8 @@ export function TerminalShells({
   models,
   session,
   onOpenAgent,
+  over,
   pane,
-  float,
   leaving,
   surfaceOpen,
 }: {
@@ -290,26 +292,18 @@ export function TerminalShells({
   models: readonly CatalogModel[] | undefined;
   session: TerminalSession;
   onOpenAgent: () => void;
-  /** The list's box, which slides in and out (`usePaneSlide`). */
+  /** What the list floating over the screen is handed (`file-view.tsx`); none draws it beside the screen. */
+  over: PaneOver | undefined;
+  /** The list's box beside the screen, which slides in and out (`usePaneSlide`). */
   pane: RefObject<HTMLElement | null>;
-  /** What the list answers while it may float over the screen (`hover-pane.ts`). */
-  float: FloatingBox;
+  /** Whether it is on its way out beside the screen. */
   leaving: boolean;
   /** Whether the tab is on screen: a question asked from the list goes as the panel closes. */
   surfaceOpen: boolean;
 }): React.JSX.Element {
   const { listed } = session;
-  return (
-    <PanePin
-      ref={pane}
-      className="terminal-shells"
-      aria-label="Shells"
-      data-leaving={leaving ? "" : undefined}
-      inert={leaving}
-      onPin={float.onPressWithin}
-      onPointerLeave={float.onPointerLeave}
-      onKeyDown={float.onKeyDown}
-    >
+  const body = (
+    <>
       <PaneBar
         title="Shells"
         actions={
@@ -326,7 +320,11 @@ export function TerminalShells({
       {listed === undefined ? (
         <UnlistedShells state={session.state} />
       ) : (
-        <ListedShells listed={listed} session={session} surfaceOpen={surfaceOpen && !leaving} />
+        <ListedShells
+          listed={listed}
+          session={session}
+          surfaceOpen={surfaceOpen && (over === undefined ? !leaving : over.open)}
+        />
       )}
       <div className="terminal-shells-foot">
         <AgentRef
@@ -337,6 +335,33 @@ export function TerminalShells({
           label={footWords(subject, listed?.sandbox)}
         />
       </div>
+    </>
+  );
+  if (over !== undefined) {
+    return (
+      <OverPane
+        open={over.open}
+        peek={over.peek}
+        onClose={over.onClose}
+        onPointerLeave={over.onPointerLeave}
+        toggle={over.toggle}
+        label="Shells"
+        width={OVER_PANE_WIDTH.COLUMN}
+      >
+        {body}
+      </OverPane>
+    );
+  }
+  return (
+    <PanePin
+      ref={pane}
+      className="terminal-shells"
+      aria-label="Shells"
+      data-leaving={leaving ? "" : undefined}
+      inert={leaving}
+      onPin={undefined}
+    >
+      {body}
     </PanePin>
   );
 }

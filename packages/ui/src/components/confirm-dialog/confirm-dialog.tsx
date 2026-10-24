@@ -9,23 +9,25 @@ import {
   type HeldConfirm,
   useConfirm,
 } from "../../confirm-state.js";
-import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
+import { DIALOG_TONE, DialogActions, type DialogTone } from "../dialog/dialog-actions.js";
 import { ErrorLine } from "../error-line/error-line.js";
 import { FormField } from "../form-field/form-field.js";
 import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js";
 
 /**
- * confirm-dialog.tsx -- an irreversible act's question as a modal over the window: what goes, then Cancel and the act.
+ * confirm-dialog.tsx -- the question before an act that costs something, as a modal over the window: what goes, then Cancel and the act.
  *
  * The window asks the way every desktop app does: it dims, a card names what
- * the act takes with it, and the two answers sit at its foot, the safe one
- * first and the act in red last, or in the accent for an act that can be
- * undone, such as restoring a version of a plan. Focus lands on Cancel, so a
- * key already pressed changes nothing; Tab stays inside the card; Escape, a
- * press on the dimmed window, and Cancel all withdraw it, and however it
- * goes, focus goes back to whatever asked if that still stands. Enter is the
- * focused button's own, so it acts only from the act's button.
+ * the act takes with it, and the two answers sit at its foot
+ * (`DialogActions`), the safe one first and the act last. The act's colour
+ * follows what it costs (`loss`): red only for what cannot be undone, and in
+ * the accent for an act that can be undone but still asks because it reaches
+ * someone else. Focus lands on Cancel, so a key already pressed changes
+ * nothing; Tab stays inside the card; Escape, a press on the dimmed window,
+ * and Cancel all withdraw it, and however it goes, focus goes back to
+ * whatever asked if that still stands. Enter is the focused button's own, so
+ * it acts only from the act's button.
  *
  * The question is `confirm-state.ts`'s, so it withdraws the render its subject
  * or its surface goes. An answer already given finishes where it stands with
@@ -34,27 +36,41 @@ import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js
  * can be tried again or let go.
  */
 
-/** How the act's button is drawn: red for an act that destroys, the accent for one that can be undone. */
-export const DIALOG_TONE = {
-  DANGER: "danger",
-  PRIMARY: "primary",
+/**
+ * What an act that asks first costs, which decides its colour. An act that
+ * can be undone and reaches no one else asks nothing: it happens at once and
+ * offers Undo.
+ */
+export const CONFIRM_LOSS = {
+  /** Past undoing: the act is red. */
+  IRREVERSIBLE: "irreversible",
+  /** Can be undone, but reaches someone else (removing a member, transferring ownership, disconnecting), so it still asks, in the accent. */
+  AFFECTS_OTHERS: "affects-others",
 } as const;
 
-export type DialogTone = (typeof DIALOG_TONE)[keyof typeof DIALOG_TONE];
+export type ConfirmLoss = (typeof CONFIRM_LOSS)[keyof typeof CONFIRM_LOSS];
 
-/** The act's button's look, by its tone. */
-const ACT_VARIANT = {
-  [DIALOG_TONE.DANGER]: BUTTON_VARIANT.DANGER,
-  [DIALOG_TONE.PRIMARY]: BUTTON_VARIANT.PRIMARY,
-} as const satisfies Record<DialogTone, string>;
+/** The act's tone, by what it costs. */
+const LOSS_TONE = {
+  [CONFIRM_LOSS.IRREVERSIBLE]: DIALOG_TONE.DANGER,
+  [CONFIRM_LOSS.AFFECTS_OTHERS]: DIALOG_TONE.PRIMARY,
+} as const satisfies Record<ConfirmLoss, DialogTone>;
 
-/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs; the act is red unless its tone says otherwise. */
+/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs; the act is red unless its loss, or failing that its tone, says otherwise. */
 export interface DialogQuestion {
   title: string;
   body?: string;
   verb: string;
   running: string;
+  /** What the act costs, which decides its colour over `tone`. */
+  loss?: ConfirmLoss;
   tone?: DialogTone;
+}
+
+/** The act's tone: its loss's where it states one, else its own, else red. */
+function actTone({ loss, tone }: DialogQuestion): DialogTone {
+  if (loss !== undefined) return LOSS_TONE[loss];
+  return tone ?? DIALOG_TONE.DANGER;
 }
 
 /** One confirming act as a dialog holds it: the confirm, and whether its subject and surface still stand. */
@@ -157,24 +173,22 @@ function ConfirmCard({
       onDismiss={dismiss}
       onKeyDown={fieldKey}
       actions={
-        <>
-          <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={settling} onClick={dismiss}>
-            Cancel
-          </Button>
-          <Button
-            ref={actButton}
-            variant={ACT_VARIANT[question.tone ?? DIALOG_TONE.DANGER]}
-            disabled={acting || locked}
-            focusableWhenDisabled={locked}
-            busy={acting}
-            busyLabel={question.running}
-            done={landed}
-            onDone={act.onShown}
-            onClick={() => confirm.run()}
-          >
-            {question.verb}
-          </Button>
-        </>
+        <DialogActions
+          onCancel={dismiss}
+          cancelRef={cancel}
+          act={{
+            verb: question.verb,
+            tone: actTone(question),
+            onPress: () => confirm.run(),
+            running: question.running,
+            busy: acting,
+            disabled: locked,
+            focusableWhenDisabled: locked,
+            landed,
+            onShown: act.onShown,
+            ref: actButton,
+          }}
+        />
       }
     >
       {question.body ? (

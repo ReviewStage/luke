@@ -20,6 +20,7 @@ import {
   ComposeIcon,
   commandKeyshortcuts,
   dropBelowStart,
+  ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
   FolderIcon,
@@ -148,7 +149,7 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
-import { RowPlaced } from "./row-moves.js";
+import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
@@ -644,6 +645,7 @@ function PinnedRows({
             if (row !== undefined) onDropOut(row, zone, at);
           },
   });
+  const keys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.
   const listedAt = new Map(rows.map((row, at) => [pinnedRowKey(row), at]));
   const placeOf = (key: string) => {
@@ -662,6 +664,7 @@ function PinnedRows({
       data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
       moves
       onPointerDown={drag}
+      {...keys}
     >
       {drawn.map(({ key, value: row }) => {
         if (row.kind === TASK_ROW.AGENT) {
@@ -2116,11 +2119,12 @@ function SidebarColumn({
                       </NoteLine>
                     ) : null}
                     {tasks.listFailed ? (
-                      <div className="sidebar-note sidebar-failure">
-                        <ErrorState onRetry={tasks.onRetryList}>
-                          Your tasks could not be read.
-                        </ErrorState>
-                      </div>
+                      <ErrorState
+                        onRetry={tasks.onRetryList}
+                        placement={ERROR_STATE_PLACEMENT.ROWS}
+                      >
+                        Your tasks could not be read.
+                      </ErrorState>
                     ) : null}
                     {/* The list is empty before its first read lands, so that it
               holds none says nothing until the service has answered. */}

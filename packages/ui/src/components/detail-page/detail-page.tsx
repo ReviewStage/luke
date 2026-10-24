@@ -1,5 +1,6 @@
 import { type ReactNode, useId } from "react";
 import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
+import { PageHeader } from "../page-header/page-header.js";
 
 /**
  * detail-page.tsx -- the page one thing is drawn on: its title and acts, its main content, and an optional secondary column beside it.
@@ -27,8 +28,10 @@ import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-fra
  * sections, reaches past the column by its rows' own inset, as on a
  * collection's page, so its words line up with the title's.
  *
- * The secondary column is a complementary landmark named by its `label`.
- * The page names itself by its title and takes no class or style.
+ * The page heads itself with a document's header (`PageHeader`), its title
+ * the page's one `h1`. The secondary column is a complementary landmark
+ * named by its `label`. The page names itself by its title and takes no
+ * class or style.
  */
 
 /** How far in from its sides the page stands its words: a page's inset, or a column's, as tabs read at the measure stand theirs. */
@@ -45,11 +48,6 @@ export type DetailSecondary = {
   label: string;
   content: ReactNode;
 };
-
-/** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
-function said(words: ReactNode): boolean {
-  return words !== undefined && words !== null && words !== false && words !== "";
-}
 
 /** One thing's page: its heading over the main content and an optional `secondary` column. */
 export function DetailPage({
@@ -79,19 +77,14 @@ export function DetailPage({
         heading.toolbar
       ) : (
         <div className="luke-detail-page-top">
-          <header className="luke-detail-page-header">
-            <div className="luke-detail-page-heading">
-              <h1 className="luke-detail-page-title" id={titleId}>
-                {heading.title}
-              </h1>
-              {said(heading.description) ? (
-                <p className="luke-detail-page-description">{heading.description}</p>
-              ) : null}
-            </div>
-            {said(heading.actions) ? (
-              <div className="luke-detail-page-actions">{heading.actions}</div>
-            ) : null}
-          </header>
+          <div className="luke-detail-page-header">
+            <PageHeader
+              title={heading.title}
+              titleId={titleId}
+              description={heading.description}
+              actions={heading.actions}
+            />
+          </div>
         </div>
       )}
       <div className="luke-detail-page-body">

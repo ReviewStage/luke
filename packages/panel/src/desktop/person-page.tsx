@@ -26,6 +26,7 @@ import {
   PAGE_FRAME,
   RowHint,
   RowHintOptions,
+  ShowMoreRow,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -393,7 +394,8 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
  * One section of a person's tasks, the first `PERSON_TASKS_SHOWN` of them,
  * newest first, wearing no face, since the page's head says whose they
  * are; and under it, where it leaves some out and the sidebar filters by
- * person, Show all, which lists every one there (`onShowAll`).
+ * person, the foot that says how many more there are and lists every one
+ * in the sidebar (`onShowAll`).
  */
 function PersonTasks({
   title,
@@ -423,11 +425,15 @@ function PersonTasks({
           />
         ))}
       </PersonSection>
-      {listed.length > PERSON_TASKS_SHOWN && onShowAll !== undefined ? (
-        <p className="person-section-foot">
-          <Button onClick={onShowAll}>{`Show all ${listed.length} in sidebar`}</Button>
-        </p>
-      ) : null}
+      {onShowAll === undefined ? null : (
+        <div className="person-section-foot">
+          <ShowMoreRow
+            more={listed.length - PERSON_TASKS_SHOWN}
+            shown={false}
+            onToggle={onShowAll}
+          />
+        </div>
+      )}
     </>
   );
 }

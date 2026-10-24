@@ -49,6 +49,7 @@ import {
   ANSWERED,
   AnsweredCard,
   AskControls,
+  askSendChord,
   bareKey,
   DraftQuestion,
   focusMissing,
@@ -277,7 +278,7 @@ function Answer({
   };
   const controls =
     asked === undefined || !asks ? undefined : (
-      <DraftQuestion pane={box}>
+      <DraftQuestion pane={box} ask={asked}>
         <AskControls
           ask={asked}
           title={undefined}
@@ -327,6 +328,7 @@ function Answer({
         quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
         says={note === undefined ? undefined : { words: note }}
         nod={nod}
+        sendChord={asks ? askSendChord(asked) : undefined}
         sending={sending}
         held={sending}
         // Note that a form of fields none of which must be filled is answered empty, so it holds an answer before anything is in it.

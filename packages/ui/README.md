@@ -247,6 +247,10 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
 - **Finite variants.** Every choice is an `as const` object with its type
   derived from it (`BUTTON_VARIANT` / `ButtonVariant`, `GAP` / `Gap`); pass the
   constant, never a string.
+- **A press that waits is busy.** A button whose press starts an act or returns
+  a promise passes `busy` and `busyLabel`, the one busy shape every kind takes
+  (`anti-slop/async-press-needs-busy` refuses one that does not, past
+  `tools/anti-slop/busy-baseline.json`, which only shrinks).
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
   `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
@@ -281,7 +285,7 @@ What the barrel holds (`src/index.ts`):
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
-| Patterns | `PageToolbar`, `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
+| Patterns | `PageToolbar`, `PageHeader` (a document's own, which `SettingsPage`, `CollectionPage`, and `DetailPage` head themselves with), `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `WingFace`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
 
 Each component's design comment, at the top of its `.tsx`, says what it owns

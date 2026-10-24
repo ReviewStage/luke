@@ -1,5 +1,6 @@
 /**
- * error-states.tsx -- a failed read among rows with Retry beside it, one
+ * error-states.tsx -- a failed read among rows with Retry beside it, one at
+ * a list's rows' inset, one
  * alone in its region with Retry under it, one with no Retry, ones with a
  * remedy, Remove, or Dismiss beside Retry, one whose place failed to draw
  * with Reload in Retry's place, one on a toolbar short of
@@ -31,6 +32,13 @@ function ErrorStates(): React.JSX.Element {
       <CatalogSection id="error-state-inline" title="Among rows">
         <div className="catalog-frame">
           <ErrorState onRetry={stay}>Your tasks could not be read.</ErrorState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-rows" title="At a list's rows' inset">
+        <div className="catalog-frame">
+          <ErrorState onRetry={stay} placement={ERROR_STATE_PLACEMENT.ROWS}>
+            Your tasks could not be read.
+          </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-centred" title="Alone in its region">
