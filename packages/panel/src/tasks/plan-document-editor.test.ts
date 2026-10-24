@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
+import { CONFLICT_NOTE } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
-import { act, createElement } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
@@ -22,12 +24,16 @@ import {
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
+import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
+import { usePlanEditDoor } from "./use-plan-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
@@ -113,6 +119,7 @@ beforeAll(async () => {
 });
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -125,12 +132,15 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the saves a plan left as it went answer before its atoms go.
+  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   mounted.length = 0;
 });
@@ -143,8 +153,9 @@ async function settle(): Promise<void> {
 
 /**
  * The document with an edit door that records each edit and answers from the
- * script, and the names it renamed to; `render` draws another plan, through
- * its own door where given.
+ * script, and the names it renamed to, beside the window's toasts and over
+ * atoms of its own, as the window holds them; `render` draws another plan,
+ * through its own door where given.
  */
 function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_TASK) {
   const sent: PlanEditRequest[] = [];
@@ -153,6 +164,8 @@ function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
   const saved: TasksEditAnswer = { saved: true };
   const onEdit = (request: PlanEditRequest) => {
     sent.push(request);
@@ -162,21 +175,43 @@ function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_
     renamed.push(name);
     return Promise.resolve(true);
   };
-  const render = (task: Task, door: typeof onEdit = onEdit) =>
+  const draw = (page: ReactElement) =>
     act(() =>
       root.render(
-        onSideBundles(
-          bundles,
-          createElement(PlanBody, { task, live: false, onEdit: door, onRename }),
+        onRegistry(
+          registry,
+          onSideBundles(bundles, createElement(Fragment, null, page, createElement(ToastHost))),
         ),
       ),
     );
+  const render = (task: Task, door: typeof onEdit = onEdit) =>
+    draw(createElement(PlanBody, { task, live: false, onEdit: door, onRename }));
+  /** The plan as a task's page draws it, saving through `edit` by the task's id. */
+  const renderPage = (task: Task, edit: TaskEdit) =>
+    draw(createElement(TaskPage, { task, edit, onRename }));
   render(first);
   const unmount = () => {
     act(() => root.unmount());
     roots.splice(roots.indexOf(root), 1);
   };
-  return { container, sent, renamed, render, unmount };
+  return { container, sent, renamed, render, renderPage, unmount };
+}
+
+/** How a task's page saves a plan's edit: by the task's id. */
+type TaskEdit = (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
+
+/** The plan as a task's page draws it, its edits saved through `edit` with the open task's id. */
+function TaskPage({
+  task,
+  edit,
+  onRename,
+}: {
+  task: Task;
+  edit: TaskEdit;
+  onRename: (name: string) => Promise<boolean>;
+}): ReactElement {
+  const onEdit = usePlanEditDoor(task.id, edit);
+  return createElement(PlanBody, { task, live: false, onEdit, onRename });
 }
 
 function block(container: HTMLElement, label: string): HTMLElement {
@@ -658,6 +693,83 @@ test("words typed in one plan are saved to that plan when another opens", async 
 
   assert.deepEqual(doors, [DOCUMENT_TASK.id]);
   assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+test("words whose save is refused as the developer leaves the plan are kept, said in a toast that stands, and open again when they come back", async () => {
+  const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  render(other);
+  await settle();
+
+  assert.equal(sent.length, 1, "the save went as the plan was left");
+  assert.equal(newestToastSays(), "Your plan edits could not be saved.Retry");
+
+  render(DOCUMENT_TASK);
+  await settle();
+
+  assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
+  assert.ok(container.textContent?.includes("Not saved: the service did not answer."));
+  assert.equal(newestToastSays(), undefined, "the toast goes once the words are back");
+  assert.equal(sent.length, 1, "nothing saves them on its own");
+});
+
+test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them over Luke's", async () => {
+  const lukes = `${BODY}Luke's.\n`;
+  const { container, sent, render } = mount([{ conflict: { current: lukes } }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+  assert.ok(container.textContent?.includes(CONFLICT_NOTE), "the conflict holds the editor open");
+
+  render(other);
+  await settle();
+
+  assert.equal(sent.length, 1, "a conflict sends nothing more as the plan is left");
+  assert.equal(newestToastSays(), `Your plan edits could not be saved.${CONFLICT_NOTE}Keep mine`);
+
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  assert.deepEqual(sent.at(-1), { document: { base: lukes, value: `${BODY}Mine.\n` } });
+  assert.equal(newestToastSays(), undefined);
+  render(DOCUMENT_TASK);
+  await settle();
+  assert.equal(
+    container.querySelector(".plan-document-editor"),
+    null,
+    "nothing is left to open on once they saved",
+  );
+});
+
+test("the toast's Retry over words a refused save left saves them to the plan they were typed in, though the page has opened another since", async () => {
+  const { container, renderPage } = mount();
+  const doors: [string, PlanEditRequest][] = [];
+  const answers: TasksEditAnswer[] = [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { saved: true }];
+  const edit: TaskEdit = (taskId, request) => {
+    doors.push([taskId, request]);
+    return Promise.resolve<TasksEditAnswer>(answers[doors.length - 1] ?? { saved: true });
+  };
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  renderPage(DOCUMENT_TASK, edit);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  renderPage(other, edit);
+  await settle();
+
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  const mine = { document: { base: BODY, value: `${BODY}Mine.\n` } };
+  assert.deepEqual(doors, [
+    [DOCUMENT_TASK.id, mine],
+    [DOCUMENT_TASK.id, mine],
+  ]);
+  assert.equal(newestToastSays(), undefined);
 });
 
 /** A browser's answer to where a point stands in the page's words: `offset` into `words`, its line `top` down the window. */

@@ -76,7 +76,7 @@ import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
-import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
+import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
@@ -778,9 +778,7 @@ function PlanDocument({
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
-  const edit: PlanEditDoor | undefined =
-    opened === undefined ? undefined : (request) => tasks.edit(opened.id, request);
-  const editDoor = useSteadyDoor(edit);
+  const editDoor = usePlanEditDoor(opened?.id, tasks.edit);
   const renameDoor = useSteadyDoor((name: string) => rename.end(name));
   const draftNameDoor = useSteadyDoor(
     opened === undefined

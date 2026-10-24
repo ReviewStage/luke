@@ -1,12 +1,16 @@
 import { useAtom } from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { PlanCommentAnchors } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import {
+  CONFLICT_NOTE,
+  DOCUMENT_EDITOR_STATE,
   type DocumentEditor,
   editorAnswered,
   editorCloseAsked,
   editorCloses,
   editorKeptMine,
+  editorLeft,
   editorOpened,
   editorRebased,
   editorRefused,
@@ -14,14 +18,20 @@ import {
   editorSent,
   editorTookLukes,
   editorTyped,
+  leavingSave,
   pendingSave,
 } from "@luke/features/plan-edit-model";
 import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { STATUS_TONE } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
-import { useEffect, useRef, useState } from "react";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PlanEditorPlacement } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { useSteadyDoor } from "../steady-door.js";
+import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
 
 /**
  * use-plan-editing.ts -- the open task's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.
@@ -32,8 +42,11 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * answers saved moves `saves`, which the byline's Saved tick confirms.
  * Another task opening takes the
  * editor with it, and words not yet saved go to the task they were typed in.
- * Unsaved words live in this window's memory alone and are never written to
- * disk. The editor itself is `plan-document-editor.tsx`.
+ * Words that save refused, or that wait on a conflict, are kept rather than
+ * lost: a toast that stands until it is dismissed says so, its action saving
+ * them through that task's door, and coming back to the task opens the
+ * editor on them again. Unsaved words live in this window's memory alone and
+ * are never written to disk. The editor itself is `plan-document-editor.tsx`.
  */
 
 /** How long the developer pauses before what they typed is saved. */
@@ -44,11 +57,79 @@ const savePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(SAVE_PAUSE), stamp),
 );
 
-/** A save that failed as a task was left, which nothing is left to say to. */
-const ignore = () => undefined;
-
 /** How the document saves an edit: what the words were written from, and the developer's. */
 export type PlanEditDoor = (request: PlanEditRequest) => Promise<TasksEditAnswer>;
+
+/** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
+const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
+
+/** What the toast over words a task was left with says, and its action, by whether they wait on a conflict. */
+const LEFT_UNSAVED = {
+  WORDS: "Your plan edits could not be saved.",
+  RETRY: "Retry",
+  KEEP_MINE: "Keep mine",
+} as const;
+
+/** What a task's words are saved through once it is left: its id, its door, and where they are kept and said. */
+interface LeftTask {
+  readonly taskId: string;
+  readonly door: PlanEditDoor;
+  readonly registry: AtomRegistry.AtomRegistry;
+  readonly toast: (notice: ToastNotice) => void;
+}
+
+/** The words left unsaved in `taskId` taken back, so nothing else saves them. */
+function takeLeft(registry: AtomRegistry.AtomRegistry, taskId: string): DocumentEditor | undefined {
+  const held = registry.get(leftUnsavedAtom);
+  const kept = held.get(taskId);
+  if (kept === undefined) return undefined;
+  const rest = new Map(held);
+  rest.delete(taskId);
+  registry.set(leftUnsavedAtom, rest);
+  return kept;
+}
+
+/**
+ * The editor as its task was left, kept where its words still did not save,
+ * and said in a toast that stands until dismissed, whose action saves them
+ * again from what is kept then: a Retry, or a Keep mine over a conflict.
+ */
+function keepLeft(left: LeftTask, now: DocumentEditor): void {
+  const { taskId, registry } = left;
+  const kept = editorLeft(now);
+  const held = new Map(registry.get(leftUnsavedAtom));
+  if (kept === undefined) held.delete(taskId);
+  else held.set(taskId, kept);
+  registry.set(leftUnsavedAtom, held);
+  if (kept === undefined) return;
+  const conflict = kept.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT;
+  const press = () => {
+    const standing = takeLeft(registry, taskId);
+    if (standing !== undefined) saveLeft(left, editorKeptMine(standing));
+  };
+  left.toast({
+    words: LEFT_UNSAVED.WORDS,
+    ...(conflict ? { detail: CONFLICT_NOTE } : {}),
+    tone: STATUS_TONE.DANGER,
+    subject: taskId,
+    persists: true,
+    action: { label: conflict ? LEFT_UNSAVED.KEEP_MINE : LEFT_UNSAVED.RETRY, onPress: press },
+  });
+}
+
+/** Saves the words of a task left through its door, keeping them where that save does not land. */
+function saveLeft(left: LeftTask, now: DocumentEditor): void {
+  const request = leavingSave(now);
+  if (request === undefined) {
+    keepLeft(left, now);
+    return;
+  }
+  const sent = editorSent(now, request);
+  left.door(request).then(
+    (answered) => keepLeft(left, editorAnswered(sent, answered)),
+    (refused: Error) => keepLeft(left, editorRefused(sent, refused.message)),
+  );
+}
 
 /** The blocks of the document that are no section of its text. */
 export const EDITOR_PLACE = {
@@ -87,6 +168,23 @@ export interface PlanEditing {
 }
 
 /**
+ * The door a task's plan saves through, bound to that task's id and steady
+ * across its draws. Note that a door calling the newest `edit` with the id
+ * open now would send the words a task was left with, which save after it is
+ * left, to the task opened since.
+ */
+export function usePlanEditDoor(
+  taskId: string | undefined,
+  edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>,
+): PlanEditDoor | undefined {
+  const save = useSteadyDoor(edit);
+  return useMemo(
+    () => (taskId === undefined ? undefined : (request: PlanEditRequest) => save(taskId, request)),
+    [taskId, save],
+  );
+}
+
+/**
  * The editor over the open plan's text as `text` holds it; none can open
  * without one. Note that a save's answer lands only on the editor it was
  * sent from: each opening is counted, and an answer for an earlier one is
@@ -102,6 +200,9 @@ export function usePlanEditing(
   const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
   const [cursor, setCursor] = useState<EditorHost | undefined>(undefined);
   const [saves, setSaves] = useState(0);
+  const registry = useContext(RegistryContext);
+  const toast = useToast();
+  const withdrawToast = useWithdrawToast();
   // The open editor's words not yet handed over, which a task leaving must save too.
   const heldWords = useRef<(() => void) | undefined>(undefined);
   const [pause, restartPause] = useAtom(savePauseAtom);
@@ -168,24 +269,28 @@ export function usePlanEditing(
   // Another task opened, or the document gone, takes the editor with it, and
   // words not yet saved are sent through the door of the task they were
   // typed in. Note that the cleanup is what sends them, because it still
-  // holds that task's door and runs before the document can go.
+  // holds that task's door and runs before the document can go. A task
+  // opening that was left with words unsaved opens its editor on them.
   useEffect(() => {
     opening.current += 1;
-    setEditor(undefined);
+    const kept = text === undefined ? undefined : takeLeft(registry, taskId);
+    if (kept !== undefined) withdrawToast(taskId);
+    latest.current = kept;
+    setEditor(kept);
     setSelecting(undefined);
     setCursor(undefined);
     return () => {
       heldWords.current?.();
       const held = latest.current;
-      const leaving = door.current;
-      const rest = (now: DocumentEditor) => {
-        const request = pendingSave(now);
-        if (request !== undefined) leaving(request).catch(ignore);
-      };
       if (held === undefined) return;
-      if (held.sending === undefined) rest(held);
+      const left: LeftTask = { taskId, door: door.current, registry, toast };
+      if (held.sending === undefined) saveLeft(left, held);
       // Note that words typed while a save was out go once it lands, from what it saved.
-      else flight.current?.then((answered) => rest(editorAnswered(held, answered)), ignore);
+      else
+        flight.current?.then(
+          (answered) => saveLeft(left, editorAnswered(held, answered)),
+          (refused: Error) => saveLeft(left, editorRefused(held, refused.message)),
+        );
     };
   }, [taskId]);
 
