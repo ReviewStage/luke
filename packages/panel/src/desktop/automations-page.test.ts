@@ -113,7 +113,11 @@ const SWEEP = automation(1, {
   name: "Nightly flaky-test sweep",
   scope: AUTOMATION_SCOPE.WORKSPACE,
 });
-const DIGEST = automation(2, { name: "Morning digest", scope: AUTOMATION_SCOPE.PERSONAL });
+const DIGEST = automation(2, {
+  name: "Morning digest",
+  scope: AUTOMATION_SCOPE.PERSONAL,
+  mine: true,
+});
 const FAILING = automation(3, {
   name: "Dependency bumps",
   scope: AUTOMATION_SCOPE.WORKSPACE,
@@ -713,7 +717,7 @@ test("what changed elsewhere is drawn as the host pushes it, and a switch reads 
 
 test("a window moved to another workspace lets the list it followed go, and follows that workspace's", async () => {
   const beta: Workspace = { ...WORKSPACE, id: "workspace-beta", name: "Beta" };
-  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id });
+  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id, mine: true });
   standing = [...standing, betaAutomation];
   const page = mount();
   await settle();
@@ -1499,6 +1503,24 @@ test("the list's Owner column draws the workspace by its tile, the account's own
   assert.equal(markOf(SWEEP.name), "tile");
   assert.equal(markOf(DIGEST.name), "person");
   assert.equal(markOf(FAILING.name), "someone");
+});
+
+test("a personal automation another member made is not called Only you, in its row, its heading, or its Owner picker", async () => {
+  const theirs = { ...DIGEST, name: "Their digest", mine: false };
+  standing = [SWEEP, theirs];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  assert.deepEqual(
+    [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
+    ["Acme", "Personal"],
+  );
+  assert.deepEqual(rows(page).at(-1), ["Their digest", "Personal"]);
+  act(() => root?.unmount());
+
+  const editor = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: theirs.id });
+  await settle();
+  assert.equal(picked(editor, "Owner"), "Personal");
 });
 
 test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {

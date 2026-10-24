@@ -179,6 +179,7 @@ import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-panel.js";
+import { automationOwnerName } from "./automation-words.js";
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
@@ -382,11 +383,6 @@ function zoneLabel(zone: string): string {
   return zone.replaceAll("_", " ");
 }
 
-/** An owner as the crumbs and the Owner row name it. */
-function ownerName(owner: AutomationScope, workspace: Workspace | undefined): string {
-  return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspace?.name ?? "Workspace") : "Only you";
-}
-
 /**
  * Who owns it, the form's first row: Only you under the account's own
  * picture, or the workspace under its photo, on the chip and in its menu
@@ -417,7 +413,7 @@ function OwnerRow({
           : "Only you see and change it. Owners and admins can see it and turn it off."
       }
       value={owner}
-      valueLabel={ownerName(owner, workspace)}
+      valueLabel={automationOwnerName(owner, workspace?.name, mine)}
       valueIcon={
         <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
       }
@@ -1920,8 +1916,12 @@ function EditorForm({
   // The form is the area its reveals move, so the groups under a trigger's rows glide as they unroll.
   const form = useRef<HTMLDivElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
+  const mine = automation === undefined || automation.mine === true;
   const owners = [
-    { value: AUTOMATION_SCOPE.PERSONAL, label: "Only you" },
+    {
+      value: AUTOMATION_SCOPE.PERSONAL,
+      label: automationOwnerName(AUTOMATION_SCOPE.PERSONAL, undefined, mine),
+    },
     { value: AUTOMATION_SCOPE.WORKSPACE, label: workspaceName },
   ] as const;
   return (
@@ -1932,7 +1932,7 @@ function EditorForm({
             <OwnerRow
               owner={draft.owner}
               owners={owners}
-              mine={automation === undefined || automation.mine === true}
+              mine={mine}
               workspace={workspace}
               onOwner={(owner) => onDraft({ owner })}
             />

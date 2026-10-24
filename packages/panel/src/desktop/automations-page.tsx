@@ -142,7 +142,7 @@ function OwnerCell({
   mine: boolean;
   workspace: Workspace | undefined;
 }): React.JSX.Element {
-  const name = automationOwnerName(owner, workspace?.name);
+  const name = automationOwnerName(owner, workspace?.name, mine);
   return (
     <Tooltip label={name}>
       <AutomationOwnerFrame
@@ -305,7 +305,11 @@ function AutomationList({
   return (
     <>
       {groups.map((group) => {
-        const name = automationOwnerName(group.owner, workspace?.name);
+        const name = automationOwnerName(
+          group.owner,
+          workspace?.name,
+          group.automations.every((automation) => automation.mine === true),
+        );
         return (
           <AutomationGroupCard key={group.owner} name={name} headed={groups.length > 1 || narrow}>
             {group.automations.map((automation) => (
