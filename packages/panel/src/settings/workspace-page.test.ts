@@ -2220,6 +2220,16 @@ test("Invite pressed again while one is on its way sends one invitation", async 
   assert.equal(page.querySelector('[role="alert"]'), null);
 });
 
+test("Invite is drawn as the form's act, its primary button", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const form =
+    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+  assert.equal(submit?.textContent, "Invite");
+  assert.equal(submit?.getAttribute("data-variant"), "primary");
+});
+
 test("an address already invited is said under the form, and a member is offered no invitations", async () => {
   refuseInvitation = true;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });

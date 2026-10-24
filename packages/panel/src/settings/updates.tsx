@@ -1,9 +1,11 @@
 import { ACT_KIND } from "@luke/host/acts";
+import { UPDATE_ENDPOINT } from "@luke/host/update-service";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "@luke/settings/update-row";
 import {
   BUTTON_VARIANT,
   Button,
+  ButtonLink,
   CheckIcon,
   ExternalIcon,
   FailureNote,
@@ -18,7 +20,7 @@ import { useAct } from "../act.js";
 
 /**
  * The row's one act, in the outline face every Settings row's act wears:
- * restart into the release, reach its page in the browser, check for one,
+ * restart into the release, reach its page in the browser as a link, check for one,
  * or check again — or none at all, while a download runs or for a
  * development build no release is newer than. The accent is kept for a
  * form's Save alone.
@@ -36,13 +38,18 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
       );
     case UPDATE_ROW_ACTION.GET:
       return (
-        <Button
+        <ButtonLink
           variant={BUTTON_VARIANT.OUTLINE}
           icon={<ExternalIcon />}
-          onClick={control.onOpenLatest}
+          href={UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL}
+          // Note that the page opens through the update act, as a toast's link does, so a refusal toasts.
+          onClick={(event) => {
+            event.preventDefault();
+            control.onOpenLatest();
+          }}
         >
           Download
-        </Button>
+        </ButtonLink>
       );
     // Note that a failed check's Retry stands in its `FailureNote` under the row.
     case UPDATE_ROW_ACTION.RETRY:
@@ -67,7 +74,7 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
  * outside. A platform that offers no updates draws the changelog alone.
  *
  * The group is `@luke/ui`'s `SettingsSection` and each line its
- * `SettingsRow`, every act the outline `Button`. Note that each row stands
+ * `SettingsRow`, every act the outline `Button` or, where it opens a page, `ButtonLink`. Note that each row stands
  * in a wrapper wearing its search anchor, because the shared row takes no
  * attribute of a caller's.
  */
@@ -130,13 +137,17 @@ export function UpdatesSection({
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.CHANGELOG)}>
         <SettingsRow label="Changelog">
           {() => (
-            <Button
+            <ButtonLink
               variant={BUTTON_VARIANT.OUTLINE}
               icon={<ExternalIcon />}
-              onClick={() => press(ACT_KIND.UPDATE_OPEN_CHANGELOG)}
+              href={UPDATE_ENDPOINT.CHANGELOG_PAGE_URL}
+              onClick={(event) => {
+                event.preventDefault();
+                press(ACT_KIND.UPDATE_OPEN_CHANGELOG);
+              }}
             >
-              Open
-            </Button>
+              Open changelog
+            </ButtonLink>
           )}
         </SettingsRow>
       </div>
