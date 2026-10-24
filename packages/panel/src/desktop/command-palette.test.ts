@@ -390,9 +390,11 @@ test("a key typed in ⌘K stands in its field at once, and the rows are ranked f
   assert.equal(rows()[0], "Agents");
 });
 
-test("a Return pressed before the rows are ranked for the words typed chooses the row they rank first, never one the earlier words ranked", async () => {
+test("a Return pressed before the rows are ranked for the words typed chooses the row they rank first, never one the earlier words ranked or highlighted", async () => {
   const sent = openPalette();
   chooseFilter("Settings");
+  key({ key: "ArrowDown" });
+  key({ key: "ArrowDown" });
 
   // Note that the key and the Return go in outside `act`, which would draw the ranking's own render between them.
   const input = field();
@@ -411,6 +413,31 @@ test("a Return pressed before the rows are ranked for the words typed chooses th
 
   assert.deepEqual(before, { tabs: [], views: [] }, "nothing chosen from the earlier rows");
   assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+});
+
+test("a Return held for its words is let go once other words are typed before they are ranked, choosing nothing", async () => {
+  const sent = openPalette();
+  chooseFilter("Settings");
+
+  // Note that the keys and the Return go in outside `act`, which would draw the ranking's own render between them.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const typeNow = (words: string) =>
+    flushSync(() => {
+      setValue?.call(input, words);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  typeNow("integrations");
+  flushSync(() => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+  });
+  typeNow("agents");
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(sent, { tabs: [], views: [] });
+  assert.equal(rows()[0], "Agents", "the palette stands, ranked for the words now typed");
 });
 
 test("choosing a page opens Settings on that page", () => {

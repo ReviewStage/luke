@@ -1479,15 +1479,19 @@ export function CommandPalette({
   // row follows in a render of its own, which the next key may cut short. A
   // closed palette seeks nothing, so an opening starts level with its empty field.
   const sought = useDeferredValue(open ? query : "");
-  // A Return pressed before the rows are ranked for the words typed, held until they are.
-  const owedReturn = useRef(false);
+  // The words a Return was pressed on before the rows were ranked for them, held until they are.
+  const owedReturn = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!open) owedReturn.current = false;
-    if (!owedReturn.current || sought !== query) return;
-    owedReturn.current = false;
+    const owed = owedReturn.current;
+    if (!open) owedReturn.current = undefined;
+    if (!open || owed === undefined || sought !== query) return;
+    owedReturn.current = undefined;
+    // Note that the Return chooses the row its words rank first, as a Return typed after them would,
+    // whatever was highlighted before; and none where the words changed again before they were ranked.
+    if (owed !== query) return;
     const items = stood.current.flatMap((group) => group.items);
-    items.find((item) => item.id === selected)?.onSelect();
-  }, [open, sought, query, selected]);
+    items.find((item) => item.disabled !== true)?.onSelect();
+  }, [open, sought, query]);
 
   // Note that no key pressed in the palette goes on to the window, which the
   // dialog sees to, because the window's Escape would stop Luke mid-reply and
@@ -1497,7 +1501,7 @@ export function CommandPalette({
     // Note that a Return the rows have not caught up with waits for them, so it never chooses a row the earlier words ranked.
     if (event.key === "Enter" && sought !== query) {
       event.preventDefault();
-      owedReturn.current = true;
+      owedReturn.current = query;
       return;
     }
     const step = arrowStep(event, query);
