@@ -185,9 +185,7 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
   open(page.switcher());
   const offered = menuItems().map(labelOf);
   choose("New workspace");
-  const field =
-    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
-    assert.fail("no name field");
+  const field = nameInput() ?? assert.fail("no name field");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field, "  Platform  ");
@@ -230,13 +228,20 @@ test("the workspace menu closes when the sidebar folds away", () => {
   assert.deepEqual(menuItems(), []);
 });
 
+/** The name field of the open New workspace card, found by the visible label that names it. */
+function nameInput(): HTMLInputElement | null {
+  const label = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')].find(
+    (candidate) => candidate.textContent === "Workspace name",
+  );
+  const input = label === undefined ? null : document.getElementById(label.htmlFor);
+  return input instanceof HTMLInputElement ? input : null;
+}
+
 /** Opens New workspace and types `name` into its field, which it answers. */
 function nameWorkspace(page: { switcher: () => HTMLButtonElement | null }, name: string) {
   open(page.switcher());
   choose("New workspace");
-  const field =
-    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
-    assert.fail("no name field");
+  const field = nameInput() ?? assert.fail("no name field");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field, name);
@@ -268,9 +273,7 @@ test("a name typed after a refusal keeps the card up, takes the refusal away, an
     setValue?.call(field, "P");
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  const typed = document.querySelector<HTMLInputElement>(
-    '[role="dialog"] input[aria-label="Workspace name"]',
-  )?.value;
+  const typed = nameInput()?.value;
   const refusalAfterTyping = document.querySelector(
     '[role="dialog"] [data-slot="field-error"]:not(:empty)',
   );
@@ -296,10 +299,7 @@ test("New workspace opens on an empty name each time, so a cancelled name is not
   open(page.switcher());
   choose("New workspace");
 
-  assert.equal(
-    document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]')?.value,
-    "",
-  );
+  assert.equal(nameInput()?.value, "");
 });
 
 test("Enter while an input method composes creates nothing, and a press dragged from the field onto the dimmed window cancels nothing", async () => {
