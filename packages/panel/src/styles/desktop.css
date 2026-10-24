@@ -1662,7 +1662,7 @@ ul.actor-stack {
 }
 
 /* A plan's comment counts and a block's comment button stand in the gutter
-   past the column's end (tasks.css), which the desktop's 40px inset holds.
+   past the column's end (tasks.css), which the desktop's 48px inset holds.
    The web's 24px holds neither, so its documents end a finger's target and a
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
@@ -1673,6 +1673,15 @@ ul.actor-stack {
 
 [data-luke-profile="web"] .desktop-document .plan-document-body {
   padding-right: var(--comment-gutter);
+}
+
+/* Under 480px of room the document gives back half its inset at its start,
+   as every page does (`CollectionPage`, `DetailPage`, `SettingsPage`), and
+   keeps its end's, which holds the comment gutter, as the web's does. */
+@container plan-document (width < 480px) {
+  .desktop-document .plan-document-body {
+    padding-left: var(--luke-page-inset-narrow);
+  }
 }
 
 .desktop-document .plan-body,

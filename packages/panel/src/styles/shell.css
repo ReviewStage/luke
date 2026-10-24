@@ -443,7 +443,7 @@
 
 /* A page's toolbar is `@luke/ui`'s `Toolbar`, which draws itself
    (toolbar.css) at the bar height set above, the one the side panel's bar
-   shares, so the two bars' bottom borders are one line across the window.
+   shares, so the two bars stand one height across the window.
    While the sidebar is folded, or a narrow room's drawer is away, the title
    bar's buttons stand over the toolbar's start, so it starts past them: the
    room the bar reads its start from (`--luke-toolbar-start-at`). */
