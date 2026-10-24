@@ -17,7 +17,7 @@ import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
 import { startVoiceLevelMeter } from "@luke/panel/voice/voice-level-meter";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
-import { hostedVoiceUnavailableNote } from "@luke/voice/microphone-access";
+import { hostedVoiceFailure } from "@luke/voice/microphone-access";
 import {
   type LiveVoiceBridge,
   LiveVoiceOrchestrator,
@@ -120,9 +120,9 @@ export function useVoiceSession(
       Effect.promise(
         async () => (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
       ),
-    hostedUnavailableNote: () =>
+    hostedFailure: () =>
       Effect.promise(async () =>
-        hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
+        hostedVoiceFailure(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
       ),
     stopSpeaking: () => Effect.promise(() => act(ACT_KIND.VOICE_STOP_SPEAKING).catch(() => false)),
   };

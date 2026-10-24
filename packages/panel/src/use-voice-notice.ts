@@ -1,3 +1,9 @@
+import {
+  VOICE_FAILURE_WORDS,
+  type VoiceFailure,
+  type VoiceFailureWords,
+  type VoiceRemedy,
+} from "@luke/features/words";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import { useEffect, useRef, useState } from "react";
 import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view.js";
@@ -32,10 +38,11 @@ type VoiceNoticeTone = (typeof VOICE_NOTICE_TONE)[keyof typeof VOICE_NOTICE_TONE
  */
 const NOTICE_LINGER_MS = 3_000;
 
-/** The line's words and what they are. */
+/** The line's words, what they are, and the remedy its button offers where one does something about them. */
 interface VoiceNoticeContent {
   tone: VoiceNoticeTone;
   words: string;
+  remedy?: VoiceRemedy | undefined;
 }
 
 export interface VoiceNoticePresentation {
@@ -46,8 +53,8 @@ export interface VoiceNoticePresentation {
 }
 
 interface UseVoiceNoticeOptions {
-  voiceError: string | undefined;
-  voiceNotice: string | undefined;
+  voiceError: VoiceFailure | undefined;
+  voiceNotice: VoiceFailure | undefined;
   /** Who is being heard, which decides what may show over a fault or a notice, and whether Luke is speaking unheard. */
   speakers: VoiceSpeakers;
   fixtureSpeaking: boolean;
@@ -55,13 +62,19 @@ interface UseVoiceNoticeOptions {
   volumeHint: { wanted: boolean; text: string };
 }
 
+/** A failure as the line says it: its words from the words module, never text the voice was handed. */
+function failureContent(tone: VoiceNoticeTone, failure: VoiceFailure): VoiceNoticeContent {
+  const said: VoiceFailureWords = VOICE_FAILURE_WORDS[failure];
+  return { tone, words: said.words, remedy: said.remedy };
+}
+
 /** What the line is being handed live this frame. */
 function liveContent(options: UseVoiceNoticeOptions): VoiceNoticeContent | undefined {
   const { speakers, fixtureSpeaking, volumeHint } = options;
   const error = voiceErrorToShow({ fixtureSpeaking, speakers, error: options.voiceError });
-  if (error !== undefined) return { tone: VOICE_NOTICE_TONE.ERROR, words: error };
+  if (error !== undefined) return failureContent(VOICE_NOTICE_TONE.ERROR, error);
   const notice = voiceNoticeToShow({ fixtureSpeaking, speakers, notice: options.voiceNotice });
-  if (notice !== undefined) return { tone: VOICE_NOTICE_TONE.NOTICE, words: notice };
+  if (notice !== undefined) return failureContent(VOICE_NOTICE_TONE.NOTICE, notice);
   // Note that the hint asks only while Luke speaks, because only then is there something unheard.
   if (volumeHint.wanted && speakers.lukeSpeaking) {
     return { tone: VOICE_NOTICE_TONE.VOLUME, words: volumeHint.text };

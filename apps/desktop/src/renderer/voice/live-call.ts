@@ -1,3 +1,4 @@
+import { VOICE_FAILURE } from "@luke/features/words";
 import {
   LIVE_PEER_END_REASON,
   LIVE_TRANSPORT_STATE,
@@ -102,8 +103,6 @@ const TURN_QUIET_WAIT_MS = Math.max(
   0,
   (TURN_GATE.QUIET_SAMPLES * 1_000) / PCM_SAMPLE_RATE - VOICE_ACTIVITY_HANGOVER_MS,
 );
-
-const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
 interface LiveCallActs {
   createSession: (
@@ -520,7 +519,7 @@ export class LiveCall implements LiveVoiceCall {
         },
       });
       if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {
-        this.#options.events.onError(opened.message);
+        this.#options.events.onError(VOICE_FAILURE.CALL_NOT_STARTED);
         this.#setStatus(LIVE_STATUS.FAILED);
         return false;
       }
@@ -533,7 +532,7 @@ export class LiveCall implements LiveVoiceCall {
       const started = yield* this.#awaitStart();
       if (started) return true;
       if (!this.#ended) {
-        this.#options.events.onError(SESSION_START_TIMEOUT_MESSAGE);
+        this.#options.events.onError(VOICE_FAILURE.CALL_NOT_STARTED);
         this.#tearDown(LIVE_STATUS.FAILED, LIVE_PEER_END_REASON.START_TIMED_OUT);
       }
       return false;
