@@ -281,6 +281,7 @@ test("each harness's row says how it is connected beside an act: nothing and Con
   const empty = await mount();
   assert.equal(rowButton(empty, "Claude").textContent, "Connect");
   assert.equal(rowButton(empty, "Codex").textContent, "Connect");
+  assert.equal(rowButton(empty, "Codex").getAttribute("aria-label"), "Connect Codex");
   assert.equal(rowState(empty, "Claude"), undefined);
   assert.equal(rowState(empty, "Codex"), undefined);
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -292,6 +293,14 @@ test("each harness's row says how it is connected beside an act: nothing and Con
   const connected = await mount();
   assert.equal(rowButton(connected, "Claude").textContent, "Manage");
   assert.equal(rowButton(connected, "Codex").textContent, "Manage");
+  assert.equal(rowButton(connected, "Claude").getAttribute("aria-label"), "Manage Claude");
+  assert.equal(rowButton(connected, "Codex").getAttribute("aria-label"), "Manage Codex");
+  const described = (harness: string) =>
+    (rowButton(connected, harness).getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent)
+      .join(" ");
+  assert.match(described("Claude"), /Connected with a subscription/u);
   assert.deepEqual(rowState(connected, "Claude"), connectedWith("Connected with a subscription"));
   assert.deepEqual(rowState(connected, "Codex"), connectedWith("Connected with an API key"));
   assert.match(

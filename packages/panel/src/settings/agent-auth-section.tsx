@@ -1184,11 +1184,12 @@ export function AgentAuthSection({
                   }
                 >
                   {(control) => (
-                    // Note that the act is described by its row's name, since both rows may say Manage.
+                    // Note that the act is named for its harness, since both rows may say Manage, and described by the row's state.
                     <Button
                       variant={BUTTON_VARIANT.OUTLINE}
+                      label={`${verb} ${harness.name}`}
                       aria-haspopup="dialog"
-                      aria-describedby={control.labelId}
+                      aria-describedby={control["aria-describedby"]}
                       onClick={() => setOpen(provider)}
                     >
                       {verb}
