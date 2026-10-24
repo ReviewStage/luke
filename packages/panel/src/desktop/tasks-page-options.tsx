@@ -80,7 +80,7 @@ import {
 import { type ReactNode, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { memberRows } from "../member-rows.js";
+import { memberReadNotice, memberRows } from "../member-rows.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryWords } from "../repository-row.js";
 import {
@@ -443,13 +443,6 @@ function offeredFields(shared: boolean): readonly TasksFilterField[] {
   );
 }
 
-/** The row standing last in a people's field while the members are read, which nothing picks. */
-const READING_MEMBERS: MenuAction = {
-  label: "Reading members…",
-  disabled: true,
-  onSelect: () => undefined,
-};
-
 /** What the Filter says of itself while it keeps anything. */
 export const FILTERED = "Filtered";
 
@@ -479,8 +472,8 @@ function filterEntries(
             onSelect: () => onFilter(toggledFilter(filter, field, value)),
           }),
         ),
-        // Note that the members are read for the people's fields alone, so no other field says it is reading.
-        ...(reader.membersReading && PERSON_FIELDS.includes(field) ? [READING_MEMBERS] : []),
+        // Note that the members are read for the people's fields alone, so no other field says it is reading or could not be read.
+        ...(PERSON_FIELDS.includes(field) ? memberReadNotice(reader) : []),
       ],
     };
   });

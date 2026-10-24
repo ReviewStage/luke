@@ -263,3 +263,55 @@ test("the assignee's menu says it is reading while the members are unread, and n
   );
   assert.equal(document.querySelector(".luke-combobox-empty"), null);
 });
+
+test("the assignee's menu says the members could not be read, with Retry, never that none match, and Retry reads them again", async () => {
+  let reads = 0;
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      reads += 1;
+      return reads === 1
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve([
+            {
+              userId: "user-ada",
+              name: "Ada Lovelace",
+              email: "ada@acme.test",
+              role: WORKSPACE_ROLE.MEMBER,
+            },
+          ]);
+    },
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  await act(async () => {
+    root.render(
+      createElement(MemberDirectory, {
+        workspace: { id: "workspace-acme", memberCount: 1 },
+        readerId: "user-dean",
+        children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
+      }),
+    );
+  });
+
+  act(() => chip(host, "Assignee").click());
+
+  const note = document.querySelector(".luke-combobox-note");
+  assert.match(note?.textContent ?? "", /Members could not be read\./u);
+  assert.equal(document.querySelector(".luke-combobox-empty"), null);
+  const retry =
+    [...(note?.querySelectorAll("button") ?? [])].find((button) =>
+      (button.textContent ?? "").includes("Retry"),
+    ) ?? assert.fail("no Retry");
+  await act(async () => retry.click());
+
+  assert.equal(document.querySelector(".luke-combobox-note"), null);
+  assert.ok(
+    [...document.querySelectorAll('[role="option"]')].some((row) =>
+      (row.textContent ?? "").includes("Ada Lovelace"),
+    ),
+  );
+});

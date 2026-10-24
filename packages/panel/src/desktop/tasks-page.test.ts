@@ -1110,6 +1110,44 @@ test("the Filter's Assignee and Creator list the members as every people menu do
   assert.match(page.textContent ?? "", /Assignee: You/, "the reader's own chip says You");
 });
 
+test("the Filter's Assignee says the members could not be read, with Retry, in the people's place, and Retry reads them again and leaves the menu standing", async () => {
+  let reads = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      reads += 1;
+      return reads === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(MEMBERS);
+    },
+  });
+  const page = await mountPage();
+  listWorkspace({ ...ACME, memberCount: 2 });
+  await act(async () => undefined);
+  const labels = () =>
+    [
+      ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
+        .at(-1)
+        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+    ].map((item) => [
+      item.querySelector(".luke-menu-item-label")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+    ]);
+
+  openOptions(page, "Filter");
+  choose("Assignee");
+  const failed = labels();
+  await act(async () => choose("Members could not be read."));
+
+  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
+  assert.ok(
+    failed.every(([label]) => label !== "Reading members…"),
+    "a failed read is no reading",
+  );
+  assert.ok(
+    labels().some(([label]) => label === "Dean Stratakos"),
+    "the members are listed once read again, in the menu that stayed",
+  );
+  assert.ok(labels().every(([label]) => label !== "Members could not be read."));
+});
+
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
   const page = await mountPage();
   const offered = () =>
