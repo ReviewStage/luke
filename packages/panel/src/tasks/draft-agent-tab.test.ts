@@ -302,8 +302,8 @@ test("a Start refused because the installation was not given the repository open
   ]);
   await tab.send();
 
-  assert.equal(tab.words(), "Luke on GitHub doesn't have access to Acme/Relay.");
-  await tab.press("Add Acme/Relay to Luke on GitHub");
+  assert.equal(tab.words(), "Luke's GitHub App doesn't have access to Acme/Relay.");
+  await tab.press("Add Acme/Relay to Luke's GitHub App");
   assert.deepEqual(tab.remedies, [`github:${settingsUrl}`]);
   assert.ok(tab.button("Retry"));
 });

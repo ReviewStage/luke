@@ -43,7 +43,7 @@ const REWIND_WORDS = {
 /** What Revert to here asks before it drops anything. */
 const REVERT_QUESTION: DialogQuestion = {
   title: "Revert to this message?",
-  body: "Everything after it will be removed from the conversation, and the agent stopped if it is working. Changes the agent made to its files stay as they are.",
+  body: "Everything after it will be removed from the transcript, and the agent stopped if it is working. Changes the agent made to its files stay as they are.",
   verb: "Revert",
   running: "Reverting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,

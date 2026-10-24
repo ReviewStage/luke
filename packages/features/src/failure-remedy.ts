@@ -99,7 +99,7 @@ export function remedyLabel(failure: Failure): string | undefined {
     case FAILURE_REASON.RECONNECT_GITHUB:
       return "Reconnect GitHub";
     case FAILURE_REASON.ADD_REPOSITORY:
-      return `Add ${failure.repository} to Luke on GitHub`;
+      return `Add ${failure.repository} to Luke's GitHub App`;
     case FAILURE_REASON.CHOOSE_REPOSITORY:
       return "Choose a repository";
     case FAILURE_REASON.MOVE_TASK:
