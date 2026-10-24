@@ -174,6 +174,7 @@ interface PlaywrightLocator {
   click(options: Record<string, unknown>): Promise<void>;
   hover(options: Record<string, unknown>): Promise<void>;
   waitFor(options: Record<string, unknown>): Promise<void>;
+  isVisible(): Promise<boolean>;
   screenshot(options: Record<string, unknown>): Promise<unknown>;
 }
 interface PlaywrightPage {
@@ -333,7 +334,19 @@ async function runStep(page: PlaywrightPage, step: Step): Promise<string | undef
   }
 }
 
-/** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. */
+/** Floats the sidebar open where the window has folded it away, which its toggle offers as "Show sidebar" and only then; a pinned sidebar offers "Hide sidebar", so nothing is pressed. */
+async function showSidebar(page: PlaywrightPage, problems: string[]): Promise<void> {
+  const toggle = page.getByRole("button", { name: "Show sidebar", exact: true }).first();
+  if (!(await toggle.isVisible())) return;
+  const problem = await runStep(page, {
+    kind: STEP.CLICK,
+    role: "button",
+    name: "Show sidebar",
+  });
+  if (problem !== undefined) problems.push(problem);
+}
+
+/** Waits for the panel's stage and its fonts, then runs the scene's steps, answering their problems. A scene that steps into the sidebar has it shown first, except in the phone's layout, whose drawer its own steps open. */
 async function stageScene(
   page: PlaywrightPage,
   scene: Scene,
@@ -348,6 +361,7 @@ async function stageScene(
   } catch {
     problems.push("still reading when shot");
   }
+  if (scene.sidebar === true && !phone) await showSidebar(page, problems);
   for (const step of (phone ? scene.phoneSteps : undefined) ?? scene.steps ?? []) {
     const problem = await runStep(page, step);
     if (problem !== undefined) problems.push(problem);
@@ -433,7 +447,8 @@ async function shootDesktop(
     await page.emulateMedia({ colorScheme: shot.theme, reducedMotion: "reduce" });
     await page.evaluate(stillPageScript(shot.theme));
     if (shot.scene.window === WINDOW.CALL) await page.waitForTimeout(LOAD_SETTLE_MS);
-    else await stageScene(page, shot.scene, false, problems);
+    // Note that the zoomed size's 608 CSS px is under the panel's narrow line (`shell-room.ts`), so it draws the phone's layout.
+    else await stageScene(page, shot.scene, shot.size === SIZE.NARROW, problems);
     await page.screenshot({ path: file, animations: "disabled", caret: "hide" });
   } finally {
     await app.close();

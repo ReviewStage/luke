@@ -8,7 +8,9 @@
  * run after the profile has drawn, in order, with the same selectors on
  * either client, since both mount the one panel. A step that finds nothing
  * is written beside the picture rather than failing the run, so a polish
- * pass still sees what the scene drew.
+ * pass still sees what the scene drew. A scene whose steps press something in
+ * the sidebar says so (`sidebar`), and the runner floats the sidebar open
+ * first wherever the window folds it away.
  *
  * The profile names are spelled here rather than imported, because this
  * runs as a plain node script that resolves no workspace package; a name
@@ -72,8 +74,10 @@ export interface Scene {
   /** The launch profile it opens on. */
   readonly profile: string;
   readonly steps?: readonly Step[];
-  /** The steps on a phone, whose sidebar is a drawer and whose places sit in a bar at the foot; `steps` where absent. */
+  /** The steps in the phone's layout, whose sidebar is a drawer and whose places sit in a bar at the foot, which is the web's 390px and the desktop's 608 CSS px at zoom; `steps` where absent. */
   readonly phoneSteps?: readonly Step[];
+  /** Whether `steps` press something in the sidebar, which a window too narrow to pin it folds away: the runner presses "Show sidebar" first there. The phone layout's drawer is `phoneSteps`' own. */
+  readonly sidebar?: true;
   /** The clients that draw it; both where absent. */
   readonly clients?: readonly Client[];
   /** The desktop window it shoots; the panel's where absent. */
@@ -121,6 +125,7 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.TASKS,
     title: "The Tasks list",
     profile: "tasks",
+    sidebar: true,
     steps: [{ kind: STEP.CLICK, role: "button", name: "Tasks" }],
     phoneSteps: PHONE_TO_LIST,
   },
@@ -129,6 +134,7 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.TASKS,
     title: "New task",
     profile: "tasks",
+    sidebar: true,
     steps: [{ kind: STEP.CLICK, role: "button", name: "New task" }],
     phoneSteps: [
       ...PHONE_TO_LIST,
@@ -140,6 +146,7 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.TASKS,
     title: "A task row's menu",
     profile: "tasks",
+    sidebar: true,
     steps: [{ kind: STEP.RIGHT_CLICK, role: "button", name: "Teammate invitations" }],
     phoneSteps: [
       ...PHONE_TO_LIST,
@@ -151,6 +158,7 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.TASKS,
     title: "The sidebar's view options",
     profile: "tasks",
+    sidebar: true,
     steps: [{ kind: STEP.CLICK, role: "button", name: "View options" }],
     phoneSteps: [
       ...PHONE_TO_LIST,
@@ -162,6 +170,7 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.TASKS,
     title: "The workspace menu",
     profile: "tasks",
+    sidebar: true,
     steps: [{ kind: STEP.CLICK, role: "button", name: "Workspace:" }],
     phoneSteps: [
       ...PHONE_TO_LIST,
@@ -185,6 +194,7 @@ export const SCENES: readonly Scene[] = [
     place: PLACE.INBOX,
     title: "The Inbox",
     profile: "tasks",
+    sidebar: true,
     steps: [{ kind: STEP.CLICK, role: "button", name: "Inbox" }],
     phoneSteps: [
       ...PHONE_TO_LIST,
