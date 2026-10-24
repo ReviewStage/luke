@@ -751,7 +751,7 @@ export function withPendingAgents<A extends NamedAgent>(
 
 export function useCodingAgents(input: {
   acts: Pick<ActHandle, "act">;
-  /** The open task, or none; a fixture run's tasks have no agents. */
+  /** The open task, or none. */
   taskId: string | undefined;
   /**
    * The one agent read by its id where no task is open, as the agent page

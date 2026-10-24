@@ -169,3 +169,21 @@ it.effect(
       assert.doesNotMatch(drawn(), /ada@example\.com/u);
     }),
 );
+
+it.effect(
+  "a fixture run on the tasks profile lands its open task's column, a task with no agents, while main answers nothing",
+  () =>
+    Effect.gen(function* () {
+      yield* drawWindow(RUN_PROFILE.TASKS);
+
+      const column = document.querySelector(".desktop-task-column");
+      assert.ok(column, "the open task's column stands");
+      assert.equal(column.querySelector('[class*="skeleton"]'), null);
+      assert.ok(
+        [...document.querySelectorAll('[role="tab"]')].some((tab) =>
+          tab.textContent?.includes("New agent"),
+        ),
+        "the column opens on its New agent tab",
+      );
+    }),
+);
