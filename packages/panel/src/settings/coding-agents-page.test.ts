@@ -12,9 +12,11 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -123,6 +125,7 @@ beforeEach(() => {
   sent = [];
   refuseWrite = false;
   refuseModels = false;
+  opened = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeActs({ act: answer });
 });
@@ -138,6 +141,9 @@ async function settle(): Promise<void> {
   });
 }
 
+/** Where the page opened Settings, as the window's opener heard it. */
+let opened: SettingsLink[] = [];
+
 async function mount(): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -146,10 +152,14 @@ async function mount(): Promise<HTMLElement> {
   act(() =>
     root.render(
       createElement(
-        Fragment,
-        null,
-        createElement(CodingAgentsPage, { signedIn: true }),
-        onRegistry(rendererRegistry, createElement(ToastHost)),
+        OpenSettingsProvider,
+        { value: (link: SettingsLink) => opened.push(link) },
+        createElement(
+          Fragment,
+          null,
+          createElement(CodingAgentsPage, { signedIn: true }),
+          onRegistry(rendererRegistry, createElement(ToastHost)),
+        ),
       ),
     ),
   );
@@ -392,4 +402,52 @@ test("a catalog that could not be read says so in the Model menu with Retry, and
   assert.equal(reads().length, before + 1, "Retry asks the service for the models again");
   assert.equal(menu.querySelector('[role="alert"]'), null);
   assert.ok(menu.querySelectorAll('[role="option"]').length > 0, "the models are listed");
+});
+
+test("a default nothing pays for, as Claude on an OpenAI key alone, says it cannot run under Model with Connect Claude, which lands on Claude's row, as picking another such model does", async () => {
+  const gpt: CatalogModel = {
+    id: "openai/gpt-6.1",
+    name: "GPT-6.1",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  };
+  const sonnet: CatalogModel = {
+    id: "anthropic/claude-sonnet-5.5",
+    name: "Claude Sonnet 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+    credentialMissing: true,
+  };
+  models = [{ ...OPUS, credentialMissing: true }, sonnet, gpt];
+  const page = await mount();
+  const claudeRow: SettingsLink = {
+    page: SETTINGS_VIEW.CODING_AGENTS,
+    section: SETTINGS_SECTION.CLAUDE,
+  };
+
+  const picker =
+    page.querySelector<HTMLButtonElement>('button[aria-label^="Model: "]') ?? assert.fail();
+  const row = picker.closest(".luke-settings-row") ?? assert.fail("no Model row");
+  assert.match(
+    row.textContent ?? "",
+    /Opus 5\.5 cannot run until you connect Claude with a subscription or an API key\./u,
+  );
+  const connect =
+    [...row.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Connect Claude",
+    ) ?? assert.fail("no Connect Claude under Model");
+  act(() => connect.click());
+  assert.deepEqual(opened, [claudeRow]);
+
+  act(() => picker.click());
+  const menu = document.querySelector('[role="dialog"][aria-label="Model"]') ?? assert.fail();
+  const option = [...menu.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+    (each.textContent ?? "").startsWith("Sonnet 5.5"),
+  );
+  assert.match(option?.textContent ?? "", /Connect Claude/u);
+  act(() => option?.click());
+  await settle();
+
+  assert.deepEqual(opened, [claudeRow, claudeRow]);
+  assert.deepEqual(written(), [], "a model nothing pays for is never kept as the default");
 });

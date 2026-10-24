@@ -1,4 +1,5 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { remedyLabel } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { readingWords } from "@luke/features/words";
 import {
@@ -12,8 +13,10 @@ import {
   Spinner,
 } from "@luke/ui";
 import { HarnessMark } from "../harness-marks.js";
+import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
   CONTEXT_WORD,
+  type ConnectFailure,
   choiceModelId,
   choiceOn,
   choiceWords,
@@ -24,16 +27,19 @@ import {
   FAST_WORD,
   fastRestingNote,
   longWindowNote,
-  MODEL_NOT_CONNECTED,
   MODELS_READ_FAILED,
   type ModelChoiceRead,
+  modelConnectFailure,
+  modelConnectWords,
   modelLabel,
   offeredModels,
   readModelChoice,
+  unrunnableChoice,
   unsearchedModels,
   windowLabel,
   windowOf,
 } from "./coding-agent-model.js";
+import { useRepositoryRemedy } from "./repository-remedy.js";
 
 /**
  * model-menu.tsx -- the one menu that picks a coding agent's model and effort: the Start button's and the agent box's chip's alike.
@@ -52,7 +58,13 @@ import {
  * of the two with what the whole one costs under them; each closes the menu
  * on a pick; and Fast, a switch to the model's fast version, muted where
  * the model has none or the service withholds it, saying which, which
- * leaves the menu open. The id a choice names is
+ * leaves the menu open. A model whose provider no subscription or API key
+ * of the account's pays for says "Connect Claude" or "Connect Codex" at its
+ * row's end, and its pick closes the menu and lands on that harness's row
+ * in Settings › Agents rather than choosing it; where the choice standing
+ * is such a model, as a new account's Claude default is on an OpenAI key
+ * alone, a Connect row heads the pinned rows and the last line says why
+ * the choice cannot run, in place of the plan that no longer pays. The id a choice names is
  * the catalog's own, the fast version's where Fast is on, so the service
  * checks it as it checks any. What the owner does with a choice is its
  * own: the Start button starts on it, the chip
@@ -71,6 +83,7 @@ const FOOT_ROW = {
   EFFORT: "effort",
   CONTEXT: "context",
   FAST: "fast",
+  CONNECT: "connect",
 } as const;
 
 /**
@@ -78,8 +91,8 @@ const FOOT_ROW = {
  * it, found by its name, its catalog name, or its provider, so "claude"
  * still finds the names that no longer say it; the chosen one says its
  * effort, and its window where standard, after its name. A model whose
- * provider no credential of the account's pays for is drawn disabled, so a
- * Start never fails late on it. Before a search only the newest of each family
+ * provider no credential of the account's pays for says what connects it at
+ * its end, so a Start never fails late on it. Before a search only the newest of each family
  * and the chosen one are listed (`unsearchedModels`).
  */
 function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefined): MenuRow[] {
@@ -95,7 +108,7 @@ function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefi
         ? choiceWords(chosen, models).detail
         : undefined,
     searchOnly: !unsearched.has(model.id),
-    ...(model.credentialMissing === true ? { disabled: MODEL_NOT_CONNECTED } : undefined),
+    end: modelConnectWords(model),
   }));
 }
 
@@ -152,6 +165,7 @@ export function ModelMenu(props: {
   ref?: ((element: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
   const { models, chosen, onChoose, onClose } = props;
+  const remedy = useRepositoryRemedy();
   const read =
     models !== undefined && chosen !== undefined
       ? readModelChoice(models, chosen.model)
@@ -223,10 +237,33 @@ export function ModelMenu(props: {
     ];
   };
 
+  const unrunnable =
+    models !== undefined && chosen !== undefined ? unrunnableChoice(models, chosen) : undefined;
+
+  /** The press that lands on the harness's row in Settings, the menu closed first. */
+  const connect = (failure: ConnectFailure): void => {
+    onClose();
+    remedy(failure)?.();
+  };
+
+  /** The Connect row that heads the pinned rows where the choice standing cannot run. */
+  const connectRow = (): FootRow[] => {
+    if (unrunnable === undefined) return [];
+    return [
+      {
+        id: FOOT_ROW.CONNECT,
+        label: remedyLabel(unrunnable) ?? OPEN_SETTINGS_LABEL,
+        icon: <HarnessMark provider={unrunnable.provider} />,
+        onPress: () => connect(unrunnable),
+      },
+    ];
+  };
+
   const foot: FootRow[] | undefined =
     chosen === undefined || read === undefined || models === undefined
       ? undefined
       : [
+          ...connectRow(),
           {
             id: FOOT_ROW.EFFORT,
             label: "Effort",
@@ -271,6 +308,9 @@ export function ModelMenu(props: {
         // The pick keeps Fast where the model has a fast version, and drops it where it has none.
         const picked = offeredModels(models ?? []).find((each) => each.model.id === base);
         if (picked === undefined) return;
+        // A model nothing pays for is never chosen: its pick goes to connect it.
+        const missing = modelConnectFailure(picked.model);
+        if (missing !== undefined) return connect(missing);
         const next = choiceAt(choiceModelId(picked, read?.fast ?? false), chosen?.effort);
         if (next === undefined) return;
         onClose();
@@ -280,7 +320,7 @@ export function ModelMenu(props: {
       onLeave={props.onLeave}
       foot={foot}
       footNote={props.footNote}
-      planNote={props.planNote}
+      planNote={unrunnable === undefined ? props.planNote : unrunnable.text}
       leaving={props.leaving}
       ref={props.ref}
     />
