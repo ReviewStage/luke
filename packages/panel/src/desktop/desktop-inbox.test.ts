@@ -4539,8 +4539,8 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
   assert.ok(
-    others.querySelector(':scope > [aria-hidden="true"] .lucide-factory'),
-    "a group of agents wears the factory glyph, naming no one actor",
+    others.querySelector(':scope > [aria-hidden="true"] .lucide-zap'),
+    "a group of agents wears the automation glyph, naming no one actor",
   );
 
   const mark = rowNamed(page, "Quarantine the flaky test?");
@@ -4582,8 +4582,8 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "the crumb of the agents no automation names wears no automation's clock",
   );
   assert.ok(
-    stray?.querySelector(".lucide-factory"),
-    "it wears the factory glyph, as its group does",
+    stray?.querySelector(".lucide-zap"),
+    "it wears the automation glyph, as its group does",
   );
 });
 
