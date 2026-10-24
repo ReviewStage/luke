@@ -8,6 +8,7 @@ import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_TONE,
   FailureNote,
@@ -187,6 +188,7 @@ export function AccountSection({
           title: `${VERB.SIGN_OUT} of ${account.email}?`,
           verb: VERB.SIGN_OUT,
           running: "Signing out",
+          loss: CONFIRM_LOSS.REVERSIBLE,
           tone: DIALOG_TONE.PRIMARY,
         }}
       />
@@ -198,6 +200,7 @@ export function AccountSection({
           body: "This cannot be undone.",
           verb: "Delete account",
           running: "Deleting account",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </SettingsSection>

@@ -13,10 +13,12 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_SIZE,
   DIALOG_TONE,
   Dialog,
+  DialogActions,
   DocumentIcon,
   ErrorState,
   Fact,
@@ -205,11 +207,7 @@ function SkillFileDialog({
       title={skill.name}
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
-      actions={
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
-          Close
-        </Button>
-      }
+      actions={<DialogActions onDone={onClose} />}
     >
       {read.kind === LIST.READING ? (
         <SpinnerRegion label={`Reading ${skill.name}`} delay />
@@ -374,11 +372,16 @@ function SkillRowView({
           body: "Agents started afterwards no longer load it. Installing it again takes the paste again.",
           verb: "Remove",
           running: "Removing…",
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       />
       <ConfirmDialog
         confirm={sharing}
-        question={{ ...shareQuestion(skill.name, workspace), tone: DIALOG_TONE.PRIMARY }}
+        question={{
+          ...shareQuestion(skill.name, workspace),
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          tone: DIALOG_TONE.PRIMARY,
+        }}
       />
       {viewing ? <SkillFileDialog skill={skill} onClose={() => setViewing(false)} /> : null}
     </>

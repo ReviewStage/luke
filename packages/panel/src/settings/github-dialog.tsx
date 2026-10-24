@@ -12,9 +12,11 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
+  DialogActions,
   GAP,
   Inline,
   JUSTIFY,
@@ -145,7 +147,12 @@ function SavedToken({
       </Button>
       <ConfirmDialog
         confirm={removal}
-        question={{ title: "Remove your GitHub token?", verb: "Remove", running: "Removing…" }}
+        question={{
+          title: "Remove your GitHub token?",
+          verb: "Remove",
+          running: "Removing…",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
+        }}
       />
     </Inline>
   );
@@ -259,11 +266,7 @@ export function GitHubTokenDialog({
           Create token
         </TextLink>
       }
-      actions={
-        <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onClose}>
-          Done
-        </Button>
-      }
+      actions={<DialogActions onDone={onClose} />}
     >
       <div className={NO_CAPTURE}>
         {token === null ? (

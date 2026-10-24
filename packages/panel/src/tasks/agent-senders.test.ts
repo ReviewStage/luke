@@ -302,7 +302,7 @@ function readingOrder(message: Element, words: string): readonly string[] {
   while (text !== null && text.textContent !== words) text = walker.nextNode();
   const seen: [string, Node | null][] = [
     ["words", text],
-    ["Copy", message.querySelector('button[aria-label="Copy"]')],
+    ["Copy", message.querySelector('button[aria-label="Copy message"]')],
     ["sender", message.querySelector(".luke-message-line-sender")],
     ["sent at", message.querySelector("time")],
   ];

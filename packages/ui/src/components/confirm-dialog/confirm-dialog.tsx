@@ -46,6 +46,8 @@ export const CONFIRM_LOSS = {
   IRREVERSIBLE: "irreversible",
   /** Can be undone, but reaches someone else (removing a member, transferring ownership, disconnecting), so it still asks, in the accent. */
   AFFECTS_OTHERS: "affects-others",
+  /** Can be undone and reaches only the asker, so it still asks, in the accent, until it happens at once and offers Undo. */
+  REVERSIBLE: "reversible",
 } as const;
 
 export type ConfirmLoss = (typeof CONFIRM_LOSS)[keyof typeof CONFIRM_LOSS];
@@ -54,6 +56,7 @@ export type ConfirmLoss = (typeof CONFIRM_LOSS)[keyof typeof CONFIRM_LOSS];
 const LOSS_TONE = {
   [CONFIRM_LOSS.IRREVERSIBLE]: DIALOG_TONE.DANGER,
   [CONFIRM_LOSS.AFFECTS_OTHERS]: DIALOG_TONE.PRIMARY,
+  [CONFIRM_LOSS.REVERSIBLE]: DIALOG_TONE.PRIMARY,
 } as const satisfies Record<ConfirmLoss, DialogTone>;
 
 /** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs; the act is red unless its loss, or failing that its tone, says otherwise. */

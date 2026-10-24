@@ -3677,28 +3677,6 @@ ol.transcript-list {
   margin-bottom: 0;
 }
 
-/* A tool call's input or output (../ai-elements/code-block.tsx): its words
-   as they are, in mono, wrapping anywhere rather than widening the
-   transcript, and scrolling inside the block past its height, in the
-   block's `ScrollArea` (`@luke/ui`). */
-.code-block {
-  display: flex;
-  max-height: 256px; /* off-scale: a block's tallest before it scrolls */
-  flex-direction: column;
-}
-
-.code-block-words {
-  margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
-  overflow-wrap: anywhere;
-  user-select: text;
-  white-space: pre-wrap;
-}
-
 /* Where a transcript line's words start: past a call's line inset, its 16px
    icon seat, and the gap after it. What opens under a line (a call's body,
    a model's reasoning, a todo list, a subagent's failure, a call's pictures)
@@ -3791,44 +3769,20 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* The body under an open line, set in past its icon: `@luke/ui`'s tinted
-   card holding the input and the answer, a hairline between them. */
+   card holding what a call sent, a hairline between its blocks. */
 .tool-body {
   margin: var(--luke-space-4) 0 var(--luke-space-4) var(--transcript-gutter);
 }
 
-.tool-body > * + * {
+.tool-body:not([data-bare]) > * + * {
   border-top: 1px solid var(--luke-color-border);
 }
 
-.tool-prompt {
-  color: var(--luke-color-text-muted);
-  user-select: none;
-}
-
-.tool-patch-line {
-  display: block;
-}
-
-.tool-patch-line[data-line="added"] {
-  color: var(--luke-color-working);
-}
-
-.tool-patch-line[data-line="removed"] {
-  color: var(--luke-color-danger-text);
-}
-
-.tool-patch-line[data-line="mark"] {
-  color: var(--luke-color-text-muted);
-}
-
-/* Show more, under an answer cut to its first lines: a quiet strip across
-   the card's width. */
-.tool-more {
-  margin: 0;
-  padding: var(--luke-space-6) var(--luke-space-12);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
+/* A body of cards of their own (`CodeCard`): one over the next, no frame around them. */
+.tool-body[data-bare] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
 }
 
 /* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens

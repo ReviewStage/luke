@@ -11,6 +11,7 @@ import {
 } from "@luke/features/task-section-wire";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   applySectionWrite,
   memberOf,
@@ -20,9 +21,10 @@ import {
 } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -38,8 +40,9 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
  * the dialog's icon picker, every Lucide glyph in a color and every emoji,
  * found by one search; and a task dragged between Pinned, Tasks, and a
  * section, pinned, unpinned, and moved where it is let go; and, under a finger, which drags nothing, a pin, a
- * section, and a section's task moved a place by its long press's menu,
- * which a mouse's menu leaves to its drag. Synthetic throughout.
+ * section, and a section's task moved a place by its menu, which a long
+ * press, a right-click, and the keyboard's ⇧⌘↑ and ⇧⌘↓ all reach, the row
+ * kept focused. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -418,12 +421,13 @@ function openRowMenu(sidebar: HTMLElement, name: string): void {
   });
 }
 
-test("a section holding tasks offers what acts on all of them between Edit and Delete", async () => {
+test("a section holding tasks offers what acts on all of them between Edit and Delete, after its move", async () => {
   const sidebar = await mountSidebar([], ICONLESS);
 
   openSectionMenu(sidebar, "Launch");
 
   assert.deepEqual(menuLabels(), [
+    "Move up",
     "Edit section",
     "Move tasks to",
     "Remove tasks from section",
@@ -432,7 +436,7 @@ test("a section holding tasks offers what acts on all of them between Edit and D
   ]);
 });
 
-test("a section holding no task offers only Edit and Delete", async () => {
+test("a section holding no task offers only Edit and Delete, after its move", async () => {
   const sidebar = await mountSidebar([], {
     sections: ICONLESS.sections,
     entries: ICONLESS.entries.filter((entry) => entry.sectionId !== SOMEDAY),
@@ -441,7 +445,7 @@ test("a section holding no task offers only Edit and Delete", async () => {
 
   openSectionMenu(sidebar, "Someday");
 
-  assert.deepEqual(menuLabels(), ["Edit section", "Delete section"]);
+  assert.deepEqual(menuLabels(), ["Move down", "Edit section", "Delete section"]);
 });
 
 test("a section's Move tasks to puts every task in it on top of the section chosen, in its order", async () => {
@@ -571,34 +575,27 @@ test("a new section starts with no icon and is made without one", async () => {
   assert.equal("icon" in made, false);
 });
 
-test("a title typed after a refusal keeps the card up, takes the refusal away, and can still be made", async () => {
+test("New section waits on a title, and Enter in it makes the section", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section…").click());
-  await act(async () => dialogButton("Create section").click());
-  const refused = document.querySelector(
-    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
-  )?.textContent;
-  const title = document.querySelector<HTMLInputElement>('[aria-label="Section title"]');
-  assert.ok(title);
+  assert.equal(dialogButton("Create section").disabled, true, "a blank title is not offered");
+  const title = document.querySelector<HTMLInputElement>(
+    '[role="dialog"] [aria-label="Section title"]',
+  );
+  assert.ok(title, "a form is a dialog, not an alert");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(title, "S");
     title.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  const typed = document.querySelector<HTMLInputElement>(
-    '[role="alertdialog"] [aria-label="Section title"]',
-  )?.value;
-  const refusalAfterTyping = document.querySelector(
-    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
-  );
-  await act(async () => dialogButton("Create section").click());
+  assert.equal(dialogButton("Create section").disabled, false);
+  await act(async () => {
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
 
-  assert.equal(refused, "Name the section.");
-  assert.equal(typed, "S", "the card stays up with what was typed");
-  assert.equal(refusalAfterTyping, null);
   assert.equal(writes[0]?.kind, TASK_SECTION_WRITE.CREATE);
   assert.equal(writes[0]?.kind === TASK_SECTION_WRITE.CREATE && writes[0].title, "S");
 });
@@ -1114,7 +1111,7 @@ test("under a finger, a pin held offers Move down, which moves it below the next
   assert.ok((asked.moves[0]?.position ?? "") > SECOND_PIN.pinPosition, "it sorts after Pin review");
 });
 
-test("with a mouse, a pin's menu offers no move, which its drag makes", async () => {
+test("with a mouse, a pin's menu offers its move too, with its chord", async () => {
   const sidebar = await mountDraggable([PINNED, SECOND_PIN, INVITES], SECTIONS, noneAsked());
 
   act(() => {
@@ -1126,8 +1123,9 @@ test("with a mouse, a pin's menu offers no move, which its drag makes", async ()
   assert.ok(menuWords().includes("Unpin"), "the pin's menu stands");
   assert.deepEqual(
     menuWords().filter((words) => words === "Move up" || words === "Move down"),
-    [],
+    ["Move up"],
   );
+  assert.equal(item("Move up").querySelector(".luke-menu-item-hint")?.textContent, "⇧⌘↑");
 });
 
 test("under a finger, a section's menu moves it up among the sections", async () => {
@@ -1172,6 +1170,87 @@ test("under a finger, a task held in a section moves down within it by its menu"
     both,
   );
   assert.deepEqual(sectionTaskIds(after, LAUNCH), [second.id, first.id]);
+});
+
+/** The sidebar over two pins that sorts them by each place `onMovePins` hears, as the window's own state does. */
+function PinsThatMove(): React.JSX.Element {
+  const [pins, setPins] = useState([PINNED, SECOND_PIN]);
+  const tasks = tasksControl({
+    tasks: pins,
+    workspaces: [WORKSPACE],
+    workspace: WORKSPACE,
+    onMovePins: (moves) =>
+      setPins((held) =>
+        held.map((pin) => {
+          const place = moves.find((move) => move.id === pin.id)?.position;
+          return place === undefined ? pin : { ...pin, pinPosition: place };
+        }),
+      ),
+  });
+  return createElement(DesktopSidebar, sidebarProps(tasks));
+}
+
+test("⇧⌘↓ moves the pin that has the keyboard below the next and leaves it focused, so ⇧⌘↑ can move it back", async () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(PinsThatMove))));
+  await settle();
+  assert.equal(appCommandOffered(APP_COMMAND.MOVE_ROW_DOWN), false, "no row has the keyboard");
+
+  act(() => rowPress(container, "Pin audit").focus());
+  assert.equal(appCommandOffered(APP_COMMAND.MOVE_ROW_DOWN), true);
+  act(() => {
+    runAppCommand(APP_COMMAND.MOVE_ROW_DOWN);
+  });
+  assert.deepEqual(namesIn(container, "Pinned"), ["Pin review", "Pin audit"]);
+  assert.equal(document.activeElement, rowPress(container, "Pin audit"));
+
+  // Note that the last row has nowhere further down, so the chord leaves it where it stands.
+  act(() => {
+    runAppCommand(APP_COMMAND.MOVE_ROW_DOWN);
+  });
+  assert.deepEqual(namesIn(container, "Pinned"), ["Pin review", "Pin audit"]);
+  act(() => {
+    runAppCommand(APP_COMMAND.MOVE_ROW_UP);
+  });
+  assert.deepEqual(namesIn(container, "Pinned"), ["Pin audit", "Pin review"]);
+  assert.equal(document.activeElement, rowPress(container, "Pin audit"));
+
+  act(() => (document.activeElement as HTMLElement).blur());
+  assert.equal(appCommandOffered(APP_COMMAND.MOVE_ROW_DOWN), false, "the keyboard left the list");
+});
+
+test("⇧⌘↓ on a task in a section moves the task within it, and ⇧⌘↑ on the section's header moves the section", async () => {
+  const asked = noneAsked();
+  const sidebar = await mountDraggable([INVITES, RETRIES], BOTH_IN_LAUNCH, asked);
+  const written = () =>
+    asked.writes.reduce(
+      (state, write) => applySectionWrite(state, write, AFTER_FIXTURES),
+      BOTH_IN_LAUNCH,
+    );
+  const before = workspaceSections(BOTH_IN_LAUNCH, WORKSPACE.id).map((section) => section.title);
+
+  act(() => rowPress(sidebar, "Invite expiry").focus());
+  act(() => {
+    runAppCommand(APP_COMMAND.MOVE_ROW_DOWN);
+  });
+  assert.deepEqual(sectionTaskIds(written(), LAUNCH), [RETRIES.id, INVITES.id]);
+  assert.deepEqual(
+    workspaceSections(written(), WORKSPACE.id).map((section) => section.title),
+    before,
+    "the section stayed where it stood",
+  );
+
+  const fold = sectionHeader(sidebar, "Launch").querySelector<HTMLElement>("button[aria-expanded]");
+  act(() => fold?.focus());
+  act(() => {
+    runAppCommand(APP_COMMAND.MOVE_ROW_UP);
+  });
+  assert.deepEqual(
+    workspaceSections(written(), WORKSPACE.id).map((section) => section.title),
+    [...before].reverse(),
+  );
 });
 
 /** An agent Ada started with no task, last active before either task was saved. */

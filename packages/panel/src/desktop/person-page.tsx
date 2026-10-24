@@ -23,7 +23,6 @@ import {
   NOTE_LINE_LOOK,
   NoteLine,
   OneLine,
-  PAGE_FRAME,
   RowHint,
   RowHintOptions,
   ShowMoreRow,
@@ -70,11 +69,11 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import { automationNextText } from "./automation-words.js";
 import {
-  PersonHeadFrame,
-  PersonHeadSkeleton,
-  PersonNameSkeleton,
+  PersonLineSkeleton,
+  PersonReadingSkeleton,
   PersonSectionFrame,
-  PersonToolbar,
+  PersonTitle,
+  PersonTitleSkeleton,
   PersonTop,
   PROFILE,
   RowsSkeleton,
@@ -183,7 +182,7 @@ function AgentRow({
 const PERSON = "Person";
 
 /**
- * The toolbar's end: their tasks in the sidebar, where the workspace is
+ * The header's end: their tasks in the sidebar, where the workspace is
  * shared and so filters by who created a task; and ⋯, holding Copy email for a
  * member and the workspace's members in Settings for its owners and admins.
  */
@@ -365,28 +364,26 @@ function AutomationRow({
   );
 }
 
-/** The page's head: their face, their name and You where it is the reader, and who they are here. */
-function PersonHead({ person }: { person: Actor }): React.JSX.Element {
-  const line = headLine(person);
+/** The page's title: their face beside their name, which is the page's one `h1`. */
+function PersonHeading({ person }: { person: Actor }): React.JSX.Element {
   return (
-    <PersonHeadFrame
+    <PersonTitle
       face={<ActorMark actor={person} size={ACTOR_SIZE.PAGE} />}
-      name={
-        <>
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
-            {headName(person)}
-          </Text>
-          {person.kind === ACTOR_KIND.PERSON && person.you ? <YouBadge /> : null}
-        </>
-      }
-      line={
-        line === undefined ? null : (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {line}
-          </Text>
-        )
-      }
+      name={headName(person)}
     />
+  );
+}
+
+/** The line under the title: You where it is the reader, and who they are here. */
+function PersonLine({ person }: { person: Actor }): React.ReactNode {
+  const line = headLine(person);
+  const you = person.kind === ACTOR_KIND.PERSON && person.you;
+  if (!you) return line;
+  return (
+    <>
+      <YouBadge />
+      {line === undefined ? null : ` ${line}`}
+    </>
   );
 }
 
@@ -496,37 +493,45 @@ function PersonColumn({
     );
   }
   // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
-  const name = unnamed ? undefined : headName(person);
   const theirs = you ? "your" : "their";
-  // A refused read will not name them, so the head says so and offers Retry rather than wait.
-  const head = !unnamed ? (
-    <PersonHead person={person} />
-  ) : refused ? (
-    <div className="home-note">
-      <ErrorState
-        onRetry={retry}
-      >{`${you ? "Your" : "Their"} profile could not be read.`}</ErrorState>
-    </div>
-  ) : (
-    <PersonHeadSkeleton />
-  );
+  // A refused read will not name them, so the page says so and offers Retry rather than wait.
+  const note =
+    refused && unnamed ? (
+      <div className="home-note">
+        <ErrorState
+          onRetry={retry}
+        >{`${you ? "Your" : "Their"} profile could not be read.`}</ErrorState>
+      </div>
+    ) : unnamed ? (
+      <PersonReadingSkeleton />
+    ) : null;
   return (
     <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label={name ?? PROFILE}
-      toolbar={
-        <PersonToolbar name={name ?? (refused ? PROFILE : <PersonNameSkeleton />)} words={name}>
-          <PersonActions
-            tasks={tasks}
-            userId={userId}
-            person={person}
-            shared={shared}
-            onShowTasks={showTasks}
-          />
-        </PersonToolbar>
+      title={
+        unnamed ? (
+          refused ? (
+            PROFILE
+          ) : (
+            <PersonTitleSkeleton name={undefined} />
+          )
+        ) : (
+          <PersonHeading person={person} />
+        )
+      }
+      description={
+        unnamed ? refused ? undefined : <PersonLineSkeleton /> : <PersonLine person={person} />
+      }
+      actions={
+        <PersonActions
+          tasks={tasks}
+          userId={userId}
+          person={person}
+          shared={shared}
+          onShowTasks={showTasks}
+        />
       }
     >
-      <PersonTop>{head}</PersonTop>
+      <PersonTop>{note}</PersonTop>
       {tasks.listFailed ? (
         <div className="home-note">
           <ErrorState onRetry={tasks.onRetryList}>
