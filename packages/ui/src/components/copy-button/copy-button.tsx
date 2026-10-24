@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { type ButtonSize, IconButton } from "../button/button.js";
+import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../chip/chip.js";
 import { TOAST_HOLD } from "../toast/toast.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
@@ -25,12 +26,29 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * nothing beside it shifts, and only its hint says what came of the copy
  * while the answer stands.
  *
+ * A copy button comes in two looks (`look`): the glyph button, which is its
+ * own face, and a chip (`COPY_LOOK.CHIP`) for a name that is shown and
+ * copied, a pull request's branch: the compact pill's face, the words it
+ * copies in the code face, cut in their middle where long, with its own
+ * glyph (`lead`) before them. The lead stands at rest; under the pointer or
+ * the keyboard it gives way to the copy glyph, saying what a press does,
+ * and the answer's check or alert stands in the same square for its hold,
+ * so the chip never moves. A chip's hint is the whole name at rest.
+ *
  * A second press starts the hold over from its own answer, and only the
  * last press's answer is shown, however the clipboard orders them. The hold
  * is an atom's work on the registry the app's root provides, as a hint's
  * rest is (`../tooltip/hint.tsx`), so nothing here arms a timer of its own
  * and a test moves it on a faked clock.
  */
+
+/** The looks a copy button comes in: a glyph alone, or a chip that names what it copies. */
+export const COPY_LOOK = {
+  ICON: "icon",
+  CHIP: "chip",
+} as const;
+
+export type CopyLook = (typeof COPY_LOOK)[keyof typeof COPY_LOOK];
 
 /** What a copy button shows: its resting glyph, the check, or the alert. */
 const COPY_STATE = {
@@ -91,24 +109,58 @@ function CopyGlyph({ state, turns }: { state: CopyState; turns: number }): React
   );
 }
 
-/** A button that copies `text` through `copy`, named "Copy {what}", and shows what came of it. */
-export function CopyButton({
-  text,
-  what,
-  copy,
-  size,
-  disabled,
-}: {
+/** What every copy button takes, whatever its look. */
+interface CopyButtonBase {
   /** The words a press copies. */
   text: string;
   /** What it copies, as a sentence goes on after "Copy": "code", "link", "lines". */
   what: string;
   /** The caller's platform act that puts words on the clipboard; a rejection is a refused copy. */
   copy: (text: string) => Promise<void>;
-  size?: ButtonSize | undefined;
   /** Whether there is nothing to copy now. */
   disabled?: boolean | undefined;
+}
+
+export type CopyButtonProps = CopyButtonBase &
+  (
+    | {
+        look?: typeof COPY_LOOK.ICON | undefined;
+        size?: ButtonSize | undefined;
+      }
+    | {
+        /** A chip names `text` itself, in the code face, so it is drawn for a name. */
+        look: typeof COPY_LOOK.CHIP;
+        /** The glyph a chip leads with at rest: a branch's. */
+        lead: () => React.JSX.Element;
+      }
+  );
+
+/** A chip's lead: its own glyph at rest, the copy's own answer in the same square under the pointer, the keyboard, and once it lands. */
+function ChipLead({
+  Lead,
+  state,
+  turns,
+}: {
+  Lead: () => React.JSX.Element;
+  state: CopyState;
+  turns: number;
 }): React.JSX.Element {
+  return (
+    <span
+      className="luke-copy-lead inline-grid size-chip-chevron flex-none text-muted-foreground [&_svg]:size-chip-chevron"
+      data-state={state}
+    >
+      <span className="luke-copy-lead-mark" aria-hidden="true">
+        <Lead />
+      </span>
+      <CopyGlyph state={state} turns={turns} />
+    </span>
+  );
+}
+
+/** A button that copies `text` through `copy`, named "Copy {what}", and shows what came of it. */
+export function CopyButton(props: CopyButtonProps): React.JSX.Element {
+  const { text, what, copy, disabled } = props;
   const label = copyLabel(what);
   const hold = useAtomSet(useMemo(copyHold, []));
   const [shown, setShown] = useState<{ readonly state: CopyState; readonly turns: number }>({
@@ -149,22 +201,47 @@ export function CopyButton({
     );
   };
   const { state, turns } = shown;
+  const hint = state === COPY_STATE.IDLE ? label : COPY_ANSWER[state];
+  const answers = (
+    <>
+      <VisuallyHidden role="status">
+        {state === COPY_STATE.COPIED ? COPY_ANSWER[state] : ""}
+      </VisuallyHidden>
+      <VisuallyHidden role="alert">
+        {state === COPY_STATE.FAILED ? COPY_ANSWER[state] : ""}
+      </VisuallyHidden>
+    </>
+  );
+  if (props.look === COPY_LOOK.CHIP) {
+    return (
+      <Tooltip label={state === COPY_STATE.IDLE ? text : COPY_ANSWER[state]}>
+        <Chip
+          look={CHIP_LOOK.PILL}
+          size={CHIP_SIZE.COMPACT}
+          aria-label={label}
+          disabled={disabled}
+          onClick={press}
+        >
+          <ChipLead Lead={props.lead} state={state} turns={turns} />
+          <ChipName mono cut={CHIP_CUT.MIDDLE}>
+            {text}
+          </ChipName>
+          {answers}
+        </Chip>
+      </Tooltip>
+    );
+  }
   return (
-    <Tooltip label={state === COPY_STATE.IDLE ? label : COPY_ANSWER[state]}>
+    <Tooltip label={hint}>
       <IconButton
         icon={
           <>
             <CopyGlyph state={state} turns={turns} />
-            <VisuallyHidden role="status">
-              {state === COPY_STATE.COPIED ? COPY_ANSWER[state] : ""}
-            </VisuallyHidden>
-            <VisuallyHidden role="alert">
-              {state === COPY_STATE.FAILED ? COPY_ANSWER[state] : ""}
-            </VisuallyHidden>
+            {answers}
           </>
         }
         label={label}
-        {...(size === undefined ? {} : { size })}
+        {...(props.size === undefined ? {} : { size: props.size })}
         disabled={disabled}
         onClick={press}
       />
