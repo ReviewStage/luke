@@ -291,15 +291,14 @@ const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
 ];
 
 /**
- * The open task mid-call, the brain running a repository command
- * while the notetaker writes, so the capture shows both of the status row's
- * lines.
+ * The open task mid-call, the brain running a repository command, so the
+ * capture shows both of the status row's lines.
  */
 const FIXTURE_OPEN_TASK: TasksView = {
   ...FIXTURE_TASK_LIST,
   activeTaskId: FIXTURE_TASK.id,
   document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
-  activity: { planner: { action: "grep -rn pending src/members" }, notes: true },
+  activity: { planner: { action: "grep -rn pending src/members" } },
   shownCode: FIXTURE_SHOWN_CODE,
 };
 

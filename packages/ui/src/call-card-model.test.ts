@@ -49,7 +49,7 @@ test("the card names the call's plan, not the one open, and hands the call bar i
   assert.equal(listening.taskName, "Teammate invitations");
   assert.deepEqual(listening.status, {
     voiceWord: "Listening",
-    backend: { brain: undefined, notes: false },
+    backend: { brain: undefined },
   });
   assert.equal(listening.microphoneMuted, false);
 
@@ -69,16 +69,14 @@ test("the card names the call's plan, not the one open, and hands the call bar i
 });
 
 test("Luke at work on the call's plan is read off the call's own activity, though another plan is open", () => {
-  const brain = { ...TASKS, callActivity: { planner: { action: "ls src" }, notes: true } };
+  const brain = { ...TASKS, callActivity: { planner: { action: "ls src" } } };
   assert.deepEqual(callCard({ view: LISTENING, tasks: brain }).status?.backend, {
     brain: { action: "ls src" },
-    notes: true,
   });
   // The open task's own activity is not the call's.
-  const other = { ...TASKS, activity: { planner: { action: "ls src" }, notes: false } };
+  const other = { ...TASKS, activity: { planner: { action: "ls src" } } };
   assert.deepEqual(callCard({ view: LISTENING, tasks: other }).status?.backend, {
     brain: undefined,
-    notes: false,
   });
 });
 

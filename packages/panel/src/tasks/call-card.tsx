@@ -9,10 +9,9 @@ import {
   Text,
   Tooltip,
   useMinute,
-  WaveformIcon,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import type { CallRecord } from "@luke/voice/transcript-model";
-import { PhoneOffIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { usePerson } from "../member-directory.js";
@@ -182,7 +181,7 @@ export function CallStartMarker({
           tone={live ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL}
           icon={
             <span className="call-marker-icon" aria-hidden="true">
-              <WaveformIcon />
+              <GLYPH.CALL />
             </span>
           }
         >
@@ -236,7 +235,7 @@ export function CallEndMarker({
   const endedAt = record?.endedAt;
   const icon = (
     <span className="call-marker-icon" aria-hidden="true">
-      <PhoneOffIcon />
+      <GLYPH.END_CALL />
     </span>
   );
   if (record === undefined || endedAt === undefined) {

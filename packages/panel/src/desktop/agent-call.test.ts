@@ -352,7 +352,7 @@ test("in a narrow box the call's status gives way, its word first and then the w
 
 test("on a call no line says what Luke is doing: no Listening, no Thinking, and no dots", async () => {
   const page = await mountOn({ onPress: () => undefined }, ON_CALL, AGENT, {
-    activity: { planner: {}, notes: true },
+    activity: { planner: {} },
   });
   const tab = page.querySelector(".agent-tab");
   assert.ok(tab);
