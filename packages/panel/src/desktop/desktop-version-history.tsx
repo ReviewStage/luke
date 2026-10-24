@@ -6,30 +6,27 @@ import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import { readFailedWords } from "@luke/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
-  BackIcon,
-  commandKeyshortcuts,
+  BACK_BUTTON_LOOK,
+  BackButton,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FailureNote,
   FILL_ELEMENT,
   Fill,
-  FoldingButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   List,
   ListRow,
-  NavItem,
   OneLine,
   ResizeEdge,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
-  Shortcut,
   ShowMoreRow,
   SKELETON_SHAPE,
   Skeleton,
@@ -282,6 +279,10 @@ function RevisionRow({
   );
 }
 
+/** What the way back from a revision's sections to the versions says, and where it leads as a hint names it. */
+const ALL_VERSIONS = "All versions";
+const ALL_VERSIONS_PLACE = "all versions";
+
 /**
  * The head of a revision's sections: the way back to every version, and who
  * wrote it, which goes where it was written where anywhere in the window
@@ -304,9 +305,12 @@ function SectionsHead({
   );
   return (
     <>
-      <NavItem icon={<BackIcon />} onClick={onBack}>
-        All versions
-      </NavItem>
+      <BackButton
+        look={BACK_BUTTON_LOOK.COLUMN}
+        label={ALL_VERSIONS}
+        place={ALL_VERSIONS_PLACE}
+        onBack={onBack}
+      />
       <p className="version-sections-head">
         <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
         {source === undefined ? (
@@ -616,6 +620,9 @@ function VersionPage({
 /** What the way back from a version to the list says, in a narrow room. */
 const VERSION_LIST = "Versions";
 
+/** Where the way back from a version to the list leads, as a hint names it. */
+const VERSION_LIST_PLACE = "versions";
+
 /** The open plan's history as the view's subject: its name, its agents, and the places in the window its revisions were written. */
 export function taskVersionSubject(tasks: TasksControl): VersionSubject {
   const { region, boundFor } = tasks;
@@ -747,14 +754,13 @@ export function DesktopVersionHistory({
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
+        <BackButton
+          look={BACK_BUTTON_LOOK.COLUMN}
+          label="Back"
+          place={subject.title ?? subject.noun}
+          command={APP_COMMAND.EXIT_VERSION_HISTORY}
+          onBack={onExit}
+        />
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>
@@ -880,7 +886,11 @@ export function DesktopVersionHistory({
             section={opened === undefined ? undefined : unit}
             lead={
               room === SHELL_ROOM.NARROW ? (
-                <FoldingButton label={VERSION_LIST} icon={<BackIcon />} onClick={versions.onList} />
+                <BackButton
+                  label={VERSION_LIST}
+                  place={VERSION_LIST_PLACE}
+                  onBack={versions.onList}
+                />
               ) : undefined
             }
           />
