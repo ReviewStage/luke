@@ -294,9 +294,9 @@ async function mount(
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
     /** What the composer asks for while its box is empty. */
     placeholder: () => document.querySelector(".agent-composer-placeholder")?.textContent,
-    /** The round Start button, by the name each mode gives it. */
+    /** The round Start button, by its place at the foot's end, since an empty box names it for what ⌘Return does there. */
     startButton: () =>
-      document.querySelector<HTMLButtonElement>('button[aria-label="Start agent"]') ??
+      document.querySelector<HTMLButtonElement>('.luke-composer-foot button[type="submit"]') ??
       assert.fail("the round Start button stands"),
     /** The card's buttons in order, as a reader meets them. */
     controls: () =>
@@ -315,7 +315,7 @@ test("the card holds the composer with its words focused, the repository chip in
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the task");
   assert.equal(controls.includes("Plan with Luke first"), false, "no Plan toggle stands");
-  for (const each of ["Attach files", "acme/web", "Start agent"]) {
+  for (const each of ["Attach files", "acme/web", "Start a task with no agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
   }
   assert.equal(head?.querySelector("h2")?.textContent, "New task");

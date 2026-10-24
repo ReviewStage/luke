@@ -14,6 +14,7 @@ import {
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
@@ -99,7 +100,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on a box with
  * neither words nor files starts a bare task: an empty plan, no call, and
- * no agent, which needs no repository. Escape closes a menu or a
+ * no agent, which needs no repository. While the box holds nothing and no
+ * issue is linked, the round button's hint says so, with its chord, since
+ * nothing else on screen would. Escape closes a menu or a
  * dictation standing first,
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
  * that was refused keeps the card and its words, with why under it and
@@ -129,8 +132,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * the fixed brief with the words fenced after it (`automation-agent-brief.ts`),
  * refused here where that would pass an agent's first message's bound. It
  * starts on words alone: it offers no Issue chip, and
- * ⌘Return on an empty box starts no bare task. A start refused after the card
- * closed opens it again for the same purpose.
+ * ⌘Return on an empty box starts no bare task, so its hint never names one.
+ * A start refused after the card closed opens it again for the same purpose.
  */
 
 /** ⌘Return: a bare task from a box with nothing in it. */
@@ -155,6 +158,13 @@ const PURPOSE_WORDS = {
     send: "Start agent",
   },
 } as const satisfies Record<NewTaskPurpose, ComposerWords>;
+
+/** A task's card while its box holds nothing: the round button's hint names what ⌘Return does there. */
+const BARE_WORDS: ComposerWords = {
+  ...PURPOSE_WORDS[NEW_TASK_PURPOSE.TASK],
+  send: `Start a ${TERM.TASK.one} with no ${TERM.AGENT.one}`,
+  chord: BARE_CHORD,
+};
 
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
@@ -438,6 +448,8 @@ export function NewTaskComposer({
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
   const bare = () => begin(issueName ?? "");
+  // Note that a linked issue keeps the round button its own name, because its press then starts an agent on the issue.
+  const startsBare = !forAutomation && !filled && !onIssue;
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shortcutMatches(BARE_CHORD, event)) return false;
@@ -540,7 +552,7 @@ export function NewTaskComposer({
       <AgentComposer
         status={CODING_AGENT_STATUS.STARTING}
         composer={composer}
-        wording={PURPOSE_WORDS[purpose]}
+        wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
         sendsEmpty={onIssue}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
         sendable={!blocked && (!forAutomation || said !== "")}

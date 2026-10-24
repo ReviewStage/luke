@@ -18,6 +18,7 @@ import {
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { INTEGRATION_LABEL, pasteCutWords } from "@luke/features/words";
+import type { ShortcutChord } from "@luke/settings/shortcuts";
 import {
   ComposerFoot,
   McpIcon,
@@ -193,11 +194,12 @@ const PLACEHOLDER = {
   NAMED: (name: string) => `Message ${name}`,
 } as const;
 
-/** What a box other than an agent's own asks for, calls its field, and calls its round button. */
+/** What a box other than an agent's own asks for, calls its field, and calls its round button, and the chord its button's hint names. */
 export interface ComposerWords {
   readonly placeholder: string;
   readonly label: string;
   readonly send: string;
+  readonly chord?: ShortcutChord | undefined;
 }
 
 /** The buttons' names, which are their tooltips too. */
@@ -814,6 +816,7 @@ export function AgentComposer({
           strip={striped ? <DictationStrip dictation={dictation} /> : undefined}
           send={{
             label: sendLabel,
+            chord: wording?.chord,
             empty,
             held: held || !sendable || files.reading,
             busy: composer.sending,
