@@ -1,19 +1,25 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { timeRuntime } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -63,8 +69,19 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
-async function opened(page?: TaskMentionsValue, task: Task = TASK) {
+/** A registry whose times count on this clock, as the window's count on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
+/** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given, and its atoms under `registry` where one is given. */
+async function opened(
+  page?: TaskMentionsValue,
+  task: Task = TASK,
+  registry?: AtomRegistry.AtomRegistry,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -80,11 +97,9 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
       reveal: undefined,
     },
   });
-  act(() =>
-    root.render(
-      page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
-    ),
-  );
+  const mentioned =
+    page === undefined ? body : createElement(TaskMentions, { value: page, children: body });
+  act(() => root.render(registry === undefined ? mentioned : onRegistry(registry, mentioned)));
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
   assert.ok(rollout);
   // Opened by Enter on its block, which places the caret by section rather than by a point jsdom cannot lay out.
@@ -188,26 +203,27 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
   assert.equal(task.container.querySelector(".mention-menu"), null);
 });
 
-test("words after an @ that read as a time on a day, up to six of them, offer it first, and Enter draws it as a chip saying it from today", async () => {
-  vi.useFakeTimers({ now: Date.parse("2026-10-19T12:00:00Z"), toFake: ["Date"] });
-  try {
-    const task = await opened();
+it.effect(
+  "words after an @ that read as a time on a day, up to six of them, offer it first, and Enter draws it as a chip saying it from today",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse("2026-10-19T12:00:00Z"));
+      const registry = registryOn(yield* Clock.Clock);
+      const task = yield* Effect.promise(() => opened(undefined, TASK, registry));
 
-    await task.typeAtEnd(" Ship @next fri at 3pm to 5pm");
-    const offered = listed(task.container)[0];
-    task.press("Enter");
-    await act(async () => undefined);
+      yield* Effect.promise(() => task.typeAtEnd(" Ship @next fri at 3pm to 5pm"));
+      const offered = listed(task.container)[0];
+      task.press("Enter");
+      yield* Effect.promise(() => act(async () => undefined));
 
-    const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
-    assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
-    assert.deepEqual(
-      chips.map((chip) => chip.textContent),
-      ["Oct 30 3:00 PM → 5:00 PM"],
-    );
-  } finally {
-    vi.useRealTimers();
-  }
-});
+      const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
+      assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
+      assert.deepEqual(
+        chips.map((chip) => chip.textContent),
+        ["Oct 30 3:00 PM → 5:00 PM"],
+      );
+    }),
+);
 
 test("Escape closes the list and leaves the editor open", async () => {
   const task = await opened();
