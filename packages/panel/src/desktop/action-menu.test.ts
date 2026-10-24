@@ -86,7 +86,7 @@ test("a Settings row's ⋯ and a file bar's ⋯ each open their menu on a press 
       "div",
       null,
       createElement(MenuRow, { thing: "Linear", actions: ACTIONS, children: "Linear" }),
-      createElement(PaneBar, { menu: { label: "File actions", groups: [ACTIONS] } }),
+      createElement(PaneBar, { menu: { thing: "File", groups: [ACTIONS] } }),
     ),
   );
   for (const name of ["Linear actions", "File actions"]) {

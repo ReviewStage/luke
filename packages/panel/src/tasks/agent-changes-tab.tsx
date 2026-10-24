@@ -332,7 +332,7 @@ function useChangesMenu({
       ? CHANGES_MENU_WORDS.NO_PATCH
       : undefined;
   return {
-    label: "Changes actions",
+    thing: "Changes",
     groups: [
       [
         {
