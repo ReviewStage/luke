@@ -4,8 +4,7 @@ import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "./coding-agent-wi
  * coding-agent-failure-words.ts -- why an agent's turn failed, in the words the window says it in: one phrase per failure word the service answers.
  *
  * A failed agent's end line says it after "Failed", and an automation's run
- * whose agent failed says it after "Its agent failed", so the two read one
- * table. A failure the window has no words for says nothing more. A
+ * whose agent failed says it after "Failed", so the two read one table. A failure the window has no words for says nothing more. A
  * failure a new agent mends says so after its words, unless Continue
  * stands beside them or one already continued it (`continuable`), when the
  * advice is redundant or stale.

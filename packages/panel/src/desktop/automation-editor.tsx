@@ -855,7 +855,7 @@ const PROMPT_ROWS = 5;
  * scheduled one, the kind most are, runs on a new agent each time: Sharing's
  * Owner; Trigger's Type, Repeats, Time, and Time zone; and Runs' Repository,
  * Runs land in, Model on the account's default, MCP servers, and Archive
- * successful runs, each with the words under its name where it says them.
+ * finished runs, each with the words under its name where it says them.
  */
 const SCHEDULED_ROWS = {
   [EDITOR_SECTION.SHARING]: [{ described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] }],
@@ -1142,7 +1142,7 @@ function EditorToolbar({
           icon={<PlayIcon />}
           variant={BUTTON_VARIANT.OUTLINE}
           busy={running}
-          busyLabel="Running"
+          busyLabel="Starting"
           onClick={onRunNow}
         />
       )}
@@ -2023,7 +2023,7 @@ function RunsGroup({
                 onSwitch={(disabledServers) => onDraft({ disabledServers })}
               />
               <SwitchRow
-                label="Archive successful runs"
+                label="Archive finished runs"
                 detail="Its transcript and pull request are kept."
                 checked={draft.archiveSuccessful}
                 onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
