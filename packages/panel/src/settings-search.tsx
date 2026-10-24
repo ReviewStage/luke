@@ -333,7 +333,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [
             WORKSPACE_CONNECTIONS,
-            "integrations GitHub Linear Sentry issues repositories connect choose manage disconnect organization",
+            "integrations GitHub Linear issues repositories connect choose manage disconnect organization",
           ],
         }
       : undefined,
