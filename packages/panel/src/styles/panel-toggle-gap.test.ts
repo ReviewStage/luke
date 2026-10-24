@@ -31,7 +31,11 @@ afterEach(() => {
 });
 
 /** Where each side's value stands in a box shorthand of one to four values. */
-const RIGHT_OF = [0, 1, 1, 1] as const;
+const SIDE_AT = {
+  top: [0, 0, 0, 0],
+  right: [0, 1, 1, 1],
+  left: [0, 1, 1, 3],
+} as const;
 
 /** `value` as `element` reads it, every custom property it names spelled out, or its fallback where it names none. */
 function resolved(element: Element, value: string): string {
@@ -46,24 +50,12 @@ function resolved(element: Element, value: string): string {
   );
 }
 
-/** A length in pixels from a sum of pixel lengths, `calc()` or bare, which is every length these rows are built from. */
+/** A length in pixels from the `calc()` or bare pixel length every length these rows are built from spells out. */
 function pixels(length: string): number {
-  const terms = length
-    .replace(/calc\(|\)/g, " ")
-    .trim()
-    .split(/\s+/);
-  let sum = 0;
-  let sign = 1;
-  for (const term of terms) {
-    if (term === "+" || term === "-") {
-      sign = term === "+" ? 1 : -1;
-      continue;
-    }
-    const value = /^(-?[\d.]+)(px)?$/.exec(term);
-    assert.ok(value?.[1] !== undefined && (value[2] === "px" || Number(value[1]) === 0), length);
-    sum += sign * Number(value[1]);
-  }
-  return sum;
+  const sum = length.replace(/calc\(/g, "(").replace(/(-?[\d.]+)px/g, "$1");
+  assert.match(sum, /^[\d.\s+\-*/()]+$/, length);
+  // SAFETY: the expression is digits, arithmetic and parentheses alone, as the match above holds.
+  return Number(new Function(`return ${sum};`)());
 }
 
 /**
@@ -92,13 +84,13 @@ function declared(element: Element, property: string): number {
   return pixels(resolved(element, values.at(-1) ?? "0"));
 }
 
-/** The right side of a box `side`, margin or padding, as the last rule reaching `element` that sets it declares it, in pixels. */
-function rightSide(element: Element, side: "margin" | "padding"): number {
+/** A side of a box `box`, margin or padding, as the last rule reaching `element` that sets it declares it, in pixels. */
+function boxSide(element: Element, box: "margin" | "padding", side: keyof typeof SIDE_AT): number {
   const values = reaching(element).flatMap((style) => {
-    const longhand = style.getPropertyValue(`${side}-right`).trim();
+    const longhand = style.getPropertyValue(`${box}-${side}`).trim();
     if (longhand !== "") return [longhand];
-    const parts = style.getPropertyValue(side).match(/calc\([^()]*(?:\([^()]*\)[^()]*)*\)|\S+/g);
-    return parts === null ? [] : [parts[RIGHT_OF[parts.length - 1] ?? 1] ?? "0"];
+    const parts = style.getPropertyValue(box).match(/calc\([^()]*(?:\([^()]*\)[^()]*)*\)|\S+/g);
+    return parts === null ? [] : [parts[SIDE_AT[side][parts.length - 1] ?? 0] ?? "0"];
   });
   return pixels(resolved(element, values.at(-1) ?? "0"));
 }
@@ -128,6 +120,8 @@ function drawn({ profile, room, sidebarCollapsed, panelOpen }: Shell) {
   column.className = "desktop-task-main";
   const toolbar = column.appendChild(document.createElement("div"));
   toolbar.className = "luke-toolbar";
+  // The plan's bar starts at its column's own edge (`TOOLBAR_INSET.COLUMN`), its tab leading it.
+  toolbar.dataset.start = "column";
   const panel = task.appendChild(document.createElement("aside"));
   panel.className = "side-panel";
   const bar = panel.appendChild(document.createElement("div"));
@@ -146,7 +140,7 @@ function drawn({ profile, room, sidebarCollapsed, panelOpen }: Shell) {
 /** The room between the row's last control and the toggle, and the gap the row keeps between its own controls. */
 function gaps(shell: Shell): { beforeToggle: number; betweenControls: number } {
   const { main, row, controls, toggle } = drawn(shell);
-  const rowEnd = rightSide(main, "margin") + rightSide(row, "padding");
+  const rowEnd = boxSide(main, "margin", "right") + boxSide(row, "padding", "right");
   const toggleStart = declared(controls, "right") + declared(toggle, "width");
   return { beforeToggle: rowEnd - toggleStart, betweenControls: declared(row, "gap") };
 }
@@ -169,5 +163,41 @@ test("the side panel's toggle stands one gap after the last control of the row b
     assert.ok(betweenControls > 0, JSON.stringify(shell));
     assert.equal(beforeToggle, betweenControls, JSON.stringify(shell));
     document.body.replaceChildren();
+  }
+});
+
+test("on the Mac, over the open sidebar's sheet, the plan's tab and the toggle stand as far in from the sheet's sides as under its top, and the web keeps a row's inset", () => {
+  for (const profile of [PROFILE.DESKTOP, PROFILE.WEB]) {
+    for (const fullScreen of [false, true]) {
+      const shell = {
+        profile,
+        room: "wide" as const,
+        sidebarCollapsed: false,
+        panelOpen: fullScreen,
+      };
+      const { main, row, controls } = drawn(shell);
+      if (fullScreen) row.parentElement?.setAttribute("data-full-screen", "true");
+      const control = pixels(resolved(row, "var(--luke-control-height)"));
+      const rowInset = pixels(resolved(row, "var(--column-inset)"));
+      const tab = {
+        top: (declared(row, "min-height") - control) / 2,
+        side: boxSide(row, "padding", "left"),
+      };
+      const toggle = {
+        top: declared(controls, "top") - boxSide(main, "margin", "top"),
+        side: declared(controls, "right") - boxSide(main, "margin", "right"),
+      };
+      const where = JSON.stringify({ ...shell, fullScreen });
+
+      if (profile === PROFILE.DESKTOP) {
+        assert.ok(tab.top < rowInset, where);
+        assert.equal(tab.side, tab.top, where);
+        assert.equal(toggle.side, toggle.top, where);
+      } else {
+        assert.equal(tab.side, rowInset, where);
+        assert.equal(declared(controls, "right"), rowInset, where);
+      }
+      document.body.replaceChildren();
+    }
   }
 });

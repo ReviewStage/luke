@@ -226,8 +226,24 @@ body,
   --title-bar-ground: var(--luke-color-well);
 }
 
+/* Where the side panel's toggle stands in from the window's right edge: a
+   row's inset, or, over the open sidebar's inset sheet on the Mac, as far
+   in from the sheet's right edge as it stands under the sheet's top, so it
+   nests in the sheet's corner on one gap rather than a hair under its top
+   and further from its side, as the plan's tab does at the other corner.
+   The web keeps a row's inset: its taller controls leave no room over them
+   to match (`--title-bar-middle`). */
+.desktop-shell {
+  --panel-toggle-right: var(--column-inset);
+}
+
+[data-luke-profile="desktop"]
+  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"]) {
+  --panel-toggle-right: calc(var(--title-bar-middle) - var(--luke-control-height) / 2);
+}
+
 .title-bar-controls[data-edge="end"] {
-  right: var(--column-inset);
+  right: var(--panel-toggle-right);
   left: auto;
   border-radius: var(--luke-control-radius);
   background: var(--title-bar-ground);
@@ -1252,14 +1268,14 @@ ul.actor-stack {
    what follows restages them for the window's own screens. */
 
 /* What a top row at the sheet's right edge leaves past its last control for
-   the side panel's toggle: the toggle, a row's inset from the window's edge,
-   and a row's gap between its items. Note that it is declared on the sheet
-   and less the sheet's own gap, because the toggle stands on the window
-   while the row stands in the sheet, a gap in from the window's edge
+   the side panel's toggle: the toggle, where it stands in from the window's
+   edge, and a row's gap between its items. Note that it is declared on the
+   sheet and less the sheet's own gap, because the toggle stands on the
+   window while the row stands in the sheet, a gap in from the window's edge
    wherever the sidebar is open. */
 .desktop-main {
   --panel-toggle-clearance: calc(
-    var(--column-inset) +
+    var(--panel-toggle-right) +
     var(--luke-control-height) +
     var(--luke-control-gap) -
     var(--sheet-gap)
@@ -1277,6 +1293,22 @@ ul.actor-stack {
    the window's, and the panel's own row leaves the toggle its room. */
 .desktop-shell .desktop-task[data-panel-open="true"] {
   --luke-toolbar-end-at: var(--column-inset);
+}
+
+/* Over the open sidebar's inset sheet on the Mac, the row is kept level with
+   the traffic lights, which leaves only a hair over its controls (shell.css).
+   The plan's toolbar, whose tab stands in the sheet's top left corner,
+   starts that same hair in from the sheet's side, so the tab nests in the
+   corner on one gap rather than a hair under the top and a row's inset from
+   the side. The toggle at the other corner does the same
+   (`--panel-toggle-right`), and so does the side panel's first tab while
+   the panel fills the sheet. A bar further in the column, a task's Inbox
+   tab's, sets its own start. */
+[data-luke-profile="desktop"]
+  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"])
+  > .desktop-main
+  .desktop-task-main {
+  --luke-toolbar-start-at: calc((var(--desktop-bar-height) - var(--luke-control-height)) / 2);
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
@@ -4340,6 +4372,16 @@ ul.actor-stack {
    toolbar would: clear of the traffic lights and the sidebar toggle. */
 .desktop-shell[data-sidebar-collapsed="true"] .side-panel[data-full-screen="true"] .side-panel-bar {
   padding-left: var(--sidebar-toggle-clearance);
+}
+
+/* Full screen beside the open sidebar on the Mac, its first tab nests in the
+   sheet's top left corner as the plan's tab does there. */
+[data-luke-profile="desktop"]
+  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"])
+  > .desktop-main
+  .side-panel[data-full-screen="true"]
+  > .side-panel-bar {
+  padding-left: calc((var(--desktop-bar-height) - var(--luke-control-height)) / 2);
 }
 
 /* The tabs and their "+" take what the row leaves beside the full-screen
