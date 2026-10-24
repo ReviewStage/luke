@@ -20,9 +20,9 @@ import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
   ANNOUNCE,
   BANNER_LOOK,
+  Banner,
   BUTTON_TYPE,
   BUTTON_VARIANT,
-  Banner,
   Button,
   CHOICE_LOOK,
   ChoiceList,
@@ -75,8 +75,8 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { InfoIcon } from "@luke/ui/icons";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu } from "../desktop/action-menu.js";
@@ -207,6 +207,7 @@ const WORDS = {
   DISCONNECT: "Disconnect",
   DISCONNECTING: "Disconnecting",
   REMOVE: "Remove",
+  REMOVING: "Removing",
   ADD_TOKEN: "Add token",
   REPLACE_TOKEN: "Replace token",
   SIGN_IN: "Sign in with ChatGPT",
@@ -629,7 +630,7 @@ function ClaudeTokenPanel({
           title: "Disconnect your Claude plan?",
           body: "Claude agents will stop running on your Claude plan, and he deletes the token he holds.",
           verb: WORDS.DISCONNECT,
-          running: "Disconnecting…",
+          running: WORDS.DISCONNECTING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
@@ -790,7 +791,7 @@ function ChatGptPanel({
           title: "Disconnect your ChatGPT plan?",
           body: "Codex agents will stop running on your ChatGPT plan, and he ends his sign-in with OpenAI.",
           verb: WORDS.DISCONNECT,
-          running: "Disconnecting…",
+          running: WORDS.DISCONNECTING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
@@ -957,7 +958,7 @@ function ApiKeyPanel({
               ? `Agents on ${name} models won't start without a subscription. Calls and dictation will be off.`
               : `Agents on ${name} models won't start without a subscription.`,
           verb: "Remove key",
-          running: "Removing…",
+          running: WORDS.REMOVING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />

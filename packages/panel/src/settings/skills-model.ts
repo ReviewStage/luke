@@ -44,7 +44,7 @@ import {
 } from "@luke/features/task-wire";
 import { andList, countWords, readFailedWords, TERM } from "@luke/features/words";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { STATUS_TONE, type StatusTone } from "@luke/ui";
+import { CONFIRM_LOSS, type ConfirmLoss, STATUS_TONE, type StatusTone } from "@luke/ui";
 
 /**
  * skills-model.ts -- Settings › Skills and its Add skill dialog as the window draws them, judged without drawing: the rows and their lines, and what a paste would install.
@@ -234,6 +234,33 @@ export function skillActions(
     ...(state.updateAvailable && row.fromGitHub ? [SKILL_ACTION.UPDATE] : []),
   ];
   return [acts, [SKILL_ACTION.REMOVE]];
+}
+
+/**
+ * What Remove asks first: the skill and its files are deleted, past undoing,
+ * so a personal skill's question is red; a workspace skill is every member's
+ * agents', so it says whose and asks in the accent, as any act on others does.
+ */
+export function removeQuestion(
+  skill: Pick<InstalledSkillSummary, "name" | "scope">,
+  workspace: Pick<Workspace, "name">,
+): {
+  readonly title: string;
+  readonly body: string;
+  readonly verb: string;
+  readonly running: string;
+  readonly loss: ConfirmLoss;
+} {
+  const shared = skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE;
+  return {
+    title: `Remove ${skill.name}?`,
+    body: shared
+      ? `${everyoneIn(workspace)} loses ${skill.name}: agents they start afterwards no longer load it, and its files are deleted.`
+      : "Its files are deleted, and agents started afterwards no longer load it. Installing it again takes the paste again.",
+    verb: "Remove",
+    running: "Removing",
+    loss: shared ? CONFIRM_LOSS.AFFECTS_OTHERS : CONFIRM_LOSS.IRREVERSIBLE,
+  };
 }
 
 /** What Share with workspace asks first: it moves the skill, so it says who gains it and that it leaves the account's own. */
