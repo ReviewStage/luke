@@ -838,7 +838,9 @@ export interface TasksControl {
     ) => Promise<string | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
-    /** Reads the models now, for the chip's name and its menu opening. */
+    /** Whether the last read of the models did not land. */
+    modelsFailed: boolean;
+    /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
     readDefault: () => Promise<CodingAgentDefaultAnswer>;
@@ -3835,6 +3837,7 @@ export function useTasksTab(input: {
       repositoriesIn,
       start: steadyStartTask,
       models: agents.models,
+      modelsFailed: agents.modelsFailed,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),

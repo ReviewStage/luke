@@ -65,7 +65,7 @@ import {
   type TurnRow,
   turnRows,
 } from "@luke/features/turn-rows";
-import { andList } from "@luke/features/words";
+import { andList, readFailedWords } from "@luke/features/words";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
   ACTOR_KIND,
@@ -958,6 +958,9 @@ function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[]
     )
     .map((each) => each.model);
 }
+
+/** What the model menu and Settings say where the catalog could not be read. */
+export const MODELS_READ_FAILED = readFailedWords("the models");
 
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";

@@ -97,6 +97,7 @@ function Owned(): React.JSX.Element {
   return createElement(AgentModelChip, {
     model: { choice, note: undefined, choose: setChoice },
     models: MODELS,
+    modelsFailed: false,
     readModels: () => undefined,
     usage: undefined,
   });
@@ -198,6 +199,7 @@ function openMenuOn(
           runtime,
         },
         models,
+        modelsFailed: false,
         readModels: () => undefined,
         usage,
         payer,

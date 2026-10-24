@@ -2128,6 +2128,7 @@ function AgentTranscriptView({
 function AgentTabView({
   agent,
   models,
+  modelsFailed,
   readModels,
   transcript,
   composer,
@@ -2175,6 +2176,7 @@ function AgentTabView({
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
   run?: CodingAgentOrigin | undefined;
   models: readonly CatalogModel[] | undefined;
+  modelsFailed: boolean;
   readModels: () => void;
   transcript: AgentTranscriptControl;
   composer: HeldComposer;
@@ -2426,6 +2428,7 @@ function AgentTabView({
             composer={composer}
             model={model}
             models={models}
+            modelsFailed={modelsFailed}
             readModels={readModels}
             usage={transcript.usage}
             payer={transcript.payer}
@@ -2739,6 +2742,7 @@ function AgentTabBody({
         bringIn={bringIn}
         holding={holding}
         models={control.models}
+        modelsFailed={control.modelsFailed}
         readModels={control.readModels}
         transcript={transcript}
         composer={sent === composer.sent ? composer : { ...composer, sent }}

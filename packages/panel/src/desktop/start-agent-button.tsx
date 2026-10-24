@@ -142,6 +142,8 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           id={menuId}
           className="start-agent-menu"
           models={models}
+          failed={control.modelsFailed}
+          onRetry={control.readModels}
           chosen={chosen}
           onChoose={setPicked}
           onClose={close}

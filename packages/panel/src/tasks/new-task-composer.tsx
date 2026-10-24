@@ -551,6 +551,7 @@ export function NewTaskComposer({
         sendable={!blocked && (!forAutomation || said !== "")}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
+        modelsFailed={newTask.modelsFailed}
         readModels={newTask.readModels}
         usage={undefined}
         servers={undefined}

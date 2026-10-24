@@ -68,6 +68,8 @@ let stored: ModelChoice = { model: OPUS.id, effort: "high" };
 let sent: AnyAct[] = [];
 /** Whether the service refuses the next write. */
 let refuseWrite = false;
+/** Whether the service answers that it could not read the models. */
+let refuseModels = false;
 
 const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
   status: FAKE_ANSWER.DONE,
@@ -79,6 +81,9 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_MODELS:
+      if (refuseModels) {
+        return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      }
       return Promise.resolve(done({ models }));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
@@ -113,6 +118,7 @@ beforeEach(() => {
   keys = [];
   sent = [];
   refuseWrite = false;
+  refuseModels = false;
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeActs({ act: answer });
 });
@@ -353,4 +359,36 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
   await settle();
 
   assert.equal(fastSwitch(page).disabled, false);
+});
+
+test("a catalog that could not be read says so in the Model menu with Retry, and Retry reads it again", async () => {
+  refuseModels = true;
+  const page = await mount();
+  assert.equal(placeholders(page).length, 0, "the page does not read for ever");
+
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label^="Model: "]') ?? assert.fail()
+    ).click(),
+  );
+  const menu = document.querySelector('[role="dialog"][aria-label="Model"]') ?? assert.fail();
+  assert.equal(
+    menu.querySelector('[role="alert"]')?.textContent,
+    "The models could not be read.Retry",
+  );
+  assert.doesNotMatch(menu.textContent ?? "", /Open Settings again/u);
+  const reads = () => sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_MODELS);
+  const before = reads().length;
+
+  refuseModels = false;
+  act(() =>
+    (
+      menu.querySelector<HTMLButtonElement>('[role="alert"] button') ?? assert.fail("no Retry")
+    ).click(),
+  );
+  await settle();
+
+  assert.equal(reads().length, before + 1, "Retry asks the service for the models again");
+  assert.equal(menu.querySelector('[role="alert"]'), null);
+  assert.ok(menu.querySelectorAll('[role="option"]').length > 0, "the models are listed");
 });

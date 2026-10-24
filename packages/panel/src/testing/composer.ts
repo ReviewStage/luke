@@ -26,6 +26,7 @@ export const QUIET_COMPOSER = {
   status: CODING_AGENT_STATUS.COMPLETED,
   model: undefined,
   models: undefined,
+  modelsFailed: false,
   readModels: ignore,
   usage: undefined,
   servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },

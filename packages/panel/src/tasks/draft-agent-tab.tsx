@@ -232,6 +232,7 @@ export function DraftAgentTab({
                 }
           }
           models={control.models}
+          modelsFailed={control.modelsFailed}
           readModels={control.readModels}
           published={undefined}
           usage={undefined}
