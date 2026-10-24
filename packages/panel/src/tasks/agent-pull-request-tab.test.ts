@@ -934,6 +934,13 @@ test("the Checks tab lists the head's deployments over its checks: each environm
     .filter((each) => each.closest("[hidden]") === null)
     .map((each) => each.firstChild?.textContent);
   assert.deepEqual(headings, ["Deployments", "Checks"], "the deployments stand over the checks");
+  assert.deepEqual(
+    [...tab.querySelectorAll(".pull-request-heading")]
+      .filter((each) => each.closest("[hidden]") === null)
+      .map((each) => each.getAttribute("data-variant")),
+    ["group", "group"],
+    "a section's heading is set in the group role",
+  );
   const deployments =
     tab.querySelector<HTMLElement>('[aria-label="Deployments"]') ??
     assert.fail("the deployments stand");
@@ -4248,13 +4255,13 @@ test("Files changed draws each review thread under its line, its comments throug
   await act(async () => option(tab, "Files changed").click());
   await settle();
   const minimize = async () => {
-    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
     const toggle = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
       (each) => each.getAttribute("aria-label") === "Minimize inline comments",
     );
     act(() => toggle?.click());
     await settle();
-    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
   };
 
   const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
@@ -4365,7 +4372,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
   assert.equal(lists.at(-1)?.selected, undefined, "the focus leaving lets them go");
   delete document.documentElement.dataset.keyboard;
 
-  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
   await settle();
   const minimize =
     [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
@@ -4972,8 +4979,10 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
   };
   await drawCommentable(undefined, { ...INVITE_FILE, additions: 5 });
   const lines = () =>
-    lists.at(-1)?.renderHeader(INVITE_FILE.path).querySelector(".agent-published-added")
-      ?.textContent;
+    lists
+      .at(-1)
+      ?.renderHeader(INVITE_FILE.path)
+      .querySelector(".agent-published-lines .luke-count-part")?.textContent;
   const comment = await pickLines({
     start: 9,
     side: DIFF_SELECTION_SIDE.ADDITIONS,
@@ -5215,13 +5224,13 @@ test("a thread's file and lines in the Conversation take it to Files changed thr
     INVITE_FILE.path,
   );
   act(() => header.querySelector<HTMLButtonElement>('button[aria-label="Collapse file"]')?.click());
-  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
   act(() =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')]
       .find((each) => each.getAttribute("aria-label") === "Minimize inline comments")
       ?.click(),
   );
-  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
   await settle();
   assert.equal(lists.at(-1)?.files[0]?.collapsed, true, "the file stands collapsed");
   await choose(tab, "Conversation");
@@ -5963,6 +5972,11 @@ test("the member's pending comments stand on their lines in Files changed, marke
     (each) => each.querySelector(".pull-request-pending-where")?.textContent,
   );
   assert.deepEqual(listed, ["src/invite.ts · line 13", "src/invite.ts · line 12"]);
+  assert.equal(
+    panel.querySelector(".pull-request-pending-where")?.getAttribute("data-font"),
+    "mono",
+    "a pending comment's place reads in the monospace face, as a path does",
+  );
 
   // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
   const entry = panel.querySelector<HTMLElement>('ol[aria-label="Pending"] > li') ?? assert.fail();

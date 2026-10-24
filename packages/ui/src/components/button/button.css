@@ -9,6 +9,19 @@
    the face inside. The keyboard's ring is the app's reset's, as it is for
    every control. */
 
+/* The fill is a registered colour, so it eases (`../../shadcn/button.tsx`
+   lists it among the transitions) even where it is drawn as a gradient over
+   `--luke-button-ground`, which no transition reaches. Note that it must,
+   because the ground under it eases in from transparent: a fill that landed
+   at once would stand over whatever is behind the button until the ground
+   arrived, a light flash over the Mac's frosted title bar. It does not
+   inherit, because every button sets its own. */
+@property --luke-button-fill {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+
 @layer components {
   /* Note that the inset and least width are a container's to change (a
      dialog's actions, a narrow error's retry), so they rest here rather

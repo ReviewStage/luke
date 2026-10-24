@@ -167,12 +167,15 @@ const CHOSEN = ':scope > [aria-selected="true"], :scope > [aria-checked="true"]'
  * fill bar takes its container's width, scrolling sideways with no bar
  * drawn, and is the container its narrow fold measures (`choice-bar.css`);
  * a segmented one hugs its options in a trough, wrapping them inside it, or,
- * stretched, fills its row on one line.
+ * stretched, fills its row on one line. Note that a fill bar in a
+ * PaneBar's middle grows to the middle's room, because the container it is
+ * sizes itself as if it held nothing, so as a flex item that only hugs its
+ * options it would stand 0px wide.
  */
 const BAR = "luke-choice-bar relative items-center min-w-0 max-w-full";
 
 const BAR_LOOK = {
-  fill: "flex flex-none self-stretch overflow-x-auto [scrollbar-width:none] @container/luke-choice-bar",
+  fill: "flex flex-none [.luke-pane-bar-middle>&]:flex-1 self-stretch overflow-x-auto [scrollbar-width:none] @container/luke-choice-bar",
   segmented: "inline-flex gap-0.5 p-0.5 rounded-control bg-muted",
 } as const satisfies Record<ChoiceBarLook, string>;
 

@@ -17,6 +17,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -174,6 +175,8 @@ async function drawnTab(input: {
   drafts?: boolean;
   /** What the first page says the agent and its newest turn cost, the latter as a service older than this window sent it. */
   usage?: Pick<CodingAgentMessagesAnswer, "usage" | "turnUsage">;
+  /** Where the end line's key press turns, by the provider it names. */
+  onOpenApiKeys?: (provider: ModelProvider | undefined) => void;
 }) {
   fakeAppBridge({});
   const source = agentOf(SOURCE, { status: input.status, ...input.source });
@@ -201,6 +204,7 @@ async function drawnTab(input: {
       input.onStop?.(agentId);
       return Promise.resolve();
     },
+    onOpenApiKeys: (provider) => input.onOpenApiKeys?.(provider),
     onMessage: () =>
       Promise.resolve(input.message ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     transcripts: pushedTranscripts(() => [
@@ -442,8 +446,8 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
     status: CODING_AGENT_STATUS.FAILED,
     failure: CODING_AGENT_FAILURE.PROVIDER_KEY,
   });
-  assert.equal(key.buttons(key.container).length, 0, "Open API keys is the fix");
-  assert.match(key.endLine()?.textContent ?? "", /Open API keys/);
+  assert.equal(key.buttons(key.container).length, 0, "Connect Claude is the fix");
+  assert.match(key.endLine()?.textContent ?? "", /Connect Claude/);
 
   const archived = await drawnTab({
     status: CODING_AGENT_STATUS.FAILED,
@@ -457,6 +461,23 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
     const settled = await drawnTab({ status });
     assert.equal(settled.buttons(settled.container).length, 0, status);
   }
+});
+
+test("a turn failed on a refused key names the harness its model runs on, and its press turns to that harness's row", async () => {
+  const opened: (ModelProvider | undefined)[] = [];
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.PROVIDER_KEY,
+    source: { model: "openai/gpt-6-astra" },
+    onOpenApiKeys: (provider) => opened.push(provider),
+  });
+  const line = tab.endLine() ?? assert.fail("the turn ends on its line");
+  const press =
+    [...line.querySelectorAll("button")].find((each) => each.textContent === "Connect Codex") ??
+    assert.fail("the line offers Connect Codex");
+
+  act(() => press.click());
+  assert.deepEqual(opened, [MODEL_PROVIDER.OPENAI]);
 });
 
 test("a box closed on an ended agent offers Continue in new agent beside its note, carrying the box's words and files into the new agent and letting them go once it started", async () => {

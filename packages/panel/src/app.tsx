@@ -3,6 +3,7 @@ import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -13,7 +14,7 @@ import {
 } from "@luke/host/app-state";
 import type { ChatShown } from "@luke/host/contract";
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties, STATUS_TONE } from "@luke/ui";
 import { callBarAgentId } from "@luke/ui/call-card-model";
@@ -346,7 +347,7 @@ function AppWindow(): React.JSX.Element {
     [openSettings],
   );
   const openApiKeys = useCallback(
-    () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
+    (provider: ModelProvider | undefined) => openSettings(agentKeyLink(provider)),
     [openSettings],
   );
 

@@ -63,8 +63,8 @@ const RUN_REASON_WORDS = {
     "Luke can no longer reach its repository on GitHub.",
   [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in had lapsed.",
   [AUTOMATION_RUN_REASON.MODEL]: "Its model is no longer offered. Choose another.",
-  [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "Connect its model's provider in Settings to run it.",
-  [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Coding agents couldn't be reached.",
+  [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "Connect its model's provider in settings to run it.",
+  [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Coding agents could not be reached.",
   [AUTOMATION_RUN_REASON.REPOSITORY_CHANGED]:
     "It no longer works in the repository the event came from.",
   [AUTOMATION_RUN_REASON.PAUSED]: "It was turned off before the run could start.",
@@ -321,8 +321,8 @@ export function automationRunTitle(run: AutomationRunSummary): string {
 /** What its owner is told of a run that failed to start: that it could not, and why, in its row's own words. */
 export function failedRunText(reason: AutomationRunReason | null): string {
   return reason === null
-    ? "A run couldn't start."
-    : `A run couldn't start. ${RUN_REASON_WORDS[reason]}`;
+    ? "A run could not start."
+    : `A run could not start. ${RUN_REASON_WORDS[reason]}`;
 }
 
 /** A run's line: why it did not start, where it did not, else where its agent stands, or that it waits to start. */

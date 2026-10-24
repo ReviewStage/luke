@@ -12,23 +12,26 @@ import {
   ISSUE_MATCH_LIMIT,
   linearIssuesAskOf,
   MICROPHONE_PRESS,
+  markAsked,
   markedView,
   microphoneButton,
   offeredIssues,
-  pendingMark,
   positionedView,
+  renameAsked,
   SETTLED_STATUS,
   settleChanges,
+  settledMarks,
   settledNote,
+  settledRenames,
+  settledStatuses,
   settleOffered,
   standingCallStatus,
+  statusAsked,
   statusedView,
   TASK_MARK,
   taskNameOfIssue,
   undoStillDue,
-  unsettledMarks,
   unsettledPinPositions,
-  unsettledStatuses,
 } from "./tasks-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -145,7 +148,7 @@ test("an account known to have no OpenAI API key is sent to add one before the m
   };
   const addKey = {
     press: MICROPHONE_PRESS.ADD_OPENAI_KEY,
-    label: "Add an OpenAI API key in Settings",
+    label: "Add an OpenAI key in settings",
     muted: false,
   };
   assert.deepEqual(microphoneButton({ ...input, openAiKeyMissing: true }), addKey);
@@ -280,9 +283,10 @@ test("an unpin given here takes the pin's place with it, so a pin made again sta
     pinnedAt: 3,
     pinPosition: "a0",
   };
+  const view = _view({ tasks: [task] });
   const unpinned = markedView(
-    _view({ tasks: [task] }),
-    new Map([[INVITES, pendingMark(TASK_MARK.UNPIN, 4)]]),
+    view,
+    new Map([[INVITES, markAsked(new Map(), view, INVITES, TASK_MARK.UNPIN, 4)]]),
   ).tasks[0];
   assert.equal(unpinned?.pinnedAt, undefined);
   assert.equal(unpinned?.pinPosition, undefined);
@@ -407,15 +411,27 @@ test("a task already done is offered no Mark done, and one already canceled no C
 
 test("a status given here is drawn on the task until the list carries it, then let go, apart from a pin given with it", () => {
   const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
-  const statuses = new Map([[INVITES, { status: TASK_STATUS.DONE }]]);
-  const pinned = new Map([[INVITES, pendingMark(TASK_MARK.PIN, 4)]]);
+  const statuses = new Map([[INVITES, statusAsked(new Map(), listed, INVITES, TASK_STATUS.DONE)]]);
+  const pinned = new Map([[INVITES, markAsked(new Map(), listed, INVITES, TASK_MARK.PIN, 4)]]);
 
   assert.equal(statusedView(listed, statuses).tasks[0]?.status, TASK_STATUS.DONE);
-  assert.equal(unsettledStatuses(statuses, listed).size, 1);
+  assert.equal(settledStatuses(statuses, listed, undefined).size, 1);
   const done = _view({ tasks: [standingTask(INVITES, TASK_STATUS.DONE)] });
-  assert.equal(unsettledStatuses(statuses, done).size, 0);
+  assert.equal(settledStatuses(statuses, done, undefined).size, 0);
   // Note that the status landing lets go of nothing the pin still waits on.
-  assert.equal(unsettledMarks(pinned, done).size, 1);
+  assert.equal(settledMarks(pinned, done, undefined).size, 1);
+});
+
+test("a name the service trims, or a status a teammate set first, gives way to the list rather than standing over it", () => {
+  const listed = _view({ tasks: [standingTask(INVITES, TASK_STATUS.TODO)] });
+  const renames = new Map([[INVITES, renameAsked(new Map(), listed, INVITES, "Invites  ")]]);
+  const statuses = new Map([[INVITES, statusAsked(new Map(), listed, INVITES, TASK_STATUS.DONE)]]);
+  const answered = _view({
+    tasks: [{ ...standingTask(INVITES, TASK_STATUS.IN_PROGRESS), name: "Invites" }],
+  });
+
+  assert.equal(settledRenames(renames, answered, undefined).size, 0);
+  assert.equal(settledStatuses(statuses, answered, undefined).size, 0);
 });
 
 test("Mark done's Undo puts back only the tasks still done, leaving one given another status since as it was chosen", () => {

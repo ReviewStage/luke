@@ -193,7 +193,7 @@ function AgentPageBar({
     rename?.editing === true ? (
       <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
         <InlineEdit
-          value={label}
+          value={rename.asked ?? label}
           label={NAME_LABEL}
           maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
           editing

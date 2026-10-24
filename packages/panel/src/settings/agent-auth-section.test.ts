@@ -15,6 +15,8 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
+import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -23,6 +25,7 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 
 /**
@@ -278,6 +281,16 @@ test("each harness's row says how it is connected: nothing, its plan, its key, o
   assert.equal(rowButton(await mount(), "Claude").textContent, "Limit reached");
 });
 
+test("each harness's row stands where a link to its section lands, and Codex's says it holds the key calls run on", async () => {
+  const page = await mount();
+  const landed = (section: string) =>
+    page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`) ??
+    assert.fail(`nothing stands at ${section}`);
+  assert.ok(landed(SETTINGS_SECTION.CLAUDE).contains(rowButton(page, "Claude")));
+  assert.ok(landed(SETTINGS_SECTION.CODEX).contains(rowButton(page, "Codex")));
+  assert.match(landed(SETTINGS_SECTION.CODEX).textContent ?? "", /OpenAI key/u);
+});
+
 test("the dialog's radios pick the plan or the key as the default, sent as the plan's forAgents, and only a saved credential's radio is pressable", async () => {
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
@@ -362,6 +375,16 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
   );
   assert.equal(rowButton(page, "Claude").textContent, "Connect");
+});
+
+test("resting on Edit key says its name in the window's pill", async () => {
+  held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
+  const page = await mount();
+  const dialog = await open(page, "Claude");
+
+  restOn(button(card(dialog, "API key"), "Edit key"));
+
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Edit key");
 });
 
 test("editing a saved API key shows Saved where the key would be, never the key, and offers no Show until one is typed", async () => {

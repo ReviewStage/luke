@@ -13,7 +13,8 @@ import type {
   SettingsResetScope,
 } from "@luke/settings/wire";
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
-import { BUTTON_VARIANT, Button, ResetIcon, STATUS_TONE } from "@luke/ui";
+import { BUTTON_VARIANT, Button, STATUS_TONE } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
@@ -139,7 +140,7 @@ function ResetPageButton({
   return (
     <Button
       variant={BUTTON_VARIANT.QUIET}
-      icon={<ResetIcon />}
+      icon={<GLYPH.GO_BACK />}
       busy={busy}
       busyLabel="Resetting"
       onClick={() => run(scope)}

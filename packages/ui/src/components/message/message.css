@@ -2,11 +2,11 @@
    pointer, until the pointer rests on the turn (`MessageFrame`), the
    keyboard is on one of them, or, on a screen with no hover, the turn is
    tapped; and the line they stand in under the turn (`MessageLine`), who
-   sent it, when, and its actions, in that order. */
+   sent it and when at the column's edge, its actions inside them. */
 
 @layer components {
-  /* The line under a turn: who sent it, when, then its actions, held to the
-     column. A column, a phone's or a narrow pane's, can be too narrow for a
+  /* The line under a turn: who sent it and when at the column's edge, its
+     actions on the side toward the middle, held to the column. A column, a phone's or a narrow pane's, can be too narrow for a
      long sender beside the time and the buttons, so who sent it gives way,
      cut short with an ellipsis, and the time and the buttons keep their
      whole width. A line that may wrap breaks before the time rather than

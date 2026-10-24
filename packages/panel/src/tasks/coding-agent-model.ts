@@ -599,7 +599,7 @@ function credentialMissingWords(
   return `Connect ${harness} in Settings to ${action}.`;
 }
 
-/** A missing credential's note, whose press opens Settings › Agents. */
+/** A missing credential's note, whose press opens Settings › Agents at the harness's row. */
 function credentialMissingFailure(
   refused: RefusedCall,
   action: (typeof ACTION)[keyof typeof ACTION],
@@ -607,6 +607,7 @@ function credentialMissingFailure(
   return {
     reason: FAILURE_REASON.CONNECT_AGENTS,
     text: credentialMissingWords(refused.provider, action),
+    provider: refused.provider,
   };
 }
 
@@ -680,13 +681,13 @@ function callFailure(text: string): Failure {
 /**
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
- * Settings; the repository given to Luke on GitHub; another repository
+ * Settings; the repository given to Luke's GitHub App; another repository
  * chosen; the task moved to the workspace whose GitHub reaches it; or the
  * member's own token replaced in Settings › Profile, or authorized on
  * GitHub for the organization's SAML SSO. A service that said nothing more
  * says the bare sentence, which Retry answers, and so does an agent with no
  * task wherever the remedy is pressed on the task: only giving the
- * repository to Luke on GitHub, and a token's remedies, are not.
+ * repository to Luke's GitHub App, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -695,7 +696,7 @@ function unreachedFailure(
   if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
     return {
       reason: FAILURE_REASON.ADD_REPOSITORY,
-      text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
+      text: `Luke's GitHub App doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
     };

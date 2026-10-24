@@ -295,7 +295,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
             "Codex",
-            "openai api key byok own key gpt chatgpt plan subscription billing provider credential",
+            "openai api key byok own key gpt chatgpt plan subscription billing provider credential voice call dictation dictate",
           ],
         }
       : undefined,

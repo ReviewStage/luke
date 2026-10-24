@@ -11,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { restOn } from "../testing/hint-rest.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane, type ReadPageSource } from "./page-pane.js";
 
@@ -122,12 +123,21 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   assert.equal(frame().getAttribute("src"), versionUrl(3));
 });
 
+test("the page's Reload hangs a hint in the words it is named by", () => {
+  const { container } = mount(FUNNEL);
+  const reload = container.querySelector('button[aria-label="Reload page"]') ?? assert.fail();
+
+  restOn(reload);
+
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Reload page");
+});
+
 test("over the source, View settings offers the settings its lines follow, and the ⋯ its actions alone", async () => {
   const { container, press } = mount(FUNNEL);
-  assert.equal(container.querySelector('button[aria-label="View settings"]'), null);
+  assert.equal(container.querySelector('button[aria-label="View options"]'), null);
 
   await press("View source");
-  await press("View settings");
+  await press("View options");
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
   assert.deepEqual(
     [...popover.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
@@ -145,7 +155,7 @@ test("over the source, View settings offers the settings its lines follow, and t
       "Ligatures",
     ],
   );
-  await press("View settings");
+  await press("View options");
 
   await press("Source actions");
   assert.deepEqual(

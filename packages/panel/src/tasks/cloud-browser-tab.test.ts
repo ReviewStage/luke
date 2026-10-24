@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
+  BROWSER_LIVE_CLOSE_CODE,
+  BROWSER_LIVE_CLOSE_REASON,
   BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_REFUSAL,
   BROWSER_LIVE_SERVER,
@@ -23,6 +25,7 @@ import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
@@ -589,6 +592,52 @@ test("a live tab's bar opens a typed address and steps back, forward, and reload
   assert.ok(
     document.body.textContent?.includes("Ada is driving this tab. Wait until they hand it back."),
   );
+});
+
+test("a bar's steps say why they are off while the tab is not live, reachable by the keyboard, and are named plainly once it is", async () => {
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: () => undefined, close: () => undefined };
+    },
+  });
+  draw(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: LUKE_OWNER,
+      shown: true,
+      memberName: () => undefined,
+    }),
+  );
+  await settle();
+  const back = () =>
+    document.querySelector<HTMLButtonElement>('button[aria-label="Back"]') ?? assert.fail("Back");
+  const hint = () => document.querySelector('[role="tooltip"]')?.textContent;
+
+  assert.equal(back().disabled, false, "an unavailable step stays in the tab order");
+  assert.equal(back().getAttribute("aria-disabled"), "true");
+  restOn(back());
+  assert.equal(hint(), "Back: the browser is not live yet");
+
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({ type: BROWSER_LIVE_SERVER.DRIVER, driver: null, yours: false }),
+    ),
+  );
+  await settle();
+  assert.equal(back().getAttribute("aria-disabled"), null);
+  act(() => back().dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  restOn(back());
+  assert.equal(hint(), "Back");
+
+  // A view the relay closed as idle needs Watch again, which is not a wait.
+  act(() => back().dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  await act(async () => listener?.closed(BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE]));
+  await settle();
+  restOn(back());
+  assert.equal(hint(), "Back: watch again to use it");
 });
 
 test("plain words typed in a cloud tab's bar search the web, in a draft and on a live tab alike", async () => {

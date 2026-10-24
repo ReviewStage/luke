@@ -151,33 +151,43 @@ body,
    shell's one column. Chat does the same by its own width as well as a
    narrow room's (`column-split.ts`), its rail or its place the view's one
    column. The one shown stands alone, so no edge parts it from the other. */
-.desktop-shell[data-room="narrow"]:not([data-sidebar-collapsed]),
+:where(:root)[data-luke-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
 .chat-view[data-single="true"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.desktop-shell[data-room="narrow"]
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
   :is(.desktop-settings, .desktop-version-history, .desktop-admin)
   > [hidden],
 .chat-view[data-single="true"] > [hidden] {
   display: none;
 }
 
-.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log, .admin-sections),
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  :is(.settings-pages, .version-log, .admin-sections),
 .chat-view[data-single="true"] > .chat-rail {
   border-right: 0;
 }
 
 /* Settings' list standing alone leads with its one way back, Back to the
    tasks; the history's Back and Forward beside it would be a second. */
-.desktop-shell[data-room="narrow"] :is(.settings-pages, .admin-sections) > .title-bar-controls {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  :is(.settings-pages, .admin-sections)
+  > .title-bar-controls {
   display: none;
 }
 
 /* A place standing alone in a narrow room leads its head with the way back,
    so its name keeps the room left and what is said beside it gives way; its
    menu stays at the head's end, the only way to edit or archive a topic. */
-.desktop-shell[data-room="narrow"] .chat-stream > .luke-pane-bar .luke-pane-bar-detail {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .chat-stream
+  > .luke-pane-bar
+  .luke-pane-bar-detail {
   display: none;
 }
 
@@ -189,12 +199,12 @@ body,
    dialog portals out of the shell, so it reads the shell's room off the
    document's root (`stage-room.ts`), and its Start stays in the card above
    the keyboard. */
-.desktop-shell[data-room="narrow"] .agent-composer-field,
+:where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-field,
 [data-luke-room="narrow"] .new-task .agent-composer-field {
   --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
 }
 
-.desktop-shell[data-room="narrow"] .agent-composer-input,
+:where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-input,
 [data-luke-room="narrow"] .new-task .new-task-composer .agent-composer-input {
   max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
 }
@@ -202,7 +212,7 @@ body,
 /* A thread opened over a narrow room's plan spans the column rather than
    standing a margin card's width at its right over the words, so its reply
    box has the column's room. */
-.desktop-shell[data-room="narrow"] .comment-float {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .comment-float {
   left: calc(var(--luke-space-6) * -1);
   width: auto;
 }
@@ -226,8 +236,24 @@ body,
   --title-bar-ground: var(--luke-color-well);
 }
 
+/* Where the side panel's toggle stands in from the window's right edge: a
+   row's inset, or, over the open sidebar's inset sheet on the Mac, as far
+   in from the sheet's right edge as it stands under the sheet's top, so it
+   nests in the sheet's corner on one gap rather than a hair under its top
+   and further from its side, as the plan's tab does at the other corner.
+   The web keeps a row's inset: its taller controls leave no room over them
+   to match (`--title-bar-middle`). */
+.desktop-shell {
+  --panel-toggle-right: var(--column-inset);
+}
+
+[data-luke-profile="desktop"]
+  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"]) {
+  --panel-toggle-right: calc(var(--title-bar-middle) - var(--luke-control-height) / 2);
+}
+
 .title-bar-controls[data-edge="end"] {
-  right: var(--column-inset);
+  right: var(--panel-toggle-right);
   left: auto;
   border-radius: var(--luke-control-radius);
   background: var(--title-bar-ground);
@@ -1152,6 +1178,7 @@ ul.actor-stack {
 /* A sidebar too narrow for the pill's word beside a name that reads folds
    the pill to its glyph alone in a round, so the name keeps the room. The
    button's name and its hint still say what it does. */
+/* off-scale: 220px, where the update pill's word stops fitting beside a name */
 @container sidebar-foot (width < 220px) {
   .sidebar-update {
     --luke-fold: folded;
@@ -1234,6 +1261,7 @@ ul.actor-stack {
   display: none;
 }
 
+/* off-scale: 220px, where the update pill's word stops fitting beside a name */
 @container sidebar-foot (width < 220px) {
   .offline-mark {
     aspect-ratio: 1;
@@ -1252,14 +1280,14 @@ ul.actor-stack {
    what follows restages them for the window's own screens. */
 
 /* What a top row at the sheet's right edge leaves past its last control for
-   the side panel's toggle: the toggle, a row's inset from the window's edge,
-   and a row's gap between its items. Note that it is declared on the sheet
-   and less the sheet's own gap, because the toggle stands on the window
-   while the row stands in the sheet, a gap in from the window's edge
+   the side panel's toggle: the toggle, where it stands in from the window's
+   edge, and a row's gap between its items. Note that it is declared on the
+   sheet and less the sheet's own gap, because the toggle stands on the
+   window while the row stands in the sheet, a gap in from the window's edge
    wherever the sidebar is open. */
 .desktop-main {
   --panel-toggle-clearance: calc(
-    var(--column-inset) +
+    var(--panel-toggle-right) +
     var(--luke-control-height) +
     var(--luke-control-gap) -
     var(--sheet-gap)
@@ -1279,18 +1307,35 @@ ul.actor-stack {
   --luke-toolbar-end-at: var(--column-inset);
 }
 
+/* Over the open sidebar's inset sheet on the Mac, the row is kept level with
+   the traffic lights, which leaves only a hair over its controls (shell.css).
+   The plan's toolbar, whose tab stands in the sheet's top left corner,
+   starts that same hair in from the sheet's side, so the tab nests in the
+   corner on one gap rather than a hair under the top and a row's inset from
+   the side. The toggle at the other corner does the same
+   (`--panel-toggle-right`), and so does the side panel's first tab while
+   the panel fills the sheet. A bar further in the column, a task's Inbox
+   tab's, sets its own start. */
+[data-luke-profile="desktop"]
+  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"])
+  > .desktop-main
+  .desktop-task-main {
+  --luke-toolbar-start-at: calc((var(--desktop-bar-height) - var(--luke-control-height)) / 2);
+}
+
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
    controls give way before its tabs do: Start draws its glyph alone, named
    still, and where the column is narrowest it leaves its model menu to the
    new agent's own composer, which chooses a model as well, and the agents'
    Retry draws its glyph alone. */
-@container luke-toolbar (max-width: 480px) {
+@container luke-toolbar (width < 480px) {
   .start-agent {
     --luke-fold: folded;
   }
 }
 
-@container luke-toolbar (max-width: 320px) {
+/* off-scale: 320px, where Start's model menu goes to the composer */
+@container luke-toolbar (width < 320px) {
   /* Start's glyph alone, its model menu left to the composer (`SplitButton`). */
   .start-agent {
     --luke-fold: bare;
@@ -1305,7 +1350,7 @@ ul.actor-stack {
 /* A narrow room's bar has its tabs on a row of their own, and a phone has
    no hover to name a glyph, so Start keeps its word there however narrow
    the bar (`SplitButton`). */
-.desktop-shell[data-room="narrow"] .desktop-task-main .start-agent {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main .start-agent {
   --luke-fold: worded;
 }
 
@@ -2054,7 +2099,8 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
-@container (min-width: 440px) {
+/* off-scale: 440px, where a tool parameter's name and values fit side by side */
+@container (width >= 440px) {
   .integration-tool-parameter {
     display: grid;
     grid-template-columns: minmax(150px, 34%) 1fr;
@@ -2172,7 +2218,7 @@ ul.actor-stack {
   --luke-toolbar-ground: var(--luke-color-fill-hover);
 }
 
-.desktop-shell[data-room="narrow"] .desktop-task-main .inbox-view {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main .inbox-view {
   --luke-toolbar-block-inset: var(--luke-space-4);
 }
 
@@ -2220,14 +2266,18 @@ ul.actor-stack {
 
 /* An unread Inbox item wears a mail app's blue dot in a gutter before its
    words (`inbox-list.tsx`); the gutter stands on every row, so the words
-   line up whether a row wears the dot or not. */
+   line up whether a row wears the dot or not, and the row's leading gap
+   alone stands between it and the title. The gutter sets its line in the
+   title's type, so its baseline is the title's, and the dot stands centred
+   on the title's capitals rather than on its line's box, which the
+   system's face sets its letters low in. */
 .inbox-row-gutter {
-  display: inline-flex;
+  display: block;
   width: var(--inbox-unread-dot);
   flex: none;
-  align-items: center;
-  justify-content: center;
-  margin-inline-end: var(--luke-item-gap);
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
+  text-align: center;
 
   --inbox-unread-dot: 7px;
 }
@@ -2235,10 +2285,12 @@ ul.actor-stack {
 /* Note that the dot is the accent's ink rather than its fill, because the
    web's cyan fill reads at 1.7:1 on its light page, under a mark's 3:1. */
 .inbox-row-unread {
+  display: inline-block;
   width: var(--inbox-unread-dot);
   height: var(--inbox-unread-dot);
   border-radius: 50%;
   background: var(--luke-color-accent-text);
+  vertical-align: calc(0.5cap - var(--inbox-unread-dot) / 2);
 }
 
 /* An Inbox item that needs the developer wears the attention mark before
@@ -2756,12 +2808,12 @@ ul.actor-stack {
   }
 }
 
-.desktop-shell[data-room="narrow"] .inbox-item-bar {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .inbox-item-bar {
   flex-wrap: wrap;
   row-gap: var(--luke-tight-gap);
 }
 
-.desktop-shell[data-room="narrow"] .inbox-item-bar > .inbox-crumbs {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .inbox-item-bar > .inbox-crumbs {
   order: 1;
   flex-basis: 100%;
 }
@@ -3032,7 +3084,7 @@ ul.actor-stack {
   container: automation-toolbar / inline-size;
 }
 
-@container automation-toolbar (max-width: 879px) {
+@container automation-toolbar (width < 880px) {
   .automation-toolbar > * {
     --luke-fold: folded;
   }
@@ -3055,7 +3107,8 @@ ul.actor-stack {
   display: contents;
 }
 
-@container automations-toolbar (max-width: 599px) {
+/* off-scale: 600px, where the Automations toolbar's acts stop fitting */
+@container automations-toolbar (width < 600px) {
   .automations-acts {
     --luke-fold: folded;
   }
@@ -3659,7 +3712,8 @@ ul.actor-stack {
   container: find-scope / inline-size;
 }
 
-@container find-scope (max-width: 400px) {
+/* off-scale: 400px, where the column is too narrow for the find bar's own width */
+@container find-scope (width < 400px) {
   .find-scope > .find-bar {
     left: var(--column-inset);
   }
@@ -3673,7 +3727,8 @@ ul.actor-stack {
 
 /* Narrower still, the tally gives the field its room and is said rather
    than drawn (`SearchField`'s fold); the matches stay marked in the tab. */
-@container find-scope (max-width: 300px) {
+/* off-scale: 300px, where the find bar's tally gives the field its room */
+@container find-scope (width < 300px) {
   .find-scope > .find-bar {
     --luke-fold: folded;
   }
@@ -4342,6 +4397,16 @@ ul.actor-stack {
   padding-left: var(--sidebar-toggle-clearance);
 }
 
+/* Full screen beside the open sidebar on the Mac, its first tab nests in the
+   sheet's top left corner as the plan's tab does there. */
+[data-luke-profile="desktop"]
+  .desktop-shell[data-sidebar-collapsed="false"]:not([data-room="narrow"])
+  > .desktop-main
+  .side-panel[data-full-screen="true"]
+  > .side-panel-bar {
+  padding-left: calc((var(--desktop-bar-height) - var(--luke-control-height)) / 2);
+}
+
 /* The tabs and their "+" take what the row leaves beside the full-screen
    button, whatever they hold, so the strip scrolls its tabs within that room
    and the "+" stands pinned after it, never scrolled away, and neither
@@ -4444,16 +4509,6 @@ ul.actor-stack {
   vertical-align: -2px; /* off-scale */
 }
 
-/* A pull request's branches on its card stand as inline code does in words
-   (`.luke-markdown code`): mono on a tint, rounded. */
-.card-code {
-  padding: 0.08em 0.36em;
-  border-radius: 0.36em;
-  background: color-mix(in srgb, currentColor 13%, transparent);
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
-}
-
 /* Who opened a pull request on its card, and how long ago it moved after
    them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
    as one piece where a long login leaves it no room, so the name is never
@@ -4511,17 +4566,21 @@ ul.actor-stack {
    in the title bar's buttons' place, the column's bar starts and ends at the
    column's own inset, and the side panel draws no bar at all, the row
    standing for it. */
-.desktop-shell[data-room="narrow"] .desktop-task-main {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .desktop-task-main {
   --luke-toolbar-wrap-start: var(--sidebar-toggle-clearance);
   --luke-toolbar-wrap-end: var(--panel-toggle-clearance);
 }
 
-.desktop-shell[data-room="narrow"] .task-head ~ .desktop-task .desktop-task-main {
+:where(:root)[data-luke-room="narrow"]
+  .desktop-shell
+  .task-head
+  ~ .desktop-task
+  .desktop-task-main {
   --luke-toolbar-wrap-start: var(--column-inset);
   --luke-toolbar-wrap-end: var(--column-inset);
 }
 
-.desktop-shell[data-room="narrow"] .side-panel-bar:has(> .side-panel-tabs) {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar:has(> .side-panel-tabs) {
   --bar-start: var(--sidebar-toggle-clearance);
   --bar-end: var(--panel-toggle-clearance);
   flex-wrap: wrap;
@@ -4529,14 +4588,14 @@ ul.actor-stack {
   padding-left: var(--bar-start);
 }
 
-.desktop-shell[data-room="narrow"] .side-panel-bar > .side-panel-tabs {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs {
   order: 1;
   flex: 0 0 calc(100% + var(--bar-start) + var(--bar-end) - 2 * var(--column-inset));
   margin-right: calc(var(--column-inset) - var(--bar-end));
   margin-left: calc(var(--column-inset) - var(--bar-start));
 }
 
-.desktop-shell[data-room="narrow"] .side-panel-bar > .side-panel-tabs + * {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .side-panel-bar > .side-panel-tabs + * {
   min-height: var(--luke-control-height);
   margin-left: auto;
 }
@@ -4832,7 +4891,7 @@ ul.actor-stack {
 /* A card too narrow for its placeholder on one line, as on a phone, wraps
    it, since its field stands five lines tall; the agent's one-line box cuts
    its own short instead, which would otherwise run over its foot. */
-@container composer (max-width: 479px) {
+@container composer (width < 480px) {
   .new-task-composer .agent-composer-placeholder {
     white-space: normal;
   }
@@ -4848,7 +4907,8 @@ ul.actor-stack {
 /* A card too narrow for every press's words, as on a phone, keeps its
    round Start at the row's end: the model chip's words are what give way, cut short, and the microphone stands in the row in place
    of a ⋯ that would hold it alone. */
-@container composer (max-width: 399px) {
+/* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
+@container composer (width < 400px) {
   .new-task-composer .agent-composer-actions .agent-model-chip {
     flex-shrink: 1;
   }
@@ -4864,7 +4924,7 @@ ul.actor-stack {
 
 /* The narrowest, where the + goes into the ⋯ too, the ⋯ stands again and
    takes the microphone in with it. */
-@container composer (max-width: 239px) {
+@container composer (width < 240px) {
   .new-task-composer .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
@@ -5282,12 +5342,12 @@ ul.actor-stack {
   flex-direction: column;
 }
 
-.desktop-shell[data-room="narrow"] .tasks-board-column {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .tasks-board-column {
   width: auto;
   flex: 1 1 auto;
 }
 
-.desktop-shell[data-room="narrow"] .tasks-board-column-scroll {
+:where(:root)[data-luke-room="narrow"] .desktop-shell .tasks-board-column-scroll {
   flex: 1 1 auto;
 }
 

@@ -342,13 +342,13 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   fakeAppBridge({});
 });
 
-test("a sent message keeps its bubble on top, with who sent it, when, and its Copy on the line under it", async () => {
+test("a sent message keeps its bubble on top, with its Copy, who sent it, and when on the line under it, the time at the right", async () => {
   const drawn = await drawnFor(DEAN.userId);
   const byId = (id: string) => drawn[MESSAGES.findIndex((each) => each.id === id)];
   const charles = byId("charles");
   const own = byId("dean");
   assert.ok(charles !== undefined && own !== undefined);
-  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "sender", "sent at", "Copy"]);
+  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "Copy", "sender", "sent at"]);
   assert.equal(
     charles.querySelector("time")?.getAttribute("datetime"),
     new Date(CHARLES_SENT_AT).toISOString(),

@@ -234,7 +234,7 @@ export function SidebarAgent({
           title={
             editing && rename !== undefined ? (
               <InlineEdit
-                value={name}
+                value={rename.asked ?? name}
                 label="Agent name"
                 maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing

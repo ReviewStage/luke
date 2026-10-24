@@ -135,6 +135,7 @@ function FoldingBox({
   succeeded,
   turns,
   disabled,
+  focusableWhenDisabled,
   onClick,
   trailing,
   doors,
@@ -152,6 +153,7 @@ function FoldingBox({
   succeeded: boolean | undefined;
   turns: boolean | undefined;
   disabled: boolean | undefined;
+  focusableWhenDisabled: boolean | undefined;
   onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   trailing: ReactNode;
 }): React.JSX.Element {
@@ -171,6 +173,7 @@ function FoldingBox({
         shape={shape ?? BUTTON_SHAPE.SQUARE}
         size={size}
         disabled={disabled}
+        focusableWhenDisabled={focusableWhenDisabled}
         turns={turns}
         onClick={onClick}
         label={doors.name}
@@ -200,6 +203,7 @@ export function FoldingButton({
   succeeded,
   turns,
   disabled,
+  focusableWhenDisabled,
   onClick,
   trailing,
   hint: Hint = Tooltip,
@@ -219,6 +223,8 @@ export function FoldingButton({
     /** Whether its glyph turns once as a press lands, as a retry's arrow does (Button's `turns`). */
     turns?: boolean | undefined;
     disabled?: boolean | undefined;
+    /** Whether it stays in the tab order while disabled, so its hint can say why (Button's `focusableWhenDisabled`). */
+    focusableWhenDisabled?: boolean | undefined;
     onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
     /** A count after its words, inside the button's fill; it stays drawn when the words fold. */
     trailing?: ReactNode;
@@ -239,6 +245,7 @@ export function FoldingButton({
       succeeded={succeeded}
       turns={turns}
       disabled={disabled}
+      focusableWhenDisabled={focusableWhenDisabled}
       onClick={onClick}
       trailing={trailing}
       doors={doors}

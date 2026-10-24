@@ -11,8 +11,8 @@ import { MICROPHONE_STATUS, type MicrophoneStatus } from "./audio.js";
  */
 export const VOICE_KEYLESS_NOTE = "Voice is off: sign in to turn it on.";
 
-/** Why a call or a dictated clip cannot run: it runs on the account's own OpenAI key, and none is saved. */
-export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI API key in Settings";
+/** Why a call or a dictated clip cannot run: it runs on the account's own OpenAI key, kept under Codex in settings, and none is saved. */
+export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI key in settings";
 
 /**
  * The failure a session the service refused is said as, where the reason is

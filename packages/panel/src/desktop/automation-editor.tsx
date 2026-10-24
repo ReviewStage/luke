@@ -18,6 +18,7 @@ import {
   draftProblems,
   draftRepositories,
   draftTrigger,
+  filterAdmitted,
   filterValuesOf,
   type GitHubTriggerSettings,
   presetDraft,
@@ -76,7 +77,7 @@ import {
   type SentryLevel,
   type SentryTriggerEvent,
 } from "@luke/features/trigger-catalog";
-import { andList, noMatchWords, readFailedWords, TERM } from "@luke/features/words";
+import { andList, noMatchWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -128,6 +129,7 @@ import {
   Skeleton,
   SkeletonRegion,
   Spinner,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
@@ -177,10 +179,12 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { mentionableAgent } from "../tasks/task-mentions.js";
 import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-panel.js";
+import { automationOwnerName } from "./automation-words.js";
 import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
@@ -197,7 +201,7 @@ import { type RunChoices, useRunChoices } from "./use-run-choices.js";
  * setting and why on the left and its control on the right, every pick a
  * Settings picker on the window's menu and every yes or no a switch. Who
  * owns it is the form's first row, wherever a team workspace offers the
- * choice: Personal under the account's own picture, or the workspace under
+ * choice: Only you under the account's own picture, or the workspace under
  * its photo (`automation-owner.tsx`). Where its runs land is picked: a new agent each
  * run, on the agent box's model chip and archived once it succeeds where
  * asked, or the same agent, chosen from the workspace's agents on its
@@ -250,7 +254,7 @@ function sentryWithheld(
 const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
 
 /** What the page says where a Sentry trigger is held back from saving. */
-const SENTRY_WITHHELD = "Luke can't receive Sentry events here. Choose another trigger.";
+const SENTRY_WITHHELD = "Luke cannot receive Sentry events here. Choose another trigger.";
 
 /** The writes the editor makes, as the list's hook answers them (`use-automations.ts`). */
 export interface AutomationWrites {
@@ -340,13 +344,13 @@ const NO_MATCH = {
 
 /** Why a save the service refused did not land, as the line under the name says it. */
 const SAVE_REFUSAL_WORDS = {
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't save it. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not save it. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
   [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository it works in.",
   [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach that repository from this workspace on GitHub.",
+    "Luke cannot reach that repository from this workspace on GitHub.",
   [AUTOMATION_CALL_FAILURE.INVALID]:
-    "Luke couldn't save it as written. Check its schedule and prompt.",
+    "Luke could not save it as written. Check its schedule and prompt.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can change it.",
 } as const satisfies Record<AutomationCallFailure, string>;
@@ -354,10 +358,19 @@ const SAVE_REFUSAL_WORDS = {
 /** Why a Run now did not start a run, as the line under the name says it. */
 const RUN_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't run it now. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not run it now. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can run it.",
 } as const satisfies Record<AutomationCallFailure, string>;
+
+/** Why a switch did not move, as its toast says it: the list's and the editor's alike. */
+export function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
+  if (!("failure" in answer)) return undefined;
+  if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
+    return SAVE_REFUSAL_WORDS[AUTOMATION_CALL_FAILURE.NOT_PERMITTED];
+  }
+  return enabled ? "Could not turn it on. Try again." : "Could not turn it off. Try again.";
+}
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
@@ -385,13 +398,8 @@ function zoneLabel(zone: string): string {
   return zone.replaceAll("_", " ");
 }
 
-/** An owner as the crumbs and the Owner row name it. */
-function ownerName(owner: AutomationScope, workspace: Workspace | undefined): string {
-  return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspace?.name ?? "Workspace") : "Personal";
-}
-
 /**
- * Who owns it, the form's first row: Personal under the account's own
+ * Who owns it, the form's first row: Only you under the account's own
  * picture, or the workspace under its photo, on the chip and in its menu
  * alike.
  */
@@ -404,7 +412,7 @@ function OwnerRow({
 }: {
   owner: AutomationScope;
   owners: readonly { value: AutomationScope; label: string }[];
-  /** Whether the reading account made it, so Personal is drawn as its own; a new one is. */
+  /** Whether the reading account made it, so Only you is drawn as its own; a new one is. */
   mine: boolean;
   workspace: Workspace | undefined;
   onOwner: (owner: AutomationScope) => void;
@@ -420,7 +428,7 @@ function OwnerRow({
           : "Only you see and change it. Owners and admins can see it and turn it off."
       }
       value={owner}
-      valueLabel={ownerName(owner, workspace)}
+      valueLabel={automationOwnerName(owner, workspace?.name, mine)}
       valueIcon={
         <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
       }
@@ -1069,7 +1077,7 @@ function EditorToolbar({
         disabled={!(automation === undefined || dirty)}
         onClick={onSave}
       >
-        {automation === undefined ? "Create" : "Save"}
+        {automation === undefined ? "Create automation" : "Save"}
       </Button>
       {automation === undefined ? null : (
         <>
@@ -1215,24 +1223,28 @@ function FilterRow({
   label,
   detail,
   values,
+  problem,
   onValues,
 }: {
   label: string;
   detail: string;
   values: readonly string[];
+  /** What stops a save in this filter, said under its row. */
+  problem: string | undefined;
   onValues: (values: readonly string[]) => void;
 }): React.JSX.Element {
   // The field's Escape lets go of the caret and keeps the press, as every field's here does.
   const field = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => values.join(", "));
   return (
-    <SettingsRow label={label} description={detail}>
+    <SettingsRow label={label} description={detail} error={problem}>
       {(control) => (
         <span className="automation-field">
           <TextField
             ref={field}
             label={label}
             describedBy={control["aria-describedby"]}
+            invalid={control["aria-invalid"]}
             spellCheck={false}
             placeholder="All"
             value={text}
@@ -1262,7 +1274,7 @@ function SentryRows({
   draft,
   sentry,
   withheld,
-  problem,
+  problems,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -1270,8 +1282,8 @@ function SentryRows({
   sentry: SentryOffer;
   /** Whether the deployment holds no Sentry integration for this new choice of it (`sentryWithheld`). */
   withheld: boolean;
-  /** What stops a save in the cooldown, said under its row. */
-  problem: string | undefined;
+  /** What stops a save, each said under the row of the field it is about. */
+  problems: DraftProblems;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   // The cooldown's Escape lets go of the caret and keeps the press, as every field's here does.
@@ -1318,12 +1330,18 @@ function SentryRows({
         label="Projects"
         detail="Project slugs, comma-separated. Empty for every project."
         values={trigger.filters?.project ?? []}
+        problem={
+          filterAdmitted(trigger.filters?.project) ? undefined : problems[DRAFT_FIELD.FILTERS]
+        }
         onValues={(project) => filter({ project })}
       />
       <FilterRow
         label="Environments"
         detail="Comma-separated. Empty for every environment."
         values={trigger.filters?.environment ?? []}
+        problem={
+          filterAdmitted(trigger.filters?.environment) ? undefined : problems[DRAFT_FIELD.FILTERS]
+        }
         onValues={(environment) => filter({ environment })}
       />
       <SettingsRow
@@ -1343,7 +1361,7 @@ function SentryRows({
       <SettingsRow
         label="Same issue again after"
         description={`Hours before one Sentry issue can start another run, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
-        error={problem}
+        error={problems[DRAFT_FIELD.COOLDOWN]}
       >
         {(control) => (
           <span className="automation-field">
@@ -1441,7 +1459,7 @@ function CodeReviewGroup({
 /** Why a new secret could not be made, as its dialog says it. */
 const NEW_SECRET_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't make a new secret. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not make a new secret. Try again.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /**
@@ -1823,7 +1841,7 @@ function AgentRow({
             <ErrorState onRetry={retryAgents}>{AGENT_SEARCH_FAILED}</ErrorState>
           ) : undefined
         ) : agents === undefined ? (
-          <Spinner delay label="Loading agents" />
+          <Spinner delay label={readingWords("agents")} />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."
         ) : undefined
@@ -2001,8 +2019,12 @@ function EditorForm({
   // The form is the area its reveals move, so the groups under a trigger's rows glide as they unroll.
   const form = useRef<HTMLDivElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
+  const mine = automation === undefined || automation.mine === true;
   const owners = [
-    { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
+    {
+      value: AUTOMATION_SCOPE.PERSONAL,
+      label: automationOwnerName(AUTOMATION_SCOPE.PERSONAL, undefined, mine),
+    },
     { value: AUTOMATION_SCOPE.WORKSPACE, label: workspaceName },
   ] as const;
   return (
@@ -2013,7 +2035,7 @@ function EditorForm({
             <OwnerRow
               owner={draft.owner}
               owners={owners}
-              mine={automation === undefined || automation.mine === true}
+              mine={mine}
               workspace={workspace}
               onOwner={(owner) => onDraft({ owner })}
             />
@@ -2030,7 +2052,7 @@ function EditorForm({
             error={
               draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
                 ? undefined
-                : (problems[DRAFT_FIELD.SCHEDULE] ?? problems[DRAFT_FIELD.FILTERS])
+                : problems[DRAFT_FIELD.SCHEDULE]
             }
             onChange={(triggerKind) => onDraft({ triggerKind })}
           />
@@ -2064,7 +2086,7 @@ function EditorForm({
                   draft={draft}
                   sentry={sentry}
                   withheld={sentryWithheld(sentry, automation, draft)}
-                  problem={problems[DRAFT_FIELD.COOLDOWN]}
+                  problems={problems}
                   onDraft={onDraft}
                 />
               ) : (
@@ -2393,6 +2415,7 @@ export function AutomationEditor({
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const toast = useToast();
   // The webhook secret a write just minted, shown once on this page and gone when it is left.
   const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
   const taskBacked = automation !== undefined && automation.planId !== null;
@@ -2495,7 +2518,10 @@ export function AutomationEditor({
   const toggle = (enabled: boolean) => {
     if (automation === undefined) return;
     writes.toggle(automation.id, enabled).then((answer) => {
-      if ("failure" in answer) setRefusal(SAVE_REFUSAL_WORDS[answer.failure]);
+      const refused = toggleRefusal(answer, enabled);
+      if (refused !== undefined) {
+        toast({ words: refused, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      }
     });
   };
   const deletion = useConfirmDialog(

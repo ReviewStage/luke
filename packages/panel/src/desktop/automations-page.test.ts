@@ -113,7 +113,11 @@ const SWEEP = automation(1, {
   name: "Nightly flaky-test sweep",
   scope: AUTOMATION_SCOPE.WORKSPACE,
 });
-const DIGEST = automation(2, { name: "Morning digest", scope: AUTOMATION_SCOPE.PERSONAL });
+const DIGEST = automation(2, {
+  name: "Morning digest",
+  scope: AUTOMATION_SCOPE.PERSONAL,
+  mine: true,
+});
 const FAILING = automation(3, {
   name: "Dependency bumps",
   scope: AUTOMATION_SCOPE.WORKSPACE,
@@ -582,12 +586,12 @@ test("the listed workspace's automations stand before the personal ones, under a
   assert.deepEqual(listed, [WORKSPACE.id]);
   assert.deepEqual(
     [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
-    ["Acme", "Personal"],
+    ["Acme", "Only you"],
   );
   assert.deepEqual(rows(page), [
     ["Nightly flaky-test sweep", "Acme"],
     ["Dependency bumps", "Acme"],
-    ["Morning digest", "Personal"],
+    ["Morning digest", "Only you"],
   ]);
 });
 
@@ -597,7 +601,7 @@ test("one owner's automations alone stand under no heading, still naming their o
   await settle();
 
   assert.equal(page.querySelectorAll(".automation-group h2").length, 0);
-  assert.deepEqual(rows(page), [["Morning digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
 });
 
 test("an automation turned off reads Off where its next run would, and a failed newest run is marked at its row's end", async () => {
@@ -707,13 +711,13 @@ test("what changed elsewhere is drawn as the host pushes it, and a switch reads 
   assert.deepEqual(rows(page), [
     ["Nightly flaky-test sweep", "Acme"],
     ["Dependency bumps, weekly", "Acme"],
-    ["Morning digest", "Personal"],
+    ["Morning digest", "Only you"],
   ]);
 });
 
 test("a window moved to another workspace lets the list it followed go, and follows that workspace's", async () => {
   const beta: Workspace = { ...WORKSPACE, id: "workspace-beta", name: "Beta" };
-  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id });
+  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id, mine: true });
   standing = [...standing, betaAutomation];
   const page = mount();
   await settle();
@@ -721,7 +725,7 @@ test("a window moved to another workspace lets the list it followed go, and foll
   render(tasksControl({ workspace: beta }));
   await settle();
 
-  assert.deepEqual(rows(page), [["Beta's digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Beta's digest", "Only you"]]);
   assert.deepEqual(listed, [WORKSPACE.id, beta.id]);
   assert.deepEqual(
     followers.map((each) => [each.id, each.closed]),
@@ -766,7 +770,7 @@ test("a list that could not be read says so, and Retry reads it again", async ()
   await settle();
 
   assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
-  assert.deepEqual(rows(page), [["Morning digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
 });
 
 test("with no automations the page says what one is, and with no workspace listed it asks for none", async () => {
@@ -774,7 +778,7 @@ test("with no automations the page says what one is, and with no workspace liste
   const page = mount();
   await settle();
 
-  assert.match(page.textContent ?? "", /No automations yet/u);
+  assert.match(page.textContent ?? "", /No automations yet\./u);
   act(() => root?.unmount());
   root = undefined;
   listed = [];
@@ -805,6 +809,21 @@ test("the list's title is its bar's heading, and Create with an agent and New au
     ),
     ["Create with an agent", "New automation"],
   );
+});
+
+test("with no workspace chosen the bar's two acts stay reachable by keyboard, press nothing, and say why on hover", async () => {
+  const agentOpens: number[] = [];
+  mount(tasksControl({ workspace: undefined, onNewAutomationAgent: () => agentOpens.push(1) }));
+  await settle();
+
+  for (const name of ["Create with an agent", "New automation"]) {
+    const bar_ = button(name);
+    assert.equal(bar_.getAttribute("aria-disabled"), "true", name);
+    assert.equal(bar_.disabled, false, `${name} stays focusable`);
+    assert.match(pillOver(bar_) ?? "", /Choose a workspace first/u, name);
+    act(() => bar_.click());
+  }
+  assert.deepEqual(agentOpens, []);
 });
 
 test("New automation, in the bar, opens a new automation's page", async () => {
@@ -885,7 +904,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
     page.querySelector("[role=status][aria-busy=true]")?.textContent,
     "Reading your automations…",
   );
-  assert.doesNotMatch(page.textContent ?? "", /No automations yet/u);
+  assert.doesNotMatch(page.textContent ?? "", /No automations yet\./u);
 
   act(() => root?.unmount());
   root = undefined;
@@ -1221,10 +1240,10 @@ test("a new automation is created only once it is named and told its task, and t
   assert.deepEqual(headings(page), ["New automation"]);
   assert.equal(crumbs(page), "Automations");
 
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.deepEqual(creates, []);
-  assert.match(page.textContent ?? "", /Name it\./u);
+  assert.match(page.textContent ?? "", /Name the automation\./u);
   assert.match(page.textContent ?? "", /Tell the agent what to do\./u);
   assert.equal(
     page.querySelector("textarea[aria-label='Prompt']")?.getAttribute("aria-invalid"),
@@ -1234,7 +1253,7 @@ test("a new automation is created only once it is named and told its task, and t
 
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.equal(creates.length, 1);
@@ -1262,7 +1281,7 @@ test("a new automation whose answer lands after a list pushed before it was made
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   // Something else moves the list while the create is out, before it is made.
@@ -1313,6 +1332,22 @@ test("a save the service refuses keeps the draft and says why under the name", a
     "Sweep",
   );
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+});
+
+test("a switch the service refuses in the editor toasts, as the list's does, and leaves the page's alert and its Save unmarked", async () => {
+  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+  await settle();
+
+  assert.equal(page.querySelector("[role='alert']"), null);
+  assert.match(
+    document.body.textContent ?? "",
+    /Only its creator, or the workspace's owners and admins, can change it\./u,
+  );
+  assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
 });
 
 test("a deletion asks first, then goes back to the list without the automation", async () => {
@@ -1405,7 +1440,7 @@ test("a new automation with nothing written leaves at once, and one just created
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
   assert.equal(leaveAsked(), undefined);
@@ -1414,7 +1449,7 @@ test("a new automation with nothing written leaves at once, and one just created
 test("the Owner row stands in a shared workspace, and not in the account's personal one", async () => {
   const shared = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.equal(picked(shared, "Owner"), "Personal");
+  assert.equal(picked(shared, "Owner"), "Only you");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1440,7 +1475,7 @@ test("who owns an automation is the editor's first setting, and nowhere else on 
   assert.equal(page.querySelector("h1 .automation-owner"), null);
 });
 
-test("the Owner picker draws Personal by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
+test("the Owner picker draws Only you by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
   handState({});
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
@@ -1448,7 +1483,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   const chip = picker(page, "Owner");
   assert.ok(
     chip.querySelector(".actor-mark[data-kind='person']"),
-    "Personal wears the account's mark",
+    "Only you wears the account's mark",
   );
   act(() => chip.click());
   const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
@@ -1460,7 +1495,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
         : "none",
   ]);
   assert.deepEqual(marks, [
-    ["Personal", "person"],
+    ["Only you", "person"],
     ["Acme", "tile"],
   ]);
 
@@ -1505,6 +1540,24 @@ test("the list's Owner column draws the workspace by its tile, the account's own
   assert.equal(markOf(SWEEP.name), "tile");
   assert.equal(markOf(DIGEST.name), "person");
   assert.equal(markOf(FAILING.name), "someone");
+});
+
+test("a personal automation another member made is not called Only you, in its row, its heading, or its Owner picker", async () => {
+  const theirs = { ...DIGEST, name: "Their digest", mine: false };
+  standing = [SWEEP, theirs];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  assert.deepEqual(
+    [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
+    ["Acme", "Personal"],
+  );
+  assert.deepEqual(rows(page).at(-1), ["Their digest", "Personal"]);
+  act(() => root?.unmount());
+
+  const editor = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: theirs.id });
+  await settle();
+  assert.equal(picked(editor, "Owner"), "Personal");
 });
 
 test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
@@ -1904,7 +1957,7 @@ test("a new automation's page moved to another workspace starts afresh in that w
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Beta triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage Beta's issues.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.equal(creates.length, 1);
@@ -1965,7 +2018,7 @@ async function mountNewScheduled(): Promise<HTMLElement> {
 test("a schedule repeated weekly is saved on Monday at nine, as its day and time are first drawn", async () => {
   const page = await mountNewScheduled();
   pick(page, "Repeats", "Weekly");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates.at(-1)?.trigger, {
@@ -2026,7 +2079,7 @@ test("a schedule's time zone is saved as searched for and picked", async () => {
       ?.click();
   });
   assert.equal(picked(page, "Time zone"), "Asia/Tokyo");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates.at(-1)?.trigger, {
@@ -2103,7 +2156,7 @@ test("a new automation with no repository is not created, and the refusal descri
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates, [], "nothing is created without a repository");
@@ -2382,7 +2435,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
 });
 
-/** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
+/** What each row's glyph draws, in order: Sentry's or GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
     if (row.querySelector(".integration-mark-sentry") !== null) return "sentry";
@@ -2395,7 +2448,7 @@ function glyphs(rows: readonly Element[]): string[] {
   });
 }
 
-test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play, while each automation's row leads with its clock tile whatever fires it", async () => {
+test("each automation's row and each run wear what fires it: a schedule's clock, GitHub's or Sentry's mark, a webhook's hook, or Run now's play", async () => {
   standing = [
     SWEEP,
     automation(7, {
@@ -2407,15 +2460,20 @@ test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook
       trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
       webhookUrl: "https://tryluke.dev/api/automations/8/webhook",
     }),
+    SENTRY_ALERTS,
   ];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(
-    automationRows(list).map(
-      (row) => row.querySelector('.actor-mark[data-kind="automation"]') !== null,
-    ),
-    [true, true, true],
+  const tiles = automationRows(list).map((row) =>
+    row.querySelector('.actor-mark[data-kind="automation"]'),
   );
+  assert.ok(tiles.every((tile) => tile !== null));
+  assert.deepEqual(glyphs(tiles.filter((tile) => tile !== null)), [
+    "clock",
+    "github",
+    "webhook",
+    "sentry",
+  ]);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -2498,7 +2556,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   await settle();
   assert.match(
     page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
-    /^No runs yet$/u,
+    /^No runs yet\.$/u,
     "the panel with no run stands the empty state",
   );
 
@@ -2528,7 +2586,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   const fresh = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
-  assert.match(fresh.textContent ?? "", /No runs yet/u);
+  assert.match(fresh.textContent ?? "", /No runs yet\./u);
 });
 
 /** A run of the sweep that started the CI digest agent, which a press on its row opens. */
@@ -2621,7 +2679,7 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates[0]?.trigger, {
@@ -2650,7 +2708,7 @@ test("a schedule Luke cannot read is not created, and the refusal is announced u
   type(page.querySelector("textarea[aria-label='Prompt']"), "Sweep the stale branches.");
   pick(page, "Repeats", "Custom");
   type(page.querySelector("input[aria-label='Cron']"), "every night");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.deepEqual(creates, []);
@@ -2686,7 +2744,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   const field = page.querySelector<HTMLInputElement>("input[aria-label='Secret']");
@@ -2712,7 +2770,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   act(() => button("Copy secret").click());
   await settle();
@@ -2741,7 +2799,7 @@ test("a shown secret is let go of once the automation is saved as anything but a
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
@@ -3036,7 +3094,7 @@ test("Code review is suggested under an empty list as under a full one, and a bl
   standing = [];
   const empty = mount();
   await settle();
-  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.match(empty.textContent ?? "", /No automations yet\./u);
   assert.ok(suggestion(empty, "Code review"));
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -3063,7 +3121,7 @@ test("while Code review is off nothing is suggested, under an empty list or a fu
   standing = [];
   const empty = mount();
   await settle();
-  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.match(empty.textContent ?? "", /No automations yet\./u);
   assert.equal(empty.querySelector("[aria-label='Suggested']"), null);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -3167,7 +3225,7 @@ test("a new automation started from the Code review suggestion is made on pull r
     "Read from the base branch, beside AGENTS.md and CLAUDE.md.",
   );
   type(rulesFile, ".cursor/BUGBOT.md");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   const made = creates[0];
@@ -3381,8 +3439,10 @@ test("a Sentry automation's runs wear Sentry's mark, its row says its event and 
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   assert.ok(
-    rowOf(list, "Fix Sentry errors").querySelector('.actor-mark[data-kind="automation"]'),
-    "the row leads with its clock tile, Sentry's mark left to its runs",
+    rowOf(list, "Fix Sentry errors").querySelector(
+      '.actor-mark[data-kind="automation"] .integration-mark-sentry',
+    ),
+    "the row's tile wears Sentry's mark",
   );
   assert.ok(
     says(rowOf(list, "Fix Sentry errors"), "When an alert fires in Sentry · web, api · error"),
@@ -3437,13 +3497,13 @@ test("a new Sentry automation is made on the event, filters, levels, and cooldow
   type(page.querySelector("input[aria-label='Hours before the same issue runs again']"), "0");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(creates.length, 0);
   assert.match(page.textContent ?? "", /Wait a whole number of hours, from 1 to 168\./u);
 
   type(page.querySelector("input[aria-label='Hours before the same issue runs again']"), "12");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
 
   assert.equal(creates.length, 1);
@@ -3458,6 +3518,33 @@ test("a new Sentry automation is made on the event, filters, levels, and cooldow
     },
   });
   assert.deepEqual(creates[0]?.guards, { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 12 });
+});
+
+test("a Sentry filter over its bounds says so under its own row, never under Type", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  pick(page, "Type", "Sentry");
+  type(
+    page.querySelector("input[aria-label='Projects']"),
+    Array.from({ length: 11 }, (_, n) => `project-${n}`).join(", "),
+  );
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
+  act(() => button("Create automation").click());
+  await settle();
+
+  assert.equal(creates.length, 0);
+  assert.ok(announced("Keep each filter to 10 values of up to 100 characters."));
+  assert.equal(
+    page.querySelector("input[aria-label='Projects']")?.getAttribute("aria-invalid"),
+    "true",
+  );
+  assert.notEqual(
+    page.querySelector("input[aria-label='Environments']")?.getAttribute("aria-invalid"),
+    "true",
+  );
+  assert.equal(picker(page, "Type").getAttribute("aria-invalid"), null);
 });
 
 test("a saved Sentry automation opens on its filters and cooldown, and a cooldown changed saves over its guards alone", async () => {
@@ -3534,10 +3621,10 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   assert.match(page.textContent ?? "", /Sentry isn't available/u);
   type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
-  act(() => button("Create").click());
+  act(() => button("Create automation").click());
   await settle();
   assert.equal(creates.length, 0);
-  assert.match(page.textContent ?? "", /Luke can't receive Sentry events here/u);
+  assert.match(page.textContent ?? "", /Luke cannot receive Sentry events here/u);
 });
 
 test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {

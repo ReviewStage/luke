@@ -626,7 +626,7 @@ test("a dictation the service refused for want of an OpenAI key says to add one 
   await settle();
 
   const said = box.container.textContent ?? "";
-  assert.match(said, /Add an OpenAI API key in Settings/u);
+  assert.match(said, /Add an OpenAI key in settings/u);
   assert.doesNotMatch(said, /couldn't be transcribed/u);
   assert.equal(box.shown(), "", "nothing was put in the box");
 });

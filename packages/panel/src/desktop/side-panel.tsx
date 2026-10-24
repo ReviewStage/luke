@@ -446,7 +446,7 @@ interface HandedTabActions {
 }
 
 /** What the "+" calls the row that opens a Browser tab. */
-const NEW_BROWSER_TAB = "New Browser tab";
+const NEW_BROWSER_TAB = "New browser tab";
 
 /**
  * One of the task's agents' cloud Browser tabs as the panel draws it, by
@@ -622,7 +622,7 @@ function agentRowCard(
 }
 
 /**
- * The "+" menu's New Browser tab, opened afresh each time, as a browser's
+ * The "+" menu's New browser tab, opened afresh each time, as a browser's
  * new tab is, so its row names no tab, and always in a coding agent's cloud
  * browser: on a task with one agent, a draft in its browser at once; on a
  * task with several, a submenu of whose browser, each wearing its glyph, the
@@ -1380,11 +1380,13 @@ export function ActivityList({
                       : { Hint: RowHint, label: entry.look.label }
                   }
                   actions={
-                    <IconButton
-                      icon={<CloseIcon />}
-                      label={`Close ${entry.look.label}`}
-                      onClick={entry.close}
-                    />
+                    <Tooltip label={`Close ${entry.look.label}`}>
+                      <IconButton
+                        icon={<CloseIcon />}
+                        label={`Close ${entry.look.label}`}
+                        onClick={entry.close}
+                      />
+                    </Tooltip>
                   }
                   onPress={() => {
                     onListed(false);

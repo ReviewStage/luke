@@ -55,6 +55,7 @@ import {
   SelectionBar,
   SelectionRegion,
   Stack,
+  selectionMenu,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -652,7 +653,9 @@ function listDrops(
  * its repository, the chip that changes its assignee, empty where its group
  * already says who, its creator's face, its agents' work, when it last
  * moved, and its ⋯. Renamed from its menu, its name is its field until the edit
- * ends.
+ * ends. Chosen among several, its ⋯, right-click, and menu key offer the
+ * selection bar's acts on every task chosen, as a Mac's list does; one not
+ * chosen keeps its own menu.
  */
 function TaskListRow({
   tasks,
@@ -663,6 +666,7 @@ function TaskListRow({
   now,
   properties,
   assigneeHeld,
+  chosen,
   onOpen,
   onStanding,
 }: {
@@ -677,6 +681,8 @@ function TaskListRow({
   properties: readonly TaskProperty[];
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
   assigneeHeld: boolean;
+  /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
+  chosen: ChosenTasks | undefined;
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -693,10 +699,18 @@ function TaskListRow({
   const item = useRef<HTMLLIElement | null>(null);
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();
+  const own = { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer };
   const menu = useRowMenu(
     rename.editing
       ? undefined
-      : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer },
+      : chosen === undefined
+        ? own
+        : {
+            thing: own.thing,
+            groups: selectionMenu(chosen.acts),
+            heading: countWords(chosen.count, TERM.TASK),
+            shown: tasks.shown,
+          },
     { disabled: actions.deletion.busy, opener: press },
   );
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
@@ -729,7 +743,7 @@ function TaskListRow({
         {rename.editing ? (
           <span className="tasks-list-press">
             <InlineEdit
-              value={task.name}
+              value={rename.asked ?? task.name}
               label="Task name"
               maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
               editing
@@ -927,6 +941,12 @@ function TasksListGroup({
   );
 }
 
+/** A selection of several tasks as a chosen row's menu reads it: how many, and the bar's acts on them all. */
+interface ChosenTasks {
+  readonly count: number;
+  readonly acts: readonly SelectionAct[];
+}
+
 /**
  * What the selection bar offers the tasks chosen: Mark done; Set status,
  * each status by its mark; and, while the account keeps sections in the
@@ -1062,6 +1082,10 @@ export function TasksList({
   // The tab as it stands, which an Undo pressed renders after its act reads.
   const latest = useRef(tasks);
   latest.current = tasks;
+  const acts = selectionActs(tasks, () => latest.current, [...selected], toast, clear);
+  // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
+  const several: ChosenTasks | undefined =
+    selected.size > 1 ? { count: selected.size, acts } : undefined;
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -1128,6 +1152,7 @@ export function TasksList({
                     now={now}
                     properties={properties}
                     assigneeHeld={!narrow && group.head.kind === TASKS_GROUP.ASSIGNEE}
+                    chosen={several !== undefined && selected.has(task.id) ? several : undefined}
                     onOpen={() => tasks.onSelect(task.id)}
                     onStanding={(standing) => setStanding(task, standing)}
                   />
@@ -1139,12 +1164,7 @@ export function TasksList({
       </SelectionRegion>
       {/* Note that the bar floats at the page's foot rather than over the rows, so choosing a row moves none under the pointer. */}
       <div className="tasks-list-selection">
-        <SelectionBar
-          count={selected.size}
-          acts={selectionActs(tasks, () => latest.current, [...selected], toast, clear)}
-          onClear={clear}
-          controls={regionId}
-        />
+        <SelectionBar count={selected.size} acts={acts} onClear={clear} controls={regionId} />
       </div>
     </CollectionPage>
   );

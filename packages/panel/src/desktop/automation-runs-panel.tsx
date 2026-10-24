@@ -5,13 +5,7 @@ import {
   automationRunStanding,
   automationRunTitle,
 } from "@luke/features/automation-list-model";
-import {
-  AUTOMATION_FIRING,
-  type AutomationFiring,
-  type AutomationRunSummary,
-  type AutomationTrigger,
-} from "@luke/features/automation-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { AUTOMATION_FIRING, type AutomationRunSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText, sinceText } from "@luke/features/time-format";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
@@ -22,11 +16,11 @@ import {
   ErrorState,
   FILL_ELEMENT,
   Fill,
+  FiringGlyph,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
   ListRow,
-  ProviderMark,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   SCROLL_FADE,
@@ -42,7 +36,7 @@ import {
   useMinute,
   useResizeEdge,
 } from "@luke/ui";
-import { ClockIcon, ExternalLinkIcon, PlayIcon, WebhookIcon } from "lucide-react";
+import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
@@ -81,7 +75,7 @@ const CREATOR = "its creator";
 const RUN_THING = "Run";
 
 /** What the panel says while the automation has no run, over how to have one. */
-const NO_RUNS_LINE = "No runs yet";
+const NO_RUNS_LINE = "No runs yet.";
 
 /** What the placeholder rows say to a reader while the runs are first read. */
 const READING_RUNS = "Reading its runs…";
@@ -105,22 +99,6 @@ export const STANDING_GLYPH = {
   [AUTOMATION_RUN_STANDING.FAILED]: GLYPH_STATE.FAILED,
   [AUTOMATION_RUN_STANDING.REST]: GLYPH_STATE.REST,
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
-
-/** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
-function FiringGlyph({ of }: { of: AutomationFiring | AutomationTrigger }): React.JSX.Element {
-  switch (of.kind) {
-    case AUTOMATION_FIRING.GITHUB:
-      return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;
-    case AUTOMATION_FIRING.WEBHOOK:
-      return <WebhookIcon />;
-    case AUTOMATION_FIRING.MANUAL:
-      return <PlayIcon />;
-    case AUTOMATION_FIRING.SCHEDULE:
-      return <ClockIcon />;
-    case AUTOMATION_FIRING.INTEGRATION:
-      return <ProviderMark provider={of.provider} />;
-  }
-}
 
 /** The subject an integration's run is about, as its provider's page and the words that open it; none for any other run, or one whose subject has no page. */
 function subjectLink(run: AutomationRunSummary): { url: string; label: string } | undefined {

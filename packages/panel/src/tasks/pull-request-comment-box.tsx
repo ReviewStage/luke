@@ -67,7 +67,7 @@ export function PullRequestCommentBox({
     >
       <Text
         as={TEXT_ELEMENT.H3}
-        variant={TEXT_VARIANT.INHERIT}
+        variant={TEXT_VARIANT.GROUP}
         truncate
         className="pull-request-heading"
       >

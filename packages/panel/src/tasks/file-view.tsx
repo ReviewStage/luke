@@ -15,6 +15,7 @@ import {
   type ResizeEdgeHandle,
   SidePanelIcon,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_TRUNCATE,
   TEXT_VARIANT,
   Text,
@@ -482,6 +483,7 @@ function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
         <Text
           as={TEXT_ELEMENT.SPAN}
           variant={TEXT_VARIANT.INHERIT}
+          font={TEXT_FONT.MONO}
           truncate={TEXT_TRUNCATE.START}
           className="file-view-path"
         >

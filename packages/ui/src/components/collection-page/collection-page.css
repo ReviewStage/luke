@@ -31,7 +31,7 @@
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
-  @container (max-width: 479px) {
+  @container (width < 480px) {
     .luke-collection-page > * {
       --luke-collection-page-inset: var(--luke-page-inset-narrow);
     }

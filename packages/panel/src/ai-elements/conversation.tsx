@@ -6,6 +6,7 @@ import {
   ScrollArea,
   type ScrollFade,
   type ScrollFadeInset,
+  Tooltip,
 } from "@luke/ui";
 import { VIRTUAL_ROWS_ATTRIBUTE, VirtualRows, type VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import { ArrowDownIcon } from "lucide-react";
@@ -358,6 +359,9 @@ export function ConversationEmptyState({
   );
 }
 
+/** What the way back to the newest line is called, as its hint and its name. */
+const SCROLL_LABEL = "Scroll to the newest line";
+
 /**
  * The way back to the newest line, shown while the reader has scrolled away
  * from it: the shared icon button, floating over the lines on a ground of
@@ -368,11 +372,13 @@ export function ConversationScrollButton(): ReactNode {
   if (isAtBottom) return null;
   return (
     <div className="conversation-scroll">
-      <IconButton
-        label="Scroll to the newest line"
-        icon={<ArrowDownIcon aria-hidden="true" />}
-        onClick={scrollToBottom}
-      />
+      <Tooltip label={SCROLL_LABEL}>
+        <IconButton
+          label={SCROLL_LABEL}
+          icon={<ArrowDownIcon aria-hidden="true" />}
+          onClick={scrollToBottom}
+        />
+      </Tooltip>
     </div>
   );
 }

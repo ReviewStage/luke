@@ -8,7 +8,7 @@ import {
   type ProviderKeysAnswer,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -26,13 +26,13 @@ import { onRegistry } from "./testing/copy-feedback.js";
 /**
  * Calls and dictation run on the account's own OpenAI API key, so an account
  * known to have none is offered no Call and no Dictate: each says to add the
- * key in Settings, and its press opens Settings › Agents, where keys are
- * saved. Until the keys are read, when a read fails, and while no one is
+ * key in settings, and its press opens Codex's row in Settings › Agents,
+ * where the OpenAI key is saved. Until the keys are read, when a read fails, and while no one is
  * signed in, nothing is known and both stand as they always have. The
  * window's focus reads the keys again. Synthetic account and keys.
  */
 
-const HINT = "Add an OpenAI API key in Settings";
+const HINT = "Add an OpenAI key in settings";
 const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 const NO_EDITOR = { current: undefined };
 const NO_KEYWORDS: readonly string[] = [];
@@ -111,7 +111,7 @@ async function settle(): Promise<void> {
   });
 }
 
-test("with no OpenAI key saved, Call and Dictate each say to add one in Settings, and the press opens Settings › Agents rather than calling", async () => {
+test("with no OpenAI key saved, Call and Dictate each say to add one in settings, and the press opens Codex's row in Settings › Agents rather than calling", async () => {
   const page = await mount(() => Promise.resolve({ keys: [ANTHROPIC_KEY] }));
   const presses = [...page.button(HINT)];
   assert.equal(presses.length, 2, "both presses say to add the key");
@@ -122,8 +122,8 @@ test("with no OpenAI key saved, Call and Dictate each say to add one in Settings
     act(() => press.click());
   }
   assert.deepEqual(page.opened, [
-    { page: SETTINGS_VIEW.CODING_AGENTS },
-    { page: SETTINGS_VIEW.CODING_AGENTS },
+    { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CODEX },
+    { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CODEX },
   ]);
   assert.deepEqual(page.called, [], "no call was opened");
 });

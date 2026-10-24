@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 23 October 2026
+Last updated: 24 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -200,10 +200,10 @@ changed since.
 
 Deleting a task removes it at once with its history, its inbox, and the
 record of each coding agent started on it with the plan copy or prompt that
-agent was handed, and marks each agent's transcript deleted, removed thirty
+agent was handed, and marks each agent's transcript deleted, removed seven
 days later. The conversation a task held with its own Luke, before tasks
 lost him, is already marked deleted, whether or not the task is, and is
-removed thirty days after it was marked. Before it deletes anything, it
+removed seven days after it was marked. Before it deletes anything, it
 stops every coding agent of the task still at work, as Stop does; if one
 cannot be stopped just then, or is still starting, the task is not deleted
 and you can try again in a moment. It also deletes the record of each of the
@@ -551,7 +551,7 @@ agent's transcript, under its terms. The checkout stays in the sandbox
 between turns and, once the sandbox is stopped, in a snapshot Vercel keeps
 until thirty days after its last use. When an agent's transcript, or the
 conversation a task's own Luke kept before tasks lost him, is removed,
-thirty days after you delete its task, our service deletes the sandbox of
+seven days after you delete its task, our service deletes the sandbox of
 each of its sessions, with the snapshots no other sandbox uses, shortly
 after; deleting your account does the same for every session of yours,
 shortly after the deletion. A session an agent's conversation was moved off
@@ -888,7 +888,7 @@ agent, when a task had its own Luke, keeps its record without the lines said
 on it, which are deleted. These rows are not sealed: they are stored
 as written, and our own operators can read them. They stand until you delete
 your account, which removes them at once. A deleted task's agents'
-transcripts are marked deleted and removed thirty days later, as is every
+transcripts are marked deleted and removed seven days later, as is every
 conversation a task held with its own Luke before tasks lost him (see
 "Tasks"); its call records, with the lines said on them, are deleted with
 the task, or within a minute or so of the call ending for a call still open.
@@ -1172,7 +1172,7 @@ to Luke signed in as a member of the workspace who can read the agent, which
 is each member who can open the task. Kept screenshots are readable by our
 own operators, like the transcript, and are deleted with it: deleting the
 agent or its task marks the transcript deleted and removes it, with its
-screenshots, thirty days later, and deleting your account removes them at
+screenshots, seven days later, and deleting your account removes them at
 once. Our service keeps the task's list of cloud
 tabs, each one's address and title, with the agent whose browser holds it,
 until that agent's conversation is removed. The agent can also record the

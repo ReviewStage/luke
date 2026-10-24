@@ -623,7 +623,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Luke on GitHub is pressed on GitHub, not the task, so it stands for an agent with no task.
+  // Giving the repository to Luke's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -637,7 +637,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   );
   assert.deepEqual(notSelected, {
     reason: FAILURE_REASON.ADD_REPOSITORY,
-    text: "Luke on GitHub doesn't have access to acme/relay.",
+    text: "Luke's GitHub App doesn't have access to acme/relay.",
     repository: "acme/relay",
     settingsUrl: "https://github.com/settings/installations/7",
   });
@@ -716,17 +716,38 @@ test("a Start refused for a missing credential says in one sentence which harnes
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Claude in Settings to start an agent.",
+        provider: MODEL_PROVIDER.ANTHROPIC,
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Codex in Settings to start an agent.",
+        provider: MODEL_PROVIDER.OPENAI,
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
         text: "Connect Codex in Settings to message this agent.",
+        provider: MODEL_PROVIDER.OPENAI,
       },
       { reason: FAILURE_REASON.OTHER, text: LUKE_PAID_REFUSAL },
     ],
+  );
+});
+
+test("a missing credential's press names the harness to connect, and Settings where the service named none", () => {
+  const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) =>
+    remedyLabel(
+      startFailureNote(
+        {
+          failure: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+          ...(provider === undefined ? undefined : { provider }),
+        },
+        null,
+      ),
+    );
+
+  assert.deepEqual(
+    [missing(MODEL_PROVIDER.ANTHROPIC), missing(MODEL_PROVIDER.OPENAI), missing()],
+    ["Connect Claude", "Connect Codex", "Open Settings"],
   );
 });
 

@@ -8,9 +8,10 @@ import { type InlineRename, useInlineRename } from "./use-inline-rename.js";
 
 /**
  * use-inline-rename.test.ts -- a surface's rename opens for the subject it
- * draws, asks for the name an edit ends on, says a refusal until the next
- * edit, lets a refusal a later ask replaced go unsaid, and says nothing of
- * one subject's refusal over another.
+ * draws, asks for the name an edit ends on, reopens on a refusal holding the
+ * name that was typed and says the refusal until the next edit, lets a refusal
+ * a later ask replaced go unsaid, and says nothing of one subject's refusal
+ * over another.
  */
 
 declare global {
@@ -83,6 +84,68 @@ test("an edit opens for the subject drawn, asks for the name it ends on, and a r
   assert.equal(surface.now().refused, false);
 });
 
+test("a refusal reopens the field holding the name that was typed", async () => {
+  const service = heldService();
+  const surface = mount("plan-1", service.onRename);
+  act(() => surface.now().begin());
+  act(() => {
+    void surface.now().end("Ship the launch");
+  });
+  assert.equal(surface.now().editing, false);
+  assert.equal(surface.now().asked, undefined);
+  service.asks[0]?.answer(false);
+  await settle();
+  assert.equal(surface.now().editing, true);
+  assert.equal(surface.now().asked, "Ship the launch");
+  assert.equal(surface.now().refused, true);
+});
+
+test("a rejected ask reopens the field too, and one taken leaves it closed", async () => {
+  const rejected = mount("plan-1", () => Promise.reject(new Error("offline")));
+  act(() => {
+    void rejected.now().end("Ship the launch");
+  });
+  await settle();
+  assert.equal(rejected.now().editing, true);
+  assert.equal(rejected.now().asked, "Ship the launch");
+
+  const service = heldService();
+  const taken = mount("plan-2", service.onRename);
+  act(() => {
+    void taken.now().end("Ship");
+  });
+  service.asks[0]?.answer(true);
+  await settle();
+  assert.equal(taken.now().editing, false);
+  assert.equal(taken.now().asked, undefined);
+});
+
+test("ending the reopened field with a new name asks again, and with none lets the refusal go", async () => {
+  const service = heldService();
+  const surface = mount("plan-1", service.onRename);
+  act(() => {
+    void surface.now().end("Ship");
+  });
+  service.asks[0]?.answer(false);
+  await settle();
+
+  act(() => {
+    void surface.now().end("Ship the launch");
+  });
+  assert.equal(surface.now().editing, false);
+  assert.equal(surface.now().refused, false);
+  service.asks[1]?.answer(false);
+  await settle();
+  assert.equal(surface.now().asked, "Ship the launch");
+
+  act(() => {
+    void surface.now().end(undefined);
+  });
+  assert.equal(surface.now().editing, false);
+  assert.equal(surface.now().refused, false);
+  assert.equal(surface.now().asked, undefined);
+});
+
 test("an edit that asks for no name asks nothing and is refused nothing", async () => {
   const service = heldService();
   const surface = mount("plan-1", service.onRename);
@@ -123,8 +186,11 @@ test("one subject's open edit and refusal are held for it, not drawn over anothe
   await settle();
   surface.draw("plan-2");
   assert.equal(surface.now().refused, false);
+  assert.equal(surface.now().asked, undefined);
+  assert.equal(surface.now().editing, false);
   surface.draw("plan-1");
   assert.equal(surface.now().refused, true);
+  assert.equal(surface.now().asked, "Ship the launch");
 
   act(() => surface.now().begin());
   surface.draw("plan-2");

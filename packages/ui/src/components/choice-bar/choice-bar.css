@@ -24,6 +24,7 @@
      the chosen one by its glyph alone. Note that it does so only while one
      is chosen, because a clearable bar with none chosen would otherwise
      name none of its options. */
+  /* off-scale: 520px, where a fill bar's options stop fitting */
   @container luke-choice-bar (width < 520px) {
     .luke-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
       .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])

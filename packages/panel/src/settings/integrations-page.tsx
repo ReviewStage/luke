@@ -73,10 +73,10 @@ import {
   serverGroups,
   serverRows,
 } from "@luke/ui/agent-servers-model";
+import { GLYPH, PlusIcon, RefreshCwIcon } from "@luke/ui/icons";
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
@@ -623,7 +623,7 @@ function IntegrationRow({
     onSelect: disconnect.ask,
   };
   const naming = several
-    ? [{ label: ROW_ACT.RENAME, icon: <PencilIcon />, onSelect: () => setEditing(true) }]
+    ? [{ label: ROW_ACT.RENAME, icon: <GLYPH.RENAME />, onSelect: () => setEditing(true) }]
     : [];
   const adding =
     !bySignIn && statuses.canAdd(provider) && row.accounts < INTEGRATION_ACCOUNTS_MAX

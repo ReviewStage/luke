@@ -251,6 +251,7 @@ function FileTreeBody({
               label="Only files Luke showed"
               pressed={onlyShown}
               disabled={shown.length === 0}
+              focusableWhenDisabled
               onClick={() => setOnlyShown((on) => !on)}
             />
           </Tooltip>

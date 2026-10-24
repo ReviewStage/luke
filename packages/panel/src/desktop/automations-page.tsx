@@ -12,7 +12,6 @@ import {
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
-import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText } from "@luke/features/time-format";
@@ -33,6 +32,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FoldingButton,
+  type FoldingButtonHint,
   IconButton,
   ListRow,
   NO_CONTEXT_MENU,
@@ -68,7 +68,12 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { rowMenu } from "./action-menu.js";
-import { AutomationEditor, AutomationPageSkeleton, type SentryOffer } from "./automation-editor.js";
+import {
+  AutomationEditor,
+  AutomationPageSkeleton,
+  type SentryOffer,
+  toggleRefusal,
+} from "./automation-editor.js";
 import {
   AutomationGroupCard,
   AutomationListSkeleton,
@@ -95,7 +100,7 @@ import { useAutomations } from "./use-automations.js";
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
  * heading each where both stand, and every row names its owner besides, a
- * building for the workspace and a lock for Personal. A row's glyph wears
+ * building for the workspace and a lock for Only you. A row's glyph wears
  * where its newest run stands, a failure keeps its mark at the row's end,
  * and an automation turned off reads "Off" where its next run would.
  * Under the list, or under the line saying there is none yet, stand the
@@ -132,16 +137,17 @@ const SUGGESTIONS: readonly {
   readonly glyph: React.ReactNode;
 }[] = [{ name: AUTOMATION_PRESET.CODE_REVIEW, glyph: <GitPullRequestIcon /> }];
 
-/** Why a switch did not move, as its toast says it. */
-function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
-  if (!("failure" in answer)) return undefined;
-  if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
-    return "Only its creator, or the workspace's owners and admins, can change it.";
-  }
-  return enabled ? "Couldn't turn it on. Try again." : "Couldn't turn it off. Try again.";
-}
+/** Why the bar's two acts are unavailable while no workspace is chosen. */
+const NO_WORKSPACE_HINT = "Choose a workspace first";
 
-/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Personal, its name whole on hover where the column cuts it short. */
+/** The hint a folding act of the bar hangs while no workspace is chosen: why it is off, after its words where they are folded. */
+const NoWorkspaceHint: FoldingButtonHint = ({ label, children }) => (
+  <Tooltip label={label === undefined ? NO_WORKSPACE_HINT : `${label}: ${NO_WORKSPACE_HINT}`}>
+    {children}
+  </Tooltip>
+);
+
+/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Only you, its name whole on hover where the column cuts it short. */
 function OwnerCell({
   owner,
   mine,
@@ -151,7 +157,7 @@ function OwnerCell({
   mine: boolean;
   workspace: Workspace | undefined;
 }): React.JSX.Element {
-  const name = automationOwnerName(owner, workspace?.name);
+  const name = automationOwnerName(owner, workspace?.name, mine);
   return (
     <Tooltip label={name}>
       <AutomationOwnerFrame
@@ -175,7 +181,7 @@ function OwnerCell({
 }
 
 /**
- * One automation's row: its clock tile, wearing where its newest run
+ * One automation's row: its tile, the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, its owner, when it runs next with a
  * failure's mark before it, and its switch, hanging the automation's card. The owner and the next run each keep a column of their
  * own, so they line up down the card whatever each row says. Everything but the switch is one press
@@ -314,7 +320,11 @@ function AutomationList({
   return (
     <>
       {groups.map((group) => {
-        const name = automationOwnerName(group.owner, workspace?.name);
+        const name = automationOwnerName(
+          group.owner,
+          workspace?.name,
+          group.automations.every((automation) => automation.mine === true),
+        );
         return (
           <AutomationGroupCard key={group.owner} name={name} headed={groups.length > 1 || narrow}>
             {group.automations.map((automation) => (
@@ -465,20 +475,25 @@ function ListPage({
         ) : (
           <AutomationsToolbar>
             <FoldingButton
-              label={CREATE_WITH_AGENT}
+              label="Create with an agent"
               icon={<BotIcon />}
               variant={BUTTON_VARIANT.OUTLINE}
               disabled={workspace === undefined}
+              focusableWhenDisabled
+              hint={workspace === undefined ? NoWorkspaceHint : undefined}
               onClick={tasks.onNewAutomationAgent}
             />
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<PlusIcon />}
-              disabled={workspace === undefined}
-              onClick={openNew}
-            >
-              {NEW_AUTOMATION}
-            </Button>
+            <Tooltip label={workspace === undefined ? NO_WORKSPACE_HINT : undefined}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<PlusIcon />}
+                disabled={workspace === undefined}
+                focusableWhenDisabled
+                onClick={openNew}
+              >
+                New automation
+              </Button>
+            </Tooltip>
           </AutomationsToolbar>
         )
       }
@@ -500,7 +515,7 @@ function ListPage({
       {/* Note that a list with none is ready rather than empty, because the suggestions under its empty state are content. */}
       {groups.length === 0 ? (
         <div className="automations-empty">
-          <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
+          <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
           <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </div>
       ) : (

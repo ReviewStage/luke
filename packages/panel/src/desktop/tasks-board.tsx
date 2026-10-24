@@ -338,7 +338,7 @@ function TaskBoardCard({
           {head}
           <span className="tasks-board-name">
             <InlineEdit
-              value={task.name}
+              value={rename.asked ?? task.name}
               label="Task name"
               maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
               editing
