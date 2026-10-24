@@ -3,7 +3,7 @@ import type { InboxItem } from "@luke/features/inbox-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
-import { readingWords } from "@luke/features/words";
+import { REFRESH_FAILED_WORDS, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -529,9 +529,10 @@ function TaskInboxTab({
         note={
           inbox.reading ? (
             <InboxListSkeleton />
-          ) : inbox.failed && listed.length === 0 ? (
+          ) : inbox.failed ? (
+            // A refresh that failed over rows already held leaves them drawn, with a line at the foot.
             <ErrorState onRetry={inbox.onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
-              The inbox could not be read.
+              {listed.length === 0 ? "The inbox could not be read." : REFRESH_FAILED_WORDS}
             </ErrorState>
           ) : inbox.read && searched !== undefined && listed.length === 0 ? (
             <SearchEmpty searched={searched} />

@@ -8603,6 +8603,8 @@ const STARTED: InboxItem = {
 function heldStarts(
   agents: readonly CodingAgentSummary[],
   found: (words: string) => readonly CodingAgentSummary[] = () => [],
+  /** The reads that do not answer while a test holds them so: the newest agents, and a search. */
+  unread: { list: boolean; search: boolean } = { list: false, search: false },
 ): CodingAgentInboxStartParams[] {
   const sent: CodingAgentInboxStartParams[] = [];
   const bridge = appBridge();
@@ -8612,6 +8614,12 @@ function heldStarts(
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         const { words } = request.payload;
+        if (words === undefined ? unread.list : unread.search) {
+          return Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          });
+        }
         const value = { agents: words === undefined ? agents : found(words) };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
@@ -8624,6 +8632,71 @@ function heldStarts(
   });
   return sent;
 }
+
+/** The To menu `openTo` opened. */
+function toMenu(): HTMLElement {
+  return document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"]') ?? assert.fail();
+}
+
+/** What To's menu says of a read that did not answer: the alert's words, and Retry's press. */
+function toAlert(menu: HTMLElement): { words: string | undefined; retry: HTMLButtonElement } {
+  const alert = menu.querySelector("[role=alert]");
+  return {
+    words: alert?.textContent ?? undefined,
+    retry: alert?.querySelector("button") ?? assert.fail("the alert offers Retry"),
+  };
+}
+
+test("a New thread whose agents could not be read says so in To with Retry, which reads them again", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const unread = { list: true, search: false };
+  heldStarts([AGENT], () => [], unread);
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+  const menu = toMenu();
+
+  const { words, retry } = toAlert(menu);
+  assert.equal(words, "The workspace's agents could not be read.Retry");
+
+  unread.list = false;
+  act(() => retry.click());
+  await settle();
+
+  assert.equal(menu.querySelector("[role=alert]"), null);
+  assert.equal(menu.querySelectorAll("[role=option]").length, 1, "the agent is listed");
+});
+
+test("a New thread's search that failed says so in To with Retry, never that no agent matches, and Retry searches again", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const unread = { list: false, search: true };
+  heldStarts([AGENT], () => [], unread);
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+  const menu = toMenu();
+
+  const field = menu.querySelector<HTMLInputElement>("input") ?? assert.fail("To searches");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, "zzz");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+
+  const { words, retry } = toAlert(menu);
+  assert.equal(words, "The search for agents could not be read.Retry");
+  assert.doesNotMatch(menu.textContent ?? "", /No agent matches/u);
+
+  unread.search = false;
+  act(() => retry.click());
+  await settle();
+
+  assert.equal(menu.querySelector("[role=alert]"), null);
+  assert.match(menu.textContent ?? "", /No agent matches/u);
+});
 
 test("New thread in the Inbox's head opens a draft in the pane, To naming the agent of the item read; Send starts the thread with that agent, once however often it is pressed, and the Inbox then opens the thread it started, the reader's words its first message", async () => {
   listedWorkspace = ACME;

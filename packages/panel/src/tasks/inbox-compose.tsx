@@ -24,13 +24,14 @@ import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-v
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { pasteCutWords, readingWords } from "@luke/features/words";
+import { pasteCutWords, readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BackButton,
   BUTTON_VARIANT,
   Button,
   CHIP_WIDTH,
+  ErrorState,
   FormField,
   IconButton,
   matchingRows,
@@ -82,7 +83,8 @@ const DISCARD = "Discard";
 const NO_AGENT = "Choose an agent";
 const NO_MATCH = "No agent matches";
 const NO_AGENTS = "No agents in this workspace yet.";
-const AGENTS_FAILED = "The workspace's agents could not be read.";
+const AGENTS_FAILED = readFailedWords("the workspace's agents");
+const AGENT_SEARCH_FAILED = readFailedWords("the search for agents");
 const INBOX = "Inbox";
 const INBOX_PLACE = "inbox";
 const DISCARDED = "Draft discarded";
@@ -204,6 +206,10 @@ interface ComposeTo {
   readonly listed: readonly MentionableAgent[];
   readonly asked: string;
   readonly agent: MentionableAgent | undefined;
+  /** Whether the search for the word typed did not answer, which To says with Retry, never as no match. */
+  readonly searchFailed: boolean;
+  /** Reads the agents again, and the search with them. */
+  readonly onRetry: () => void;
   readonly onSearch: (words: string) => void;
   readonly onPick: (agent: MentionableAgent) => void;
 }
@@ -220,6 +226,9 @@ export function InboxCompose(props: InboxComposeProps): React.JSX.Element {
   const [read, setRead] = useState<AgentsRead | undefined>(undefined);
   // The agents the last search found, standing until the next answers.
   const [found, setFound] = useState<readonly MentionableAgent[] | undefined>(undefined);
+  const [searchFailed, setSearchFailed] = useState(false);
+  // Each press of Retry reads the agents again, and the search with them.
+  const [reads, setReads] = useState(0);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const { draft, update } = useDraft(threadPlace(workspace));
@@ -267,10 +276,11 @@ export function InboxCompose(props: InboxComposeProps): React.JSX.Element {
       encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, mentions.doors.place),
     );
   };
-  // The agents are read as the pane opens.
+  // The agents are read as the pane opens, and again at each Retry.
   useEffect(() => {
     if (readAgents === undefined) return;
     let live = true;
+    setRead(undefined);
     readAgents(undefined).then(
       (agents) => {
         if (live) setRead({ agents: heard(agents) });
@@ -282,29 +292,36 @@ export function InboxCompose(props: InboxComposeProps): React.JSX.Element {
     return () => {
       live = false;
     };
-  }, [readAgents]);
+  }, [readAgents, reads]);
   // Once a word is typed the service finds the agents it names, however many the workspace holds.
   const asked = query.trim();
   useEffect(() => {
     if (readAgents === undefined || asked === "") return;
     let live = true;
+    setSearchFailed(false);
     readAgents(asked).then(
       (agents) => {
-        if (live) setFound(heard(agents));
+        if (!live) return;
+        setSearchFailed(false);
+        setFound(heard(agents));
       },
       () => {
-        if (live) setFound([]);
+        if (!live) return;
+        setSearchFailed(true);
+        setFound(undefined);
       },
     );
     return () => {
       live = false;
     };
-  }, [readAgents, asked]);
+  }, [readAgents, asked, reads]);
   const composeTo: ComposeTo = {
     read,
     listed: listedAgents(read, found, asked, place),
     asked,
     agent,
+    searchFailed: asked !== "" && searchFailed,
+    onRetry: () => setReads((count) => count + 1),
     onSearch: setQuery,
     onPick: (pick) => {
       pickedAgents.set(pick.id, pick);
@@ -347,7 +364,7 @@ function ComposeCard({
   readonly update: (next: (was: Draft) => Draft) => void;
   readonly skills: SkillSource | undefined;
 }): React.JSX.Element {
-  const { read, listed, asked, agent } = composeTo;
+  const { read, listed, asked, agent, searchFailed } = composeTo;
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -489,10 +506,14 @@ function ComposeCard({
               placeholder="Search agents"
               noMatch={NO_MATCH}
               note={
-                asked !== "" ? undefined : read === undefined ? (
+                asked !== "" ? (
+                  searchFailed ? (
+                    <ErrorState onRetry={composeTo.onRetry}>{AGENT_SEARCH_FAILED}</ErrorState>
+                  ) : undefined
+                ) : read === undefined ? (
                   <Spinner delay label={readingWords("agents")} />
                 ) : "failed" in read ? (
-                  AGENTS_FAILED
+                  <ErrorState onRetry={composeTo.onRetry}>{AGENTS_FAILED}</ErrorState>
                 ) : read.agents.length === 0 ? (
                   NO_AGENTS
                 ) : undefined
