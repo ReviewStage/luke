@@ -784,6 +784,37 @@ test("with no automations the page says what one is, and with no workspace liste
   assert.deepEqual(listed, []);
 });
 
+/** The window's bar over `page`, its parts in the order they stand, each by its text. */
+function bar(page: HTMLElement): { banner: HTMLElement; parts: Element[] } {
+  const banner = page.querySelector<HTMLElement>("header") ?? assert.fail("no bar");
+  return { banner, parts: [...banner.children] };
+}
+
+test("the list's title is its bar's heading, and Create with an agent and New automation end the bar", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  const { banner, parts } = bar(page);
+  assert.equal(banner.querySelectorAll("h1").length, 1);
+  assert.equal(parts.length, 2, "a heading and the acts, with no box of the page's own between");
+  const [heading, actions] = parts;
+  assert.equal(heading?.querySelector("h1")?.textContent, "Automations");
+  assert.deepEqual(
+    [...(actions?.querySelectorAll("button") ?? [])].map(
+      (each) => each.getAttribute("aria-label") ?? each.textContent,
+    ),
+    ["Create with an agent", "New automation"],
+  );
+});
+
+test("New automation, in the bar, opens a new automation's page", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  act(() => button("New automation").click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW });
+});
+
 test("while the list is first read it stands as quiet rows under its toolbar, said to a reader as being read", async () => {
   listHeld = true;
   const page = mount();
@@ -792,10 +823,9 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
   const wait = page.querySelector("[role=status][aria-busy=true]");
   assert.equal(wait?.textContent, "Reading your automations…");
   assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);
-  assert.ok(
-    page.querySelector("h1")?.textContent === "Automations",
-    "its toolbar stands over them",
-  );
+  const { parts } = bar(page);
+  assert.equal(parts[0]?.querySelector("h1")?.textContent, "Automations");
+  assert.ok(parts[1]?.querySelector("button"), "its acts stand at the bar's end");
 });
 
 test("while the list is first read its blocks stand in an owner's card of rows, each with its clock tile, its owner's and next run's columns, and its switch's place, as a row of the list does", async () => {
@@ -992,6 +1022,11 @@ function button(name: string): HTMLButtonElement {
   );
   assert.ok(found, `no button ${name}`);
   return found;
+}
+
+/** What a copy button says of its copy to a reader: "Copied" once the clipboard took it. */
+function said(copyButton: HTMLButtonElement): string {
+  return copyButton.querySelector('[role="status"]')?.textContent ?? "";
 }
 
 /** The option of the list standing open whose words are `words`. */
@@ -1741,6 +1776,22 @@ test("a page naming an automation the list does not hold, as a link to another w
     page.textContent ?? "",
     /Not foundThis automation doesn't exist, or you don't have access to it\./u,
   );
+});
+
+test("a page naming an automation the list does not hold keeps its bar, its way back to the list standing in it", async () => {
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: "3f0e6f5c-7d1a-4f6e-9a55-999999999999",
+  });
+  await settle();
+
+  const { banner } = bar(page);
+  assert.equal(banner.parentElement?.getAttribute("aria-label"), "Not found");
+  const back = [...banner.querySelectorAll("button")].find(
+    (each) => each.textContent === "Automations",
+  );
+  act(() => back?.click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
 });
 
 test("an automation's page opened before the list is read stands its toolbar's way back over its form as quiet blocks", async () => {
@@ -2640,6 +2691,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   act(() => button("Copy secret").click());
   await settle();
   assert.deepEqual(copied, [MADE_SECRET]);
+  assert.equal(said(button("Copy secret")), "Copied");
 
   act(() => button("Done").click());
   assert.equal(page.querySelector("input[aria-label='Secret']"), null);
@@ -2657,7 +2709,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   await settle();
   act(() => button("Copy secret").click());
   await settle();
-  assert.ok(button("Copied"), "the first secret's copy is said");
+  assert.equal(said(button("Copy secret")), "Copied", "the first secret's copy is said");
 
   act(() => button("Done").click());
   act(() => button("New secret").click());
@@ -2673,7 +2725,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
     page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
     ROTATED_SECRET,
   );
-  assert.ok(button("Copy secret"), "the new secret is not said to be copied");
+  assert.equal(said(button("Copy secret")), "", "the new secret is not said to be copied");
 });
 
 test("a shown secret is let go of once the automation is saved as anything but a webhook", async () => {
@@ -2718,6 +2770,9 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
     "no secret is shown unasked",
   );
   act(() => button("Copy address").click());
+  await settle();
+  assert.deepEqual(copied, [hooked.webhookUrl]);
+  assert.equal(said(button("Copy address")), "Copied");
   act(() => button("New secret").click());
   await settle();
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");

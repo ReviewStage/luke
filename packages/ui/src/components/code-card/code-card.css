@@ -2,8 +2,8 @@
    type naming the lines, its Copy at the end; the lines in mono on the
    code's own ground, whole and scrolling sideways inside the card, each run
    in the host's colour for the appearance it stands in, tinted by what each
-   does where the block is drawn as rows; and, under a cut block, the line
-   offering the rest. */
+   does where the block is drawn as rows; the rest of a cut block, drawn but
+   folded away; and, under a cut block, the line offering the rest. */
 
 @layer components {
   .luke-code-card {
@@ -85,6 +85,12 @@
 
   .luke-code-card-row[data-row="removed"] {
     background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+  }
+
+  /* The lines past a cut, a block of their own so `hidden="until-found"`
+     can fold them out of sight while a find still reaches them. */
+  .luke-code-card-rest {
+    display: block;
   }
 
   /* A run the host coloured, in its colour for the appearance it stands in. */

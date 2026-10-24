@@ -22,9 +22,12 @@ import {
   CHOICE_LOOK,
   ChoiceList,
   type ChoiceOption,
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_SIZE,
+  DIALOG_TONE,
   Dialog,
+  DialogActions,
   ErrorState,
   GAP,
   IconButton,
@@ -162,9 +165,9 @@ const WORDS = {
   API_KEY: "API key",
   GET_KEY: "Get key",
   DESKTOP_ONLY: "Desktop app only",
-  DONE: "Done",
   CANCEL: "Cancel",
   SAVE: "Save",
+  SAVING_TOKEN: "Saving the token",
   DISCONNECT: "Disconnect",
   DISCONNECTING: "Disconnecting",
   REMOVE: "Remove",
@@ -403,6 +406,56 @@ function ChatGptMark(): React.JSX.Element {
   );
 }
 
+/**
+ * The foot of a pasted secret's form: Save alone while nothing is held to
+ * go back to, else Cancel and Save as a dialog's foot draws them. Note that
+ * Save stays the form's submit where it stands alone, because Enter in the
+ * field presses it there; with Cancel beside it Enter still submits the
+ * form's one field.
+ */
+function SecretFoot({
+  cancel,
+  saving,
+  empty,
+  running,
+  onSave,
+}: {
+  /** Goes back to the held secret; undefined where none is held. */
+  cancel: (() => void) | undefined;
+  saving: boolean;
+  empty: boolean;
+  running: string;
+  onSave: () => void;
+}): React.JSX.Element {
+  return (
+    <Inline justify={JUSTIFY.END}>
+      {cancel === undefined ? (
+        <Button
+          type={BUTTON_TYPE.SUBMIT}
+          variant={BUTTON_VARIANT.PRIMARY}
+          disabled={empty}
+          busy={saving}
+          busyLabel={running}
+        >
+          {WORDS.SAVE}
+        </Button>
+      ) : (
+        <DialogActions
+          onCancel={cancel}
+          act={{
+            verb: WORDS.SAVE,
+            tone: DIALOG_TONE.PRIMARY,
+            onPress: onSave,
+            running,
+            busy: saving,
+            disabled: empty,
+          }}
+        />
+      )}
+    </Inline>
+  );
+}
+
 /* ----- The subscription cards ----- */
 
 /** Claude's plan: a pasted setup-token, its status, Replace token, and Disconnect. */
@@ -527,22 +580,13 @@ function ClaudeTokenPanel({
               setRejection(undefined);
             }}
           />
-          <Inline justify={JUSTIFY.END}>
-            {plan === undefined ? null : (
-              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
-                {WORDS.CANCEL}
-              </Button>
-            )}
-            <Button
-              type={BUTTON_TYPE.SUBMIT}
-              variant={BUTTON_VARIANT.PRIMARY}
-              disabled={pasted.trim() === ""}
-              busy={saving}
-              busyLabel="Saving the token"
-            >
-              {WORDS.SAVE}
-            </Button>
-          </Inline>
+          <SecretFoot
+            cancel={plan === undefined ? undefined : cancel}
+            saving={saving}
+            empty={pasted.trim() === ""}
+            running={WORDS.SAVING_TOKEN}
+            onSave={save}
+          />
         </Stack>
       ) : null}
       <ConfirmDialog
@@ -552,6 +596,7 @@ function ClaudeTokenPanel({
           body: "Claude agents will stop running on your Claude plan, and Luke deletes the token it holds.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </>
@@ -706,6 +751,7 @@ function ChatGptPanel({
           body: "Codex agents will stop running on your ChatGPT plan, and Luke ends its sign-in with OpenAI.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
+          loss: CONFIRM_LOSS.REVERSIBLE,
         }}
       />
       {notice ? <FirstSignInNotice onDismiss={dismissNotice} /> : null}
@@ -810,22 +856,13 @@ function ApiKeyPanel({
               setRejection(undefined);
             }}
           />
-          <Inline justify={JUSTIFY.END}>
-            {stored === undefined ? null : (
-              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
-                {WORDS.CANCEL}
-              </Button>
-            )}
-            <Button
-              type={BUTTON_TYPE.SUBMIT}
-              variant={BUTTON_VARIANT.PRIMARY}
-              disabled={pasted.trim() === ""}
-              busy={saving}
-              busyLabel="Checking the key"
-            >
-              {WORDS.SAVE}
-            </Button>
-          </Inline>
+          <SecretFoot
+            cancel={stored === undefined ? undefined : cancel}
+            saving={saving}
+            empty={pasted.trim() === ""}
+            running="Checking the key"
+            onSave={save}
+          />
         </Stack>
       ) : (
         <Inline justify={JUSTIFY.BETWEEN}>
@@ -878,6 +915,7 @@ function ApiKeyPanel({
               : `Agents on ${name} models won't start without a subscription.`,
           verb: "Remove key",
           running: "Removing…",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </>
@@ -976,11 +1014,7 @@ function AgentAuthDialog({
       title={harness.name}
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
-      actions={
-        <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onClose}>
-          {WORDS.DONE}
-        </Button>
-      }
+      actions={<DialogActions onDone={onClose} />}
     >
       <div className={NO_CAPTURE}>
         <Stack gap={GAP.CONTROL}>

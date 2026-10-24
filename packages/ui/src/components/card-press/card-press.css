@@ -44,4 +44,10 @@
   .luke-card-press:active:not(:disabled) > .luke-card-press-reach {
     background: var(--luke-color-fill-pressed);
   }
+
+  /* A card chosen in a selection takes the selected fill over its reach, as
+     a chosen list row does. */
+  .luke-card-press[data-selected="true"] > .luke-card-press-reach {
+    background: var(--luke-color-fill-selected);
+  }
 }

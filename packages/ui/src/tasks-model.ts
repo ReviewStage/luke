@@ -393,13 +393,13 @@ function standingStatus(task: Pick<TaskSummary, "status">): TaskStatus {
 }
 
 /**
- * What settling tasks at a status asks of each, and what its Undo asks: the
+ * What setting tasks at a status asks of each, and what its Undo asks: the
  * status each stood at before. A task already there is left out of both,
  * since the press changes nothing about it.
  */
 export function settleChanges(
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
-  status: SettledStatus,
+  status: TaskStatus,
 ): { readonly asked: readonly StatusChange[]; readonly undo: readonly StatusChange[] } {
   const moved = tasks.filter((task) => standingStatus(task) !== status);
   return {
@@ -413,35 +413,53 @@ export function settleOffered(task: Pick<TaskSummary, "status">, status: Settled
   return standingStatus(task) !== status;
 }
 
-/** What the toasts say of tasks settled at each status: one, several, and the refusals. */
-const SETTLE_NOTES = {
-  [SETTLED_STATUS.DONE]: {
+/** What the toasts say of tasks set at each status: one, several, and the refusals. */
+const STATUS_NOTES = {
+  [TASK_STATUS.BACKLOG]: {
+    one: "Moved to Backlog",
+    many: "tasks moved to Backlog",
+    failedOne: "The task could not be moved to Backlog. Try again.",
+    failedMany: "The tasks could not be moved to Backlog. Try again.",
+  },
+  [TASK_STATUS.TODO]: {
+    one: "Moved to Todo",
+    many: "tasks moved to Todo",
+    failedOne: "The task could not be moved to Todo. Try again.",
+    failedMany: "The tasks could not be moved to Todo. Try again.",
+  },
+  [TASK_STATUS.IN_PROGRESS]: {
+    one: "Moved to In progress",
+    many: "tasks moved to In progress",
+    failedOne: "The task could not be moved to In progress. Try again.",
+    failedMany: "The tasks could not be moved to In progress. Try again.",
+  },
+  [TASK_STATUS.DONE]: {
     one: "Marked done",
     many: "tasks marked done",
     failedOne: "The task could not be marked done. Try again.",
     failedMany: "The tasks could not be marked done. Try again.",
   },
-  [SETTLED_STATUS.CANCELED]: {
+  [TASK_STATUS.CANCELED]: {
     one: "Task canceled",
     many: "tasks canceled",
     failedOne: "The task could not be canceled. Try again.",
     failedMany: "The tasks could not be canceled. Try again.",
   },
-} as const satisfies Record<SettledStatus, Record<string, string>>;
+} as const satisfies Record<TaskStatus, Record<string, string>>;
 
 /**
- * What the toast says once tasks were settled at a status, by how many the
- * service kept and how many it refused; one task says "Marked done".
+ * What the toast says once tasks were set at a status, by how many the
+ * service kept and how many it refused; one task done says "Marked done".
  */
-export function settledNote(status: SettledStatus, landed: number, refused: number): string {
-  const notes = SETTLE_NOTES[status];
+export function settledNote(status: TaskStatus, landed: number, refused: number): string {
+  const notes = STATUS_NOTES[status];
   const kept = landed === 1 ? notes.one : `${landed} ${notes.many}`;
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
-/** What the toast says when the service refused every task a press settled. */
-export function settleFailedNote(status: SettledStatus, refused: number): string {
-  const notes = SETTLE_NOTES[status];
+/** What the toast says when the service refused every task a press set at a status. */
+export function settleFailedNote(status: TaskStatus, refused: number): string {
+  const notes = STATUS_NOTES[status];
   return refused === 1 ? notes.failedOne : notes.failedMany;
 }
 
@@ -567,13 +585,13 @@ export function unsettledStatuses(statuses: PendingStatuses, view: TasksView): P
 }
 
 /**
- * What an Undo of settling tasks at a status still puts back: only the tasks
+ * What an Undo of setting tasks at a status still puts back: only the tasks
  * that still stand there, since one given another status since was chosen
  * anew and an Undo must not take that choice back.
  */
 export function undoStillDue(
   undo: readonly StatusChange[],
-  settled: SettledStatus,
+  settled: TaskStatus,
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
 ): readonly StatusChange[] {
   return undo.filter(({ taskId }) => {

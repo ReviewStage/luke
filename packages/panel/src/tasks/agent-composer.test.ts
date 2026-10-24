@@ -176,7 +176,7 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
 test("a paste past the box's cap is cut to the room left and the note says so, until the words change", async () => {
   const box = await mounted();
   const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => box.container.querySelector(".agent-composer-note")?.textContent;
+  const note = () => box.container.querySelector(".luke-composer-foot-note")?.textContent;
   assert.equal(note(), undefined);
 
   pasteInComposer(box.container, "x".repeat(cap + 500));
@@ -195,7 +195,7 @@ test("a paste that fits the cap says nothing of a cut", async () => {
   const box = await mounted();
   pasteInComposer(box.container, "x".repeat(1000));
   assert.equal(box.shown().length, 1000);
-  assert.equal(box.container.querySelector(".agent-composer-note"), null);
+  assert.equal(box.container.querySelector(".luke-composer-foot-note"), null);
 });
 
 test("a paste into a full box whose message did not go leaves the failure and its Retry standing", async () => {

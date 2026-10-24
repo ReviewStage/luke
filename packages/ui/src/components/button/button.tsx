@@ -1,4 +1,5 @@
 import {
+  type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
   type MouseEvent,
   type ReactNode,
@@ -88,8 +89,11 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * somewhere: a download, another site, an app's own scheme. The browser
  * follows its address, so it opens in a new tab, copies, and hands off as
  * any link does; it is never unavailable or busy, since a link that cannot
- * be followed is not drawn. An IconButtonLink is an IconButton's look on a
- * link, named by its `label`, which may open in a `newTab`.
+ * be followed is not drawn. A window that opens addresses through its own
+ * door stops the browser's follow in `onClick`, and the link is still what a
+ * right-click, a reader's link list and ⌘-click find. An IconButtonLink is an
+ * IconButton's look on a link, named by its `label`, which may open in a
+ * `newTab`.
  *
  * A labelled button is named by its words, unless it is given a `label`
  * that says more of what it does than they have room for ("Start a coding
@@ -200,6 +204,19 @@ type LandingProps = BusyProps & {
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
   "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "aria-keyshortcuts"
+>;
+
+/** What an app's hint hands the link it wraps: when to show and go, and the chord it names. */
+type LinkHintProps = Pick<
+  AnchorHTMLAttributes<HTMLAnchorElement>,
+  | "onPointerEnter"
+  | "onPointerLeave"
+  | "onPointerDown"
+  | "onTouchEnd"
+  | "onFocus"
+  | "onBlur"
+  | "aria-describedby"
+  | "aria-keyshortcuts"
 >;
 
 /** What every button takes, labelled or not. */
@@ -557,15 +574,19 @@ export function ButtonLink({
   href,
   variant,
   icon,
+  label,
   onClick,
   children,
-}: {
+  ...hint
+}: LinkHintProps & {
   href: string;
   variant?: ButtonVariant;
-  /** Called as the press leaves, before the browser follows the link. */
+  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** The glyph before its words. */
   icon?: ReactNode;
+  /** Its accessible name, where it says more of what it does than its words have room for; it holds them. */
+  label?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -574,7 +595,9 @@ export function ButtonLink({
         buttonLook({ variant, size: undefined, shape: undefined, iconOnly: false }),
       )}
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      {...hint}
       href={href}
+      aria-label={label}
       onClick={(event) => {
         pulse(event.currentTarget, variant);
         onClick?.(event);
@@ -598,7 +621,9 @@ export function IconButtonLink({
   label,
   variant,
   newTab = false,
-}: {
+  onClick,
+  ...hint
+}: LinkHintProps & {
   href: string;
   icon: ReactNode;
   /** Its accessible name, which a sighted reader has from the glyph. */
@@ -606,6 +631,8 @@ export function IconButtonLink({
   variant?: ButtonVariant;
   /** Whether it opens in a new tab, leaving the page it is on where it was. */
   newTab?: boolean;
+  /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
 }): React.JSX.Element {
   return (
     <a
@@ -614,9 +641,13 @@ export function IconButtonLink({
       )}
       data-icon-only="true"
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      {...hint}
       href={href}
       aria-label={label}
-      onClick={(event) => pulse(event.currentTarget, variant)}
+      onClick={(event) => {
+        pulse(event.currentTarget, variant);
+        onClick?.(event);
+      }}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >

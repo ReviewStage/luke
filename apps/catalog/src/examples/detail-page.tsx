@@ -23,7 +23,8 @@ import { CatalogSection } from "../section";
  * detail-page.tsx -- one thing's page with a secondary column beside its
  * main content, each scrolling on its own; the same page with no secondary
  * column; and the page in a phone's width, where the secondary column
- * follows the main content in the one scroll; and the page under a window's
+ * follows the main content in the one scroll; a long page whose bar picks up
+ * its title once the header scrolls away; and the page under a window's
  * toolbar, which holds its title and acts; and the page in a side panel
  * under its tabs, its words at the tabs' column inset. Every name is made up.
  */
@@ -121,6 +122,21 @@ function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
   );
 }
 
+/** A page long enough to scroll its header away, so its bar picks up the title. */
+function LongTask(): React.JSX.Element {
+  return (
+    <DetailPage
+      title={TITLE}
+      description="Scroll down: the bar names the task once its title is gone."
+    >
+      <Stack gap={GAP.SECTION}>
+        <Sections />
+        <Sections />
+      </Stack>
+    </DetailPage>
+  );
+}
+
 function TaskUnderToolbar(): React.JSX.Element {
   return (
     <DetailPage
@@ -189,6 +205,14 @@ function DetailPages(): React.JSX.Element {
       >
         <div className="catalog-screen catalog-screen-phone catalog-screen-detail">
           <Task secondary />
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="detail-page-pick-up"
+        title="Its title in the bar once the header scrolls away"
+      >
+        <div className="catalog-screen catalog-screen-detail">
+          <LongTask />
         </div>
       </CatalogSection>
       <CatalogSection id="detail-page-toolbar" title="Under the window's toolbar">

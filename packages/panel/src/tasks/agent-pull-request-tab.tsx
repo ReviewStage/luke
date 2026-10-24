@@ -45,6 +45,7 @@ import {
   BlockListItem,
   BUTTON_VARIANT,
   Button,
+  ButtonLink,
   CHIP_LOOK,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
@@ -89,11 +90,11 @@ import {
   STATUS_TONE,
   Stack,
   type StatusTone,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
+  TEXT_LINK_LOOK,
   TEXT_VARIANT,
   Text,
-  TextButton,
+  TextLink,
   TIME_LOOK,
   Time,
   Tooltip,
@@ -228,7 +229,13 @@ import {
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import { usePushedLineMoved } from "./use-agent-pull-request.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
+import {
+  linkPressOf,
+  type OpenHere,
+  OpenHereFirst,
+  useOpenLink,
+  useOpenPlace,
+} from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 
 /**
@@ -1239,6 +1246,21 @@ function PendingList({
   );
 }
 
+/** Words that say what a read left on GitHub, a link to the page that holds it, opened through the window's link-open act. */
+function OnGitHubLink({ href, children }: { href: string; children: string }): React.JSX.Element {
+  const openLink = useOpenLink();
+  return (
+    <TextLink
+      href={href}
+      look={TEXT_LINK_LOOK.UNDERLINED}
+      external
+      onClick={linkPressOf(openLink, href)}
+    >
+      {children}
+    </TextLink>
+  );
+}
+
 /** A review thread's comments, oldest first, on its card, with the replies a read left on GitHub counted after them, wherever the thread is drawn. */
 function ThreadComments({
   thread,
@@ -1249,7 +1271,6 @@ function ThreadComments({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const openLink = useOpenLink();
   const last = thread.comments.at(-1);
   return (
     <>
@@ -1266,13 +1287,7 @@ function ThreadComments({
       </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
         <p className="pull-request-more annotation-card-more">
-          <TextButton
-            tone={TEXT_BUTTON_TONE.LINK}
-            onClick={() => openLink(last.url)}
-            linkHref={last.url}
-          >
-            {PULL_REQUEST_WORDS.moreReplies(thread.more)}
-          </TextButton>
+          <OnGitHubLink href={last.url}>{PULL_REQUEST_WORDS.moreReplies(thread.more)}</OnGitHubLink>
         </p>
       )}
     </>
@@ -1576,14 +1591,15 @@ function PreviewControl({
   if (serving.length === 1) {
     return (
       <Tooltip label={only.environment}>
-        <Button
+        <ButtonLink
           variant={BUTTON_VARIANT.OUTLINE}
           icon={<ScanSearchIcon />}
           label={`${PULL_REQUEST_WORDS.PREVIEW} ${only.environment}`}
-          onClick={() => openLink(only.url)}
+          href={only.url}
+          onClick={linkPressOf(openLink, only.url)}
         >
           {PULL_REQUEST_WORDS.PREVIEW}
-        </Button>
+        </ButtonLink>
       </Tooltip>
     );
   }
@@ -1728,7 +1744,6 @@ function ConversationPart({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const openLink = useOpenLink();
   const part = parts.conversation;
   if (part.kind !== PART.LANDED) {
     return (
@@ -1756,9 +1771,7 @@ function ConversationPart({
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
         <p className="pull-request-more pull-request-earlier">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)} linkHref={url}>
-            {PULL_REQUEST_WORDS.earlier(earlier)}
-          </TextButton>
+          <OnGitHubLink href={url}>{PULL_REQUEST_WORDS.earlier(earlier)}</OnGitHubLink>
         </p>
       )}
       {conversation.length === 0 ? (

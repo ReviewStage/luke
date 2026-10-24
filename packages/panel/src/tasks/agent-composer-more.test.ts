@@ -129,9 +129,11 @@ async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_S
   );
   const foot =
     container.querySelector<HTMLElement>("form > :last-child") ?? assert.fail("the foot stands");
+  const card =
+    container.querySelector<HTMLElement>(".agent-composer") ?? assert.fail("the card stands");
   return {
     container,
-    foot,
+    card,
     press: (name: string) =>
       foot.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`) ??
       assert.fail(`${name} stands`),
@@ -179,7 +181,7 @@ test("MCP servers chosen from the ⋯ opens the servers popover its hidden press
 
 test("the ⋯'s menu closes once the card changes width, as a panel dragged narrower would, so it never offers a stale set of presses", async () => {
   const box = await drawnAt(CARD.NARROW);
-  const width = vi.spyOn(box.foot, "getBoundingClientRect");
+  const width = vi.spyOn(box.card, "getBoundingClientRect");
   width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROW }));
   // What the standing menu offers; a closed one, held drawn while its exit plays, is inert.
   const offered = () =>

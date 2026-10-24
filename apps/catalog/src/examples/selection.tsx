@@ -1,4 +1,16 @@
-import { List, ListRow, SelectionBar } from "@luke/ui";
+import {
+  Card,
+  CardPress,
+  GAP,
+  List,
+  ListRow,
+  SelectionBar,
+  SelectionRegion,
+  Stack,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -9,6 +21,8 @@ import { CatalogSection } from "../section";
  * out, ⇧-click a run, ⇧↑↓ grow the run, ⌘A every row, Esc none, a plain
  * click still opening its row; one row unavailable, which nothing chooses;
  * and the bar over it while any is chosen, its count, its acts, and Clear.
+ * Then cards of the app's own under two heads, chosen the same way across
+ * both in one region.
  */
 
 const TASKS = [
@@ -60,11 +74,58 @@ function ChoosingTasks(): React.JSX.Element {
   );
 }
 
+/** The cards of the region, under the head each stands under. */
+const GROUPS = [
+  { head: "Working", tasks: TASKS.slice(0, 2) },
+  { head: "Ready", tasks: TASKS.slice(2) },
+] as const;
+
+function ChoosingCards(): React.JSX.Element {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set(["sign-in", "inbox"]));
+  const [open, setOpen] = useState<string | undefined>(undefined);
+  const clear = () => setSelected(new Set());
+  return (
+    <div className="catalog-column">
+      <SelectionBar
+        count={selected.size}
+        onClear={clear}
+        controls="selection-cards-region"
+        acts={[{ label: "Mark done", icon: <GLYPH.DONE />, onAct: clear }]}
+      />
+      <SelectionRegion id="selection-cards-region" selection={{ selected, onChange: setSelected }}>
+        {GROUPS.map((group) => (
+          <Stack key={group.head} gap={GAP.TIGHT}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {group.head}
+            </Text>
+            {group.tasks.map((task) => (
+              <Card key={task.id}>
+                <CardPress
+                  selectKey={task.id}
+                  disabled={task.id === UNAVAILABLE}
+                  onPress={() => setOpen(task.id)}
+                >
+                  <Text>{open === task.id ? `${task.title} (open)` : task.title}</Text>
+                </CardPress>
+              </Card>
+            ))}
+          </Stack>
+        ))}
+      </SelectionRegion>
+    </div>
+  );
+}
+
 function Selection(): React.JSX.Element {
   return (
-    <CatalogSection id="selection-tasks" title="Rows chosen with ⌘ and ⇧, and the bar over them">
-      <ChoosingTasks />
-    </CatalogSection>
+    <>
+      <CatalogSection id="selection-tasks" title="Rows chosen with ⌘ and ⇧, and the bar over them">
+        <ChoosingTasks />
+      </CatalogSection>
+      <CatalogSection id="selection-cards" title="Cards of the app's own, chosen across groups">
+        <ChoosingCards />
+      </CatalogSection>
+    </>
   );
 }
 

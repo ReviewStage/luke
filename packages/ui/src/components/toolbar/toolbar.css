@@ -1,0 +1,118 @@
+/* toolbar.css -- Toolbar: one row at the window's bar height, its parts at
+   the control gap; each edge inset by name, at its column's words or at the
+   column's own edge; the heading taking the room left so the actions end
+   the bar, its title in the dialog's type with a title's tracking, and a tag
+   after it on its last baseline.
+
+   Each rule reaches the window's older `desktop-toolbar*` names beside the
+   bar's own, so a bar still built by hand draws as this one does until it
+   moves onto `Toolbar`. */
+
+@layer components {
+  /* A bar's height, a row and its hairline, where nothing names the
+     window's: the shell sets it level with its title bar. */
+  :root {
+    --luke-toolbar-height: calc(var(--luke-control-height) + 2 * var(--luke-space-8) + 1px);
+  }
+
+  /* Where a column's controls start (the column's own edge), and where its
+     words start, a row's inset further in, which is where a row's padding
+     puts them; words on no row (a page's title) start there too, so a
+     column reads down one edge. */
+  :is(.luke-toolbar, .desktop-toolbar) {
+    --luke-toolbar-column-inset: var(--luke-space-12);
+    --luke-toolbar-page-inset: calc(var(--luke-toolbar-column-inset) + var(--luke-row-inset));
+    --luke-toolbar-start: var(--luke-toolbar-page-inset);
+    --luke-toolbar-end: var(--luke-toolbar-page-inset);
+
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    min-height: var(--luke-toolbar-height);
+    padding: var(--luke-space-8) var(--luke-toolbar-end) var(--luke-space-8)
+      var(--luke-toolbar-start);
+  }
+
+  .luke-toolbar[data-start="column"] {
+    --luke-toolbar-start: var(--luke-toolbar-column-inset);
+  }
+
+  .luke-toolbar[data-end="column"] {
+    --luke-toolbar-end: var(--luke-toolbar-column-inset);
+  }
+
+  /* What leads gives way before the actions do, its controls shrinking to
+     their own floors rather than pushing the actions off the bar. */
+  .luke-toolbar-lead {
+    display: flex;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--luke-control-gap);
+  }
+
+  :is(.luke-toolbar-heading, .desktop-toolbar-heading) {
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* A tag stands on the title's last baseline, as a devtool's Beta label
+     does: the last, because a title led by crumbs ends in its own name. */
+  .luke-toolbar-heading:has(> .luke-toolbar-tag) {
+    display: flex;
+    align-items: last baseline;
+    gap: var(--luke-space-8);
+  }
+
+  .luke-toolbar-tag {
+    flex: none;
+  }
+
+  /* Its room reaches 6px left of the words, so the title's own hover fill and
+     field ring, which start there, are not clipped. */
+  :is(.luke-toolbar-title, .desktop-toolbar-title) {
+    margin: 0 0 0 calc(-1 * var(--luke-space-6));
+    padding-left: var(--luke-space-6);
+    font-size: var(--luke-type-dialog-size);
+    font-weight: var(--luke-type-dialog-weight);
+    letter-spacing: var(--luke-type-title-tracking);
+  }
+
+  :is(.luke-toolbar-actions, .desktop-toolbar-actions) {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--luke-control-gap);
+  }
+
+  /* A document's name, picked up from its header once that has scrolled
+     away: it stands where a title would, arriving over the quick duration
+     with a short rise on the spring, and leaving as a fade over the exit,
+     after which it is taken from the pointer and stands ready to rise
+     again. Reduced motion and a capture run zero the durations, so it
+     lands and leaves at once. */
+  .luke-toolbar-pick-up {
+    display: block;
+    min-width: 0;
+    opacity: 0;
+    transform: translateY(var(--luke-space-4));
+    visibility: hidden;
+    transition:
+      opacity var(--luke-duration-exit) var(--luke-motion-exit),
+      transform 0s var(--luke-duration-exit),
+      visibility 0s var(--luke-duration-exit);
+  }
+
+  .luke-toolbar-pick-up[data-shown="true"] {
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+    transition:
+      opacity var(--luke-duration-quick) var(--luke-motion-exit),
+      transform var(--luke-duration-fast) var(--luke-spring),
+      visibility 0s;
+  }
+}

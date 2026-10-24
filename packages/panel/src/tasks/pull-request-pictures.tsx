@@ -157,11 +157,9 @@ function EntryViewer({
   const action: ViewerAction = {
     label: PICTURE_WORDS.OPEN_ON_GITHUB,
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
-    onPress: (file) => {
-      // Note that the file is matched as the viewer was handed it, because two pictures may hold the same bytes.
-      const shown = files.find((each) => each.file === file);
-      if (shown !== undefined) openLink(shown.original);
-    },
+    // Note that the file is matched as the viewer was handed it, because two pictures may hold the same bytes.
+    address: (file) => files.find((each) => each.file === file)?.original,
+    onOpen: openLink,
   };
   return at < 0 ? null : (
     <AttachmentViewer

@@ -1,12 +1,17 @@
 import {
   AttachmentChip,
+  BUTTON_VARIANT,
+  Button,
   COMPOSER_ELEMENT,
   COMPOSER_LOOK,
   ComposerFoot,
+  ComposerFootSkeleton,
   ComposerFrame,
   type ComposerLook,
   GAP,
   IconButton,
+  SKELETON_SHAPE,
+  Skeleton,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -21,8 +26,10 @@ import { CatalogSection } from "../section";
 /**
  * composer-foots.tsx -- a message box's foot in each state: empty, with its
  * Send unavailable; holding files; near its limit, the counter showing;
- * sending; with a cut paste's note and a refused send's Retry; in a call,
- * and dictating in a call; then at a field's and a bare frame's inset.
+ * sending; Stop in the send's place, and stopping; with a cut paste's note,
+ * a refused send's Retry, and a closed box's mend under its note; in a call,
+ * and dictating in a call; then at a field's and a bare frame's inset, and
+ * still loading.
  */
 
 const ignore = () => undefined;
@@ -78,6 +85,18 @@ function Box({
   );
 }
 
+/** A box still loading: its foot's placeholders, a tool's and a press's, and the send's disc. */
+function BoxSkeleton(): React.JSX.Element {
+  return (
+    <ComposerFrame look={COMPOSER_LOOK.CARD}>
+      <ComposerFootSkeleton
+        tools={<Skeleton shape={SKELETON_SHAPE.CIRCLE} />}
+        actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} />}
+      />
+    </ComposerFrame>
+  );
+}
+
 function ComposerFoots(): React.JSX.Element {
   return (
     <>
@@ -102,6 +121,16 @@ function ComposerFoots(): React.JSX.Element {
               words="Sending this one."
               send={{ label: "Send", empty: false, busy: true, busyLabel: "Sending" }}
             />
+            <Box
+              words="Ask to make changes"
+              send={{ label: "Send", empty: true }}
+              stop={{ label: "Stop", onStop: ignore }}
+            />
+            <Box
+              words="Ask to make changes"
+              send={{ label: "Send", empty: true }}
+              stop={{ label: "Stop", onStop: ignore, busy: true, busyLabel: "Stopping…" }}
+            />
           </Stack>
         </div>
       </CatalogSection>
@@ -116,6 +145,18 @@ function ComposerFoots(): React.JSX.Element {
             <Box
               words="Can you take a look?"
               note={{ words: "The message could not be sent.", onRetry: ignore }}
+            />
+            <Box
+              words=""
+              send={{ label: "Send", empty: true, held: true }}
+              note={{
+                words: "The agent takes no more messages.",
+                mends: (
+                  <Button variant={BUTTON_VARIANT.OUTLINE} onClick={ignore}>
+                    Continue in new agent
+                  </Button>
+                ),
+              }}
             />
           </Stack>
         </div>
@@ -145,6 +186,7 @@ function ComposerFoots(): React.JSX.Element {
               words="Comment…"
               send={{ label: "Comment", empty: false }}
             />
+            <BoxSkeleton />
           </Stack>
         </div>
       </CatalogSection>

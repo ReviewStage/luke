@@ -1,4 +1,5 @@
 import { type ReactNode, useRef } from "react";
+import { useHeadingAway } from "../page-header/heading-away.js";
 import { PAGE_HEADER_END, PageHeader } from "../page-header/page-header.js";
 import { RevealArea, revealArea } from "../reveal/reveal.js";
 import {
@@ -6,12 +7,17 @@ import {
   SettingsSectionsSkeleton,
 } from "../settings-section/settings-section.js";
 import { Skeleton } from "../skeleton/skeleton.js";
+import { Toolbar } from "../toolbar/toolbar.js";
 
 /**
  * settings-page.tsx -- a settings page: its title and what acts on the whole page above its sections, in a column that scrolls.
  *
- * The page is its own scroller and owns everything between its edges and
- * its sections: the inset around the column, which narrows when the page
+ * The page stands under the window's bar (`Toolbar`), which leads with what
+ * its caller hands it (a way back) and is still above the page's scroll;
+ * once the header has scrolled away, the bar picks up its name
+ * (`useHeadingAway`), so the reader never loses which page they are on.
+ * Under it the page is its own scroller and owns everything between its
+ * edges and its sections: the inset around the column, which narrows when the page
  * does, the measure the column reads at, the title's place and size, the
  * room under the head, and the room between one section (`SettingsSection`)
  * and the next. Its column of sections is a reveal area (`RevealArea`), so
@@ -50,27 +56,36 @@ const SKELETON_TITLE_WIDTH = "calc(5 * var(--luke-control-height))";
 export function SettingsPage({
   title,
   actions,
+  lead,
   children,
 }: {
   /** The page's name, its `h1`. */
   title: ReactNode;
   /** What acts on the whole page, at the end of the title's line. */
   actions?: ReactNode;
+  /** What leads the bar above the page: a way back, where the window gives one. */
+  lead?: ReactNode;
   /** The sections, a section's gap apart. */
   children: ReactNode;
 }): React.JSX.Element {
+  const page = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLDivElement>(null);
   const sections = useRef<HTMLDivElement>(null);
+  const named = useHeadingAway(page, head);
   return (
-    <div className="luke-settings-page">
-      <div className="luke-settings-page-column">
-        <div className="luke-settings-page-head">
-          <PageHeader title={title} actions={actions} end={PAGE_HEADER_END.WORDS} />
-        </div>
-        <RevealArea root={sections}>
-          <div ref={sections} className="luke-settings-page-sections" {...revealArea()}>
-            {children}
+    <div className="luke-settings-page-frame">
+      <Toolbar lead={lead} pickUp={{ name: named.name, shown: named.away }} />
+      <div ref={page} className="luke-settings-page">
+        <div className="luke-settings-page-column">
+          <div ref={head} className="luke-settings-page-head">
+            <PageHeader title={title} actions={actions} end={PAGE_HEADER_END.WORDS} />
           </div>
-        </RevealArea>
+          <RevealArea root={sections}>
+            <div ref={sections} className="luke-settings-page-sections" {...revealArea()}>
+              {children}
+            </div>
+          </RevealArea>
+        </div>
       </div>
     </div>
   );

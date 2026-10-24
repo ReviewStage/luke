@@ -13,6 +13,7 @@ import {
   Banner,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   EmptyState,
@@ -119,6 +120,7 @@ const RESET_QUESTION: DialogQuestion = {
   body: "Your current template stays in its version history.",
   verb: "Reset",
   running: "Resetting",
+  loss: CONFIRM_LOSS.REVERSIBLE,
 };
 
 /** One write of the template, read as the template kept or nothing at all. */

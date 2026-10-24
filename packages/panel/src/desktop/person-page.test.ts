@@ -361,8 +361,21 @@ function sections(page: HTMLElement): Record<string, string[]> {
   );
 }
 
+/** What an element says to a reader: its words without its marks, which are hidden from one. */
+function said(element: Element): string {
+  const copy = element.cloneNode(true) as Element;
+  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  return copy.textContent ?? "";
+}
+
+/** The page's header: its title, and the line under it. */
 function head(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".person-head p")].map((line) => line.textContent ?? "");
+  return [...page.querySelectorAll(".luke-page-header-heading > *")].map(said);
+}
+
+/** The page's headings of the first level. */
+function titles(page: HTMLElement): string[] {
+  return [...page.querySelectorAll("h1")].map(said);
 }
 
 /** What each placeholder on the page says it is waiting on, in order. */
@@ -394,11 +407,19 @@ test("a teammate's page names them as the members read does and lists their work
   });
 });
 
+test("the page names its person once: exactly one h1, their name, and no second heading saying it", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  assert.deepEqual(titles(page), ["Charles Pan"]);
+  assert.equal(said(page).split("Charles Pan").length - 1, 1);
+});
+
 test("the reader's own page says You and what waits on them", async () => {
   const { page } = mount(DEAN.userId);
   await settle();
 
-  assert.deepEqual(head(page), ["Dean StratakosYou", "Owner · dean@example.com"]);
+  assert.deepEqual(head(page), ["Dean Stratakos", "You Owner · dean@example.com"]);
   assert.deepEqual(sections(page), {
     "Working now": ["Limiter flag"],
     "Waiting on you": ["Ship the limiter at 10%?"],
@@ -601,12 +622,12 @@ test("a workspace of one offers no sidebar filter, since its sidebar filters by 
   assert.doesNotMatch(page.textContent ?? "", /tasks in sidebar/u);
 });
 
-test("the reader's own page offers nothing to edit: its toolbar lists their tasks in the sidebar and ⋯ alone", async () => {
+test("the reader's own page offers nothing to edit: its header lists their tasks in the sidebar and ⋯ alone", async () => {
   const { page } = mount(DEAN.userId);
   await settle();
 
   assert.deepEqual(
-    [...page.querySelectorAll(".desktop-toolbar-actions button")].map(
+    [...page.querySelectorAll(".luke-page-header-actions button")].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
     ["My tasks in sidebar", "Person actions"],
@@ -681,7 +702,7 @@ test("someone who left heads their page with their own picture", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
-  const face = page.querySelector<HTMLElement>(".person-head .actor-mark");
+  const face = page.querySelector<HTMLElement>(".luke-page-header .actor-mark");
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });
 
@@ -786,7 +807,7 @@ test("a members read that was refused says so and offers Retry in the head's pla
 
   assert.match(page.textContent ?? "", /Their profile could not be read\./u);
   assert.deepEqual(waits(page), []);
-  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Profile");
+  assert.deepEqual(titles(page), ["Profile"]);
   assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace|Nothing of theirs/u);
 
   membersRefused = false;
@@ -795,7 +816,7 @@ test("a members read that was refused says so and offers Retry in the head's pla
 
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
-  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Sam Ortiz");
+  assert.deepEqual(titles(page), ["Sam Ortiz"]);
 });
 
 test("a read of who left that was refused says so and offers Retry, and Retry names them as a former member", async () => {

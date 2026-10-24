@@ -2,16 +2,17 @@
 
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PLAN_ACTOR, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_STATUS,
+  type Task,
+  type TaskStatus,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ProviderMark } from "@luke/ui";
-import {
-  DOCUMENT_REGION,
-  type SettledStatus,
-  TASKS_PAGE,
-  type TaskMark,
-} from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -687,7 +688,7 @@ test("Mark done marks a task with agents done at once, from its row's check and 
     agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
   const done: TaskSummary = { ...working, status: TASK_STATUS.DONE };
-  const settled: [string[], SettledStatus][] = [];
+  const settled: [string[], TaskStatus][] = [];
   const tasks = tasksControl({
     tasks: [working],
     onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),

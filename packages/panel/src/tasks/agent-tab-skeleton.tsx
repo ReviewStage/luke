@@ -1,9 +1,5 @@
-import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
-import {
-  PromptInputCard,
-  PromptInputFooter,
-  PromptInputTools,
-} from "../ai-elements/prompt-input.js";
+import { ComposerFootSkeleton, SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
+import { PromptInputCard } from "../ai-elements/prompt-input.js";
 import { ComposerActions, ComposerAttach, ComposerCard } from "./agent-composer.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ComposerFieldRoom, UnloadedComposerField } from "./composer-field.js";
@@ -56,9 +52,9 @@ export function TranscriptSkeleton({
 
 /**
  * The composer's card in its own frame and size, drawn in the composer's own
- * boxes: its field unloaded, one line tall, and its foot's two ends as the
- * composer lays them, the + at the left, and the model chip beside the round
- * send at the right, so the card lands where it stood and its presses where
+ * boxes: its field unloaded, one line tall, and its foot (`ComposerFootSkeleton`)
+ * with its two ends as the composer lays them, the + at the left, and the
+ * model chip beside the round send's disc at the right, so the card lands where it stood and its presses where
  * their blocks were. The icon presses between the chip and Send are left
  * out, as a narrow card folds them into its ⋯.
  */
@@ -69,17 +65,18 @@ export function ComposerSkeleton(): React.JSX.Element {
         <ComposerFieldRoom>
           <UnloadedComposerField />
         </ComposerFieldRoom>
-        <PromptInputFooter>
-          <PromptInputTools>
+        <ComposerFootSkeleton
+          tools={
             <ComposerAttach>
               <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SQUARE_CONTROL_WIDTH} />
             </ComposerAttach>
-          </PromptInputTools>
-          <ComposerActions>
-            <Skeleton shape={SKELETON_SHAPE.CONTROL} width={MODEL_CHIP_WIDTH} />
-            <Skeleton shape={SKELETON_SHAPE.CIRCLE} />
-          </ComposerActions>
-        </PromptInputFooter>
+          }
+          actions={
+            <ComposerActions>
+              <Skeleton shape={SKELETON_SHAPE.CONTROL} width={MODEL_CHIP_WIDTH} />
+            </ComposerActions>
+          }
+        />
       </PromptInputCard>
     </ComposerCard>
   );

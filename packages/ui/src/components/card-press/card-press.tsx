@@ -1,3 +1,4 @@
+import { SELECTION_WORDS } from "@luke/features/words";
 import {
   type ButtonHTMLAttributes,
   type KeyboardEvent,
@@ -5,11 +6,13 @@ import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useContext,
   useEffect,
   useRef,
 } from "react";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
+import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-selection.js";
 
 /**
  * card-press.tsx -- the one press a whole card is: a real button that reaches every edge of the card it stands in.
@@ -49,6 +52,11 @@ import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
  * unavailable press (`disabled`) refuses the keyboard and the pointer alike.
  * Where the app drags its cards by their press, it finds the press by
  * `CARD_PRESS_SELECTOR`.
+ *
+ * In a `SelectionRegion`, a press with a key (`selectKey`) is a row that can
+ * be chosen: ⌘- and ⇧-clicks on the button choose rows rather than press it
+ * (`list-selection.ts`), and one chosen takes the selected fill on its
+ * reach and is described as selected.
  */
 
 /** How a press reaches its card: lying over it, or hearing through it. */
@@ -120,6 +128,7 @@ export function CardPress({
   corner = CARD_PRESS_CORNER.CONTROL,
   label,
   disabled = false,
+  selectKey,
   ref,
   onKeyDown,
   contextMenu,
@@ -141,6 +150,8 @@ export function CardPress({
   label?: string | undefined;
   /** Whether its press is unavailable: refused, and out of the tab order. */
   disabled?: boolean | undefined;
+  /** What the card is chosen by in a `SelectionRegion`; a press with none is never chosen. */
+  selectKey?: string | undefined;
   /** The button, for what focuses it or measures against it. */
   ref?: RefObject<HTMLButtonElement | null> | undefined;
   /** A key pressed on it, as a menu's key opens the card's menu. */
@@ -150,6 +161,9 @@ export function CardPress({
   /** What the card is, as the button shows and names it. */
   children: ReactNode;
 }): React.JSX.Element {
+  const selecting = useContext(ListSelectionContext);
+  const choosable = selecting !== undefined && selectKey !== undefined;
+  const chosen = choosable && selecting.selected.has(selectKey);
   const own = useRef<HTMLButtonElement | null>(null);
   const held = useCallback(
     (element: HTMLButtonElement | null) => {
@@ -187,10 +201,15 @@ export function CardPress({
       data-corner={corner}
       {...{ [CARD_PRESS_ATTRIBUTE]: "" }}
       aria-label={label}
+      aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
+      data-selected={chosen ? "true" : undefined}
+      {...(choosable ? selectableRow(selectKey) : {})}
       disabled={disabled}
+      onMouseDown={choosable ? holdRun : undefined}
       onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
         pulseCard(event.currentTarget);
-        onPress(event);
+        // Note that a ⌘- or ⇧-click that chose rows is no press of the card.
+        if (!(choosable && selecting.press(selectKey, event))) onPress(event);
         onClick?.(event);
       }}
       onKeyDown={onKeyDown}

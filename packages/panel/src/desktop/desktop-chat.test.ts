@@ -456,14 +456,21 @@ test("a message's Copy takes its words as Markdown, beside the Reply its byline 
     [...(actions?.querySelectorAll("button") ?? [])].map(
       (button) => button.getAttribute("aria-label") ?? button.textContent,
     ),
-    ["Copy", "Reply"],
+    ["Copy message", "Reply"],
   );
-  act(() => actions?.querySelector<HTMLButtonElement>('button[aria-label="Copy"]')?.click());
+  act(() =>
+    actions?.querySelector<HTMLButtonElement>('button[aria-label="Copy message"]')?.click(),
+  );
   await settle();
   assert.deepEqual(copied, [
     "Two invites to one address in one workspace would otherwise both go pending. It's one " +
       "migration, online, and nothing writes the pair twice today.",
   ]);
+  assert.equal(
+    actions?.querySelector('button[aria-label="Copy message"] [role="status"]')?.textContent,
+    "Copied",
+    "the press shows it was copied",
+  );
 });
 
 /** The id of the developer's DM with Invite emails, the fixture's second agent. */

@@ -473,6 +473,21 @@ test("grouped by priority, the pins not leading, the List runs from the most pre
   assert.equal(page.querySelector(".tasks-list [data-cell='repository']"), null);
 });
 
+test("the title is the bar's heading with the List | Board switch after it, and Filter and View options end the bar", async () => {
+  const page = await mountPage();
+
+  const bar = page.querySelector("header") ?? assert.fail("no bar");
+  const [heading, actions] = [...bar.children];
+  assert.equal(bar.children.length, 2, "a heading and the acts, with no box of the page's own");
+  assert.equal(heading?.querySelector("h1")?.textContent, "Tasks");
+  assert.equal(
+    heading?.querySelector('[role="radiogroup"]')?.getAttribute("aria-label"),
+    "Tasks view",
+  );
+  assert.ok(actions?.querySelector('button[aria-label="Filter"]'), "Filter ends the bar");
+  assert.ok(actions?.querySelector('button[aria-label="View options"]'), "View options end it");
+});
+
 test("the switch beside the title shows the Board, kept on this Mac", async () => {
   const page = await mountPage();
   act(() => buttonNamed(page, "Board").click());
