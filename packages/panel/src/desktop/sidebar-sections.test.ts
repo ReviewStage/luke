@@ -575,34 +575,27 @@ test("a new section starts with no icon and is made without one", async () => {
   assert.equal("icon" in made, false);
 });
 
-test("a title typed after a refusal keeps the card up, takes the refusal away, and can still be made", async () => {
+test("New section waits on a title, and Enter in it makes the section", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
 
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section…").click());
-  await act(async () => dialogButton("Create section").click());
-  const refused = document.querySelector(
-    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
-  )?.textContent;
-  const title = document.querySelector<HTMLInputElement>('[aria-label="Section title"]');
-  assert.ok(title);
+  assert.equal(dialogButton("Create section").disabled, true, "a blank title is not offered");
+  const title = document.querySelector<HTMLInputElement>(
+    '[role="dialog"] [aria-label="Section title"]',
+  );
+  assert.ok(title, "a form is a dialog, not an alert");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(title, "S");
     title.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  const typed = document.querySelector<HTMLInputElement>(
-    '[role="alertdialog"] [aria-label="Section title"]',
-  )?.value;
-  const refusalAfterTyping = document.querySelector(
-    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
-  );
-  await act(async () => dialogButton("Create section").click());
+  assert.equal(dialogButton("Create section").disabled, false);
+  await act(async () => {
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
 
-  assert.equal(refused, "Name the section.");
-  assert.equal(typed, "S", "the card stays up with what was typed");
-  assert.equal(refusalAfterTyping, null);
   assert.equal(writes[0]?.kind, TASK_SECTION_WRITE.CREATE);
   assert.equal(writes[0]?.kind === TASK_SECTION_WRITE.CREATE && writes[0].title, "S");
 });

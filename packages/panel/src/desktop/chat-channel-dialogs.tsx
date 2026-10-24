@@ -2,26 +2,35 @@ import { CHAT_BOUNDS, type ChatAnswer, type ChatChannel } from "@luke/features/c
 import {
   ConfirmDialog,
   DIALOG_TONE,
+  Dialog,
+  DialogActions,
   type DialogConfirm,
+  ErrorLine,
   FormField,
   Stack,
+  TEXT_TONE,
+  Text,
   TextField,
   useConfirmDialog,
 } from "@luke/ui";
 import { type ChatChannelChange, topicName, topicNameProblem } from "@luke/ui/chat-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { useFormDialog } from "./use-form-dialog.js";
 
 /**
  * chat-channel-dialogs.tsx -- the questions Chat asks to open a topic channel, to rename it or say what it is for, and to archive it.
  *
  * A topic is the room's own, so any person in the workspace opens one,
  * names it, says in a line what it is for, and archives it, as an agent may
- * (`post_chat`). New channel and Edit channel ask the same two things: a
+ * (`post_chat`). New channel and Edit channel are forms, a `Dialog` with
+ * its fields and `DialogActions` at its foot, and ask the same two things: a
  * name, written as a channel's is (lower case, a hyphen for each run of
  * spaces), held to its grammar and refused where another channel holds it,
- * and a purpose, which shows under the name and in every agent's read.
- * Archive asks first, since an archived topic takes no post. Each answer
+ * and a purpose, which shows under the name and in every agent's read; the
+ * act stands unavailable until there is a name to try, and Enter in either
+ * field answers it. Archive is the one confirm, since an archived topic takes
+ * no post. Each answer
  * waits on the service, and a refusal stands in the card until the next
  * key changes what was asked.
  */
@@ -119,56 +128,74 @@ export function useChannelDialogs(
     if (confirm.rejection !== undefined) confirm.ask();
   };
   const editing = ask?.kind === CHANNEL_ASK.EDIT;
+  const form = useFormDialog(confirm, topicName(name) !== "");
+  const bodyId = useId();
   const dialog = (
     <>
-      <ConfirmDialog
-        confirm={confirm}
-        field={field}
-        question={{
-          title: editing ? "Edit channel" : "New channel",
-          body: "A topic channel is open to everyone in the workspace, agents included.",
-          verb: editing ? "Save" : "Create channel",
-          running: editing ? "Saving" : "Creating channel",
-          tone: DIALOG_TONE.PRIMARY,
-        }}
-      >
-        <Stack>
-          <FormField
-            label="Name"
-            description="Lowercase, with dashes, as agents write it after #."
-            count={{ length: name.length, limit: CHAT_BOUNDS.MAX_KEY_CHARS }}
-          >
-            {(control) => (
-              <TextField
-                ref={field}
-                field={control}
-                placeholder="release-train"
-                spellCheck={false}
-                maxLength={CHAT_BOUNDS.MAX_KEY_CHARS}
-                value={name}
-                disabled={confirm.busy}
-                onChange={typed(setName)}
-              />
-            )}
-          </FormField>
-          <FormField
-            label="Purpose"
-            description="Agents that read the channel see it too."
-            count={{ length: purpose.length, limit: CHAT_BOUNDS.MAX_PURPOSE_CHARS }}
-          >
-            {(control) => (
-              <TextField
-                field={control}
-                placeholder="What the channel is for, in a line"
-                maxLength={CHAT_BOUNDS.MAX_PURPOSE_CHARS}
-                value={purpose}
-                disabled={confirm.busy}
-                onChange={typed(setPurpose)}
-              />
-            )}
-          </FormField>
-        </Stack>
-      </ConfirmDialog>
+      {form.open ? (
+        <Dialog
+          title={editing ? "Edit channel" : "New channel"}
+          describedBy={bodyId}
+          busy={form.settling}
+          refused={form.refusal !== undefined}
+          initialFocus={field}
+          onDismiss={form.dismiss}
+          actions={
+            <DialogActions
+              onCancel={form.dismiss}
+              act={{
+                verb: editing ? "Save" : "Create channel",
+                tone: DIALOG_TONE.PRIMARY,
+                running: editing ? "Saving" : "Creating channel",
+                ...form.act,
+              }}
+            />
+          }
+        >
+          <Text id={bodyId} tone={TEXT_TONE.MUTED}>
+            A topic channel is open to everyone in the workspace, agents included.
+          </Text>
+          <Stack>
+            <FormField
+              label="Name"
+              description="Lowercase, with dashes, as agents write it after #."
+              count={{ length: name.length, limit: CHAT_BOUNDS.MAX_KEY_CHARS }}
+            >
+              {(control) => (
+                <TextField
+                  ref={field}
+                  field={control}
+                  placeholder="release-train"
+                  spellCheck={false}
+                  maxLength={CHAT_BOUNDS.MAX_KEY_CHARS}
+                  value={name}
+                  disabled={form.settling}
+                  onEnter={form.submit}
+                  onChange={typed(setName)}
+                />
+              )}
+            </FormField>
+            <FormField
+              label="Purpose"
+              description="Agents that read the channel see it too."
+              count={{ length: purpose.length, limit: CHAT_BOUNDS.MAX_PURPOSE_CHARS }}
+            >
+              {(control) => (
+                <TextField
+                  field={control}
+                  placeholder="What the channel is for, in a line"
+                  maxLength={CHAT_BOUNDS.MAX_PURPOSE_CHARS}
+                  value={purpose}
+                  disabled={form.settling}
+                  onEnter={form.submit}
+                  onChange={typed(setPurpose)}
+                />
+              )}
+            </FormField>
+          </Stack>
+          <ErrorLine>{form.refusal}</ErrorLine>
+        </Dialog>
+      ) : null}
       <ConfirmDialog
         confirm={archive}
         question={{

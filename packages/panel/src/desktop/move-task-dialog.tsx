@@ -1,11 +1,11 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
-  BUTTON_VARIANT,
-  Button,
   ChoiceList,
   DIALOG_SIZE,
+  DIALOG_TONE,
   Dialog,
+  DialogActions,
   type DialogConfirm,
   ErrorState,
   SCROLL_SIZE,
@@ -36,9 +36,10 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
  * first that can take it is chosen. Under the list it says what the move
  * does for the one chosen: who in the task's workspace loses it, who in the
  * other gains it, and that its agents go with it. The dialog is the move's
- * confirmation, so its act is the move itself. The question goes with its
- * task and its surface (`@luke/ui`'s `useConfirmDialog`), a move
- * landed puts it away, and a refused one keeps it up saying so under the
+ * confirmation, so its act is the move itself, at the foot of a `Dialog` that
+ * picks a destination rather than a `ConfirmDialog`, which only asks yes or
+ * no. The question goes with its task and its surface (`@luke/ui`'s
+ * `useConfirmDialog`), a move landed puts it away, and a refused one keeps it up saying so under the
  * list, the toast the move would raise held back in its favour.
  */
 
@@ -175,20 +176,18 @@ function MoveTaskCard({
       initialFocus={chosen === undefined ? cancel : first}
       onDismiss={dismiss}
       actions={
-        <>
-          <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={moving} onClick={dismiss}>
-            Cancel
-          </Button>
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            disabled={chosen === undefined}
-            busy={moving}
-            busyLabel="Moving"
-            onClick={() => confirm.run()}
-          >
-            {chosen === undefined ? "Move" : `Move to ${chosen.name}`}
-          </Button>
-        </>
+        <DialogActions
+          onCancel={dismiss}
+          cancelRef={cancel}
+          act={{
+            verb: chosen === undefined ? "Move" : `Move to ${chosen.name}`,
+            tone: DIALOG_TONE.PRIMARY,
+            running: "Moving",
+            busy: moving,
+            disabled: chosen === undefined,
+            onPress: () => confirm.run(),
+          }}
+        />
       }
     >
       <div className="move-dialog">
