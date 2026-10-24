@@ -481,6 +481,18 @@ test("deleting a section removes it at once with no dialog, and Undo brings it b
   assert.equal(icon?.textContent, "🚀");
 });
 
+test("deleting the last section hands focus to the first, rather than letting it fall to the window", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const { container: sidebar, draw } = await mountSidebarRedrawn(writes, BOTH_IN_LAUNCH);
+  openSectionMenu(sidebar, "Launch");
+
+  act(() => item("Delete section").click());
+  await draw(applied(BOTH_IN_LAUNCH, writes.splice(0)));
+
+  assert.deepEqual(sectionTitles(sidebar), ["Someday"]);
+  assert.ok(sectionHeader(sidebar, "Someday").contains(document.activeElement));
+});
+
 test("a section holding tasks offers what acts on all of them between Edit and Delete, after its move", async () => {
   const sidebar = await mountSidebar([], ICONLESS);
 

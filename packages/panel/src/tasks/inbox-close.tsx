@@ -6,6 +6,7 @@ import {
   CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
+  nextRowOrHead,
   STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
@@ -217,6 +218,13 @@ export function useInboxClose(
       closer === undefined || !open
         ? undefined
         : { label: CLOSE_ITEM_LABEL, icon: <GLYPH.CLOSE />, onSelect: ask },
-    dialog: <ConfirmDialog open confirm={confirm} question={closeQuestion(item)} />,
+    dialog: (
+      <ConfirmDialog
+        open
+        confirm={confirm}
+        question={closeQuestion(item)}
+        restoreTo={nextRowOrHead}
+      />
+    ),
   };
 }

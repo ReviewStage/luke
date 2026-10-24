@@ -14,6 +14,7 @@ import {
   Comment,
   ConfirmDialog,
   type DialogQuestion,
+  nextRowOrHead,
   STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
@@ -242,7 +243,7 @@ export function PendingComment({
         </div>
       )}
       <PullRequestWriteNote writes={writes} className="pull-request-thread-note" />
-      <ConfirmDialog open confirm={deleting} question={DELETE_QUESTION} />
+      <ConfirmDialog open confirm={deleting} question={DELETE_QUESTION} restoreTo={nextRowOrHead} />
     </div>
   );
   if (head === undefined) return body;
