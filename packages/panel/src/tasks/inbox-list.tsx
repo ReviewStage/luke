@@ -1076,7 +1076,7 @@ function ListHead({
         <PhoneHead
           place="inbox"
           start={head.phone.start}
-          title={<h1 className="desktop-toolbar-title">{title}</h1>}
+          title={<h1 className="luke-toolbar-title">{title}</h1>}
           end={
             <PlaceMore
               thing="Inbox"

@@ -17,6 +17,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   TOOLBAR_INSET,
+  TOOLBAR_LOOK,
   Toolbar,
   useMinute,
 } from "@luke/ui";
@@ -268,6 +269,8 @@ function TaskPageSkeleton({
         <>
           <Toolbar
             start={TOOLBAR_INSET.COLUMN}
+            look={TOOLBAR_LOOK.TABS}
+            measure
             title={<MainTabStripSkeleton />}
             actions={<TaskActionsSkeleton summary={summary.holds} />}
           />
@@ -1132,6 +1135,8 @@ function PlanDocument({
                       <>
                         <Toolbar
                           start={TOOLBAR_INSET.COLUMN}
+                          look={TOOLBAR_LOOK.TABS}
+                          measure
                           title={
                             <MainTabStrip
                               task={task}

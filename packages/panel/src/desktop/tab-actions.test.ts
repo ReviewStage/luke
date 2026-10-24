@@ -205,7 +205,7 @@ interface Bars {
 
 /** The two columns' bars, as the task's page draws them. */
 function bars(container: HTMLElement): Bars {
-  const main = container.querySelector<HTMLElement>(".desktop-task-main .desktop-toolbar");
+  const main = container.querySelector<HTMLElement>(".desktop-task-main .luke-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
   assert.ok(main && side, "both columns draw their bars");
   return { main, side };

@@ -11,12 +11,13 @@
  */
 
 import type { ReactNode } from "react";
-import { ToolbarFrame } from "../toolbar/toolbar-frame.js";
+import { ToolbarFrame, type ToolbarInset } from "../toolbar/toolbar-frame.js";
 
 export function PageToolbar({
   lead,
   heading,
   actions,
+  start,
 }: {
   /** What stands first, as it is: a way back, or a strip that draws its own heading. */
   lead?: ReactNode;
@@ -24,16 +25,14 @@ export function PageToolbar({
   heading?: ReactNode;
   /** The page's actions, at the strip's end; none draws no box. */
   actions?: ReactNode;
+  /** How far in the bar's first thing stands, as `Toolbar` names it; where its column's words start where none is named. */
+  start?: ToolbarInset | undefined;
 }): React.JSX.Element {
   return (
-    <ToolbarFrame>
+    <ToolbarFrame start={start}>
       {lead}
-      {heading === undefined ? null : (
-        <div className="luke-toolbar-heading desktop-toolbar-heading">{heading}</div>
-      )}
-      {actions === undefined ? null : (
-        <div className="luke-toolbar-actions desktop-toolbar-actions">{actions}</div>
-      )}
+      {heading === undefined ? null : <div className="luke-toolbar-heading">{heading}</div>}
+      {actions === undefined ? null : <div className="luke-toolbar-actions">{actions}</div>}
     </ToolbarFrame>
   );
 }

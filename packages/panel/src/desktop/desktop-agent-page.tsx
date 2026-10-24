@@ -190,7 +190,7 @@ function AgentPageBar({
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
+            className="luke-toolbar-title"
           >
             <InlineEdit
               value={label}

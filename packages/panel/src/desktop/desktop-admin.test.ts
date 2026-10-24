@@ -191,7 +191,7 @@ test("the Users view reads its roster through the window's host and draws its ac
 test("a view's toolbar is the app's own, headed by its section's name, in the title bar's row with no drag strip over it", async () => {
   const { page } = await open({ kind: "users" });
 
-  assert.equal(page.querySelector(".admin-page header.desktop-toolbar h1")?.textContent, "Users");
+  assert.equal(page.querySelector(".admin-page header.luke-toolbar h1")?.textContent, "Users");
   assert.equal(page.querySelector(".admin-page .desktop-drag-strip"), null);
 });
 

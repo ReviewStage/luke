@@ -212,7 +212,7 @@ export function TasksPage({
       <PhoneHead
         place="tasks"
         start={<NewTaskButton tasks={tasks} />}
-        title={<h1 className="desktop-toolbar-title">{TASKS}</h1>}
+        title={<h1 className="luke-toolbar-title">{TASKS}</h1>}
         end={
           <PlaceMore
             thing="Task list"

@@ -37,7 +37,14 @@
  *
  * A phone's bar (`TOOLBAR_LOOK.PHONE`) lays the same slots as one control a
  * corner, its title centred between them, and is named by the place it
- * heads (`place`).
+ * heads (`place`). A task's bar leads with its tab strip (`TOOLBAR_LOOK.TABS`),
+ * which a narrow room wraps to a row of its own.
+ *
+ * What the window around the bar knows and the bar does not, it says in
+ * custom properties on the room the bar stands in (`toolbar.css`): the
+ * bar's row, where the window's own buttons stand over an edge, what its
+ * ground is, and whether its title centres. No stylesheet of the window
+ * reaches into the bar's parts.
  *
  * A place the window cannot show keeps its bar (`NotFound`), so a link to
  * something gone still leaves its way back and the window's drag handle
@@ -103,6 +110,10 @@ export interface ToolbarProps {
   readonly look?: ToolbarLook | undefined;
   /** What the bar heads (`task`), which names it to the page's own rules and its tests as `task-head`. */
   readonly place?: string | undefined;
+  /** Whether the bar is a container its slots' rules answer the width of (`@container luke-toolbar`), so a control folds before the title or tabs beside it do. */
+  readonly measure?: boolean | undefined;
+  /** Whether every labelled control of the bar draws its glyph alone, named still. */
+  readonly folded?: boolean | undefined;
 }
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -114,11 +125,7 @@ function said(node: ReactNode): boolean {
 function ToolbarTitle({ title }: { title: ReactNode }): React.JSX.Element {
   if (typeof title !== "string") return <>{title}</>;
   return (
-    <OneLine
-      as={ONE_LINE_ELEMENT.H1}
-      hint={wholeWordsHint(title)}
-      className="luke-toolbar-title desktop-toolbar-title"
-    >
+    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className="luke-toolbar-title">
       {title}
     </OneLine>
   );
@@ -153,11 +160,20 @@ export function Toolbar({
   end,
   look,
   place,
+  measure,
+  folded,
 }: ToolbarProps): React.JSX.Element {
   return (
-    <ToolbarFrame start={start} end={end} look={look} place={place}>
+    <ToolbarFrame
+      start={start}
+      end={end}
+      look={look}
+      place={place}
+      measure={measure}
+      folded={folded}
+    >
       {said(lead) ? <div className="luke-toolbar-lead">{lead}</div> : null}
-      <div className="luke-toolbar-heading desktop-toolbar-heading">
+      <div className="luke-toolbar-heading">
         {said(title) ? (
           <ToolbarTitle title={title} />
         ) : pickUp !== undefined && pickUp.name !== "" ? (
@@ -165,9 +181,7 @@ export function Toolbar({
         ) : null}
         {said(tag) ? <span className="luke-toolbar-tag">{tag}</span> : null}
       </div>
-      {said(actions) ? (
-        <div className="luke-toolbar-actions desktop-toolbar-actions">{actions}</div>
-      ) : null}
+      {said(actions) ? <div className="luke-toolbar-actions">{actions}</div> : null}
     </ToolbarFrame>
   );
 }

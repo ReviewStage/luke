@@ -867,7 +867,7 @@ test("an automation's page read before the list stands the groups and rows a sch
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const reading = setupShape(page);
-  const acts = page.querySelectorAll(".desktop-toolbar-actions .luke-skeleton").length;
+  const acts = page.querySelectorAll(".luke-toolbar-actions .luke-skeleton").length;
   assert.ok(acts > 0, "its acts stand as blocks");
 
   listHeld = false;

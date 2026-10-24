@@ -878,7 +878,7 @@ function EditorToolbarFrame({
     <PageToolbar
       lead={
         <div className="automation-toolbar">
-          <div className="desktop-toolbar-heading">
+          <div className="luke-toolbar-heading">
             <nav className="automation-crumbs" aria-label="Path">
               <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
               <ChevronRightIcon aria-hidden="true" />
@@ -886,7 +886,7 @@ function EditorToolbarFrame({
             </nav>
             {tag}
           </div>
-          <div className="desktop-toolbar-actions">{children}</div>
+          <div className="luke-toolbar-actions">{children}</div>
         </div>
       }
     />

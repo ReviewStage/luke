@@ -68,6 +68,7 @@ export function PhoneHead({
   place,
   start,
   title,
+  tag,
   end,
 }: {
   /** What the row heads, which its class names, as `task-head` for a task. */
@@ -76,6 +77,8 @@ export function PhoneHead({
   start: React.ReactNode;
   /** What is on screen, centred, or what stands in its place, such as a search's field. */
   title: React.ReactNode;
+  /** What names the page's state, after the title on its baseline (an experiment's mark). */
+  tag?: React.ReactNode;
   /** The end corner's one control, the ⋯. */
   end: React.ReactNode;
 }): React.JSX.Element {
@@ -87,6 +90,7 @@ export function PhoneHead({
       end={TOOLBAR_INSET.COLUMN}
       lead={start}
       title={title}
+      tag={tag}
       actions={end}
     />
   );

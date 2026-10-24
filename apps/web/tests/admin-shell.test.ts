@@ -220,12 +220,13 @@ test("the toggle at the sidebar's top hides it and shows it again, remembered ac
 
 /**
  * Whether the view's toolbar starts past the sidebar's toggle: whether a rule
- * of the app's shared shell sheet that starts a toolbar at the toggle's
- * clearance reaches it. jsdom computes no padding drawn from a custom
- * property, so the sheet's own rules are read.
+ * of the app's shared shell sheet that sets where a toolbar's start stands to
+ * the toggle's clearance (`--luke-toolbar-start-at`) reaches the room around
+ * it. jsdom computes no padding drawn from a custom property, so the sheet's
+ * own rules are read.
  */
 function toolbarClearsToggle(page: HTMLElement): boolean {
-  const toolbar = page.querySelector("main header.desktop-toolbar");
+  const toolbar = page.querySelector("main header.luke-toolbar");
   if (toolbar === null) throw new Error("No toolbar heads the view");
   const laid = document.head.appendChild(document.createElement("style"));
   laid.textContent = SHELL_SHEET;
@@ -234,8 +235,9 @@ function toolbarClearsToggle(page: HTMLElement): boolean {
   return rules.some(
     (rule) =>
       rule instanceof CSSStyleRule &&
-      rule.style.getPropertyValue("padding-left") === "var(--sidebar-toggle-clearance)" &&
-      toolbar.matches(rule.selectorText),
+      rule.style.getPropertyValue("--luke-toolbar-start-at") ===
+        "var(--sidebar-toggle-clearance)" &&
+      toolbar.parentElement?.closest(rule.selectorText) != null,
   );
 }
 

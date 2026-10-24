@@ -1194,12 +1194,8 @@ function RailBar({
         <PhoneHead
           place="chat-rail"
           start={newChannel}
-          title={
-            <>
-              <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
-              <ExperimentTag narrow />
-            </>
-          }
+          title={<h1 className="luke-toolbar-title">{CHAT_LIST}</h1>}
+          tag={<ExperimentTag narrow />}
           end={
             <PlaceMore
               thing="Chat"
@@ -1231,6 +1227,7 @@ function RailBar({
       title={CHAT_LIST}
       tag={<ExperimentTag />}
       end={TOOLBAR_INSET.COLUMN}
+      folded
       actions={
         <>
           {viewOptions?.(undefined)}

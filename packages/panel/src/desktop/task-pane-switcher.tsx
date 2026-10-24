@@ -137,7 +137,7 @@ export function TaskHead({
         </Tooltip>
       }
       title={
-        <h1 className="desktop-toolbar-title">
+        <h1 className="luke-toolbar-title">
           <InlineEdit
             value={title}
             label="Task name"

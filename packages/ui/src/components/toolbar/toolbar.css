@@ -4,9 +4,25 @@
    the bar, its title in the dialog's type with a title's tracking, and a tag
    after it on its last baseline.
 
-   Each rule reaches the window's older `desktop-toolbar*` names beside the
-   bar's own, so a bar still built by hand draws as this one does until it
-   moves onto `Toolbar`. */
+   The window the bar stands in answers for what the bar cannot know, by
+   custom properties it sets on the room around a bar, which the bar reads
+   as it draws and no stylesheet of the window reaches into the bar to
+   change:
+
+   - `--luke-toolbar-height`, the row, and `--luke-toolbar-block-inset`,
+     what the row's top and bottom are padded by.
+   - `--luke-toolbar-start-at` and `--luke-toolbar-end-at`, where an edge
+     stands in place of its named inset: past the window's own buttons,
+     which stand over it, or at a column's edge.
+   - `--luke-toolbar-ground`, what the row is drawn on where it is not the
+     window's own.
+   - `--luke-toolbar-centre: on`, the title centred over the bar's column
+     between what stands at each side; the bar's start is then where the
+     column's own inset stands and `--luke-toolbar-start-at` is room kept
+     for the window's buttons.
+   - `--luke-toolbar-wrap-start` and `--luke-toolbar-wrap-end`, where a tab
+     strip's bar stands its edges in a narrow room, which wraps the strip
+     to a row of its own. */
 
 @layer components {
   /* A bar's height, a row and its hairline, where nothing names the
@@ -19,11 +35,14 @@
      words start, a row's inset further in, which is where a row's padding
      puts them; words on no row (a page's title) start there too, so a
      column reads down one edge. */
-  :is(.luke-toolbar, .desktop-toolbar) {
+  .luke-toolbar {
     --luke-toolbar-column-inset: var(--luke-space-12);
     --luke-toolbar-page-inset: calc(var(--luke-toolbar-column-inset) + var(--luke-row-inset));
     --luke-toolbar-start: var(--luke-toolbar-page-inset);
     --luke-toolbar-end: var(--luke-toolbar-page-inset);
+    --luke-toolbar-edge-block: var(--luke-toolbar-block-inset, var(--luke-space-8));
+    --luke-toolbar-edge-start: var(--luke-toolbar-start-at, var(--luke-toolbar-start));
+    --luke-toolbar-edge-end: var(--luke-toolbar-end-at, var(--luke-toolbar-end));
 
     position: relative;
     display: flex;
@@ -31,8 +50,19 @@
     align-items: center;
     gap: var(--luke-control-gap);
     min-height: var(--luke-toolbar-height);
-    padding: var(--luke-space-8) var(--luke-toolbar-end) var(--luke-space-8)
-      var(--luke-toolbar-start);
+    padding: var(--luke-toolbar-edge-block) var(--luke-toolbar-edge-end)
+      var(--luke-toolbar-edge-block) var(--luke-toolbar-edge-start);
+    background: var(--luke-toolbar-ground, transparent);
+  }
+
+  /* Only the desktop's window is dragged by its bar, and what stands on the
+     bar keeps its presses: the actions, and the buttons of a lead. */
+  [data-luke-profile="desktop"] .luke-toolbar {
+    -webkit-app-region: drag;
+  }
+
+  [data-luke-profile="desktop"] .luke-toolbar-actions {
+    -webkit-app-region: no-drag;
   }
 
   .luke-toolbar[data-start="column"] {
@@ -53,7 +83,7 @@
     gap: var(--luke-control-gap);
   }
 
-  :is(.luke-toolbar-heading, .desktop-toolbar-heading) {
+  .luke-toolbar-heading {
     min-width: 0;
     flex: 1;
   }
@@ -72,7 +102,7 @@
 
   /* Its room reaches 6px left of the words, so the title's own hover fill and
      field ring, which start there, are not clipped. */
-  :is(.luke-toolbar-title, .desktop-toolbar-title) {
+  .luke-toolbar-title {
     margin: 0 0 0 calc(-1 * var(--luke-space-6));
     padding-left: var(--luke-space-6);
     font-size: var(--luke-type-dialog-size);
@@ -80,7 +110,7 @@
     letter-spacing: var(--luke-type-title-tracking);
   }
 
-  :is(.luke-toolbar-actions, .desktop-toolbar-actions) {
+  .luke-toolbar-actions {
     position: relative;
     display: flex;
     flex: 0 0 auto;
@@ -92,6 +122,11 @@
      title centred between them, cut where it meets them. Each part stands
      in its own column, so a corner left empty leaves the title centred. */
   .luke-toolbar[data-look="phone"] {
+    /* The corners stand at the column's own edge: a phone draws no window
+       buttons over them. */
+    --luke-toolbar-start-at: initial;
+    --luke-toolbar-end-at: initial;
+
     display: grid;
     grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
   }
@@ -104,15 +139,99 @@
     gap: var(--luke-space-8);
   }
 
-  .luke-toolbar[data-look="phone"]
-    > .luke-toolbar-heading
-    > :is(.luke-toolbar-title, .desktop-toolbar-title) {
+  .luke-toolbar[data-look="phone"] > .luke-toolbar-heading:has(> .luke-toolbar-tag) {
+    align-items: last baseline;
+  }
+
+  .luke-toolbar[data-look="phone"] > .luke-toolbar-heading > .luke-toolbar-title {
     min-width: 0;
   }
 
   .luke-toolbar[data-look="phone"] > .luke-toolbar-actions {
     grid-column: 3;
     justify-content: flex-end;
+  }
+
+  /* A tab strip's bar leads with its strip, which a narrow room has no room
+     for beside the window's buttons and the actions, so the strip takes a row
+     of its own under them, as a phone's browser stands its tabs under its
+     address bar. The actions keep the top row's end, both rows clear of the
+     window's buttons at either edge, and the row beneath reaches past that
+     clearance to the column's own inset, its whole width. */
+  [data-room="narrow"] .luke-toolbar[data-look="tabs"] {
+    flex-wrap: wrap;
+    padding-right: var(--luke-toolbar-wrap-end, var(--luke-toolbar-end));
+    padding-left: var(--luke-toolbar-wrap-start, var(--luke-toolbar-start));
+  }
+
+  [data-room="narrow"] .luke-toolbar[data-look="tabs"] > .luke-toolbar-heading {
+    order: 1;
+    flex: 0 0
+      calc(
+        100% +
+        var(--luke-toolbar-wrap-start, var(--luke-toolbar-column-inset)) +
+        var(--luke-toolbar-wrap-end, var(--luke-toolbar-column-inset)) -
+        2 *
+        var(--luke-toolbar-column-inset)
+      );
+    margin-right: calc(
+      var(--luke-toolbar-column-inset) -
+      var(--luke-toolbar-wrap-end, var(--luke-toolbar-column-inset))
+    );
+    margin-left: calc(
+      var(--luke-toolbar-column-inset) -
+      var(--luke-toolbar-wrap-start, var(--luke-toolbar-column-inset))
+    );
+  }
+
+  [data-room="narrow"] .luke-toolbar[data-look="tabs"] > .luke-toolbar-heading + * {
+    min-height: var(--luke-control-height);
+    margin-left: auto;
+  }
+
+  /* The bar's own width is what its slots' rules answer, so a control folds
+     before the title or the tabs beside it do. */
+  .luke-toolbar[data-measure="true"] {
+    container: luke-toolbar / inline-size;
+  }
+
+  /* Every labelled control of the bar draws its glyph alone, named still. */
+  .luke-toolbar[data-folded="true"] {
+    --luke-fold: folded;
+  }
+
+  /* Where the window sets the bar to centre its title over a column (a list
+     whose first control stands past the window's buttons), the title stands
+     centred in the bar, each side holding at least what stands there: the
+     room kept for the window's buttons at the start, the actions at the end.
+     The title moves aside only once it would meet them, and is cut short only
+     once it no longer fits between them. The bar is inset alike on both
+     sides, so centred in the bar is centred in the column. */
+  @container style(--luke-toolbar-centre: on) {
+    .luke-toolbar {
+      display: grid;
+      grid-template-columns:
+        minmax(
+          calc(
+            var(--luke-toolbar-start-at, 0px) -
+            var(--luke-toolbar-column-inset) -
+            var(--luke-control-gap)
+          ),
+          1fr
+        )
+        minmax(0, max-content)
+        minmax(max-content, 1fr);
+      padding-left: var(--luke-toolbar-column-inset);
+    }
+
+    .luke-toolbar > .luke-toolbar-heading {
+      grid-column: 2;
+    }
+
+    .luke-toolbar > .luke-toolbar-actions {
+      grid-column: 3;
+      justify-self: end;
+    }
   }
 
   /* A document's name, picked up from its header once that has scrolled
