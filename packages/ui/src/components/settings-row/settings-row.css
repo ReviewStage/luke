@@ -131,7 +131,7 @@
   }
 
   .luke-settings-row-description {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-settings-row-error {
@@ -281,7 +281,7 @@
   }
 
   .luke-settings-changed-mark {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-tag-leading);
     font-weight: var(--luke-type-tag-weight);

@@ -3,6 +3,7 @@ import type {
   AdminSignInMethods,
   AdminTrend,
 } from "@luke/features/admin-answer-wire";
+import { formatCount, formatPercent } from "@luke/features/number-format";
 import {
   type ChartConfig,
   ChartContainer,
@@ -11,7 +12,6 @@ import {
 } from "@luke/ui/chart";
 import { DailyBars } from "@luke/ui/daily-bars";
 import { seriesHasNoData } from "@luke/ui/daily-series";
-import { formatCount } from "@luke/ui/time-format";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import { barRadius, barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
@@ -110,9 +110,7 @@ export function SignInMethodsChart({
     .filter((row) => row.accounts > 0)
     .map((row) => ({
       ...row,
-      label: `${formatCount(row.accounts)} · ${Math.round(
-        (row.accounts / totalAccounts) * 100,
-      )}% of accounts`,
+      label: `${formatCount(row.accounts)} · ${formatPercent(row.accounts / totalAccounts)} of accounts`,
     }));
 
   if (rows.length === 0) {

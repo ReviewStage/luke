@@ -15,7 +15,7 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { dayAndTimeText } from "@luke/ui/time-format";
+import { dayAndTimeText } from "@luke/features/time-format";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { test } from "vitest";

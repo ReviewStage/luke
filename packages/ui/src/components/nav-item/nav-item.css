@@ -27,8 +27,8 @@
     text-decoration: none;
     cursor: pointer;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -105,8 +105,8 @@
     grid-area: 1 / 1;
     place-items: center;
     transition:
-      opacity var(--luke-duration-hover) ease,
-      transform var(--luke-duration-hover) ease;
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
+      transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-nav-item-icon > svg {
@@ -176,7 +176,7 @@
     min-width: 0;
     flex: 1 1 0;
     overflow: hidden;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -208,21 +208,20 @@
   }
 
   .luke-nav-item-count {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     font-variant-numeric: tabular-nums;
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-nav-item-count[data-shown="on-hover"] {
     opacity: 0;
   }
 
-  /* Note that the accent count takes the accent's ink rather than its fill,
-     because a count is words, and the fill reads at 1.5:1 on the web's
-     light sidebar. */
-  .luke-nav-item-count[data-tone="accent"] {
-    color: var(--luke-color-accent-text);
+  /* A count of what waits on the reader is in the needs-you tone, as the
+     rows it counts are (`tokens/status-tone.css`); a tally keeps the muted ink. */
+  .luke-nav-item-count[data-tone]:not([data-tone="neutral"]) {
+    color: var(--luke-tone-ink);
   }
 
   .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {
@@ -240,7 +239,7 @@
      while the row is hovered or has the keyboard. */
   .luke-nav-item-shortcut {
     opacity: 0;
-    transition: opacity var(--luke-duration-quick) ease;
+    transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   .luke-nav-item:focus-visible:not(:disabled) > .luke-nav-item-shortcut {

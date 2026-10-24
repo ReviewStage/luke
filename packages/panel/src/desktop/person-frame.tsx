@@ -146,7 +146,7 @@ export function PersonSectionFrame({
         >
           {title}
         </Text>
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {count}
         </Text>
       </header>

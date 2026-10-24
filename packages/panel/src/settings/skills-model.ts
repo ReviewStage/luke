@@ -23,6 +23,7 @@ import {
   type InstalledSkillScope,
   type InstalledSkillSource,
 } from "@luke/features/installed-skill-wire";
+import { formatBytes, formatExactBytes } from "@luke/features/number-format";
 import {
   readSkillFile,
   SKILL_FILE_BOUNDS,
@@ -43,6 +44,7 @@ import {
 } from "@luke/features/task-wire";
 import { andList, countWords, TERM } from "@luke/features/words";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { STATUS_TONE, type StatusTone } from "@luke/ui";
 
 /**
  * skills-model.ts -- Settings › Skills and its Add skill dialog as the window draws them, judged without drawing: the rows and their lines, and what a paste would install.
@@ -62,8 +64,6 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 
 /** How many characters of a commit a row and the dialog show. */
 const SHORT_SHA = 7;
-
-const BYTES_PER_KB = 1024;
 
 /** What the page and the dialog say that no row's data says. */
 export const SKILLS_LINE = {
@@ -111,13 +111,6 @@ export function workspaceGroupTitle(workspace: Pick<Workspace, "name">): string 
 /** "Everyone in Stage": the dialog's workspace scope, named for the workspace. */
 function everyoneIn(workspace: Pick<Workspace, "name">): string {
   return `Everyone in ${workspace.name}`;
-}
-
-/** A size as a line says it: bytes under a kilobyte, kilobytes to one place under ten, else whole. */
-export function sizeText(bytes: number): string {
-  if (bytes < BYTES_PER_KB) return `${bytes} B`;
-  const kb = bytes / BYTES_PER_KB;
-  return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
 }
 
 /** "1 file", "4 files". */
@@ -323,10 +316,10 @@ const FILES_REFUSAL_WORDS = {
   [INSTALLED_SKILL_FILES_REFUSAL.NO_SKILL_FILE]: "has no SKILL.md in its folder.",
   [INSTALLED_SKILL_FILES_REFUSAL.DUPLICATE_PATH]: "holds two files at one path.",
   [INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES]: `holds more than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files.`,
-  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${sizeText(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
   [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_INVALID]:
     "needs a valid name and a description in its SKILL.md.",
-  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${sizeText(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
   [INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED]:
     "holds what looks like a credential. A skill must never carry one.",
 } as const satisfies Record<InstalledSkillFilesRefusal, string>;
@@ -371,10 +364,10 @@ const PROBLEM_WORDS = {
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING]: "No description",
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG]: `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
   [INSTALLED_SKILL_PROBLEM.FRONTMATTER_UNCLOSED]: "Frontmatter never closed",
-  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${sizeText(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
+  [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
   [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED]: "Holds what looks like a credential",
   [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES]: `More than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files`,
-  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${sizeText(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
+  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
 } as const satisfies Record<InstalledSkillProblem, string>;
 
 /** A skill's problems, joined into one line. */
@@ -398,14 +391,11 @@ const UNSUPPORTED_WORDS = {
 
 /* ----- The dialog ----- */
 
-/** How a line under the box reads: understood, a wait, or a problem. */
-export const DETECTED_TONE = {
-  DETECTED: "detected",
-  WAITING: "waiting",
-  PROBLEM: "problem",
-} as const;
-
-export type DetectedTone = (typeof DETECTED_TONE)[keyof typeof DETECTED_TONE];
+/** How a line under the box reads, of the status tones: understood, a wait, or a problem. */
+export type DetectedTone =
+  | typeof STATUS_TONE.COMPLETE
+  | typeof STATUS_TONE.NEUTRAL
+  | typeof STATUS_TONE.ATTENTION;
 
 /** The line under the box. */
 export interface DetectedLine {
@@ -423,16 +413,16 @@ export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
     case SKILL_PASTE_KIND.EMPTY:
       return undefined;
     case SKILL_PASTE_KIND.UNSUPPORTED:
-      return { text: UNSUPPORTED_WORDS[paste.reason], tone: DETECTED_TONE.PROBLEM };
+      return { text: UNSUPPORTED_WORDS[paste.reason], tone: STATUS_TONE.ATTENTION };
     case SKILL_PASTE_KIND.SOURCE:
       return {
         text: `Reading ${paste.owner}/${paste.repo}…`,
-        tone: DETECTED_TONE.WAITING,
+        tone: STATUS_TONE.NEUTRAL,
       };
     case SKILL_PASTE_KIND.TEXT:
       return {
         text: `Skill text${paste.name === undefined ? "" : ` · ${paste.name}`} · ${SKILLS_LINE.READING}`,
-        tone: DETECTED_TONE.WAITING,
+        tone: STATUS_TONE.NEUTRAL,
       };
   }
 }
@@ -440,12 +430,12 @@ export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
 /** What a preview that leaves nothing to show says under the box: no skill in the repository, or a source Luke does not read. */
 export function previewLine(preview: InstalledSkillPreview): DetectedLine | undefined {
   if (preview.kind === SKILL_PASTE_KIND.UNSUPPORTED) {
-    return { text: UNSUPPORTED_WORDS[preview.reason], tone: DETECTED_TONE.PROBLEM };
+    return { text: UNSUPPORTED_WORDS[preview.reason], tone: STATUS_TONE.ATTENTION };
   }
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE || preview.skills.length > 0) return undefined;
   return {
     text: `No skills found in ${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}.`,
-    tone: DETECTED_TONE.PROBLEM,
+    tone: STATUS_TONE.ATTENTION,
   };
 }
 
@@ -506,7 +496,7 @@ export function addSkillTitle(
 
 /** The one line the box folds into once previewed: where the skills come from, or the text's size. */
 export function previewSourceLine(screen: AddSkillScreen, preview: InstalledSkillPreview): string {
-  if (preview.kind === SKILL_PASTE_KIND.TEXT) return `Pasted text · ${sizeText(preview.bytes)}`;
+  if (preview.kind === SKILL_PASTE_KIND.TEXT) return `Pasted text · ${formatBytes(preview.bytes)}`;
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE) return "";
   const where = `${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}`;
   return screen === ADD_SKILL_SCREEN.BROWSE
@@ -527,10 +517,10 @@ export function othersLine(count: number): string {
   return `${count} other ${count === 1 ? "skill" : "skills"} in this repo`;
 }
 
-/** What a found skill holds and where: "2 files · 0.4 KB · skills/productivity/grill-me". */
+/** What a found skill holds and where: "2 files · 0.4 kB · skills/productivity/grill-me". */
 export function candidateFacts(candidate: InstalledSkillCandidate): string {
   const where = candidate.path === "" ? "repository root" : candidate.path;
-  return `${filesText(candidate.fileCount)} · ${sizeText(candidate.bytes)} · ${where}`;
+  return `${filesText(candidate.fileCount)} · ${formatBytes(candidate.bytes)} · ${where}`;
 }
 
 /** Whether a found skill may be ticked at all: one with problems never installs. */
@@ -560,20 +550,10 @@ export function installable(
   return tickable(candidate) && standingIn(candidate, scope) === undefined;
 }
 
-/** How a mark beside a found skill's name reads, as a badge's tone does. */
-export const SKILL_MARK_TONE = {
-  NEUTRAL: "neutral",
-  COMPLETE: "complete",
-  WORKING: "working",
-  ATTENTION: "attention",
-} as const;
-
-export type SkillMarkTone = (typeof SKILL_MARK_TONE)[keyof typeof SKILL_MARK_TONE];
-
 /** One mark beside a found skill's name. */
 export interface SkillMark {
   readonly text: string;
-  readonly tone: SkillMarkTone;
+  readonly tone: StatusTone;
 }
 
 /** The skills.sh partners the `skills` tool names, by the key skills.sh answers under. */
@@ -655,16 +635,16 @@ export function candidateMarks(
   const marks: SkillMark[] = [];
   const standing = standingIn(candidate, scope);
   if (standing === INSTALLED_SKILL_STANDING.CURRENT) {
-    marks.push({ text: SKILLS_LINE.INSTALLED, tone: SKILL_MARK_TONE.COMPLETE });
+    marks.push({ text: SKILLS_LINE.INSTALLED, tone: STATUS_TONE.COMPLETE });
   } else if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
-    marks.push({ text: SKILLS_LINE.UPDATE_AVAILABLE, tone: SKILL_MARK_TONE.WORKING });
+    marks.push({ text: SKILLS_LINE.UPDATE_AVAILABLE, tone: STATUS_TONE.WORKING });
   } else if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
     marks.push({
       text: `Name taken in ${scopeName(scope, workspace)}`,
-      tone: SKILL_MARK_TONE.ATTENTION,
+      tone: STATUS_TONE.ATTENTION,
     });
   }
-  if (candidate.hasScripts === true) marks.push({ text: "scripts", tone: SKILL_MARK_TONE.NEUTRAL });
+  if (candidate.hasScripts === true) marks.push({ text: "scripts", tone: STATUS_TONE.NEUTRAL });
   return marks;
 }
 
@@ -674,16 +654,16 @@ export function candidateNote(
   scope: InstalledSkillScope,
 ): DetectedLine | undefined {
   if (!tickable(candidate)) {
-    return { text: problemsLine(candidate.problems), tone: DETECTED_TONE.PROBLEM };
+    return { text: problemsLine(candidate.problems), tone: STATUS_TONE.ATTENTION };
   }
   const standing = standingIn(candidate, scope);
   if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
-    return { text: "Update it from the Skills page instead.", tone: DETECTED_TONE.WAITING };
+    return { text: "Update it from the Skills page instead.", tone: STATUS_TONE.NEUTRAL };
   }
   if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
     return {
       text: `Another skill named ${candidate.name} is installed there. Remove it first, or install for the other scope.`,
-      tone: DETECTED_TONE.WAITING,
+      tone: STATUS_TONE.NEUTRAL,
     };
   }
   return undefined;

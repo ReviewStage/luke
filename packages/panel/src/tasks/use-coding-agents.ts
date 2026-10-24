@@ -29,6 +29,7 @@ import {
 } from "@luke/features/pull-request-chapters-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
+import { STATUS_TONE } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -42,7 +43,7 @@ import {
 } from "../composer-drafts.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, UNDO_LABEL, useToast } from "../toast.js";
 import { useChatOn } from "./chat-gate.js";
 import {
   type AgentRun,
@@ -676,7 +677,7 @@ export function useCodingAgents(input: {
   const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
   const failed = useCallback(
-    (words: string) => toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [toast],
   );
   // Note that the acts and the opening are read through a ref, because the
@@ -1332,7 +1333,7 @@ export function useCodingAgents(input: {
     );
     toast({
       words: words.done,
-      tone: TOAST_TONE.DONE,
+      tone: STATUS_TONE.COMPLETE,
       action: {
         label: UNDO_LABEL,
         onPress: () => archiveNow.current(agentId, !archived).then(sayRefusal),
@@ -1360,7 +1361,7 @@ export function useCodingAgents(input: {
         ? was
         : { ...was, agents: was.agents.filter((agent) => agent.id !== agentId) },
     );
-    toast({ words: DELETE_WORDS.done, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    toast({ words: DELETE_WORDS.done, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
     // Note that the list is read again, which drops a read already out that still holds the agent.
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };

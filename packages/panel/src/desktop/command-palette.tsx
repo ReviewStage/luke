@@ -51,6 +51,7 @@
  */
 
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { readFailedWords, TERM } from "@luke/features/words";
@@ -106,7 +107,6 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
-import { formatCount } from "@luke/ui/time-format";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -1683,7 +1683,7 @@ export function CommandPalette({
             <Command.Group
               key={section.kind}
               heading={
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   {FILTER_LABEL[section.kind]}
                 </Text>
               }
@@ -1704,7 +1704,7 @@ export function CommandPalette({
           ))}
           {cut ? (
             <div className="command-palette-notice">
-              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                 {TRUNCATED_LINE}
               </Text>
             </div>

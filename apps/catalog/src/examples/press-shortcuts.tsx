@@ -9,11 +9,11 @@ import {
   IconButton,
   Inline,
   MARK_STRIP_LOOK,
-  MARK_STRIP_TONE,
   MarkStrip,
   Menu,
   PlayIcon,
   SplitButton,
+  STATUS_TONE,
   type StripMark,
   TEXT_TONE,
   Text,
@@ -89,21 +89,21 @@ function HeardSplit({ onDone }: { onDone: (what: string) => void }): React.JSX.E
 }
 
 const MARKS: readonly StripMark[] = [
-  { tone: MARK_STRIP_TONE.DANGER, viewed: true },
-  { tone: MARK_STRIP_TONE.ATTENTION, current: true },
-  { tone: MARK_STRIP_TONE.COMPLETE },
-  { tone: MARK_STRIP_TONE.ATTENTION },
+  { tone: STATUS_TONE.DANGER, viewed: true },
+  { tone: STATUS_TONE.ATTENTION, current: true },
+  { tone: STATUS_TONE.COMPLETE },
+  { tone: STATUS_TONE.ATTENTION },
   {},
 ];
 
 /** A changed file's bar for each of a pull request's files, a renamed one in the working tone, the file shown standing wider. */
 const BARS: readonly StripMark[] = [
-  { tone: MARK_STRIP_TONE.COMPLETE, viewed: true },
-  { tone: MARK_STRIP_TONE.ATTENTION },
-  { tone: MARK_STRIP_TONE.ATTENTION, current: true },
-  { tone: MARK_STRIP_TONE.WORKING },
-  { tone: MARK_STRIP_TONE.DANGER },
-  ...Array.from({ length: 40 }, () => ({ tone: MARK_STRIP_TONE.ATTENTION })),
+  { tone: STATUS_TONE.COMPLETE, viewed: true },
+  { tone: STATUS_TONE.ATTENTION },
+  { tone: STATUS_TONE.ATTENTION, current: true },
+  { tone: STATUS_TONE.WORKING },
+  { tone: STATUS_TONE.DANGER },
+  ...Array.from({ length: 40 }, () => ({ tone: STATUS_TONE.ATTENTION })),
 ];
 
 function PressShortcuts(): React.JSX.Element {

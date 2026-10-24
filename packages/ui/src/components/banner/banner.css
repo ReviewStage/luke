@@ -10,8 +10,9 @@
     flex: none;
   }
 
-  .luke-banner[data-tone="attention"] {
-    --luke-banner-ink: var(--luke-color-attention);
+  /* Its glyph is in its status tone's ink (`tokens/status-tone.css`). */
+  .luke-banner[data-tone] {
+    --luke-banner-ink: var(--luke-tone-ink);
   }
 
   .luke-banner-row {
@@ -98,8 +99,8 @@
     background: var(--luke-color-fill-strong);
   }
 
-  .luke-banner[data-look="card"][data-tone="attention"] .luke-banner-glyph {
-    background: color-mix(in srgb, var(--luke-banner-ink) 14%, transparent);
+  .luke-banner[data-look="card"][data-tone]:not([data-tone="neutral"]) .luke-banner-glyph {
+    background: var(--luke-tone-tint);
     color: var(--luke-banner-ink);
   }
 

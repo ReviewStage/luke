@@ -6,6 +6,7 @@ import {
   type GitHubTokenStatus,
   type GitHubTokenSummary,
 } from "@luke/features/github-token-wire";
+import { dayText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_TYPE,
@@ -33,7 +34,6 @@ import {
   TextLink,
   useConfirmDialog,
 } from "@luke/ui";
-import { dayText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";

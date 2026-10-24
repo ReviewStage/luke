@@ -79,7 +79,7 @@ test("an automation's agent with no plan is toasted under the automation's name,
       toast.querySelector(".luke-toast-detail")?.textContent,
       toast.dataset.tone,
     ],
-    ["Triage overnight issues failed", "Morning Sentry triage", "failed"],
+    ["Triage overnight issues failed", "Morning Sentry triage", "danger"],
   );
   const view = [...toast.querySelectorAll("button")].find(
     (button) => button.textContent === "View",

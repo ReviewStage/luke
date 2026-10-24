@@ -15,6 +15,7 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestAction,
   type PullRequestActionRequest,
+  type PullRequestRefusal,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -22,7 +23,6 @@ import {
   BUTTON_SIZE,
   CHIP_LOOK,
   CHIP_SIZE,
-  CHIP_TONE,
   Chip,
   ChipName,
   COMMAND_LINK_ELEMENT,
@@ -32,6 +32,7 @@ import {
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
+  STATUS_TONE,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -146,13 +147,25 @@ export const WRITE_NOTE = {
 
 export type WriteNote =
   | { readonly kind: typeof WRITE_NOTE.SIGN_IN }
-  | { readonly kind: typeof WRITE_NOTE.WORDS; readonly words: string };
+  | {
+      readonly kind: typeof WRITE_NOTE.WORDS;
+      readonly words: string;
+      /** Why the service refused it, where the control that sent it does more than say its words. */
+      readonly reason?: PullRequestRefusal | undefined;
+    };
 
-/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why. */
-type WriteOutcome = { readonly done: true } | { readonly done: false; readonly words: string };
+/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why, and the note it left. */
+export type WriteOutcome =
+  | { readonly done: true }
+  | { readonly done: false; readonly words: string; readonly note: WriteNote };
 
 /** What a press sent while another change is out is told: it was not sent. */
-const NOT_SENT: WriteOutcome = { done: false, words: "Another change is on its way to GitHub." };
+const NOT_SENT_WORDS = "Another change is on its way to GitHub.";
+const NOT_SENT: WriteOutcome = {
+  done: false,
+  words: NOT_SENT_WORDS,
+  note: { kind: WRITE_NOTE.WORDS, words: NOT_SENT_WORDS },
+};
 
 /** How an answer went, in the words its line says where GitHub did not make the change. */
 function outcomeOf(note: WriteNote | undefined): WriteOutcome {
@@ -160,6 +173,7 @@ function outcomeOf(note: WriteNote | undefined): WriteOutcome {
   return {
     done: false,
     words: note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words,
+    note,
   };
 }
 
@@ -188,7 +202,12 @@ export function noteOf(
     case PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED:
       return { kind: WRITE_NOTE.SIGN_IN };
     case PULL_REQUEST_WRITE_OUTCOME.REFUSED:
-      return { kind: WRITE_NOTE.WORDS, words: WRITE_WORDS.refused(answer.words) };
+      return {
+        kind: WRITE_NOTE.WORDS,
+        words: WRITE_WORDS.refused(answer.words),
+        // Note that only a change's answer names why; a viewed mark's never does.
+        reason: "reason" in answer ? answer.reason : undefined,
+      };
   }
 }
 
@@ -279,7 +298,7 @@ function queuedWords(queued: { readonly position?: number | undefined }): string
  * opens the changes that may be made from there, and a merged pull request,
  * which no change leaves, is a badge. An open one GitHub holds in its merge
  * queue says so in the pill, as stage-cli's does: Queued and its place, in
- * the attention tone with the merge's mark, its menu offering Close alone.
+ * the working tone with the merge's mark, its menu offering Close alone.
  * Note that the pill is a compact one, which `@luke/ui` draws in a badge's
  * box, so every state stands at the one size the app's status badges do,
  * the one with a menu adding its chevron.
@@ -300,7 +319,7 @@ export function PullRequestStateMenu({
   const menu = useMenu(actions.length > 0);
   const words = inQueue ? queuedWords(queued) : STATE_WORDS[pullRequest.state];
   const label = `Pull request ${words}`;
-  const tone = inQueue ? CHIP_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
+  const tone = inQueue ? STATUS_TONE.WORKING : PULL_REQUEST_TONE[pullRequest.state];
   const mark = inQueue ? (
     <GitMergeIcon aria-hidden="true" />
   ) : (

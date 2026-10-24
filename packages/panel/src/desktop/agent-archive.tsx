@@ -8,6 +8,7 @@ import {
   IconButton,
   LAYOUT_ELEMENT,
   OneLine,
+  STATUS_TONE,
   Stack,
   Tooltip,
   UnarchiveIcon,
@@ -20,7 +21,7 @@ import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { agentStillWriting, agentTabLabel } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
 
@@ -82,7 +83,7 @@ function useArchivePress(agents: CodingAgentsControl) {
   return (agentId: string, archived: boolean) =>
     agents.onArchive(agentId, archived).then((result: ActionResult) => {
       if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
-      toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
 }
 

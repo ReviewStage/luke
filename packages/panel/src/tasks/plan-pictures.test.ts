@@ -16,6 +16,7 @@ import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { PlanBody } from "./plan-body.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -46,6 +47,7 @@ const HOUR = 60 * 60 * 1000;
 let root: Root | undefined;
 
 afterEach(() => {
+  releaseMotion();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -278,7 +280,8 @@ test("a picture whose read went unanswered says so alone, and the picture drawn 
   const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, first), live: false }));
   assert.equal(view.querySelector(".picture-block")?.textContent, "First mock · not available");
 
-  // A plan drawn again asks the window whether motion is reduced, which a page with no layout cannot say.
+  // A plan drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
+  holdMotion();
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({

@@ -233,3 +233,28 @@ test("a document with nothing above its text leaves ↑ on its first line to the
 
   assert.equal(up.defaultPrevented, false);
 });
+
+test("a word changed inside a GitHub alert keeps its marker unescaped, so GitHub still draws it as an alert", () => {
+  const { editor, last } = mounted(BODY);
+
+  const { from, to } = positionsOf(editor, "behaves");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.insertText("works", from, to));
+  });
+
+  assert.equal(last(), BODY.replace("The plan behaves as before.", "The plan works as before."));
+});
+
+test("a body saved with Windows line endings comes back byte for byte untouched, and keeps them where a word is changed", () => {
+  const crlf = BODY.replaceAll("\n", "\r\n");
+  const { editor, handle, last } = mounted(crlf);
+
+  assert.equal(handle.markdown(), crlf);
+
+  const { from, to } = positionsOf(editor, "lifts");
+  act(() => {
+    editor.view.dispatch(editor.state.tr.insertText("moves", from, to));
+  });
+
+  assert.equal(last(), crlf.replace("This lifts the editor", "This moves the editor"));
+});

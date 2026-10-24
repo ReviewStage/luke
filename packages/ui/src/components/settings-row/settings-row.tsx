@@ -1,5 +1,6 @@
 import { type ReactNode, useId } from "react";
-import { AlertIcon, CheckIcon } from "../../face/glyphs.js";
+import { CheckIcon } from "../../face/glyphs.js";
+import { AlertIcon } from "../../icons/lucide-glyphs.js";
 import { GAP, type Gap, Inline } from "../layout/layout.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";

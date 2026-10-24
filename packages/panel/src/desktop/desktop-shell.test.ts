@@ -22,7 +22,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { NAV_COUNT_TONE } from "@luke/ui";
+import { STATUS_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -1261,7 +1261,7 @@ test("the sidebar's Chat row stands only while the account has Chat on and a cha
   );
 });
 
-test("⌘K's Chat opens Chat only while the account has it on and a chat is available, and the row counts what waits in the Inbox's accent", async () => {
+test("⌘K's Chat opens Chat only while the account has it on and a chat is available, and the row counts what waits in the needs-you tone its rows wear", async () => {
   let opened = 0;
   const chat = fixtureChat({ fixtureMode: true }, 0);
   const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
@@ -1278,7 +1278,7 @@ test("⌘K's Chat opens Chat only while the account has it on and a chat is avai
   assert.equal(runAppCommand(APP_COMMAND.CHAT), true);
   assert.equal(opened, 1);
   const count = chatRow(page)?.querySelector<HTMLElement>(".luke-nav-item-count");
-  assert.equal(count?.dataset.tone, NAV_COUNT_TONE.ACCENT);
+  assert.equal(count?.dataset.tone, STATUS_TONE.ATTENTION);
 });
 
 test("⌘K's Admin opens the Admin place for an admin alone, and is offered nothing for anyone else", async () => {

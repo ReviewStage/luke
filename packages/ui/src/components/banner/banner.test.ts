@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { BANNER_LOOK, BANNER_TONE, Banner } from "./banner.js";
+import { STATUS_TONE } from "../../status-tone.js";
+import { BANNER_LOOK, Banner } from "./banner.js";
 
 /**
  * banner.test.ts -- a banner is a region named by its own words, its glyph
@@ -52,7 +53,7 @@ test("a banner's presses answer it, in reading order after its words", () => {
   const view = render(
     createElement(Banner, {
       look: BANNER_LOOK.STRIP,
-      tone: BANNER_TONE.ATTENTION,
+      tone: STATUS_TONE.ATTENTION,
       glyph: null,
       actions: [
         createElement(

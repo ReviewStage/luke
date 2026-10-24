@@ -3,7 +3,7 @@ import {
   type ChangedFileStatus,
   type CodingAgentChangedFile,
 } from "@luke/features/coding-agent-wire";
-import { MARK_STRIP_LOOK, MARK_STRIP_TONE, MarkStrip, type MarkStripTone } from "@luke/ui";
+import { MARK_STRIP_LOOK, MarkStrip, STATUS_TONE, type StatusTone } from "@luke/ui";
 
 /**
  * changes-strip.tsx -- the thin strip Files changed leaves in its tree's place while the tree is hidden: one mark for each changed file, in the tree's order, the pointer resting on it peeking the tree out over the list.
@@ -29,16 +29,16 @@ export interface StripPeek {
 }
 
 /** A file's mark's tone, as its letter's in the tree: added, deleted, renamed, or else changed. */
-function statusTone(status: ChangedFileStatus): MarkStripTone {
+function statusTone(status: ChangedFileStatus): StatusTone {
   switch (status) {
     case CHANGED_FILE_STATUS.ADDED:
-      return MARK_STRIP_TONE.COMPLETE;
+      return STATUS_TONE.COMPLETE;
     case CHANGED_FILE_STATUS.DELETED:
-      return MARK_STRIP_TONE.DANGER;
+      return STATUS_TONE.DANGER;
     case CHANGED_FILE_STATUS.RENAMED:
-      return MARK_STRIP_TONE.WORKING;
+      return STATUS_TONE.WORKING;
     default:
-      return MARK_STRIP_TONE.ATTENTION;
+      return STATUS_TONE.ATTENTION;
   }
 }
 

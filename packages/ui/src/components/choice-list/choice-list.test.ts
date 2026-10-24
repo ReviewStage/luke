@@ -4,12 +4,11 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { BADGE_TONE } from "../badge/badge.js";
+import { STATUS_TONE } from "../../status-tone.js";
 import {
   CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
-  CHOICE_TONE,
   ChoiceList,
   type ChoiceLook,
   type ChoiceOption,
@@ -186,7 +185,7 @@ test("an open row's badge stands in the attention tone unless the option names i
       legend: "Retries",
       options: [
         { value: "three", label: "Retry 3 times", badge: "Recommended" },
-        { value: "never", label: "Never retry", badge: "Quiet", badgeTone: BADGE_TONE.NEUTRAL },
+        { value: "never", label: "Never retry", badge: "Quiet", badgeTone: STATUS_TONE.NEUTRAL },
       ],
       value: [],
       onChange: () => undefined,
@@ -197,8 +196,8 @@ test("an open row's badge stands in the attention tone unless the option names i
     badge.getAttribute("data-tone"),
   ]);
   assert.deepEqual(tones, [
-    ["Recommended", BADGE_TONE.ATTENTION],
-    ["Quiet", BADGE_TONE.NEUTRAL],
+    ["Recommended", STATUS_TONE.ATTENTION],
+    ["Quiet", STATUS_TONE.NEUTRAL],
   ]);
 });
 
@@ -293,8 +292,8 @@ test("a list across stands its rows side by side, each toned row filling its che
     return createElement(ChoiceList<string>, {
       legend: "Decision",
       options: [
-        { value: "yes", label: "Approve", tone: CHOICE_TONE.COMPLETE },
-        { value: "no", label: "Decline", tone: CHOICE_TONE.DANGER },
+        { value: "yes", label: "Approve", tone: STATUS_TONE.COMPLETE },
+        { value: "no", label: "Decline", tone: STATUS_TONE.DANGER },
       ],
       value,
       look: CHOICE_LOOK.MARKED,

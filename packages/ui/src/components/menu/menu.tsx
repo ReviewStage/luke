@@ -480,7 +480,7 @@ function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[])
 /** The slot at a row's end, one glyph wide, after any hint; a setting's check in the text's own ink. */
 function endSlot(afterHint: boolean, setting: boolean): string {
   return cn(
-    "luke-menu-item-end grid size-menu-glyph flex-none place-items-center text-subtle-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
+    "luke-menu-item-end grid size-menu-glyph flex-none place-items-center text-muted-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
     !afterHint && "ml-auto",
     setting && "text-foreground",
   );
@@ -1049,7 +1049,7 @@ export function Menu({
           <>
             <DropdownMenuSeparator className="luke-menu-rule" />
             <div
-              className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-subtle-foreground"
+              className="luke-menu-footer flex flex-col gap-luke-2 px-row-inset py-luke-4 text-caption leading-[inherit] text-muted-foreground"
               role="none"
             >
               {footer}

@@ -997,6 +997,12 @@ body {
   gap: var(--luke-icon-gap);
 }
 
+.catalog-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--luke-space-12);
+}
+
 .catalog-glyph-line-top {
   align-items: flex-start;
 }

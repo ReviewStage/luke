@@ -19,7 +19,7 @@
     width: 11px;
     height: 11px;
     flex: 0 0 auto;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 }
 

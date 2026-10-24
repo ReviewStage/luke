@@ -284,7 +284,7 @@ function FootNote({
 }): React.JSX.Element {
   return (
     <div className="task-compose-menu-foot-note" data-aligned={aligned || undefined}>
-      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
     </div>
@@ -360,7 +360,7 @@ export function MenuRowList({
           <Fragment key={first}>
             {section.heading === undefined ? null : (
               <div className="menu-row-list-heading" aria-hidden="true">
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   {section.heading}
                 </Text>
               </div>

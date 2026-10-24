@@ -32,8 +32,8 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   [data-luke-profile="desktop"] .luke-chip {
@@ -110,7 +110,7 @@
   .luke-chip-face > svg.settings-chevron {
     width: 12px;
     height: 12px;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   /* A toolbar chip and a field light under the pointer and while their
@@ -209,7 +209,7 @@
   /* A count after the words (`ChipCount`), quiet, at fixed figures; on a
      pressed filter it steps back from the ground's colour its words are in. */
   .luke-chip-count {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-variant-numeric: tabular-nums;
   }
 
@@ -239,7 +239,7 @@
      scales it the same way, so the two never play at once. */
   .luke-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
-      luke-chip-fade-in var(--luke-duration-quick) ease-out backwards,
+      luke-chip-fade-in var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
@@ -318,24 +318,9 @@
     background: var(--luke-chip-tone);
   }
 
-  .luke-chip[data-tone="neutral"] {
-    --luke-chip-tone: var(--luke-color-text-muted);
-  }
-
-  .luke-chip[data-tone="attention"] {
-    --luke-chip-tone: var(--luke-color-attention);
-  }
-
-  .luke-chip[data-tone="complete"] {
-    --luke-chip-tone: var(--luke-color-complete);
-  }
-
-  .luke-chip[data-tone="merged"] {
-    --luke-chip-tone: var(--luke-color-merged);
-  }
-
-  .luke-chip[data-tone="danger"] {
-    --luke-chip-tone: var(--luke-color-danger-text);
+  /* Its leading mark and its dot are in its status tone's ink (`tokens/status-tone.css`). */
+  .luke-chip[data-tone] {
+    --luke-chip-tone: var(--luke-tone-ink);
   }
 
   /* The widths a place shares: the field column a settings row's pop-ups

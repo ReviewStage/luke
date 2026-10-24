@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
+  FINISH,
   PLACEMENT_END,
   type PlacedWords,
   type PlanEditorModule,
@@ -22,6 +23,7 @@ import {
 } from "../plan-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
+import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -114,7 +116,8 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  // A document arriving is drawn at once under reduced motion, which jsdom has no answer to.
+  // A document arriving is drawn at once where motion is held still.
+  holdMotion();
   const ignore = () => undefined;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -123,6 +126,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
   vi.restoreAllMocks();
@@ -799,7 +803,7 @@ test("the words the caret stood on stay where they stood as the editor closes, t
     DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
   );
 
-  act(() => open().onFinish(1));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
@@ -812,7 +816,7 @@ test("an editor closing with its caret on no words scrolls nothing", async () =>
   const scroller = scrollerOf(container);
   scroller.scrollTop = 500;
 
-  act(() => open().onFinish(1));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
   await settle();
 
   assert.equal(scroller.scrollTop, 500);

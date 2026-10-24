@@ -1,7 +1,7 @@
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import { BUTTON_VARIANT, Button, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { useState } from "react";
-import { MarkdownField } from "./markdown-field.js";
+import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import {
   PullRequestWriteNote,
   type PullRequestWrites,
@@ -46,7 +46,7 @@ export function usePullRequestComment(agentId: string, onWritten: () => void): P
   return { writes, body, setBody };
 }
 
-/** The box: its heading, the words with their preview, GitHub's answer where it did not take the last one, and Comment, which ⌘↩ presses too. */
+/** The box: its heading, the words written as they are drawn, GitHub's answer where it did not take the last one, and Comment, which ⌘↩ presses too. */
 export function PullRequestCommentBox({
   comment,
 }: {
@@ -54,7 +54,7 @@ export function PullRequestCommentBox({
 }): React.JSX.Element {
   const { writes, body, setBody } = comment;
   const sending = writes.pending !== undefined;
-  const blank = body.trim() === "";
+  const blank = body.trim() === "" || overCommentBound(body);
   const send = () => {
     if (blank || sending) return;
     writes.write({ action: PULL_REQUEST_ACTION.COMMENT, body }, () => setBody(""));
@@ -72,7 +72,7 @@ export function PullRequestCommentBox({
       >
         {COMMENT_WORDS.TITLE}
       </Text>
-      <MarkdownField
+      <CommentEditor
         label={COMMENT_WORDS.FIELD}
         placeholder={COMMENT_WORDS.PLACEHOLDER}
         value={body}
