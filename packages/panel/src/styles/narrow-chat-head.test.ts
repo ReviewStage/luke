@@ -5,8 +5,8 @@ import { afterEach, test } from "vitest";
 import { layContainersAt, shown } from "../testing/container-width.js";
 
 /**
- * narrow-chat-head.test.ts -- a Chat place's head on a phone keeps a topic's
- * menu. In a narrow room the head leads with the way back and gives its
+ * narrow-chat-head.test.ts -- a Chat place's head standing alone keeps a topic's
+ * menu. Where Chat is one column, by its own width or in a narrow room, the head leads with the way back and gives its
  * name the room, so what is said beside the name gives way; the topic's
  * menu at its end does not, since it is the only way to edit, archive, or
  * bring back a topic. jsdom lays nothing out, so the sheets are laid for a
@@ -23,14 +23,17 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A topic's head in a shell of the room given: the way back, its name, its purpose, and its menu. */
-function topicHead(room: string) {
+/** A topic's head in a shell of the room given, in a Chat standing as one column or beside its rail: the way back, its name, its purpose, and its menu. */
+function topicHead(room: string, single: boolean) {
   laid = layContainersAt({}, { touch: room === "narrow" });
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
   document.documentElement.dataset.lukeRoom = room;
-  const section = shell.appendChild(document.createElement("section"));
+  const view = shell.appendChild(document.createElement("div"));
+  view.className = "chat-view";
+  view.dataset.single = String(single);
+  const section = view.appendChild(document.createElement("section"));
   section.className = "chat-stream";
   const head = section.appendChild(document.createElement("header"));
   head.className = "luke-pane-bar";
@@ -54,14 +57,20 @@ function topicHead(room: string) {
 }
 
 test("in a narrow room a topic's head keeps the way back and its menu, and its purpose gives way", () => {
-  const { back, meta, menu } = topicHead("narrow");
+  const { back, meta, menu } = topicHead("narrow", true);
   assert.ok(shown(back), "the way back");
   assert.ok(shown(menu), "the topic's menu");
   assert.ok(!shown(meta), "the purpose gives way");
 });
 
-test("in a wide room a topic's head shows its purpose and its menu", () => {
-  const { meta, menu } = topicHead("wide");
+test("a Chat one column by its own width in a wide room gives its topic's purpose way too, keeping its menu", () => {
+  const { meta, menu } = topicHead("wide", true);
+  assert.ok(shown(menu), "the topic's menu");
+  assert.ok(!shown(meta), "the purpose gives way");
+});
+
+test("a topic's head beside its rail shows its purpose and its menu", () => {
+  const { meta, menu } = topicHead("wide", false);
   assert.ok(shown(meta), "the purpose");
   assert.ok(shown(menu), "the topic's menu");
 });
