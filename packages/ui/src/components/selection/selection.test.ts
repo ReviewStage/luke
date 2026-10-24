@@ -3,8 +3,10 @@
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { CardPress } from "../card-press/card-press.js";
 import { List, ListRow } from "../list-row/list-row.js";
 import { type SelectionAct, SelectionBar } from "./selection-bar.js";
+import { SelectionRegion } from "./selection-region.js";
 
 /**
  * selection.test.ts -- a List asked to choose rows does so as a Mac's list
@@ -17,7 +19,8 @@ import { type SelectionAct, SelectionBar } from "./selection-bar.js";
  * list not asked opens its row on a ⌘-click as it always has. The bar
  * over the list says how many are chosen, does its acts, drops an act's
  * menu, and clears on Clear and on Esc; with none chosen it draws nothing.
- * Synthetic places.
+ * A region of the app's own lists chooses its card presses the same way,
+ * across every list it holds. Synthetic places.
  */
 
 declare global {
@@ -389,4 +392,71 @@ test("the bar's buttons are one Tab stop, ←→ walking them", () => {
   expect(document.activeElement).toBe(button(container, "Move to section"));
   key("ArrowRight");
   expect(document.activeElement).toBe(button(container, "Clear selection"));
+});
+
+/** Places split over two lists of card presses, chosen together in one region; each place opened is listed after it. */
+function ChoosingCards(): React.JSX.Element {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [opened, setOpened] = useState<string[]>([]);
+  const list = (names: readonly string[]) =>
+    createElement(
+      "ul",
+      null,
+      names.map((name) =>
+        createElement(
+          "li",
+          { key: name },
+          createElement(CardPress, {
+            selectKey: name,
+            onPress: () => setOpened((held) => [...held, name]),
+            children: name,
+          }),
+        ),
+      ),
+    );
+  return createElement(
+    Fragment,
+    null,
+    createElement(SelectionRegion, {
+      id: "places",
+      selection: { selected, onChange: setSelected },
+      children: [
+        createElement(Fragment, { key: "first" }, list(PLACES.slice(0, 2))),
+        createElement(Fragment, { key: "rest" }, list(PLACES.slice(2))),
+      ],
+    }),
+    createElement("output", { "data-chosen": "" }, [...selected].join(",")),
+    createElement("output", { "data-opened": "" }, opened.join(",")),
+  );
+}
+
+test("a region chooses its card presses across its lists: ⌘-click one, ⇧-click a run into the next list, Esc none, a plain press opening its card", () => {
+  const page = draw(createElement(ChoosingCards));
+  const card = (name: string) => {
+    const press = [...page.querySelectorAll<HTMLButtonElement>("[data-card-press]")].find(
+      (each) => each.textContent === name,
+    );
+    if (press === undefined) throw new Error(`no card for ${name}`);
+    return press;
+  };
+  const click = (name: string, keys: MouseEventInit = {}) =>
+    act(() => {
+      card(name).dispatchEvent(new MouseEvent("click", { bubbles: true, ...keys }));
+    });
+  const chosen = () => page.querySelector("[data-chosen]")?.textContent;
+
+  click("Tasks", { metaKey: true });
+  click("Automations", { shiftKey: true });
+  expect(chosen()).toBe("Tasks,Chat,Automations");
+  expect(card("Chat").getAttribute("aria-description")).toBe("Selected");
+  expect(page.querySelector("[data-opened]")?.textContent).toBe("");
+
+  act(() => {
+    card("Chat").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  expect(chosen()).toBe("");
+  click("Inbox");
+  expect(page.querySelector("[data-opened]")?.textContent).toBe("Inbox");
 });

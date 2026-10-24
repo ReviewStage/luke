@@ -27,6 +27,10 @@ import {
  * the focus, which they take on with them, and stop at either end rather
  * than wrapping. ⌘A chooses every row, and Esc, while any is chosen, none.
  *
+ * A list of the app's own, whose rows are no `ListRow`s, chooses them the
+ * same way inside a `SelectionRegion`, each row's `CardPress` taking part
+ * by its key, its rows chosen together across every list the region holds.
+ *
  * Note that the order and who is available are read off the rows as they
  * are drawn, as `useRovingKeys` reads its items, because the rows are
  * drawn by whoever fills the list. And note that a key pressed in a field
@@ -52,6 +56,17 @@ export const ListSelectionContext = createContext<ListSelecting | undefined>(und
 /** The attribute a choosable row's press wears, naming its key. */
 const KEY_ATTRIBUTE = "data-select-key";
 
+/** The attribute the box whose rows are chosen together wears: a `List`, or a `SelectionRegion` over lists of the app's own. */
+const ROOT_ATTRIBUTE = "data-selection-root";
+
+/** What finds the box a row is chosen in. */
+const ROOT_SELECTOR = `[${ROOT_ATTRIBUTE}]`;
+
+/** What the box whose rows are chosen together wears. */
+export function selectionRoot(): { readonly "data-selection-root": "" } {
+  return { [ROOT_ATTRIBUTE]: "" };
+}
+
 /** What a row's press wears in a list that chooses rows. */
 export function selectableRow(key: string): { readonly "data-select-key": string } {
   return { [KEY_ATTRIBUTE]: key };
@@ -74,7 +89,7 @@ interface Choosable {
 /** The available rows of `list` that can be chosen, in the order they are drawn, none of a list nested in it. */
 function choosableOf(list: Element): Choosable[] {
   return Array.from(list.querySelectorAll<HTMLElement>(`[${KEY_ATTRIBUTE}]`))
-    .filter((press) => press.closest(".luke-list") === list)
+    .filter((press) => press.closest(ROOT_SELECTOR) === list)
     .filter(
       (press) => !press.matches(":disabled") && press.getAttribute("aria-disabled") !== "true",
     )
@@ -114,6 +129,16 @@ function command(event: { metaKey: boolean; ctrlKey: boolean }): boolean {
 }
 
 /**
+ * A ⇧-press on a row that can be chosen, which would otherwise select the
+ * words from the last press to this one: it takes the focus itself instead.
+ */
+export function holdRun(event: MouseEvent<HTMLElement>): void {
+  if (!event.shiftKey) return;
+  event.preventDefault();
+  event.currentTarget.focus();
+}
+
+/**
  * The selection a `List` keeps over its rows: what its rows read, and the
  * keys it hears, which answer whether they chose anything so the arrows'
  * walk is not also made. A list asked for none chooses nothing.
@@ -145,7 +170,7 @@ export function useListSelection(selection: ListSelection | undefined): {
       if (current === undefined) return false;
       const chosen = current.selected;
       if (event.shiftKey) {
-        const list = event.currentTarget.closest(".luke-list");
+        const list = event.currentTarget.closest(ROOT_SELECTOR);
         if (list === null) return false;
         const from = standing(chosen) ?? { key, base: chosen, head: key, left: chosen };
         const next = withRun(choosableOf(list), from.base, from.key, key);

@@ -110,6 +110,7 @@ export * from "./components/search-field/search-field.js";
 export * from "./components/searchable-menu/searchable-menu.js";
 export * from "./components/secret-field/secret-field.js";
 export * from "./components/selection/selection-bar.js";
+export * from "./components/selection/selection-region.js";
 export * from "./components/settings-page/settings-page.js";
 export * from "./components/settings-row/settings-row.js";
 export * from "./components/settings-section/settings-section.js";

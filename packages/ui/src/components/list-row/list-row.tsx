@@ -34,9 +34,11 @@ import {
 import { MoreButton, moreLabel } from "../more-button/more-button.js";
 import { rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import {
+  holdRun,
   type ListSelection,
   ListSelectionContext,
   selectableRow,
+  selectionRoot,
   useListSelection,
 } from "../selection/list-selection.js";
 import { useRowSwipe } from "./use-row-swipe.js";
@@ -261,16 +263,6 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
 }
 
 /**
- * A ⇧-press on a row that can be chosen, which would otherwise select the
- * words from the last press to this one: it takes the focus itself instead.
- */
-function holdRun(event: MouseEvent<HTMLElement>): void {
-  if (!event.shiftKey) return;
-  event.preventDefault();
-  event.currentTarget.focus();
-}
-
-/**
  * The words a slot is measured by, where they are a plain string: a box whose
  * words are a tree is watched for any change under it instead, which a long
  * list of rows would pay for once a row.
@@ -369,6 +361,7 @@ export function List({
       }}
       id={id}
       className="luke-list"
+      {...selectionRoot()}
       data-variant={variant}
       data-density={density}
       data-finger-tall={fingerTall ? "true" : undefined}
