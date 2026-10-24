@@ -13,6 +13,7 @@ import {
   isValidElement,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -20,6 +21,7 @@ import { flushSync } from "react-dom";
 import { cn } from "../../cn.js";
 import { cssCustomProperties } from "../../css.js";
 import { CloseIcon } from "../../face/glyphs.js";
+import { joinRefs } from "../../join-refs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
@@ -30,6 +32,12 @@ import {
   type MenuPlacement,
   opensMenu,
 } from "../menu/menu.js";
+import {
+  ROVING_ORIENTATION,
+  ROVING_STOP,
+  rovingItem,
+  useRovingKeys,
+} from "../roving-keys/roving-keys.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
@@ -39,8 +47,9 @@ import { type TabMove, useTabDrag } from "./use-tab-drag.js";
  * A tab is its glyph and its label in a compact pill: raised while it is the
  * chosen one, plain and muted otherwise. A tab that may be closed carries an
  * × at its end, standing on the chosen tab and shown on the others while the
- * pointer is on them. The strip is one stop for Tab: the arrow keys, Home,
- * and End move between its tabs, Return or Space chooses the one focused,
+ * pointer is on them. The strip is one stop for Tab, on its chosen tab
+ * (`useRovingKeys`): the arrow keys, Home, and End move between its tabs,
+ * bringing each into view, Return or Space chooses the one focused,
  * and Delete or Backspace closes it, handing focus to the tab chosen in its
  * place. The × is for the pointer alone, so it takes no stop of its own.
  *
@@ -204,27 +213,6 @@ function tabHint(input: {
   return words.length === 0 ? undefined : words.join(" · ");
 }
 
-/**
- * The tab a navigation key moves to from the focused one, or nothing for any
- * other key. Note that a key held with a modifier moves nothing, because an
- * owner's chords move the tab itself rather than focus.
- */
-function tabAfter(event: React.KeyboardEvent, at: number, count: number): number | undefined {
-  if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return undefined;
-  switch (event.key) {
-    case "ArrowRight":
-      return (at + 1) % count;
-    case "ArrowLeft":
-      return (at <= 0 ? count : at) - 1;
-    case "Home":
-      return 0;
-    case "End":
-      return count - 1;
-    default:
-      return undefined;
-  }
-}
-
 function closesTab(key: string): boolean {
   return key === "Delete" || key === "Backspace";
 }
@@ -320,6 +308,14 @@ export function Tabs({
   children: ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
+  // Note that a key held with a modifier moves no focus, which the roving
+  // keys leave alone, because an owner's chords move the tab itself.
+  const roving = useRovingKeys<HTMLDivElement>({
+    orientation: ROVING_ORIENTATION.HORIZONTAL,
+    stop: ROVING_STOP.CHOSEN,
+    moveTo: (tab) => focusTab(strip.current, tab),
+  });
+  const stripRef = useMemo(() => joinRefs(strip, roving.ref), [roving.ref]);
   // How many tabs the strip draws, which it asks room for at their widest (tabs.css).
   const count = Children.toArray(children).filter(isValidElement).length;
   const [movedSaid, setMovedSaid] = useState("");
@@ -387,10 +383,7 @@ export function Tabs({
       if (pill?.getAttribute("data-closable") === "true") closedAt.current = at;
       return;
     }
-    const next = tabAfter(event, at, tabs.length);
-    if (next === undefined) return;
-    event.preventDefault();
-    focusTab(strip.current, tabs[next]);
+    roving.onKeyDown(event);
   };
 
   // A wheel turned up and down runs the strip along, as a browser's tab strip
@@ -421,7 +414,8 @@ export function Tabs({
         </span>
       )}
       <div
-        ref={strip}
+        ref={stripRef}
+        data-roving={roving["data-roving"]}
         role="tablist"
         aria-label={label}
         className={STRIP}
@@ -432,6 +426,7 @@ export function Tabs({
         onPointerDown={onPointerDown}
         onWheel={wheel}
         onFocus={(event) => {
+          roving.onFocus(event);
           if (within(event.currentTarget, event.target)) onFocusChange?.(true);
         }}
         onBlur={(event) => {
@@ -537,7 +532,7 @@ export function Tab({
       aria-selected={selected}
       aria-keyshortcuts={keyshortcuts}
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
-      tabIndex={selected ? 0 : -1}
+      {...rovingItem()}
       onClick={(event) => {
         // Note that the tab around the button is the pill a press is seen on.
         pulsePress(event.currentTarget.closest<HTMLElement>(".luke-tab") ?? event.currentTarget);

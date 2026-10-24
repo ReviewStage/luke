@@ -7,9 +7,13 @@ import { ROVING_ORIENTATION, rovingItem, useRovingKeys } from "./roving-keys.js"
 
 /**
  * roving-keys.test.ts -- a row of items walks with ←→ and leaves ↑↓ alone,
- * and an item's own handler that takes a key keeps it. A `List`'s walk
- * down its rows is tested through the list (`list-row.test.ts`). Synthetic
- * tools.
+ * a key heard on the box itself steps from none, and an item's own handler
+ * that takes a key keeps it. A `List`'s walk down its rows is tested
+ * through the list (`list-row.test.ts`), and a set's other options through
+ * the components that take them: a chosen stop and a `moveTo` through
+ * `Tabs` and `ChoiceBar`, both pairs of arrows through `ChoiceBar` and
+ * `ChoiceList`, a tab order the box leaves alone through `Menu` and
+ * `ChoiceList`, and the walk alone through `Combobox`. Synthetic tools.
  */
 
 declare global {
@@ -92,4 +96,21 @@ test("an item whose own handler takes a key keeps the focus", () => {
   act(() => tools.Italic.focus());
   key("ArrowRight");
   expect(document.activeElement).toBe(tools.Italic);
+});
+
+test("a key heard on the box itself steps from none: forward and Home to the first, back and End to the last", () => {
+  const tools = draw();
+  const box = tools.Bold.parentElement;
+  if (box === null) throw new Error("No toolbar");
+  box.tabIndex = -1;
+  for (const [name, landed] of [
+    ["ArrowRight", tools.Bold],
+    ["Home", tools.Bold],
+    ["ArrowLeft", tools.Link],
+    ["End", tools.Link],
+  ] as const) {
+    act(() => box.focus());
+    key(name);
+    expect(document.activeElement, name).toBe(landed);
+  }
 });
