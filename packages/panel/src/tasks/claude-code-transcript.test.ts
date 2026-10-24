@@ -239,7 +239,7 @@ test("an Edit's patch marks the lines it changed, the newline ending its words o
   const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
   act(() => line.click());
   const marked = (kind: string) =>
-    [...container.querySelectorAll(`[data-line="${kind}"]`)].map((each) => each.textContent);
+    [...container.querySelectorAll(`[data-row="${kind}"]`)].map((each) => each.textContent);
   assert.deepEqual(marked("removed"), ["-a;"]);
   assert.deepEqual(marked("added"), ["+b;", "+", "+c;"]);
 });
