@@ -32,6 +32,7 @@ import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
 import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
+import { DIALOG_ACTIONS_EXAMPLE } from "./examples/dialog-actions";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
@@ -164,6 +165,7 @@ export const EXAMPLES: readonly Example[] = [
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
+  DIALOG_ACTIONS_EXAMPLE,
   DISCLOSURES_EXAMPLE,
   DRAWER_SWIPES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
