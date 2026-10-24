@@ -250,12 +250,12 @@
   --luke-focus-ring-room: padding-box var(--luke-focus-ring-reach);
 
   /* The layers that float over the whole page, each drawn at the root of the
-     document: a menu, then a dialog and a hint on one layer, whichever was
-     drawn later on top, then the passing notice over everything. */
+     document: a menu, then a dialog, then the passing notice, then a hint
+     over everything, since a toast's own × hangs one over the toast. */
   --luke-z-menu: 20;
   --luke-z-dialog: 30;
-  --luke-z-tooltip: 30;
   --luke-z-toast: 31;
+  --luke-z-tooltip: 32;
 }
 
 [data-luke-profile="web"] {
@@ -488,12 +488,12 @@
   --luke-focus-ring-room: padding-box var(--luke-focus-ring-reach);
 
   /* The layers that float over the whole page, each drawn at the root of the
-     document: a menu, then a dialog and a hint on one layer, whichever was
-     drawn later on top, then the passing notice over everything. */
+     document: a menu, then a dialog, then the passing notice, then a hint
+     over everything, since a toast's own × hangs one over the toast. */
   --luke-z-menu: 20;
   --luke-z-dialog: 30;
-  --luke-z-tooltip: 30;
   --luke-z-toast: 31;
+  --luke-z-tooltip: 32;
 }
 
 /* A compact site surface, a dashboard's (`DENSITY.COMPACT` in `surface.ts`):
