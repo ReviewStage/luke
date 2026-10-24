@@ -1692,7 +1692,7 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   const channel = () => segmentedGroup(pane, "Channel");
   const severity = () => segmentedGroup(pane, "Severity");
   const onCall = () =>
-    pane.querySelector<HTMLInputElement>('[data-inbox-field="boolean"] input[type="checkbox"]') ??
+    pane.querySelector<HTMLElement>('[data-inbox-field="boolean"] [role="checkbox"]') ??
     assert.fail("no Page on-call checkbox");
   const unpicked = readSegmented(channel());
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
@@ -1724,7 +1724,7 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   assert.deepEqual(picked, [["Slack"], ["High"]]);
   assert.deepEqual(readSegmented(channel()).checked, [], "the optional pick is taken back");
   assert.deepEqual(readSegmented(severity()).checked, [], "the required pick is taken back too");
-  assert.equal(onCall().checked, true);
+  assert.equal(onCall().getAttribute("aria-checked"), "true");
   assert.ok(pane.querySelector('[data-inbox-field="number"] .inbox-field-short input'));
   assert.ok(pane.querySelector('[data-inbox-field="text"] .inbox-field-composer .composer-editor'));
   const reason =
@@ -3758,13 +3758,13 @@ function answeredFields(within: Element): (string | null | undefined)[][] {
     const kind = field.dataset.inboxAnsweredField;
     const name = field.querySelector(".luke-field-label, .inbox-field-name, .luke-checkbox-words")
       ?.firstChild?.textContent;
-    const box = field.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const box = field.querySelector<HTMLElement>('[role="checkbox"]');
     const number = field.querySelector<HTMLInputElement>('input[type="number"]');
     const words = field.querySelector('[role="textbox"]');
     const pills = field.querySelector<HTMLElement>(".luke-choice-list");
     if (box !== null) {
       assert.equal(box.getAttribute("aria-readonly"), "true");
-      return [kind, name, box.checked ? "checked" : "unchecked"];
+      return [kind, name, box.getAttribute("aria-checked") === "true" ? "checked" : "unchecked"];
     }
     if (number !== null) {
       assert.equal(number.readOnly, true);
@@ -7589,9 +7589,10 @@ test("an answered do heads its reply with its steps ticked as they were sent, ov
   const box = answeredBox(pane);
   const steps = () =>
     [...box.querySelectorAll<HTMLElement>("[data-inbox-step]")].map((step) => {
-      const tick = step.querySelector<HTMLInputElement>("input") ?? assert.fail("a step's box");
+      const tick =
+        step.querySelector<HTMLElement>('[role="checkbox"]') ?? assert.fail("a step's box");
       assert.equal(tick.getAttribute("aria-readonly"), "true");
-      return [step.textContent, tick.checked];
+      return [step.textContent, tick.getAttribute("aria-checked") === "true"];
     });
 
   assert.deepEqual(askBoxes(pane), []);

@@ -10,6 +10,7 @@ import { cn } from "./cn.js";
 
 test("a theme's type size and a text colour both stand, and a later size replaces an earlier", () => {
   assert.equal(cn("text-body text-foreground"), "text-body text-foreground");
+  assert.equal(cn("text-label text-button-ink"), "text-label text-button-ink");
   assert.equal(cn("text-body text-foreground", "text-caption"), "text-foreground text-caption");
 });
 
