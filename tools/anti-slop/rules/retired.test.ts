@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -176,6 +177,45 @@ tester.run("retired (baseline)", baselined, {
       code: 'export * from "old-lib"; const lib = require("old-lib"); await import("old-lib/x");',
       filename: PANEL,
       errors: [{ messageId: "retired" }, { messageId: "retired" }, { messageId: "retired" }],
+    },
+  ],
+});
+
+// The ⋯ guard as shipped, `tools/anti-slop/retired/more-button.json`: only MoreButton draws a thing's ⋯.
+const MORE_BUTTON = path.join(
+  REPOSITORY_ROOT,
+  "packages/ui/src/components/more-button/more-button.tsx",
+);
+const MENU_BAR = path.join(REPOSITORY_ROOT, "packages/panel/src/desktop/mobile-bar.tsx");
+const moreButton = retiredRuleFor(
+  parseRetiredFile(
+    "more-button.json",
+    readFileSync(path.join(REPOSITORY_ROOT, "tools/anti-slop/retired/more-button.json"), "utf8"),
+  ),
+);
+
+tester.run("retired (more-button.json)", moreButton, {
+  valid: [
+    { code: 'import { GLYPH } from "@luke/ui/icons"; <GLYPH.MORE />;', filename: MORE_BUTTON },
+    { code: 'import { BarItem, EllipsisIcon } from "@luke/ui";', filename: MENU_BAR },
+    { code: 'import { MoreButton, PlusIcon } from "@luke/ui";', filename: PANEL },
+    { code: 'import { GLYPH } from "@luke/ui/icons"; <GLYPH.TASK />;', filename: PANEL },
+  ],
+  invalid: [
+    {
+      code: 'import { GLYPH } from "@luke/ui/icons"; <IconButton icon={<GLYPH.MORE />} label="Actions" />;',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }],
+    },
+    {
+      code: 'import { EllipsisIcon } from "@luke/ui"; <IconButton icon={<EllipsisIcon />} label="Actions" />;',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }],
+    },
+    {
+      code: 'import { Ellipsis, MoreHorizontalIcon } from "@luke/ui/icons";',
+      filename: PANEL,
+      errors: [{ messageId: "retired" }, { messageId: "retired" }],
     },
   ],
 });

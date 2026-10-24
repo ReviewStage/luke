@@ -271,6 +271,12 @@ export interface ConversationContentProps {
   fade?: ScrollFade | undefined;
   /** Where its start fade begins: beneath a band stuck at its top, as a call's checkpoint is. */
   fadeInset?: ScrollFadeInset | undefined;
+  /**
+   * Whether its lines are written as they stream in, as an agent's reply is,
+   * so the log is no live region: a reader would hear each chunk as it
+   * landed, and its owner says the line once it is whole instead.
+   */
+  streams?: boolean | undefined;
   children?: ReactNode;
 }
 
@@ -279,6 +285,7 @@ export function ConversationContent({
   className,
   fade = SCROLL_FADE.BOTH,
   fadeInset,
+  streams = false,
   children,
 }: ConversationContentProps): ReactNode {
   const { list, onScroll, onFold } = useConversation();
@@ -286,6 +293,7 @@ export function ConversationContent({
     <ScrollArea
       ref={list}
       role="log"
+      aria-live={streams ? "off" : undefined}
       fade={fade}
       fadeInset={fadeInset}
       onScroll={onScroll}

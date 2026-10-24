@@ -22,7 +22,7 @@ import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
-import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
+import { withContextMenu } from "../menu/menu.js";
 import { rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
 import {
@@ -78,8 +78,8 @@ export type { ListSelection } from "../selection/list-selection.js";
  * a right-click, the row's press, or its ⋯ where it opens nothing. A row
  * that offers no acts now, its groups empty, or is unavailable, draws no ⋯
  * and opens nothing.
- * `contextMenu` (`useMenu`'s) is the older door, a right-click alone, which
- * a row wires by hand beside its own ⋯; `menu` takes its place.
+ * `menu` is the one way a row wires its menu: a row never opens one by a
+ * right-click it wires itself.
  *
  * A list stands plain, its rows apart on the ground, each lit on its own;
  * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
@@ -395,7 +395,6 @@ export function ListRow({
   motionKey: followedBy,
   ref,
   onKeyDown,
-  contextMenu,
   menu,
   swipe,
 }: {
@@ -456,9 +455,7 @@ export function ListRow({
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
-  /** The menu a right-click, the menu key, or a long press opens anywhere on the row (`useMenu`'s `contextMenu`). */
-  contextMenu?: ContextMenuProps | undefined;
-  /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, and the menu key; it takes `contextMenu`'s and `menuOpen`'s place. */
+  /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, a long press, and the menu key; it takes `menuOpen`'s place. */
   menu?: ListRowMenu | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
@@ -626,7 +623,6 @@ export function ListRow({
       ) : null}
     </>
   );
-  const rightClick = rowMenu.doors ?? contextMenu;
   const { view, item } = swiped;
   const hold = (element: HTMLLIElement | null) => {
     item.ref.current = element;
@@ -652,7 +648,7 @@ export function ListRow({
         data-armed={view.armed ? "true" : undefined}
         onKeyDown={rowMenu.onKeyDown}
         {...withContextMenu(
-          rightClick,
+          rowMenu.doors,
           swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
         )}
         {...(swipe === undefined

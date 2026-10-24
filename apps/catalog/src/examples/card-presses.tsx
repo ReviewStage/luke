@@ -11,11 +11,10 @@ import {
   Card,
   CardPress,
   type CardPressEvent,
-  EllipsisIcon,
   GAP,
-  IconButton,
   Inline,
   JUSTIFY,
+  MoreButton,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -62,11 +61,7 @@ function CardPresses(): React.JSX.Element {
                 </Stack>
               </CardPress>
               <span className="catalog-card-press-lift">
-                <IconButton
-                  icon={<EllipsisIcon />}
-                  label="Actions for Ship the release"
-                  onClick={stay}
-                />
+                <MoreButton thing="Ship the release" onClick={stay} />
               </span>
             </Inline>
           </Card>

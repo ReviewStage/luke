@@ -41,7 +41,6 @@ import {
   ComposerFoot,
   ComposerFrame,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -411,7 +410,6 @@ const DELETE_QUESTION: DialogQuestion = {
   verb: "Delete",
   running: "Deleting…",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
-  tone: DIALOG_TONE.DANGER,
 };
 
 const DELETE_THREAD_QUESTION: DialogQuestion = {
@@ -420,7 +418,6 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
   verb: "Delete thread",
   running: "Deleting…",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
-  tone: DIALOG_TONE.DANGER,
 };
 
 /** What a delete that did not land says. */

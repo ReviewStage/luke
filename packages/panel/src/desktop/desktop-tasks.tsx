@@ -564,6 +564,7 @@ function PlanDocument({
   const inbox = useTaskInbox({
     taskId: inboxTaskId,
     shown: tasks.shown,
+    onScreen: inboxTaskId !== undefined && tasks.inboxShown === inboxTaskId,
     waiting: tasks.inbox.some((task) => task.taskId === inboxTaskId),
     readerId: tasks.me,
     agents: tasks.agents,

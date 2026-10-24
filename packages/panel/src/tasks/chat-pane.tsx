@@ -18,9 +18,9 @@ import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { andList } from "@luke/features/words";
 import {
+  CONFIRM_LOSS,
   Comment,
   ConfirmDialog,
-  DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
   FailureNote,
@@ -398,7 +398,7 @@ const DISCARD_QUESTION: DialogQuestion = {
   body: "Its words and pictures are kept nowhere else.",
   verb: "Discard",
   running: "Discarding…",
-  tone: DIALOG_TONE.DANGER,
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /**

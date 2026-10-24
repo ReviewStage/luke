@@ -91,6 +91,7 @@ import {
   Chip,
   ChipName,
   ChoiceList,
+  CONFIRM_LOSS,
   ConfirmDialog,
   CopyButton,
   cssCustomProperties,
@@ -1498,6 +1499,7 @@ function WebhookRows({
           body: "The secret your sender uses now stops working until you give it the new one, which Luke shows you once.",
           verb: "New secret",
           running: "Making",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </>
@@ -2511,6 +2513,7 @@ export function AutomationEditor({
           title: "Leave with unsaved changes?",
           verb: "Leave",
           running: "Leaving",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
       <ConfirmDialog
@@ -2520,6 +2523,7 @@ export function AutomationEditor({
           body: "Its schedule stops and its run history goes. Agents its runs started stay.",
           verb: "Delete",
           running: "Deleting",
+          loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
     </AutomationPageFrame>

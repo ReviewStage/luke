@@ -330,7 +330,7 @@ function sourceMenu(
   copy: (text: string, words: string) => void,
 ): PaneBarMenu {
   return {
-    label: "Source actions",
+    thing: "Source",
     groups: [
       [
         {

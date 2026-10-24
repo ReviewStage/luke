@@ -9,9 +9,9 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
-  EllipsisIcon,
   FoldChevronIcon,
   IconButton,
+  MoreButton,
   Stack,
   Text,
 } from "@luke/ui";
@@ -37,11 +37,7 @@ function ActionDisclosure(): React.JSX.Element {
       <DisclosureSummary>
         <span>Review thread · ⋯ pressed {presses}×</span>
         <DisclosureAction>
-          <IconButton
-            icon={<EllipsisIcon />}
-            label="More"
-            onClick={() => setPresses((count) => count + 1)}
-          />
+          <MoreButton thing="Review thread" onClick={() => setPresses((count) => count + 1)} />
         </DisclosureAction>
       </DisclosureSummary>
       <DisclosureBody>

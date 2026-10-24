@@ -244,6 +244,11 @@ export interface InboxItemToast {
   detail: string;
 }
 
+/** The inbox items one read found opened, handed to the window together, so it says them in one toast rather than one each. */
+export interface InboxItemsToast {
+  items: readonly InboxItemToast[];
+}
+
 /**
  * The doors an announcement leaves this process through: the OS's
  * notification, the panel's toast for a turn's end or an inbox item, and
@@ -254,7 +259,7 @@ export interface InboxItemToast {
 export interface AgentNoticeDoorsSurface {
   post(notice: AgentNotice): void;
   toast(end: AgentEndToast): void;
-  toastInbox(item: InboxItemToast): void;
+  toastInbox(opened: InboxItemsToast): void;
   toastFailedRun(run: FailedRunToast): void;
   toastChat(message: ChatMessageToast): void;
   /** How many inbox items and chat messages wait across the account, which the Dock's badge counts; none clears it. */
@@ -290,7 +295,7 @@ function guardedDoors(
   return {
     post: guarded("post", (notice: AgentNotice) => doors.post(notice)),
     toast: guarded("toast", (end: AgentEndToast) => doors.toast(end)),
-    toastInbox: guarded("inbox toast", (item: InboxItemToast) => doors.toastInbox(item)),
+    toastInbox: guarded("inbox toast", (opened: InboxItemsToast) => doors.toastInbox(opened)),
     toastFailedRun: guarded("failed-run toast", (run: FailedRunToast) => doors.toastFailedRun(run)),
     toastChat: guarded("chat toast", (message: ChatMessageToast) => doors.toastChat(message)),
     badge: guarded("badge", (count: number) => doors.badge(count)),
@@ -861,22 +866,27 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       }
     }
 
-    /** An item opened: told nowhere on its task's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
-    function announceItem(item: AccountInboxEntry): void {
-      if (focused && shownInbox === item.planId) return;
-      const text = inboxNoticeText(item, taskName(item.planId), models);
+    /**
+     * The items one read found opened: told nowhere on their task's Inbox in
+     * front, where the Inbox says them itself, in one toast together
+     * elsewhere in front, and as a notification each behind.
+     */
+    function announceItems(opened: readonly AccountInboxEntry[]): void {
       if (focused) {
+        const toasted = opened.filter((item) => shownInbox !== item.planId);
+        if (toasted.length === 0) return;
         doors.toastInbox({
-          taskId: item.planId,
-          itemId: item.id,
-          words: text.body,
-          detail: text.title,
+          items: toasted.map((item) => {
+            const text = inboxNoticeText(item, taskName(item.planId), models);
+            return { taskId: item.planId, itemId: item.id, words: text.body, detail: text.title };
+          }),
         });
         return;
       }
-      if (dependencies.notifying()) {
+      if (!dependencies.notifying()) return;
+      for (const item of opened) {
         doors.post({
-          ...text,
+          ...inboxNoticeText(item, taskName(item.planId), models),
           subject: { kind: NOTICE_KIND.INBOX_ITEM, itemId: item.id, revision: item.revision },
           onClick: () => dependencies.openInbox(item.planId),
         });
@@ -944,12 +954,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (entry.reason !== ACCOUNT_CHAT_REASON.ASK || entry.updatedAt > since)
           announceChat(entry);
       }
+      const opened: AccountInboxEntry[] = [];
       for (const item of answer.items) {
         const known = seenRevision.get(item.id);
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
         if (since === undefined || was?.items.has(item.id) === true) continue;
-        if ((known ?? 0) < item.revision && item.updatedAt > since) announceItem(item);
+        if ((known ?? 0) < item.revision && item.updatedAt > since) opened.push(item);
       }
+      announceItems(opened);
       for (const item of taskless) {
         const known = seenRevision.get(item.id);
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));

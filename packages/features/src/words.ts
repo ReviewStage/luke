@@ -137,6 +137,28 @@ export const SELECTION_WORDS = {
   CLEAR_SELECTION: "Clear selection",
 } as const;
 
+/** An Inbox item as a count of arrivals names it: "1 new item", "2 new items". */
+const NEW_INBOX_ITEM: Noun = {
+  one: `new ${TERM.INBOX_ITEM.one}`,
+  many: `new ${TERM.INBOX_ITEM.many}`,
+};
+
+/**
+ * What items that landed in the Inbox together are said as: one by its own
+ * words, "New in your inbox: Push to the release branch?", and several by
+ * their count, "2 new items in your inbox".
+ */
+export function inboxArrivalWords(said: readonly string[]): string {
+  const [only] = said;
+  if (said.length === 1 && only !== undefined) return `New in your inbox: ${only}`;
+  return `${countWords(said.length, NEW_INBOX_ITEM)} in your inbox`;
+}
+
+/** What a reply an agent finished is said as: who sent it, then its lead where the reader is not already at it. */
+export function replyFromWords(agent: string, lead?: string): string {
+  return lead === undefined || lead === "" ? `Reply from ${agent}` : `Reply from ${agent}: ${lead}`;
+}
+
 /** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */
 export const REFRESH_FAILED_WORDS = "Could not refresh";
 

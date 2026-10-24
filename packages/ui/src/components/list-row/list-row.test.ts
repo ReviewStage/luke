@@ -4,7 +4,6 @@ import { act, cloneElement, createElement, Fragment, Profiler, useState } from "
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
-import { Menu, useMenu } from "../menu/menu.js";
 import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import {
   LIST_DENSITY,
@@ -31,7 +30,7 @@ import {
  * open one is announced as current, whether it opens something or not; and a
  * row that opens nothing is no control, though its acts still are. A
  * keyboard-driven list can hand focus back to a row through its ref, hear
- * the keys pressed on it, and hear a right-click anywhere on it. A row
+ * the keys pressed on it. A row
  * current as the page beside the list is announced so, and the app's hint
  * hung from a row's press raises its words for the press. A row whose
  * metadata stands on its title's line reads it after the title and before
@@ -504,7 +503,7 @@ test("a row that opens nothing hands its item to its ref", () => {
   expect(row).toBe(container.querySelector("li"));
 });
 
-test("a key pressed on a row reaches its handler, and a right-click anywhere on it reaches its own", () => {
+test("a key pressed on a row reaches its handler", () => {
   const heard: string[] = [];
   const container = draw(
     createElement(List, {
@@ -513,25 +512,16 @@ test("a key pressed on a row reaches its handler, and a right-click anywhere on 
         title: "Ada Lovelace",
         onPress: () => undefined,
         onKeyDown: (event) => heard.push(`key ${event.key}`),
-        contextMenu: {
-          onContextMenu: () => heard.push("menu"),
-          onPointerDown: ignore,
-          onTouchEnd: ignore,
-          "data-long-press": "",
-        },
         actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
       }),
     }),
   );
-  const row = button(container, "Ada Lovelace");
   act(() => {
-    row.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    button(container, "More for ada").dispatchEvent(
-      new MouseEvent("contextmenu", { bubbles: true }),
+    button(container, "Ada Lovelace").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "j", bubbles: true }),
     );
   });
-  expect(heard).toEqual(["key j", "menu", "menu"]);
+  expect(heard).toEqual(["key j"]);
 });
 
 test("a row that opens nothing hears no keys, not even its acts'", () => {
@@ -1510,28 +1500,15 @@ test("a scroll that follows a quick trackpad swipe ends its flick, so the row on
 
 /** A row offering a swipe and a menu a right-click or a long press opens, its press counted in `opened`. */
 function SwipedMenuRow({ opened }: { opened: string[] }): React.JSX.Element {
-  const menu = useMenu(true);
-  return createElement(
-    Fragment,
-    null,
-    createElement(List, {
-      label: "Inbox",
-      children: createElement(ListRow, {
-        title: "Alert at 80%?",
-        onPress: () => opened.push("open"),
-        swipe: { label: "Read", icon: glyph(), onAct: () => opened.push("Read") },
-        contextMenu: menu.contextMenu(),
-      }),
+  return createElement(List, {
+    label: "Inbox",
+    children: createElement(ListRow, {
+      title: "Alert at 80%?",
+      onPress: () => opened.push("open"),
+      swipe: { label: "Read", icon: glyph(), onAct: () => opened.push("Read") },
+      menu: { thing: "Item", groups: [[{ label: "Archive", onSelect: ignore }]] },
     }),
-    menu.drawn === undefined
-      ? null
-      : createElement(Menu, {
-          label: "Item actions",
-          menu: menu.drawn,
-          groups: [[{ label: "Archive", onSelect: ignore }]],
-          onClose: menu.close,
-        }),
-  );
+  });
 }
 
 test("a row that swipes still opens its menu on a touch held still, and the touch's end makes no click", () => {

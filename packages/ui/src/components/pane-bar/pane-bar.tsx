@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
-import { EllipsisIcon } from "../../face/glyphs.js";
-import { IconButton } from "../button/button.js";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
+import { MoreButton, moreLabel } from "../more-button/more-button.js";
 import { OneLine } from "../one-line/one-line.js";
-import { Tooltip, wholeWordsHint } from "../tooltip/hint.js";
+import { wholeWordsHint } from "../tooltip/hint.js";
 
 /**
  * pane-bar.tsx -- the bar across the top of a tab or a dock: what leads it (a mark and a title, fading where cut), its middle (tabs or crumbs), its actions, and its ⋯ at the end.
@@ -24,16 +23,17 @@ import { Tooltip, wholeWordsHint } from "../tooltip/hint.js";
  * controls (Back and Forward before a path's crumbs, an address, tabs). The
  * actions stand at the bar's end, the glyphs in them close, and the ⋯ last.
  *
- * The ⋯ is drawn from a menu's definition (`menu`), its label naming both
- * the button and the menu it drops, so a bar never wires its own trigger;
+ * The ⋯ is a `MoreButton`, drawn from a menu's definition (`menu`), its
+ * thing naming both the button and the menu it drops ("File" makes "File
+ * actions"), so a bar never wires its own trigger;
  * how its lines are drawn is a View settings button among the actions,
  * never an item of the ⋯.
  */
 
 /** The bar's ⋯: what it and the menu it drops are called, and the menu's groups of items. */
 export interface PaneBarMenu {
-  /** Names the ⋯ and its menu: "File actions". */
-  readonly label: string;
+  /** What the tab shows, as a sentence opens with it: "File" names the ⋯ and its menu "File actions". */
+  readonly thing: string;
   readonly groups: readonly (readonly MenuEntry[])[];
 }
 
@@ -47,11 +47,14 @@ function BarMenu({ menu }: { menu: PaneBarMenu }): React.JSX.Element {
   const drop = useMenu(true);
   return (
     <>
-      <Tooltip label={menu.label}>
-        <IconButton icon={<EllipsisIcon />} label={menu.label} {...drop.trigger()} />
-      </Tooltip>
+      <MoreButton thing={menu.thing} {...drop.trigger()} />
       {drop.drawn === undefined ? null : (
-        <Menu label={menu.label} menu={drop.drawn} groups={menu.groups} onClose={drop.close} />
+        <Menu
+          label={moreLabel(menu.thing)}
+          menu={drop.drawn}
+          groups={menu.groups}
+          onClose={drop.close}
+        />
       )}
     </>
   );

@@ -5,9 +5,8 @@ import {
   ChoiceBar,
   DETAIL_PAGE_INSET,
   DetailPage,
-  EllipsisIcon,
   GAP,
-  IconButton,
+  MoreButton,
   PAGE_FRAME,
   PencilIcon,
   Stack,
@@ -113,7 +112,7 @@ function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
             Edit
           </Button>
-          <IconButton icon={<EllipsisIcon />} label="More for this task" />
+          <MoreButton thing="Task" />
         </>
       }
       secondary={secondary ? { label: "Details", content: <Facts /> } : undefined}
@@ -156,7 +155,7 @@ function TaskUnderToolbar(): React.JSX.Element {
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
             Edit
           </Button>
-          <IconButton icon={<EllipsisIcon />} label="More for this task" />
+          <MoreButton thing="Task" />
         </header>
       }
       secondary={{ label: "Details", content: <Facts /> }}
