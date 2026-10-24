@@ -4,7 +4,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { sinceText } from "@luke/features/time-format";
-import { readFailedWords } from "@luke/features/words";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
   Badge,
@@ -19,6 +19,7 @@ import {
   type PopoverAlign,
   ProviderMark,
   SearchableMenu,
+  Spinner,
   STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -130,9 +131,10 @@ const GITHUB_ROW = {
 /** How long the typing rests before Linear is searched for the words as typed. */
 const SEARCH_PAUSE = Duration.millis(250);
 
-/** What the Linear read of the workspace's issues stands as: the issues, none while they are read or where the workspace offers none, and whether the read was refused. */
+/** What the Linear read of the workspace's issues stands as: the issues, none while they are read or where the workspace offers none, whether the read is still out, and whether it was refused. */
 interface LinearIssuesRead<Issue> {
   readonly issues: readonly Issue[];
+  readonly reading: boolean;
   readonly failed: boolean;
   /** Reads them again. */
   readonly retry: () => void;
@@ -141,8 +143,8 @@ interface LinearIssuesRead<Issue> {
 /**
  * The Linear issues of the workspace the task starts in, read as the card
  * opens and again for another workspace or when `retry` asks; none while
- * they are read or where the workspace offers none, and `failed` where the
- * read was refused, which is not an empty workspace.
+ * they are read or where the workspace offers none, `reading` until the read
+ * answers, and `failed` where it was refused, which is not an empty workspace.
  */
 function useIssuesRead<Issue>(
   readIn: (workspaceId: string | undefined) => (() => Promise<readonly Issue[]>) | undefined,
@@ -150,6 +152,7 @@ function useIssuesRead<Issue>(
 ): LinearIssuesRead<Issue> {
   const [issues, setIssues] = useState<readonly Issue[]>([]);
   const [failed, setFailed] = useState(false);
+  const [answered, setAnswered] = useState(false);
   const [attempts, setAttempts] = useState(0);
   // Note that the reader is held through a ref, because the tab hands a new
   // one on every render and a read is owed to a workspace, not a render.
@@ -159,15 +162,20 @@ function useIssuesRead<Issue>(
   useEffect(() => {
     setIssues([]);
     setFailed(false);
+    setAnswered(false);
     const reading = connected ? latest.current(workspaceId) : undefined;
     if (reading === undefined) return;
     let current = true;
     reading().then(
       (listed) => {
-        if (current) setIssues(listed);
+        if (!current) return;
+        setIssues(listed);
+        setAnswered(true);
       },
       () => {
-        if (current) setFailed(true);
+        if (!current) return;
+        setFailed(true);
+        setAnswered(true);
       },
     );
     return () => {
@@ -175,7 +183,12 @@ function useIssuesRead<Issue>(
     };
     // Note that `attempts` is no value the read uses, only each Retry's ask to read again.
   }, [connected, workspaceId, attempts]);
-  return { issues, failed, retry: () => setAttempts((count) => count + 1) };
+  return {
+    issues,
+    reading: connected && !answered,
+    failed,
+    retry: () => setAttempts((count) => count + 1),
+  };
 }
 
 /** One search of a workspace's Linear for the words as typed, and the read that asks it. */
@@ -329,6 +342,7 @@ function githubRows(
 ): readonly MenuRow[] {
   if (
     standing.kind === GITHUB_ISSUES_STANDING.NONE ||
+    standing.kind === GITHUB_ISSUES_STANDING.READING ||
     standing.kind === GITHUB_ISSUES_STANDING.FAILED
   ) {
     return [];
@@ -468,7 +482,9 @@ export function IssuePickerChip({
   const headed =
     linear &&
     githubStanding.kind !== GITHUB_ISSUES_STANDING.NONE &&
+    githubStanding.kind !== GITHUB_ISSUES_STANDING.READING &&
     githubStanding.kind !== GITHUB_ISSUES_STANDING.FAILED;
+  const reading = githubStanding.kind === GITHUB_ISSUES_STANDING.READING || linearRead.reading;
   const rows = [
     ...githubRows(githubStanding, now, (issue) => unpickable(linked.has(issue.nodeId), full)),
     ...listed.map((issue) =>
@@ -538,8 +554,9 @@ export function IssuePickerChip({
           rows={rows}
           value={undefined}
           note={
-            githubStanding.kind === GITHUB_ISSUES_STANDING.FAILED || linearFailed ? (
+            reading || githubStanding.kind === GITHUB_ISSUES_STANDING.FAILED || linearFailed ? (
               <>
+                {reading ? <Spinner delay label={readingWords("issues")} /> : null}
                 {githubStanding.kind === GITHUB_ISSUES_STANDING.FAILED ? (
                   <ErrorState onRetry={retryGitHub}>
                     {readFailedWords(ISSUE_READ.GITHUB)}

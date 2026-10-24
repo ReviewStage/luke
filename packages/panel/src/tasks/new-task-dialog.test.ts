@@ -130,15 +130,19 @@ async function settle(): Promise<void> {
  * repository group's + does, `issues` the workspace's Linear issues where it
  * has Linear connected, `finds` what its Linear answers a search or an
  * identifier with, and `github` what a repository's GitHub issues read
- * answers, where the workspace has GitHub connected.
+ * answers, where the workspace has GitHub connected; a read handed as a
+ * promise stays out until the test settles it.
  */
 async function mount(
   answer: string | Failure | undefined = undefined,
   preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
-  issues?: readonly LinearIssueSummary[] | Error,
+  issues?: readonly LinearIssueSummary[] | Error | Promise<readonly LinearIssueSummary[]>,
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
-  github?: (repository: string, ask: RepositoryIssuesAsk) => GitHubRepositoryIssuesAnswer,
+  github?: (
+    repository: string,
+    ask: RepositoryIssuesAsk,
+  ) => GitHubRepositoryIssuesAnswer | Promise<GitHubRepositoryIssuesAnswer>,
 ) {
   const starts: [string, string | null][] = [];
   const githubAsks: [string, RepositoryIssuesAsk][] = [];
@@ -1647,4 +1651,39 @@ test("a Linear read that failed says its issues could not be read, with Retry, a
   assert.notEqual(issueNote().retry, null);
   assert.deepEqual(issueRows().rows, []);
   assert.doesNotMatch(document.body.textContent ?? "", /No issues found/u);
+});
+
+test("while GitHub's and Linear's issues are being read the menu says Reading issues, never that none were found, and the rows stand once both answer", async () => {
+  let answerGitHub: (answer: GitHubRepositoryIssuesAnswer) => void = () => undefined;
+  let answerLinear: (issues: readonly LinearIssueSummary[]) => void = () => undefined;
+  await mount(
+    undefined,
+    undefined,
+    {},
+    new Promise<readonly LinearIssueSummary[]>((resolve) => {
+      answerLinear = resolve;
+    }),
+    () => [],
+    () =>
+      new Promise<GitHubRepositoryIssuesAnswer>((resolve) => {
+        answerGitHub = resolve;
+      }),
+  );
+
+  await openLinear();
+
+  assert.match(issueNote().words, /Reading issues/u);
+  assert.deepEqual(issueRows().rows, []);
+  assert.doesNotMatch(document.body.textContent ?? "", /No open issues match|No issues found/u);
+
+  answerGitHub(acmeGitHub("acme/web", {}));
+  await settle();
+
+  assert.match(issueNote().words, /Reading issues/u, "Linear's read is still out");
+
+  answerLinear(ISSUES);
+  await settle();
+
+  assert.equal(issueNote().words, "");
+  assert.equal(issueRows().rows[0]?.split("#")[0], "Login fails on Safari 18");
 });
