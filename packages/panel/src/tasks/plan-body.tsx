@@ -87,7 +87,7 @@ import {
   type UnitView,
 } from "./task-reveal.js";
 import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
-import { TaskTitle } from "./task-title.js";
+import { TaskTitle, TextTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
@@ -1066,7 +1066,7 @@ export function PlanPageHead({
   return (
     <header className="task-page-head">
       <div className="task-title-line">
-        <TaskTitle name={name} />
+        <TextTitle name={name} />
         {actions}
       </div>
       {edited}
@@ -1486,22 +1486,19 @@ export const PlanBody = memo(function PlanBody({
               <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
             )}
             {titled ? (
-              attributed(
-                // Keyed by the plan, so words typed for one are saved to it as another opens.
-                <EditableTitle
-                  key={task.id}
-                  name={task.name}
-                  entry={entry === EDITOR_PLACE.TITLE}
-                  editing={editing}
-                  renaming={renaming}
-                  onRename={onRename}
-                  onDraft={onDraftName}
-                />,
-                null,
-                titleMenu,
-              )
+              // Keyed by the plan, so words typed for one are saved to it as another opens.
+              <EditableTitle
+                key={task.id}
+                name={task.name}
+                entry={entry === EDITOR_PLACE.TITLE}
+                editing={editing}
+                renaming={renaming}
+                actions={titleMenu}
+                onRename={onRename}
+                onDraft={onDraftName}
+              />
             ) : page === undefined ? (
-              attributed(<TaskTitle name={task.name} />, null, titleMenu)
+              <TaskTitle name={task.name} actions={titleMenu} />
             ) : (
               <PlanPageHead
                 name={task.name}

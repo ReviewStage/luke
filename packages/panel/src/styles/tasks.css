@@ -2849,55 +2849,6 @@
   color: var(--luke-color-text-muted);
 }
 
-/* A branch's glyph: the branch at rest, the copy glyph under the pointer
-   or the keyboard, saying what a press does, then the copy's own answer
-   for its moment, each in the one square so the chip never moves. */
-.pull-request-branch-glyph {
-  display: inline-grid;
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: var(--luke-color-text-muted);
-}
-
-.pull-request-branch-glyph > *,
-.pull-request-branch-glyph svg {
-  width: 12px;
-  height: 12px;
-}
-
-.pull-request-branch-glyph > * {
-  grid-area: 1 / 1;
-  transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-.pull-request-branch-glyph > .copy-glyph {
-  opacity: 0;
-}
-
-.pull-request-branch:has(:focus-visible) .pull-request-branch-glyph > svg,
-.pull-request-branch-glyph:not([data-state="idle"]) > svg {
-  opacity: 0;
-}
-
-.pull-request-branch:has(:focus-visible) .pull-request-branch-glyph > .copy-glyph,
-.pull-request-branch-glyph:not([data-state="idle"]) > .copy-glyph {
-  opacity: 1;
-}
-
-/* Note that the pointer's swap is a mouse's alone, because a touch
-   screen spends a first tap on a hover that changes what is shown; there
-   the branch's glyph stands until the copy's answer. */
-@media (hover: hover) {
-  .pull-request-branch:hover .pull-request-branch-glyph > svg {
-    opacity: 0;
-  }
-
-  .pull-request-branch:hover .pull-request-branch-glyph > .copy-glyph {
-    opacity: 1;
-  }
-}
-
 /* The branches and, beside them, the stack it stands in
    (`pull-request-stack.tsx`): the branches give way first. */
 .pull-request-branch-row {
@@ -4648,6 +4599,14 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex: none;
 }
 
+/* The foot's end, which stands whole in every other box, gives way where it
+   holds these presses, so the model chip's words are cut short before the
+   row runs past the card. */
+.luke-composer-foot-end:has(> .agent-composer-actions) {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
 /* The +, the MCP button and the ⋯ each stand in a box of their own, which
    the queries below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯
    stands only once the card is too narrow for every press. */
@@ -4665,15 +4624,15 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* A call's controls in the composer's row, in Call's place beside Send
    (`agent-call.tsx`): the mutes and Video as the row's own presses, End
    call on its red disc. They never fold into the ⋯, because they are the
-   call, and a narrow card folds the presses around them first. */
+   call, and a narrow card folds the presses around them first; the foot
+   stands them a step off Send (`ComposerFoot`'s call). */
 .agent-call-controls {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--luke-space-4);
   min-inline-size: 0;
-  /* End call stands a step off Send, so the two discs never read as a pair. */
-  margin: 0 var(--luke-space-4) 0 0;
+  margin: 0;
   padding: 0;
   border: 0;
 }
@@ -4732,21 +4691,22 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   color: var(--luke-color-text-muted);
 }
 
-/* A clip still being read as a call begins shares the foot with the call's
-   controls (`agent-composer.tsx`): side by side where the card has room for
-   the strip's words, and the controls on a line of their own under it where
-   it has not, so Cancel and End call both stay within the card. */
-.prompt-input-footer:has(> .dictation-strip + .agent-call-controls) {
+/* A clip still being read as a call begins shares the foot's bar with the
+   call's controls (`agent-composer.tsx`, `ComposerFoot`'s strip and call):
+   side by side where the card has room for the strip's words, and the
+   controls on a line of their own under it where it has not, so Cancel and
+   End call both stay within the card. */
+.luke-composer-foot-bar:has(> .luke-composer-foot-strip + .luke-composer-foot-call) {
   flex-wrap: wrap;
   row-gap: var(--luke-space-4);
 }
 
-.prompt-input-footer > .dictation-strip:has(+ .agent-call-controls) {
+.luke-composer-foot-strip:has(+ .luke-composer-foot-call) {
   /* Room for the strip's spinner, its word, and Cancel. */
   flex-basis: 160px;
 }
 
-.prompt-input-footer > .dictation-strip + .agent-call-controls {
+.luke-composer-foot-strip + .luke-composer-foot-call {
   margin-inline-start: auto;
 }
 
@@ -6488,27 +6448,21 @@ svg.lucide {
   line-height: 1.45;
 }
 
-.comment-field-foot {
+/* A field's foot, a reply's `ComposerFoot` and an edit's Cancel and Save,
+   holds its tools a size under a page's, at the field's padding; a
+   dictation's strip stands at their height. */
+.comment-field-foot,
+.comment-field .luke-composer-foot {
   --luke-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
+  padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+}
+
+.comment-field-foot {
   display: flex;
   min-height: 26px; /* off-scale: as its tools */
   align-items: center;
   justify-content: space-between;
   gap: var(--luke-space-6);
-  padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
-}
-
-.comment-field-tools {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  margin-left: auto;
-}
-
-/* A dictation stands in the foot's place while it records, at its height. */
-.comment-field-foot .dictation-strip {
-  height: 26px; /* off-scale: as the foot's tools */
-  flex: 1;
 }
 
 /* A thread's first comment is the card itself (`COMPOSER_LOOK.BARE`): its
@@ -6519,7 +6473,7 @@ svg.lucide {
   margin-top: 0;
 }
 
-.comment-field[data-variant="first"] .comment-field-foot {
+.comment-field[data-variant="first"] .luke-composer-foot {
   padding-right: 0;
   padding-left: 0;
 }

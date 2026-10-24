@@ -1841,7 +1841,10 @@ export function AgentChangesTab({
             truncated={pullRequest.truncated}
           />
         }
-        onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
+        github={{
+          href: `${pullRequest.url}/files`,
+          open: (url) => appPlatform().openGitHub(url),
+        }}
         menu={
           <>
             <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />

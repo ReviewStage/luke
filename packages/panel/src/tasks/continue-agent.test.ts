@@ -269,7 +269,7 @@ async function drawnTab(input: {
       container.querySelector<HTMLElement>(".agent-end") ??
       container.querySelector<HTMLElement>("[data-ended]")?.parentElement ??
       null,
-    note: () => container.querySelector<HTMLElement>(".agent-composer-note"),
+    note: () => container.querySelector<HTMLElement>(".luke-composer-foot-note"),
     continuedNote: () => container.querySelector<HTMLElement>(".continued-composer"),
     continuedIn: () => [...container.querySelectorAll<HTMLElement>("[data-continued]")],
     sendButton: () => container.querySelector<HTMLButtonElement>('button[aria-label="Send"]'),

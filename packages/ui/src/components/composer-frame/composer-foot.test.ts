@@ -8,8 +8,9 @@ import { ComposerFoot } from "./composer-foot.js";
 /**
  * composer-foot.test.ts -- a message box's foot takes no send while the box
  * is empty, says its one note, shows its counter from four fifths of the
- * limit, offers a remedy beside its note, and keeps a call's status beside
- * the send and beside a strip.
+ * limit, offers a remedy beside its note and a mend under it, stands Stop
+ * in the send's place, and keeps a call's status beside the send and beside
+ * a strip.
  */
 
 declare global {
@@ -118,6 +119,40 @@ test("a note's remedy mends what Retry cannot, and a send in words says what it 
   expect(mended).toEqual(["back"]);
   expect(settled).toEqual(["nod"]);
   expect(button(container, "Got it").textContent).toBe("Got it");
+});
+
+test("a note's mend stands under its line, as a closed agent's Continue does", () => {
+  const { container } = draw({
+    send: { label: "Send", empty: true },
+    note: {
+      words: "The agent takes no more messages.",
+      mends: createElement("span", { className: "mend" }, "Continue in new agent"),
+    },
+  });
+  const note = container.querySelector(".luke-composer-foot-note");
+  expect(note?.querySelector('[role="alert"]')?.textContent).toBe(
+    "The agent takes no more messages.",
+  );
+  expect(note?.querySelector(".mend")?.textContent).toBe("Continue in new agent");
+});
+
+test("Stop stands in the send's place and stops, and while its stop is out it is named by its busy words and takes no second press", () => {
+  const stops: string[] = [];
+  const send = { label: "Send", empty: true };
+  const onStop = () => stops.push("stop");
+  const { container, redraw } = draw({ send, stop: { label: "Stop", onStop } });
+  expect(() => button(container, "Send")).toThrow();
+  act(() => button(container, "Stop").click());
+  expect(stops).toEqual(["stop"]);
+
+  redraw({ send, stop: { label: "Stop", onStop, busy: true, busyLabel: "Stopping…" } });
+  act(() => button(container, "Stopping…").click());
+  expect(button(container, "Stopping…").getAttribute("aria-busy")).toBe("true");
+  expect(stops).toEqual(["stop"]);
+
+  redraw({ send: { label: "Send", empty: false } });
+  expect(button(container, "Send")).toBeDefined();
+  expect(() => button(container, "Stop")).toThrow();
 });
 
 test("the counter shows once the words reach four fifths of the limit", () => {

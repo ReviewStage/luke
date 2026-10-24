@@ -76,7 +76,7 @@ function Bar(): React.JSX.Element {
     ready: true,
     readText: () => Promise.resolve({ kind: WHOLE_TEXT.READ, text: "" }),
   });
-  return createElement(FileViewBar, { lead: null, onGitHub: undefined, ...end });
+  return createElement(FileViewBar, { lead: null, github: undefined, ...end });
 }
 
 /** Draws the bar's end beside the look the tab's lines follow. */

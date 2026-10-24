@@ -19,17 +19,13 @@ import {
 import type { CatalogModel } from "@luke/features/models-wire";
 import { pasteCutWords } from "@luke/features/words";
 import {
-  BUTTON_TYPE,
-  ErrorState,
-  LengthCounter,
+  ComposerFoot,
   McpIcon,
   MicrophoneIcon,
   MoreButton,
   moreLabel,
   PlusIcon,
   riseAboveEnd,
-  SUBMIT_STATE,
-  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
@@ -43,13 +39,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input.js";
+import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
@@ -79,7 +69,8 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
- * at its default type. Its foot is laid
+ * at its default type, and its foot is every message box's
+ * (`@luke/ui`'s `ComposerFoot`). Its foot is laid
  * out as ChatGPT's and Codex's are: at the left the "+" that attaches
  * files and, once the agent has pushed a branch with no pull request yet,
  * the branch's chip, which opens it on GitHub (`agent-published.tsx`); a
@@ -89,7 +80,8 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * the menu that changes it for the next step (`agent-model-chip.tsx`),
  * the ring that shows, once a step has ended, how full the agent's model's
  * context is and opens what fills it (`agent-context.tsx`), the
- * microphone, and the round button. The box takes a message to the agent:
+ * microphone, a call's controls where a call is offered, and the round
+ * button. The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line (on a coarse pointer Enter is,
  * and the round Send sends: `composer-editor.ts`), and Escape leaves the box; the
  * box is an editor (`composer-field.tsx`) that holds plain words and a
@@ -103,13 +95,14 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * the button at the card's right, the way every chat draws it: Send while
  * there are words or files, disabled while there are neither and the agent
  * is idle, and Stop while there are neither and a turn runs, which is the
- * one Stop the tab has. A message that did not go stays in the box with why under the card
- * and what mends it (`@luke/ui`'s `ErrorState`): Retry, which sends it again
+ * one Stop the tab has. A message that did not go stays in the box with why under the foot's
+ * bar and what mends it (`@luke/ui`'s `ErrorState`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
  * (`repository-remedy.tsx`), a move of the task sending it again by itself
  * once it lands; an agent that takes no message any more keeps the box,
- * disabled, with the reason under it; a change of model that did not take
+ * disabled, with the reason under the bar and Continue in new agent under
+ * that (`closedRemedy`); a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
  * the agent has on whose sign-in expired is offered to reconnect, in place, as
  * the MCP popover reconnects it; an editor bundle that could not be loaded
@@ -118,16 +111,21 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * opening a tab never takes the caret out of the plan, and a message sent
  * from the box, by Enter or by Send, hands the caret back to the box as it
  * opens again, unless the developer went somewhere else meanwhile, so the
- * next message is written at once. A draft agent's tab
+ * next message is written at once. An agent's box never holds while a
+ * message goes: the box empties, takes the next message at once, and each
+ * agent's messages go one after another, the next once the one before it
+ * answered (`use-agent-composer.ts`); a box whose send opens something,
+ * New task's or a draft agent's, holds until it answers, its Send busy
+ * meanwhile. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
  * first message of its still empty conversation, and its model chip once
  * the choice it starts on is known.
  *
  * Files go with a message the way every chat takes them: the "+" at the
  * foot's left opens the system's file picker, an image pasted into the box
- * is taken, and files dropped on the card are, each drawn as a chip above
- * the words with its way off (`attached-file-chips.tsx`). A file that
- * cannot come says why under the card while the rest still come
+ * is taken, and files dropped on the card are, each drawn as a chip over
+ * the foot's bar with its way off (`attached-file-chips.tsx`). A file that
+ * cannot come says why under the bar while the rest still come
  * (`attached-files.ts`). A message is words, files, or both, as the wire
  * takes it (`hasWordsOrFiles`), so files alone send too.
  *
@@ -174,8 +172,8 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * and the round Send or Stop always stand whole. The chips drawing their
  * marks alone are `FOLD_WIDTH`'s, read off the card's width here; what the
  * ⋯ takes in is the stylesheet's, which it offers as it opens, read off the
- * foot itself; a popover it opens hangs at the foot's right, where its own
- * hidden press stood.
+ * card itself; a popover it opens hangs where the ⋯ stands, at the right
+ * of the owner's presses, where its own hidden press stood.
  *
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
@@ -208,6 +206,7 @@ const BUTTON = {
   SEND: "Send",
   STOP: "Stop",
   STOPPING: "Stopping…",
+  SENDING: "Sending",
   ATTACH: "Attach files",
   MORE_THING: "Composer",
 } as const;
@@ -242,11 +241,11 @@ interface OverflowOffer {
   action: MenuAction;
 }
 
-/** The presses standing on the foot that the stylesheet hid for want of room. */
-function hiddenPresses(foot: HTMLElement | null): readonly OverflowPress[] {
-  if (foot === null) return [];
+/** The presses standing on the card's foot that the stylesheet hid for want of room. */
+function hiddenPresses(card: HTMLElement | null): readonly OverflowPress[] {
+  if (card === null) return [];
   return Object.values(OVERFLOW_PRESS).filter((press) => {
-    const element = foot.querySelector(`.${press}`);
+    const element = card.querySelector(`.${press}`);
     return element !== null && getComputedStyle(element).display === "none";
   });
 }
@@ -302,7 +301,7 @@ export function ComposerAttach({ children }: { children: ReactNode }): React.JSX
   return <span className="agent-composer-attach">{children}</span>;
 }
 
-/** The foot's right: the model chip, the context ring, the microphone, and Send. */
+/** The owner's presses at the foot's right, before a call and Send: the model chip, the servers, the context ring, the microphone, and the ⋯. */
 export function ComposerActions({ children }: { children: ReactNode }): React.JSX.Element {
   return <div className="agent-composer-actions">{children}</div>;
 }
@@ -315,10 +314,10 @@ export function ComposerActions({ children }: { children: ReactNode }): React.JS
  * width; the panel beside it may be dragged with no window resize.
  */
 function ComposerMore({
-  foot,
+  card,
   offers,
 }: {
-  foot: RefObject<HTMLDivElement | null>;
+  card: RefObject<HTMLDivElement | null>;
   offers: readonly OverflowOffer[];
 }): React.JSX.Element {
   const menu = useMenu(true);
@@ -327,15 +326,15 @@ function ComposerMore({
   const standing = menu.open !== undefined;
   const { close } = menu;
   useEffect(() => {
-    const card = foot.current;
-    if (!standing || card === null) return undefined;
-    const width = card.getBoundingClientRect().width;
+    const box = card.current;
+    if (!standing || box === null) return undefined;
+    const width = box.getBoundingClientRect().width;
     const observer = new ResizeObserver(() => {
-      if (card.getBoundingClientRect().width !== width) close(false);
+      if (box.getBoundingClientRect().width !== width) close(false);
     });
-    observer.observe(card);
+    observer.observe(box);
     return () => observer.disconnect();
-  }, [standing, close, foot]);
+  }, [standing, close, card]);
   const actions = offers.filter((offer) => taken.includes(offer.press)).map((each) => each.action);
   return (
     <>
@@ -344,7 +343,7 @@ function ComposerMore({
           thing={BUTTON.MORE_THING}
           {...trigger}
           onClick={(event) => {
-            setTaken(hiddenPresses(foot.current));
+            setTaken(hiddenPresses(card.current));
             trigger.onClick(event);
           }}
         />
@@ -466,7 +465,6 @@ export function AgentComposer({
   const card = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const picker = useRef<AttachPicker>(null);
-  const foot = useRef<HTMLDivElement>(null);
   const footWidth = useFootWidth(card);
   const folds = (below: number) => footWidth !== undefined && footWidth < below;
   // The popovers the ⋯ may open in place of their hidden presses.
@@ -622,6 +620,8 @@ export function AgentComposer({
     side: listSide,
   });
   const { dictation, dictating } = pickers;
+  // Whether a dictation's strip stands in the bar's place: while the box dictates, or while a clip is read as a call takes the microphone.
+  const striped = dictating && (dictates || dictation.phase === DICTATION_PHASE.TRANSCRIBING);
   // Note that a call taking the microphone ends a dictation under way, keeping
   // the words already said, so the row it hands the call to is never hidden
   // under the dictation's strip.
@@ -643,7 +643,7 @@ export function AgentComposer({
   // ⋯, after its own close has handed it to its hidden press, because a
   // hidden press can hold no keyboard; with the press drawn, the ⋯ is not.
   const handBack = (set: (open: boolean) => void) => (open: boolean) => {
-    const more = foot.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
+    const more = card.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const press = more?.querySelector<HTMLElement>("button") ?? null;
     const returning =
       !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
@@ -712,10 +712,6 @@ export function AgentComposer({
         }}
       >
         {above}
-        <AttachedFileChips
-          files={attachmentChips(composer.attachments)}
-          onRemove={held ? undefined : files.remove}
-        />
         <ComposerField
           module={module}
           editor={editor}
@@ -750,110 +746,102 @@ export function AgentComposer({
           onPasteFiles={files.paste}
           quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
         />
-        <PromptInputFooter ref={foot}>
-          {/* Note that a clip already being read as a call begins keeps its strip
-              and its Cancel until it lands, with the call's controls beside it,
-              so neither the clip nor the call is left with no way to reach it. */}
-          {dictating && (dictates || dictation.phase === DICTATION_PHASE.TRANSCRIBING) ? (
+        <ComposerFoot
+          files={
+            <AttachedFileChips
+              files={attachmentChips(composer.attachments)}
+              onRemove={held ? undefined : files.remove}
+            />
+          }
+          tools={
             <>
-              <DictationStrip dictation={dictation} />
-              {dictates ? null : call}
-            </>
-          ) : (
-            <>
-              <PromptInputTools>
-                <ComposerAttach>
-                  <AttachFilesButton
-                    label={BUTTON.ATTACH}
-                    disabled={held}
-                    picker={picker}
-                    onFiles={files.attach}
-                  />
-                </ComposerAttach>
-                <BranchChip
-                  published={published}
-                  doors={doors}
-                  narrow={folds(FOLD_WIDTH.PUBLISHED)}
+              <ComposerAttach>
+                <AttachFilesButton
+                  label={BUTTON.ATTACH}
+                  disabled={held}
+                  picker={picker}
+                  onFiles={files.attach}
                 />
-                {tools}
-              </PromptInputTools>
-              <ComposerActions>
-                <LengthCounter length={composer.draft.length} limit={maxLength} />
-                {actions?.(folds(FOLD_WIDTH.ACTIONS))}
-                {model === undefined ? null : (
-                  <AgentModelChip
-                    model={model}
-                    models={models}
-                    modelsFailed={modelsFailed}
-                    readModels={readModels}
-                    usage={usage}
-                    payer={payer}
-                    narrow={folds(FOLD_WIDTH.MODEL)}
-                  />
-                )}
-                {servers === undefined ? null : (
-                  <AgentServersButton
-                    servers={servers}
-                    statuses={statuses}
-                    open={serversOpen}
-                    onOpenChange={handBack(setServersOpen)}
-                  />
-                )}
-                <AgentContextRing
-                  context={context}
-                  brief={brief}
-                  open={contextOpen}
-                  onOpenChange={handBack(setContextOpen)}
-                />
-                {call}
-                {dictates ? (
-                  <DictateButton dictation={dictation} disabled={held || module === undefined} />
-                ) : null}
-                <ComposerMore foot={foot} offers={offers} />
-                {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
-                {showsStop ? (
-                  <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
-                    <PromptInputSubmit
-                      type={BUTTON_TYPE.BUTTON}
-                      status={stopping ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.STREAMING}
-                      label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
-                      disabled={stopping}
-                      onClick={stop}
-                    />
-                  </Tooltip>
-                ) : (
-                  <Tooltip label={sendLabel}>
-                    <PromptInputSubmit
-                      label={sendLabel}
-                      status={composer.sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                      disabled={held || empty || !sendable || files.reading}
-                    />
-                  </Tooltip>
-                )}
-              </ComposerActions>
+              </ComposerAttach>
+              <BranchChip
+                published={published}
+                doors={doors}
+                narrow={folds(FOLD_WIDTH.PUBLISHED)}
+              />
+              {tools}
             </>
-          )}
-        </PromptInputFooter>
+          }
+          counter={{ length: composer.draft.length, limit: maxLength }}
+          actions={
+            <ComposerActions>
+              {actions?.(folds(FOLD_WIDTH.ACTIONS))}
+              {model === undefined ? null : (
+                <AgentModelChip
+                  model={model}
+                  models={models}
+                  modelsFailed={modelsFailed}
+                  readModels={readModels}
+                  usage={usage}
+                  payer={payer}
+                  narrow={folds(FOLD_WIDTH.MODEL)}
+                />
+              )}
+              {servers === undefined ? null : (
+                <AgentServersButton
+                  servers={servers}
+                  statuses={statuses}
+                  open={serversOpen}
+                  onOpenChange={handBack(setServersOpen)}
+                />
+              )}
+              <AgentContextRing
+                context={context}
+                brief={brief}
+                open={contextOpen}
+                onOpenChange={handBack(setContextOpen)}
+              />
+              {dictates ? (
+                <DictateButton dictation={dictation} disabled={held || module === undefined} />
+              ) : null}
+              <ComposerMore card={card} offers={offers} />
+              {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
+            </ComposerActions>
+          }
+          // Note that a clip already being read as a call begins keeps its strip
+          // and its Cancel until it lands, with the call's controls beside it,
+          // so neither the clip nor the call is left with no way to reach it.
+          call={striped && dictates ? undefined : call}
+          strip={striped ? <DictationStrip dictation={dictation} /> : undefined}
+          send={{
+            label: sendLabel,
+            empty,
+            held: held || !sendable || files.reading,
+            busy: composer.sending,
+            busyLabel: BUTTON.SENDING,
+          }}
+          stop={
+            showsStop
+              ? { label: BUTTON.STOP, onStop: stop, busy: stopping, busyLabel: BUTTON.STOPPING }
+              : undefined
+          }
+          note={
+            note === undefined
+              ? undefined
+              : {
+                  words: note.text,
+                  remedy:
+                    remedyWords === undefined || remedy === undefined
+                      ? undefined
+                      : { label: remedyWords, onClick: remedy },
+                  onRetry:
+                    retries && (remedyWords === undefined || retriesBesideRemedy(note))
+                      ? composer.retry
+                      : undefined,
+                  mends: closed ? closedRemedy : undefined,
+                }
+          }
+        />
       </PromptInput>
-      {note !== undefined ? (
-        <div className="agent-composer-note">
-          <ErrorState
-            remedy={
-              remedyWords === undefined || remedy === undefined
-                ? undefined
-                : { label: remedyWords, onClick: remedy }
-            }
-            onRetry={
-              retries && (remedyWords === undefined || retriesBesideRemedy(note))
-                ? composer.retry
-                : undefined
-            }
-          >
-            {note.text}
-          </ErrorState>
-          {closed ? closedRemedy : null}
-        </div>
-      ) : null}
     </ComposerCard>
   );
 }

@@ -28,6 +28,7 @@ import { MentionChipCard } from "./mention-chip.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useLinkStanding } from "./use-link-standing.js";
+import { linkPressOf } from "./use-open-link.js";
 
 /**
  * agent-published.tsx -- what an agent published, on its tab: the pull request's row pinned over the box, or the branch's chip at the box's foot while no pull request stands.
@@ -134,9 +135,10 @@ export function BranchChip({
             look={CHIP_LOOK.PILL}
             iconOnly={narrow}
             aria-label={branch}
-            onClick={() => {
+            href={url}
+            onClick={(event) => {
               menu.close(false);
-              doors.openGitHub(url);
+              linkPressOf(doors.openGitHub, url)(event);
             }}
             {...menu.contextMenu()}
           >

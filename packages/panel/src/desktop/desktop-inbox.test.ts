@@ -8324,9 +8324,12 @@ test("New thread in the Inbox's head opens a draft in the pane, To naming the ag
   typeInComposer(pane, "Draft the annual plan's line too.");
   assert.equal(send().disabled, false, "To and words light Send, the subject being optional");
 
-  const subject =
-    pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
-    assert.fail("the draft has a Subject");
+  const subject = subjectField(pane);
+  assert.equal(
+    subjectLabel(pane).textContent,
+    "SubjectOptional",
+    "the Subject says it may be left empty, in its label",
+  );
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(subject, "Annual plan copy");
@@ -8396,11 +8399,23 @@ async function openNewThread(page: HTMLElement): Promise<HTMLElement> {
   return pane;
 }
 
+/** The label of a New thread's Subject. */
+function subjectLabel(pane: HTMLElement): HTMLLabelElement {
+  return (
+    [...pane.querySelectorAll("label")].find((label) => label.textContent?.startsWith("Subject")) ??
+    assert.fail("the draft has a Subject")
+  );
+}
+
+/** The field a New thread's Subject label names. */
+function subjectField(pane: HTMLElement): HTMLInputElement {
+  const field = pane.querySelector<HTMLInputElement>(`input[id="${subjectLabel(pane).htmlFor}"]`);
+  return field ?? assert.fail("the Subject label names a field");
+}
+
 /** Types `words` into a New thread's Subject. */
 function typeSubject(pane: HTMLElement, words: string): void {
-  const subject =
-    pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
-    assert.fail("the draft has a Subject");
+  const subject = subjectField(pane);
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(subject, words);
@@ -8412,7 +8427,7 @@ function typeSubject(pane: HTMLElement, words: string): void {
 function threadDraft(pane: HTMLElement) {
   return {
     to: pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    subject: pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]')?.value,
+    subject: subjectField(pane).value,
     words: composerEditor(pane).textContent,
     files: attachedNames(pane),
   };

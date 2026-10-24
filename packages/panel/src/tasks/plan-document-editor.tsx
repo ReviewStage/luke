@@ -8,9 +8,10 @@ import {
   EDITABLE_TEXT_BLOCK_SELECTOR,
   EditableBlock,
   EditableHeading,
+  PageHeader,
   RetryButton,
 } from "@luke/ui";
-import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
+import { markdownClass } from "@luke/ui/markdown-class";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
@@ -464,6 +465,7 @@ export function EditableTitle({
   entry,
   editing,
   renaming = 0,
+  actions,
   onRename,
   onDraft,
 }: {
@@ -473,13 +475,15 @@ export function EditableTitle({
   editing: PlanEditing;
   /** How many times Rename was chosen; each change is an ask of its own. */
   renaming?: number;
+  /** The title's ⋯, at the end of its line. */
+  actions?: ReactNode;
   /** Renames the task, answering whether the name was taken. */
   onRename: (name: string) => Promise<boolean>;
   onDraft: (name: string | undefined) => void;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
   const prefetchEditorBundle = usePrefetchEditorBundle();
-  const text = useRef<HTMLDivElement>(null);
+  const text = useRef<HTMLElement>(null);
   const [pause, restartPause] = useAtom(titlePauseAtom);
   const stamp = useRef(0);
   // ↑ on the text's first line comes back into the title, its caret at the end.
@@ -566,50 +570,55 @@ export function EditableTitle({
     };
   }, []);
   return (
-    <EditableBlock
-      ref={block}
-      label="Title"
-      kind={EDITABLE_BLOCK_KIND.TITLE}
-      entry={entry}
-      onPointerEnter={prefetchEditorBundle}
-      onFocus={(event) => {
-        prefetchEditorBundle();
-        if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
-      }}
-      onOpen={() => {
-        if (text.current !== null) caretAtEnd(text.current);
-      }}
-    >
-      <div className={`${MARKDOWN_CLASS.ROOT} task-title ph-no-capture`}>
-        <EditableHeading
-          ref={text}
-          label="Task name"
-          level={1}
-          onFocus={() => {
-            saved.current = false;
-          }}
-          onInput={(event) => {
-            saved.current = false;
-            if (!typed.current) {
-              typed.current = true;
-              tellUnsaved();
-            }
-            boundTitle(event.currentTarget);
-            const next = typedName(event.currentTarget);
-            echo.current = next === "" ? undefined : next;
-            onDraft(echo.current);
-            stamp.current += 1;
-            restartPause(stamp.current);
-          }}
-          onBlur={(event) => save(event.currentTarget)}
-          onLeave={(way, heading) => {
-            save(heading);
-            if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
-            else editing.open();
-          }}
+    // Note that the unit's class lets the ⋯ show as the pointer or the keyboard comes onto the title, as a section's does.
+    <div className="task-title plan-unit-attributed ph-no-capture">
+      <EditableBlock
+        ref={block}
+        label="Title"
+        kind={EDITABLE_BLOCK_KIND.TITLE}
+        entry={entry}
+        onPointerEnter={prefetchEditorBundle}
+        onFocus={(event) => {
+          prefetchEditorBundle();
+          if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
+        }}
+        onOpen={() => {
+          if (text.current !== null) caretAtEnd(text.current);
+        }}
+      >
+        <PageHeader
+          title={
+            <EditableHeading
+              ref={text}
+              label="Task name"
+              onFocus={() => {
+                saved.current = false;
+              }}
+              onInput={(event) => {
+                saved.current = false;
+                if (!typed.current) {
+                  typed.current = true;
+                  tellUnsaved();
+                }
+                boundTitle(event.currentTarget);
+                const next = typedName(event.currentTarget);
+                echo.current = next === "" ? undefined : next;
+                onDraft(echo.current);
+                stamp.current += 1;
+                restartPause(stamp.current);
+              }}
+              onBlur={(event) => save(event.currentTarget)}
+              onLeave={(way, heading) => {
+                save(heading);
+                if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
+                else editing.open();
+              }}
+            />
+          }
+          actions={actions}
         />
-      </div>
-    </EditableBlock>
+      </EditableBlock>
+    </div>
   );
 }
 

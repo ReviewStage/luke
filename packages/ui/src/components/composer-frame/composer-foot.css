@@ -55,6 +55,14 @@
     margin-inline-start: auto;
   }
 
+  /* The note's line, and under it what mends it where that is more than one press. */
+  .luke-composer-foot-note {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--luke-tight-gap);
+  }
+
   /* A dictation's strip takes the bar's room, the call beside it at the end. */
   .luke-composer-foot-strip {
     display: flex;

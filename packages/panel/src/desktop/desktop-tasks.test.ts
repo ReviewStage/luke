@@ -865,7 +865,7 @@ test("a plan's document opens on its title, with who created it and last edited 
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
   assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
-  assert.ok(first?.querySelector(".task-title"), "the title leads the document");
+  assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
   assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
   act(() => root.unmount());

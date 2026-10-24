@@ -234,7 +234,7 @@ async function mountChosen(width: number, touch: boolean) {
 /** The presses drawn along the foot's right-hand row, in the order they stand, each by its name. */
 function rowPresses(container: HTMLElement): readonly HTMLButtonElement[] {
   const row =
-    container.querySelector(".agent-composer-actions") ?? assert.fail("the foot's row stands");
+    container.querySelector(".luke-composer-foot-end") ?? assert.fail("the foot's row stands");
   return [...row.querySelectorAll<HTMLButtonElement>("button")].filter(shown);
 }
 

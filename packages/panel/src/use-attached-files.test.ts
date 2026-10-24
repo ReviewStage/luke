@@ -137,10 +137,7 @@ function held(container: HTMLElement) {
     chips: [...container.querySelectorAll('[aria-label="Attached files"] > li')].map(
       attachmentChipName,
     ),
-    note:
-      container.querySelector(
-        '.agent-composer-note [role="alert"], .luke-composer-foot-note [role="alert"]',
-      )?.textContent ?? null,
+    note: container.querySelector('.luke-composer-foot-note [role="alert"]')?.textContent ?? null,
   };
 }
 

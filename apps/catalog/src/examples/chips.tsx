@@ -204,6 +204,19 @@ function Chips(): React.JSX.Element {
           </Chip>
         </Inline>
       </CatalogSection>
+      <CatalogSection id="chips-link" title="A link, given an address">
+        <Inline gap={GAP.TIGHT}>
+          <Chip
+            look={CHIP_LOOK.PILL}
+            size={CHIP_SIZE.COMPACT}
+            href="#chips-link"
+            data-provider="github"
+          >
+            <ProviderMark provider={MARK_PROVIDER.GITHUB} />
+            <ChipName mono>#312</ChipName>
+          </Chip>
+        </Inline>
+      </CatalogSection>
       <CatalogSection id="chips-removable" title="Removable">
         <RemovableRow />
       </CatalogSection>

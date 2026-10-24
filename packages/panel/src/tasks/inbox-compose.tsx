@@ -34,6 +34,7 @@ import {
   CHIP_WIDTH,
   FoldingButton,
   type FoldingButtonHint,
+  FormField,
   matchingRows,
   PageToolbar,
   POPOVER_ALIGN,
@@ -82,7 +83,6 @@ const NO_AGENT = "Choose an agent";
 const NO_MATCH = "No agent matches";
 const NO_AGENTS = "No agents in this workspace yet.";
 const AGENTS_FAILED = "The workspace's agents could not be read.";
-const SUBJECT_PLACEHOLDER = "Optional";
 const BACK_TO_INBOX = "Back to inbox";
 const DISCARDED = "Draft discarded";
 
@@ -492,19 +492,21 @@ function ComposeCard({
               }}
             />
           </div>
-          <div className="inbox-compose-row">
-            <span className="inbox-compose-label">{SUBJECT}</span>
-            <TextField
-              label={SUBJECT}
-              size={TEXT_FIELD_SIZE.INLINE}
-              value={draft.title ?? ""}
-              placeholder={SUBJECT_PLACEHOLDER}
-              maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
-              disabled={sending}
-              autoFocus
-              onChange={(title) => write((was) => ({ ...was, title }))}
-              onEnter={() => field.editor.current?.focus()}
-            />
+          <div className="inbox-compose-row" data-field="">
+            <FormField label={SUBJECT} optional>
+              {(control) => (
+                <TextField
+                  field={control}
+                  size={TEXT_FIELD_SIZE.INLINE}
+                  value={draft.title ?? ""}
+                  maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
+                  disabled={sending}
+                  autoFocus
+                  onChange={(title) => write((was) => ({ ...was, title }))}
+                  onEnter={() => field.editor.current?.focus()}
+                />
+              )}
+            </FormField>
           </div>
         </div>
         <div className="agent-composer inbox-compose-box" {...files.drop.target}>

@@ -44,7 +44,7 @@ test("a box whose editor bundle could not be loaded says so under the card, and 
   await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
 
   assert.equal(
-    container.querySelector(".agent-composer-note")?.textContent,
+    container.querySelector(".luke-composer-foot-note")?.textContent,
     "The message box could not be loaded.",
   );
   assert.equal(container.querySelector(".agent-composer-input")?.getAttribute("aria-busy"), "true");

@@ -1466,39 +1466,6 @@ ul.actor-stack {
   background: var(--luke-color-fill-pressed);
 }
 
-/* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
-   alert in one cell, only the state's own drawn, so a copy crossfades in
-   place, the check in the success colour, and the button never moves. */
-.copy-glyph {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-}
-
-.copy-glyph > svg {
-  grid-area: 1 / 1;
-  opacity: 0;
-  transform: scale(0.6);
-  transition:
-    opacity var(--luke-duration-quick) var(--luke-motion-exit),
-    transform var(--luke-duration-fast) var(--luke-spring-fast);
-}
-
-.copy-glyph[data-state="idle"] > [data-glyph="idle"],
-.copy-glyph[data-state="copied"] > [data-glyph="copied"],
-.copy-glyph[data-state="failed"] > [data-glyph="failed"] {
-  opacity: 1;
-  transform: none;
-}
-
-.copy-glyph > [data-glyph="copied"] {
-  color: var(--luke-color-complete);
-}
-
-.copy-glyph > [data-glyph="failed"] {
-  color: var(--luke-color-danger-text);
-}
-
 /* Plan actions ---------------------------------------------------------- */
 
 /* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its
@@ -1637,6 +1604,12 @@ ul.actor-stack {
   border-bottom: 1px solid var(--luke-color-border);
   column-gap: var(--luke-space-12);
   grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
+}
+
+/* A row that is a FormField stands its label over its control rather than before it. */
+.inbox-compose-row[data-field] {
+  display: block;
+  padding-block: var(--luke-space-8);
 }
 
 .inbox-compose-label {
@@ -3295,18 +3268,15 @@ ul.actor-stack {
 
 /* The Automations list's toolbar: where its two acts' words would crowd the
    title, Create with an agent folds to its glyph, named by its pill
-   (`folding-button.tsx`), and New automation keeps its words. */
+   (`folding-button.tsx`), and New automation keeps its words. The bar's own
+   width, its insets included, is what the query reads. */
 .automations-toolbar {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: var(--luke-control-gap);
+  flex: none;
   container: automations-toolbar / inline-size;
 }
 
-@container automations-toolbar (max-width: 559px) {
-  .automations-toolbar > * {
+@container automations-toolbar (max-width: 599px) {
+  .automations-toolbar .luke-toolbar-actions {
     --luke-fold: folded;
   }
 }
@@ -5196,7 +5166,7 @@ ul.actor-stack {
 /* Where the card is too narrow for one row, as in a narrow window zoomed
    in, the foot wraps: its chips and its presses each stand on a line of
    their own, the presses kept at the right. */
-.new-task-composer :is(.prompt-input-footer, .prompt-input-tools) {
+.new-task-composer :is(.luke-composer-foot-bar, .luke-composer-foot-tools) {
   flex-wrap: wrap;
   row-gap: var(--luke-space-8);
 }
@@ -5682,20 +5652,12 @@ ul.actor-stack {
   flex: 1 1 auto;
 }
 
-/* The Tasks page (`tasks-page.tsx`): its
-   List | Board switch stands beside its title, and the List runs its groups
-   down the page, each headed as a Board's column is, its rows the page's
-   own `ListRow`s led by the task's priority, key, and status. */
-.desktop-toolbar-heading.tasks-page-heading {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-}
-
-/* The List is one grid (`tasks-list.tsx`), its columns the properties the
-   view draws (`--tasks-list-columns`), and every group and every row a
-   subgrid of it, so each column lines up down the whole page whatever any
-   one row holds, as Linear's list stands its rows. */
+/* The Tasks page's List (`tasks-list.tsx`) runs its groups down the page,
+   each headed as a Board's column is, its rows the page's own `ListRow`s
+   led by the task's priority, key, and status. It is one grid, its columns
+   the properties the view draws (`--tasks-list-columns`), and every group
+   and every row a subgrid of it, so each column lines up down the whole
+   page whatever any one row holds, as Linear's list stands its rows. */
 .tasks-list {
   display: grid;
   grid-template-columns: var(--tasks-list-columns);
@@ -5706,6 +5668,22 @@ ul.actor-stack {
 
 .tasks-list-none {
   grid-column: 1 / -1;
+}
+
+/* The selection bar floats at the foot of the page while rows are chosen,
+   centred, over the rows that scroll under it; only the bar takes the
+   pointer, so the rows beside it stay pressable. */
+.tasks-list-selection {
+  position: sticky;
+  z-index: 4;
+  bottom: var(--luke-space-16);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.tasks-list-selection > * {
+  pointer-events: auto;
 }
 
 .tasks-list-group,
