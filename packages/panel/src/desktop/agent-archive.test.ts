@@ -15,6 +15,7 @@ import { afterEach, test, vi } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { ARCHIVE_DRAWN } from "../tasks/use-coding-agents.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 
@@ -276,6 +277,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
   try {
     let answer: () => void = () => undefined;
     let unarchives = 0;
+    let drawn: string | undefined;
     const agents = codingAgentsControl({
       archived: [
         {
@@ -290,8 +292,9 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
           archivedAt: 2,
         },
       ],
-      onArchive: () => {
+      onArchive: (_id, _archived, when) => {
         unarchives += 1;
+        drawn = when;
         return new Promise((resolve) => {
           answer = () => resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
         });
@@ -319,6 +322,11 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     assert.equal(ring(), true);
     act(() => unarchive.click());
     assert.equal(unarchives, 1, "a second press waits for the first");
+    assert.equal(
+      drawn,
+      ARCHIVE_DRAWN.ON_ANSWER,
+      "the row stays to show it, rather than leave at once",
+    );
     await act(async () => answer());
     assert.equal(unarchive.getAttribute("aria-label"), "Unarchive");
     assert.equal(ring(), false);

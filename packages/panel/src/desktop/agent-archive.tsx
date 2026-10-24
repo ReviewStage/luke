@@ -26,7 +26,11 @@ import { useBusyPress } from "../settings/busy-press.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
-import { ARCHIVE_DRAWN, type CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import {
+  ARCHIVE_DRAWN,
+  type ArchiveDrawn,
+  type CodingAgentsControl,
+} from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -107,8 +111,8 @@ function archiveQuestion(name: string): DialogQuestion {
 /** A press that archives or unarchives without a dialog, its refusal said in a toast. */
 function useArchivePress(agents: CodingAgentsControl) {
   const toast = useToast();
-  return (agentId: string, archived: boolean) =>
-    agents.onArchive(agentId, archived).then((result: ActionResult) => {
+  return (agentId: string, archived: boolean, drawn?: ArchiveDrawn) =>
+    agents.onArchive(agentId, archived, drawn).then((result: ActionResult) => {
       if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
       toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
@@ -193,7 +197,8 @@ function ArchivedAgentRow({
   const menu = useMenu(shown);
   const item = useRef<HTMLLIElement>(null);
   const unarchive = () => press(agent.id, false);
-  const unarchiving = useBusyPress(unarchive);
+  // Note that the button's Unarchive is drawn on the answer, because drawn at once the row would leave and take its ring with it.
+  const unarchiving = useBusyPress(() => press(agent.id, false, ARCHIVE_DRAWN.ON_ANSWER));
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
     <li ref={item} className="task-summary-archived-agent" {...menu.contextMenu()}>
