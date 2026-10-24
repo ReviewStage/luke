@@ -1,8 +1,8 @@
-import { type ReactNode, useId, useRef } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
 import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
 import { useHeadingAway } from "../page-header/heading-away.js";
 import { PageHeader } from "../page-header/page-header.js";
-import { Toolbar } from "../toolbar/toolbar.js";
+import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
 
 /**
  * detail-page.tsx -- the page one thing is drawn on: its title and acts, its main content, and an optional secondary column beside it.
@@ -33,9 +33,12 @@ import { Toolbar } from "../toolbar/toolbar.js";
  * collection's page, so its words line up with the title's.
  *
  * The page heads itself with a document's header (`PageHeader`), its title
- * the page's one `h1`. The secondary column is a complementary landmark
- * named by its `label`. The page names itself by its title and takes no
- * class or style.
+ * the page's one `h1`. Where the window's bar stands above the page and what
+ * stands beside it (an editor with a panel beside it) rather than inside
+ * its column, the page draws no bar of its own and hands the caller the name
+ * its header reads (`onPickUp`), for the caller's bar to pick up. The
+ * secondary column is a complementary landmark named by its `label`. The
+ * page names itself by its title and takes no class or style.
  */
 
 /** How far in from its sides the page stands its words: a page's inset, or a column's, as tabs read at the measure stand theirs. */
@@ -57,10 +60,19 @@ export type DetailSecondary = {
 export function DetailPage({
   secondary,
   inset = DETAIL_PAGE_INSET.PAGE,
+  onPickUp,
   children,
   ...heading
 }: PageHeading & {
   secondary?: DetailSecondary | undefined;
+  /**
+   * For a page headed by its own title whose bar stands outside it: hears
+   * what the bar picks up, the name the header reads and whether the header
+   * has scrolled away (`Toolbar`'s `pickUp`), as either changes, in place of
+   * the page drawing a bar. It must keep one identity (a state setter), or
+   * each draw would hand it the name again.
+   */
+  onPickUp?: ((pickUp: ToolbarPickUp) => void) | undefined;
   /** How far in from its sides the words stand; a page's inset where left out. */
   inset?: DetailPageInset | undefined;
   /** The main content (sections, a document, a transcript). */
@@ -71,6 +83,11 @@ export function DetailPage({
   const header = useRef<HTMLDivElement>(null);
   const named = useHeadingAway(body, header);
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
+  const barOutside = !underToolbar && onPickUp !== undefined;
+  // Note that the caller hears the name when it or its visibility changes, because its bar stands outside this page and cannot read the header itself.
+  useEffect(() => {
+    onPickUp?.({ name: named.name, shown: named.away });
+  }, [onPickUp, named.name, named.away]);
   return (
     <section
       className="luke-detail-page"
@@ -82,7 +99,7 @@ export function DetailPage({
     >
       {underToolbar ? (
         heading.toolbar
-      ) : (
+      ) : barOutside ? null : (
         <Toolbar pickUp={{ name: named.name, shown: named.away }} />
       )}
       <div ref={body} className="luke-detail-page-body">

@@ -299,3 +299,42 @@ test("a tab strip's bar wraps its strip to a row of its own, under the actions, 
   assert.equal(declared(heading, "order"), "1");
   assert.equal(declared(strip("wide"), "flex-wrap"), "");
 });
+
+test("a document's trail leads its bar, and its name joins the trail as the current page only once its header has scrolled away", () => {
+  // jsdom lacks the ResizeObserver a folding way back measures its fold by.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+  const trail = [{ label: "Automations", icon: createElement("svg"), onPress: () => undefined }];
+  const crumbs = (shown: boolean): string[] => {
+    const banner = bar({ trail, pickUp: { name: "Nightly triage", shown } });
+    return [...banner.querySelectorAll("nav li")].map((crumb) => crumb.textContent ?? "");
+  };
+
+  assert.deepEqual(crumbs(false), ["Automations"]);
+  document.body.replaceChildren();
+  assert.deepEqual(crumbs(true), ["Automations", "Nightly triage"]);
+});
+
+test("a document's trail stands alone while its name is not yet read", () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+  const banner = bar({
+    trail: [{ label: "Automations", icon: createElement("svg"), onPress: () => undefined }],
+    pickUp: { name: "", shown: false },
+  });
+
+  assert.deepEqual(
+    [...banner.querySelectorAll("nav li")].map((crumb) => crumb.textContent),
+    ["Automations"],
+  );
+});

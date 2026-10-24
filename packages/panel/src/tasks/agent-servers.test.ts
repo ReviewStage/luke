@@ -274,6 +274,23 @@ test("the arrows move the highlight, and Space on an empty search flips the high
   assert.deepEqual(switched, [[VERCEL]]);
 });
 
+test("a server page's back is hinted \"Back to MCP servers\", names no key since the popover's own keys step back, and returns to the servers", async () => {
+  const { container } = await opened();
+  openVercel(container);
+  const back =
+    container.querySelector<HTMLButtonElement>(
+      ".agent-servers-page-head > .luke-folding-button button",
+    ) ?? assert.fail("no back on the page");
+
+  restOn(back);
+  const hint = document.querySelector('[role="tooltip"]:not([inert])');
+
+  assert.equal(hint?.textContent, "Back to MCP servers");
+  assert.equal(back.getAttribute("aria-keyshortcuts"), null);
+  act(() => back.click());
+  assert.equal(container.querySelector(".agent-servers-page-title"), null);
+});
+
 test("a pointer's press on a server page's switch leaves the focus in the filter, so Backspace still goes back", async () => {
   const { container, key, switched } = await opened();
   act(() => serverPress(container, "Vercel")?.click());

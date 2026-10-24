@@ -216,3 +216,29 @@ test("a title that is more than words hands the bar the words a reader hears, no
   scrollHeading(container, true);
   expect(barName(container)).toBe("Ada Lovelace");
 });
+
+test("a page whose bar stands outside it draws no bar and hands the caller the name its bar picks up, shown once the header has scrolled away", () => {
+  vi.stubGlobal("IntersectionObserver", HeadingObserver);
+  const picked: { name: string; shown: boolean }[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(DetailPage, {
+        frame: PAGE_FRAME.PAGE,
+        title: "Launch checklist",
+        onPickUp: (pickUp: { name: string; shown: boolean }) => picked.push(pickUp),
+        children: createElement("p", null, "Step 1"),
+      }),
+    ),
+  );
+
+  expect(container.querySelector("header.luke-toolbar")).toBeNull();
+  expect(container.querySelectorAll("h1")).toHaveLength(1);
+  expect(picked.at(-1)).toEqual({ name: "Launch checklist", shown: false });
+
+  scrollHeading(container, true);
+  expect(picked.at(-1)).toEqual({ name: "Launch checklist", shown: true });
+});

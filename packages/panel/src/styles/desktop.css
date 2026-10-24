@@ -3084,66 +3084,25 @@ ul.actor-stack {
   line-height: var(--luke-type-caption-leading);
 }
 
-/* An automation's page: crumbs back to the list naming its owner, then its
-   name, the line saying who sees it, and its form at a Settings measure.
-   The crumbs clip what runs past them, though not the keyboard's ring on a
-   crumb, so the way back never draws over the tag after them. */
-.automation-crumbs {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-tight-gap);
-  overflow: clip;
-  overflow-clip-margin: var(--luke-focus-ring-reach);
-  color: var(--luke-color-text-muted);
-}
-
-.automation-crumbs > svg {
-  width: 13px; /* off-scale: the crumbs' separator, a size under a control's glyph */
-  height: 13px;
-  flex: none;
-}
-
-/* The automation's name in the dialog heading role, the size a toolbar's
-   title stands at. */
-.automation-crumb {
-  overflow: hidden;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-  line-height: var(--luke-type-dialog-leading);
-  white-space: nowrap;
-}
+/* An automation's page: its toolbar, then its header and its form at a
+   Settings measure. */
 
 /* Where the draft stands, in the caption role (`Text`), kept on one line. */
 .automation-editor-status {
   white-space: nowrap;
 }
 
-/* The editor's toolbar holds its crumbs and its acts in a box of their own,
-   whose width a container query reads: the toolbar's own padding leaves the
-   traffic lights their room or not as the sidebar folds, so the window's
-   width says nothing of the room the crumbs have. Too narrow for every
-   act's words beside a readable name, the acts fold to their glyphs, each
-   named by its pill (`@luke/ui`'s `FoldingButton`, folded by `--luke-fold`), and the draft's state goes,
+/* The editor's toolbar stands in a box of its own, whose width a container
+   query reads: the toolbar's own padding leaves the traffic lights their room
+   or not as the sidebar folds, so the window's width says nothing of the room
+   the crumbs have. Too narrow for every act's words beside a readable name,
+   the acts fold to their glyphs, each named by its pill (`@luke/ui`'s
+   `FoldingButton`, folded by `--luke-fold`), and the draft's state goes,
    since Save, pressable or not, says it already; the crumb back folds to
    its glyph alike, so the name it leads to keeps the room. */
 .automation-toolbar {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: var(--luke-control-gap);
+  flex: none;
   container: automation-toolbar / inline-size;
-}
-
-/* An experiment's tag after the crumbs stands on the title's last baseline,
-   which an automation's name is the last of, the first being the smaller
-   words of the way back. */
-.automation-toolbar .luke-toolbar-heading:has(> .experiment-tag) {
-  display: flex;
-  align-items: last baseline;
-  gap: var(--luke-control-gap);
 }
 
 @container automation-toolbar (max-width: 879px) {

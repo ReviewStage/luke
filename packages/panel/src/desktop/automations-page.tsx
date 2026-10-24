@@ -21,6 +21,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BackButton,
   BUTTON_VARIANT,
   Button,
   CardPress,
@@ -478,13 +479,20 @@ function ListPage({
   );
 }
 
+/** What the way back to the list is called, and where it leads as its hint names it. */
+const AUTOMATIONS_PLACE = "Automations";
+const AUTOMATIONS_PLACE_NAME = "automations";
+
 /** The bar of an automation's page that has no automation to show: its way back to the list, at the column's edge. */
 function backBar(onBack: () => void): ToolbarProps {
   return {
     lead: (
-      <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-        Automations
-      </Button>
+      <BackButton
+        label={AUTOMATIONS_PLACE}
+        place={AUTOMATIONS_PLACE_NAME}
+        command={APP_COMMAND.EXIT_AUTOMATIONS}
+        onBack={onBack}
+      />
     ),
     start: TOOLBAR_INSET.COLUMN,
   };
