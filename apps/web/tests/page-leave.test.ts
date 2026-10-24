@@ -94,3 +94,36 @@ test("a page the back-forward cache brings back holds its unsaved work back agai
 
   expect(holdsBack(page)).toBe(true);
 });
+
+test("plan words held with no ask standing hold the browser's close and reload back, until they are not", () => {
+  const page = new EventTarget();
+  const tab = pageLeave(page);
+
+  tab.holdsUnsavedWork(true);
+  expect(holdsBack(page)).toBe(true);
+
+  tab.holdsUnsavedWork(false);
+  expect(holdsBack(page)).toBe(false);
+});
+
+test("a send while only plan words are held goes at once, to the browser's own question", () => {
+  const page = new EventTarget();
+  const tab = pageLeave(page);
+  tab.holdsUnsavedWork(true);
+  const asked: boolean[] = [];
+
+  tab.leave(() => asked.push(holdsBack(page)));
+
+  expect(asked).toEqual([true]);
+});
+
+test("a page's ask taken down while plan words are held still holds the browser's close and reload back", () => {
+  const page = new EventTarget();
+  const tab = pageLeave(page);
+  tab.unsavedWork(() => undefined);
+  tab.holdsUnsavedWork(true);
+
+  tab.unsavedWork(undefined);
+
+  expect(holdsBack(page)).toBe(true);
+});

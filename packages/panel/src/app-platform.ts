@@ -111,9 +111,9 @@ export interface AppPlatform {
   /**
    * Hears whether the window holds unsaved work, a page's or a plan's words
    * not saved, each time that changes, so a shell whose own ways out of the
-   * app save nothing asks first while there is work to lose: the Mac app's
-   * quit, restart to update, and sign-out. A browser tab, whose ways out
-   * `unsavedWork` guards, leaves this out.
+   * app or the page save nothing asks first while there is work to lose: the
+   * Mac app's quit, restart to update, and sign-out, and a browser tab's
+   * close, reload, and sends elsewhere.
    */
   holdsUnsavedWork?(holding: boolean): void;
 }
