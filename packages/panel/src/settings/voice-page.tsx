@@ -127,7 +127,7 @@ export function VoiceSection({
               {() => (
                 <>
                   {microphoneRow.offerSystemSettings ? (
-                    <Tooltip label="System Settings">
+                    <Tooltip label="Open Privacy & Security in System Settings">
                       <IconButton
                         icon={<ExternalIcon />}
                         label="Open Privacy & Security in System Settings"

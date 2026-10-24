@@ -1153,7 +1153,7 @@ function Invitations({
             <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
             <Button
               type={BUTTON_TYPE.SUBMIT}
-              variant={BUTTON_VARIANT.OUTLINE}
+              variant={BUTTON_VARIANT.PRIMARY}
               busy={writing === INVITATION_WRITE.INVITE}
               busyLabel="Inviting"
               disabled={writing === INVITATION_WRITE.CANCEL}

@@ -29,6 +29,7 @@ import { OpenAiKeyProvider } from "../openai-key.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
 /**
@@ -169,6 +170,18 @@ test("once macOS refused, the row says where to allow it and opens System Settin
   );
   assert.equal(button(container, "Allow"), undefined);
   assert.ok(!headings(container).includes("Conversation"));
+});
+
+test("resting on the System Settings glyph says its name, the words of what it opens", () => {
+  const { container } = draw(microphoneAt(MICROPHONE_STATUS.DENIED));
+  const glyph = button(container, "Open Privacy & Security in System Settings");
+
+  restOn(glyph ?? assert.fail("no System Settings glyph"));
+
+  assert.equal(
+    document.querySelector('[role="tooltip"]')?.textContent,
+    "Open Privacy & Security in System Settings",
+  );
 });
 
 test("once the microphone is allowed, the conversation's controls stand under it", () => {
