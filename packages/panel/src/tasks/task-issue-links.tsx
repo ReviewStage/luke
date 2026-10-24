@@ -31,8 +31,8 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { CircleDotIcon } from "lucide-react";
 import { useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { IssueCard } from "./issue-card.js";
@@ -103,7 +103,12 @@ function LinkMark({
 }): React.JSX.Element {
   if (state !== undefined) return <IssueMark issue={{ number: number ?? 0, state }} />;
   if (provider === TASK_ISSUE_PROVIDER.GITHUB) {
-    return <CircleDotIcon className="task-issue-link-unread" aria-hidden="true" />;
+    // Note that a registry glyph takes no props, so the unread mark stands in a box that sizes and tints it.
+    return (
+      <span className="task-issue-link-unread">
+        <GLYPH.ISSUE_UNREAD />
+      </span>
+    );
   }
   return <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />;
 }

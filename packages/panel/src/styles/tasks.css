@@ -2966,7 +2966,7 @@
    where the editor's placeholder will, in its type. */
 .pull-request-description-empty {
   margin: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .pull-request-description-text.plan-document-text > * {
@@ -5329,15 +5329,15 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .agent-context [data-part="system-prompt"] {
-  --context-part: var(--luke-color-merged);
+  --context-part: var(--luke-color-chart-2);
 }
 
 .agent-context [data-part="tool-definitions"] {
-  --context-part: var(--luke-color-working);
+  --context-part: var(--luke-color-chart-1);
 }
 
 .agent-context [data-part="brief"] {
-  --context-part: var(--luke-color-complete);
+  --context-part: var(--luke-color-chart-3);
 }
 
 .agent-context [data-part="conversation"] {
@@ -5389,6 +5389,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   color: var(--pull-request-tone);
 }
 
+/* The queued mark stands in a box, since a registry glyph takes no props. */
+.pull-request-mark > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
    success green, closed as done in the merged purple, and closed as not
    planned in the muted ink. */
@@ -5435,6 +5442,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .task-issue-link-unread {
   flex: none;
   color: var(--luke-color-text-muted);
+}
+
+.task-issue-link-unread > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .task-issue-link-key {

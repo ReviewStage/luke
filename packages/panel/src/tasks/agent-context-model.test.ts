@@ -51,6 +51,12 @@ test("the ring says the share of the window the last step read, and the popover 
   );
 });
 
+test("the ring's hover says near the limit once the ring is amber or red, and says nothing of it while there is room", () => {
+  assert.equal(contextHint(reading(799_999)), "80% of context used");
+  assert.equal(contextHint(reading(800_000)), "80% of context used, near the limit");
+  assert.equal(contextHint(reading(950_000)), "95% of context used, near the limit");
+});
+
 test("the ring has room short of a tenth of the window below eve's compaction, turns amber from there, and red at the compaction and past it", () => {
   assert.equal(contextLevel(reading(799_999)), "room");
   assert.equal(contextLevel(reading(800_000)), "near");

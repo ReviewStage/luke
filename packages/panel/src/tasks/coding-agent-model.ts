@@ -2275,8 +2275,8 @@ export function agentLines(
   return [...messages, ...sent.map(sentLineMessage)];
 }
 
-/** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row. */
-const PULL_REQUEST_STATE_LABEL = {
+/** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */
+export const PULL_REQUEST_STATE_LABEL = {
   [PULL_REQUEST_STATE.OPEN]: "Open",
   [PULL_REQUEST_STATE.DRAFT]: "Draft",
   [PULL_REQUEST_STATE.MERGED]: "Merged",
@@ -2326,7 +2326,12 @@ export function pullRequestStateWord(
 }
 
 /** What the row says of an open pull request GitHub's merge queue holds, as its tab's pill says it. */
-const QUEUED_LABEL = "Queued";
+export const QUEUED_LABEL = "Queued";
+
+/** How a pull request the merge queue holds is said where its place is known: "Queued #3", else "Queued". */
+export function queuedLabel(position: number | undefined): string {
+  return position === undefined ? QUEUED_LABEL : `${QUEUED_LABEL} #${position}`;
+}
 
 /** Where a pull request stands in one word, as its card heads it: Queued for an open one the merge queue holds, else its state's label. */
 export function pullRequestStateLabel(

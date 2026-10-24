@@ -10,7 +10,8 @@ import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
-} from "lucide-react";
+  GLYPH,
+} from "@luke/ui/icons";
 import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-model.js";
 
 /**
@@ -22,7 +23,8 @@ import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-mod
  * the same in all of them: open in the success green, a draft in the
  * muted ink, merged in the merged purple, and closed in the danger red. An
  * open one GitHub holds in its merge queue is drawn as its Pull request
- * tab's pill draws it: the merge's glyph in the working tone, said queued.
+ * tab's pill draws it: its own glyph, the queue's hourglass, in the working tone,
+ * said queued; never the merged glyph, which differs from it only in tone.
  * Its checks never change its colour: failed checks are said in its words
  * for a reader who cannot see it, and drawn where the checks themselves
  * are. The colour is the stylesheet's, keyed on
@@ -86,10 +88,26 @@ export function PullRequestMark({
   className?: string;
 }): React.JSX.Element {
   const state = pullRequestMarkState(pullRequest);
-  const Glyph = state === PULL_REQUEST_MARK_QUEUED ? GitMergeIcon : PULL_REQUEST_GLYPH[state];
+  const markClass =
+    className === undefined ? "pull-request-mark" : `pull-request-mark ${className}`;
+  if (state === PULL_REQUEST_MARK_QUEUED) {
+    // Note that a registry glyph takes no props, so the queued mark stands in a box that carries them.
+    return (
+      <span
+        className={markClass}
+        data-pull-request-mark=""
+        data-pull-request-state={state}
+        role="img"
+        aria-label={pullRequestMarkLabel(pullRequest)}
+      >
+        <GLYPH.PULL_REQUEST_QUEUED />
+      </span>
+    );
+  }
+  const Glyph = PULL_REQUEST_GLYPH[state];
   return (
     <Glyph
-      className={className === undefined ? "pull-request-mark" : `pull-request-mark ${className}`}
+      className={markClass}
       data-pull-request-mark=""
       data-pull-request-state={state}
       role="img"
