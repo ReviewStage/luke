@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_STATUS,
   type CodingAgentArchivedBy,
 } from "@luke/features/coding-agent-wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -267,4 +269,60 @@ test("on a touch screen an archived agent's row shows its Unarchive at rest, in 
   assert.ok(roomKept(row));
   assert.ok(offered(unarchive));
   assert.equal(getComputedStyle(mark).display, "none");
+});
+
+test("an archived agent's Unarchive is named Unarchiving while the service answers, shows its ring once the settle delay has passed, and clears when it answers", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    let answer: () => void = () => undefined;
+    let unarchives = 0;
+    const agents = codingAgentsControl({
+      archived: [
+        {
+          id: "agent-8",
+          planId: "plan-1",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          title: "Retry audit",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          archivedAt: 2,
+        },
+      ],
+      onArchive: () => {
+        unarchives += 1;
+        return new Promise((resolve) => {
+          answer = () => resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+        });
+      },
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    act(() =>
+      root.render(
+        onRegistry(AtomRegistry.make(), createElement(ArchivedAgents, { agents, shown: true })),
+      ),
+    );
+    act(() => container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
+    const unarchive =
+      container.querySelector<HTMLButtonElement>(".task-summary-marks button") ??
+      assert.fail("the Unarchive");
+    const ring = () => unarchive.querySelector(".luke-spinner-ring") !== null;
+
+    act(() => unarchive.click());
+    assert.equal(unarchive.getAttribute("aria-label"), "Unarchiving");
+    assert.equal(ring(), false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
+    assert.equal(ring(), true);
+    act(() => unarchive.click());
+    assert.equal(unarchives, 1, "a second press waits for the first");
+    await act(async () => answer());
+    assert.equal(unarchive.getAttribute("aria-label"), "Unarchive");
+    assert.equal(ring(), false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

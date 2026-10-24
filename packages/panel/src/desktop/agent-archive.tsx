@@ -22,6 +22,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
 import { useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
+import { useBusyPress } from "../settings/busy-press.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
@@ -84,6 +85,9 @@ const ARCHIVED_NOUN: CountNoun = { one: "archived agent", many: "archived agents
 
 /** What an archived agent's one action says, in an archived task's words. */
 const UNARCHIVE = commandHead(PANEL_COMMAND.UNARCHIVE_AGENT);
+
+/** What the Unarchive button is named while the service answers, as the composer's own is. */
+const UNARCHIVING = "Unarchiving";
 
 /**
  * What asking to archive a teammate's working agent says. Unarchive brings
@@ -189,6 +193,7 @@ function ArchivedAgentRow({
   const menu = useMenu(shown);
   const item = useRef<HTMLLIElement>(null);
   const unarchive = () => press(agent.id, false);
+  const unarchiving = useBusyPress(unarchive);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
     <li ref={item} className="task-summary-archived-agent" {...menu.contextMenu()}>
@@ -212,7 +217,9 @@ function ArchivedAgentRow({
             icon={UNARCHIVE.icon}
             label={UNARCHIVE.label}
             size={BUTTON_SIZE.COMPACT}
-            onClick={unarchive}
+            busy={unarchiving.busy}
+            busyLabel={UNARCHIVING}
+            onClick={unarchiving.onPress}
           />
         </Tooltip>
       </span>

@@ -829,9 +829,13 @@ test("the hidden tasks' line opens the status filter, whose choice lists the bac
 
 test("the status filter is on the Tasks head, and listing everyone's tasks again keeps the statuses chosen", async () => {
   const sidebar = await mountRead(ACME, BY_STATUS);
-  const filter = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Show statuses"]');
-  assert.ok(filter, "the Tasks head offers the status filter");
+  const filter = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Filter"]');
+  assert.ok(filter, "the Tasks head offers the status filter, named Filter as the Tasks page's is");
   act(() => filter.click());
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="Filter by status"]'),
+    "its menu is labelled Filter by status",
+  );
   act(() => menuItem("Done").click());
   choose(sidebar, "Created by", "Me");
   const lift = chip(sidebar)?.querySelector<HTMLButtonElement>("button");

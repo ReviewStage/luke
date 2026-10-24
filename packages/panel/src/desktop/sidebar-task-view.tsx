@@ -43,6 +43,7 @@ import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import type { TaskListViewControl } from "./task-list-view.js";
+import { FILTER } from "./tasks-page-options.js";
 
 /**
  * sidebar-task-view.tsx -- the heads of the sidebar's two sections, Pinned and Tasks, and the Tasks head's View options: how the list groups and orders its tasks.
@@ -69,8 +70,8 @@ import type { TaskListViewControl } from "./task-list-view.js";
 /** What View options is called, on its button and its menu alike. */
 const VIEW_OPTIONS = "View options";
 
-/** What the status filter is called, on its button and its menu alike. */
-const STATUS_FILTER = "Show statuses";
+/** What the status filter's menu is labelled; its button is called Filter, as the Tasks page's is. */
+const STATUS_FILTER_MENU = "Filter by status";
 
 /** The menu the status filter's button and the hidden tasks' line both open. */
 type StatusFilterMenu = ReturnType<typeof useMenu>;
@@ -244,7 +245,12 @@ function StatusFilterMenuDrawn({
     onSelect: () => onStatuses(toggledStatus(statuses, status)),
   }));
   return (
-    <ActionMenu label={STATUS_FILTER} menu={menu.drawn} groups={[entries]} onClose={menu.close} />
+    <ActionMenu
+      label={STATUS_FILTER_MENU}
+      menu={menu.drawn}
+      groups={[entries]}
+      onClose={menu.close}
+    />
   );
 }
 
@@ -265,8 +271,8 @@ export function TaskStatusFilter({
   return (
     <>
       <span className="sidebar-status-filter">
-        <Tooltip label={STATUS_FILTER}>
-          <IconButton icon={<ListFilterIcon />} label={STATUS_FILTER} {...menu.trigger()} />
+        <Tooltip label={FILTER}>
+          <IconButton icon={<ListFilterIcon />} label={FILTER} {...menu.trigger()} />
         </Tooltip>
       </span>
       <StatusFilterMenuDrawn menu={menu} statuses={statuses} onStatuses={onStatuses} />
