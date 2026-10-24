@@ -1,0 +1,35 @@
+{
+  "exempt": [
+    {
+      "path": "packages/panel/src/plan-editor/",
+      "reason": "The plan editor's ProseMirror keymaps move the caret between blocks and out of the first line."
+    },
+    {
+      "path": "packages/panel/src/tasks/plan-body.tsx",
+      "reason": "With nothing focused, the arrows select a block of the plan document: editor navigation, not a list."
+    },
+    {
+      "path": "packages/panel/src/tasks/block-picker.tsx",
+      "reason": "A popup of the plan editor: Home, End and \u2192 stay the editor's caret and word keys while the menu is open."
+    },
+    {
+      "path": "packages/panel/src/tasks/mention-picker.tsx",
+      "reason": "A popup of the plan and comment editors: Home, End and \u2192 stay the editor's caret keys while the menu is open."
+    },
+    {
+      "path": "packages/panel/src/terminal/",
+      "reason": "Arrow keys are bytes sent to the pty (\u2318\u2190 and \u2318\u2192 become line start and end), never a focus move."
+    }
+  ],
+  "baseline": {
+    "packages/panel/src/desktop/desktop-version-history.tsx": 2,
+    "packages/panel/src/desktop/section-icon-picker.tsx": 5,
+    "packages/panel/src/desktop/tab-switcher.tsx": 2,
+    "packages/panel/src/settings/integrations-page.tsx": 2,
+    "packages/panel/src/settings/sampled-choice-row.tsx": 4,
+    "packages/panel/src/tasks/agent-servers.tsx": 11,
+    "packages/panel/src/tasks/attachment-viewer.tsx": 3,
+    "packages/panel/src/tasks/pull-request-reactions.tsx": 4,
+    "packages/panel/src/tasks/skill-picker.tsx": 3
+  }
+}

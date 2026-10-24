@@ -22,6 +22,7 @@
     "anti-slop/enforce-update-with-where": "error",
     "anti-slop/no-await-drizzle-statement": "error",
     "anti-slop/no-document-press-listener": "error",
+    "anti-slop/no-hand-written-arrow-keys": "error",
     "anti-slop/no-hand-written-live-region": "error",
     "anti-slop/no-lucide-outside-door": "error",
     "anti-slop/no-node-test": "error",

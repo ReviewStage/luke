@@ -268,6 +268,13 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   `announce(ANNOUNCE.POLITE | ANNOUNCE.ALERT, words)` and the one `Announcer`.
   The blocks that stand in the page keep their roles here: `ErrorState`,
   `FailureNote`, `EmptyState`, `NoteLine`, the toast stack and the announcer.
+- **Lists and menus are stepped by `useRovingKeys` and `List`.** Outside this
+  package a key read off an event and matched to `ArrowUp`, `ArrowDown`,
+  `ArrowLeft`, `ArrowRight`, `Home` or `End` is refused
+  (`anti-slop/no-hand-written-arrow-keys`). The editors and the terminal, which
+  need the raw keys, are exempt by name in `tools/anti-slop/arrow-keys.json`
+  with a reason each; the files still stepping by hand sit on its baseline,
+  which only shrinks.
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
   `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
