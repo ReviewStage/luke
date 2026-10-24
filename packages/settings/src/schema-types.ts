@@ -30,7 +30,7 @@ export const SETTINGS_PAGE = {
   WORKSPACE: "workspace",
   /** The stored switch that notifies as a coding agent ends or needs the developer. */
   NOTIFICATIONS: "notifications",
-  /** What this Mac lets agents do on it: the stored switch for running commands here. */
+  /** What this Mac lets agents do on it, the stored switch for running commands here, and whether Luke opens as it starts. */
   THIS_MAC: "this-mac",
   /** The features the account can turn on before they are finished, each the account's on the service rather than a stored setting. */
   EXPERIMENTAL: "experimental",
@@ -55,10 +55,12 @@ export const SETTING_SECTION = {
   VIDEO_CALLS: "video-calls",
   /** How code and diffs are drawn, a group of its own under Appearance's own rows. */
   DIFFS: "diffs",
-  /** Where the account's Luke links open, a group of its own on Profile, under who is signed in. */
+  /** Where the account's Luke links open, a group of its own on Account, under who is signed in. */
   LINKS: "links",
-  /** Whether this Luke counts how its features are used, a group of its own on Profile, under Links. */
+  /** Whether this Luke counts how its features are used, a group of its own on Account, under Links. */
   PRIVACY: "privacy",
+  /** Whether Luke opens as this Mac starts, a group of its own on This Mac, under its own rows. */
+  STARTUP: "startup",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];

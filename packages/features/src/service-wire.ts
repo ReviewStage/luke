@@ -151,7 +151,7 @@ export const HOSTED_API_ERROR = {
   /**
    * The workspace's Linear could not be read: none is connected, Linear no
    * longer honours its grant, or the issue is none it reaches. An owner or
-   * admin mends the first two in Settings › Workspace › Integrations.
+   * admin mends the first two in Settings › Workspace › Workspace connections.
    * Nothing was written.
    */
   LINEAR_UNAVAILABLE: "linear-unavailable",

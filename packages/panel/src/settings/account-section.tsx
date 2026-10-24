@@ -153,9 +153,11 @@ export function AccountSection({
 
   // Note that each row stands in a wrapper wearing its search anchor, because
   // a pressed result lands on and rings the whole row, as it did before the
-  // row was shared, and the shared row takes no attribute of a caller's.
+  // row was shared, and the shared row takes no attribute of a caller's. The
+  // section is untitled, as the Workspace page's first is, because the page
+  // over it is already headed Account.
   return (
-    <SettingsSection title="Account">
+    <SettingsSection>
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIGN_OUT)}>
         <SettingsRow
           // The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue.

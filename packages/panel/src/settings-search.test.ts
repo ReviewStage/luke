@@ -71,9 +71,10 @@ test("Members finds the members for every workspace", () => {
   }
 });
 
-test("Integrations, Linear, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
+test("Workspace connections, Integrations, Linear, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
   const queries = [
+    "Workspace connections",
     "Integrations",
     "Linear",
     "manage",
@@ -91,7 +92,7 @@ test("Integrations, Linear, and every word GitHub repositories was found by, fin
   }
 });
 
-test("the Workspace page's group reads Integrations, under its Workspace page apart from the Integrations page's rows", () => {
+test("Integrations finds the Workspace page's group as Workspace connections, under its Workspace page apart from the Integrations page's rows", () => {
   const groups =
     searchSettings(
       settingsSearchEntries({
@@ -107,7 +108,7 @@ test("the Workspace page's group reads Integrations, under its Workspace page ap
 
   assert.deepEqual(
     workspaceGroup?.items.map((entry) => [entry.id, entry.label]),
-    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Integrations"]],
+    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Workspace connections"]],
   );
   assert.equal(
     groups

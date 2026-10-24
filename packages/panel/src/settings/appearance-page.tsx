@@ -9,9 +9,8 @@ import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
 /**
- * How Luke looks and when he starts: his theme, his zoom, and whether he
- * opens at login, in one nameless group, since the page's title already
- * names it; then how code and diffs are drawn, under Diffs: the File tabs'
+ * How Luke looks: his theme and his zoom, in one nameless group, since the
+ * page's title already names it; then how code and diffs are drawn, under Diffs: the File tabs'
  * numbers and wrap, and every diff setting the Files changed popover offers
  * (`../tasks/view-settings.tsx`), the same stored settings.
  */

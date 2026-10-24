@@ -295,9 +295,9 @@ function press(listed: string): void {
   act(() => row.click());
 }
 
-/** The Settings pages by their names, in the order the palette lists them: Account's own page is Profile, and the Workspace page, whose head names the listed workspace, is Workspace here. */
+/** The Settings pages by their names, in the order the palette lists them: Account's own page is Account, and the Workspace page, whose head names the listed workspace, is Workspace here. */
 const SETTINGS_PAGES = [
-  "Profile",
+  "Account",
   "Workspace",
   "Agents",
   "Integrations",
@@ -324,7 +324,7 @@ test("the Settings filter lists Memory after Workspace only while the account ha
   await paletteUnderState(tasksControl());
   chooseFilter("Settings");
 
-  assert.deepEqual(rows().slice(0, 3), ["Profile", "Workspace", "Memory"]);
+  assert.deepEqual(rows().slice(0, 3), ["Account", "Workspace", "Memory"]);
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 

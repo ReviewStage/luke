@@ -67,7 +67,7 @@ const isAgentRead = (kind: string): boolean =>
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
  * grouped under the workspace the tasks' sidebar lists, Account, and This
- * Mac, opening on Profile, and every option moved by the one-home layout is
+ * Mac, opening on Account, and every option moved by the one-home layout is
  * drawn on its new page and on no other, as the search finds it there too.
  * The Workspace page is titled with the listed workspace and follows the
  * sidebar. The Integrations page's own search stands beside the sidebar's:
@@ -84,7 +84,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Profile", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
+    rows: ["Account", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -123,11 +123,12 @@ function listing(listed: Workspace): WorkspaceSettingsControl {
 
 /** Each moved option's words, the one page that holds it, and the name the search finds its row by where that differs. */
 const HOMES = [
-  { words: "Sign out", page: "Profile" },
-  { words: "Delete account", page: "Profile" },
+  { words: "Sign out", page: "Account" },
+  { words: "Delete account", page: "Account" },
   { words: "Quiet Music and Spotify", page: "Voice" },
   { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
+  { words: "Open Luke at login", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
   { words: "Changelog", page: "About" },
   { words: "Minimize inline comments", page: "Appearance" },
@@ -195,7 +196,7 @@ const NO_HISTORY: NavigationHistory = {
 };
 
 /**
- * Settings holding its own page, as the app holds it, opened on Profile,
+ * Settings holding its own page, as the app holds it, opened on Account,
  * over the workspaces the tasks' sidebar lists where it is handed them; in
  * `room`, standing on its list or its page as `step` says, over `history`
  * where it is named.
@@ -330,12 +331,12 @@ function openPage(page: HTMLElement, title: string): HTMLElement {
   return drawn;
 }
 
-test("Settings opens on Profile, and its sidebar lists every page once under Workspace, Account, and This Mac where no workspace is listed", () => {
+test("Settings opens on Account, and its sidebar lists every page once under Workspace, Account, and This Mac where no workspace is listed", () => {
   const page = mount(createElement(SettingsHarness));
   assert.deepEqual(pageGroups(page), PAGE_GROUPS);
   const current = pageButtons(page).find((each) => each.getAttribute("aria-current") === "page");
-  assert.equal(current?.textContent, "Profile");
-  assert.equal(shownTitle(page), "Profile");
+  assert.equal(current?.textContent, "Account");
+  assert.equal(shownTitle(page), "Account");
 });
 
 test("Settings names its page once, by the page's own header, which also holds the page's Reset", () => {
@@ -375,14 +376,14 @@ test("a page group's head folds its pages, its one chevron turning with the fold
     [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
     ["true", "true"],
   );
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Profile"));
+  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
 
   act(() => account.click());
   assert.deepEqual(
     [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
     ["false", "false"],
   );
-  assert.ok(!pageButtons(page).some((each) => each.textContent === "Profile"));
+  assert.ok(!pageButtons(page).some((each) => each.textContent === "Account"));
   assert.ok(
     pageButtons(page).some((each) => each.textContent === "Workspace"),
     "the other groups stand",
@@ -390,7 +391,7 @@ test("a page group's head folds its pages, its one chevron turning with the fold
 
   act(() => account.click());
   assert.equal(turns()[0]?.getAttribute("data-open"), "true");
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Profile"));
+  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
 });
 
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
@@ -415,7 +416,7 @@ test("the sidebar lists Memory under Workspace and its search finds it only whil
   });
 
   assert.deepEqual(pageGroups(on)[0]?.rows, ["Workspace", "Memory"]);
-  assert.equal(shownTitle(on), "Profile");
+  assert.equal(shownTitle(on), "Account");
   openPage(on, "Memory");
   assert.equal(shownTitle(on), "Memory");
 });
@@ -463,6 +464,24 @@ test("the Settings search finds each moved option under its new page", () => {
   }
 });
 
+test("Open Luke at login stands on This Mac under Startup, drawn as the choice already stored, and Appearance holds it no more", () => {
+  const page = mount(
+    createElement(SettingsHarness, {
+      stored: settingsView({ voiceAvailable: true, openAtLogin: false }),
+    }),
+  );
+
+  const appearance = openPage(page, "Appearance").textContent ?? "";
+  const thisMac = openPage(page, "This Mac");
+  const login = thisMac.querySelector<HTMLButtonElement>('button[aria-label="Open Luke at login"]');
+  assert.ok(login, "This Mac draws the switch");
+  const group = login.closest("[aria-labelledby]");
+  const heading = group && document.getElementById(group.getAttribute("aria-labelledby") ?? "");
+  assert.equal(heading?.textContent, "Startup");
+  assert.equal(login.getAttribute("aria-checked"), "false");
+  assert.equal(appearance.includes("Open Luke at login"), false);
+});
+
 test("a platform without voice, notifications, Mac commands, or updates lists none of their pages, draws About without its Updates row, and its search finds none of them", () => {
   const missing: readonly HostCapability[] = [
     HOST_CAPABILITY.VOICE,
@@ -490,11 +509,12 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   }
 });
 
-test("a browser, which is no installed app, draws Appearance without Zoom or Open Luke at login, lists no Keyboard shortcuts page, heads its last group This device, and its search finds none of them; the desktop draws them all", () => {
+test("a browser, which is no installed app, draws Appearance without Zoom and This Mac without Startup, lists no Keyboard shortcuts page, heads its last group This device, and its search finds none of them; the desktop draws them all", () => {
   const drawnOn = (capabilities: readonly HostCapability[]) => {
     const page = mount(createElement(SettingsHarness, { capabilities }));
     const groups = pageGroups(page);
     const appearance = openPage(page, "Appearance").textContent ?? "";
+    const thisMac = openPage(page, "This Mac").textContent ?? "";
     const found = ["Zoom", "Open Luke at login", "Keyboard shortcuts"].flatMap((words) =>
       foundUnder(page, words),
     );
@@ -504,7 +524,8 @@ test("a browser, which is no installed app, draws Appearance without Zoom or Ope
     return {
       last: groups.at(-1),
       zoom: appearance.includes("Zoom"),
-      login: appearance.includes("Open Luke at login"),
+      login: thisMac.includes("Open Luke at login"),
+      startup: thisMac.includes("Startup"),
       found,
     };
   };
@@ -518,11 +539,13 @@ test("a browser, which is no installed app, draws Appearance without Zoom or Ope
   assert.ok(desktop.last?.rows.includes("Keyboard shortcuts"));
   assert.equal(desktop.zoom, true);
   assert.equal(desktop.login, true);
+  assert.equal(desktop.startup, true);
   assert.notDeepEqual(desktop.found, []);
   assert.equal(browser.last?.heading, "This device");
   assert.equal(browser.last?.rows.includes("Keyboard shortcuts"), false);
   assert.equal(browser.zoom, false);
   assert.equal(browser.login, false);
+  assert.equal(browser.startup, false);
   assert.deepEqual(browser.found, []);
 });
 
@@ -1146,6 +1169,6 @@ test("the page list is one Tab stop, and ↑ and ↓ walk its pages across the g
   press("ArrowUp");
   press("ArrowUp");
   assert.equal(document.activeElement, buttons.at(-1), "↑ wraps to the last page");
-  assert.equal(shownTitle(page), "Profile", "walking the list opens no page");
+  assert.equal(shownTitle(page), "Account", "walking the list opens no page");
   assert.equal(buttons.filter((each) => each.tabIndex === 0).length, 1);
 });

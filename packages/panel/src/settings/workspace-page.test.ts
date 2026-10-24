@@ -1606,7 +1606,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
     });
 
-    assert.equal(group.querySelector("h2")?.textContent, "Integrations");
+    assert.equal(group.querySelector("h2")?.textContent, "Workspace connections");
     assert.equal(
       row.querySelector(".luke-settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
@@ -2558,6 +2558,8 @@ test("while the repositories are read, placeholder rows stand in the Repositorie
   const { page } = await mount(ACME);
   const group = section(page, SETTINGS_SECTION.MAC_REPOSITORIES);
 
+  // Note that the group is named for the Mac, since the page around it is the workspace's.
+  assert.equal(group.querySelector("h2")?.textContent, "Repositories on this Mac");
   assert.deepEqual(placeholderOf(group), ["Reading the repositories", 2]);
   land();
   await settle();

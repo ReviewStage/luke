@@ -158,9 +158,12 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.OPEN_AT_LOGIN,
     label: "Open Luke at login",
     default: true,
-    page: SETTINGS_PAGE.APPEARANCE,
-    order: 10,
-    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    // Note that the Mac starts Luke, so the switch stands on This Mac and
+    // under no page's reset: Appearance's Reset to defaults once flipped it.
+    // The field and its id are unmoved, so a choice already made is kept.
+    page: SETTINGS_PAGE.THIS_MAC,
+    section: SETTING_SECTION.STARTUP,
+    order: 1,
     visible: desktopAppDrawn,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
   }),
