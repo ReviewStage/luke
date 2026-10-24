@@ -84,7 +84,9 @@
 
 .integration-tools-split {
   display: grid;
-  height: 420px;
+  /* Note that the split takes a share of what is seen, because a fixed height
+     overran a short window and left a tall one a thin strip. */
+  height: calc(var(--luke-stage-height) * 0.6);
   grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
 }
 
