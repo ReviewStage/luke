@@ -12,10 +12,10 @@
  * the back-forward cache. A send the developer said to take goes past the
  * browser's question too, since they were just asked, and past it once
  * only: a send that never unloads (stopped, or never committed) leaves the
- * next close or reload asked about again. Work the panel asks nothing about
- * before its own doors, a plan's words not saved, holds the browser's close
- * and reload back too, and lets this tab's sends go to the browser's
- * question rather than past it.
+ * next close or reload asked about again. A plan's words not saved, which
+ * the panel asks nothing about before its own doors, hold the browser's
+ * close and reload back too, and send this tab's ways out to the browser's
+ * question rather than past it, a Leave answered for a page's work among them.
  */
 
 import type { AppPlatform } from "@luke/panel/app-platform";
@@ -32,16 +32,16 @@ export interface LeavingPage {
 export interface PageLeave {
   /** What the platform answers the panel with: the ask standing while a page holds unsaved work, or nothing once none does. */
   readonly unsavedWork: (ask: LeaveAsk) => void;
-  /** What the platform answers the panel with: whether the window holds unsaved work at all, a page's or a plan's words. */
-  readonly holdsUnsavedWork: (holding: boolean) => void;
+  /** What the platform answers the panel with: whether a plan holds words not saved, which no page's ask covers. */
+  readonly unsavedPlanWords: (unsaved: boolean) => void;
   /** Takes `go`, a way out of this tab, once the standing ask says to, or at once where none stands. */
   readonly leave: (go: () => void) => void;
 }
 
 export function pageLeave(page: LeavingPage): PageLeave {
   let standing: LeaveAsk;
-  // Whether the window holds unsaved work the panel asks nothing about before its own doors, as a plan's words.
-  let holding = false;
+  // Whether a plan holds words not saved, which the panel asks nothing about before its own doors.
+  let planWords = false;
   // Whether the browser is told to hold its close and reload back.
   let listening = false;
   // Whether a way out the developer said to take is under way, whose one `beforeunload` the browser asks nothing about.
@@ -59,7 +59,7 @@ export function pageLeave(page: LeavingPage): PageLeave {
 
   /** The browser's close and reload held back while an ask stands or work is held, and let go once neither is. */
   const listen = (): void => {
-    const hold = standing !== undefined || holding;
+    const hold = standing !== undefined || planWords;
     if (hold && !listening) page.addEventListener("beforeunload", holdBack);
     if (!hold && listening) page.removeEventListener("beforeunload", holdBack);
     listening = hold;
@@ -72,16 +72,18 @@ export function pageLeave(page: LeavingPage): PageLeave {
     listen();
   };
 
-  // Note that work held with no ask standing lets this tab's own sends go at
+  // Note that words held with no ask standing let this tab's own sends go at
   // once, so the browser's own question is the one that asks before them.
-  const holdsUnsavedWork = (next: boolean): void => {
-    if (next && !holding) leaving = false;
-    holding = next;
+  const unsavedPlanWords = (next: boolean): void => {
+    if (next && !planWords) leaving = false;
+    planWords = next;
     listen();
   };
 
+  // Note that a Leave answers for the page's work alone, so while a plan's
+  // words stand too the browser still asks before the send goes.
   const take = (go: () => void): void => {
-    leaving = true;
+    leaving = !planWords;
     go();
   };
 
@@ -94,7 +96,7 @@ export function pageLeave(page: LeavingPage): PageLeave {
     ask(() => take(go));
   };
 
-  return { unsavedWork, holdsUnsavedWork, leave };
+  return { unsavedWork, unsavedPlanWords, leave };
 }
 
 /** This tab's ways out, over its own window. */

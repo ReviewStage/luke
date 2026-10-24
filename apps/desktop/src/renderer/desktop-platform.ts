@@ -10,6 +10,13 @@ import type { AppPlatform } from "@luke/panel/app-platform";
 import { openBrowserLiveOverPort } from "@luke/panel/browser-live-port";
 import { applySessionReplay } from "./session-replay";
 
+/** What of this window's work is unsaved: a page's, which stands an ask, and a plan's words. */
+const unsaved = { page: false, planWords: false };
+
+/** Tells main whether this window holds unsaved work, which a quit, a restart to update, and a sign-out ask about with its own sheet. */
+const tellUnsavedWork = (): void =>
+  tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding: unsaved.page || unsaved.planWords });
+
 /**
  * The desktop's platform. The clipboard, the save dialog, the panel's focus,
  * and the browser are main's, reached over the act channel, and so is a
@@ -37,6 +44,12 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   // A cloud Browser tab's socket is the host's, under its bearer, and reaches this window on a port of its own.
   openBrowserLive: openBrowserLiveOverPort,
   applySessionReplay,
-  // Main asks before a quit, a restart to update, and a sign-out while a panel holds unsaved work, with its own sheet.
-  holdsUnsavedWork: (holding) => tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding }),
+  unsavedWork: (ask) => {
+    unsaved.page = ask !== undefined;
+    tellUnsavedWork();
+  },
+  unsavedPlanWords: (planWords) => {
+    unsaved.planWords = planWords;
+    tellUnsavedWork();
+  },
 };
