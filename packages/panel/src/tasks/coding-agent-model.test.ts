@@ -659,7 +659,7 @@ test("a refusal for the member's own GitHub token reads with its remedy, Update 
 
   assert.deepEqual(noToken, {
     reason: FAILURE_REASON.GITHUB_TOKEN,
-    text: "No GitHub token saved.",
+    text: "Your saved GitHub token could not be opened.",
   });
   assert.deepEqual(noAccess, {
     reason: FAILURE_REASON.GITHUB_TOKEN,
