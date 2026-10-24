@@ -1690,6 +1690,10 @@ test("in a form of three fields Enter on a focused select option only picks it, 
     "Send's hint names ⌘↩",
   );
 
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(sentAbout(EXPIRY.id), [], "nor does Enter in the note, a new line there");
+
   keyOn(high, "Enter", { metaKey: true });
   await settle();
   assert.deepEqual(sentAbout(EXPIRY.id), [

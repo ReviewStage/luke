@@ -3,7 +3,7 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
 import type { ShortcutChord } from "@luke/settings/shortcuts";
-import { ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
+import { ComposerFoot, type ComposerNote, STATUS_TONE, TEXT_AREA_SUBMIT } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -311,6 +311,8 @@ export function AnswerForm({
         takesFocus={false}
         {...pickers.field}
         onEnter={onEnter}
+        // Note that the note's Enter is a new line wherever the form's own is, since a partly filled form is already sendable.
+        submitKey={sendChord === undefined ? undefined : TEXT_AREA_SUBMIT.MOD_ENTER}
         onPasteFiles={onPasteFiles ?? takesNoFiles}
         onPasteCut={onPasteCut}
         quote={quote}
