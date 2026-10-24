@@ -221,8 +221,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       ...(brain === undefined
         ? undefined
         : { planner: brain.action === undefined ? {} : { action: brain.action } }),
-      // Note that no notetaker writes beside the call any more: Luke writes the plan himself.
-      notes: false,
     });
   };
 

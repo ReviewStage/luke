@@ -172,8 +172,7 @@ export const TASK_ACTIVITY_ACTION_MAX_CHARS = 120;
  * What each part of Luke is doing on a task call, whole, as the service's
  * `task.activity` frame says it: the voice's wait where it is in one, the
  * brain while it works on an ask with the command it is running
- * where one is pending, and whether the notetaker is writing. Nothing of the
- * ask, and no tool's output.
+ * where one is pending. Nothing of the ask, and no tool's output.
  */
 export const taskActivitySchema = EffectSchema.Struct({
   voice: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(VOICE_PHASE))),
@@ -185,7 +184,8 @@ export const taskActivitySchema = EffectSchema.Struct({
       ),
     }),
   ),
-  notes: EffectSchema.Boolean,
+  // Note that no notetaker writes beside a call any more, so the service sends no `notes`; the key stays optional, never removed, so a desktop of an older release still parses what it sends and a newer one parses what an older service sent.
+  notes: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type TaskActivity = typeof taskActivitySchema.Type;

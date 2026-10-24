@@ -45,7 +45,6 @@
   "packages/panel/src/tasks/annotation-card.tsx": 1,
   "packages/panel/src/tasks/attach-files-button.tsx": 1,
   "packages/panel/src/tasks/attachment-viewer.tsx": 1,
-  "packages/panel/src/tasks/call-card.tsx": 1,
   "packages/panel/src/tasks/changes-list.tsx": 1,
   "packages/panel/src/tasks/chat-ask.tsx": 1,
   "packages/panel/src/tasks/chat-notice.tsx": 1,

@@ -560,7 +560,7 @@ test("Keyboard shortcuts lists Show terminal and the Call group's chords only on
     document.body.innerHTML = "";
     return {
       terminal: words.includes("Show terminal"),
-      call: words.includes("Toggle microphone"),
+      call: words.includes("Mute or unmute microphone"),
       found,
     };
   };

@@ -7,8 +7,9 @@
  * and decides nothing: whether a call stands, what its status says, and
  * what a press asks of the voice are the owner's. End call is the one red
  * control, on the danger fill with the hang-up glyph (`GLYPH.END_CALL`),
- * because ending a call cannot be undone; a mute is quiet while off and on
- * the danger tint while on, its glyph struck through.
+ * because ending a call cannot be undone; a mute is quiet while off and lit
+ * in neutral grey while on, its glyph struck through, since muting is no
+ * failure. A live call wears the working blue.
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -22,7 +23,11 @@ import {
 } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { STATUS_TONE } from "../../status-tone.js";
-import type { CallStatus } from "../../tasks-model.js";
+import {
+  type CallStatus,
+  MUTE_MICROPHONE_LABEL,
+  UNMUTE_MICROPHONE_LABEL,
+} from "../../tasks-model.js";
 import { BUTTON_SHAPE, BUTTON_VARIANT, type ButtonShape, IconButton } from "../button/button.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { ThinkingDots } from "../thinking-dots/thinking-dots.js";
@@ -33,15 +38,14 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 /** What a reader is told while the backend works; the sighted read the dots and the line. */
 const TASK_WORKING_LABEL = "Luke is working on it";
 
-/** The backend line's names for its two parts, and what Luke says with no command pending. */
-const BRAIN_NAME = "Luke";
+/** The backend line's words, subject-free like the voice's: what Luke says with no command pending, and what leads the command he runs. */
 const BRAIN_THINKING = "Thinking";
-const NOTETAKER_WRITING = "Notetaker · Writing notes";
+const BRAIN_WORKING = "Working";
 
 /** Each call control's name for a reader and its hover, by whether it is on. */
 export const CALL_CONTROL_LABEL = {
-  MUTE_MICROPHONE: "Mute microphone",
-  UNMUTE_MICROPHONE: "Unmute microphone",
+  MUTE_MICROPHONE: MUTE_MICROPHONE_LABEL,
+  UNMUTE_MICROPHONE: UNMUTE_MICROPHONE_LABEL,
   MUTE_SPEAKER: "Mute speaker",
   UNMUTE_SPEAKER: "Unmute speaker",
   VIDEO_OFF: "Turn video off",
@@ -95,7 +99,7 @@ const MUTE = {
 /**
  * A mute the call offers, round in the call bar and square in an agent's
  * composer row: named for what the press will do, with its chord in its
- * hint, and its glyph struck through, on the danger tint, while muted.
+ * hint, and its glyph struck through, lit in neutral grey, while muted.
  */
 export function CallMute({
   device,
@@ -113,7 +117,7 @@ export function CallMute({
   return (
     <Tooltip label={label} command={mute.command}>
       <IconButton
-        variant={BUTTON_VARIANT.DANGER}
+        variant={BUTTON_VARIANT.QUIET}
         shape={shape}
         icon={muted ? <mute.Muted /> : <mute.Live />}
         label={label}
@@ -160,7 +164,7 @@ function CallLiveMark({ props }: { props: CallLiveProps }): React.JSX.Element {
       </span>
     );
   }
-  const tone = props.stage === CALL_STAGE.LIVE ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL;
+  const tone = props.stage === CALL_STAGE.LIVE ? STATUS_TONE.WORKING : STATUS_TONE.NEUTRAL;
   return <span className="luke-call-live-mark" data-tone={tone} aria-hidden="true" />;
 }
 
@@ -235,11 +239,10 @@ export function VideoToggle({
 }
 
 /**
- * The call's two lines: the voice's word, and the backend's while it works.
- * A narrow bar drops the notetaker's part while Luke's stands, so Luke's
- * keeps the room (call.css). Where `titled`, Luke's command carries its
- * whole words as the system's own hint, for the floating window, which is
- * too small to hold a tooltip.
+ * The call's two lines: the voice's word, and the backend's while it works:
+ * "Thinking", or "Working" and the command it runs. Where `titled`, the
+ * command carries its whole words as the system's own hint, for the floating
+ * window, which is too small to hold a tooltip.
  */
 function CallStatusLines({
   status,
@@ -251,7 +254,6 @@ function CallStatusLines({
   titled: boolean;
 }): React.JSX.Element {
   const brain = status?.backend.brain;
-  const notes = status?.backend.notes ?? false;
   return (
     <span className="luke-call-status">
       <Text
@@ -263,40 +265,26 @@ function CallStatusLines({
       >
         {status?.voiceWord}
       </Text>
-      {brain !== undefined || notes ? (
+      {brain !== undefined ? (
         <span className="luke-call-backend">
           <span className="luke-call-backend-dots">
             <ThinkingDots />
           </span>
-          {brain === undefined ? null : (
-            // Note that this keeps the system's title, because the floating call window is too short for a pill.
-            <Text
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.INHERIT}
-              truncate
-              className="luke-call-backend-part"
-              data-part="brain"
-              title={titled ? brain.action : undefined}
-            >
-              {BRAIN_NAME} ·{" "}
-              {brain.action === undefined ? (
-                BRAIN_THINKING
-              ) : (
-                <span className="luke-call-backend-action">{brain.action}</span>
-              )}
-            </Text>
-          )}
-          {notes ? (
-            <Text
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.INHERIT}
-              truncate
-              className="luke-call-backend-part"
-              data-part="notes"
-            >
-              {NOTETAKER_WRITING}
-            </Text>
-          ) : null}
+          {/* Note that this keeps the system's title, because the floating call window is too short for a pill. */}
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            title={titled ? brain.action : undefined}
+          >
+            {brain.action === undefined ? (
+              BRAIN_THINKING
+            ) : (
+              <>
+                {BRAIN_WORKING} · <span className="luke-call-backend-action">{brain.action}</span>
+              </>
+            )}
+          </Text>
           <VisuallyHidden role="status">{TASK_WORKING_LABEL}</VisuallyHidden>
         </span>
       ) : null}
@@ -307,7 +295,7 @@ function CallStatusLines({
 /**
  * The strip of a call's controls, laid out the way a voice composer's own
  * are: the call's status at the left, and at the right the speaker and
- * microphone mutes, each struck through and tinted while on, and End call
+ * microphone mutes, each struck through and lit while on, and End call
  * beside them, apart from both so muting never hangs up. The two mutes'
  * chords are not the bar's to offer: they answer while any call is in
  * progress, wherever the owner stands. A narrow bar stacks its status over

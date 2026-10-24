@@ -39,12 +39,12 @@ function stay(): void {}
 
 const LISTENING: CallStatus = {
   voiceWord: "Listening",
-  backend: { brain: undefined, notes: false },
+  backend: { brain: undefined },
 };
 
 const WORKING: CallStatus = {
   voiceWord: "Listening",
-  backend: { brain: { action: "Reading the plan's open questions" }, notes: true },
+  backend: { brain: { action: "Reading the plan's open questions" } },
 };
 
 /** A bar whose mutes toggle as a call's owner would toggle them. */

@@ -43,8 +43,9 @@
     line-height: var(--luke-type-section-leading);
   }
 
+  /* Muting is no failure, so the word goes quiet, never red. */
   .luke-call-status-word[data-muted="true"] {
-    color: var(--luke-color-danger-text);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-call-backend {
@@ -59,12 +60,6 @@
 
   .luke-call-backend-dots {
     display: flex;
-  }
-
-  /* Luke's part is the one that gives way to a long command; the notetaker's
-     says the same few words whole, or goes (below). */
-  .luke-call-backend-part[data-part="notes"] {
-    flex: none;
   }
 
   .luke-call-backend-action {
@@ -147,14 +142,6 @@
   /* off-scale: 376px, where the foot's live mark stops fitting */
   @container luke-composer-foot (width < 376px) {
     .luke-call-live {
-      display: none;
-    }
-  }
-
-  /* Too narrow for both of the backend's parts: the notetaker's goes while
-     Luke's stands, so what Luke is doing keeps the line. */
-  @container luke-call-bar (width < 480px) {
-    .luke-call-backend-part[data-part="brain"] ~ [data-part="notes"] {
       display: none;
     }
   }

@@ -81,13 +81,13 @@ test("an agent's Call button asks for the permission first, then calls the agent
   });
   assert.deepEqual(
     microphoneButton({ ...input, listening: true, call: own, voiceStatus: LIVE_STATUS.LISTENING }),
-    { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
+    { press: MICROPHONE_PRESS.TALK, label: "Mute microphone", muted: false },
   );
   // The agent's own call standing unheard is muted, Luke speaking over it or not.
   for (const voiceStatus of [LIVE_STATUS.MUTED, LIVE_STATUS.SPEAKING]) {
     assert.deepEqual(microphoneButton({ ...input, call: own, voiceStatus }), {
       press: MICROPHONE_PRESS.TALK,
-      label: "Unmute the microphone",
+      label: "Unmute microphone",
       muted: true,
     });
   }
@@ -135,6 +135,16 @@ test("a call that failed still has a word on its bar, where an idle voice has no
   assert.equal(standingCallStatus({ voiceStatus: LIVE_STATUS.IDLE }, undefined), undefined);
 });
 
+test("a call's bar says what Luke is doing without naming him, and draws no notetaker whatever an older service sent", () => {
+  const speaking = standingCallStatus({ voiceStatus: LIVE_STATUS.SPEAKING }, undefined);
+  assert.equal(speaking?.voiceWord, "Speaking");
+  const working = standingCallStatus(
+    { voiceStatus: LIVE_STATUS.LISTENING },
+    { planner: { action: "ls src" }, notes: true },
+  );
+  assert.deepEqual(working?.backend, { brain: { action: "ls src" } });
+});
+
 test("an account known to have no OpenAI API key is sent to add one before the microphone is asked for, unknown asks nothing, and its own standing call keeps its mute", () => {
   const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
   const own = { taskId: INVITES, agentId };
@@ -179,7 +189,7 @@ test("an account known to have no OpenAI API key is sent to add one before the m
       voiceStatus: LIVE_STATUS.LISTENING,
       openAiKeyMissing: true,
     }),
-    { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
+    { press: MICROPHONE_PRESS.TALK, label: "Mute microphone", muted: false },
   );
 });
 

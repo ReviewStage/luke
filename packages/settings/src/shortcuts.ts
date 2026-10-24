@@ -437,12 +437,12 @@ export const APP_SHORTCUTS = {
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
   [APP_COMMAND.TOGGLE_MICROPHONE]: {
-    label: "Toggle microphone",
+    label: "Mute or unmute microphone",
     chord: { key: SHORTCUT_KEY.M, shift: true },
     capability: HOST_CAPABILITY.VOICE,
   },
   [APP_COMMAND.TOGGLE_SPEAKER]: {
-    label: "Toggle speaker",
+    label: "Mute or unmute speaker",
     chord: { key: SHORTCUT_KEY.S, shift: true },
     capability: HOST_CAPABILITY.VOICE,
   },

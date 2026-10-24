@@ -826,7 +826,7 @@ const STATUS_WORD = {
   [LIVE_STATUS.CONNECTING]: "Connecting",
   [LIVE_STATUS.MUTED]: "Muted",
   [LIVE_STATUS.LISTENING]: "Listening",
-  [LIVE_STATUS.SPEAKING]: "Luke speaking",
+  [LIVE_STATUS.SPEAKING]: "Speaking",
   [LIVE_STATUS.CLOSING]: "Closing",
   [LIVE_STATUS.FAILED]: "Call failed",
 } as const satisfies Record<LiveStatus, string | undefined>;
@@ -850,7 +850,7 @@ const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
  */
 export interface CallStatus {
   voiceWord: string;
-  backend: { brain: { action: string | undefined } | undefined; notes: boolean };
+  backend: { brain: { action: string | undefined } | undefined };
 }
 
 /**
@@ -889,7 +889,6 @@ export function standingCallStatus(
     voiceWord: phase === undefined ? word : VOICE_PHASE_WORD[phase],
     backend: {
       brain: brain === undefined ? undefined : { action: brain.action },
-      notes: activity?.notes ?? false,
     },
   };
 }
@@ -920,6 +919,12 @@ export interface MicrophoneButton {
 
 /** What the Call button says on an archived agent, which no call speaks into. */
 const ARCHIVED_CALL_LABEL = "Unarchive the agent to call it";
+
+/** What the Call button says while the developer is heard on the call, and what a mute's own control says: one wording for the press wherever it stands. */
+export const MUTE_MICROPHONE_LABEL = "Mute microphone";
+
+/** What the Call button says while the developer is not heard on the call. */
+export const UNMUTE_MICROPHONE_LABEL = "Unmute microphone";
 
 /** What the Call button says where a press opens a call into its agent. */
 export const CALL_LABEL = "Call";
@@ -993,10 +998,10 @@ export function microphoneButton(input: {
     return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
   }
   if (ownCall && input.listening) {
-    return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false };
+    return { press: MICROPHONE_PRESS.TALK, label: MUTE_MICROPHONE_LABEL, muted: false };
   }
   if (ownCall && CALL_STANDING.has(input.voiceStatus)) {
-    return { press: MICROPHONE_PRESS.TALK, label: "Unmute the microphone", muted: true };
+    return { press: MICROPHONE_PRESS.TALK, label: UNMUTE_MICROPHONE_LABEL, muted: true };
   }
   if (input.archived === true) {
     return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };

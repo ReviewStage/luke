@@ -88,13 +88,15 @@ test("the speaker's mute is its own, named for the speaker and toggled by its ow
   const speaker = button(scope, CALL_CONTROL_LABEL.UNMUTE_SPEAKER);
   expect(speaker.getAttribute("aria-pressed")).toBe("true");
   expect(speaker.getAttribute("aria-keyshortcuts")).toMatch(/Shift\+S/u);
+  // Muted is neutral grey, never the red End call alone wears.
+  expect(speaker.getAttribute("data-variant")).not.toBe("danger");
 });
 
 test("the bar's mutes and End call each hand their press back, and End call alone is no toggle", () => {
   const pressed: string[] = [];
   const scope = draw(
     createElement(CallBar, {
-      status: { voiceWord: "Listening", backend: { brain: undefined, notes: false } },
+      status: { voiceWord: "Listening", backend: { brain: undefined } },
       microphone: { muted: false, onPress: () => pressed.push("microphone") },
       speaker: { muted: false, onPress: () => pressed.push("speaker") },
       onEnd: () => pressed.push("end"),
@@ -114,17 +116,17 @@ test("the bar's mutes and End call each hand their press back, and End call alon
   ]);
 });
 
-test("the bar says what Luke is doing while the backend works, and that it works to a reader", () => {
+test("the bar says what Luke is doing while the backend works, with no subject and no notetaker, and that it works to a reader", () => {
   const scope = draw(
     createElement(CallBar, {
-      status: { voiceWord: "Listening", backend: { brain: { action: "Reading" }, notes: true } },
+      status: { voiceWord: "Listening", backend: { brain: { action: "Reading" } } },
       microphone: { muted: false, onPress: () => {} },
       speaker: { muted: false, onPress: () => {} },
       onEnd: () => {},
     }),
   );
-  expect(scope.textContent).toContain("Reading");
-  expect(scope.textContent).toContain("Writing notes");
+  expect(scope.textContent).toContain("Working · Reading");
+  expect(scope.textContent).not.toMatch(/Luke ·|Notetaker|Writing notes/u);
   expect(scope.querySelector('[role="status"]')?.textContent).toBe("Luke is working on it");
 });
 
@@ -144,6 +146,8 @@ test("a box's call status says the call is live and how long it has run, and say
     createElement(CallLive, { stage: CALL_STAGE.LIVE, startedAt, muted: false, now }),
   );
   expect(live.textContent).toBe(`${CALL_LIVE_WORD.LIVE}1m 12s`);
+  expect(live.querySelector('[data-tone="working"]')).not.toBeNull();
+  expect(live.querySelector('[data-tone="complete"]')).toBeNull();
   const timer = live.querySelector('[role="timer"]');
   expect(timer?.getAttribute("dateTime")).toBe("PT72S");
 
