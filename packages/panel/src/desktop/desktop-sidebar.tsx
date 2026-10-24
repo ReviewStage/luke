@@ -23,7 +23,6 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
-  FolderIcon,
   GAP,
   GROUP_ACTIONS,
   GROUP_HEADING,
@@ -68,6 +67,15 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
+import {
+  FolderPlusIcon,
+  FolderXIcon,
+  InboxIcon,
+  ListTodoIcon,
+  MessagesSquareIcon,
+  ShieldUserIcon,
+  ZapIcon,
+} from "@luke/ui/icons";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
   type AssigneeGroup,
@@ -111,14 +119,6 @@ import {
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import {
-  FolderPlusIcon,
-  InboxIcon,
-  ListTodoIcon,
-  MessagesSquareIcon,
-  ShieldUserIcon,
-  ZapIcon,
-} from "lucide-react";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
@@ -895,12 +895,11 @@ function RepositorySection({
         heading={GROUP_HEADING.NONE}
         glyph={
           repository === null ? (
-            <FolderIcon />
+            <FolderXIcon />
           ) : (
             <RepositoryPicture
               repository={repository}
               pictures={context.tasks.repositories.pictures}
-              fallback={<FolderIcon />}
               size={AVATAR_SIZE.GLYPH}
             />
           )

@@ -38,6 +38,8 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   GAP,
+  GLYPH_INK,
+  GlyphSlot,
   GROUP_HEAD,
   GROUP_ROWS,
   GROUP_SURFACE,
@@ -70,7 +72,7 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
+import { FolderXIcon, GLYPH, ICON_SIZE, ListTodoIcon, PinIcon, UserXIcon } from "@luke/ui/icons";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
   isAgentEntry,
@@ -99,14 +101,6 @@ import {
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { Schema } from "effect";
-import {
-  FolderGitIcon,
-  FolderIcon,
-  FolderXIcon,
-  ListTodoIcon,
-  PinIcon,
-  UserXIcon,
-} from "lucide-react";
 import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -441,7 +435,7 @@ function groupHead(
     case TASKS_GROUP.SECTION: {
       const section = tasks.taskSections.sections.find((each) => each.id === head.sectionId);
       return {
-        icon: sectionGlyph(section?.icon) ?? <FolderIcon />,
+        icon: sectionGlyph(section?.icon) ?? <GLYPH.SECTION />,
         name: section?.title ?? "",
       };
     }
@@ -463,7 +457,6 @@ function groupHead(
               <RepositoryPicture
                 repository={head.repository}
                 pictures={tasks.repositories.pictures}
-                fallback={<FolderGitIcon />}
                 size={AVATAR_SIZE.GLYPH}
               />
             ),
@@ -790,13 +783,17 @@ function TaskListRow({
         TASK_PROPERTY.REPOSITORY,
         <>
           {task.repository === null ? (
-            <FolderXIcon className="tasks-list-repository-glyph" aria-hidden="true" />
+            <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
+              <FolderXIcon />
+            </GlyphSlot>
           ) : (
             <RepositoryPicture
               repository={task.repository}
               pictures={tasks.repositories.pictures}
               fallback={
-                <FolderGitIcon className="tasks-list-repository-glyph" aria-hidden="true" />
+                <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
+                  <GLYPH.REPOSITORY />
+                </GlyphSlot>
               }
             />
           )}
@@ -973,7 +970,7 @@ function selectionActs(
   const sectionMenu = [
     sections.map((section) => ({
       label: section.title,
-      icon: sectionGlyph(section.icon) ?? <GLYPH.FOLDER />,
+      icon: sectionGlyph(section.icon) ?? <GLYPH.SECTION />,
       onSelect: move(section.id),
     })),
     [{ label: SELECTION_ACT.NO_SECTION, onSelect: move(null) }],

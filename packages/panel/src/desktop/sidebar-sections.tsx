@@ -30,6 +30,7 @@ import {
   useLeaving,
   useMenu,
 } from "@luke/ui";
+import { FolderOutputIcon, GLYPH, MailOpenIcon } from "@luke/ui/icons";
 import { TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
   applySectionWrite,
@@ -46,7 +47,6 @@ import {
 } from "@luke/ui/task-sections-model";
 import { SETTLED_STATUS, settleOffered } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
@@ -390,7 +390,7 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
     });
   return {
     label: "Move tasks to",
-    icon: <LayersIcon />,
+    icon: <GLYPH.MOVE />,
     items: [
       ...others,
       { label: "New section…", onSelect: () => dialogs.askNew(section.workspaceId, put) },

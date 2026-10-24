@@ -5476,14 +5476,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   white-space: nowrap;
 }
 
-.agent-published-added {
-  color: var(--luke-color-complete);
-}
-
-.agent-published-removed {
-  color: var(--luke-color-danger-text);
-}
-
 /* Lucide's glyphs, which the AI Elements components draw with, at the
    stroke every glyph of our own is drawn at in its 24 box (glyphs.tsx), so
    the transcripts read at the weight of the rest of the window. */

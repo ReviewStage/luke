@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { taskCardOf } from "./task-card.js";
+import { PullRequestLine, taskCardOf } from "./task-card.js";
 
 /**
  * task-card.test.ts -- a task's hover card leads with where the task stands,
@@ -117,5 +118,36 @@ test("a task with no key, status, or priority leads with its name", () => {
   assert.equal(
     card.firstElementChild?.querySelector(".luke-hover-card-name")?.textContent,
     bare.name,
+  );
+});
+
+test("a pull request's line on the card counts its size as every figure is counted, green then red", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PullRequestLine, {
+        pullRequest: {
+          number: 7,
+          title: "Add invitations",
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 1234,
+          deletions: 56,
+        },
+      }),
+    ),
+  );
+  assert.deepEqual(
+    [...container.querySelectorAll(".luke-count-part")].map((each) => [
+      each.textContent,
+      each.getAttribute("data-tone"),
+    ]),
+    [
+      ["+1,234", "complete"],
+      ["−56", "danger"],
+    ],
   );
 });

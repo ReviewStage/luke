@@ -29,6 +29,26 @@ import {
   personActor,
 } from "@luke/ui/actor-model";
 import {
+  ArrowDownAZIcon,
+  ArrowDownNarrowWideIcon,
+  BotIcon,
+  CalendarPlusIcon,
+  CircleCheckIcon,
+  ClockIcon,
+  EyeIcon,
+  FolderXIcon,
+  GLYPH,
+  ListFilterIcon,
+  ListIcon,
+  RotateCcwIcon,
+  Rows3Icon,
+  SignalHighIcon,
+  SlidersHorizontalIcon,
+  UserCheckIcon,
+  UserIcon,
+  UserXIcon,
+} from "@luke/ui/icons";
+import {
   BOARD_GROUPINGS,
   BOARD_PROPERTIES,
   boardGrouping,
@@ -54,27 +74,6 @@ import {
   toggledFilter,
   valueCounts,
 } from "@luke/ui/tasks-page-model";
-import {
-  ArrowDownAZIcon,
-  ArrowDownNarrowWideIcon,
-  BotIcon,
-  CalendarPlusIcon,
-  CircleCheckIcon,
-  CircleDotIcon,
-  ClockIcon,
-  EyeIcon,
-  FolderGitIcon,
-  FolderXIcon,
-  ListFilterIcon,
-  ListIcon,
-  RotateCcwIcon,
-  Rows3Icon,
-  SignalHighIcon,
-  SlidersHorizontalIcon,
-  UserCheckIcon,
-  UserIcon,
-  UserXIcon,
-} from "lucide-react";
 import { type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -143,12 +142,12 @@ const FIELD_WORDS = {
 
 /** Each field's glyph, on its submenu and its chip. */
 const FIELD_ICON = {
-  [TASKS_FILTER_FIELD.STATUS]: <CircleDotIcon />,
+  [TASKS_FILTER_FIELD.STATUS]: <GLYPH.STATUS />,
   [TASKS_FILTER_FIELD.PRIORITY]: <SignalHighIcon />,
   [TASKS_FILTER_FIELD.ASSIGNEE]: <UserCheckIcon />,
   [TASKS_FILTER_FIELD.CREATOR]: <UserIcon />,
   [TASKS_FILTER_FIELD.MADE_BY]: <BotIcon />,
-  [TASKS_FILTER_FIELD.REPOSITORY]: <FolderGitIcon />,
+  [TASKS_FILTER_FIELD.REPOSITORY]: <GLYPH.REPOSITORY />,
 } as const satisfies Record<TasksFilterField, React.JSX.Element>;
 
 /** What each completed window is called, in the order the menu lists them. */
@@ -192,9 +191,9 @@ const GROUPING_WORDS = {
 } as const satisfies Record<TasksGrouping, string>;
 
 const GROUPING_ICON = {
-  [TASKS_GROUPING.STATUS]: <CircleDotIcon />,
+  [TASKS_GROUPING.STATUS]: <GLYPH.STATUS />,
   [TASKS_GROUPING.PRIORITY]: <SignalHighIcon />,
-  [TASKS_GROUPING.REPOSITORY]: <FolderGitIcon />,
+  [TASKS_GROUPING.REPOSITORY]: <GLYPH.REPOSITORY />,
   [TASKS_GROUPING.ASSIGNEE]: <UserCheckIcon />,
   [TASKS_GROUPING.CREATOR]: <UserIcon />,
   [TASKS_GROUPING.NONE]: <ListIcon />,
@@ -411,13 +410,7 @@ function fieldValues(
             words: repositoryWords(repository).label,
             detail: repositoryWords(repository).detail,
             card: <RepositoryCard repository={repository} pictures={pictures} />,
-            icon: (
-              <RepositoryPicture
-                repository={repository}
-                pictures={pictures}
-                fallback={<FolderGitIcon />}
-              />
-            ),
+            icon: <RepositoryPicture repository={repository} pictures={pictures} />,
           })),
         ...(held.has(null) ? [{ value: null, words: NO_REPOSITORY, icon: <FolderXIcon /> }] : []),
       ];
