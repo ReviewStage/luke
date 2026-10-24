@@ -99,6 +99,7 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
+import { landedMark } from "@luke/ui/landed";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   BookOpenIcon,
@@ -1389,7 +1390,7 @@ function EntryCard({
       ref={landed.ref}
       // Note that the entry takes the focus a link to it on GitHub brings, though no key reaches it.
       tabIndex={-1}
-      data-search-landed={landed.ringed ? "" : undefined}
+      {...landedMark(landed.ringed)}
       onAnimationEnd={landed.onAnimationEnd}
     >
       <EntryHead>

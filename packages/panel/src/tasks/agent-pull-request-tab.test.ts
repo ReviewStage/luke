@@ -5091,7 +5091,7 @@ function headPress(tab: HTMLElement): HTMLButtonElement {
 function ringEnds(card: Element): void {
   for (const name of ["animationend", "webkitAnimationEnd"]) {
     const end = new Event(name, { bubbles: true });
-    Object.defineProperty(end, "animationName", { value: "search-landed" });
+    Object.defineProperty(end, "animationName", { value: "luke-landed" });
     act(() => card.dispatchEvent(end));
   }
 }
@@ -5168,11 +5168,11 @@ test("a thread's file and lines in the Conversation take it to Files changed thr
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 600, 400));
   await frames();
 
-  assert.equal(card.hasAttribute("data-search-landed"), true, "the thread is ringed");
+  assert.equal(card.hasAttribute("data-landed"), true, "the thread is ringed");
   assert.equal(document.activeElement, card.querySelector("summary"), "the thread takes the focus");
   ringEnds(card);
   assert.equal(lists.at(-1)?.selected, undefined, "its lines are let go as the ring ends");
-  assert.equal(card.hasAttribute("data-search-landed"), false);
+  assert.equal(card.hasAttribute("data-landed"), false);
 });
 
 test("a thread on a line no hunk shows, and one a later push outdated, land on their file's list above its diff, opened, the list scrolled to the file's header", async () => {
@@ -5273,7 +5273,7 @@ test("a link to a thread opens a folded Conversation to land on it, centring it 
   await reveal();
   assert.equal(sectionHead(tab, "Conversation").getAttribute("aria-expanded"), "true");
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread is drawn");
-  assert.equal(card.hasAttribute("data-search-landed"), true, "the thread is landed on");
+  assert.equal(card.hasAttribute("data-landed"), true, "the thread is landed on");
   assert.equal(top, 900 + 100 / 2 - (58 + (400 - 58) / 2), "centred under the heading's band");
 
   ringEnds(card);
@@ -5299,7 +5299,7 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true");
   assert.deepEqual(listReveals, [], "no file is scrolled to");
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
-  assert.equal(card.hasAttribute("data-search-landed"), true, "the thread is shown where it stays");
+  assert.equal(card.hasAttribute("data-landed"), true, "the thread is shown where it stays");
 
   ringEnds(card);
   act(() =>
@@ -5316,7 +5316,7 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   );
   await settle();
   await frames();
-  assert.equal(card.hasAttribute("data-search-landed"), false, "nothing is landed on");
+  assert.equal(card.hasAttribute("data-landed"), false, "nothing is landed on");
 });
 
 test("every review thread's head leads with its chevron and ends with its ⋯, in the Conversation as on its line in Files changed, and a press on the row folds it", async () => {
@@ -5384,7 +5384,7 @@ test("a thread's ⋯ in Files changed shows it in the Conversation through the s
   assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true");
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
   assert.equal(card.querySelector("details")?.open, true, "the resolved thread is opened");
-  assert.equal(card.hasAttribute("data-search-landed"), true);
+  assert.equal(card.hasAttribute("data-landed"), true);
   assert.equal(document.activeElement, card.querySelector("summary"));
 });
 
@@ -5458,14 +5458,14 @@ test("a link in the pull request's words to one of its own comments on GitHub op
     [...tab.querySelectorAll<HTMLElement>(".pull-request-entry")].find((each) =>
       each.textContent?.includes("GitHub sent no rendering of"),
     ) ?? assert.fail("the note is drawn");
-  assert.equal(note.hasAttribute("data-search-landed"), true, "the note is ringed");
+  assert.equal(note.hasAttribute("data-landed"), true, "the note is ringed");
   assert.equal(document.activeElement, note, "the note takes the focus");
   ringEnds(note);
   act(() => note.blur());
   await press("the note");
   await frames();
   assert.equal(
-    note.hasAttribute("data-search-landed"),
+    note.hasAttribute("data-landed"),
     true,
     "the same link pressed again lands again",
   );
@@ -5564,12 +5564,12 @@ test("a landing waits for the panel to be visible before it takes the focus, as 
   await settle();
   await frames();
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
-  assert.equal(card.hasAttribute("data-search-landed"), false, "nothing lands on a hidden panel");
+  assert.equal(card.hasAttribute("data-landed"), false, "nothing lands on a hidden panel");
 
   tab.style.visibility = "visible";
   await frames();
   assert.equal(
-    card.hasAttribute("data-search-landed"),
+    card.hasAttribute("data-landed"),
     true,
     "the landing ends once the panel is seen",
   );

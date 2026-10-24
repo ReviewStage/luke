@@ -492,9 +492,6 @@ function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element 
 /** The class every unit of the text wears, one per section in the order the sections stand. */
 const UNIT_CLASS = "plan-unit";
 
-/** The class of a unit lit as it settles. */
-const FRESH_CLASS = "plan-fresh";
-
 /** The class of the unit the caret is typing in, whose heading wears the writing mark. */
 const WRITING_CLASS = "plan-writing";
 
@@ -578,9 +575,9 @@ function unitClass(view: UnitView, changed: boolean): string {
   const lit = changed ? ` ${CHANGED_CLASS}` : "";
   if (view.writing) return `${UNIT_CLASS} ${WRITING_CLASS}${lit}`;
   if (view.resting) {
-    return `${UNIT_CLASS} ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}${lit}`;
+    return `${UNIT_CLASS} ${RESTING_CLASS}${lit}`;
   }
-  return view.fresh ? `${UNIT_CLASS} ${FRESH_CLASS}${lit}` : `${UNIT_CLASS}${lit}`;
+  return `${UNIT_CLASS}${lit}`;
 }
 
 /**
@@ -970,6 +967,7 @@ const DocumentUnit = memo(function DocumentUnit({
     <MarkdownMessage
       words={view.words}
       className={unitClass(view, changed)}
+      landed={view.fresh}
       edit={edit}
       link={link}
       openLink={openLink}
