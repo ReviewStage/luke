@@ -295,17 +295,13 @@ function AppWindow(): React.JSX.Element {
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, so its own ways out of the page ask first, and hears whether
-  // that or a plan's words not saved stand, so its ways out of the app ask first.
-  const [pageAsks, setPageAsks] = useState(false);
-  const leaveGuard = useLeaveGuard((ask) => {
-    tellShellUnsavedWork(ask);
-    setPageAsks(ask !== undefined);
-  });
+  // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
+  // covers, so its own ways out of the page and the app ask first.
+  const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
   const planWordsUnsaved = usePlanWordsUnsaved();
   useEffect(() => {
-    appPlatform().holdsUnsavedWork?.(pageAsks || planWordsUnsaved);
-  }, [pageAsks, planWordsUnsaved]);
+    appPlatform().unsavedPlanWords?.(planWordsUnsaved);
+  }, [planWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>

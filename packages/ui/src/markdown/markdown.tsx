@@ -37,6 +37,7 @@ import {
   type StreamdownProps,
   type UrlTransform,
 } from "streamdown";
+import { landedMark } from "../components/landed/landed.js";
 import { QUOTE_CLASS } from "../quote-face.js";
 import { MARKDOWN_CLASS, markdownClass } from "./markdown-class.js";
 import { type MarkdownTaskToggler, placeTaskItems, taskInput } from "./markdown-tasks.js";
@@ -183,6 +184,8 @@ export interface MarkdownProps {
   look: MarkdownLook;
   /** The place's own class on the root; a document has none, being drawn into `Prose`'s. */
   className?: string | undefined;
+  /** Whether a note was just landed on, lit once as every place landed on is (`landed.ts`). */
+  landed?: boolean | undefined;
   /** Whether a transcript's words are still arriving, read block by block, an unclosed fence or emphasis drawn as written so far. */
   streaming?: boolean | undefined;
   /** The elements the place draws its own way, over the look's own. */
@@ -260,6 +263,7 @@ function WholeWords({
 export const Markdown = memo(function Markdown({
   className,
   streaming = false,
+  landed = false,
   ...whole
 }: MarkdownProps): React.JSX.Element {
   const {
@@ -292,7 +296,7 @@ export const Markdown = memo(function Markdown({
   }
   if (look === MARKDOWN_LOOK.DOCUMENT) return <WholeWords {...whole} />;
   return (
-    <div className={markdownClass(className)}>
+    <div className={markdownClass(className)} {...landedMark(landed)}>
       <WholeWords {...whole} />
     </div>
   );

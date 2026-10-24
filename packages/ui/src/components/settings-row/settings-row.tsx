@@ -1,6 +1,7 @@
 import { type ReactNode, useId } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
 import { AlertIcon } from "../../icons/lucide-glyphs.js";
+import { LANDED, landedMark } from "../landed/landed.js";
 import { GAP, type Gap, Inline } from "../layout/layout.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
@@ -60,9 +61,9 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * control wears the id the row hands it (`controlId`).
  *
  * A row that just arrived, a skill just installed, says so (`landed`): it
- * lights once, a wash over it fading out on the motion tokens, so the eye
- * finds it among the rest; reduced motion and a capture run, which zero the
- * tokens, leave it unlit.
+ * is lit as every place landed on is (`../landed/landed.ts`), its wash a
+ * step inside the card it stands flush in, so the eye finds it among the
+ * rest; reduced motion keeps the wash, still, for as long.
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -180,7 +181,7 @@ export function SettingsRow({
       data-density={density}
       data-indent={indent}
       data-labels-control={labelsControl}
-      data-landed={landed ? "" : undefined}
+      {...landedMark(landed, LANDED.WITHIN)}
     >
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">

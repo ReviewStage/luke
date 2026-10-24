@@ -19,6 +19,7 @@
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
     "./icons": "./src/icons/icons.js",
+    "./landed": "./src/components/landed/landed.js",
     "./daily-bars": "./src/chart/daily-bars.js",
     "./markdown": "./src/markdown/markdown.js",
     "./markdown-class": "./src/markdown/markdown-class.js",

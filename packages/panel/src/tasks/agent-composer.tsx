@@ -52,11 +52,10 @@ import {
 } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { imageFiles } from "../feedback-images.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentContextRing } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
@@ -64,7 +63,6 @@ import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
 import { AttachFilesButton, type AttachPicker } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
@@ -476,11 +474,8 @@ export function AgentComposer({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
-  // How many hand-offs are still being read, during which Send waits, so no
-  // message goes without a file the developer already handed the box.
-  const [reading, setReading] = useState(0);
-  // Note that files are read through a ref, because reading them takes a
-  // while and the box they land in is whichever render is current by then.
+  // Note that a move's retry is read through a ref, because it lands a while
+  // after its press and the box it retries is whichever render is current by then.
   const latest = useRef(composer);
   latest.current = composer;
   // Note that Stop stands only once a turn runs, because the service cancels
@@ -488,7 +483,12 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)), { over: !held });
+  // Note that Send waits while files are read, so no message goes without a file the developer already handed the box.
+  const files = useAttachedFiles({
+    holder: { attachments: composer.attachments, update: composer.setAttachments },
+    held,
+    onRefusal: setRefusal,
+  });
   const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(useSideBundles().planEditor);
@@ -692,28 +692,15 @@ export function AgentComposer({
     },
   ];
 
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0 || held) return;
-    setReading((count) => count + 1);
-    readFiles(files)
-      .then((read) => {
-        // Taken after whatever the box holds as the read lands, so neither a
-        // read that landed first nor a chip taken off meanwhile is undone.
-        setRefusal(withFiles(latest.current.attachments, read).refusal);
-        latest.current.setAttachments((now) => withFiles(now, read).attachments);
-      })
-      .finally(() => setReading((count) => count - 1));
-  };
-
   return (
     <ComposerCard
       ref={card}
       data-status={status}
       data-closed={closed ? "" : undefined}
-      {...fileDrop.target}
+      {...files.drop.target}
     >
       <PromptInput
-        dropping={fileDrop.dropping}
+        dropping={files.drop.dropping}
         onSubmit={() => {
           setRefusal(undefined);
           setCut(false);
@@ -725,14 +712,7 @@ export function AgentComposer({
         {above}
         <AttachedFileChips
           files={attachmentChips(composer.attachments)}
-          onRemove={
-            held
-              ? undefined
-              : (index) => {
-                  setRefusal(undefined);
-                  composer.setAttachments((now) => now.filter((_, at) => at !== index));
-                }
-          }
+          onRemove={held ? undefined : files.remove}
         />
         <ComposerField
           module={module}
@@ -760,18 +740,12 @@ export function AgentComposer({
           onKey={(event) =>
             pickers.field.onKey(event) ||
             // A file still being read holds the owner's keys too, as it holds Send.
-            (reading === 0 && onKey?.(event) === true)
+            (!files.reading && onKey?.(event) === true)
           }
           onEnter={() => {
             if (room.current !== null) submitPromptInput(room.current);
           }}
-          onPasteFiles={(files) => {
-            // Only images are taken from the clipboard; text pastes as it always does.
-            const pasted = imageFiles(files);
-            if (pasted.length === 0) return false;
-            attach(pasted);
-            return true;
-          }}
+          onPasteFiles={files.paste}
           quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
         />
         <PromptInputFooter ref={foot}>
@@ -791,7 +765,7 @@ export function AgentComposer({
                     label={BUTTON.ATTACH}
                     disabled={held}
                     picker={picker}
-                    onFiles={attach}
+                    onFiles={files.attach}
                   />
                 </ComposerAttach>
                 <BranchChip
@@ -850,7 +824,7 @@ export function AgentComposer({
                     <PromptInputSubmit
                       label={sendLabel}
                       status={composer.sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                      disabled={held || empty || !sendable || reading > 0}
+                      disabled={held || empty || !sendable || files.reading}
                     />
                   </Tooltip>
                 )}

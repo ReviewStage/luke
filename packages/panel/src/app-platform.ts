@@ -102,20 +102,18 @@ export interface AppPlatform {
   /**
    * Hears the ask standing each time a page comes to hold unsaved work, and
    * nothing once none does, so a shell that can leave the page by ways of its
-   * own, a browser tab closed, reloaded, or sent elsewhere, asks first while
-   * there is work to lose and only then. `ask` takes the way out once the
-   * developer says to leave. The Mac app, whose window's close is main's,
-   * leaves this out.
+   * own asks first while there is work to lose and only then: a browser tab
+   * closed, reloaded, or sent elsewhere, and the Mac app quit, restarted to
+   * update, or signed out. `ask` takes the way out once the developer says to
+   * leave.
    */
   unsavedWork?(ask: ((leave: () => void) => void) | undefined): void;
   /**
-   * Hears whether the window holds unsaved work, a page's or a plan's words
-   * not saved, each time that changes, so a shell whose own ways out of the
-   * app save nothing asks first while there is work to lose: the Mac app's
-   * quit, restart to update, and sign-out. A browser tab, whose ways out
-   * `unsavedWork` guards, leaves this out.
+   * Hears whether a plan holds words not saved each time that changes. No
+   * page's ask covers them, since the panel's own doors save them as a task
+   * is left, so a shell whose ways out save nothing asks before those too.
    */
-  holdsUnsavedWork?(holding: boolean): void;
+  unsavedPlanWords?(unsaved: boolean): void;
 }
 
 let installed: AppPlatform | undefined;

@@ -17,6 +17,7 @@ import {
   VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
 } from "@luke/ui";
+import { landedMark } from "@luke/ui/landed";
 import { MessageSquareIcon } from "lucide-react";
 import type { AnimationEvent, ReactNode } from "react";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
@@ -165,7 +166,7 @@ export function AnnotationCard({
       ref={landing?.ref}
       className={className === undefined ? "annotation-card" : `annotation-card ${className}`}
       aria-label={label}
-      data-search-landed={landing?.ringed === true ? "" : undefined}
+      {...landedMark(landing?.ringed === true)}
       onAnimationEnd={landing?.onAnimationEnd}
     >
       {where === undefined ? null : <div className="annotation-card-where">{where}</div>}

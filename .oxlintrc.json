@@ -25,6 +25,7 @@
     "anti-slop/no-raw-async-primitives": "error",
     "anti-slop/no-raw-press-outside-ui": "error",
     "anti-slop/no-run-promise-outside-edges": "error",
+    "anti-slop/retired": "error",
     "anti-slop/skeleton-through-components": "error"
   },
   "overrides": [

@@ -12,6 +12,7 @@ import {
   JSX_SOURCE,
   PRESS_GUARD_RULE,
 } from "./shared/press-guard.ts";
+import { namesRetired, RETIRED_GUARD_RULE } from "./shared/retired.ts";
 import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
 
 /**
@@ -21,7 +22,9 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
  * file holding one that would silence `skeleton-through-components`, on any
  * TypeScript file holding one that would silence `no-lucide-outside-door`,
- * whose baseline is the only way past it, and on an `.oxlintrc.json` that
+ * whose baseline is the only way past it, on any TypeScript file that spells
+ * a retired name and holds one that would silence `retired`, whose retired
+ * file's baseline is the only way past it, and on an `.oxlintrc.json` that
  * leaves any of them short of an error anywhere or whose `ignorePatterns`
  * hide a file one of them watches.
  */
@@ -66,6 +69,16 @@ const GUARDS = [
       existsSync(absolute) &&
       readFileSync(absolute, "utf8").includes("lucide-react"),
     remedy: "Import the icon from @luke/ui/icons instead",
+  },
+  {
+    rule: RETIRED_GUARD_RULE,
+    sources: TYPESCRIPT_SOURCE,
+    // As for Lucide: a file that never spells a retired name has nothing to silence.
+    watches: (absolute: string) =>
+      !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
+      existsSync(absolute) &&
+      namesRetired(readFileSync(absolute, "utf8")),
+    remedy: "Use what the retired file under tools/anti-slop/retired/ names instead",
   },
 ] as const;
 

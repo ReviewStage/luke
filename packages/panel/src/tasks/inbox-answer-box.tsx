@@ -24,7 +24,6 @@ import {
   submitPromptInput,
 } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { imageFiles } from "../feedback-images.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import {
   COMPOSER_INPUT,
@@ -33,10 +32,9 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
 import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
@@ -401,18 +399,21 @@ function AnswerCard({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
-  // How many hand-offs of files are still being read, during which the answer waits.
-  const [reading, setReading] = useState(0);
   const draft = control.draftOf(item);
   const sending = control.sending.has(item.id);
-  // Note that the item is read through a ref, because reading files takes a
-  // while and the item they land on is whichever revision is current by then.
-  const latest = useRef(item);
-  latest.current = item;
+  // Note that the answer waits while files are read, and files read for an item its agent revised meanwhile land nowhere, as its words were let go.
+  const files = useAttachedFiles({
+    holder: {
+      attachments: draft.attachments,
+      update: (next) => control.onAttachments(item, next),
+    },
+    place: { key: item.revision, moved: ITEM_CHANGED },
+    onRefusal: setRefusal,
+  });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
   const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
   const nod = awaitsNod(item) && emptyBox(draft) && !nodded;
-  const held = sending || reading > 0;
+  const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
   const sendable = nod || inboxThreadSend(thread, draft) !== undefined;
   const asks = controls !== undefined;
@@ -453,49 +454,18 @@ function AnswerCard({
     setCut(false);
     control.onAcknowledge(item);
   };
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0) return;
-    const { revision } = item;
-    setReading((count) => count + 1);
-    readFiles(files)
-      .then((read) => {
-        // Files read for an item its agent changed meanwhile land nowhere, as its words were let go.
-        const now = latest.current;
-        if (now.revision !== revision) {
-          setRefusal(ITEM_CHANGED);
-          return;
-        }
-        // Taken after whatever the card holds as the write lands, so neither a
-        // read that landed first nor a chip taken off meanwhile is undone.
-        let refusal = read.refusal;
-        control.onAttachments(now, (was) => {
-          const taken = withFiles(was, read);
-          refusal = taken.refusal;
-          return taken.attachments;
-        });
-        setRefusal(refusal);
-      })
-      .finally(() => setReading((count) => count - 1));
-  };
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
   return (
-    <div className="agent-composer" {...fileDrop.target}>
+    <div className="agent-composer" {...files.drop.target}>
       <AnswerForm
-        dropping={fileDrop.dropping}
+        dropping={files.drop.dropping}
         field={field}
         asks={asks}
         messages
         controls={controls}
         chips={
-          <AttachedFileChips
-            files={attachmentChips(draft.attachments)}
-            onRemove={(index) => {
-              setRefusal(undefined);
-              control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
-            }}
-          />
+          <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
         }
         note={draft.note}
         onNote={(text) => {
@@ -512,21 +482,15 @@ function AnswerCard({
         onEnter={() => {
           if (room.current !== null) submitPromptInput(room.current);
         }}
-        onPasteFiles={(files) => {
-          // Only images are taken from the clipboard; text pastes as it always does.
-          const pasted = imageFiles(files);
-          if (pasted.length === 0) return false;
-          attach(pasted);
-          return true;
-        }}
+        onPasteFiles={files.paste}
         quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
-        tools={<AttachFilesButton onFiles={attach} />}
+        tools={<AttachFilesButton onFiles={files.attach} />}
         nod={nod}
         sending={sending}
         held={held}
         sendable={sendable}
         onSubmit={() => {
-          if (reading > 0) return;
+          if (files.reading) return;
           if (nod) acknowledge();
           else message();
         }}

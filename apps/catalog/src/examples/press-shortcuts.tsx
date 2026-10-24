@@ -78,7 +78,8 @@ function HeardSplit({ onDone }: { onDone: (what: string) => void }): React.JSX.E
     <SplitButton
       variant={BUTTON_VARIANT.OUTLINE}
       icon={<PlayIcon />}
-      busy="Starting"
+      busy
+      busyLabel="Starting"
       onClick={() => onDone("Started")}
       onMainPress={() => onDone("Heard a press of Start")}
       menu={{ label: "Choose a model to start with", ...menu.trigger() }}

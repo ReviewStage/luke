@@ -40,7 +40,6 @@ import {
   SteppedBack,
   TEXT_TONE,
   Text,
-  Time,
   Tooltip,
   useMenu,
   useMinute,
@@ -56,7 +55,7 @@ import {
 import { isWireString } from "@luke/wire";
 import { CheckIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActorLine, ActorRef, AutomationCard } from "../actor-ref.js";
+import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -95,7 +94,7 @@ import {
 import { askHeadWords } from "./inbox-ask-words.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import type { InboxCodeDoors } from "./inbox-code-card.js";
-import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
+import { COMMENT, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import { HolderGlyph } from "./inbox-item-parts.js";
 import {
@@ -308,9 +307,9 @@ interface ItemAgent {
   readonly onOpen: () => void;
 }
 
-/** The agent in a line of the thread: its tile and name, which hang its card and open its tab. */
+/** The agent named in a line of the thread, whose tile its comment's face draws: its name, which hangs its card and opens its tab. */
 function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
-  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
+  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} nameOnly />;
 }
 
 /** What the draft reply's head names the reader by, where nothing else names them. */
@@ -348,16 +347,13 @@ function DraftReply({
 }): React.JSX.Element {
   const reader = useReader(readerId);
   return (
-    <Comment
+    <InboxComment
       kind={COMMENT.DRAFT}
-      head={
-        <CommentName>
-          <ActorRef actor={reader} />
-        </CommentName>
-      }
+      author={commentAuthor(reader)}
+      nameRef={<ActorRef actor={reader} nameOnly />}
     >
       {children}
-    </Comment>
+    </InboxComment>
   );
 }
 
@@ -801,19 +797,13 @@ function ThreadMessage({
   const answers = message.answers;
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
-    <Comment
+    <InboxComment
       kind={COMMENT.MESSAGE}
       messageId={message.id}
-      head={
-        <>
-          <CommentName>
-            {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
-          </CommentName>
-          <span className="inbox-comment-when">
-            <Time className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
-          </span>
-        </>
-      }
+      author={commentAuthor(fromAgent ? by.subject.tile : member)}
+      nameRef={fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} nameOnly />}
+      at={message.createdAt}
+      now={now}
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
         <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
@@ -855,7 +845,7 @@ function ThreadMessage({
           waitingOn={waitingOn}
         />
       )}
-    </Comment>
+    </InboxComment>
   );
 }
 

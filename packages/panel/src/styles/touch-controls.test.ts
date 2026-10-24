@@ -170,9 +170,19 @@ const HOVER_ONLY: readonly {
       className: "chat-message",
       children: [
         {
-          tag: "p",
-          className: "chat-byline",
-          children: [{ tag: "span", className: "chat-byline-action" }],
+          className: "luke-comment",
+          children: [
+            {
+              className: "luke-comment-head",
+              children: [
+                {
+                  tag: "span",
+                  className: "luke-comment-trailing",
+                  children: [{ tag: "span", className: "chat-byline-action" }],
+                },
+              ],
+            },
+          ],
         },
       ],
     },

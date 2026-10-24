@@ -18,6 +18,7 @@ import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { andList } from "@luke/features/words";
 import {
+  Comment,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
@@ -71,7 +72,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
+import { ActorRef, ActorStack, commentAuthor } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -556,32 +557,32 @@ function PendingRow({
       data-pending={entry.refused === undefined ? "" : undefined}
       data-unsent={entry.refused === undefined ? undefined : ""}
     >
-      <Face actor={actor} at={entry.at} />
-      <div className="chat-message-body">
-        <Byline actor={actor} at={entry.at} where={undefined} />
-        <AttachedFileChips files={attachmentChips(attachments ?? [])} />
-        {text === undefined ? null : (
-          <div className="chat-words">
-            <SentWords text={text} asDocument />
-          </div>
-        )}
-        {entry.refused === undefined ? null : (
-          <p className="agent-undelivered chat-unsent" role="alert">
-            <CircleAlertIcon aria-hidden="true" />
-            {entry.refused}
-            <TextButton
-              tone={TEXT_BUTTON_TONE.ACCENT}
-              onClick={() => context.onRetryPost(entry.id)}
-            >
-              {RETRY_POST}
-            </TextButton>
-            <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
-              {DISCARD_POST}
-            </TextButton>
-          </p>
-        )}
-        <ConfirmDialog confirm={discard} question={DISCARD_QUESTION} />
-      </div>
+      <MessageComment actor={actor} at={entry.at}>
+        <div className="chat-message-body">
+          <AttachedFileChips files={attachmentChips(attachments ?? [])} />
+          {text === undefined ? null : (
+            <div className="chat-words">
+              <SentWords text={text} asDocument />
+            </div>
+          )}
+          {entry.refused === undefined ? null : (
+            <p className="agent-undelivered chat-unsent" role="alert">
+              <CircleAlertIcon aria-hidden="true" />
+              {entry.refused}
+              <TextButton
+                tone={TEXT_BUTTON_TONE.ACCENT}
+                onClick={() => context.onRetryPost(entry.id)}
+              >
+                {RETRY_POST}
+              </TextButton>
+              <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
+                {DISCARD_POST}
+              </TextButton>
+            </p>
+          )}
+          <ConfirmDialog confirm={discard} question={DISCARD_QUESTION} />
+        </div>
+      </MessageComment>
     </li>
   );
 }
@@ -705,73 +706,64 @@ function AskBody({
   );
 }
 
-/** The line over a message's words, as Slack's is: its author by name in bold, their card on it, where it was said, and how long ago, the full moment on hover, as every row and thread in the window says it. */
-function Byline({
+/**
+ * A message the chat draws as a comment (`Comment`): its author's face, their name hanging their card, how long ago, the full moment on hover, as every row and thread in the window says it, and where it was said and the presses at the line's end, shown while the message is hovered or one has the keyboard; then its words.
+ */
+function MessageComment({
   actor,
   at,
   where,
   action,
-  continued = false,
+  children,
 }: {
   actor: Actor;
   at: number;
   /** Where it was said, as For you names a message's channel; none in the channel itself. */
-  where: React.ReactNode;
-  /** The presses at the line's end, shown while the message is hovered or one has the keyboard. */
+  where?: React.ReactNode;
   action?: React.ReactNode;
-  /** Whether the message continues its author's run, so the line names no one and holds its press alone. */
-  continued?: boolean;
+  children: React.ReactNode;
 }): React.JSX.Element {
-  if (continued) {
-    // The author stays named for a screen reader, which may land on this message alone.
-    return (
-      <div className="chat-byline" data-continued="true">
-        <VisuallyHidden>{actorName(actor)}</VisuallyHidden>
-        {action}
-      </div>
+  const door =
+    actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+      <SendingAgent actor={actor} agentId={actor.agentId} nameOnly />
+    ) : (
+      <ActorRef actor={actor} nameOnly />
     );
-  }
+  const trailing =
+    where === undefined && action === undefined ? undefined : (
+      <>
+        {where === undefined ? null : <OneLine className="chat-byline-where">{where}</OneLine>}
+        {action}
+      </>
+    );
   return (
-    <div className="chat-byline">
-      <span className="chat-byline-name">
-        {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
-          <SendingAgent actor={actor} agentId={actor.agentId} nameOnly />
-        ) : (
-          <ActorRef actor={actor} nameOnly />
-        )}
-      </span>
-      {where === undefined ? null : <OneLine className="chat-byline-where">{where}</OneLine>}
-      <Time className="chat-time" at={at} />
+    <Comment author={commentAuthor(actor)} nameRef={door} at={at} trailing={trailing}>
+      {children}
+    </Comment>
+  );
+}
+
+/** The presses of a message continuing its author's run, on a line that names no one: the author stays named for a screen reader, which may land on this message alone. */
+function ContinuedByline({
+  actor,
+  action,
+}: {
+  actor: Actor;
+  action?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="chat-byline" data-continued="true">
+      <VisuallyHidden>{actorName(actor)}</VisuallyHidden>
       {action}
     </div>
   );
 }
 
-/**
- * The face a message leads with, in a column of its own at a card's size: the
- * person's photo or initial, as a circle, or the agent's own mark, as a rounded square. A message continuing its
- * author's run leads with its time instead, shown while it is hovered, as
- * Slack's grouped messages do.
- */
-function Face({
-  actor,
-  continued = false,
-  at,
-}: {
-  actor: Actor;
-  continued?: boolean;
-  at: number;
-}): React.JSX.Element {
-  if (continued) {
-    return (
-      <span className="chat-face" data-continued="true">
-        <Time className="chat-time" at={at} />
-      </span>
-    );
-  }
+/** A message continuing its author's run leads with its time instead of a face, shown while it is hovered, as Slack's grouped messages do. */
+function ContinuedTime({ at }: { at: number }): React.JSX.Element {
   return (
-    <span className="chat-face">
-      <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
+    <span className="chat-face" data-continued="true">
+      <Time className="chat-time" at={at} />
     </span>
   );
 }
@@ -812,16 +804,11 @@ const Reply = memo(function Reply({
   const actor = context.actorOf(message.authorId);
   return (
     <li className="chat-reply" data-seq={message.seq}>
-      <Face actor={actor} at={message.postedAt} />
-      <div className="chat-message-body">
-        <Byline
-          actor={actor}
-          at={message.postedAt}
-          where={undefined}
-          action={<RowActions message={message} />}
-        />
-        <Body message={message} context={context} />
-      </div>
+      <MessageComment actor={actor} at={message.postedAt} action={<RowActions message={message} />}>
+        <div className="chat-message-body">
+          <Body message={message} context={context} />
+        </div>
+      </MessageComment>
     </li>
   );
 });
@@ -886,6 +873,60 @@ const ThreadRow = memo(function ThreadRow({
       quoting === undefined ? undefined : { words: quoting, onQuoted: () => setQuoting(undefined) },
     [quoting],
   );
+  const words = (
+    <>
+      <Body message={message} context={context} />
+      {quiet ? null : (
+        <div className="chat-thread" data-open={String(open)}>
+          <div className="chat-thread-toggle">
+            {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
+            {replies.length > 0 && !open ? (
+              <ActorStack
+                actors={repliers}
+                drawn={REPLIERS_DRAWN}
+                faces={repliers.map(() => ({}))}
+                label={REPLIERS_LABEL}
+              />
+            ) : null}
+            {toggle}
+          </div>
+          {open && replies.length + pendingReplies.length > 0 ? (
+            <ul className="chat-replies">
+              {replies.map((reply) => (
+                <Reply key={reply.id} message={reply} context={context} />
+              ))}
+              {pendingReplies.map((entry) => (
+                <PendingRow key={entry.id} entry={entry} context={context} reply />
+              ))}
+            </ul>
+          ) : null}
+          {open && canReply ? (
+            <ChatComposer
+              channelId={message.channelId}
+              replyTo={message.seq}
+              label="Reply in thread"
+              mentions={context.mentionsIn(message.channelId, [
+                message.authorId,
+                ...replies.map((reply) => reply.authorId),
+              ])}
+              keywords={context.keywords}
+              compact
+              replyDoor={threadDoor}
+              pendingQuote={pendingQuote}
+              onSend={(text, attachments, takeBack) =>
+                context.send(
+                  { channelId: message.channelId, replyTo: message.seq },
+                  { ...postOf(text, attachments), replyTo: message.seq },
+                  takeBack,
+                )
+              }
+            />
+          ) : null}
+        </div>
+      )}
+    </>
+  );
+  const action = <RowActions message={message} extra={quiet && canReply ? toggle : undefined} />;
   return (
     <li
       ref={row}
@@ -893,65 +934,19 @@ const ThreadRow = memo(function ThreadRow({
       data-seq={message.seq}
       data-continued={String(continued)}
     >
-      <Face actor={actor} continued={continued} at={message.postedAt} />
-      <div className="chat-message-body">
-        <Byline
-          actor={actor}
-          at={message.postedAt}
-          where={where}
-          continued={continued}
-          action={<RowActions message={message} extra={quiet && canReply ? toggle : undefined} />}
-        />
-        <Body message={message} context={context} />
-        {quiet ? null : (
-          <div className="chat-thread" data-open={String(open)}>
-            <div className="chat-thread-toggle">
-              {/* Note that the faces stand beside the press rather than in it, since each hangs its replier's card. */}
-              {replies.length > 0 && !open ? (
-                <ActorStack
-                  actors={repliers}
-                  drawn={REPLIERS_DRAWN}
-                  faces={repliers.map(() => ({}))}
-                  label={REPLIERS_LABEL}
-                />
-              ) : null}
-              {toggle}
-            </div>
-            {open && replies.length + pendingReplies.length > 0 ? (
-              <ul className="chat-replies">
-                {replies.map((reply) => (
-                  <Reply key={reply.id} message={reply} context={context} />
-                ))}
-                {pendingReplies.map((entry) => (
-                  <PendingRow key={entry.id} entry={entry} context={context} reply />
-                ))}
-              </ul>
-            ) : null}
-            {open && canReply ? (
-              <ChatComposer
-                channelId={message.channelId}
-                replyTo={message.seq}
-                label="Reply in thread"
-                mentions={context.mentionsIn(message.channelId, [
-                  message.authorId,
-                  ...replies.map((reply) => reply.authorId),
-                ])}
-                keywords={context.keywords}
-                compact
-                replyDoor={threadDoor}
-                pendingQuote={pendingQuote}
-                onSend={(text, attachments, takeBack) =>
-                  context.send(
-                    { channelId: message.channelId, replyTo: message.seq },
-                    { ...postOf(text, attachments), replyTo: message.seq },
-                    takeBack,
-                  )
-                }
-              />
-            ) : null}
+      {continued ? (
+        <>
+          <ContinuedTime at={message.postedAt} />
+          <div className="chat-message-body">
+            <ContinuedByline actor={actor} action={action} />
+            {words}
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <MessageComment actor={actor} at={message.postedAt} where={where} action={action}>
+          <div className="chat-message-body">{words}</div>
+        </MessageComment>
+      )}
     </li>
   );
 });

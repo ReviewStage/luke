@@ -2,19 +2,28 @@
 
 import assert from "node:assert/strict";
 import { STATUS_TONE } from "@luke/ui";
+import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "./testing/copy-feedback.js";
-import { TOAST_HOLD, ToastHost, type ToastNotice, useToast, useWorkingToast } from "./toast.js";
+import {
+  TOAST_HOLD,
+  ToastHost,
+  type ToastNotice,
+  undoToast,
+  useToast,
+  useWorkingToast,
+} from "./toast.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
  * window too short for three stands two, setting the oldest aside until
  * there is room again; one whose hold runs down with an action draws that
- * hold as its countdown; and work under way settles into its own card in
- * place. jsdom lays nothing out, so the window's height is given. Synthetic
+ * hold as its countdown; work under way settles into its own card in
+ * place; and an act's Undo toast takes the act back and stands for the Undo
+ * hold. jsdom lays nothing out, so the window's height is given. Synthetic
  * throughout.
  */
 
@@ -30,6 +39,7 @@ let show: ((notice: ToastNotice) => void) | undefined;
 let work: ((words: string) => (notice: ToastNotice) => void) | undefined;
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   registry?.dispose();
@@ -77,6 +87,21 @@ function standing(): string[] {
   return [...document.querySelectorAll(".luke-toast:not([data-leaving]) .luke-toast-words")].map(
     (words) => words.textContent ?? "",
   );
+}
+
+/** Lets `ms` pass on the faked clock the toasts' holds run down on. */
+function pass(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+/** The button a standing toast labels `label`. */
+function toastButton(label: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>(".luke-toast:not([data-leaving]) button"),
+  ].find((button) => button.textContent === label);
+  return found ?? assert.fail(`a toast button named ${label}`);
 }
 
 /** The window grown or shrunk to `height`, as a drag of its edge reports it. */
@@ -216,4 +241,33 @@ test("two pieces of work under way stand apart, each settles its own card in pla
     [STATUS_TONE.COMPLETE, STATUS_TONE.DANGER],
   );
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Couldn't save");
+});
+
+test("an Undo toast says the act in the success tone, and its Undo takes the act back and sends the toast away", () => {
+  mount(WINDOW.TALL);
+  const undone: string[] = [];
+  act(() => show?.(undoToast("Task archived", () => undone.push("Task archived"))));
+  const tone = document.querySelector<HTMLElement>(".luke-toast")?.dataset.tone;
+
+  act(() => toastButton("Undo").click());
+
+  assert.equal(tone, STATUS_TONE.COMPLETE);
+  assert.deepEqual(undone, ["Task archived"]);
+  assert.deepEqual(standing(), []);
+});
+
+test("an Undo toast nobody points at stands for the Undo hold, then leaves without taking the act back", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  mount(WINDOW.TALL);
+  const hold = Duration.toMillis(TOAST_HOLD.UNDO);
+  const undone: string[] = [];
+  act(() => show?.(undoToast("Settings reset", () => undone.push("Settings reset"))));
+
+  pass(hold - 1);
+  const justBefore = standing();
+  pass(1);
+
+  assert.deepEqual(justBefore, ["Settings reset"]);
+  assert.deepEqual(standing(), []);
+  assert.deepEqual(undone, []);
 });

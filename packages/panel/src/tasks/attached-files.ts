@@ -21,9 +21,18 @@ import { encodeImage } from "../feedback-images.js";
  * note while the ones that can still come.
  */
 
+/** What a box carries: any file a message to an agent takes, or pictures alone, as a post in a channel does. */
+export const ATTACH_TAKES = {
+  FILES: "files",
+  IMAGES: "images",
+} as const;
+
+export type AttachTakes = (typeof ATTACH_TAKES)[keyof typeof ATTACH_TAKES];
+
 /** Why a file did not come, in the words the box's note says. */
 const REFUSAL = {
   KIND: (name: string) => `${name} can't be attached. Attach images, PDFs, or text files.`,
+  NOT_IMAGE: (name: string) => `${name} can't be attached. Attach images.`,
   TOO_LARGE: (name: string) => `${name} is too large to attach.`,
   EMPTY: (name: string) => `${name} is empty.`,
   UNREADABLE: (name: string) => `${name} couldn't be read.`,
@@ -72,6 +81,24 @@ async function attachmentOf(file: File): Promise<FileRead> {
   if (!pdf && !spellsText(bytes)) return { refusal: REFUSAL.KIND(name) };
   const mediaType = pdf ? CODING_AGENT_ATTACHMENT_TYPE.PDF : CODING_AGENT_ATTACHMENT_TYPE.TEXT;
   return { attachment: { name, mediaType, data: base64Of(bytes) } };
+}
+
+/**
+ * The files handed to a box that it reads at all, in order: every one where
+ * it takes any file, and the pictures alone where it takes only those, the
+ * first other file saying why it did not come before anything is read.
+ */
+export function filesTaken(
+  files: readonly File[],
+  takes: AttachTakes,
+): { readonly files: readonly File[]; readonly refusal: string | undefined } {
+  if (takes === ATTACH_TAKES.FILES) return { files, refusal: undefined };
+  const images = files.filter((file) => file.type.startsWith("image/"));
+  const other = files.find((file) => !images.includes(file));
+  return {
+    files: images,
+    refusal: other === undefined ? undefined : REFUSAL.NOT_IMAGE(other.name),
+  };
 }
 
 /** Files read: what the message may carry of them, in order, and why the first that cannot come did not. */

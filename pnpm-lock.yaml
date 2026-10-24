@@ -1363,6 +1363,9 @@ importers:
       '@oxlint/plugins':
         specifier: 1.79.0
         version: 1.79.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
       oxc-parser:
         specifier: 0.152.0
         version: 0.152.0

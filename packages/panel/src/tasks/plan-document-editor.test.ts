@@ -285,8 +285,7 @@ test("the open text wears every class its drawn sections wear, so a list keeps i
     document: { body: "- reproduce\n  - twice\n- fix\n", assumptions: [] },
   });
   const drawn = container.querySelector<HTMLElement>(".luke-editable-block .plan-unit");
-  // Note that a section's arrival light is left out, since it comes and goes with the reveal's frames and moves nothing.
-  const worn = [...(drawn?.classList ?? [])].filter((name) => name !== "plan-fresh");
+  const worn = [...(drawn?.classList ?? [])];
   assert.ok(worn.includes("plan-unit"), "the plan's words are drawn");
 
   act(() => {
@@ -963,6 +962,30 @@ test("a conflict over a teammate's words names them on its note and its button, 
 
   assert.equal(sent.length, 1, "taking their words saves nothing");
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+});
+
+test("Keep mine in the open editor over a teammate's change to another section lays the merged words into it and saves both changes", async () => {
+  const theirs = BODY.replace("Only an admin", "Only an owner");
+  const mine = BODY.replace("Invites land by email.", "Invites land by email or link.");
+  const merged = theirs.replace("Invites land by email.", "Invites land by email or link.");
+  const by = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
+  const { container, sent } = mount([{ conflict: { current: theirs, by } }]);
+  act(() => block(container, "Goal").click());
+  const [editor] = mounted;
+  act(() => open().onDraft(mine));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+
+  const keep = container.querySelector(".plan-editor-note")?.querySelector("button");
+  assert.equal(keep?.textContent, "Keep mine");
+  act(() => keep?.click());
+  await settle();
+
+  assert.deepEqual(editor?.took, [[mine, merged]]);
+  assert.deepEqual(sent, [
+    { document: { base: BODY, value: mine } },
+    { document: { base: theirs, value: merged } },
+  ]);
 });
 
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Luke's", async () => {
