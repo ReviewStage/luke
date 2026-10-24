@@ -94,6 +94,9 @@ export function readFailedWords(thing: string): string {
   return `${sentenceStart(thing)} could not be read.`;
 }
 
+/** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */
+export const REFRESH_FAILED_WORDS = "Could not refresh";
+
 /**
  * The voice's failures, each said in words of its own. The notice line and
  * app state carry only these keys, never a browser's or a provider's text, so

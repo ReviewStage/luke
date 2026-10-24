@@ -140,6 +140,47 @@ test("a repository the picker lists on a member's token, on an owner the workspa
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
 });
 
+test("a refresh that fails when the window comes back keeps the listed repositories, says Could not refresh with Retry, and Retry lists again", async () => {
+  let failing = false;
+  const { container } = await mount(() =>
+    failing ? Promise.reject(new Error("offline")) : TOKEN_LISTING(),
+  );
+  const chip =
+    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    assert.fail("the card draws the repository chip");
+  act(() => chip.click());
+  await settle();
+  const listed = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].some((option) =>
+      option.textContent?.includes("tools"),
+    );
+  const refreshNote = () =>
+    [...document.querySelectorAll('[role="alert"]')].find((each) =>
+      each.textContent?.includes("Could not refresh"),
+    );
+  assert.equal(listed(), true);
+
+  failing = true;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+
+  assert.equal(listed(), true, "the last listing stands");
+  const note = refreshNote();
+  assert.ok(note, "the failed refresh says so");
+
+  failing = false;
+  const retry = [...note.querySelectorAll("button")].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  act(() => retry?.click());
+  await settle();
+
+  assert.equal(listed(), true);
+  assert.equal(refreshNote(), undefined);
+});
+
 test("the repository chip hangs the repository's card while the pointer rests on it: its name, and its owner under it", async () => {
   const { container } = await mount(TOKEN_LISTING, "octo/tools");
   restOn(

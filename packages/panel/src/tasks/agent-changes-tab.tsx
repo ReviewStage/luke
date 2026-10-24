@@ -10,6 +10,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
+import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_SIZE,
@@ -1609,7 +1610,10 @@ type ChangesPullRequest = Extract<
  * the member's viewed marks, read with each answer.
  */
 export interface ChangesReads {
+  /** The changes as last answered, a good answer standing over any failure after it; a failure only where none has landed. */
   readonly answer: CodingAgentChangesAnswerView | undefined;
+  /** Whether the latest read failed after a good one landed, which leaves the good one drawn. */
+  readonly refreshFailed: boolean;
   readonly out: boolean;
   readonly ask: () => void;
   /** How many answers have landed, which a changed image is drawn anew on. */
@@ -1634,13 +1638,26 @@ export function useChangesReads(
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
   const number = usePullRequestNumber();
-  const { answer, out, ask } = useAgentRead(
+  const {
+    answer: latest,
+    out,
+    ask,
+  } = useAgentRead(
     agentId,
     shown,
     ended,
     (id: string) => control.readChanges(id, number),
     UNANSWERED,
   );
+  // Note that a good answer stands over a failure after it, because a read that fails
+  // again must not take the files drawn away; the count follows what is drawn.
+  const good = useRef<
+    { readonly agentId: string; readonly answer: CodingAgentChangesAnswerView } | undefined
+  >(undefined);
+  if (latest !== undefined && !("failure" in latest)) good.current = { agentId, answer: latest };
+  const standing = good.current?.agentId === agentId ? good.current.answer : undefined;
+  const answer = standing ?? latest;
+  const refreshFailed = standing !== undefined && latest !== undefined && "failure" in latest;
   const reads = useRef<{ readonly of: unknown; readonly count: number }>({
     of: undefined,
     count: 0,
@@ -1656,7 +1673,7 @@ export function useChangesReads(
     readViewed,
     pullRequest === null ? undefined : reads.current.count,
   );
-  return { answer, out, ask, count: reads.current.count, pullRequest, viewedFiles };
+  return { answer, refreshFailed, out, ask, count: reads.current.count, pullRequest, viewedFiles };
 }
 
 /** A file to bring into view in the list, as a chapter's key change asks: counted, so each ask is its own. */
@@ -1701,7 +1718,7 @@ export function AgentChangesTab({
   /** A file to bring into view, once, among those drawn. */
   fileReveal?: FileReveal | undefined;
 }): React.JSX.Element {
-  const { answer, out, ask, pullRequest, viewedFiles } = reads;
+  const { answer, refreshFailed, out, ask, pullRequest, viewedFiles } = reads;
   const room = usePaneRoom(tree);
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
@@ -1783,11 +1800,13 @@ export function AgentChangesTab({
     const standing = latestReveal.current;
     if (revealGone && standing !== undefined) standing.onGone(standing.ask);
   }, [revealGone, revealAsk]);
-  // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
+  // A failure with nothing drawn gives way to the wait as soon as it is asked again; files drawn stand until the answer lands, and a failure after them is a line over them.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
-  if ("failure" in answer) {
+  // Where the good answer drew no files (no pull request, none changed), a refresh that failed has nothing to keep drawn and stands as the failure.
+  const unkept = refreshFailed && !out && (pullRequest === null || shownFile === undefined);
+  if ("failure" in answer || unkept) {
     return (
       <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {CHANGES_WORDS.FAILED}
@@ -1829,6 +1848,7 @@ export function AgentChangesTab({
         tree={room.toggles}
       />
       <PullRequestWriteNote writes={viewedFiles} />
+      {refreshFailed && !out ? <ErrorState onRetry={ask}>{REFRESH_FAILED_WORDS}</ErrorState> : null}
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p>{CHANGES_WORDS.TRUNCATED}</p>
