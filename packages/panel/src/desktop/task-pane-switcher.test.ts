@@ -6,8 +6,8 @@ import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -50,6 +50,16 @@ const PAGE = {
   at: 1,
 };
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+beforeAll(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+const roots: Root[] = [];
+
 beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   fakeAppBridge({});
@@ -65,6 +75,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
   vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
@@ -102,6 +115,7 @@ function mount(
   const told: string[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
+  roots.push(root);
   const narrow = room === SHELL_ROOM.NARROW;
   const registry = AtomRegistry.make();
   const draw = (shown: boolean, on: SidePanelTab | undefined) =>
