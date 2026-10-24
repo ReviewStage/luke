@@ -118,6 +118,11 @@ const PHONE_PLACES = { role: "navigation", name: "Places" } as const;
 
 const DESKTOP_ONLY: readonly Client[] = [CLIENT.DESKTOP];
 
+/** Whether `client` draws `scene`: every client does where the scene names none. */
+export function drawsOn(scene: Scene, client: Client): boolean {
+  return (scene.clients ?? Object.values(CLIENT)).includes(client);
+}
+
 export const SCENES: readonly Scene[] = [
   // Tasks: the list, the open task, and its menus.
   { id: "tasks-open", place: PLACE.TASKS, title: "An open task", profile: "tasks" },

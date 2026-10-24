@@ -40,9 +40,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { READY_SCRIPT } from "./ready.ts";
 import {
   CLIENT,
   type Client,
+  drawsOn,
   PLACES,
   SCENES,
   type Scene,
@@ -104,12 +106,6 @@ const LOAD_SETTLE_MS = 1_200;
 const STEP_SETTLE_MS = 400;
 // The element every panel window draws once its state has arrived (`packages/panel/src/app.tsx`).
 const STAGE_SELECTOR = ".app-stage";
-// What a wait draws, which a scene is not shot under: a loading skeleton's box (root AGENTS.md: `anti-slop/skeleton-through-components`), a spinner's box (`Spinner`, `SpinnerRegion`, a busy button's ring: `luke-spinner`), anything the app marks `aria-busy`, and Excalidraw's own line while the board's scene loads (`LoadingMessage`). One counts only where it stands on screen.
-const WAIT_SELECTOR = '[class*="skeleton"], .luke-spinner, [aria-busy="true"], .LoadingMessage';
-const READY_SCRIPT = `![...document.querySelectorAll(${JSON.stringify(WAIT_SELECTOR)})].some((box) => {
-  const r = box.getBoundingClientRect();
-  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
-})`;
 // The video player's example draws only this line until its stand-in is recorded, some frames on (`apps/catalog/src/examples/video-player.tsx`).
 const RECORDED_SCRIPT = `!document.querySelector(".catalog-example").textContent.includes("Recording a stand-in video")`;
 // How long a scene waits for its skeletons and spinners to give way before it is shot anyway, with a note.
@@ -664,19 +660,14 @@ function shotsOf(
 }
 
 /** The targets of `wanted` that draw an app scene: its clients, both where it names none. */
-function clientsOf(scene: Scene, wanted: readonly Target[]): readonly Target[] {
-  const clients: readonly Client[] = scene.clients ?? [CLIENT.DESKTOP, CLIENT.WEB];
-  return wanted.filter((target) => clients.some((client) => client === target));
+function clientsOf(scene: Scene, wanted: readonly Target[]): readonly Client[] {
+  return wanted.filter((target) => target !== TARGET.CATALOG && drawsOn(scene, target));
 }
 
 /** The clients among `wanted` that a scene naming its clients does not draw on. */
 function clientsNotDrawing(scene: Scene, wanted: readonly Target[]): readonly Client[] {
   if (scene.clients === undefined) return [];
-  const drawn = clientsOf(scene, wanted);
-  return Object.values(CLIENT).filter(
-    (client) =>
-      wanted.some((target) => target === client) && !drawn.some((target) => target === client),
-  );
+  return wanted.filter((target) => target !== TARGET.CATALOG && !drawsOn(scene, target));
 }
 
 const USAGE = `usage: polish-shots.ts [--out <dir>] [--client desktop|web|catalog]... [--scene <id>]...
