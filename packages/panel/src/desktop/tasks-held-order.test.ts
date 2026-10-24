@@ -22,12 +22,13 @@ import {
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { TasksBoard } from "./tasks-board.js";
@@ -221,6 +222,29 @@ test("in the List, a teammate's change of status or priority moves no row while 
     chipOf(container, "ACME-41", "Status").getAttribute("aria-label"),
     "Status: In progress",
   );
+});
+
+test("in the List, a group whose last task goes slides out where it stood, out of reach, the groups that stay keeping the order they hold, and leaves once its exit has played", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const { container, draw } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
+  draw(changed(41, { status: TASK_STATUS.IN_PROGRESS, priority: TASK_PRIORITY.URGENT }));
+
+  draw(TASKS.filter((each) => each.number !== 42));
+
+  const leaving = container.querySelector<HTMLElement>(".tasks-list-group[data-leaving]");
+  assert.equal(leaving?.getAttribute("aria-label"), "In progress", "its group is drawn on");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach while it goes");
+  const out = motions.played.find((each) => each.element === leaving);
+  assert.equal(out?.keyframes.at(-1)?.opacity, 0, "it fades out as it slides");
+  const standing = [...container.querySelectorAll<HTMLElement>(".tasks-list-group")]
+    .filter((group) => group !== leaving)
+    .map((group) => [...group.querySelectorAll("[data-task-key]")].map((key) => key.textContent));
+  assert.deepEqual(standing, [["ACME-40", "ACME-39", "ACME-41"]], "the rows that stay hold");
+
+  act(() => out?.finish());
+  assert.equal(container.querySelector("[data-leaving]"), null);
+  assert.deepEqual(laidOut(container), [["Todo", ["ACME-40", "ACME-39", "ACME-41"]]]);
 });
 
 test("in the List, a task held still stands where it is now once the page is hidden and shown again, or grouped anew", async () => {

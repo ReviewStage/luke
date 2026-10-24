@@ -23,12 +23,13 @@ import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -479,6 +480,44 @@ test("deleting a section removes it at once with no dialog, and Undo brings it b
   assert.deepEqual(namesIn(sidebar, "Tasks"), []);
   const icon = sectionHeader(sidebar, "Launch").querySelector(".luke-group-header-icon");
   assert.equal(icon?.textContent, "🚀");
+});
+
+test("a deleted section slides out where it stood, out of reach, and leaves once its exit has played; the one that stays is not held", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const writes: TaskSectionWrite[] = [];
+  const { container: sidebar, draw } = await mountSidebarRedrawn(writes, ICONLESS);
+  openSectionMenu(sidebar, "Launch");
+
+  act(() => item("Delete section").click());
+  await draw(applied(ICONLESS, writes.splice(0)));
+
+  const leaving = sidebar.querySelector<HTMLElement>("li[data-leaving]");
+  assert.match(leaving?.textContent ?? "", /Launch/u, "it is drawn on");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach while it goes");
+  const out = motions.played.find((each) => each.element === leaving);
+  assert.equal(out?.keyframes.at(-1)?.opacity, 0, "it fades out as it slides");
+
+  act(() => out?.finish());
+  assert.equal(sidebar.querySelector("[data-leaving]"), null);
+  assert.deepEqual(sectionTitles(sidebar), ["Someday"]);
+});
+
+test("the last section deleted slides out too, and takes its group with it once its exit has played", async () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const writes: TaskSectionWrite[] = [];
+  const { container: sidebar, draw } = await mountSidebarRedrawn(writes);
+  openSectionMenu(sidebar, "Launch");
+
+  act(() => item("Delete section").click());
+  await draw(applied(SECTIONS, writes.splice(0)));
+
+  const leaving = sidebar.querySelector<HTMLElement>('nav[aria-label="Sections"] li[data-leaving]');
+  assert.match(leaving?.textContent ?? "", /Launch/u, "it is drawn on");
+
+  act(() => motions.played.find((each) => each.element === leaving)?.finish());
+  assert.equal(sidebar.querySelector('nav[aria-label="Sections"]'), null);
 });
 
 test("deleting the last section hands focus to the first, rather than letting it fall to the window", async () => {

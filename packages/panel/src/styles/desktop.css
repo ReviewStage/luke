@@ -5353,6 +5353,14 @@ ul.actor-stack {
   transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
+/* Note that a group leaving is laid over its place out of the list's grid
+   (`ListMotion`), where a subgrid has no grid to be one of, so it lays out
+   the page's columns itself, the same width as it stood. */
+.tasks-list-group[data-leaving] {
+  grid-template-columns: var(--tasks-list-columns);
+  column-gap: var(--luke-block-gap);
+}
+
 .tasks-list-group > :not(.tasks-list-rows) {
   grid-column: 1 / -1;
 }
