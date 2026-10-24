@@ -149,8 +149,9 @@ const DETAILS_CHORD = APP_SHORTCUTS[APP_COMMAND.SHOW_DETAILS].chord;
  * How each control hanging a card opens it from the keyboard, by the
  * control's element, so a menu opened from it can open that card
  * (`showDetailsFrom`). Note that it is keyed by the element, as the tooltip
- * learns it from its ref or the first pointer or focus on it, because a
- * control takes only the handlers a hint hands it and wears no mark of ours.
+ * learns it from its ref where the control is an element of the page's own,
+ * or else from the first pointer or focus on it, because a control takes
+ * only the handlers a hint hands it and wears no mark of ours.
  */
 const cardDoors = new WeakMap<HTMLElement, () => void>();
 
@@ -772,7 +773,8 @@ export function Tooltip({
   const anchor = cloneElement(children, {
     ...(shown?.describes && label !== undefined ? { "aria-describedby": id } : undefined),
     ...(keyshortcuts === "" ? undefined : { "aria-keyshortcuts": keyshortcuts }),
-    ref: anchorRef,
+    // Note that only an element of the page's own is handed a ref, because a component may spread what it is handed over a ref of its own, as a chip's link address is.
+    ...(typeof children.type === "string" ? { ref: anchorRef } : undefined),
     onPointerEnter: (event) => {
       own.onPointerEnter?.(event);
       learn(event.currentTarget);
