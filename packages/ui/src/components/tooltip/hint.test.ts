@@ -399,6 +399,27 @@ function CardedRow({ row }: { row: string }): React.JSX.Element {
   );
 }
 
+/** A row hanging a card over its whole row, with a control inside it whose own card is `overRow` or not. */
+function RowWithTag({ overRow }: { overRow: boolean }): React.JSX.Element {
+  const item = useRef<HTMLElement | null>(null);
+  return createElement(
+    "li",
+    { ref: item },
+    createElement(Tooltip, {
+      label: "Task",
+      card: createElement("p", null, "Task's card"),
+      cardRegion: item,
+      children: createElement("button", { type: "button", "aria-describedby": undefined }, "Task"),
+    }),
+    createElement(Tooltip, {
+      label: "Tag",
+      card: createElement("p", null, "Tag's card"),
+      overRow,
+      children: createElement("button", { type: "button", "aria-describedby": undefined }, "Tag"),
+    }),
+  );
+}
+
 /** Rows that each hang a card, drawn under a registry of their own. */
 function drawRows(rows: readonly string[]): (row: string) => HTMLElement {
   const container = document.body.appendChild(document.createElement("ul"));
@@ -462,6 +483,30 @@ test("a pointer crossing a row in less than the wait mounts no card for it, and 
   pass(1);
   assert.deepEqual(mounted, ["Gamma"]);
   assert.deepEqual(cards(), ["Gamma's card"]);
+});
+
+test("a control in a row whose card stands hangs its own card over it only where it asks to, and otherwise yields to the row's", () => {
+  for (const [overRow, shown] of [
+    [false, ["Task's card"]],
+    [true, ["Tag's card"]],
+  ] as const) {
+    waiting();
+    const container = document.body.appendChild(document.createElement("ul"));
+    const root = createRoot(container);
+    roots.push(root);
+    act(() => root.render(onRegistry(AtomRegistry.make(), createElement(RowWithTag, { overRow }))));
+    const [task, tag] = container.querySelectorAll("button");
+    assert.ok(task && tag);
+    move(undefined, task);
+    pass(MOTION_DELAY_MS.HINT);
+    assert.deepEqual(cards(), ["Task's card"]);
+
+    move(task, tag);
+    pass(MOTION_DELAY_MS.HINT);
+    assert.deepEqual(cards(), shown);
+    for (const mountedRoot of roots.splice(0)) act(() => mountedRoot.unmount());
+    vi.useRealTimers();
+  }
 });
 
 test("a pointer leaving a row before the wait is out mounts nothing once it would have run out", () => {

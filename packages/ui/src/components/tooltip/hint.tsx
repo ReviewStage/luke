@@ -377,6 +377,9 @@ function Hint({
  * description the keyboard never enters. `cardRegion` is the row the
  * control stands in, the whole of which counts as the control while its
  * card stands, and which the card hangs from in the control's place.
+ * `overRow` is a control inside such a row whose own hint is wanted over the
+ * row's card, as an issue's tag on a task's card is, rather than yielding to
+ * it as the row's other controls do.
  */
 export function Tooltip({
   label,
@@ -385,6 +388,7 @@ export function Tooltip({
   card,
   cardBeside = false,
   cardRegion,
+  overRow = false,
   children,
 }: {
   label: string | undefined;
@@ -393,6 +397,7 @@ export function Tooltip({
   card?: ReactNode;
   cardBeside?: boolean | undefined;
   cardRegion?: RefObject<HTMLElement | null> | undefined;
+  overRow?: boolean | undefined;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();
@@ -470,9 +475,11 @@ export function Tooltip({
       linger(Atom.Interrupt);
       return;
     }
-    // A control in the standing card's row is part of that row, and leaves the card standing.
+    // A control in the standing card's row is part of that row, and leaves the card standing, unless its own hint is wanted over it.
     const top = standing.at(-1);
-    if (top !== undefined && top.id !== id && top.region?.contains(anchor) === true) return;
+    if (!overRow && top !== undefined && top.id !== id && top.region?.contains(anchor) === true) {
+      return;
+    }
     // Note that the warm spell is read before anything is taken down, so a
     // hint this one takes down never warms the window for it.
     if (touched || performance.now() < warmUntil) {

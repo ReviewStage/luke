@@ -269,6 +269,7 @@ export function TaskIssueTagChip({
     <Tooltip
       label={`${tag.key} · ${LINKS_WORDS[tag.relation]}`}
       card={<IssueTagCard tag={tag} taskId={taskId} repository={repository} />}
+      overRow
     >
       <Chip
         look={CHIP_LOOK.PILL}
