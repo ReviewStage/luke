@@ -92,6 +92,11 @@ export interface ComboboxOption {
   readonly words?: string | undefined;
   /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
   readonly lead?: ReactNode;
+  /**
+   * Its glyph; null keeps the glyph's room, empty, so an option with no
+   * glyph of its own names itself at the edge the glyphed options beside it
+   * do, and none draws no room, for a list whose options wear none.
+   */
   readonly icon?: ReactNode;
   /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
@@ -155,6 +160,7 @@ export function ComboboxOptionItem({
       {option.lead === undefined ? null : (
         <span className={cn("luke-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
       )}
+      {/* Note that a null glyph still stands, empty, so the names of a group whose options mix glyphs and none start at one edge. */}
       {option.icon === undefined ? null : (
         <span className={cn("luke-combobox-option-glyph", COMBOBOX_ITEM_GLYPH)}>{option.icon}</span>
       )}

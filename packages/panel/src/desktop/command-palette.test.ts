@@ -501,7 +501,7 @@ test("with the field empty, ← and → step through the filters, wrapping at th
   assert.equal(key(RIGHT), false, "the step is the palette's, not the caret's");
   assert.equal(chosenFilter(), "Tasks");
   key(RIGHT);
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   key(LEFT);
   key(LEFT);
   assert.equal(chosenFilter(), "All");
@@ -532,7 +532,7 @@ test("⌘[ and ⌘] step through the filters, wrapping at the ends, whether or n
   assert.equal(chosenFilter(), "Tasks");
   type("invite");
   key(FORWARD);
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   assert.equal(key(BACK), false, "the window's Back is held off");
   key(BACK);
   key(BACK);
@@ -551,7 +551,7 @@ test("a press on a filter chooses it and leaves the caret in the field, no filte
     [],
     "no filter is a tab stop",
   );
-  const agents = filterOptions().find((each) => each.textContent === "Agents");
+  const agents = filterOptions().find((each) => each.textContent === "This task");
   assert.ok(agents);
   const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   act(() => {
@@ -559,7 +559,7 @@ test("a press on a filter chooses it and leaves the caret in the field, no filte
   });
   assert.equal(down.defaultPrevented, true, "the press does not move the keyboard");
   act(() => agents.click());
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   assert.equal(document.activeElement, field(), "the caret stays in the field");
   assert.equal(field().value, "invite");
 });
@@ -577,7 +577,7 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
   key(FORWARD);
   assert.equal(bar.scrollLeft, 0, "Tasks already stands in view");
   key(FORWARD);
-  assert.equal(chosenFilter(), "Agents");
+  assert.equal(chosenFilter(), "This task");
   assert.equal(bar.scrollLeft, 50);
   key(BACK);
   key(BACK);
@@ -599,6 +599,68 @@ test("the footer names the keys that step the filters now: ← → while the fie
 
   type("");
   assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "←→ Filter"]);
+});
+
+/** Offers the Inbox and Tasks, which open places, and Show my tasks, which no menu offers and so wears no glyph of its own. */
+function OffersPlaces(): null {
+  useAppCommand(APP_COMMAND.INBOX, () => undefined);
+  useAppCommand(APP_COMMAND.TASKS, () => undefined);
+  useAppCommand(APP_COMMAND.SHOW_MY_TASKS, () => undefined);
+  return null;
+}
+
+/** The palette over a window offering `OffersPlaces`'s commands. */
+function openPaletteOverPlaces(): void {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(OffersPlaces)));
+  openPalette();
+}
+
+test("the footer says Return runs a command chosen and opens anything else", () => {
+  openPaletteOverPlaces();
+
+  type("go to inbox");
+  assert.equal(rows()[0], "Go to inbox");
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Run", "⌘[⌘] Filter"]);
+
+  type("theme");
+  assert.equal(rows()[0], "Theme · Appearance");
+  assert.deepEqual(footer(), ["↑↓ Select", "⏎ Open", "⌘[⌘] Filter"]);
+});
+
+test("⌘K says a place it opens as Go to the place, and the menus' own words stand for the rest", () => {
+  openPaletteOverPlaces();
+  chooseFilter("Commands");
+
+  assert.ok(rows().includes("Go to inbox"));
+  assert.ok(rows().includes("Go to tasks"));
+  assert.ok(rows().includes("Show my tasks"));
+  assert.ok(!rows().includes("Inbox"), "the place is never said bare, as a verb would be");
+});
+
+test("every row in Commands keeps a glyph's room, so a command no menu marks names itself at the edge the others do", () => {
+  openPaletteOverPlaces();
+  chooseFilter("Commands");
+
+  const options = [...document.querySelectorAll('[role="group"] [role="option"]')];
+  assert.ok(options.length > 0, "commands are listed");
+  for (const option of options) {
+    assert.ok(
+      option.querySelector(".luke-combobox-option-glyph"),
+      `${option.textContent} keeps the glyph's room`,
+    );
+  }
+});
+
+test("the field asks to search Luke under All, and the kind under its filter", () => {
+  openPalette();
+  assert.equal(field().placeholder, "Search Luke");
+
+  chooseFilter("This task");
+  assert.equal(field().placeholder, "Search this task");
+  chooseFilter("Commands");
+  assert.equal(field().placeholder, "Search commands");
 });
 
 /** The window behind the palette, running the menu bar's commands, its Back and Forward recorded. */
@@ -663,7 +725,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
       onShowAgent: (taskId, agentId) => shown.push([taskId, agentId]),
     }),
   );
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
@@ -757,7 +819,7 @@ test("an archived agent of the open task is still found, after the standing ones
       agentView: { ...base.agentView, onOpen: (agentId) => shown.push(agentId) },
     }),
   );
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
@@ -859,7 +921,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() => {
       assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
     });
-    chooseFilter("Agents");
+    chooseFilter("This task");
     const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
       each.textContent?.includes("Invoice export"),
     );
@@ -1581,7 +1643,7 @@ test("a command whose only key is Esc is no row in ⌘K, though it is still offe
   roots.push(root);
   act(() => root.render(createElement(OffersEscapes, { ran })));
   openPalette();
-  chooseFilter("Actions");
+  chooseFilter("Commands");
   type("exit settings");
   assert.equal(rows().includes("Exit settings"), false);
   type("back to inbox list");
@@ -2002,7 +2064,7 @@ test("People lists the listed workspace's members as every people menu does, the
   assert.deepEqual(sent.tabs, []);
 });
 
-/** What the list says where no row stands: its notice, or "Nothing matches.". */
+/** What the list says where no row stands: its notice, or "No results match". */
 function emptyLine(): string | undefined {
   return (
     document.querySelector(".luke-note-line, [cmdk-list] [role=alert]")?.textContent ?? undefined
@@ -2053,7 +2115,7 @@ test("under All, a query nothing else matches says the repository's files are st
   type("zqx");
 
   assert.deepEqual(rows(), []);
-  assert.equal(emptyLine(), "Reading the repository's files…");
+  assert.equal(emptyLine(), "Reading the repository's files");
   assert.equal(document.querySelector(".luke-note-line")?.getAttribute("role"), "status");
 
   await act(async () =>
@@ -2070,7 +2132,7 @@ test("under All, a query nothing else matches says the repository's files are st
   assert.deepEqual(rows(), ["zqx.ts · src"]);
 
   type("nothing-at-all");
-  assert.equal(emptyLine(), "Nothing matches.", "once every source answered, it says so");
+  assert.equal(emptyLine(), "No results match", "once every source answered, it says so");
 });
 
 test("People says the members are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
@@ -2091,13 +2153,13 @@ test("People says the members are being read until they answer, and a refused re
   openPalette(tasksControl({ me: "user-dean", workspace: ACME }));
   chooseFilter("People");
   await settle();
-  assert.equal(emptyLine(), "Reading the workspace's members…");
+  assert.equal(emptyLine(), "Reading the workspace's members");
 
   await act(async () => answers.shift()?.refuse());
   await settle();
   const alert = document.querySelector("[cmdk-list] [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
-  assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
+  assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 
   answers = [];
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -2106,7 +2168,7 @@ test("People says the members are being read until they answer, and a refused re
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
   await settle();
-  assert.equal(emptyLine(), "Reading the workspace's members…");
+  assert.equal(emptyLine(), "Reading the workspace's members");
   await act(async () => answers.shift()?.resolve([member]));
   await settle();
   assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
@@ -2116,8 +2178,8 @@ test("Tasks says the account's tasks are being read before the list first answer
   membersAnswer(() => Promise.resolve([]));
   openPalette(tasksControl({ workspace: ACME, listRead: false }));
   chooseFilter("Tasks");
-  assert.equal(emptyLine(), "Reading your tasks…");
-  assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
+  assert.equal(emptyLine(), "Reading your tasks");
+  assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 });
 
 test("Tasks says a refused list with a Retry that reads it again", () => {
@@ -2410,14 +2472,14 @@ test("⌘K offers the open task's Chat tab only while the account has Chat on", 
   });
   handState(experimentsOn(EXPERIMENT.CHAT));
   await paletteUnderState(tasks);
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.ok(rows().includes("Chat · Billing usage alerts"), "Chat on offers the task's Chat");
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
   handState({});
   await paletteUnderState(tasks);
-  chooseFilter("Agents");
+  chooseFilter("This task");
   assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
 });
 
@@ -2439,7 +2501,7 @@ test("⌘K's Show chat is offered only while the account has Chat on, as the sid
   });
   handState(experimentsOn(EXPERIMENT.CHAT));
   await paletteUnderState(tasks);
-  chooseFilter("Actions");
+  chooseFilter("Commands");
   assert.ok(rows().includes("Show chat"), "Chat on offers Show chat");
   assert.ok(rows().includes("Show board"));
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -2447,7 +2509,7 @@ test("⌘K's Show chat is offered only while the account has Chat on, as the sid
 
   handState({});
   await paletteUnderState(tasks);
-  chooseFilter("Actions");
+  chooseFilter("Commands");
   assert.ok(!rows().includes("Show chat"), "Chat off offers no Show chat");
   assert.ok(rows().includes("Show board"), "the tabs that exist are still offered");
 });
@@ -2471,7 +2533,7 @@ test("⌘K still offers Show inbox for a task an item waits on while its agents 
     inbox: [{ taskId: DOCUMENT_TASK.id, items: [] }],
   });
   await paletteUnderState(tasks);
-  chooseFilter("Actions");
+  chooseFilter("Commands");
   assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
 });
 
@@ -2571,7 +2633,7 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "Agents", "Inbox", "People", "Files", "Actions", "Settings"],
+    ["All", "Tasks", "This task", "Inbox", "People", "Files", "Commands", "Settings"],
   );
 });
 
@@ -2789,7 +2851,7 @@ test("while main says a task's inbox changed later than its push, a query it doe
 
   type("webhook");
   await settle();
-  assert.equal(emptyLine(), "Reading your inbox…");
+  assert.equal(emptyLine(), "Reading your inbox");
 
   const fresh = { ...ROTATE, updatedAt: 12_000 };
   act(() =>

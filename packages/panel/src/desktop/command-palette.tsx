@@ -59,7 +59,7 @@ import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
-import { readFailedWords, TERM } from "@luke/features/words";
+import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
@@ -188,11 +188,11 @@ import { WorkspaceRef } from "./workspace-ref.js";
 const PALETTE_FILTER = {
   ALL: "all",
   TASKS: "plans",
-  AGENTS: "agents",
+  THIS_TASK: "this-task",
   INBOX: "inbox",
   PEOPLE: "people",
   FILES: "files",
-  ACTIONS: "actions",
+  COMMANDS: "commands",
   SETTINGS: "settings",
 } as const;
 
@@ -207,25 +207,20 @@ const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.TASKS]: "Tasks",
-  [PALETTE_FILTER.AGENTS]: "Agents",
+  [PALETTE_FILTER.THIS_TASK]: "This task",
   [PALETTE_FILTER.INBOX]: "Inbox",
   [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.FILES]: "Files",
-  [PALETTE_FILTER.ACTIONS]: "Actions",
+  [PALETTE_FILTER.COMMANDS]: "Commands",
   [PALETTE_FILTER.SETTINGS]: "Settings",
 } as const satisfies Record<PaletteFilter, string>;
 
-/** What the search field asks for under each filter. */
-const FILTER_PLACEHOLDER = {
-  [PALETTE_FILTER.ALL]: "Search tasks, agents, inbox, people, files, actions, and settings…",
-  [PALETTE_FILTER.TASKS]: "Search tasks…",
-  [PALETTE_FILTER.AGENTS]: "Search agents…",
-  [PALETTE_FILTER.INBOX]: "Search inbox…",
-  [PALETTE_FILTER.PEOPLE]: "Search people…",
-  [PALETTE_FILTER.FILES]: "Search files…",
-  [PALETTE_FILTER.ACTIONS]: "Search actions…",
-  [PALETTE_FILTER.SETTINGS]: "Search settings…",
-} as const satisfies Record<PaletteFilter, string>;
+/** What the search field asks for: Luke under All, and the kind, as it stands mid-sentence, under its filter. */
+function filterPlaceholder(filter: PaletteFilter): string {
+  return filter === PALETTE_FILTER.ALL
+    ? "Search Luke"
+    : `Search ${FILTER_LABEL[filter].toLowerCase()}`;
+}
 
 /** How many rows a kind lists: its best few under All, and as many as are worth reading under its own filter. */
 const KIND_ROWS = {
@@ -239,8 +234,8 @@ const FIRST_ROW = "1";
 /** The group Ask Luke stands alone in, above every kind's, under no heading. */
 const ASK_LUKE_GROUP = "ask-luke";
 
-/** What the list says where no row stands and no source is still to answer. */
-const NOTHING_MATCHES = "Nothing matches.";
+/** What the list says where no row stands and no source is still to answer, as every menu says it. */
+const NOTHING_MATCHES = noMatchWords(TERM.RESULT);
 
 /** What the row that opens Luke says, as his chord's command names it. */
 const ASK_LUKE_LABEL = appCommandLabel(APP_COMMAND.ASK_LUKE);
@@ -271,24 +266,24 @@ const NO_REPOSITORY_LINE = "Open a task with a repository to search its files.";
 const FILES_MISSED_LINE = "The files could not be read.";
 
 /** What the Files filter says while the repository is read. */
-const READING_LINE = "Reading the repository's files…";
+const READING_LINE = readingWords(`the repository's ${TERM.FILE.many}`);
 
 /** What the Tasks filter says while the account's tasks are first read, and where that read did not land. */
-const TASKS_READING_LINE = "Reading your tasks…";
+const TASKS_READING_LINE = readingWords(`your ${TERM.TASK.many}`);
 const TASKS_FAILED_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
 /** What the Inbox filter says while its items are first read, and where a read did not land. */
-const INBOX_READING_LINE = "Reading your inbox…";
+const INBOX_READING_LINE = readingWords("your inbox");
 const INBOX_FAILED_LINE = "Your inbox could not be read.";
 
 /** How many characters of an item's words a row says on either side of the word that found it. */
 const SNIPPET_REACH = 40;
 
 /** What the People filter says while the listed workspace's members are read, and where that read did not land. */
-const PEOPLE_READING_LINE = "Reading the workspace's members…";
+const PEOPLE_READING_LINE = readingWords(`the workspace's ${TERM.MEMBER.many}`);
 const PEOPLE_FAILED_LINE = "The workspace's members could not be read.";
 
-/** What the list says in place of "Nothing matches.": a line of its own, a source still reading, or one refused. */
+/** What the list says in place of "No results match": a line of its own, a source still reading, or one refused. */
 const PALETTE_NOTICE = {
   SAID: "said",
   READING: "reading",
@@ -316,20 +311,29 @@ interface FooterHint {
   label: string;
 }
 
+/** What Return does to the row chosen, as the footer says it: a command runs, and a thing opens. */
+const RETURN_WORD = {
+  RUN: "Run",
+  OPEN: VERB.OPEN,
+} as const;
+
 /**
- * The footer's hints for the list's own keys, which are bare. Escape is not
- * among them, because every dialog closes on it and saying so is noise.
+ * The footer's hints for the list's own keys, which are bare: ↑ and ↓, and
+ * Return, worded for the row chosen. Escape is not among them, because
+ * every dialog closes on it and saying so is noise.
  */
-const LIST_HINTS: readonly FooterHint[] = [
-  {
-    chords: [
-      { key: SHORTCUT_KEY.UP, bare: true },
-      { key: SHORTCUT_KEY.DOWN, bare: true },
-    ],
-    label: "Select",
-  },
-  { chords: [{ key: SHORTCUT_KEY.ENTER, bare: true }], label: "Open" },
-];
+function listHints(returnWord: (typeof RETURN_WORD)[keyof typeof RETURN_WORD]): FooterHint[] {
+  return [
+    {
+      chords: [
+        { key: SHORTCUT_KEY.UP, bare: true },
+        { key: SHORTCUT_KEY.DOWN, bare: true },
+      ],
+      label: "Select",
+    },
+    { chords: [{ key: SHORTCUT_KEY.ENTER, bare: true }], label: returnWord },
+  ];
+}
 
 /**
  * The Filter hint, naming the keys that step the filters now: ← and → while
@@ -926,7 +930,35 @@ function inboxRows(
   });
 }
 
-/** The commands offered now, the palette's own left out, each with its chord, and the glyph its menu item wears where a menu offers it too (`command-items.tsx`). */
+/**
+ * The commands that open a place of the window rather than act, which ⌘K
+ * says as "Go to" and the place, as it stands mid-sentence, so a place is
+ * never read as a verb among the verbs; the menus and the Keyboard
+ * shortcuts page go on naming the place alone.
+ */
+const PLACE_COMMANDS: ReadonlySet<AppCommand> = new Set([
+  APP_COMMAND.TASKS,
+  APP_COMMAND.INBOX,
+  APP_COMMAND.CHAT,
+  APP_COMMAND.AUTOMATIONS,
+  APP_COMMAND.SETTINGS,
+  APP_COMMAND.KEYBOARD_SHORTCUTS,
+  APP_COMMAND.ADMIN,
+]);
+
+/** What a command's row says: a place as "Go to" it, and else the words its menu item or its shortcut says. */
+function actionLabel(command: AppCommand): string {
+  if (PLACE_COMMANDS.has(command)) return `Go to ${appCommandLabel(command).toLowerCase()}`;
+  const item = panelCommandOf(command);
+  return item === undefined ? appCommandLabel(command) : commandWords(item, COMMAND_PLACE.PALETTE);
+}
+
+/**
+ * The commands offered now, the palette's own left out, each with its chord,
+ * and the glyph its menu item wears where a menu offers it too
+ * (`command-items.tsx`). Note that one no menu offers keeps its glyph's room
+ * empty, so every name in the group starts at one edge.
+ */
 function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   return LISTED_COMMANDS.filter(
     (command) =>
@@ -935,11 +967,9 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
       command !== APP_COMMAND.ASK_LUKE &&
       appCommandOffered(command),
   ).map((command) => {
-    const item = panelCommandOf(command);
-    const label =
-      item === undefined ? appCommandLabel(command) : commandWords(item, COMMAND_PLACE.PALETTE);
+    const label = actionLabel(command);
     return {
-      icon: item?.icon,
+      icon: panelCommandOf(command)?.icon ?? null,
       label,
       command: isKeyedCommand(command) ? command : undefined,
       terms: [label],
@@ -1323,9 +1353,12 @@ function PaletteFilters({
   );
 }
 
-/** The keys' hints along the foot, each its chords and then its word, which a reader is not read. */
-function PaletteFooter({ typed }: { typed: boolean }): React.JSX.Element {
-  const hints = [...LIST_HINTS, typed ? FILTER_HINT.TYPED : FILTER_HINT.EMPTY];
+/** The keys' hints along the foot, each its chords and then its word, which a reader is not read: Return runs a command chosen, and opens anything else. */
+function PaletteFooter({ typed, runs }: { typed: boolean; runs: boolean }): React.JSX.Element {
+  const hints = [
+    ...listHints(runs ? RETURN_WORD.RUN : RETURN_WORD.OPEN),
+    typed ? FILTER_HINT.TYPED : FILTER_HINT.EMPTY,
+  ];
   return (
     <>
       {hints.map((hint) => (
@@ -1427,7 +1460,7 @@ export function CommandPalette({
   const [fromPanel, setFromPanel] = useState(false);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
-  // The groups as they stood when the palette last stood open, which it fades out with rather than giving way to "Nothing matches.".
+  // The groups as they stood when the palette last stood open, which it fades out with rather than giving way to "No results match".
   const stood = useRef<readonly CommandGroup[]>([]);
   // The menu bar's Back and Forward, a mouse's back button among them, leave the window behind the palette alone.
   useOverlayHold(open);
@@ -1557,7 +1590,7 @@ export function CommandPalette({
   const askLukeShown =
     open &&
     askLuke !== undefined &&
-    (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.AGENTS) &&
+    (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.COMMANDS) &&
     (tokens.length === 0 || rowScore(askLuke, sought) > 0);
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
@@ -1629,7 +1662,7 @@ export function CommandPalette({
           )
         : [],
     ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(tasks, chatOn, onTasks)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, chatOn, onTasks)],
     [PALETTE_FILTER.INBOX]: () => [
       inboxAsked
         ? inboxRows(inboxSearch.items, {
@@ -1647,7 +1680,7 @@ export function CommandPalette({
     ],
     [PALETTE_FILTER.FILES]: () => [],
     // Note that a command is found by its letters in order too, as a path is, since a command's name is typed by its first letters.
-    [PALETTE_FILTER.ACTIONS]: () => [
+    [PALETTE_FILTER.COMMANDS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
@@ -1681,12 +1714,12 @@ export function CommandPalette({
   // Each kind's word for its rows' absence: still reading, refused, or a line of its own.
   const noticeOf = {
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
-    [PALETTE_FILTER.AGENTS]: () => undefined,
+    [PALETTE_FILTER.THIS_TASK]: () => undefined,
     [PALETTE_FILTER.INBOX]: () => (inboxAsked ? inboxNotice(inboxSearch) : undefined),
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.FILES]: () =>
       fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
-    [PALETTE_FILTER.ACTIONS]: () => undefined,
+    [PALETTE_FILTER.COMMANDS]: () => undefined,
     [PALETTE_FILTER.SETTINGS]: () => undefined,
   } as const satisfies Record<PaletteKind, () => PaletteNotice | undefined>;
   // Note that each kind's notice stands in its own group, beside the rows other kinds matched,
@@ -1737,13 +1770,18 @@ export function CommandPalette({
   // The render a key paints the field in draws the ranking already standing, and only the
   // render the words sought catch up in ranks them, so no key waits on the ranking.
   if (open) stood.current = sought === query ? rank() : stood.current;
+  // Whether the row chosen is a command's, which Return runs rather than opens.
+  const runs =
+    stood.current
+      .find((group) => group.id === PALETTE_FILTER.COMMANDS)
+      ?.items.some((item) => item.id === selected) ?? false;
 
   return (
     <CommandDialog
       open={open}
       onOpenChange={setOpen}
       label="Command palette"
-      placeholder={FILTER_PLACEHOLDER[filter]}
+      placeholder={filterPlaceholder(filter)}
       groups={stood.current}
       filter={COMMAND_FILTER.NONE}
       query={query}
@@ -1751,9 +1789,9 @@ export function CommandPalette({
       selected={selected}
       onSelectedChange={setSelected}
       // Note that a listing cut short is said where nothing matches too, since what was sought may lie past the cut.
-      empty={cut ? `${NOTHING_MATCHES} ${TRUNCATED_LINE}` : NOTHING_MATCHES}
+      empty={cut ? `${NOTHING_MATCHES}. ${TRUNCATED_LINE}` : NOTHING_MATCHES}
       band={<PaletteFilters filter={filter} onFilter={changeFilter} />}
-      foot={<PaletteFooter typed={query !== ""} />}
+      foot={<PaletteFooter typed={query !== ""} runs={runs} />}
       onKeyDown={keyDown}
       inputRef={keystrokes}
     />
