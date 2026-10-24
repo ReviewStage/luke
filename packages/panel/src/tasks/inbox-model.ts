@@ -194,15 +194,22 @@ export function inboxCommentFiles(
 /** The board as the tab draws it. */
 export interface InboxBoardView {
   readonly open: readonly InboxItem[];
+  /** The open items that wait on the reader (`readersItem`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate. */
+  readonly waiting: readonly InboxItem[];
   readonly settled: readonly InboxItem[];
 }
 
-/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
-export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` says which of what waits waits on the reader. */
+export function inboxBoard(
+  items: readonly InboxItem[],
+  readerId: string | undefined,
+): InboxBoardView {
+  const open = items
+    .filter((item) => item.status === INBOX_STATUS.OPEN)
+    .toSorted((a, b) => a.postedAt - b.postedAt);
   return {
-    open: items
-      .filter((item) => item.status === INBOX_STATUS.OPEN)
-      .toSorted((a, b) => a.postedAt - b.postedAt),
+    open,
+    waiting: open.filter((item) => readersItem(item, readerId)),
     settled: items
       .filter((item) => item.status !== INBOX_STATUS.OPEN)
       .toSorted((a, b) => b.updatedAt - a.updatedAt),

@@ -601,8 +601,8 @@ export const planEditorSchema = memberRefSchema;
 
 export type PlanEditor = typeof planEditorSchema.Type;
 
-/** The newest revision of a plan, as its "Edited by" line reads it. */
-const planLastEditSchema = EffectSchema.Struct({
+/** The newest revision of a plan, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
+export const planLastEditSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
   /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
   by: EffectSchema.optionalKey(planEditorSchema),

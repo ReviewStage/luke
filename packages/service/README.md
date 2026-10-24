@@ -2033,8 +2033,8 @@ A plan's text has one write, `src/tasks/plan-notes.ts`, and three
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what others wrote meanwhile
-where it can be, and answered as a conflict with the text as it stands, with
-nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
+where it can be, and answered as a conflict with the text as it stands and
+the plan's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
 restore above is the second. A coding agent's
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), the third, answers with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a

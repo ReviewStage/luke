@@ -1215,7 +1215,7 @@ function PanelTabs({
     pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
-    inboxWaiting: inbox?.open.length ?? 0,
+    inboxWaiting: inbox?.waiting.length ?? 0,
     inboxDrafted,
     inbox,
   });

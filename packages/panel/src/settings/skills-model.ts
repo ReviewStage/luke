@@ -42,7 +42,7 @@ import {
   TASK_SKILL_SOURCE,
   type TaskSkillSource,
 } from "@luke/features/task-wire";
-import { andList, countWords, TERM } from "@luke/features/words";
+import { andList, countWords, readFailedWords, TERM } from "@luke/features/words";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { STATUS_TONE, type StatusTone } from "@luke/ui";
 
@@ -355,6 +355,28 @@ export function failureLine(failed: {
     return `${skillName ?? "The skill"} ${FILES_REFUSAL_WORDS[skillRefusal]}`;
   }
   return FAILURE_WORDS[failure];
+}
+
+/** The failures of a preview that asking again may get past: the service was not reached, or GitHub did not answer. */
+const RETRYABLE_FAILURES: ReadonlySet<InstalledSkillCallFailure> = new Set([
+  INSTALLED_SKILL_CALL_FAILURE.UNANSWERED,
+  INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED,
+]);
+
+/** Whether a failed preview offers Retry. */
+export function previewRetries(failed: { readonly failure: InstalledSkillCallFailure }): boolean {
+  return RETRYABLE_FAILURES.has(failed.failure);
+}
+
+/** What a failed preview says under the box: a paste not reached says it could not be read, as every read does, and the rest say why in their own words. */
+export function previewFailureLine(failed: {
+  readonly failure: InstalledSkillCallFailure;
+  readonly skillName?: string;
+  readonly skillRefusal?: InstalledSkillFilesRefusal;
+}): string {
+  return failed.failure === INSTALLED_SKILL_CALL_FAILURE.UNANSWERED
+    ? readFailedWords("that paste")
+    : failureLine(failed);
 }
 
 /** What keeps a found skill from installing, as a short phrase. */

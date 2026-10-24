@@ -681,8 +681,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /**
      * The developer's edit of the plan's document: answered with the plan as
-     * saved, with the text as it now stands where the edit conflicts with
-     * it, or as refused where the plan would be longer than a plan may be.
+     * saved, with the text as it now stands and who last wrote it where the
+     * edit conflicts with it, or as refused where the plan would be longer than a plan may be.
      */
     edit: plans.edit.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
@@ -691,7 +691,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         case PLAN_SAVE_STATUS.SAVED:
           return { plan: saved.task };
         case PLAN_SAVE_STATUS.CONFLICT:
-          return { conflict: { current: saved.current } };
+          return {
+            conflict:
+              saved.by === undefined
+                ? { current: saved.current }
+                : { current: saved.current, by: saved.by },
+          };
         case PLAN_SAVE_STATUS.NOT_SAVED:
           if (saved.reason === PLAN_SAVE_REFUSAL.TOO_LONG) {
             return { refused: PLAN_EDIT_REFUSAL.TOO_LONG };

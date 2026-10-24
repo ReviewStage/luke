@@ -1585,6 +1585,7 @@ export function useTasksTab(input: {
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
+    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
   });
   // An Untitled task takes its first agent's title on the service, and the

@@ -556,6 +556,7 @@ function PlanDocument({
     taskId: inboxTaskId,
     shown: tasks.shown,
     waiting: tasks.inbox.some((task) => task.taskId === inboxTaskId),
+    readerId: tasks.me,
     agents: tasks.agents,
   });
   // The task's comments are read while the task is shown, for its plan's margin, its Comments tab, and its summary.

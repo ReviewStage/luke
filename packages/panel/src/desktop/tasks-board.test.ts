@@ -157,6 +157,7 @@ async function mountBoard(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
   display: TasksDisplay = DEFAULT_BOARD_DISPLAY,
+  overrides: NonNullable<Parameters<typeof tasksControl>[0]> = {},
 ): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -178,6 +179,7 @@ async function mountBoard(
       renamed.push([taskId, name]);
       return Promise.resolve(true);
     },
+    ...overrides,
   });
   const registry = AtomRegistry.make();
   const draw = (shown: TasksDisplay) =>
@@ -271,6 +273,33 @@ test("each status has its column, its cards the most pressing first, each its ke
     "Assignee: No assignee",
   );
   assert.equal(card.querySelector(".actor-mark"), null, "the card wears no creator's face");
+});
+
+test("a refresh that failed after the tasks were read keeps the columns drawn under Could not refresh and Retry, where a first read that failed draws the error alone", async () => {
+  let retried = 0;
+  const onRetryList = () => {
+    retried += 1;
+  };
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {
+    listFailed: true,
+    onRetryList,
+  });
+
+  assert.notEqual(columns(board).length, 0, "the columns stand");
+  const note = board.querySelector('[role="alert"]');
+  assert.match(note?.textContent ?? "", /Could not refresh/u);
+  const retry = [...(note?.querySelectorAll("button") ?? [])].find((each) =>
+    each.textContent?.includes("Retry"),
+  );
+  act(() => retry?.click());
+  assert.equal(retried, 1);
+
+  const first = await mountBoard([], SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {
+    listFailed: true,
+    listRead: false,
+  });
+  assert.equal(columns(first).length, 0);
+  assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
 test("a task from a service before statuses stands under Todo", async () => {
