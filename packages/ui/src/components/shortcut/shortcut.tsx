@@ -1,8 +1,9 @@
 import {
+  COMMAND_KEY,
+  commandKeyNow,
   type ShortcutChord,
   shortcutAccelerator,
   shortcutGlyphs,
-  shortcutSpelledInWords,
 } from "@luke/settings/shortcuts";
 import { cn } from "../../cn.js";
 
@@ -53,7 +54,7 @@ export function Shortcut(
     <kbd
       className={cn("luke-shortcut", props.className)}
       data-value={props.value === true ? "" : undefined}
-      data-words={shortcutSpelledInWords() ? "" : undefined}
+      data-words={commandKeyNow() === COMMAND_KEY.CONTROL ? "" : undefined}
       aria-hidden={props.spoken === true ? undefined : "true"}
     >
       {shortcutGlyphs(accelerator).map((glyph) => (

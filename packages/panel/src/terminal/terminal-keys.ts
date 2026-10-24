@@ -12,8 +12,12 @@
  * as sending it. ⌃Tab and ⌃⇧Tab are the window's too, its tab switcher's, as
  * they are in VS Code's terminal, since a shell reads them as a bare Tab.
  * Everything else, Escape and Control chords included, is the shell's, and
- * Option types the character the keyboard layout gives it.
+ * Option types the character the keyboard layout gives it. Off a Mac, where
+ * the window's chords are Ctrl ones, every Ctrl chord is the shell's all the
+ * same, ⌃Tab included, and the window yields them (`surfaceKeepsPress`).
  */
+
+import { surfaceKeepsPress } from "@luke/settings/shortcuts";
 
 /** Where a key press goes. */
 export const TERMINAL_KEY = {
@@ -59,6 +63,7 @@ export function terminalKey(event: KeyboardEvent): TerminalKey {
   if (line !== undefined && holdsOnly(event, { meta: true })) {
     return { kind: TERMINAL_KEY.SEND, data: line };
   }
+  if (surfaceKeepsPress(event)) return { kind: TERMINAL_KEY.SHELL };
   if (event.metaKey) return { kind: TERMINAL_KEY.WINDOW };
   if (event.key === "Tab" && event.ctrlKey && !event.altKey) return { kind: TERMINAL_KEY.WINDOW };
   return { kind: TERMINAL_KEY.SHELL };

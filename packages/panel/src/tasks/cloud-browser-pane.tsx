@@ -13,6 +13,7 @@ import {
 } from "@luke/features/browser-live-wire";
 import { BROWSER_TAB_OPEN_FAILURE, type BrowserTabOpenFailure } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { surfaceKeepsPress } from "@luke/settings/shortcuts";
 import {
   AddressField,
   ANNOUNCE,
@@ -94,7 +95,8 @@ import {
  * offers Watch again. While the member drives the tab, the mouse, the
  * wheel, and the keys pressed on the canvas go to the page, and a paste goes
  * as text; a Command chord the window answers (`chordIsWindows`) stays the
- * window's, and one the page edits text with
+ * window's, though off a Mac every Ctrl chord is the page's
+ * (`surfaceKeepsPress`), and one the page edits text with
  * is sent as Control, since the page runs on Linux. What the page shows is
  * the agent's and its members', so the pane is left out of the screen
  * recording (`ph-no-capture`), whose canvas recording is off in any case,
@@ -545,8 +547,9 @@ export function CloudBrowserPane({
   const keyInput = (input: RemoteKey): boolean => {
     const { key, modifiers: held } = input;
     const chord = { key, meta: held.meta, shift: held.shift, alt: held.alt, control: held.control };
-    // A chord the window answers is left to it; ⌘V, or Control-V off a Mac, arrives as the paste it is.
-    if (chordIsWindows(chord)) return false;
+    // A chord the window answers is left to it, but off a Mac a Ctrl chord, which is the page's; ⌘V, or Control-V off a Mac, arrives as the paste it is.
+    const keptHere = surfaceKeepsPress({ ctrlKey: held.control, metaKey: held.meta });
+    if (!keptHere && chordIsWindows(chord)) return false;
     if ((held.meta || held.control) && !held.alt && key.toLowerCase() === "v") return false;
     const edit = held.meta && PAGE_EDIT_KEYS.has(key.toLowerCase());
     const modifiers = edit

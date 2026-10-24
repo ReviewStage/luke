@@ -1141,9 +1141,22 @@ export function shortcutGlyphs(accelerator: string): readonly string[] {
   return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key];
 }
 
-/** Whether chords are drawn in words, Ctrl Shift K, rather than glyphs set tight, ⇧⌘K: where Command is Ctrl. */
-export function shortcutSpelledInWords(): boolean {
-  return commandKey === COMMAND_KEY.CONTROL;
+/** The window's command key now, which a chord drawn in words reads. */
+export function commandKeyNow(): CommandKey {
+  return commandKey;
+}
+
+/**
+ * Whether a press on a surface that hands keys on to something of its own, a
+ * terminal's shell or a remote page, stays that surface's, the window
+ * yielding it. Where Command is Ctrl, every Ctrl chord does, as VS Code's
+ * terminal keeps them on Windows and Linux, because a shell and a page read
+ * Ctrl as their own (Ctrl+C, Ctrl+[ for Escape, Ctrl+B for bold). On a Mac
+ * none does here, since the window's chords there are ⌘ ones, which each
+ * surface sorts itself.
+ */
+export function surfaceKeepsPress(press: { ctrlKey: boolean; metaKey: boolean }): boolean {
+  return commandKey === COMMAND_KEY.CONTROL && press.ctrlKey && !press.metaKey;
 }
 
 /** The chord as `aria-keyshortcuts` spells it, its Command as the window's command key. */
