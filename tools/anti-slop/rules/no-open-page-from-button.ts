@@ -45,6 +45,7 @@ export const noOpenPageFromButtonRule = defineRule({
   },
   createOnce(context) {
     let file = "";
+    let watched = false;
     let kinds = new Map<string, string>();
     let held = new Map<string, Node | null>();
     let buttons: ESTree.JSXOpeningElement[] = [];
@@ -116,14 +117,15 @@ export const noOpenPageFromButtonRule = defineRule({
     return {
       before() {
         file = repositoryPathOf(context.filename);
-        if (!JSX_SOURCE.test(file) || isTestFile(file) || !isOutsideUi(file)) return false;
         kinds = new Map();
         held = new Map();
         buttons = [];
-        return true;
+        watched = JSX_SOURCE.test(file) && !isTestFile(file) && isOutsideUi(context.filename);
+        return watched;
       },
       ImportDeclaration(node) {
-        if (!isUiModule(String(node.source.value), file)) return;
+        // Note that a file the rule does not watch collects no buttons, so it reports none.
+        if (!watched || !isUiModule(String(node.source.value), file)) return;
         for (const binding of node.specifiers) {
           if (binding.type !== "ImportSpecifier") continue;
           const imported =
