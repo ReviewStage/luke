@@ -33,7 +33,12 @@ import { useEditorPictures } from "./editor-pictures.js";
 import { MarkdownEditor } from "./markdown-editor.js";
 import { type MentionDoors, retargetedMention } from "./mention-chip.js";
 import { useTaskMentions } from "./task-mentions.js";
-import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing.js";
+import {
+  EDITOR_PLACE,
+  type EditorHost,
+  type PlanEditing,
+  useMarkTitleUnsaved,
+} from "./use-plan-editing.js";
 
 /**
  * plan-document-editor.tsx -- the open plan, edited in place: its title, its sections as blocks, and its whole text in one editor.
@@ -495,6 +500,10 @@ export function EditableTitle({
   const echo = useRef<string | undefined>(undefined);
   const doors = useRef({ onRename, onDraft });
   doors.current = { onRename, onDraft };
+  // How many renames asked for have not answered; the title's words are unsaved work while any is out or words are typed.
+  const asking = useRef(0);
+  const markUnsaved = useMarkTitleUnsaved();
+  const tellUnsaved = () => markUnsaved(typed.current || asking.current > 0);
   // The Rename last answered, so only a newer one puts the caret here.
   const renamed = useRef(renaming);
   useEffect(() => {
@@ -517,10 +526,17 @@ export function EditableTitle({
   const rename = (element: HTMLElement) => {
     typed.current = false;
     const next = typedName(element);
-    if (next === "" || next === base.current) return;
+    if (next === "" || next === base.current) {
+      tellUnsaved();
+      return;
+    }
     base.current = next;
     const asked = stamp.current;
+    asking.current += 1;
+    tellUnsaved();
     doors.current.onRename(next).then((renamed) => {
+      asking.current -= 1;
+      tellUnsaved();
       if (renamed) return;
       if (stamp.current !== asked) {
         if (base.current === next) base.current = "";
@@ -578,7 +594,10 @@ export function EditableTitle({
           }}
           onInput={(event) => {
             saved.current = false;
-            typed.current = true;
+            if (!typed.current) {
+              typed.current = true;
+              tellUnsaved();
+            }
             boundTitle(event.currentTarget);
             const next = typedName(event.currentTarget);
             echo.current = next === "" ? undefined : next;

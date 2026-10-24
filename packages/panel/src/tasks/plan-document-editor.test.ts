@@ -765,6 +765,44 @@ test("words a plan was left with that its save refused stay unsaved work, there 
   assert.equal(unsavedWords(container), true, "and in the editor they open in again");
 });
 
+test("words a plan was left with stay unsaved work while their save is out, and not once it lands", async () => {
+  let answer: (saved: TasksEditAnswer) => void = () => assert.fail("no save went");
+  const { container, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  const held = () =>
+    new Promise<TasksEditAnswer>((resolve) => {
+      answer = resolve;
+    });
+  render(DOCUMENT_TASK, held);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  render(other, held);
+  await settle();
+  assert.equal(unsavedWords(container), true, "the save is still out");
+
+  answer({ saved: true });
+  await settle();
+  assert.equal(unsavedWords(container), false);
+});
+
+test("a title typed in is unsaved work until its rename answers", async () => {
+  const { container, renamed } = mount();
+  const words = title(container);
+
+  act(() => {
+    words.focus();
+    words.textContent = "Beta";
+    words.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(unsavedWords(container), true);
+
+  act(() => words.blur());
+  await settle();
+  assert.deepEqual(renamed, ["Beta"]);
+  assert.equal(unsavedWords(container), false);
+});
+
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them over Luke's", async () => {
   const lukes = `${BODY}Luke's.\n`;
   const { container, sent, render } = mount([{ conflict: { current: lukes } }]);

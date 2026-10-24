@@ -27,7 +27,7 @@ import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { PlanEditorPlacement } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { useSteadyDoor } from "../steady-door.js";
@@ -66,19 +66,30 @@ const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEdi
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
 const openUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
 
-/** Whether any plan holds words not saved: an editor open on them, or a task left with them. */
+/** The tasks left with words whose leaving save is still out, until it answers. */
+const savingLeftAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
+
+/** The titles being typed in, each by its own id, from the first word typed until the rename it asks for answers. */
+const titlesUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
+
+/** Whether any plan holds words not saved: an editor open on them, a task left with them, or a title typed in. */
 const planWordsUnsavedAtom = Atom.make(
-  (get) => get(openUnsavedAtom).length > 0 || get(leftUnsavedAtom).size > 0,
+  (get) =>
+    get(openUnsavedAtom).length > 0 ||
+    get(savingLeftAtom).length > 0 ||
+    get(leftUnsavedAtom).size > 0 ||
+    get(titlesUnsavedAtom).length > 0,
 );
 
-/** `taskId` marked as holding words its open editor has not saved, or not. */
-function markOpenUnsaved(
+/** `key` marked in `marks` as holding words not saved, or not. */
+function mark(
   registry: AtomRegistry.AtomRegistry,
-  taskId: string,
+  marks: Atom.Writable<readonly string[]>,
+  key: string,
   unsaved: boolean,
 ): void {
-  const others = registry.get(openUnsavedAtom).filter((held) => held !== taskId);
-  registry.set(openUnsavedAtom, unsaved ? [...others, taskId] : others);
+  const others = registry.get(marks).filter((held) => held !== key);
+  registry.set(marks, unsaved ? [...others, key] : others);
 }
 
 /** What the toast over words a task was left with says, and its action, by whether they wait on a conflict. */
@@ -119,6 +130,7 @@ function keepLeft(left: LeftTask, now: DocumentEditor): void {
   if (kept === undefined) held.delete(taskId);
   else held.set(taskId, kept);
   registry.set(leftUnsavedAtom, held);
+  mark(registry, savingLeftAtom, taskId, false);
   if (kept === undefined) return;
   const conflict = kept.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT;
   const press = () => {
@@ -135,8 +147,9 @@ function keepLeft(left: LeftTask, now: DocumentEditor): void {
   });
 }
 
-/** Saves the words of a task left through its door, keeping them where that save does not land. */
+/** Saves the words of a task left through its door, keeping them where that save does not land; they are unsaved work until it answers. */
 function saveLeft(left: LeftTask, now: DocumentEditor): void {
+  mark(left.registry, savingLeftAtom, left.taskId, true);
   const request = leavingSave(now);
   if (request === undefined) {
     keepLeft(left, now);
@@ -195,6 +208,20 @@ export interface PlanEditing {
  */
 export function usePlanWordsUnsaved(): boolean {
   return useAtomValue(planWordsUnsavedAtom);
+}
+
+/**
+ * Marks a title's words as unsaved work, or not, for as long as the title
+ * stands and after: words typed stay unsaved until the rename they ask for
+ * answers, which may be after the title has gone.
+ */
+export function useMarkTitleUnsaved(): (unsaved: boolean) => void {
+  const registry = useContext(RegistryContext);
+  const key = useId();
+  return useCallback(
+    (unsaved: boolean) => mark(registry, titlesUnsavedAtom, key, unsaved),
+    [registry, key],
+  );
 }
 
 /**
@@ -291,8 +318,8 @@ export function usePlanEditing(
   const unsaved = editor !== undefined && (holding || editor.draft !== editor.base);
   useEffect(() => {
     if (!unsaved) return;
-    markOpenUnsaved(registry, taskId, true);
-    return () => markOpenUnsaved(registry, taskId, false);
+    mark(registry, openUnsavedAtom, taskId, true);
+    return () => mark(registry, openUnsavedAtom, taskId, false);
   }, [registry, taskId, unsaved]);
 
   // A pause that ran out on the newest keystroke saves what stands.
@@ -325,13 +352,17 @@ export function usePlanEditing(
       const held = latest.current;
       if (held === undefined) return;
       const left: LeftTask = { taskId, door: door.current, registry, toast };
-      if (held.sending === undefined) saveLeft(left, held);
-      // Note that words typed while a save was out go once it lands, from what it saved.
-      else
-        flight.current?.then(
-          (answered) => saveLeft(left, editorAnswered(held, answered)),
-          (refused: Error) => saveLeft(left, editorRefused(held, refused.message)),
-        );
+      if (held.sending === undefined) {
+        saveLeft(left, held);
+        return;
+      }
+      // Note that words typed while a save was out go once it lands, from
+      // what it saved, and are unsaved work while they wait on it.
+      mark(registry, savingLeftAtom, taskId, true);
+      flight.current?.then(
+        (answered) => saveLeft(left, editorAnswered(held, answered)),
+        (refused: Error) => saveLeft(left, editorRefused(held, refused.message)),
+      );
     };
   }, [taskId]);
 

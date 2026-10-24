@@ -153,13 +153,10 @@ const CHAT_WAITING: Atom.Atom<readonly string[]> = Atom.map(
 /** The version of main's document the window holds, which moves with every delivery. */
 const APP_STATE_VERSION: Atom.Atom<number> = appStateDerivedAtom((state) => state?.version ?? 0);
 
-/**
- * The ask the shell hears while a plan holds words not saved and no page
- * stands an ask of its own: the panel's own doors save those words as a
- * task is left, so nothing asks before them, but the shell's ways out of
- * the page save nothing, and ask first.
- */
-const LEAVE_AT_ONCE: LeaveAsk = (leave) => leave();
+/** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
+const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
+  appPlatform().unsavedWork?.(ask);
+};
 
 /**
  * The shell, handed Settings as the document holds it. It is read here
@@ -298,13 +295,17 @@ function AppWindow(): React.JSX.Element {
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, and so do plan words not saved, so its own ways out of the page ask first.
-  const [pageAsk, setPageAsk] = useState<LeaveAsk>();
-  const leaveGuard = useLeaveGuard((ask) => setPageAsk(() => ask));
+  // The shell hears the ask too, so its own ways out of the page ask first, and hears whether
+  // that or a plan's words not saved stand, so its ways out of the app ask first.
+  const [pageAsks, setPageAsks] = useState(false);
+  const leaveGuard = useLeaveGuard((ask) => {
+    tellShellUnsavedWork(ask);
+    setPageAsks(ask !== undefined);
+  });
   const planWordsUnsaved = usePlanWordsUnsaved();
   useEffect(() => {
-    appPlatform().unsavedWork?.(pageAsk ?? (planWordsUnsaved ? LEAVE_AT_ONCE : undefined));
-  }, [pageAsk, planWordsUnsaved]);
+    appPlatform().holdsUnsavedWork?.(pageAsks || planWordsUnsaved);
+  }, [pageAsks, planWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>

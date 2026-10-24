@@ -38,5 +38,5 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   openBrowserLive: openBrowserLiveOverPort,
   applySessionReplay,
   // Main asks before a quit, a restart to update, and a sign-out while a panel holds unsaved work, with its own sheet.
-  unsavedWork: (ask) => tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding: ask !== undefined }),
+  holdsUnsavedWork: (holding) => tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding }),
 };
