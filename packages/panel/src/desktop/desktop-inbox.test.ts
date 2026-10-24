@@ -40,6 +40,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { formatCount } from "@luke/features/number-format";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import {
@@ -1334,7 +1335,10 @@ test("a paste past an item's reply cap is cut to the room left and its note line
   await settle();
   assert.equal(composerEditor(pane).textContent?.length, cap);
   assert.equal(note(), pasteCutWords(cap));
-  assert.equal(pane.querySelector(".luke-length-counter")?.textContent, `${cap}/${cap}`);
+  assert.equal(
+    pane.querySelector(".luke-length-counter")?.textContent,
+    `${formatCount(cap)}/${formatCount(cap)}`,
+  );
 
   const editor = composerEditor(pane).editor ?? assert.fail("the editor is running");
   act(() => {

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import { formatCount } from "@luke/features/number-format";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -742,7 +743,10 @@ test("a reply pasted past the comment's cap is cut to the room left and the card
 
   pasteInComposer(card, "x".repeat(cap + 100));
   assert.equal(note(), pasteCutWords(cap));
-  assert.equal(card.querySelector(".luke-length-counter")?.textContent, `${cap}/${cap}`);
+  assert.equal(
+    card.querySelector(".luke-length-counter")?.textContent,
+    `${formatCount(cap)}/${formatCount(cap)}`,
+  );
 
   const editor = composerEditor(card).editor;
   assert.ok(editor);
