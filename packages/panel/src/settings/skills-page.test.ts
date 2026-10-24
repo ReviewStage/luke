@@ -456,9 +456,29 @@ test("the workspace's skills stand before the account's own, each with its sourc
   const headings = [...document.querySelectorAll("h2")].map((each) => each.textContent);
   assert.deepEqual(headings, ["Stage", "Only you"]);
   const text = document.body.textContent ?? "";
-  assert.match(text, /release-notes described · acme\/agent-skills @ 3f9c2e1 · by DeanWorkspace/u);
+  assert.match(
+    text,
+    /release-notes described · acme\/agent-skills @ 3f9c2e1 · by Dean\. Follows your workspace\.Workspace/u,
+  );
   assert.match(text, /pr-style described · pastedOnly you/u);
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
+});
+
+test("the workspace's skills each say they follow the workspace, and the account's own say nothing the page's head does not", async () => {
+  await mountPage();
+
+  assert.match(rowOf("release-notes").textContent ?? "", /Follows your workspace\./u);
+  assert.doesNotMatch(rowOf("pr-style").textContent ?? "", /Follows your/u);
+});
+
+test("an empty workspace group says it follows the workspace", async () => {
+  stored = [PR_STYLE];
+  await mountPage();
+
+  assert.match(
+    document.body.textContent ?? "",
+    /No skills installed yet\. Follows your workspace\./u,
+  );
 });
 
 test("a skill's row leads with the book in the settings mark slot, and hangs the skill's card, which says whose it is and names no file", async () => {
@@ -511,7 +531,10 @@ test("the account's own skill offers Share with workspace, which asks in plain w
   ]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   const [, shared, personal] = [...document.querySelectorAll("section")];
-  assert.match(shared?.textContent ?? "", /pr-style described · pasted · by youWorkspace/u);
+  assert.match(
+    shared?.textContent ?? "",
+    /pr-style described · pasted · by you\. Follows your workspace\.Workspace/u,
+  );
   assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
 });
 
