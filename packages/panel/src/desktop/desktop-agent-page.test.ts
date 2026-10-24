@@ -1197,6 +1197,11 @@ test("an agent the service will not hand the reader, as a link to another worksp
     /Not foundThis agent doesn't exist, or you don't have access to it\./u,
   );
   assert.equal(page.querySelector("h1"), null);
+  // The window's bar stands over the words saying so, as it stands over every page.
+  assert.equal(
+    page.querySelector("section[aria-label='Not found']")?.firstElementChild?.tagName,
+    "HEADER",
+  );
   assert.equal(
     [...page.querySelectorAll("button")].some((each) => /Retry/u.test(each.textContent ?? "")),
     false,
