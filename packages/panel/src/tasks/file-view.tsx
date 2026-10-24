@@ -256,6 +256,9 @@ const BESIDE_TOGGLE = '.file-tree-toggle[data-place="beside"]';
 /** The toggle that floats the pane over the tab, which the stylesheet draws only where the pane cannot stand beside it. */
 const OVER_TOGGLE = '.file-tree-toggle[data-place="over"]';
 
+/** The pane floated over the tab, whose box the pointer may be in. */
+const OVER_PANE = ".luke-over-pane";
+
 /** The strip a closed pane may leave in its place, which peeks the pane over the tab (`changes-strip.tsx`). */
 const PANE_STRIP = ".file-tree-strip";
 
@@ -350,6 +353,8 @@ export function usePaneRoom(shown: {
       onPointerEnter: peek,
       onPointerLeave: (event) => {
         const to = event.relatedTarget;
+        // Note that the pane over the tab is the pane the pointer is on its way into, as well as the docked one.
+        if (to instanceof Element && to.closest(OVER_PANE) !== null) return;
         if (to instanceof Node && beside.pane.current?.contains(to)) return;
         unpeek();
       },
@@ -374,7 +379,7 @@ export function usePaneRoom(shown: {
         const atEdge = event.clientX >= box.right - PEEK_EDGE;
         const onPane =
           event.target instanceof Element &&
-          (event.target.closest(".luke-over-pane") !== null ||
+          (event.target.closest(OVER_PANE) !== null ||
             beside.pane.current?.contains(event.target) === true ||
             event.target.closest(PANE_STRIP) !== null);
         if (over === PANE_FLOAT.CLOSED && atEdge && event.buttons === 0) {

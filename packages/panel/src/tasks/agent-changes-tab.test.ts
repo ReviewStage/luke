@@ -2624,3 +2624,24 @@ test("Escape in the tree floated over the list puts it away and gives the keyboa
   act(() => vi.advanceTimersByTime(MOTION_DURATION_MS.PANE));
   assert.equal(floatedTree(), null);
 });
+
+test("the pointer leaving the strip for the tree it peeked keeps the tree, and leaving it for anywhere else puts it away", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  const { tree } = heldTree(false);
+  await drawTab({ tree });
+  const strip =
+    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    assert.fail("a strip");
+  const leave = (to: Element) =>
+    act(() =>
+      strip.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: to })),
+    );
+
+  act(() => strip.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+  await flush();
+  leave(floatedTree() ?? assert.fail("the tree peeks out"));
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "peek");
+
+  leave(document.body);
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "closed");
+});

@@ -219,3 +219,16 @@ test("a peek takes no keyboard and holds none against Tab, until it is made open
   press(button("Elsewhere"));
   expect(pane()?.getAttribute("data-state")).toBe("leaving");
 });
+
+test("Escape puts a peek away wherever the keyboard stands, though it holds none", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(PeekTab)));
+  act(() => button("Elsewhere").focus());
+  press(button("Peek"));
+  expect(pane()?.getAttribute("data-arrival")).toBe("peek");
+
+  key(button("Elsewhere"), "Escape");
+  expect(pane()?.getAttribute("data-state")).toBe("leaving");
+});

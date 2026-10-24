@@ -215,6 +215,30 @@ function usePressOutside(
   }, []);
 }
 
+/**
+ * Asks the owner to close a peek at Escape wherever the keyboard stands,
+ * since a peek takes none and so hears no key of its own. Note that it is
+ * heard at the window before the work's layers hear it, and that a key
+ * aimed into a menu or a dialog is left to that layer, and one already
+ * taken, or aimed into the pane, to the pane's own handler.
+ */
+function useEscapedPeek(peeking: boolean, onClose: () => void): void {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!peeking) return undefined;
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(`${KEY_LAYERS}, .luke-over-pane`) != null) return;
+      event.preventDefault();
+      close.current();
+    };
+    window.addEventListener("keydown", onEscape, true);
+    return () => window.removeEventListener("keydown", onEscape, true);
+  }, [peeking]);
+}
+
 /** The pane floating over a tab, drawn while `open` and through its slide out. */
 export function OverPane({
   open,
@@ -250,6 +274,7 @@ export function OverPane({
   const leaving = useLeaving(open);
   useHeldKeyboard(open && !peek, pane, initialFocus);
   const pin = usePressOutside(open, toggle, onClose);
+  useEscapedPeek(open && peek, onClose);
   if (!open && !leaving) return null;
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
