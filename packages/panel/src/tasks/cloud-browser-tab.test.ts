@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
@@ -17,11 +18,14 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { COMMAND_KEY } from "@luke/settings/shortcuts";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Duration } from "effect";
+import { Clock, Context, Duration, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
@@ -31,6 +35,7 @@ import { onPhone } from "../testing/phone-tab.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
+  CLOUD_BROWSER_AGENT_RECENT,
   CLOUD_BROWSER_TABS_AGAIN,
   noteOpenedCloudTab,
   useCloudBrowserTabs,
@@ -781,3 +786,48 @@ test("on a phone a Browser tab's bar keeps its address alone, the task's header'
   assert.deepEqual(handed.labels(), ["Back", "Forward", "Reload"]);
   assert.deepEqual(handed.item("Reload"), { disabled: true, detail: "no page is open yet" });
 });
+
+it.effect(
+  "a tab says its agent is using it while the agent acted lately, and stops saying so once the recent span passes with nothing else redrawing the bar",
+  () =>
+    Effect.gen(function* () {
+      const clock = yield* Clock.Clock;
+      fakeAppPlatform({
+        openBrowserLive: () => ({ send: () => undefined, close: () => undefined }),
+      });
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      const registry = AtomRegistry.make({
+        initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+      });
+      act(() =>
+        root.render(
+          onRegistry(
+            registry,
+            createElement(CloudBrowserPane, {
+              taskId: TASK,
+              tab: { ...LISTED, lastActedAt: 0 },
+              owner: { name: "Ada", icon: createElement("span") },
+              shown: true,
+              memberName: () => undefined,
+            }),
+          ),
+        ),
+      );
+      const says = () => document.body.textContent?.includes("Ada is using this tab") === true;
+      const landed = Effect.promise(settle);
+
+      yield* landed;
+      assert.equal(says(), true, "said while the agent just acted");
+
+      yield* TestClock.adjust(Duration.subtract(CLOUD_BROWSER_AGENT_RECENT, Duration.millis(1)));
+      yield* landed;
+      assert.equal(says(), true, "still said a moment before the span ends");
+
+      yield* TestClock.adjust(Duration.millis(1));
+      yield* landed;
+      assert.equal(says(), false, "gone once the span passes, unprompted");
+    }),
+);
