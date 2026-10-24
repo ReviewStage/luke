@@ -5260,9 +5260,9 @@ ul.actor-stack {
   pointer-events: none;
 }
 
-/* The pills: its priority, its assignee, its repository, its agents at
-   work and their pull requests, and the issues it links, wrapping onto as
-   many lines as they take rather than running past the card's edge, as
+/* Its priority's and its assignee's marks, drawn bare as the List draws
+   them, then the pills: its repository, its agents at work and their pull
+   requests, and the issues it links, wrapping onto as many lines as they take rather than running past the card's edge, as
    Linear's do. A pill too long for a line alone, a repository's name, is
    cut short within it. */
 .tasks-board-card-pills {
