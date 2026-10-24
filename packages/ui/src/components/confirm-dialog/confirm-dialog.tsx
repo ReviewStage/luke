@@ -80,13 +80,12 @@ export function useConfirmDialog(
 
 /**
  * What the act takes with it, the name a gate asks for, and a refusal,
- * between the shared dialog's title and its answers. The body is the part
- * that gives way and scrolls, so the title and the answers stay on screen
- * however short the window is; the gate's name is set apart from the words
- * around it so it reads as exactly what to type.
+ * between the shared dialog's title and its answers, which hold them in the
+ * middle that gives way and scrolls (`Dialog`), so the title and the answers
+ * stay on screen however short the window is; the gate's name is set apart
+ * from the words around it so it reads as exactly what to type.
  */
-const BODY =
-  "m-0 min-h-0 overflow-x-hidden overflow-y-auto text-body text-muted-foreground wrap-anywhere";
+const BODY = "m-0 text-body text-muted-foreground wrap-anywhere";
 const GATE = "font-mono text-foreground wrap-anywhere";
 const REFUSAL = "m-0 text-caption text-danger wrap-anywhere";
 

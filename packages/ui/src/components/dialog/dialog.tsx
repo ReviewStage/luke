@@ -53,7 +53,8 @@ import { useHeldFocus } from "./held-focus.js";
  * width so a short verb is not a smaller target than Cancel beside it, with a
  * tool of the dialog's own (attaching a screenshot) at the foot's start where
  * it has one. What it holds between them is the part that gives way and
- * scrolls, so its title and its answers stay on screen however short the
+ * scrolls (a `min-h-0` middle of the card, with the head and the foot outside
+ * it), so its title and its answers stay on screen however short the
  * window is. A picture's card opened from its tile grows from the tile
  * and goes back into it (`expand`), in place of the fade and rise every other
  * card opens with. A dialog whose head is more than words (a picture's bar, a title
@@ -144,6 +145,23 @@ const CARD_LOOK = [
 /** The foot: a tool of the dialog's own at its start, the answers at its end at a common width. */
 const FOOT = "flex min-w-0 shrink-0 items-center gap-dialog-action-gap mt-3";
 const ACTIONS = "ml-auto flex shrink-0 gap-dialog-action-gap [&>.luke-button]:min-w-dialog-action";
+
+/**
+ * The middle: what the card holds between its head and its foot, the one part
+ * that gives way and scrolls, laid out as the card is (a column at the card's
+ * own gap) so what it holds keeps the spacing it had as the card's children.
+ * Note that it clips what it holds, so it draws a control's ring inside the
+ * control, as a `Card` does, rather than clipped at the edge; that a
+ * picture's card (`media`) is fitted edge to edge and draws its own head and
+ * scroller, so its middle lays nothing out; and that a composer's card
+ * does not scroll its middle, because its chips hang lists (the repository's,
+ * the `@` menu) past the card's inner edges, which a scroller would clip and
+ * a picker would take for its room (`roomAround`). Its middle still gives
+ * way to the card's height, as `.new-task` did standing in the card itself,
+ * so its field yields to a short window (`desktop.css`) and its foot stays.
+ */
+const MIDDLE =
+  "flex min-h-0 flex-1 flex-col gap-[inherit] overflow-x-hidden overflow-y-auto overscroll-contain [--luke-focus-ring-offset:var(--luke-focus-ring-inset)] data-[size=media]:contents data-[size=composer]:overflow-visible";
 
 /** What a reader is told when a draft holds the card back. */
 const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
@@ -393,7 +411,9 @@ export function Dialog({
             {title}
           </Text>
         )}
-        {children}
+        <div data-slot="dialog-body" data-size={size} className={MIDDLE}>
+          {children}
+        </div>
         {holding ? (
           <span className="luke-visually-hidden" role="status">
             {held ? HELD_NOTICE : ""}
