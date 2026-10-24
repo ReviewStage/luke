@@ -9,9 +9,17 @@ import {
   type TasksView,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { RUN_PROFILE } from "@luke/host/app-state";
+import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
+import type { SettingsLink } from "@luke/settings/settings-views";
 import { agentActAnswer, agentSidePanel, agentTasksView } from "./agent-fixture.js";
+import { automationsActAnswer, automationsLaunchPlace } from "./automations-fixture.js";
+import {
+  settingsActAnswer,
+  settingsAppState,
+  settingsLaunchLink,
+  settingsTasksView,
+} from "./settings-fixture.js";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -19,6 +27,7 @@ import {
   type SidePanelState,
   type StagedSidePanel,
 } from "./use-side-panel.js";
+import type { AutomationsPlace } from "./use-tasks-tab.js";
 
 /**
  * tasks-fixture.ts -- the synthetic tasks a fixture run's Tasks tab draws in place of the service's.
@@ -381,8 +390,10 @@ const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: fals
 /**
  * The tasks a fixture run draws: the list with its first task open under the
  * tasks profiles, that task holding its coding agent under the agent
- * profiles (`agent-fixture.ts`), the list alone under any other, and nothing
- * for a live run, which draws what the host read.
+ * profiles (`agent-fixture.ts`), the list alone under any other, its
+ * workspaces as Settings shows them under the Settings profiles
+ * (`settings-fixture.ts`), and nothing for a live run, which draws what the
+ * host read.
  */
 export function fixtureTasksView(run: {
   readonly fixtureMode: boolean;
@@ -395,7 +406,7 @@ export function fixtureTasksView(run: {
   if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_OPEN_BOARD;
   if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_OPEN_TASK;
   if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_OPEN_TASK;
-  return FIXTURE_TASK_LIST;
+  return settingsTasksView(run.profile, FIXTURE_TASK_LIST) ?? FIXTURE_TASK_LIST;
 }
 
 /**
@@ -424,12 +435,48 @@ export function fixtureSidePanel(run: {
 /**
  * What a fixture run answers an act with in place of main (`act.ts`), boxed
  * so an act that answers nothing is told from one left to main: its agent
- * profiles' tabs' reads, and nothing else, which goes to main as it would.
+ * profiles' tabs' reads, its signed-in profiles' pages' reads, and nothing
+ * else, which goes to main as it would.
  */
 export function fixtureActAnswer(
   run: { readonly profile: string },
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
-  return agentActAnswer(run.profile, kind, payload);
+  return (
+    agentActAnswer(run.profile, kind, payload) ??
+    automationsActAnswer(run.profile, kind, payload) ??
+    settingsActAnswer(run.profile, kind, payload)
+  );
+}
+
+/**
+ * Main's document as a fixture run draws it (`use-app-state.ts`): with the
+ * synthetic account signed in under the profiles that stage one
+ * (`settings-fixture.ts`), and as main holds it under any other.
+ */
+export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
+  return settingsAppState(state.run.profile, state);
+}
+
+/**
+ * Where a fixture run's window opens at launch, past the Tasks tab it opens
+ * on otherwise: a page of Settings, the Admin place, or an Automations page.
+ */
+export type FixturePlace =
+  | { readonly settings: SettingsLink }
+  | { readonly admin: true }
+  | { readonly automations: AutomationsPlace };
+
+/** The place a fixture run's profile opens the window on; none for a live run, or a profile that opens the Tasks tab. */
+export function fixturePlace(run: {
+  readonly fixtureMode: boolean;
+  readonly profile: string;
+}): FixturePlace | undefined {
+  if (!run.fixtureMode) return undefined;
+  if (run.profile === RUN_PROFILE.ADMIN) return { admin: true };
+  const settings = settingsLaunchLink(run.profile);
+  if (settings !== undefined) return { settings };
+  const automations = automationsLaunchPlace(run.profile);
+  return automations === undefined ? undefined : { automations };
 }

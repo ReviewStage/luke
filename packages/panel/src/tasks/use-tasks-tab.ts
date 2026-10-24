@@ -194,6 +194,7 @@ import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import { freshAccount, newestWaiting, RESTING_PAGE, restingPage } from "./resting-page.js";
+import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
@@ -462,6 +463,14 @@ export type AutomationsPlace =
 
 /** The list, where the Automations pages open with none asked for. */
 const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
+
+/** What a fixture run's profile stands in the task's place at launch: Admin's Overview, or an Automations page; none for a place that is no stand-in. */
+function launchedStandIn(place: FixturePlace | undefined): StandIn | undefined {
+  if (place === undefined) return undefined;
+  if ("admin" in place) return { kind: STAND_IN.ADMIN, view: ADMIN_OVERVIEW, listed: false };
+  if ("automations" in place) return { kind: STAND_IN.AUTOMATIONS, place: place.automations };
+  return undefined;
+}
 
 /** Whether an Automations page stands its runs alone in a narrow room: as it was last told, else where it was opened on a run's link, which names a run its runs list. */
 function runsStanding(place: AutomationsPlace, runs: boolean | undefined): boolean {
@@ -1296,11 +1305,11 @@ export function useTasksTab(input: {
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
-  // The chat profile opens Chat at launch over its fixture.
+  // The chat profile opens Chat at launch over its fixture, and the Admin and Automations profiles their place.
   const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
     input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
       ? { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true }
-      : undefined,
+      : launchedStandIn(loadedTasksFixture()?.fixturePlace(input.run)),
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   // Whether the window's Inbox shows one column, as it measures itself.
