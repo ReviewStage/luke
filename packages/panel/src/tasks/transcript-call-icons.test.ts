@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CALL_KIND } from "@luke/features/turn-rows";
+import { GLYPH, type Glyph } from "@luke/ui/icons";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -88,4 +89,33 @@ test("each chat call wears a chat glyph of its own rather than the wrench a tool
     [1, 1, 1, 1],
   );
   assert.equal(box.querySelector(".lucide-wrench"), null);
+});
+
+/** The markup `glyph` draws, as any place seating it draws it. */
+function glyphMarkup(glyph: Glyph): string {
+  return renderToStaticMarkup(createElement(glyph));
+}
+
+/** A finished call of `kind`'s row, and the glyphs it draws, by markup. */
+function glyphsOf(kind: typeof CALL_KIND.LIST_ISSUES | typeof CALL_KIND.TODOS): string[] {
+  const box = document.createElement("div");
+  box.innerHTML = renderToStaticMarkup(
+    createElement(TranscriptTool, {
+      kind,
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      subject: "",
+      description: undefined,
+      input: { kind: TOOL_BLOCK.JSON, text: "{}" },
+      output: { kind: TOOL_BLOCK.JSON, text: "{}" },
+      errorText: undefined,
+    }),
+  );
+  return [...box.querySelectorAll("svg")].map((svg) => svg.outerHTML);
+}
+
+test("a list of issues wears the issue's glyph, and a to-do write the to-do list's, never the Tasks one", () => {
+  assert.ok(glyphsOf(CALL_KIND.LIST_ISSUES).includes(glyphMarkup(GLYPH.ISSUE)));
+  assert.ok(!glyphsOf(CALL_KIND.LIST_ISSUES).includes(glyphMarkup(GLYPH.TASK)));
+  assert.ok(glyphsOf(CALL_KIND.TODOS).includes(glyphMarkup(GLYPH.TODOS)));
+  assert.ok(!glyphsOf(CALL_KIND.TODOS).includes(glyphMarkup(GLYPH.TASK)));
 });

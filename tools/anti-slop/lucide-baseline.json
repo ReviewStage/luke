@@ -82,10 +82,8 @@
   "packages/panel/src/tasks/pull-request-thread-actions.tsx": 1,
   "packages/panel/src/tasks/replay-card.tsx": 1,
   "packages/panel/src/tasks/reply-to-selection.tsx": 1,
-  "packages/panel/src/tasks/rewind-action.tsx": 1,
   "packages/panel/src/tasks/skill-ref.tsx": 1,
   "packages/panel/src/tasks/tab-look.tsx": 1,
-  "packages/panel/src/tasks/transcript-blocks.tsx": 1,
   "packages/panel/src/tasks/use-side-panel.ts": 1,
   "packages/panel/src/tasks/view-settings.tsx": 1
 }
