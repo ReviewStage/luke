@@ -29,7 +29,7 @@ import {
 const DISMISS_HINT_LABEL = "Got it";
 
 /** What the voice's toast is about, by which it is withdrawn once the voice stops saying it. */
-const VOICE_NOTICE_SUBJECT = "voice-notice";
+const VOICE_NOTICE_SUBJECT = "voice-toast";
 
 /** OpenAI's billing page, where the key's account is given credit. */
 export const OPENAI_BILLING_URL =

@@ -111,8 +111,8 @@ import { tabCard } from "./tab-card.js";
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers the agent's own actions, the very ones its
  * tab's ⋯ offers on a task (`agent-actions.tsx`): Rename, which turns the
- * title into its name's field, Open terminal, Copy link, the
- * transcript's two copies, and Archive agent, so an agent with no task is
+ * title into its name's field, Show terminal, Copy link, the
+ * transcript's two copies, and Archive, so an agent with no task is
  * acted on as a task's is; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
@@ -337,7 +337,7 @@ export function DesktopAgentPage({
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
-  // Open terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
+  // Show terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
   const terminalDoors = useAgentTerminalDoors(sidePanel, agentRepository, () =>
     setFocus(COLUMN.SIDE),
   );

@@ -65,7 +65,7 @@ import { TabStrip } from "./tab-strip.js";
  * same hover and chosen fills, dragged and stepped along, closed by ×,
  * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
  * right-click (`strip-tabs.tsx`). A tab's own actions, on an agent's its
- * Rename, its Open terminal, its transcript's copies, and its Archive, are
+ * Rename, its Show terminal, its transcript's copies, and its Archive, are
  * its right-click menu's alone: the toolbar's one ⋯ is the task's.
  *
  * Each agent's tab is named by its title, or its model until it has one,
@@ -73,8 +73,8 @@ import { TabStrip } from "./tab-strip.js";
  * works and an alert once it failed, and the voice's live mark while a call
  * into it is in progress, and hangs a card naming it whole with when it
  * last moved and its latest step, read from what its tab last drew and
- * never from the service. Its menu offers Pin tab, which puts it in the
- * sidebar, Rename, which turns the tab into its name's field, Open terminal,
+ * never from the service. Its menu offers Pin, which puts it in the
+ * sidebar, Rename, which turns the tab into its name's field, Show terminal,
  * which shows the agent's own Terminal tab in the side panel as ⌘J does from
  * the tab, and its transcript's two copies. Closing it closes only the view:
  * the agent goes on as it was, and the "+" opens it again. A tab an agent

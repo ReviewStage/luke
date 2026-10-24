@@ -1,14 +1,10 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  CloseIcon,
-  CopyIcon,
   IconButton,
   type MenuRow,
   MoreButton,
   moreLabel,
-  PencilIcon,
-  PinIcon,
   PlusIcon,
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
@@ -17,13 +13,12 @@ import {
   Skeleton,
   STATUS_TONE,
   Tooltip,
-  UnpinIcon,
   useMenu,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { ListXIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyToast } from "../copy-feedback.js";
 import type { HeldTranscript } from "../tasks/agent-tab-card.js";
 import {
@@ -41,10 +36,10 @@ import { MenuTab } from "./tab-strip.js";
  *
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
- * Close and Close others; Pin tab or Unpin tab, and an agent's Rename,
- * beside it; an agent's Open terminal; a transcript's two copies; and an
+ * Close and Close others; Pin or Unpin, and an agent's Rename,
+ * beside it; an agent's Show terminal; a transcript's two copies; and an
  * agent's Archive. Those that act on what the chosen tab shows, an agent's
- * Rename, Open terminal, copies, and Archive, and a subagent's copies, its
+ * Rename, Show terminal, copies, and Archive, and a subagent's copies, its
  * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`), with what the
  * tab's own body hands up while it is drawn, a Pull request tab's Refresh
  * and Open on GitHub (`useHandedTabActions`). Each strip
@@ -112,42 +107,34 @@ interface ContentActions {
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
- * itself: an agent's Rename, its Open terminal, Copy link and a transcript's two copies,
+ * itself: an agent's Rename, its Show terminal, Copy link and a transcript's two copies,
  * an agent's Archive, which takes the tab with it, and its Permanently
  * delete, alone after it.
  */
 function contentActions(doors: TabDoors): ContentActions {
   const { onCopy, onRename, onOpenTerminal, archive, deletion, copyLink } = doors;
   return {
-    rename:
-      onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
+    rename: onRename === undefined ? [] : [commandAction(PANEL_COMMAND.RENAME, onRename, false)],
     terminal:
       onOpenTerminal === undefined
         ? []
-        : [
-            {
-              label: "Open terminal",
-              icon: <TerminalIcon />,
-              onSelect: onOpenTerminal,
-              // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
-              ...(doors.chosen ? { command: APP_COMMAND.SHOW_TERMINAL } : undefined),
-            },
-          ],
+        : // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
+          [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, doors.chosen)],
     copies: [
       ...(copyLink === undefined ? [] : [copyLink]),
       ...(onCopy === undefined
         ? []
         : [
-            {
-              label: "Copy concise transcript",
-              icon: <CopyIcon />,
-              onSelect: () => onCopy(TRANSCRIPT_COPY.CONCISE),
-            },
-            {
-              label: "Copy full transcript",
-              icon: <ScrollTextIcon />,
-              onSelect: () => onCopy(TRANSCRIPT_COPY.FULL),
-            },
+            commandAction(
+              PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
+              () => onCopy(TRANSCRIPT_COPY.CONCISE),
+              false,
+            ),
+            commandAction(
+              PANEL_COMMAND.COPY_FULL_TRANSCRIPT,
+              () => onCopy(TRANSCRIPT_COPY.FULL),
+              false,
+            ),
           ]),
     ],
     archive: archive === undefined ? [] : [archive],
@@ -158,8 +145,8 @@ function contentActions(doors: TabDoors): ContentActions {
 /**
  * A tab's actions in the groups a rule divides, as an editor's tab offers
  * them on a right-click: Close and Close others, the plan's tab offering
- * only the second; Pin tab or Unpin tab, which puts it in the sidebar or
- * takes it out, and a Rename beside it; for an agent's, its Open terminal;
+ * only the second; Pin or Unpin, which puts it in the sidebar or
+ * takes it out, and a Rename beside it; for an agent's, its Show terminal;
  * Copy link, for a tab whose thing has a link, and a transcript's two
  * copies after it; then, for an agent's, its Archive, and last and alone its
  * Permanently delete. Close others stands dimmed where nothing else would close.
@@ -170,30 +157,25 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
     onClose === undefined
       ? []
       : [
-          {
-            label: "Close",
-            icon: <CloseIcon />,
-            onSelect: onClose,
-            // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
-            ...(doors.chosen ? { command: APP_COMMAND.CLOSE_TAB } : undefined),
-          },
+          // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
+          commandAction(PANEL_COMMAND.CLOSE_TAB, onClose, doors.chosen),
         ];
   const pin: MenuAction[] =
     doors.pin === undefined
       ? []
       : [
-          doors.pin.pinned
-            ? { label: "Unpin tab", icon: <UnpinIcon />, onSelect: doors.pin.onToggle }
-            : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.pin.onToggle },
+          commandAction(
+            doors.pin.pinned ? PANEL_COMMAND.UNPIN_TAB : PANEL_COMMAND.PIN_TAB,
+            doors.pin.onToggle,
+            false,
+          ),
         ];
   const { rename, terminal, copies, archive, deletion } = contentActions(doors);
   return [
     [
       ...close,
       {
-        label: "Close others",
-        icon: <ListXIcon />,
-        onSelect: () => doors.onCloseOthers?.(),
+        ...commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, () => doors.onCloseOthers?.(), false),
         disabled: doors.onCloseOthers === undefined,
       },
     ],
@@ -207,7 +189,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
  * The chosen tab's actions as its toolbar's ⋯ offers them: those of its
  * right-click that act on what it shows (`contentActions`), in the same
  * groups, after what its body hands up while it is drawn (`handed`), and
- * none of the tab's own keeping, Close, Close others, and Pin tab, which
+ * none of the tab's own keeping, Close, Close others, and Pin, which
  * stay on the right-click alone. An agent's own page offers the same in
  * its toolbar's ⋯ (`desktop-agent-page.tsx`), so a taskless agent is acted
  * on as a task's is.

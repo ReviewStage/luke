@@ -47,6 +47,7 @@ import { SETTLED_STATUS, settleOffered } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
@@ -286,8 +287,7 @@ export function moveToSectionEntry(
           },
         ];
   return {
-    label: "Move to section",
-    icon: <LayersIcon />,
+    ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION),
     items: [
       ...sections,
       { label: "New section…", onSelect: () => askNew(workspaceId, put) },

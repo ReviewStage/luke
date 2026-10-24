@@ -31,6 +31,9 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextButton,
   Time,
   TOOLBAR_INSET,
@@ -767,7 +770,9 @@ export function DesktopVersionHistory({
         />
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
-            <h1 className="version-log-title">Version history</h1>
+            <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="version-log-title">
+              Version history
+            </Text>
             <Fill className="sidebar-section">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}

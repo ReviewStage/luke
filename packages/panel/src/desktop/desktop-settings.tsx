@@ -152,13 +152,21 @@ function GroupHeading({
   capabilities: readonly HostCapability[];
 }): React.JSX.Element {
   if (group !== SETTINGS_PAGE_GROUP.WORKSPACE || listed === undefined) {
-    return <h2 className="section-heading">{settingsGroupHeadingOf(group, capabilities)}</h2>;
+    return (
+      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.GROUP} className="section-heading">
+        {settingsGroupHeadingOf(group, capabilities)}
+      </Text>
+    );
   }
   return (
-    <h2 className="section-heading settings-nav-workspace">
+    <Text
+      as={TEXT_ELEMENT.H2}
+      variant={TEXT_VARIANT.GROUP}
+      className="section-heading settings-nav-workspace"
+    >
       <WorkspaceTile workspace={listed} />
       {listed.name}
-    </h2>
+    </Text>
   );
 }
 

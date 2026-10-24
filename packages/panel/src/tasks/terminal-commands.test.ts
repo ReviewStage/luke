@@ -331,7 +331,7 @@ function rightClickTab(name: string): void {
   });
 }
 
-test("an agent's tab offers Open terminal on its right-click, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
+test("an agent's tab offers Show terminal on its right-click, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     main: { agent: WORKING.id },
@@ -345,13 +345,13 @@ test("an agent's tab offers Open terminal on its right-click, which opens that a
   );
   // The chosen tab's right-click says ⌘J, which opens the same terminal from here.
   rightClickTab("Invite flow");
-  const fromChosen = menuItem("Open terminal");
+  const fromChosen = menuItem("Show terminal");
   assert.equal(fromChosen.hint, "⌘J");
   await fromChosen.press();
   assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
   // Another agent's tab opens its own terminal, which ⌘J would not from here, so it says no shortcut.
   rightClickTab("Expiry job");
-  const fromOther = menuItem("Open terminal");
+  const fromOther = menuItem("Show terminal");
   assert.equal(fromOther.hint, undefined);
   await fromOther.press();
   assert.deepEqual(task.shown.at(-1), { terminal: DONE.id });
@@ -375,7 +375,7 @@ async function mountOn(
   return mount(input);
 }
 
-test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers no Open terminal", async () => {
+test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers no Show terminal", async () => {
   const offered = (each: HostCapability) =>
     each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.MAC_TERMINAL;
   await mountOn(DESKTOP_CAPABILITIES, {
@@ -405,8 +405,8 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
     (group) => group.textContent ?? "",
   );
 
-  assert.ok(onDesktop.includes("Open terminal"), "the desktop offers it");
-  assert.equal(without.includes("Open terminal"), false);
+  assert.ok(onDesktop.includes("Show terminal"), "the desktop offers it");
+  assert.equal(without.includes("Show terminal"), false);
   assert.equal(
     groups.some((group) => group.startsWith("Terminal")),
     false,

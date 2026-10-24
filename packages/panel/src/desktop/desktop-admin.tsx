@@ -33,6 +33,9 @@ import {
   SCROLL_FADE,
   ScrollArea,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
@@ -127,7 +130,9 @@ export function DesktopAdmin({
           command={APP_COMMAND.EXIT_ADMIN}
           onBack={onExit}
         />
-        <h1 className="admin-sections-title">{ADMIN_TITLE}</h1>
+        <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE} className="admin-sections-title">
+          {ADMIN_TITLE}
+        </Text>
         <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
