@@ -17,6 +17,8 @@ import type { SettingsLink } from "@luke/settings/settings-views";
 import { agentActAnswer, agentSidePanel, agentTasksView } from "./agent-fixture.js";
 import { automationsActAnswer, automationsLaunchPlace } from "./automations-fixture.js";
 import {
+  FIXTURE_PERSON,
+  fixtureMembersAnswer,
   settingsActAnswer,
   settingsAppState,
   settingsLaunchLink,
@@ -112,6 +114,17 @@ const FIXTURE_TEXT = [
     "- An invite expires after 7 days.",
 ].join("\n\n");
 
+/**
+ * When the fixture's call stands, from which every task's times are counted:
+ * a fixed instant, never the clock, so each picture draws the same dates.
+ * Its tasks were started over the few days before it, and the call's own
+ * task was last saved during it, just before its coding agent began
+ * (`agent-fixture.ts`).
+ */
+const CALL_AT = Date.parse("2026-10-07T16:40:00Z");
+const HOUR = 60 * 60_000;
+const DAY = 24 * HOUR;
+
 /** The reference journey's task, by the id its chat channel (`chat-fixture.ts`) and the host's staged call (`@luke/host/fixture-stage`) name it by too. */
 export const FIXTURE_TASK_ID = FIXTURE_IDS.TASK;
 
@@ -119,9 +132,10 @@ const FIXTURE_TASK: Task = {
   id: FIXTURE_TASK_ID,
   workspaceId: FIXTURE_FIRST.id,
   name: FIXTURE_TASK_NAME,
-  createdAt: 1,
-  updatedAt: 2,
+  createdAt: CALL_AT - 2 * DAY - 2 * HOUR,
+  updatedAt: CALL_AT,
   repository: "ada/relay",
+  createdBy: FIXTURE_PERSON.ADA,
   status: TASK_STATUS.IN_PROGRESS,
   priority: TASK_PRIORITY.HIGH,
   number: 42,
@@ -133,17 +147,19 @@ const FIXTURE_OTHER_TASKS: readonly TaskSummary[] = [
     id: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
     workspaceId: FIXTURE_FIRST.id,
     name: "Billing export",
-    createdAt: 1,
-    updatedAt: 1,
+    createdAt: CALL_AT - 4 * DAY - 6 * HOUR,
+    updatedAt: CALL_AT - DAY - 2 * HOUR,
     repository: "ada/ledger",
+    createdBy: FIXTURE_PERSON.THEO,
   },
   {
     id: "2b8c4e6a-0d3f-4a51-9c79-3e4f5a6b7c82",
     workspaceId: FIXTURE_TEAM.id,
     name: "Usage alerts",
-    createdAt: 1,
-    updatedAt: 1,
+    createdAt: CALL_AT - 3 * DAY - 7 * HOUR,
+    updatedAt: CALL_AT - DAY - 5 * HOUR,
     repository: "acme/relay",
+    createdBy: FIXTURE_PERSON.MAYA,
   },
 ];
 
@@ -191,6 +207,7 @@ const FIXTURE_TASK_LIST: TasksView = {
       createdAt: FIXTURE_TASK.createdAt,
       updatedAt: FIXTURE_TASK.updatedAt,
       repository: FIXTURE_TASK.repository,
+      createdBy: FIXTURE_PERSON.ADA,
       status: TASK_STATUS.IN_PROGRESS,
       priority: TASK_PRIORITY.HIGH,
       number: 42,
@@ -451,9 +468,10 @@ function emptyTaskAnswer(
 /**
  * What a fixture run answers an act with in place of main (`act.ts`), boxed
  * so an act that answers nothing is told from one left to main: its agent
- * profiles' tabs' reads, its signed-in profiles' pages' reads, every other
- * profile's task as one with no agents and no linked issues, and nothing
- * else, which goes to main as it would.
+ * profiles' tabs' reads, its signed-in profiles' pages' reads, every
+ * profile's workspace members, every other profile's task as one with no
+ * agents and no linked issues, and nothing else, which goes to main as it
+ * would.
  */
 export function fixtureActAnswer(
   run: { readonly profile: string },
@@ -464,6 +482,7 @@ export function fixtureActAnswer(
     agentActAnswer(run.profile, kind, payload) ??
     automationsActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??
+    fixtureMembersAnswer(kind, payload) ??
     emptyTaskAnswer(kind)
   );
 }

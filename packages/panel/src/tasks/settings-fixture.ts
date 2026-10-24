@@ -8,7 +8,9 @@
  * Acme, signed in and an admin of Luke, with the experiments its pages stand
  * behind turned on; the window opens on the page the profile names; and each
  * read those pages ask is answered here, through the act door (`act.ts`), as
- * main would answer it with the service behind it. Every person, address,
+ * main would answer it with the service behind it. The workspaces' members
+ * are answered under every profile, since the window reads them wherever it
+ * stands, and a task names its creator from the same people. Every person, address,
  * and repository here is invented, and no credential, token, or key is: a
  * stored key is drawn by its hint alone, as the service only ever answers it,
  * and an expired sign-in by its status, which carries nothing secret.
@@ -100,40 +102,77 @@ const SIGNED_IN_PROFILES: ReadonlySet<string> = new Set<string>([
 
 /* ----- Settings › Workspace ----- */
 
+/** Someone by id and name, as a task names its creator and a member is listed. */
+type Person = Pick<WorkspaceMember, "userId" | "name">;
+
+/**
+ * The fixture's people, by id and the name their account holds, as a task
+ * names who created it: the account, and the teammates its workspaces share.
+ */
+export const FIXTURE_PERSON = {
+  ADA: { userId: ACCOUNT_ID, name: "Ada Lovelace" },
+  MAYA: { userId: "user-maya", name: "Maya Okafor" },
+  THEO: { userId: "user-theo", name: "Theo Lindqvist" },
+  PRIYA: { userId: "user-priya", name: "Priya Raman" },
+} as const satisfies Record<string, Person>;
+
 /** A member of a fixture workspace, with no picture, as the service answers one who signed in without one. */
-function member(userId: string, name: string, role: WorkspaceMember["role"]): WorkspaceMember {
-  return { userId, name, email: `${userId.replace("user-", "")}@example.com`, role };
+function member(person: Person, role: WorkspaceMember["role"]): WorkspaceMember {
+  return { ...person, email: `${person.userId.replace("user-", "")}@example.com`, role };
 }
+
+/** The account's own workspace: the account, and two teammates it brought in. */
+const PERSONAL_MEMBERS: readonly WorkspaceMember[] = [
+  member(FIXTURE_PERSON.ADA, WORKSPACE_ROLE.OWNER),
+  member(FIXTURE_PERSON.THEO, WORKSPACE_ROLE.MEMBER),
+  member(FIXTURE_PERSON.PRIYA, WORKSPACE_ROLE.MEMBER),
+];
 
 /** Acme's team, whose owner is someone else and whose admin the account is. */
 const ACME_MEMBERS: readonly WorkspaceMember[] = [
-  member("user-maya", "Maya Okafor", WORKSPACE_ROLE.OWNER),
-  member(ACCOUNT_ID, "Ada Lovelace", WORKSPACE_ROLE.ADMIN),
-  member("user-theo", "Theo Lindqvist", WORKSPACE_ROLE.MEMBER),
-  member("user-priya", "Priya Raman", WORKSPACE_ROLE.MEMBER),
+  member(FIXTURE_PERSON.MAYA, WORKSPACE_ROLE.OWNER),
+  member(FIXTURE_PERSON.ADA, WORKSPACE_ROLE.ADMIN),
+  member(FIXTURE_PERSON.THEO, WORKSPACE_ROLE.MEMBER),
+  member(FIXTURE_PERSON.PRIYA, WORKSPACE_ROLE.MEMBER),
 ];
 
-/** Each workspace's members: the account alone in its own, and Acme's team. */
+/** Each workspace's members: the account's own and Acme's team. */
 const MEMBERS: ReadonlyMap<string, readonly WorkspaceMember[]> = new Map([
-  [WORKSPACE.PERSONAL, [member(ACCOUNT_ID, "Ada Lovelace", WORKSPACE_ROLE.OWNER)]],
+  [WORKSPACE.PERSONAL, PERSONAL_MEMBERS],
   [WORKSPACE.ACME, ACME_MEMBERS],
 ]);
 
 /**
  * The workspaces as the Settings profiles list them, from the list the tasks
- * profiles draw: Acme counting its members, and its Linear connected with
+ * profiles draw: each counting its members, and Acme's Linear connected with
  * its sign-in since expired, which its row says.
  */
 export function settingsTasksView(profile: string, list: TasksView): TasksView | undefined {
   if (!SETTINGS_LINKS.has(profile)) return undefined;
   return {
     ...list,
-    workspaces: list.workspaces.map((workspace) =>
-      workspace.id === WORKSPACE.ACME
-        ? { ...workspace, memberCount: ACME_MEMBERS.length, linear: { active: false } }
-        : { ...workspace, memberCount: 1 },
-    ),
+    workspaces: list.workspaces.map((workspace) => ({
+      ...workspace,
+      memberCount: MEMBERS.get(workspace.id)?.length ?? 1,
+      ...(workspace.id === WORKSPACE.ACME ? { linear: { active: false } } : undefined),
+    })),
   };
+}
+
+/**
+ * A fixture workspace's members, answered under every profile rather than
+ * only the signed-in ones, because ⌘K's People, a task's assignee and
+ * creator faces, and the person page read them wherever the window stands;
+ * none for any other read.
+ */
+export function fixtureMembersAnswer(
+  kind: PortActKind,
+  payload: PortActPayload<PortActKind>,
+): { readonly answer: PortActResult<PortActKind> } | undefined {
+  if (kind !== ACT_KIND.WORKSPACE_MEMBERS_READ) return undefined;
+  // SAFETY: the kind is the members read, whose payload names the workspace.
+  const { workspaceId } = payload as PortActPayload<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>;
+  return { answer: MEMBERS.get(workspaceId) ?? [] };
 }
 
 /* ----- Settings › Integrations ----- */
@@ -314,9 +353,7 @@ function memory(
   };
 }
 
-const ADA = { userId: ACCOUNT_ID, name: "Ada Lovelace" } as const;
-const MAYA = { userId: "user-maya", name: "Maya Okafor" } as const;
-const THEO = { userId: "user-theo", name: "Theo Lindqvist" } as const;
+const { ADA, MAYA, THEO } = FIXTURE_PERSON;
 
 /** The workspace's memories, the most recently kept first. */
 const MEMORIES: readonly MemorySummary[] = [
@@ -538,7 +575,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     addable: [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.SLACK],
   }),
   [ACT_KIND.INTEGRATIONS_TOOLS]: () => ({ tools: TOOLS }),
-  [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) => MEMBERS.get(workspaceId) ?? [],
   [ACT_KIND.WORKSPACE_INVITATIONS_READ]: ({ workspaceId }) =>
     workspaceId === WORKSPACE.ACME
       ? [
