@@ -777,9 +777,7 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
     header("a.ts").querySelector(".file-view-status") ?? assert.fail("the letter stands");
   restOn(letter());
   await flush();
-  const hint = letter().getAttribute("aria-describedby");
-  assert.ok(hint !== null, "the letter is described by its hint");
-  assert.equal(document.getElementById(hint)?.textContent, "Modified");
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Modified");
 });
 
 test("a file's header leads with its type's icon after its status letter, and its folder and name fade out where the row cuts them rather than ending in an ellipsis", async () => {

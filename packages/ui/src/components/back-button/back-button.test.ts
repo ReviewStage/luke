@@ -98,7 +98,8 @@ test.each(LOOKS)("a way back in a %s hints where it leads, with the key that goe
   focusByKeyboard(button);
   const hint = document.querySelector('[role="tooltip"]');
   expect(hint?.textContent).toContain("Back to chat");
-  expect(button.getAttribute("aria-describedby")).toBe(hint?.id);
+  const described = document.getElementById(button.getAttribute("aria-describedby") ?? "");
+  expect(described?.textContent).toBe("Back to chat");
   expect(button.getAttribute("aria-keyshortcuts")).toBe("Meta+[");
 });
 

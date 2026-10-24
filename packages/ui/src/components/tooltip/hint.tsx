@@ -59,6 +59,16 @@
  * Taken down once it has shown, a pill or a card is held drawn through its
  * exit, inert, and only then taken out.
  *
+ * A reader hears a hint without waiting for it, since a screen reader's focus
+ * marks no keyboard and its cursor rests no pointer: from the control's first
+ * render, its words, a card's one-line summary, are the control's
+ * description, heard as focus lands on it. A control that takes no focus, a
+ * run's time or a mark, is only read by the cursor, which hears no
+ * description, so its words are hidden text it owns (`aria-owns`) instead,
+ * which the cursor reads at its end, while its own words stay as they are.
+ * And a control whose own name already says the words, a card's control
+ * among them, is told them once, by its name.
+ *
  * Its words are text like any other, so the session recording masks them
  * with the rest; nothing of it rides an attribute, and a card is left out
  * of the recording whole.
@@ -112,7 +122,7 @@ import type { ListRowHint } from "../list-row/list-row.js";
 import { useTouchHold } from "../menu/touch-hold.js";
 import type { OneLineHint } from "../one-line/clipped-line.js";
 import { Shortcut } from "../shortcut/shortcut.js";
-import { TOOLTIP_CHORD, TooltipCard, TooltipPill } from "./tooltip.js";
+import { TOOLTIP_CHORD, TooltipCard, TooltipPill, TooltipWords } from "./tooltip.js";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the
@@ -139,6 +149,29 @@ const CARD_LINGER = Duration.millis(MOTION_DELAY_MS.SETTLE);
 const OWN_CONTROL =
   "a[href], button, summary, input, textarea, select, label, [role='button'], [role='link'], [role='tab'], [role='switch'], [role='menuitem'], [contenteditable='true']";
 
+/**
+ * What takes focus, by Tab or by the arrows of a list it roves in, and so is
+ * heard with its description; anything else is only walked by a reader's
+ * cursor, which hears none.
+ */
+const TAKES_FOCUS =
+  "a[href], button, summary, input, textarea, select, [tabindex], [contenteditable='true']";
+
+/** What holds no words, so a hint over it is told as its description even where a reader only walks over it. */
+const HOLDS_NO_WORDS = "img, svg, br, hr, wbr";
+
+/** What a name is compared by: its letters alone, as a path cut into a file and its lines still says both. */
+const SPACING = /\s+/gu;
+
+/** How a reader hears a hint's words: as its control's description, spoken at the end of a control that takes no focus, as words it owns, or not at all where the control's own name already says them. */
+const HEARD = {
+  DESCRIBED: "described",
+  SPOKEN: "spoken",
+  NAMED: "named",
+} as const;
+
+type Heard = (typeof HEARD)[keyof typeof HEARD];
+
 /** What carries a context menu, whose long press is the menu's rather than a hint's (`useMenu`'s `contextMenu`). */
 const LONG_PRESS_MENU = "[data-long-press]";
 
@@ -158,9 +191,10 @@ const cardDoors = new WeakMap<HTMLElement, () => void>();
 /** Until when a newly rested-on control shows its pill at once: the window's one warm spell. */
 let warmUntil = 0;
 
-/** A tooltip standing in the window: its id, the way to take it down, the row its card was hung from, and whether a node stands on its card. */
+/** A tooltip standing in the window: its id, the control it hangs from, the way to take it down, the row its card was hung from, and whether a node stands on its card. */
 interface Standing {
   readonly id: string;
+  readonly anchor: HTMLElement;
   readonly hide: () => void;
   /** The row the card was hung from, whose other controls raise nothing of their own while it stands. */
   readonly region: HTMLElement | undefined;
@@ -263,19 +297,18 @@ interface AnchorProps {
   onTouchEnd?: TouchEventHandler<HTMLElement> | undefined;
   onFocus?: FocusEventHandler<HTMLElement> | undefined;
   onBlur?: FocusEventHandler<HTMLElement> | undefined;
+  "aria-owns"?: string | undefined;
   ref?: Ref<HTMLElement> | undefined;
 }
 
 /**
  * A pill standing: the control it names, the row a card hung from it hangs
- * beside, whether its label says more than the control's own name,
- * whether a finger opened it, by a tap or a long press, rather than a
+ * beside, whether a finger opened it, by a tap or a long press, rather than a
  * pointer resting or the keyboard, and whether the keyboard entered its card.
  */
 interface Shown {
   anchor: HTMLElement;
   region: HTMLElement | undefined;
-  describes: boolean;
   touched: boolean;
   entered: boolean;
 }
@@ -324,6 +357,15 @@ export function useHintRest(): HintRest {
   return useMemo(() => ({ rest, stop }), [rest, stop]);
 }
 
+/**
+ * The control the standing hint `node` stands on hangs from, as a menu traces
+ * a press on an item's card back to its item, the topmost where cards hang
+ * over one another; none where `node` stands on no hint.
+ */
+export function hintedControlOf(node: Node): HTMLElement | undefined {
+  return standing.findLast((each) => each.holds(node))?.anchor;
+}
+
 /** The chord as `aria-keyshortcuts` spells it, for a control that shows its shortcut without a tooltip. */
 export function commandKeyshortcuts(command: KeyedCommand): string {
   return shortcutAria(APP_SHORTCUTS[command].chord);
@@ -342,6 +384,18 @@ export function showDetailsFrom(from: HTMLElement | null | undefined): (() => vo
     if (door !== undefined) return door;
   }
   return undefined;
+}
+
+/**
+ * How a reader hears `label` over `element`: never twice, so not at all where
+ * its `aria-label`, or else its words, already say it, and spoken at its end
+ * where it takes no focus and holds words.
+ */
+function heardOver(element: HTMLElement, label: string): Heard {
+  const name = element.getAttribute("aria-label") ?? element.textContent ?? "";
+  if (name.replace(SPACING, "").includes(label.replace(SPACING, ""))) return HEARD.NAMED;
+  const spoken = !element.matches(TAKES_FOCUS) && !element.matches(HOLDS_NO_WORDS);
+  return spoken ? HEARD.SPOKEN : HEARD.DESCRIBED;
 }
 
 /** Hands `node` to a ref of any shape, as a control's own ref is handed beside the tooltip's. */
@@ -411,12 +465,14 @@ function Hint({
  * adds its chord to the pill and to the control's `aria-keyshortcuts`, and
  * `chord` does the same for a key the control's own surface answers rather
  * than the window, as the picture viewer's bare = and − do. The
- * pill describes the control only where its label is not already the
- * control's own name, so a reader is not told the same word twice. With no
+ * label describes the control from its first render, whether or not the pill
+ * stands, only where the control's own name does not already say it, so a
+ * reader is not told the same words twice, and is spoken at the end of a
+ * control that takes no focus, which a reader hears no description of. With no
  * label it raises no pill, so a control whose hint comes and goes keeps its
  * place, and its focus, while it does. `card`, while given, is drawn in the
- * pill's place, and always describes the control, since it says more than
- * the control's name; `cardBeside` hangs it past the control's end rather
+ * pill's place, its label, the card's one-line summary, heard as the pill's
+ * is; `cardBeside` hangs it past the control's end rather
  * than under it, as a list row's card hangs, or before its start where the
  * window ends past the control. A card's buttons and links
  * take it down once chosen; ⌥↓ on the control opens its card and takes
@@ -506,11 +562,11 @@ export function Tooltip({
     const beneath = standing.findLastIndex((each) => each.id !== id && each.holds(anchor));
     takeDownOver(beneath + 1, id);
     unstack(id);
-    const name = anchor.getAttribute("aria-label") ?? anchor.textContent?.trim();
     const row = region();
-    setShown({ anchor, region: row, describes: carded || name !== label, touched, entered });
+    setShown({ anchor, region: row, touched, entered });
     standing.push({
       id,
+      anchor,
       hide,
       region: row,
       holds: (node) => pillElement.current?.contains(node) === true,
@@ -648,6 +704,23 @@ export function Tooltip({
     [ownRef, learn],
   );
 
+  // How a reader hears the label, read off the control once it is drawn and
+  // again as it draws anew, ahead of any focus landing on it.
+  const wordsId = useId();
+  const [heard, setHeard] = useState<Heard>(HEARD.DESCRIBED);
+  useLayoutEffect(() => {
+    if (label === undefined) return;
+    // Note that a control the tooltip hands no ref is found by the
+    // description it was first drawn with, which every control starts on.
+    let element = control.current;
+    if (element === null || !element.isConnected) {
+      element = document.querySelector<HTMLElement>(`[aria-describedby~="${wordsId}"]`);
+    }
+    if (element === null) return;
+    learn(element);
+    setHeard(heardOver(element, label));
+  });
+
   // While a pill stands, the window's own movements take it down. A key is
   // a press too, Escape among them, and the key is still the control's or
   // the window's: the pill is no layer of its own to take one. Only a card
@@ -767,8 +840,18 @@ export function Tooltip({
   ]
     .filter((each) => each !== undefined && each !== "")
     .join(" ");
+  const described = label !== undefined && heard === HEARD.DESCRIBED;
+  // Note that the control's own description is kept, ahead of the label.
+  const describedBy = [own["aria-describedby"], described ? wordsId : undefined]
+    .filter((each) => each !== undefined && each !== "")
+    .join(" ");
+  const spoken = label !== undefined && heard === HEARD.SPOKEN;
+  const owns = [own["aria-owns"], spoken ? wordsId : undefined]
+    .filter((each) => each !== undefined && each !== "")
+    .join(" ");
   const anchor = cloneElement(children, {
-    ...(shown?.describes && label !== undefined ? { "aria-describedby": id } : undefined),
+    ...(describedBy === "" ? undefined : { "aria-describedby": describedBy }),
+    ...(owns === "" ? undefined : { "aria-owns": owns }),
     ...(keyshortcuts === "" ? undefined : { "aria-keyshortcuts": keyshortcuts }),
     // Note that only an element of the page's own is handed a ref, because a component may spread what it is handed over a ref of its own, as a chip's link address is.
     ...(typeof children.type === "string" ? { ref: anchorRef } : undefined),
@@ -842,6 +925,7 @@ export function Tooltip({
   return (
     <>
       {anchor}
+      {described || spoken ? <TooltipWords id={wordsId} words={label} spoken={spoken} /> : null}
       {!pill.mounted || drawn === undefined ? null : (
         <Hint
           id={id}
