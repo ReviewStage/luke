@@ -9,7 +9,8 @@ import { CODE_ROW, CodeCard, type CodeRow } from "./code-card.js";
  * code-card.test.ts -- a code card names its lines in its header with a
  * Copy named "Copy code"; a block over 40 lines shows its first 40 over
  * "Show all", which shows the rest and then offers "Show less"; Copy copies
- * the whole block however it stands; and the lines the host coloured keep
+ * the whole block however it stands, and the rest, drawn hidden until
+ * found, shows when a find's match lands in it; and the lines the host coloured keep
  * their runs' colours, cut as the block is. A block drawn as rows tints each
  * by what it does; one may copy other words than it shows; and one whose
  * body the caller draws keeps the header, the Copy of the lines it names,
@@ -41,10 +42,12 @@ function block(count: number): string {
   return Array.from({ length: count }, (_, at) => `const line${at + 1} = ${at + 1};`).join("\n");
 }
 
-/** The lines the card shows now. */
+/** The lines the card shows now, less what it holds `hidden` and the newline that closes the last. */
 function shownLines(): string[] {
-  const body = document.querySelector("pre") ?? expect.fail("No code body");
-  return (body.textContent ?? "").split("\n");
+  const body = document.querySelector("pre")?.cloneNode(true);
+  if (!(body instanceof Element)) return expect.fail("No code body");
+  for (const hidden of body.querySelectorAll("[hidden]")) hidden.remove();
+  return (body.textContent ?? "").replace(/\n$/u, "").split("\n");
 }
 
 function buttonNamed(name: string): HTMLButtonElement | undefined {
@@ -78,6 +81,21 @@ test("Show all reveals the rest of the block, and Show less cuts it again", () =
   const code = block(60);
   draw(createElement(CodeCard, { title: "typescript", code, copy: noCopy }));
   press("Show all");
+  expect(shownLines()).toEqual(code.split("\n"));
+  expect(buttonNamed("Show less")?.getAttribute("aria-expanded")).toBe("true");
+  press("Show less");
+  expect(shownLines()).toHaveLength(40);
+});
+
+test("a cut block's rest is drawn hidden until found, and a match landing there shows it whole", () => {
+  const code = block(60);
+  draw(createElement(CodeCard, { title: "typescript", code, copy: noCopy }));
+  const rest = document.querySelector("pre [hidden]") ?? expect.fail("No hidden rest");
+  expect(rest.getAttribute("hidden")).toBe("until-found");
+  expect(rest.textContent?.split("\n")).toEqual(code.split("\n").slice(40));
+  act(() => {
+    rest.dispatchEvent(new Event("beforematch", { bubbles: true }));
+  });
   expect(shownLines()).toEqual(code.split("\n"));
   expect(buttonNamed("Show less")?.getAttribute("aria-expanded")).toBe("true");
   press("Show less");
@@ -128,7 +146,9 @@ test("a block drawn as rows tints each row by what it does, cut at 40 like any b
     .split("\n")
     .map((_, at) => (at % 2 === 0 ? CODE_ROW.ADDED : CODE_ROW.REMOVED));
   draw(createElement(CodeCard, { title: "diff", code, rows, copy: noCopy }));
-  const shown = [...document.querySelectorAll("pre [data-row]")];
+  const shown = [...document.querySelectorAll("pre [data-row]")].filter(
+    (row) => row.closest("[hidden]") === null,
+  );
   expect(shown).toHaveLength(40);
   expect(shown.slice(0, 2).map((row) => row.getAttribute("data-row"))).toEqual([
     "added",
