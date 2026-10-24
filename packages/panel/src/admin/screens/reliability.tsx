@@ -61,6 +61,7 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
+import { connectionWord, INSTALLATION_LABEL } from "../status-words.js";
 import { useAdminRead } from "../use-admin-read.js";
 
 /**
@@ -109,12 +110,12 @@ const AUTOMATION_REASON_LABEL = {
   [AUTOMATION_RUN_REASON.CREATOR_LEFT]: "Creator left workspace",
   [AUTOMATION_RUN_REASON.NO_REPOSITORY]: "No repository",
   [AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE]: "Repository unreachable",
-  [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "GitHub sign-in lapsed",
+  [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "GitHub sign-in expired",
   [AUTOMATION_RUN_REASON.MODEL]: "Model no longer offered",
   [AUTOMATION_RUN_REASON.CREDENTIAL_MISSING]: "No credential connected",
   [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Agents unreachable",
   [AUTOMATION_RUN_REASON.REPOSITORY_CHANGED]: "Repository changed",
-  [AUTOMATION_RUN_REASON.PAUSED]: "Paused before start",
+  [AUTOMATION_RUN_REASON.PAUSED]: "Turned off",
   [AUTOMATION_RUN_REASON.MISSED]: "Missed its hour",
   [AUTOMATION_RUN_REASON.AGENT_GONE]: "Agent gone",
   [AUTOMATION_RUN_REASON.SAME_SUBJECT]: "Same issue in cooldown",
@@ -123,7 +124,7 @@ const AUTOMATION_REASON_LABEL = {
 const NO_REASON_LABEL = "No reason recorded";
 
 const AGENT_FAILURES_SERIES: readonly BreakdownSeries[] = [
-  { key: "count", label: "Failed runs", color: "var(--luke-color-chart-2)" },
+  { key: "count", label: "Failed runs", color: "var(--luke-color-danger)" },
 ];
 
 const AUTOMATION_REASONS_SERIES: readonly BreakdownSeries[] = [
@@ -153,9 +154,9 @@ function problemLabel(problem: AdminAttentionProblem): string {
     case ADMIN_ATTENTION_KIND.PROVIDER_KEY:
       return `${KEY_PROVIDER_LABEL[problem.provider]} key · ${KEY_STATUS_LABEL[problem.status]}`;
     case ADMIN_ATTENTION_KIND.INTEGRATION:
-      return `${INTEGRATION_NAME[problem.provider]} · ${problem.status}`;
+      return `${INTEGRATION_NAME[problem.provider]} · ${connectionWord(problem.status)}`;
     case ADMIN_ATTENTION_KIND.GITHUB_INSTALLATION:
-      return `GitHub App · ${problem.status}`;
+      return `GitHub App · ${INSTALLATION_LABEL[problem.status]}`;
   }
 }
 

@@ -5,7 +5,6 @@ import type {
   AdminWorkspaceRow,
 } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
-import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
@@ -23,7 +22,6 @@ import {
   SearchField,
   STATUS_TONE,
   Stack,
-  type StatusTone,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -44,6 +42,12 @@ import {
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
+import {
+  connectionTone,
+  connectionWord,
+  INSTALLATION_LABEL,
+  INSTALLATION_TONE,
+} from "../status-words.js";
 import { useAdminRead } from "../use-admin-read.js";
 
 /**
@@ -79,19 +83,6 @@ const WORKSPACE_COLUMN = {
 } as const;
 
 type WorkspaceColumnKey = (typeof WORKSPACE_COLUMN)[keyof typeof WORKSPACE_COLUMN];
-
-/** The tone each installation status is drawn in: working, held, or gone. */
-const INSTALLATION_TONE = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: STATUS_TONE.COMPLETE,
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: STATUS_TONE.ATTENTION,
-  [GITHUB_INSTALLATION_STATUS.DELETED]: STATUS_TONE.NEUTRAL,
-} as const satisfies Record<AdminWorkspaceInstallation["status"], StatusTone>;
-
-const INSTALLATION_LABEL = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: "Active",
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: "Suspended",
-  [GITHUB_INSTALLATION_STATUS.DELETED]: "Uninstalled",
-} as const satisfies Record<AdminWorkspaceInstallation["status"], string>;
 
 function InstallationsCell({
   installations,
@@ -136,17 +127,10 @@ function IntegrationsCell({
   return (
     <Inline gap={GAP.ICON}>
       {integrations.map((integration) => (
-        <Badge
-          key={integration.provider}
-          tone={
-            integration.status === INTEGRATION_ROW_STATUS.EXPIRED
-              ? STATUS_TONE.ATTENTION
-              : STATUS_TONE.NEUTRAL
-          }
-        >
-          {integration.status === INTEGRATION_ROW_STATUS.EXPIRED
-            ? `${INTEGRATION_NAME[integration.provider]} · expired`
-            : INTEGRATION_NAME[integration.provider]}
+        <Badge key={integration.provider} tone={connectionTone(integration.status)}>
+          {integration.status === INTEGRATION_ROW_STATUS.CONNECTED
+            ? INTEGRATION_NAME[integration.provider]
+            : `${INTEGRATION_NAME[integration.provider]} · ${connectionWord(integration.status)}`}
         </Badge>
       ))}
     </Inline>

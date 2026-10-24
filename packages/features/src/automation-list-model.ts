@@ -134,8 +134,8 @@ function agentLine(
     : standing;
 }
 
-/** Where a started run's agent stands, as its row's line says it. */
-const AGENT_STATUS_WORDS = {
+/** Where a started run's agent stands, as its row's line says it; the admin pages say an agent's status in these words too. */
+export const AGENT_STATUS_WORDS = {
   [CODING_AGENT_STATUS.STARTING]: "Starting…",
   [CODING_AGENT_STATUS.RUNNING]: "Working",
   [CODING_AGENT_STATUS.COMPLETED]: "Finished",
