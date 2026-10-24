@@ -20,6 +20,7 @@ import {
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText } from "@luke/features/time-format";
+import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -509,7 +510,7 @@ function ListPage({
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const now = useMinute();
   const workspace = tasks.workspace;
-  const { read, reload, toggle, remove } = automations;
+  const { read, refreshFailed, reload, toggle, remove } = automations;
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   const openSuggested = (preset: AutomationPresetName) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
@@ -596,6 +597,8 @@ function ListPage({
         )
       }
     >
+      {/* A refresh that failed after the list was read leaves it drawn, with a line over it. */}
+      {refreshFailed ? <ErrorState onRetry={reload}>{REFRESH_FAILED_WORDS}</ErrorState> : null}
       {/* Note that a list with none is ready rather than empty, because the suggestions under its empty state are content. */}
       {groups.length === 0 ? (
         <div className="automations-empty">

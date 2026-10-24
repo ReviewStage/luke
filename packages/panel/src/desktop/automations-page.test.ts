@@ -829,6 +829,29 @@ test("a list that could not be read says so, and Retry reads it again", async ()
   assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
 });
 
+test("a push that fails over a list already read keeps its rows under Could not refresh and Retry, and Retry reads the list again", async () => {
+  standing = [DIGEST];
+  const page = mount();
+  await settle();
+
+  act(() => followers[0]?.push({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }));
+  await settle();
+
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
+  const note = page.querySelector('[role="alert"]');
+  assert.match(note?.textContent ?? "", /Could not refresh/u);
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  const retry = [...(note?.querySelectorAll("button") ?? [])].find(
+    (button) => button.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  await settle();
+
+  assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
+  assert.equal(page.querySelector('[role="alert"]'), null, "the line goes once the list is read");
+});
+
 test("with no automations the page says what one is, and with no workspace listed it asks for none", async () => {
   standing = [];
   const page = mount();
