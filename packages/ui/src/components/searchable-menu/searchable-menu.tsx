@@ -365,7 +365,7 @@ export function MenuRowList({
           <Fragment key={first}>
             {section.heading === undefined ? null : (
               <div className="luke-searchable-menu-heading" aria-hidden="true">
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.GROUP}>
                   {section.heading}
                 </Text>
               </div>
