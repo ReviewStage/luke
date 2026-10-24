@@ -307,18 +307,21 @@ export function useBlockPicker({
       bottom: said.trigger.rect.bottom + shift,
     };
   };
-  const menu = !open ? null : (
-    <RectFloat anchor={slash} side={POPOVER_SIDE.BELOW}>
-      <BlockMenu
-        id={listId}
-        groups={groups.map((group) => ({
-          label: group.label,
-          rows: group.entries.map((entry) => entry.row),
-        }))}
-        active={at}
-        onActiveChange={moveTo}
-        onChoose={(row) => choose(entries.findIndex((entry) => entry.row === row))}
-      />
+  // The menu fades as it closes, drawing the rows it last showed.
+  const menu = (
+    <RectFloat open={open} anchor={slash} side={POPOVER_SIDE.BELOW}>
+      {!open ? null : (
+        <BlockMenu
+          id={listId}
+          groups={groups.map((group) => ({
+            label: group.label,
+            rows: group.entries.map((entry) => entry.row),
+          }))}
+          active={at}
+          onActiveChange={moveTo}
+          onChoose={(row) => choose(entries.findIndex((entry) => entry.row === row))}
+        />
+      )}
     </RectFloat>
   );
 

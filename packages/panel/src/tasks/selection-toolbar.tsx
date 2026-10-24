@@ -186,6 +186,7 @@ export function useSelectionToolbar({
   const drawnToolbar =
     !standing || format === undefined ? null : (
       <RectFloat
+        open
         anchor={coarse ? () => pastHandle(words()) : words}
         side={coarse ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE}
       >
@@ -201,7 +202,7 @@ export function useSelectionToolbar({
   const href = linking?.href;
   const drawnField =
     linking === undefined ? null : (
-      <RectFloat anchor={words} side={POPOVER_SIDE.BELOW}>
+      <RectFloat open anchor={words} side={POPOVER_SIDE.BELOW}>
         <LinkField
           ref={field}
           href={href}

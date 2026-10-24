@@ -13,6 +13,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
 import { useSideBundles } from "../bundle-loader.js";
 import type { FileTreeHandle, ReadFolder, TreeStanding } from "../file-tree/contract.js";
+import { useHeldThroughExit } from "../use-held-through-exit.js";
 import { FileTreeStage, TREE_READING } from "./file-tree-pane.js";
 
 /**
@@ -81,20 +82,26 @@ function fromRoot(folder: string, path: string): string {
  * `RectFloat`), as tall as the rows it shows up to its bound, its rows
  * scrolling within. It closes as a menu does: Escape, which hands the
  * keyboard back to the crumb, a press elsewhere, which the layer hears, or
- * the window losing the keyboard or changing its size.
+ * the window losing the keyboard or changing its size; and it fades out as
+ * it closes, as a menu does, its owner holding it drawn until it is gone.
  */
 function CrumbTree({
   label,
   opened,
+  open,
   listFolder,
   onOpen,
   onClose,
+  onExited,
 }: {
   label: string;
   opened: Opened;
+  /** Whether it stands; closed, it fades out before its owner lets go of it. */
+  open: boolean;
   listFolder: ReadFolder;
   onOpen: (path: string, newTab: boolean) => void;
   onClose: (returnFocus: boolean) => void;
+  onExited: () => void;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().fileTree);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -167,6 +174,8 @@ function CrumbTree({
   // is what closes the tree it opened.
   return (
     <RectFloat
+      open={open}
+      onExited={onExited}
       anchor={() => opener.getBoundingClientRect()}
       side={POPOVER_SIDE.BELOW}
       onPressAway={() => latest.current.onClose(false)}
@@ -216,6 +225,8 @@ export function FileBreadcrumbs({
   const [asked, setOpened] = useState<Opened | undefined>(undefined);
   // A tree opened over another file, the tab having moved on, is let go.
   const opened = asked?.path === path ? asked : undefined;
+  // The tree closed is held drawn through its fade, and let go once it is gone.
+  const { held, onExited } = useHeldThroughExit(opened);
 
   const close = (returnFocus: boolean) => {
     if (returnFocus) opened?.opener.focus();
@@ -291,14 +302,16 @@ export function FileBreadcrumbs({
   return (
     <>
       <Breadcrumbs label="Path" crumbs={crumbs} />
-      {opened === undefined ? null : (
+      {held === undefined ? null : (
         <CrumbTree
-          key={opened.at}
-          label={opened.folder === "" ? repository : opened.folder}
-          opened={opened}
+          key={held.at}
+          label={held.folder === "" ? repository : held.folder}
+          opened={held}
+          open={opened !== undefined}
           listFolder={listFolder}
           onOpen={onOpen}
           onClose={close}
+          onExited={onExited}
         />
       )}
     </>
