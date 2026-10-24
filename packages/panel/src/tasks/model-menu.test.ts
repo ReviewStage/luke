@@ -15,10 +15,11 @@ import { ModelMenu } from "./model-menu.js";
 /**
  * model-menu.test.ts -- a model no subscription or API key of the account's
  * pays for is never a dead row: its pick lands on its harness's row in
- * Settings › Agents rather than choosing it, and where the choice standing
- * is such a model, as a new account's Claude default is on an OpenAI key
- * alone, the menu says it cannot run and offers the same Connect. Synthetic
- * catalog.
+ * Settings › Agents rather than choosing it, and where the Start button's
+ * choice is such a model, as a new account's Claude default is on an OpenAI
+ * key alone, the menu says it cannot run and offers the same Connect; a
+ * running agent's chip, which its starter's credentials pay for, says
+ * nothing of it. Synthetic catalog.
  */
 
 declare global {
@@ -67,8 +68,19 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The menu open on `chosen`, recording where Settings opened, what it chose, and whether it asked to close. */
-function open(chosen: ModelChoice): {
+/** What owns the menu: the Start button, whose choice a new agent starts on, or a running agent's chip, which shows its plan. */
+const OWNER = { START: "start", CHIP: "chip" } as const;
+
+type Owner = (typeof OWNER)[keyof typeof OWNER];
+
+/** The words a ChatGPT-paid agent's chip hands the menu's last line. */
+const PLAN_NOTE = "Using ChatGPT plan";
+
+/** The menu open on `chosen` under `owner`, recording where Settings opened, what it chose, and whether it asked to close. */
+function open(
+  chosen: ModelChoice,
+  owner: Owner = OWNER.START,
+): {
   menu: HTMLElement;
   opened: SettingsLink[];
   chose: ModelChoice[];
@@ -98,6 +110,7 @@ function open(chosen: ModelChoice): {
             closes += 1;
           },
           onLeave: () => undefined,
+          ...(owner === OWNER.START ? { startsNew: true } : { planNote: PLAN_NOTE }),
         }),
       ),
     ),
@@ -146,6 +159,14 @@ test("a choice nothing pays for says it cannot run under the pinned rows, and th
 
   assert.deepEqual(opened, [CLAUDE_ROW]);
   assert.deepEqual(chose, []);
+});
+
+test("a running agent's chip says nothing of connecting for a model the reader's account lacks, since its starter's credentials pay, and keeps its plan's line", () => {
+  const { menu } = open(OPUS, OWNER.CHIP);
+
+  const foot = menu.querySelector<HTMLElement>(".luke-searchable-menu-foot")?.textContent ?? "";
+  assert.doesNotMatch(foot, /cannot run|Connect/u);
+  assert.match(foot, /Using ChatGPT plan/u);
 });
 
 test("a choice something pays for says nothing of connecting", () => {

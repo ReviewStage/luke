@@ -61,10 +61,13 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * leaves the menu open. A model whose provider no subscription or API key
  * of the account's pays for says "Connect Claude" or "Connect Codex" at its
  * row's end, and its pick closes the menu and lands on that harness's row
- * in Settings › Agents rather than choosing it; where the choice standing
- * is such a model, as a new account's Claude default is on an OpenAI key
- * alone, a Connect row heads the pinned rows and the last line says why
- * the choice cannot run, in place of the plan that no longer pays. The id a choice names is
+ * in Settings › Agents rather than choosing it. On the Start button's
+ * menu, whose choice a new agent starts on and the reader's own
+ * credentials pay for, a choice that is such a model, as a new account's
+ * Claude default is on an OpenAI key alone, has a Connect row head the
+ * pinned rows and the last line say why it cannot run; a running agent's
+ * chip says nothing of it, since the catalog marks what the reader's
+ * account lacks and the agent runs on what its starter's pays. The id a choice names is
  * the catalog's own, the fast version's where Fast is on, so the service
  * checks it as it checks any. What the owner does with a choice is its
  * own: the Start button starts on it, the chip
@@ -159,6 +162,8 @@ export function ModelMenu(props: {
   footNote?: string | undefined;
   /** One muted line under that: the plan that pays and where to manage it, on a ChatGPT-paid agent's chip; nothing elsewhere. */
   planNote?: React.ReactNode;
+  /** Whether the choice is what a new agent would start on, on the reader's own credentials, so one nothing of theirs pays for says it cannot run: the Start button's. */
+  startsNew?: boolean | undefined;
   /** The menu is on its way out (`SearchableMenu`'s). */
   leaving?: boolean | undefined;
   /** Hands the menu's element to the hold its owner draws it through its exit with. */
@@ -238,7 +243,9 @@ export function ModelMenu(props: {
   };
 
   const unrunnable =
-    models !== undefined && chosen !== undefined ? unrunnableChoice(models, chosen) : undefined;
+    props.startsNew === true && models !== undefined && chosen !== undefined
+      ? unrunnableChoice(models, chosen)
+      : undefined;
 
   /** The press that lands on the harness's row in Settings, the menu closed first. */
   const connect = (failure: ConnectFailure): void => {
