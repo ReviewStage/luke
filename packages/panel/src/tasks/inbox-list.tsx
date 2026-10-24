@@ -25,6 +25,7 @@ import {
   joinRefs,
   LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
+  LIST_MOTION_WAY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
@@ -91,7 +92,15 @@ import {
   UsersIcon,
 } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -889,23 +898,28 @@ function windowEntries(
   return [view, whose, looks];
 }
 
-/**
- * The chip over the list while Whose leaves out anyone's items: Me by the
- * reader's face, or the teammate's face and name, and a × that lists
- * everyone's again (`@luke/ui`'s removable filter chip, as the sidebar's
- * Created by stands over its tasks).
- */
-function WhoseChip({
-  whose,
-  readerId,
-}: {
-  whose: InboxWhoseChoice;
-  readerId: string | undefined;
-}): React.JSX.Element | null {
-  const { members, former, readerId: known } = useMemberDirectory();
+/** The key the chip over the list is followed by, as it arrives and leaves. */
+const WHOSE_CHIP_KEY = "whose";
+
+/** The chip over the list as last drawn, so it leaves looking as it did: its mark, if the person is known, and its words. */
+interface WhoseChipEntry {
+  readonly key: typeof WHOSE_CHIP_KEY;
+  readonly actor: Actor | undefined;
+  readonly words: string;
+}
+
+/** What a press on the chip leaving does, out of reach as it is: nothing. */
+function stays(): void {}
+
+/** The chip Whose calls for, Me by the reader's face, or the teammate's face and name; none while the list holds everyone's. */
+function whoseChipEntries(
+  chosen: InboxWhoseChoice["whose"],
+  directory: ReturnType<typeof useMemberDirectory>,
+  readerId: string | undefined,
+): WhoseChipEntry[] {
+  if (chosen.kind === INBOX_WHOSE.EVERYONE) return [];
+  const { members, former, readerId: known } = directory;
   const reader = known ?? readerId;
-  const chosen = whose.whose;
-  if (chosen.kind === INBOX_WHOSE.EVERYONE) return null;
   const me = members?.find((member) => member.userId === reader);
   const actor: Actor | undefined =
     chosen.kind === INBOX_WHOSE.PERSON
@@ -913,23 +927,81 @@ function WhoseChip({
       : me === undefined
         ? undefined
         : memberActor(me, reader);
+  const words =
+    chosen.kind === INBOX_WHOSE.MINE
+      ? PEOPLE_FILTER_WORDS.ME
+      : actor === undefined
+        ? chosen.name
+        : actorName(actor);
+  return [{ key: WHOSE_CHIP_KEY, actor, words }];
+}
+
+/**
+ * The chip itself. Note that this is its own component under the line's
+ * `ListMotion`, because `useLeaving` finds the motion through the context
+ * the motion provides.
+ */
+function WhoseChipLine({
+  line,
+  whose,
+  readerId,
+}: {
+  line: RefObject<HTMLDivElement | null>;
+  whose: InboxWhoseChoice;
+  readerId: string | undefined;
+}): React.JSX.Element {
+  const directory = useMemberDirectory();
+  const chosen = whose.whose;
+  // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
+  const listed = useMemo(
+    () => whoseChipEntries(chosen, directory, readerId),
+    [chosen, directory, readerId],
+  );
+  const drawn = useLeaving(listed, (entry) => entry.key);
+  // Note that the box around the row stands hidden while the list holds everyone's, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
   return (
-    <div className="inbox-tasks-chips">
-      <Chip
-        look={CHIP_LOOK.FILTER}
-        removeLabel={CLEAR_WHOSE}
-        onRemove={() => whose.onWhose(EVERYONES)}
-      >
-        {actor === undefined ? <UserIcon /> : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
-        <ChipName>
-          {chosen.kind === INBOX_WHOSE.MINE
-            ? PEOPLE_FILTER_WORDS.ME
-            : actor === undefined
-              ? chosen.name
-              : actorName(actor)}
-        </ChipName>
-      </Chip>
+    <div ref={line} hidden={drawn.length === 0}>
+      <div className="inbox-tasks-chips" {...motionRows()}>
+        {drawn.map(({ key, value, leaving }) => (
+          <Chip
+            key={key}
+            motionKey={key}
+            look={CHIP_LOOK.FILTER}
+            removeLabel={CLEAR_WHOSE}
+            onRemove={leaving ? stays : () => whose.onWhose(EVERYONES)}
+          >
+            {value.actor === undefined ? (
+              <UserIcon />
+            ) : (
+              <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
+            )}
+            <ChipName>{value.words}</ChipName>
+          </Chip>
+        ))}
+      </div>
     </div>
+  );
+}
+
+/**
+ * The chip over the list while Whose leaves out anyone's items: Me by the
+ * reader's face, or the teammate's face and name, and a × that lists
+ * everyone's again (`@luke/ui`'s removable filter chip, as the sidebar's
+ * Created by stands over its tasks). It scales in as Whose chooses someone
+ * and out as the × lifts it, as the Tasks page's filter chips do.
+ */
+function WhoseChip({
+  whose,
+  readerId,
+}: {
+  whose: InboxWhoseChoice;
+  readerId: string | undefined;
+}): React.JSX.Element {
+  const line = useRef<HTMLDivElement | null>(null);
+  return (
+    <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
+      <WhoseChipLine line={line} whose={whose} readerId={readerId} />
+    </ListMotion>
   );
 }
 

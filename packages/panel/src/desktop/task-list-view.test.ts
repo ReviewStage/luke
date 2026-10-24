@@ -9,13 +9,14 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { restOn } from "../testing/hint-rest.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -402,6 +403,53 @@ test("Created by a teammate lists only theirs, named in the chip, and the choice
   );
   assert.equal(chipWords(sidebar), "Created by Charles Pan");
 });
+
+test("a filter's chip scales in as it is chosen and out as it is lifted, drawn on out of reach until its exit has played, the line standing hidden between", async () => {
+  const motions = playListMotions();
+  // Note that a row arriving rides the quick beat and the stagger, which the list's tokens leave out.
+  const tokens = { "--luke-duration-quick": "140ms", "--luke-row-stagger": "32ms" };
+  for (const [name, value] of Object.entries(tokens)) {
+    document.documentElement.style.setProperty(name, value);
+  }
+  onTestFinished(() => {
+    motions.remove();
+    for (const name of Object.keys(tokens)) document.documentElement.style.removeProperty(name);
+  });
+  const sidebar = await mountRead(ACME);
+  const line = () => sidebar.querySelector<HTMLElement>(".sidebar-view-chips")?.parentElement;
+  assert.equal(line()?.hidden, true, "the line stands ready, hidden");
+
+  choose(sidebar, "Created by", "Charles Pan");
+  const chosen = sidebar.querySelector("[data-motion-key='createdBy']");
+  assert.equal(line()?.hidden, false);
+  assert.ok(scaled(motions.played, chosen), "the chip scales in");
+
+  const lift = chosen?.querySelector("button");
+  act(() => (lift ?? assert.fail("a way to lift it")).click());
+  const leaving = sidebar.querySelector("[data-motion-key='createdBy']");
+  assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn on while it goes");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach");
+  assert.equal(leaving?.querySelector(".luke-chip-name")?.textContent, "Created by Charles Pan");
+  assert.ok(scaled(motions.played, leaving), "it scales out");
+
+  act(() => {
+    for (const each of motions.played.splice(0)) each.finish();
+  });
+  assert.equal(sidebar.querySelector("[data-motion-key='createdBy']"), null);
+  assert.equal(line()?.hidden, true);
+});
+
+/** Whether a motion played on `element` scaled it. */
+function scaled(
+  played: readonly { element: Element; keyframes: Keyframe[] }[],
+  element: Element | null | undefined,
+): boolean {
+  return played.some(
+    (motion) =>
+      motion.element === element &&
+      motion.keyframes.some((frame) => String(frame.transform).includes("scale")),
+  );
+}
 
 test("a filter that leaves nothing says so, and Show all lists everyone's again", async () => {
   const theirs = TASKS.filter((each) => each.createdBy?.userId === CHARLES);
