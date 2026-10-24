@@ -68,14 +68,17 @@ const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
 const ALERT_TONES: ReadonlySet<ToastTone> = new Set([STATUS_TONE.DANGER]);
 
 /**
- * How long a toast stands, by what it reports: a change carried, one
- * refused, which takes longer to read and to act on, or news an agent or an
- * automation sent while the developer was looking elsewhere in the window,
- * which has the longest, since it arrives unbidden and carries a View to
- * reach for.
+ * How long a toast stands, by what it reports, and the only holds a toast
+ * names: a change carried, which is short; one carried that its Undo takes
+ * back, long enough to reach for Undo, and what any toast with an action
+ * stands for where it names no hold; one refused, which takes longer to read
+ * and to act on; or news an agent or an automation sent while the developer
+ * was looking elsewhere in the window, which has the longest, since it
+ * arrives unbidden and carries a View to reach for.
  */
 export const TOAST_HOLD = {
   DONE: Duration.seconds(3),
+  UNDO: Duration.seconds(5),
   FAILED: Duration.seconds(6),
   NEWS: Duration.seconds(8),
 } as const;
@@ -119,9 +122,6 @@ export type ToastNotice = {
       readonly persists?: never;
     }
 );
-
-/** How long a toast carrying an action stands while nobody points at it: long enough to reach for the action. */
-const ACTION_HOLD = Duration.seconds(5);
 
 /** How long a toast takes to leave, as `--luke-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
@@ -193,10 +193,10 @@ const EMPTY_STACK: ToastLine = { count: 0, shown: [], waiting: [], room: TOAST_R
 
 const toastStackAtom = Atom.keepAlive(Atom.make<ToastLine>(EMPTY_STACK));
 
-/** The hold a notice stands for: its own, its action's, or none where it persists or says work is under way. */
+/** The hold a notice stands for: its own, the Undo hold where it carries an action and names none, or none where it persists or says work is under way. */
 function holdOf(notice: ToastNotice): Duration.Duration | undefined {
   if (notice.persists === true || notice.tone === STATUS_TONE.WORKING) return undefined;
-  return notice.hold ?? ACTION_HOLD;
+  return notice.hold ?? TOAST_HOLD.UNDO;
 }
 
 /** A notice standing from `now`, as the stack's next. */
@@ -394,6 +394,22 @@ const toastLifeAtom = Atom.keepAlive(
     }),
   ),
 );
+
+/**
+ * The toast an act that happened at once says it with, so the developer can
+ * take it back: its words in the success tone, with Undo, standing for the
+ * Undo hold. Pressing Undo dismisses it, then runs `undo`. It is a notice
+ * rather than a show, so it is handed to whatever shows the act's answer:
+ * `useToast`'s function, `showToast`, or a working toast's settle.
+ */
+export function undoToast(words: string, undo: () => void): ToastNotice {
+  return {
+    words,
+    tone: STATUS_TONE.COMPLETE,
+    action: { label: UNDO_LABEL, onPress: undo },
+    hold: TOAST_HOLD.UNDO,
+  };
+}
 
 /**
  * Shows a toast from outside React, on the window's own registry, the one its
