@@ -131,7 +131,7 @@ test("code a turn showed after a call ended stands after that call's closing lin
   );
   const order = [
     ...codeTab.querySelectorAll(
-      '[data-checkpoint], [data-call-marker="start"], [data-call-ended], .code-card',
+      '[data-checkpoint], [data-call-marker="start"], [data-call-ended], .luke-code-card',
     ),
   ];
   const at = (selector: string) => {
@@ -168,7 +168,7 @@ test("code an agent showed on a turn of its own stands under that turn's divider
       onOpenFile: () => undefined,
     }),
   );
-  const order = [...codeTab.querySelectorAll("[data-checkpoint], .code-card")];
+  const order = [...codeTab.querySelectorAll("[data-checkpoint], .luke-code-card")];
   const words = order.map((element) =>
     element.matches('[data-checkpoint], [data-call-marker="start"]')
       ? (element.textContent ?? "")

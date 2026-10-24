@@ -173,30 +173,28 @@ export function TerminalTab({
             <div ref={session.screen} className="terminal-tab-screen" data-dim={String(look.dim)} />
           )}
         </div>
-        {room.drawn ? (
-          <TerminalShells
-            subject={subject}
-            models={agents.models}
-            session={{
-              ...session,
-              // A shell chosen in the list floating over the screen takes the list down, to show the shell.
-              onChoose: (id) => {
-                room.closeOver();
-                session.onChoose(id);
-              },
-              // So does a shell started there, which the screen shows.
-              onCreate: () => {
-                room.closeOver();
-                session.onCreate();
-              },
-            }}
-            onOpenAgent={onOpenAgent}
-            pane={room.beside.pane}
-            float={room.pane}
-            leaving={room.beside.leaving}
-            surfaceOpen={shown}
-          />
-        ) : null}
+        <TerminalShells
+          subject={subject}
+          models={agents.models}
+          session={{
+            ...session,
+            // A shell chosen in the list floating over the screen takes the list down, to show the shell.
+            onChoose: (id) => {
+              room.closeOver();
+              session.onChoose(id);
+            },
+            // So does a shell started there, which the screen shows.
+            onCreate: () => {
+              room.closeOver();
+              session.onCreate();
+            },
+          }}
+          onOpenAgent={onOpenAgent}
+          over={room.docked ? undefined : room.over}
+          pane={room.beside.pane}
+          leaving={room.beside.leaving}
+          surfaceOpen={shown}
+        />
       </Fill>
     </Fill>
   );

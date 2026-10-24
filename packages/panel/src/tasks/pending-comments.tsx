@@ -19,11 +19,10 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, Trash2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
-import type { HeldBodies } from "./comment-drafts.js";
-import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import { useNamer } from "./pull-request-people.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
+import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
 
 /**
  * pending-comments.tsx -- the member's own pending review comments, which nobody else sees until they submit the review, drawn as GitHub draws them: on their lines in Files changed, each marked Pending, with Edit and Delete.
@@ -50,12 +49,16 @@ export const PENDING_WORDS = {
   PENDING: "Pending",
   EDIT: "Edit",
   DELETE: "Delete",
-  SAVE: "Save",
-  SAVING: "Saving",
-  CANCEL: "Cancel",
-  FIELD: "Pending comment",
-  PLACEHOLDER: "Leave a comment…",
 } as const;
+
+/** What the edit's form is named, asks for, and says. */
+const EDIT_WORDS: ReplyFormWords = {
+  field: "Pending comment",
+  placeholder: "Leave a comment…",
+  cancel: "Cancel",
+  send: "Save",
+  sending: "Saving",
+};
 
 /** What Delete asks before it takes a pending comment out of the review. */
 const DELETE_QUESTION: DialogQuestion = {
@@ -149,72 +152,6 @@ export function PendingBadge(): React.JSX.Element {
   return <Badge tone={STATUS_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
 }
 
-/** The words being written over a pending comment's: the field, Cancel, and Save; ⌘↩ saves, Esc lets go keeping them for the next time Edit opens, and Cancel keeps nothing. */
-function EditForm({
-  draft,
-  held,
-  busy,
-  saving,
-  onSave,
-  onCancel,
-}: {
-  draft: PendingReviewComment;
-  /** The place that keeps the words written over the comment's own, from the last time Edit was open. */
-  held: HeldBodies;
-  busy: boolean;
-  saving: boolean;
-  onSave: (body: string) => void;
-  onCancel: () => void;
-}): React.JSX.Element {
-  const [body, setBody] = useState(held.of(draft.id) ?? draft.body);
-  const blank = body.trim() === "" || overCommentBound(body);
-  const write = (next: string) => {
-    setBody(next);
-    // Note that words written back to the comment's own are no edit, so none are held.
-    held.keep(draft.id, next === draft.body ? undefined : next);
-  };
-  const save = () => {
-    if (!blank && !busy) onSave(body);
-  };
-  // Note that ⌘↩ saves this comment alone, and goes no further (`comment-editor.tsx`): the Review panel around a listed comment submits the whole review on it.
-  return (
-    <div className="pull-request-thread-reply">
-      <CommentEditor
-        label={PENDING_WORDS.FIELD}
-        placeholder={PENDING_WORDS.PLACEHOLDER}
-        value={body}
-        onChange={write}
-        busy={busy}
-        focus
-        onSubmit={save}
-        onCancel={() => {
-          if (!busy) onCancel();
-        }}
-      />
-      <div className="pull-request-thread-reply-foot">
-        <Button
-          disabled={busy}
-          onClick={() => {
-            held.keep(draft.id, undefined);
-            onCancel();
-          }}
-        >
-          {PENDING_WORDS.CANCEL}
-        </Button>
-        <Button
-          variant={BUTTON_VARIANT.PRIMARY}
-          disabled={blank || (busy && !saving)}
-          busy={saving}
-          busyLabel={PENDING_WORDS.SAVING}
-          onClick={save}
-        >
-          {PENDING_WORDS.SAVE}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /**
  * One of the member's pending comments: its head, marked Pending, then its
  * words, or the field over them while Edit is open, Esc keeping what
@@ -254,12 +191,14 @@ export function PendingComment({
   const body = (
     <div className="pull-request-pending-comment">
       {editing && writing !== undefined ? (
-        <EditForm
-          draft={draft}
-          held={writing.edits}
+        <ReplyForm
+          words={EDIT_WORDS}
+          start={writing.edits.of(draft.id) ?? draft.body}
           busy={out !== undefined}
-          saving={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
-          onSave={(body) =>
+          sending={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
+          // Note that words written back to the comment's own are no edit, so none are held.
+          onWrite={(next) => writing.edits.keep(draft.id, next === draft.body ? undefined : next)}
+          onSend={(body) =>
             writes.write(
               { action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT, commentId: draft.id, body },
               () => {
@@ -268,7 +207,11 @@ export function PendingComment({
               },
             )
           }
-          onCancel={() => setEditing(false)}
+          onLeave={() => setEditing(false)}
+          onDiscard={() => {
+            writing.edits.keep(draft.id, undefined);
+            setEditing(false);
+          }}
         />
       ) : (
         words

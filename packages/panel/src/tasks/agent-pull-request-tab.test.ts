@@ -683,15 +683,15 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     /@charlespan asked\./u,
     "a mention stands as GitHub drew it",
   );
-  assert.equal(description.querySelector(".transcript-code-language")?.textContent, "ts");
+  assert.equal(description.querySelector(".luke-code-card-title")?.textContent, "ts");
   assert.equal(
-    description.querySelector(".transcript-code-body")?.textContent,
+    description.querySelector(".luke-code-card-body")?.textContent,
     "const days = 7;\n\nexport default days;",
     "a highlighted block is the window's own code block in its language, a blank line in it kept",
   );
   assert.ok(description.querySelector('input[type="checkbox"][disabled]'), "a task list stands");
   assert.equal(
-    description.querySelectorAll(".transcript-code").length,
+    description.querySelectorAll(".luke-code-card").length,
     1,
     "inline code stays inline",
   );
@@ -2999,6 +2999,31 @@ test("Review opens a panel whose choice and words are submitted for the agent as
     true,
     "a fresh review says Comment",
   );
+});
+
+test("Ctrl+Enter submits the review from its words as ⌘↩ does, and a bare Enter only adds a line", async () => {
+  const tab = await draw(controlAnswering());
+  const panel = openReview(tab);
+
+  writeReview(panel, "Looks right.");
+  pressInBox(panel, { key: "Enter" }, "Review comment");
+  await settle();
+  assert.deepEqual(changes, [], "a bare Enter sends nothing");
+
+  pressInBox(panel, { key: "Enter", ctrlKey: true }, "Review comment");
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+        event: REVIEW_EVENT.COMMENT,
+        // Note that the bare Enter left a new line open after the words.
+        body: "Looks right.\n\n",
+      },
+    ],
+  ]);
 });
 
 test("a review GitHub refuses says so in GitHub's own words inside the panel, never over the header, and the words written stand for another try", async () => {

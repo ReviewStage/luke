@@ -444,9 +444,9 @@ function TaskInboxTab({
           inbox.reading ? (
             <InboxListSkeleton />
           ) : inbox.failed && listed.length === 0 ? (
-            <div className="sidebar-note">
-              <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>
-            </div>
+            <ErrorState onRetry={inbox.onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
+              The inbox could not be read.
+            </ErrorState>
           ) : inbox.read && searched !== undefined && listed.length === 0 ? (
             <SearchEmpty searched={searched} />
           ) : inbox.read && filteredOut ? (

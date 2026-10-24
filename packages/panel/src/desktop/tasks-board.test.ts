@@ -333,7 +333,7 @@ test("a card at rest hangs its task's card", async () => {
   assert.ok(document.querySelector(".luke-tooltip-card [data-task-card]"));
 });
 
-test("the settled finished before the past week give way to a line counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
+test("the settled finished before the past week give way to a foot counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
   const board = await mountBoard();
   const done = board.querySelector<HTMLElement>('[data-task-column="done"]');
   assert.deepEqual(columns(board).slice(-2), [
@@ -341,9 +341,9 @@ test("the settled finished before the past week give way to a line counting them
     ["Canceled", []],
   ]);
   const older = [...(done?.querySelectorAll<HTMLElement>("button") ?? [])].find(
-    (button) => button.textContent === "+ 1 older",
+    (button) => button.textContent === "Show 1 more",
   );
-  act(() => (older ?? assert.fail("no older line under Done")).click());
+  act(() => (older ?? assert.fail("no Show more line under Done")).click());
   assert.deepEqual(
     displayed.map((each) => each.completed),
     [COMPLETED_WINDOW.ALL],

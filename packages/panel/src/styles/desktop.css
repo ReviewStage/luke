@@ -480,20 +480,6 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
-.sidebar-note {
-  margin: var(--luke-space-4) var(--row-inset);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* The task list's failure is a row of the section under Tasks' head: its
-   glyph where a row's glyph stands, and Retry at the end where the head's
-   own buttons stand, so Retry's glyph stands under View options'. */
-.sidebar-failure {
-  margin-inline-end: var(--luke-space-4);
-}
-
 /* The plans while the list is first read: each row a row's room around
    one block in the name's type, as far apart as the rows, so the rows land
    where the blocks stood. */
@@ -1180,12 +1166,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-medium);
 }
 
-.section-icon-note {
-  margin: var(--luke-space-8) 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
 .section-icon-resting {
   min-height: 16px;
   margin: 0;
@@ -1760,8 +1740,7 @@ ul.actor-stack {
 
 /* A webhook call's body, folded inside the card under a line of its own: a
    call's line in the muted ink, its hover fill bringing the full ink, and
-   the body as the caller sent it in the code type, broken anywhere rather
-   than run past the card. */
+   the body as the caller sent it in a code card. */
 .agent-origin-body {
   font-size: var(--luke-type-caption-size);
 }
@@ -1770,15 +1749,6 @@ ul.actor-stack {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-}
-
-.agent-origin-body-text {
-  margin: 0;
-  padding: var(--luke-space-4);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* A teammate's call at its divider: their mark and name, then when it
@@ -2449,7 +2419,7 @@ ul.actor-stack {
 }
 
 /* Under the strip, its list's head and its item's bar are the tab's own bar,
-   as tall as every other tab's (`.file-view-bar`) and on its ground, rather
+   as tall as every other tab's (`PaneBar`) and on its ground, rather
    than a top row. */
 .desktop-task-main .inbox-view .desktop-toolbar {
   min-height: var(--secondary-bar-height);
@@ -3455,15 +3425,6 @@ ul.actor-stack {
   max-width: 100%;
 }
 
-/* What stops a save stands under its row inside the card, as a Settings
-   row's refusal does, in the caption role. */
-.automation-save-refusal,
-.automation-form-problem {
-  margin: 0;
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* Choose a model hangs its menu from itself, as the agent box's model chip does. */
 .automation-model-picker {
   position: relative;
@@ -3595,29 +3556,6 @@ ul.actor-stack {
 
 .task-chat {
   flex: 1;
-}
-
-.chat-head {
-  padding-left: var(--column-inset);
-}
-
-/* A place's name is the toolbar's title, and what is said of it (a topic's
-   purpose) follows on its baseline, giving way first as the head narrows. */
-.chat-head .desktop-toolbar-heading {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-space-8);
-}
-
-.chat-head .desktop-toolbar-title {
-  min-width: 0;
-  flex: 0 1 auto;
-}
-
-.chat-head-meta {
-  display: flex;
-  min-width: 0;
-  flex: 0 1000 auto;
 }
 
 /* The place's head is a `PaneBar`, whose detail keeps its width; here it is

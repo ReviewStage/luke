@@ -2219,8 +2219,8 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   assert.ok(panel, "the panel stands beside the page");
   assert.match(panel.textContent ?? "", /src\/relay\.ts/u);
   // No File tab reads a repository no task names, so the card offers no way into one.
-  assert.ok(panel.querySelector(".code-card"), "the code's card stands");
-  assert.equal(panel.querySelector(".code-card [aria-label^='Open ']"), null);
+  assert.ok(panel.querySelector(".luke-code-card"), "the code's card stands");
+  assert.equal(panel.querySelector(".luke-code-card [aria-label^='Open ']"), null);
 });
 
 test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {

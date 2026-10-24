@@ -134,6 +134,11 @@ export function useCopyFeedback(): CopyFeedback {
   };
 }
 
+/** The copy act a `@luke/ui` copy button is handed: the words on the shell's clipboard, a refusal rejecting. */
+export function copyThroughShell(words: string): Promise<void> {
+  return appPlatform().copyText(words);
+}
+
 /** What a copy button's hint says in this state: its own label at rest. */
 export function copyHint(state: CopyState, label: string): string {
   return state === COPY_STATE.IDLE ? label : COPY_HINT[state];

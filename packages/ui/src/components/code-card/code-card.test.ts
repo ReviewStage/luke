@@ -3,14 +3,17 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { CodeCard } from "./code-card.js";
+import { CODE_ROW, CodeCard, type CodeRow } from "./code-card.js";
 
 /**
  * code-card.test.ts -- a code card names its lines in its header with a
  * Copy named "Copy code"; a block over 40 lines shows its first 40 over
  * "Show all", which shows the rest and then offers "Show less"; Copy copies
  * the whole block however it stands; and the lines the host coloured keep
- * their runs' colours, cut as the block is. Synthetic code.
+ * their runs' colours, cut as the block is. A block drawn as rows tints each
+ * by what it does; one may copy other words than it shows; and one whose
+ * body the caller draws keeps the header, the Copy of the lines it names,
+ * and the actions beside it, with no cut. Synthetic code.
  */
 
 declare global {
@@ -117,4 +120,78 @@ test("the lines the host coloured keep each run's colours, cut where the block i
   expect(keyword?.textContent).toBe("const");
   expect(keyword?.style.getPropertyValue("--luke-code-run-dark")).toBe("#ff7b72");
   expect(keyword?.style.getPropertyValue("--luke-code-run-light")).toBe("#cf222e");
+});
+
+test("a block drawn as rows tints each row by what it does, cut at 40 like any block", () => {
+  const code = block(45);
+  const rows: CodeRow[] = code
+    .split("\n")
+    .map((_, at) => (at % 2 === 0 ? CODE_ROW.ADDED : CODE_ROW.REMOVED));
+  draw(createElement(CodeCard, { title: "diff", code, rows, copy: noCopy }));
+  const shown = [...document.querySelectorAll("pre [data-row]")];
+  expect(shown).toHaveLength(40);
+  expect(shown.slice(0, 2).map((row) => row.getAttribute("data-row"))).toEqual([
+    "added",
+    "removed",
+  ]);
+  expect(shown[1]?.textContent).toBe("const line2 = 2;");
+  expect(buttonNamed("Show all")).toBeDefined();
+});
+
+test("a block may copy words other than those it shows", async () => {
+  const copied: string[] = [];
+  draw(
+    createElement(CodeCard, {
+      title: "Suggested change",
+      code: "old\nnew",
+      rows: [CODE_ROW.REMOVED, CODE_ROW.ADDED],
+      copied: "new",
+      copy: async (words: string) => {
+        copied.push(words);
+      },
+    }),
+  );
+  await act(async () => buttonNamed("Copy code")?.click());
+  expect(copied).toEqual(["new"]);
+});
+
+test("a body the caller draws stands in place of the lines, uncut, beside the header's actions and Copy of the lines it names", async () => {
+  const copied: string[] = [];
+  draw(
+    createElement(CodeCard, {
+      title: "src/seats.ts",
+      body: createElement("div", { "data-body": "" }, "drawn elsewhere"),
+      copied: "lines named",
+      actions: createElement("button", { type: "button", "aria-label": "Open file" }),
+      copy: async (words: string) => {
+        copied.push(words);
+      },
+    }),
+  );
+  expect(document.querySelector("pre")).toBeNull();
+  expect(document.querySelector("[data-body]")?.textContent).toBe("drawn elsewhere");
+  expect(buttonNamed("Show all")).toBeUndefined();
+  expect(buttonNamed("Open file")).toBeDefined();
+  await act(async () => buttonNamed("Copy code")?.click());
+  expect(copied).toEqual(["lines named"]);
+});
+
+test("a body with nothing to copy draws no Copy", () => {
+  draw(createElement(CodeCard, { title: "src/seats.ts", body: "reading", copy: noCopy }));
+  expect(buttonNamed("Copy code")).toBeUndefined();
+});
+
+test("a block drawn as rows keeps an empty last row", () => {
+  draw(
+    createElement(CodeCard, {
+      title: "Suggested change",
+      code: "old\n",
+      rows: [CODE_ROW.REMOVED, CODE_ROW.ADDED],
+      copy: noCopy,
+    }),
+  );
+  expect([...document.querySelectorAll("pre [data-row]")].map((row) => row.textContent)).toEqual([
+    "old",
+    "\n",
+  ]);
 });

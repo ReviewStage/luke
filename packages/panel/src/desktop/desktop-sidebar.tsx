@@ -20,6 +20,7 @@ import {
   ComposeIcon,
   commandKeyshortcuts,
   dropBelowStart,
+  ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
   FolderIcon,
@@ -2116,11 +2117,12 @@ function SidebarColumn({
                       </NoteLine>
                     ) : null}
                     {tasks.listFailed ? (
-                      <div className="sidebar-note sidebar-failure">
-                        <ErrorState onRetry={tasks.onRetryList}>
-                          Your tasks could not be read.
-                        </ErrorState>
-                      </div>
+                      <ErrorState
+                        onRetry={tasks.onRetryList}
+                        placement={ERROR_STATE_PLACEMENT.ROWS}
+                      >
+                        Your tasks could not be read.
+                      </ErrorState>
                     ) : null}
                     {/* The list is empty before its first read lands, so that it
               holds none says nothing until the service has answered. */}
