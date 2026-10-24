@@ -154,7 +154,7 @@ test("a row names its workspace, owner, installation, and integrations", async (
   expect(northwind).toContain("Grace Hopper");
   expect(northwind).toContain("northwindActive");
   expect(northwind).toContain("Linear");
-  expect(northwind).toContain("Notion · expired");
+  expect(northwind).toContain("Notion · Sign-in expired");
   expect(feldspar).toContain("feldspar-ioSuspended");
   expect(feldspar).toContain("None");
 });

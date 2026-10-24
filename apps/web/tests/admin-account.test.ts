@@ -308,16 +308,16 @@ test("the support sections say what the account did and what broke, by the servi
 
   const agents = rows(page, "The account's newest coding agents");
   expect(agents).toEqual([
-    "Oct 14, 8:05 AM UTC|acme/relay|anthropic/claude-opus-5.5 · high|completed|merged",
-    "Oct 13, 4:40 PM UTC|acme/web|openai/gpt-5.5 · medium · standard window|failedprovider_key|—",
+    "Oct 14, 8:05 AM UTC|acme/relay|anthropic/claude-opus-5.5 · high|Finished|Merged",
+    "Oct 13, 4:40 PM UTC|acme/web|openai/gpt-5.5 · medium · standard window|Failedprovider_key|—",
   ]);
   expect(rows(page, "The account's workspaces")).toEqual([
     "Ada's workspacePersonal|owner|1|not installed",
-    "AcmeShared workspace|member|9|active",
+    "AcmeShared workspace|member|9|Active",
   ]);
   expect(rows(page, "The account's provider keys and integration connections")).toEqual([
     "Provider key|openai|quota_exceeded|Oct 13, 4:41 PM UTC",
-    "Connection|linear|connected|Sep 2, 12:00 AM UTC",
+    "Connection|linear|Connected|Sep 2, 12:00 AM UTC",
   ]);
   expect(page.textContent).toContain("Coding agents start on anthropic/claude-opus-5.5 · high.");
   expect(page.textContent).toContain("Experiments:Chat");
