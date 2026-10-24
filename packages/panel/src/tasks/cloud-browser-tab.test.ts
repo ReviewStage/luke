@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
   BROWSER_LIVE_CLIENT,
+  BROWSER_LIVE_CLOSE_CODE,
+  BROWSER_LIVE_CLOSE_REASON,
   BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_REFUSAL,
   BROWSER_LIVE_SERVER,
@@ -629,6 +631,13 @@ test("a bar's steps say why they are off while the tab is not live, reachable by
   act(() => back().dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
   restOn(back());
   assert.equal(hint(), "Back");
+
+  // A view the relay closed as idle needs Watch again, which is not a wait.
+  act(() => back().dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
+  await act(async () => listener?.closed(BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE]));
+  await settle();
+  restOn(back());
+  assert.equal(hint(), "Back: watch again to use it");
 });
 
 test("plain words typed in a cloud tab's bar search the web, in a draft and on a live tab alike", async () => {

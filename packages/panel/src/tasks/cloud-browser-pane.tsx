@@ -315,6 +315,17 @@ function noticeOf(view: CloudBrowserView): Notice | undefined {
   return view.painted ? undefined : { waiting: true, label: "Waiting for the page" };
 }
 
+/** Why the bar's steps are off while the view is not live, the wait or the act that brings them back. */
+function stepsOffOf(view: CloudBrowserView): string {
+  if (view.phase === CLOUD_BROWSER_PHASE.ENDED) {
+    return view.ended === BROWSER_LIVE_CLOSE_REASON.GONE
+      ? "this tab has closed"
+      : "watch again to use it";
+  }
+  if (view.phase === CLOUD_BROWSER_PHASE.RECONNECTING) return "reconnecting";
+  return "the browser is not live yet";
+}
+
 /** Paints a decoded frame over the canvas, scaled to it whole. */
 function paint(canvas: HTMLCanvasElement | null, image: HTMLImageElement | undefined): void {
   if (canvas === null || image === undefined) return;
@@ -555,7 +566,7 @@ export function CloudBrowserPane({
       <CloudBrowserBar
         address={address}
         onStep={isLive ? live.step : undefined}
-        whyOff="the browser is not live yet"
+        whyOff={stepsOffOf(view)}
         onOpen={live.navigate}
         disabled={!isLive}
       />
