@@ -291,7 +291,7 @@ function buttonLook({
     className: cn(
       "luke-button",
       busy ? "cursor-progress" : settled ? "cursor-default" : PRESSABLE_CURSOR,
-      fades && "disabled:opacity-45",
+      fades && "disabled:opacity-disabled",
     ),
   };
 }

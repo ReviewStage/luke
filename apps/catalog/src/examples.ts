@@ -35,6 +35,7 @@ import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
 import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
+import { ERROR_LINES_EXAMPLE } from "./examples/error-lines";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FACTS_EXAMPLE } from "./examples/facts";
 import { FAILURE_NOTES_EXAMPLE } from "./examples/failure-notes";
@@ -88,6 +89,7 @@ import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEARCHABLE_MENU_EXAMPLE } from "./examples/searchable-menu";
+import { SECRET_FIELDS_EXAMPLE } from "./examples/secret-fields";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -159,6 +161,7 @@ export const EXAMPLES: readonly Example[] = [
   DISCLOSURES_EXAMPLE,
   DRAWER_SWIPES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
+  ERROR_LINES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,
   FAILURE_NOTES_EXAMPLE,
@@ -211,6 +214,7 @@ export const EXAMPLES: readonly Example[] = [
   SAVED_TICKS_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
   SEARCHABLE_MENU_EXAMPLE,
+  SECRET_FIELDS_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,

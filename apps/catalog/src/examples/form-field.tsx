@@ -5,7 +5,7 @@ import { CatalogSection } from "../section";
 
 /**
  * form-field.tsx -- a field with a label alone, with a description, with an
- * error, with long words in a narrow column, and one counting its words
+ * error, one that may be left empty, with long words in a narrow column, and one counting its words
  * against its limit once they near it. The control is a text field standing
  * in for any control a field holds.
  */
@@ -51,6 +51,13 @@ function FormFields(): React.JSX.Element {
               label="Workspace name"
               description="Everyone in the workspace sees it."
               error="A workspace by that name already exists."
+            >
+              {(control) => <SampleInput control={control} />}
+            </FormField>
+            <FormField
+              label="Subject"
+              description="The item's title in the Inbox; its first line where left empty."
+              optional
             >
               {(control) => <SampleInput control={control} />}
             </FormField>

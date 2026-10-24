@@ -302,7 +302,7 @@ function faceClasses(
     look === CHIP_LOOK.FIELD ? "flex-1 [&>.settings-chevron]:ml-auto" : "flex-initial",
     iconOnly ? "[&>.settings-chevron]:hidden" : "",
     // Note that a busy chip's face pulses whole rather than standing faded, so only an idle one fades.
-    busy ? "" : "group-disabled/chip:opacity-45 group-aria-disabled/chip:opacity-45",
+    busy ? "" : "group-disabled/chip:opacity-disabled group-aria-disabled/chip:opacity-disabled",
   ]
     .filter((part) => part !== "")
     .join(" ");

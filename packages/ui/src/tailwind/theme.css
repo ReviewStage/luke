@@ -27,6 +27,8 @@
   --color-switch-thumb: var(--luke-color-switch-thumb);
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
+  /* How far a control fades while it cannot be used (`opacity-disabled`). */
+  --opacity-disabled: var(--luke-disabled-opacity);
 
   /* The controls' own roles (`profiles.css`), which a button, a toggle, and
      a tab are drawn at in every profile; and a button's look, which its

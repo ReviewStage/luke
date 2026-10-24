@@ -13,6 +13,8 @@ import { extendTailwindMerge } from "tailwind-merge";
  * `tailwind/theme.css` adds, because tailwind-merge reads a name it does not
  * know as a colour: `text-body` beside `text-foreground` would be dropped as
  * a second text colour, and `px-control-inset` would outlive a later `p-0`.
+ * The disabled fade (`opacity-disabled`) is told as an opacity, which it
+ * would otherwise not read as one, so a later fade would not replace it.
  */
 
 /**
@@ -252,6 +254,9 @@ const merge = extendTailwindMerge({
         "tooltip-in",
         "tooltip-leave",
       ],
+    },
+    classGroups: {
+      opacity: [{ opacity: ["disabled"] }],
     },
   },
 });

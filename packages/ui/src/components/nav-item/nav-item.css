@@ -54,7 +54,7 @@
   }
 
   .luke-nav-item:disabled {
-    opacity: 0.45;
+    opacity: var(--luke-disabled-opacity);
     cursor: default;
   }
 

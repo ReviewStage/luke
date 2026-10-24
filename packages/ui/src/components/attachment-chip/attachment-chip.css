@@ -126,7 +126,7 @@
   }
 
   .luke-attachment-chip-remove:disabled {
-    opacity: 0.5;
+    opacity: var(--luke-disabled-opacity);
   }
 
   /* The app's reset draws the ring; it stands inside the target, close round the disc. */

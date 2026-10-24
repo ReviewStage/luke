@@ -4,8 +4,8 @@ import { cn } from "./cn.js";
 
 /**
  * cn.test.ts -- the joiner keeps a theme's type size beside a text colour,
- * and lets a later length, padding, corner, width, or motion from the theme
- * replace an earlier one, as it does Tailwind's own.
+ * and lets a later length, padding, corner, width, motion, or disabled fade
+ * from the theme replace an earlier one, as it does Tailwind's own.
  */
 
 test("a theme's type size and a text colour both stand, and a later size replaces an earlier", () => {
@@ -25,4 +25,9 @@ test("a later width or motion replaces a theme's own, as a caller's class replac
   assert.equal(cn("max-w-dialog-wide", "max-w-dialog-confirm"), "max-w-dialog-confirm");
   assert.equal(cn("animate-dialog-in", "animate-none"), "animate-none");
   assert.equal(cn("animate-menu-in", "animate-tooltip-leave"), "animate-tooltip-leave");
+});
+
+test("a later disabled fade replaces an earlier one, the theme's own included", () => {
+  assert.equal(cn("disabled:opacity-50", "disabled:opacity-disabled"), "disabled:opacity-disabled");
+  assert.equal(cn("disabled:opacity-disabled", "disabled:opacity-100"), "disabled:opacity-100");
 });
