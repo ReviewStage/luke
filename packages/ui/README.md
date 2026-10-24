@@ -251,6 +251,10 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   a promise passes `busy` and `busyLabel`, the one busy shape every kind takes
   (`anti-slop/async-press-needs-busy` refuses one that does not, past
   `tools/anti-slop/busy-baseline.json`, which only shrinks).
+- **A page to open is a link.** Outside this package a button's press never
+  opens a page (`anti-slop/no-open-page-from-button`): draw a `ButtonLink`, a
+  `TextLink`, a `Chip` with `href`, or a toast action with `href`, so a
+  right-click, ⌘-click and a reader's link list find it.
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
   `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is

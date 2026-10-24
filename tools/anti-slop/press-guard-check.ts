@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { BUSY_GUARD_RULE } from "./shared/busy-guard.ts";
 import { TYPESCRIPT_SOURCE } from "./shared/effect-edges.ts";
 import { LUCIDE_GUARD_RULE } from "./shared/lucide-guard.ts";
+import { OPEN_PAGE_GUARD_RULE } from "./shared/open-page-guard.ts";
 import {
   configWeakensGuard,
   guardSuppressionLines,
@@ -22,7 +23,9 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * after it. It fails on a JSX-capable file outside `@luke/ui` holding a
  * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
  * file holding one that would silence `skeleton-through-components` or
- * `async-press-needs-busy`, whose baseline is the only way past it, on any
+ * `async-press-needs-busy`, whose baseline is the only way past it, on a
+ * JSX-capable file outside `@luke/ui` holding one that would silence
+ * `no-open-page-from-button`, on any
  * TypeScript file holding one that would silence `no-lucide-outside-door`,
  * whose baseline is the only way past it, on any TypeScript file that spells
  * a retired name and holds one that would silence `retired`, whose retired
@@ -67,6 +70,13 @@ const GUARDS = [
     watches: () => true,
     remedy:
       "Pass `busy` and `busyLabel` to the button (`useBusyPress` holds them), so a press that waits shows it is working",
+  },
+  {
+    rule: OPEN_PAGE_GUARD_RULE,
+    sources: JSX_SOURCE,
+    watches: (absolute: string) => isOutsideUi(absolute),
+    remedy:
+      "Draw a link instead (ButtonLink, TextLink, or Chip's href), so a page opens from a link",
   },
   {
     rule: LUCIDE_GUARD_RULE,

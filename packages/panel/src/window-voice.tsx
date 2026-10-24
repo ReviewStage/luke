@@ -28,16 +28,13 @@ import { useOpenLink } from "./tasks/use-open-link.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 import { useVoiceNotice } from "./use-voice-notice.js";
 import { fixtureVoice, useStandingVoiceView, useVoiceView } from "./use-voice-view.js";
-import { useVoiceNoticeToast } from "./voice-notice-toast.js";
+import { OPENAI_BILLING_URL, useVoiceNoticeToast } from "./voice-notice-toast.js";
 
 /** The Mac's output as last read, which the volume hint answers. */
 const OUTPUT_AUDIO = Atom.map(APP_SLICE.AUDIO, (audio) => audio?.outputAudio);
 
 /** The launch profile, which stages a capture run's conversation. */
 const RUN_PROFILE_NAME = Atom.map(APP_SLICE.RUN, (run) => run?.profile);
-
-/** OpenAI's billing page, where the account a saved key belongs to is given credit. */
-const OPENAI_BILLING_URL = "https://platform.openai.com/settings/organization/billing/overview";
 
 /**
  * The call's chords, the menu bar's and the keys': read here, where nothing

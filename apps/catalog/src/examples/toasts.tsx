@@ -33,12 +33,15 @@ function Acting({
   words,
   detail,
   label,
+  href,
   countdown,
 }: {
   tone: ToastTone;
   words: string;
   detail?: string;
   label: string;
+  /** The page the action opens, drawn as a link in the action's look. */
+  href?: string;
   countdown?: number;
 }): React.JSX.Element {
   return (
@@ -48,7 +51,13 @@ function Acting({
       detail={detail}
       countdown={countdown}
       actions={
-        <ToastActions label={label} onPress={noop} dismissLabel="Dismiss" onDismiss={noop} />
+        <ToastActions
+          label={label}
+          href={href}
+          onPress={noop}
+          dismissLabel="Dismiss"
+          onDismiss={noop}
+        />
       }
     />
   );
@@ -81,6 +90,12 @@ function Toasts(): React.JSX.Element {
             words="Should withdrawn invitations count?"
             detail="Relay · Retry the webhook"
             label="View"
+          />
+          <Acting
+            tone={STATUS_TONE.DANGER}
+            words="Your OpenAI account is out of credit."
+            label="Add credit"
+            href="https://platform.openai.com/settings/organization/billing/overview"
           />
         </ToastStack>
       </div>

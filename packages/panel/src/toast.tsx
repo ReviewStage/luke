@@ -75,9 +75,10 @@ export { TOAST_HOLD };
 /** What a toast's action says when it takes back what the toast reports. */
 export const UNDO_LABEL = "Undo";
 
-/** A toast's one action: its button's label, and what a press of it does. */
+/** A toast's one action: its button's label, and what a press of it does; one that opens a page names it as `href`, so it is drawn as a link, and its press opens it through the window's door. */
 interface ToastAction {
   readonly label: string;
+  readonly href?: string | undefined;
   readonly onPress: () => void;
 }
 
@@ -510,6 +511,7 @@ function ToastCard({
         action === undefined ? undefined : (
           <ToastActions
             label={action.label}
+            href={action.href}
             onPress={action.onPress}
             dismissLabel={DISMISS_LABEL}
             onDismiss={dismiss}
