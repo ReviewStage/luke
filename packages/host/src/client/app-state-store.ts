@@ -194,6 +194,15 @@ export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
   return { avatar: held.avatar };
 }
 
+/**
+ * The voice slice once the voice window has been given up on for the run:
+ * gone as above, and voice unavailable until Luke is reopened, which every
+ * panel says where it offers a call.
+ */
+export function voiceWindowGaveUp(held: AppState["voice"]): AppState["voice"] {
+  return { ...voiceWindowGone(held), unavailable: true };
+}
+
 /** What a launch knows of itself before the host answers anything, which is the run slice's own facts. */
 interface ClientRunFacts {
   readonly launch: {

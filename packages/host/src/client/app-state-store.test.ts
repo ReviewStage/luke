@@ -16,6 +16,7 @@ import {
   bootstrapPatch,
   initialAppState,
   publishAppStateChanges,
+  voiceWindowGaveUp,
   voiceWindowGone,
   windowAppState,
 } from "./app-state-store.js";
@@ -318,4 +319,16 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
     push: PUSH.SHOW_AGENT,
     payload: { taskId: "task-1", agentId: "agent-1" },
   });
+});
+
+it("a voice window given up on sets voice unavailable for the run: no view, the avatar standing, and a later bootstrap keeps it", () => {
+  const app = store();
+  assert.equal(app.snapshot().voice.unavailable, undefined);
+  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true }, avatar: AVATAR_OFF } });
+  app.update({ voice: voiceWindowGaveUp(app.snapshot().voice) });
+  assert.equal(app.snapshot().voice.unavailable, true);
+  assert.equal(app.snapshot().voice.view, undefined);
+  assert.deepEqual(app.snapshot().voice.avatar, AVATAR_OFF);
+  app.update(bootstrapPatch(app.snapshot(), BOOT));
+  assert.equal(app.snapshot().voice.unavailable, true);
 });

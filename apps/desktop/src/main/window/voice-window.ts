@@ -18,7 +18,8 @@ export interface VoiceWindowOptions {
    * Reopening has stopped for this run: the renderer went down
    * `MAXIMUM_REVIVALS_PER_LOAD` times without once finishing a load. A hidden
    * window that crash-looped would be seen by nobody, so it is reported once
-   * and stood down, the way the trace writer answers a full disk.
+   * and stood down, the way the trace writer answers a full disk, and voice
+   * is said to be unavailable wherever a call is offered.
    */
   onGaveUp: (reason: string) => void;
 }

@@ -15,7 +15,12 @@ import type {
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
-import { type AppStateStore, voiceWindowGone, windowAppState } from "@luke/host/client";
+import {
+  type AppStateStore,
+  voiceWindowGaveUp,
+  voiceWindowGone,
+  windowAppState,
+} from "@luke/host/client";
 import { type EventPushName, PUSH, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
@@ -211,6 +216,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     onGaveUp: (reason) => {
       config.report(`Voice window abandoned: ${reason}`);
+      // Nothing stands the window back up this run, so every panel says voice
+      // is unavailable where it offers a call, rather than a press reaching
+      // a window that is not there.
+      state.update({ voice: voiceWindowGaveUp(state.snapshot().voice), callTranscript: undefined });
+      panels.setVoiceExchange(false);
     },
   });
   const voiceWindowWanted = runMode.takesFocus || runMode.sendsNetwork;
