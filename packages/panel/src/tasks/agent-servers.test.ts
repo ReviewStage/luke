@@ -133,7 +133,7 @@ async function opened(standing: IntegrationStatuses = statuses) {
     ),
   );
   act(() =>
-    container.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]')?.click(),
+    container.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]')?.click(),
   );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -299,7 +299,7 @@ test("a server page's back is hinted \"Back to MCP servers\", names no key since
   restOn(back);
   const hint = document.querySelector('[role="tooltip"]:not([inert])');
 
-  assert.equal(hint?.textContent, "Back to MCP servers");
+  assert.equal(hint?.textContent, "Back to Integrations");
   assert.equal(back.getAttribute("aria-keyshortcuts"), null);
   act(() => back.click());
   assert.equal(container.querySelector(".agent-servers-page-title"), null);
@@ -720,7 +720,7 @@ test("Escape from the home fades the popover out, inert and ending, then takes i
   const finishExits = holdPanelExits();
   const { container, key, type, field } = await opened();
   const button = () =>
-    container.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]') ??
+    container.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]') ??
     assert.fail("no button");
   type("deploy");
 

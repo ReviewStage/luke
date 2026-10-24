@@ -371,7 +371,9 @@ export function PullRequestStateMenu({
   const words = inQueue
     ? queuedLabel(queued.position)
     : PULL_REQUEST_STATE_LABEL[pullRequest.state];
-  const label = `Pull request ${words}`;
+  // Note that the pill is named by the words it draws, so a change out reads "Merging…" as the screen does.
+  const shownWords = writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`;
+  const label = `Pull request ${shownWords}`;
   const tone = inQueue ? STATUS_TONE.WORKING : PULL_REQUEST_TONE[pullRequest.state];
   // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
   const mark = (
@@ -436,9 +438,7 @@ export function PullRequestStateMenu({
         {...menu.trigger()}
       >
         {mark}
-        <ChipName>
-          {writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`}
-        </ChipName>
+        <ChipName>{shownWords}</ChipName>
       </Chip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />

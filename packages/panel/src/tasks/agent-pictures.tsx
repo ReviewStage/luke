@@ -261,7 +261,7 @@ function ShownOne({
   return (
     <PictureBlock
       state={state}
-      alt={shown.caption}
+      alt={shown.name}
       caption={shown.caption === "" ? undefined : shown.caption}
       onOpen={onOpen}
     />
@@ -448,7 +448,7 @@ function ShownStills({
   if (shown.length === 1 && only !== undefined && only.picture === undefined) {
     const caption = only.caption === "" ? undefined : only.caption;
     return (
-      <PictureBlock state={{ kind: PICTURE_STATE.READING }} alt={only.caption} caption={caption} />
+      <PictureBlock state={{ kind: PICTURE_STATE.READING }} alt={only.name} caption={caption} />
     );
   }
   if (shown.length === 1 && only?.picture !== undefined) {

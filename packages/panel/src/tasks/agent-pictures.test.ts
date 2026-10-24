@@ -174,6 +174,13 @@ test("two shown sets one after another are one set, and one picture alone is its
   assert.equal(joined.container.querySelectorAll(".picture-set").length, 1);
   assert.equal(single.container.querySelectorAll(".picture-block").length, 1);
   assert.equal(single.container.querySelector(".picture-caption")?.textContent, "Screen 1");
+  const image = single.container.querySelector("img");
+  assert.ok(image, "the picture is drawn");
+  assert.notEqual(
+    image.getAttribute("alt"),
+    "Screen 1",
+    "the caption is drawn once, not read again as the picture's own alt",
+  );
 });
 
 test("an integration's call keeps its row and gains its pictures as chips, one left out saying so with its size", async () => {
@@ -506,7 +513,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
       "under Luke's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
-    assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
+    assert.equal(inline.getAttribute("aria-label"), "Video: flow");
     assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.deepEqual(
       [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),

@@ -110,17 +110,22 @@ export function MessageAction({
   return <Tooltip label={tooltip === true ? label : tooltip}>{button}</Tooltip>;
 }
 
-/** A message's heading levels, each with the element that keeps the outline and the type role that sets it. */
+/** A message's heading levels, each with the type role that sets it; h4 to h6 take the section role, never a label's, which the web draws smaller than the body. */
 const TRANSCRIPT_HEADING = {
-  1: { as: TEXT_ELEMENT.H1, variant: TEXT_VARIANT.DIALOG },
-  2: { as: TEXT_ELEMENT.H2, variant: TEXT_VARIANT.SECTION },
-  3: { as: TEXT_ELEMENT.H3, variant: TEXT_VARIANT.SECTION },
-  4: { as: TEXT_ELEMENT.H4, variant: TEXT_VARIANT.LABEL },
-  5: { as: TEXT_ELEMENT.H5, variant: TEXT_VARIANT.LABEL },
-  6: { as: TEXT_ELEMENT.H6, variant: TEXT_VARIANT.LABEL },
+  1: TEXT_VARIANT.DIALOG,
+  2: TEXT_VARIANT.SECTION,
+  3: TEXT_VARIANT.SECTION,
+  4: TEXT_VARIANT.SECTION,
+  5: TEXT_VARIANT.SECTION,
+  6: TEXT_VARIANT.SECTION,
 } as const;
 
-/** A heading of a rendered message: its level in the outline, its look from the role that level maps to, its spacing from tasks.css. */
+/**
+ * A heading of a rendered message: its look from the role its level maps to,
+ * its spacing from tasks.css, and no heading element. Note that a model's `#`
+ * line is words in a conversation, not a part of the window's outline, so it
+ * is a paragraph, as a note's headings are (`@luke/ui/markdown`).
+ */
 function TranscriptHeading({
   level,
   children,
@@ -128,9 +133,13 @@ function TranscriptHeading({
   level: keyof typeof TRANSCRIPT_HEADING;
   children: ReactNode;
 }): React.JSX.Element {
-  const { as, variant } = TRANSCRIPT_HEADING[level];
   return (
-    <Text as={as} variant={variant} className="transcript-heading" data-level={level}>
+    <Text
+      as={TEXT_ELEMENT.P}
+      variant={TRANSCRIPT_HEADING[level]}
+      className="transcript-heading"
+      data-level={level}
+    >
       {children}
     </Text>
   );

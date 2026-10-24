@@ -684,7 +684,11 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
 
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
-  assert.equal(description.querySelector("h2")?.textContent, "Summary", "GitHub's heading stands");
+  assert.equal(
+    description.querySelector(".transcript-heading")?.textContent,
+    "Summary",
+    "GitHub's heading stands, as words and no heading element",
+  );
   assert.equal(
     description.querySelector("a.anchor, [href='#summary']"),
     null,
@@ -2172,7 +2176,7 @@ test("the pill, the title, and the files' count stand from what Luke holds befor
     "Expire invitations weekly #42",
     "the read's title replaces what was held",
   );
-  assert.equal(section("Description").querySelector("h2")?.textContent, "Summary");
+  assert.equal(section("Description").querySelector(".transcript-heading")?.textContent, "Summary");
 
   await choose(tab, "Checks");
   assert.deepEqual(waiting(tab), ["Reading checks"]);
@@ -3186,7 +3190,7 @@ test("a pull request with no labels spends no line on them: its label picker sta
     );
 
   assert.equal(tab.querySelector(".pull-request-header .pull-request-labels"), null);
-  assert.deepEqual(pickers(), ["Edit reviewers", "Edit labels"]);
+  assert.deepEqual(pickers(), ["Reviewer", "Label"]);
 
   labels = [{ name: "bug", color: "d73a4a" }];
   await pressToolbar(tab, "Refresh");
@@ -3194,7 +3198,7 @@ test("a pull request with no labels spends no line on them: its label picker sta
   const list = people().querySelector('[aria-label="Labels"]') ?? assert.fail("its labels stand");
   assert.equal(list.textContent, "bug");
   assert.equal(people().lastElementChild, list, "they close the line of people");
-  assert.deepEqual(pickers(), ["Edit reviewers", "Edit labels"]);
+  assert.deepEqual(pickers(), ["Reviewer", "Label"]);
 });
 
 it.effect(
@@ -3599,7 +3603,7 @@ test("the reviewer picker lists the repository's teams then its people, the auth
     }),
   );
   const picker = () =>
-    tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Edit reviewers"]') ??
+    tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Reviewer"]') ??
     assert.fail("the reviewer picker stands beside the reviewers");
 
   act(() => picker().click());
@@ -3670,10 +3674,10 @@ test("a picker's choice shows its button busy once the change has waited the set
     }),
   );
   const picker = (name: string) =>
-    tab.querySelector<HTMLButtonElement>(`.pull-request-reviewers [aria-label^="${name}"]`);
+    tab.querySelector<HTMLButtonElement>(`.pull-request-reviewers button[aria-label^="${name}"]`);
   const ringed = (name: string) => picker(name)?.querySelector(".luke-spinner-ring") != null;
-  const labels = () => picker("Edit labels") ?? picker("Updating labels");
-  const reviewers = () => picker("Edit reviewers") ?? picker("Updating reviewers");
+  const labels = () => picker("Label") ?? picker("Updating labels");
+  const reviewers = () => picker("Reviewer") ?? picker("Updating reviewers");
 
   act(() => labels()?.click());
   await settle();
@@ -3724,9 +3728,9 @@ test("the label picker lists the repository's labels, those on the pull request 
       PULL_REQUEST_STATE.MERGED,
     ),
   );
-  assert.equal(tab.querySelector('[aria-label="Edit reviewers"]'), null);
+  assert.equal(tab.querySelector('[aria-label="Reviewer"]'), null);
   const picker =
-    tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Edit labels"]') ??
+    tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Label"]') ??
     assert.fail("the label picker stands beside the reviewers");
 
   act(() => picker.click());
@@ -4004,6 +4008,22 @@ test("an open pull request's pill offers Close and a closed one's Reopen, each a
     [AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }],
     [AGENT.id, { action: PULL_REQUEST_ACTION.REOPEN }],
   ]);
+});
+
+test("the pill is named by the words it draws, so a change out reads as the screen does, and the name returns with its words", async () => {
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
+  const pill = () => pillOf(tab) ?? assert.fail("the pill stands");
+  assert.equal(pill().getAttribute("aria-label"), `Pull request ${pill().textContent}`);
+
+  const answer = Promise.withResolvers<void>();
+  changeHeld = answer.promise;
+  await pressAction(tab, "Close pull request");
+  assert.match(pill().textContent ?? "", /…$/u, "the pill says its change is out");
+  assert.equal(pill().getAttribute("aria-label"), `Pull request ${pill().textContent}`);
+
+  answer.resolve();
+  await settle();
+  assert.equal(pill().getAttribute("aria-label"), `Pull request ${pill().textContent}`);
 });
 
 test("Close acts at once on an open pull request and a draft, a toast offering Reopen, which sends the reopen and goes", async () => {
