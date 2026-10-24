@@ -40,7 +40,6 @@ import {
   InlineRef,
   LAYOUT_ELEMENT,
   LineButton,
-  LineSummary,
   OneLine,
   ProviderMark,
   RollingNumber,
@@ -145,6 +144,7 @@ import {
   ToolOutput,
   type ToolState,
   ToolStateMark,
+  ToolSummary,
 } from "../ai-elements/tool.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
@@ -1458,7 +1458,8 @@ export function TranscriptTodos({
  * The list the agent is working through, docked above the composer while
  * it works, as Claude Code keeps its list over the prompt and VS Code's
  * chat over its log: one line saying how far the list has got and the
- * item it is at, which opens onto the whole list. Closed by default, as
+ * item it is at, which opens onto the whole list, led by the chevron as
+ * every fold's line is. Closed by default, as
  * VS Code's collapses to the item in progress, so it costs the log one
  * line. It is a card on the task card's look, since it stands outside the
  * log, and it is drawn by the caller only while the list is worked. It
@@ -1478,6 +1479,7 @@ export function TranscriptTodosDock({
   return (
     <Disclosure look={DISCLOSURE_LOOK.CARD} data-todos-dock="" aria-label="To-dos">
       <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
+        <DisclosureChevron />
         <GlyphSlot>
           <ListTodoIcon />
         </GlyphSlot>
@@ -1494,9 +1496,6 @@ export function TranscriptTodosDock({
             {focus}
           </Text>
         )}
-        <span className="todos-dock-chevron">
-          <DisclosureChevron />
-        </span>
       </DisclosureSummary>
       <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
         <TodoItems todos={todos} live />
@@ -1587,9 +1586,9 @@ export function TranscriptSubagent({
   const row =
     onOpen === undefined && body !== undefined ? (
       <Tool>
-        <LineSummary data-subagent-row="" data-call-id={callId}>
+        <ToolSummary data-subagent-row="" data-call-id={callId}>
           {line}
-        </LineSummary>
+        </ToolSummary>
         <ToolContent bare>
           <ToolInput block={body.input} />
           <ToolOutput block={body.output} errorText={undefined} />

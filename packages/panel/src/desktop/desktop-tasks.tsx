@@ -1,4 +1,5 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
@@ -321,6 +322,24 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
 /** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
 const NO_FOLDS = () => false;
 
+/** An item a call's row asked the task's Inbox to open: the thread under `key` of the agent whose row it was, any of the task's agents' where the row names none. */
+interface InboxItemAsk {
+  readonly taskId: string;
+  readonly key: string;
+  readonly agentId: string | undefined;
+}
+
+/** The item an ask names among a task's items, the latest posted where more than one agent posted under its key. */
+function askedItem(items: readonly InboxItem[], ask: InboxItemAsk): InboxItem | undefined {
+  const named = items.filter(
+    (item) => item.key === ask.key && (ask.agentId === undefined || item.agentId === ask.agentId),
+  );
+  return named.reduce<InboxItem | undefined>(
+    (latest, item) => (latest === undefined || item.postedAt > latest.postedAt ? item : latest),
+    undefined,
+  );
+}
+
 /**
  * The plan's own Inbox tab, in the side panel: its items newest first in the window's Inbox's
  * list, under the window's head, whose view's menu offers To do and All
@@ -336,12 +355,16 @@ const NO_FOLDS = () => false;
  * (`inbox-columns.ts`); holding one item, it is that item, with no list to
  * go back to. K and J, and the pager where the item stands alone, step
  * through the list (`inbox-pager.tsx`). Its head's magnifier searches the
- * list as the window's Inbox's does, the item shown keeping its place.
+ * list as the window's Inbox's does, the item shown keeping its place. A
+ * call's row that names a thread asks for its item, which the tab opens
+ * once its read holds it, or lets go once a read holds no such item.
  */
 function TaskInboxTab({
   tasks,
   task,
   inbox,
+  ask,
+  onAsked,
   onOpenTask,
   onOpenAgent,
   code,
@@ -349,6 +372,9 @@ function TaskInboxTab({
   tasks: TasksControl;
   task: TasksControl["tasks"][number];
   inbox: TaskInboxControl;
+  /** The item a call's row asked for, none where none waits to be opened. */
+  ask: InboxItemAsk | undefined;
+  onAsked: () => void;
   onOpenTask: () => void;
   onOpenAgent: (agentId: string) => void;
   code: InboxCodeDoors;
@@ -402,6 +428,17 @@ function TaskInboxTab({
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  // The item a call's row asked for is opened once the read holds it, as a row's press opens it.
+  const openColumn = columns.onOpen;
+  const asking = ask === undefined ? undefined : askedItem(items, ask);
+  const settled = ask !== undefined && (asking !== undefined || inbox.read);
+  useEffect(() => {
+    if (!settled) return;
+    onAsked();
+    if (asking === undefined) return;
+    setAsked(asking.id);
+    openColumn(asking.id);
+  }, [settled, asking, onAsked, openColumn]);
   const opened = shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen : undefined;
   useReadOnOpen({
     shown: opened?.item,
@@ -551,6 +588,9 @@ function PlanDocument({
     tab: SidePanelTab | undefined;
     opening: boolean;
   }>();
+  // The Inbox item a call's row asked for, which the task's Inbox opens once it holds it.
+  const [inboxAsk, setInboxAsk] = useState<InboxItemAsk | undefined>(undefined);
+  const inboxAsked = useCallback(() => setInboxAsk(undefined), []);
   const { open: panelOpen, tab: panelTab } = tasks.sidePanel;
   useEffect(() => {
     if (activityAsked?.opening && panelOpen)
@@ -697,15 +737,19 @@ function PlanDocument({
   };
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: an agent in this column, the plan and the
-  // Inbox in the side panel, another task as the sidebar opens it, the
-  // rest in the side panel.
-  const openTarget = (target: ToolTarget) => {
+  // Inbox in the side panel, the Inbox on the item a call names, posted by
+  // the agent whose row it was (`from`), another task as the sidebar opens
+  // it, the rest in the side panel.
+  const openTarget = (target: ToolTarget, from?: string) => {
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
         return openColumnTab({ agent: target.agent });
       case TOOL_TARGET.PLAN:
         return openPanelTab(SIDE_PANEL_TAB.PLAN);
       case TOOL_TARGET.INBOX:
+        if (target.key !== undefined && taskId !== undefined) {
+          setInboxAsk({ taskId, key: target.key, agentId: from });
+        }
         return openPanelTab(SIDE_PANEL_TAB.INBOX);
       case TOOL_TARGET.CHAT:
         return chatOn ? openPanelTab(SIDE_PANEL_TAB.CHAT) : undefined;
@@ -774,7 +818,8 @@ function PlanDocument({
   // panel's width, and the minute's clock move; only the cards a
   // transcript's rows hang move with the minute. Each door stands across
   // draws and calls the newest closure (`useSteadyDoor`).
-  const openTargetDoor = useSteadyDoor(openTarget);
+  // Note that the column's pane draws its tab's agent alone, so a row it opens is that agent's.
+  const openTargetDoor = useSteadyDoor((target: ToolTarget) => openTarget(target, agentOfTab(tab)));
   const openDelegationDoor = useSteadyDoor(openDelegation);
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
@@ -1046,6 +1091,8 @@ function PlanDocument({
       tasks={tasks}
       task={listed}
       inbox={inbox}
+      ask={inboxAsk?.taskId === listed.id ? inboxAsk : undefined}
+      onAsked={inboxAsked}
       onOpenTask={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
       onOpenAgent={(agent) => openColumnTab({ agent })}
       code={{

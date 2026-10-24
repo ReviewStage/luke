@@ -14,7 +14,9 @@ import {
   GlyphSlot,
   LineSummary,
   OneLine,
+  Tooltip,
   useDisclosureBodyDrawn,
+  useDisclosureState,
 } from "@luke/ui";
 import type { ReactNode } from "react";
 import { copyThroughShell } from "../copy-feedback.js";
@@ -36,8 +38,9 @@ import { Fold, type FoldProps } from "./fold.js";
  * verb is in the full ink and the icon and the subject in the muted one,
  * so a reader scans what each call did and the subject reads as its
  * preview, fading where the line cuts it rather than ending on an
- * ellipsis. There is no chevron: the icon leads, and a hover fill says
- * the line opens. The body under
+ * ellipsis. There is no chevron: the icon leads, a hover fill says the
+ * line opens, and its hint says what a press does, as a line that opens a
+ * tab says what it opens. The body under
  * it, set in under the words, is the call's input and its answer, each a
  * `CodeCard` headed "Input" and "Answer" with the window's one Copy and its
  * one cut at 40 lines, so a long answer shows its first lines over "Show
@@ -86,6 +89,12 @@ function patchRow(line: string): CodeRow {
   if (line.startsWith("-")) return CODE_ROW.REMOVED;
   return CODE_ROW.CONTEXT;
 }
+
+/** What the hover over a call's folding line says a press does, by whether the fold stands open. */
+export const FOLD_HINT = {
+  SHOW: "Show the call",
+  HIDE: "Hide the call",
+} as const;
 
 export type ToolProps = Omit<FoldProps, "className">;
 
@@ -181,6 +190,26 @@ export function ToolLine({
   );
 }
 
+/**
+ * A call's folding line, which opens and closes its fold, hanging the hint
+ * that says so, as a line that opens a tab hangs what it opens; the caller
+ * draws what stands in it, and finds it by the marks it hands.
+ */
+export function ToolSummary({
+  children,
+  ...marks
+}: {
+  children: ReactNode;
+  [mark: `data-${string}`]: string | undefined;
+}): ReactNode {
+  const { open } = useDisclosureState();
+  return (
+    <Tooltip label={open ? FOLD_HINT.HIDE : FOLD_HINT.SHOW}>
+      <LineSummary {...marks}>{children}</LineSummary>
+    </Tooltip>
+  );
+}
+
 /** The one line a call shows: what it did, and where it stands. */
 export function ToolHeader({
   state,
@@ -194,7 +223,7 @@ export function ToolHeader({
 }: ToolHeaderProps): ReactNode {
   const drawn = useDisclosureBodyDrawn();
   return (
-    <LineSummary>
+    <ToolSummary>
       <ToolLine
         state={state}
         icon={icon}
@@ -204,7 +233,7 @@ export function ToolHeader({
         subjectIsCode={subjectIsCode}
         place={place}
       />
-    </LineSummary>
+    </ToolSummary>
   );
 }
 
