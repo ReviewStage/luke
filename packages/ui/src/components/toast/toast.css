@@ -22,7 +22,7 @@
   .luke-toast-stack {
     right: var(--luke-space-16);
     bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
-    width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
+    width: min(340px, calc(var(--luke-stage-width) - 2 * var(--luke-space-16)));
   }
 
   /* On a phone the stack stands just above whatever docks at the column's
@@ -44,7 +44,7 @@
     width: min(
       340px,
       calc(
-        100vw -
+        var(--luke-stage-width) -
         2 *
         var(--luke-space-8) -
         env(safe-area-inset-left, 0px) -
