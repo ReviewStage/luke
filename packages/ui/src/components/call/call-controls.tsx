@@ -129,9 +129,10 @@ export function EndCallButton({ onPress }: { onPress: () => void }): React.JSX.E
 }
 
 /**
- * A call's status where a message box steers it: a live mark, "On call",
- * or "Muted" in the danger ink while the microphone is muted, and how long
- * the call has run, counted each second. It stands beside the call's
+ * A call's status where a message box steers it: a live mark and "On call",
+ * or while the microphone is muted the struck microphone and "Muted" in the
+ * quiet ink, since muting is no failure and red is for danger alone, and
+ * how long the call has run, counted each second. It stands beside the call's
  * controls in the box's foot (`ComposerFoot`'s call), so a call standing
  * reads as one at a glance from the place it is ended. Given a `now` the
  * count stands still at it.
@@ -149,11 +150,13 @@ export function CallLive({
 }): React.JSX.Element {
   return (
     <span className="luke-call-live" data-muted={String(muted)}>
-      <span
-        className="luke-call-live-mark"
-        data-tone={muted ? STATUS_TONE.DANGER : STATUS_TONE.COMPLETE}
-        aria-hidden="true"
-      />
+      {muted ? (
+        <span className="luke-call-live-muted" aria-hidden="true">
+          <MicrophoneOffIcon />
+        </span>
+      ) : (
+        <span className="luke-call-live-mark" data-tone={STATUS_TONE.COMPLETE} aria-hidden="true" />
+      )}
       <span className="luke-call-live-word">
         {muted ? CALL_LIVE_WORD.MUTED : CALL_LIVE_WORD.LIVE}
       </span>

@@ -2,7 +2,9 @@
 
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
+import { MicrophoneOffIcon } from "../../face/glyphs.js";
 import {
   CALL_CONTROL_LABEL,
   CALL_DEVICE,
@@ -133,7 +135,7 @@ test("Video on or off asks for the other, named for what its press will do", () 
   expect(asked).toEqual([false, true]);
 });
 
-test("a box's call status says the call is live and how long it has run, and says Muted while the microphone is", () => {
+test("a box's call status says the call is live and how long it has run, and says Muted, quietly, with the struck microphone while the microphone is muted", () => {
   const startedAt = Date.UTC(2026, 9, 24, 15, 0, 0);
   const now = startedAt + 72_000;
   const live = draw(createElement(CallLive, { startedAt, muted: false, now }));
@@ -144,4 +146,8 @@ test("a box's call status says the call is live and how long it has run, and say
   const muted = draw(createElement(CallLive, { startedAt, muted: true, now }));
   expect(muted.textContent).toBe(`${CALL_LIVE_WORD.MUTED}1m 12s`);
   expect(muted.textContent).not.toContain(CALL_LIVE_WORD.LIVE);
+  expect(muted.querySelector("svg")?.outerHTML).toBe(
+    renderToStaticMarkup(createElement(MicrophoneOffIcon)),
+  );
+  expect(muted.querySelector('[data-tone="danger"]')).toBeNull();
 });

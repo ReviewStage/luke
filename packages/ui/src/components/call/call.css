@@ -89,8 +89,9 @@
   }
 
   /* A call's status in a message box's foot: its live mark, its word, and
-     its count on one line in the caption's type, the word in the danger ink
-     while muted, as the call bar's is. The count's figures are tabular
+     its count on one line in the caption's type. While muted the struck
+     microphone stands for the mark and the word goes quiet, never red,
+     since red is for danger alone. The count's figures are tabular
      (`Time`), so the controls beside it never shift as it ticks. */
   .luke-call-live {
     display: flex;
@@ -116,7 +117,17 @@
   }
 
   .luke-call-live[data-muted="true"] .luke-call-live-word {
-    color: var(--luke-color-danger-text);
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-call-live-muted {
+    display: flex;
+    flex: none;
+  }
+
+  .luke-call-live-muted > svg {
+    width: var(--luke-icon-12);
+    height: var(--luke-icon-12);
   }
 
   /* Too narrow for both of the backend's parts: the notetaker's goes while
