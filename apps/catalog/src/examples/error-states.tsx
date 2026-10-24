@@ -1,7 +1,8 @@
 /**
  * error-states.tsx -- a failed read among rows with Retry beside it, one
  * alone in its region with Retry under it, one with no Retry, ones with a
- * remedy, Remove, or Dismiss beside Retry, one on a toolbar short of
+ * remedy, Remove, or Dismiss beside Retry, one whose place failed to draw
+ * with Reload in Retry's place, one on a toolbar short of
  * room, long words and a long remedy in a pane narrower than the line,
  * a list's foot that is itself the retry, and a failure's Retry on its own
  * beside its words, named for what it reads again.
@@ -36,6 +37,13 @@ function ErrorStates(): React.JSX.Element {
         <div className="catalog-frame catalog-region catalog-error-region">
           <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={stay}>
             The changes could not be read.
+          </ErrorState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-reload" title="A place that failed to draw">
+        <div className="catalog-frame catalog-region catalog-error-region">
+          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onReload={stay}>
+            This window could not be shown.
           </ErrorState>
         </div>
       </CatalogSection>
