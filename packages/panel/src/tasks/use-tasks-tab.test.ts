@@ -49,11 +49,13 @@ import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
+import { PENDING_LIMIT } from "@luke/ui/pending-values";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import {
   DOCUMENT_REGION,
   PIN_MOVE_FAILED_NOTE,
   SETTLED_STATUS,
+  TASK_MARK,
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -478,6 +480,63 @@ test("a repository pin still waiting on the service is let go with a sign-out, s
   assert.deepEqual(pending, ["acme/secret"]);
   assert.deepEqual(tab.control().pinnedRepositories, []);
 });
+
+test("a task's name, pin, and status still waiting on the service are let go with a sign-out, so the next account never wears them", async () => {
+  // The service never answers, as when the window signs out with the presses still out.
+  const never = () => new Promise<boolean>(() => undefined);
+  const tab = mount(
+    { shown: true, tasks: listRead([listed()]) },
+    {
+      [ACT_KIND.TASKS_RENAME]: never,
+      [ACT_KIND.TASKS_PIN]: never,
+      [ACT_KIND.TASKS_SET_STANDING]: never,
+    },
+  );
+  const drawn = () => tab.control().listed.tasks.find((task) => task.id === TASK.id);
+
+  await act(async () => {
+    void tab.control().onRenameTask(TASK.id, "Secret launch");
+    tab.control().onMarkTask(TASK.id, TASK_MARK.PIN);
+    tab.control().onSettleTasks([TASK.id], TASK_STATUS.DONE);
+  });
+  const pending = drawn();
+  // Note that the list still holds the task as the window signs out, before main's view empties.
+  tab.stand({ signedIn: false });
+  tab.stand({ signedIn: true });
+
+  assert.equal(pending?.name, "Secret launch");
+  assert.ok(pending?.pinnedAt !== undefined, "the pin was drawn");
+  assert.equal(pending?.status, TASK_STATUS.DONE);
+  assert.equal(drawn()?.name, TASK.name);
+  assert.equal(drawn()?.pinnedAt, undefined);
+  assert.equal(drawn()?.status, listed().status);
+});
+
+it.effect(
+  "a name the service kept but the list never carries gives way to the list once its time runs out",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, tasks: listRead([listed()]) },
+        { [ACT_KIND.TASKS_RENAME]: () => Promise.resolve(true) },
+        registryOn(yield* Clock.Clock),
+      );
+      const name = () => tab.control().listed.tasks.find((task) => task.id === TASK.id)?.name;
+
+      act(() => {
+        void tab.control().onRenameTask(TASK.id, "Launch plan");
+      });
+      yield* landed;
+      const drawn = name();
+      yield* passing(Duration.seconds(10));
+      const waiting = name();
+      yield* passing(PENDING_LIMIT);
+
+      assert.equal(drawn, "Launch plan");
+      assert.equal(waiting, "Launch plan");
+      assert.equal(name(), TASK.name);
+    }),
+);
 
 test("New plan opens its dialog over the open plan, which stays open; a second press leaves it as it stands, only a plan that starts closes it, and leaving the tab puts it away", async () => {
   const answers = [

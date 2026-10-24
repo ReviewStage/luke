@@ -60,6 +60,7 @@
     "./use-clipped": "./src/use-clipped.js",
     "./visible-viewport": "./src/visible-viewport.js",
     "./tasks-model": "./src/tasks-model.js",
+    "./pending-values": "./src/pending-values.js",
     "./call-card-model": "./src/call-card-model.js",
     "./avatar-session-contract": "./src/avatar-session-contract.js",
     "./diagram-contract": "./src/diagram-contract.js",
