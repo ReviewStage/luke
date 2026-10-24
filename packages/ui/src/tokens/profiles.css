@@ -153,13 +153,48 @@
     0 24px 64px var(--luke-color-shadow-deep);
   /* The room a dialog's card may stand in: the window seen, less its margins. */
   --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+  /* ⌘K's card: the chrome around its list is a field, a filter band and a
+     foot, the list's own padding, a group's heading and the three hairlines
+     between them; the list keeps three rows beside that however short the
+     window is, so the card stands two thirds of the window tall (four fifths
+     as a sheet) or what that takes, never past the window less a margin,
+     and its top yields to make room. Where the window cannot hold all of
+     it, the card takes the window and the list scrolls. */
+  --luke-command-chrome: calc(
+    var(--luke-touch-target) +
+    var(--luke-control-height) +
+    4 *
+    var(--luke-space-16) +
+    var(--luke-row-inset) +
+    var(--luke-type-group-leading) +
+    2 *
+    var(--luke-menu-inset)
+  );
+  --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
+  --luke-command-room: min(
+    calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
+    max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
+  );
+  --luke-command-sheet: min(
+    var(--luke-stage-height),
+    max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
+  );
+  --luke-command-top: max(
+    var(--luke-space-8),
+    min(
+      calc(var(--luke-stage-height) * 0.18),
+      var(--luke-stage-height) -
+      var(--luke-command-room) -
+      var(--luke-space-8)
+    )
+  );
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it
      was shared, the widest it stands (the window, less twice tooltip.tsx's
      TOOLTIP_MARGIN), and the width of a card hung in its place. */
   --luke-tooltip-radius: 7px;
   --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
-  --luke-tooltip-max-width: calc(100vw - 12px);
+  --luke-tooltip-max-width: calc(var(--luke-stage-width) - 12px);
   --luke-tooltip-card-width: 280px;
 
   /* A hover card's name is a label and the line under it a caption; what it
@@ -357,13 +392,48 @@
     0 24px 64px var(--luke-color-shadow-deep);
   /* The room a dialog's card may stand in: the window seen, less its margins. */
   --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+  /* ⌘K's card: the chrome around its list is a field, a filter band and a
+     foot, the list's own padding, a group's heading and the three hairlines
+     between them; the list keeps three rows beside that however short the
+     window is, so the card stands two thirds of the window tall (four fifths
+     as a sheet) or what that takes, never past the window less a margin,
+     and its top yields to make room. Where the window cannot hold all of
+     it, the card takes the window and the list scrolls. */
+  --luke-command-chrome: calc(
+    var(--luke-touch-target) +
+    var(--luke-control-height) +
+    4 *
+    var(--luke-space-16) +
+    var(--luke-row-inset) +
+    var(--luke-type-group-leading) +
+    2 *
+    var(--luke-menu-inset)
+  );
+  --luke-command-least: calc(var(--luke-command-chrome) + 3 * var(--luke-menu-row-height));
+  --luke-command-room: min(
+    calc(var(--luke-stage-height) - 2 * var(--luke-space-8)),
+    max(calc(var(--luke-stage-height) * 0.64), var(--luke-command-least))
+  );
+  --luke-command-sheet: min(
+    var(--luke-stage-height),
+    max(calc(var(--luke-stage-height) * 0.8), var(--luke-command-least))
+  );
+  --luke-command-top: max(
+    var(--luke-space-8),
+    min(
+      calc(var(--luke-stage-height) * 0.18),
+      var(--luke-stage-height) -
+      var(--luke-command-room) -
+      var(--luke-space-8)
+    )
+  );
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it
      was shared, the widest it stands (the window, less twice tooltip.tsx's
      TOOLTIP_MARGIN), and the width of a card hung in its place. */
   --luke-tooltip-radius: 7px;
   --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
-  --luke-tooltip-max-width: calc(100vw - 12px);
+  --luke-tooltip-max-width: calc(var(--luke-stage-width) - 12px);
   --luke-tooltip-card-width: 280px;
 
   /* A hover card's name is a label and the line under it a caption; what it

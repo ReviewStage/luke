@@ -50,7 +50,7 @@
      its own shape, the bar along the screen's foot. */
   .luke-video-player-frame:fullscreen {
     display: grid;
-    width: 100vw;
+    width: var(--luke-stage-width);
     height: 100vh;
     place-items: center;
   }

@@ -192,21 +192,16 @@ body,
 }
 
 /* A narrow room is a phone's, whose keyboard takes half the screen: a box's
-   field stops growing at a share of what is seen (`--luke-stage-height`)
-   short of its eight lines (tasks.css), and scrolls past it, so the words
-   written to and the box writing them both keep a part of the screen. Home's
-   card keeps its five lines under the cap, since Home scrolls. New task's
-   dialog portals out of the shell, so it reads the shell's room off the
-   document's root (`stage-room.ts`), and its Start stays in the card above
-   the keyboard. */
+   field stops growing at a smaller share of what is seen
+   (`--luke-stage-height`) than the two fifths every room keeps (tasks.css),
+   short of its eight lines, and scrolls past it, so the words written to and
+   the box writing them both keep a part of the screen. Home's card keeps its
+   five lines under the cap, since Home scrolls. New task's dialog portals out
+   of the shell, so it reads the shell's room off the document's root
+   (`stage-room.ts`), and its Start stays in the card above the keyboard. */
 :where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-field,
 [data-luke-room="narrow"] .new-task .agent-composer-field {
   --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
-}
-
-:where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-input,
-[data-luke-room="narrow"] .new-task .new-task-composer .agent-composer-input {
-  max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
 }
 
 /* A thread opened over a narrow room's plan spans the column rather than
