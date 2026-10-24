@@ -14,8 +14,7 @@ import {
 } from "@luke/ui";
 import { createContext, useContext, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
-import { SHELL_ROOM } from "../shell-room.js";
-import { ShellRoomContext } from "../stage-room.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { ROW_RUN, withRowMoves } from "./row-moves.js";
 
@@ -24,7 +23,7 @@ import { ROW_RUN, withRowMoves } from "./row-moves.js";
  *
  * The strip itself, its keys, its drag, its scroll, and its look, is
  * `@luke/ui`'s (`components/tabs`). What the window adds: how its tabs fold
- * in the room the stage gives (`ShellRoomContext`); the focused tab
+ * for the pointer that works them (`useCoarsePointer`); the focused tab
  * stepped left or right by ⇧⌘← and ⇧⌘→, as VS Code moves an editor, while
  * one of the strip's tabs has the focus; each tab's hint, this window's
  * tooltip (`TabTooltip`); and a tab's own actions on a right-click, or from
@@ -67,9 +66,12 @@ export function TabStrip({
   children: React.ReactNode;
 }): React.JSX.Element {
   const controls = useRef<TabsControls | null>(null);
-  // A narrow room's tabs keep their labels rather than turning to glyphs,
-  // since a phone has no hint to name a glyph and two agents' glyphs look alike.
-  const room = useContext(ShellRoomContext);
+  // A finger's tabs keep their labels rather than turning to glyphs, since a
+  // finger has no hint to name a glyph and two agents' glyphs look alike. Note
+  // that the room says nothing here: each tab folds by its own width
+  // (`@luke/ui`'s tabs.css), so a narrow window worked by a mouse folds as a
+  // wide one does, its glyphs named under the pointer.
+  const finger = useCoarsePointer();
   // Whether one of the strip's tabs has focus, the one the move chords move.
   const [focused, setFocused] = useState(false);
   const stepping = onMove !== undefined && focused;
@@ -81,7 +83,7 @@ export function TabStrip({
       <Tabs
         label={label}
         ground={ground}
-        fold={room === SHELL_ROOM.NARROW ? TABS_FOLD.LABEL : TABS_FOLD.GLYPH}
+        fold={finger ? TABS_FOLD.LABEL : TABS_FOLD.GLYPH}
         onMove={onMove}
         onFocusChange={setFocused}
         controls={controls}

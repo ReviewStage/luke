@@ -6,14 +6,14 @@ import { layContainersAt, shown } from "../testing/container-width.js";
 
 /**
  * narrow-labels.test.ts -- a phone's tabs, crumbs, Start, and bylines say
- * what they are, within the column. On the desktop a tab other than the chosen one narrower than 72px
- * turns to its glyph, its hint naming it under the pointer; a phone has no pointer to
- * hover, and two agents' glyphs look alike, so in a narrow room every tab
+ * what they are, within the column. Under a mouse a tab other than the chosen one narrower than 72px
+ * turns to its glyph, its hint naming it under the pointer, in any room; a finger has no pointer to
+ * hover, and two agents' glyphs look alike, so on a touch screen every tab
  * keeps its label and the strip scrolls instead. jsdom lays nothing out, so
  * the sheets are laid for a tab container that narrow
  * (`testing/container-width.ts`) and the strip is built in the markup
- * `@luke/ui`'s Tabs draws, folding as `tab-strip.tsx` tells it for the room. An Inbox item's crumbs, squeezed beside its bar's
- * buttons to a glyph and a letter, take a line of their own there, and Start
+ * `@luke/ui`'s Tabs draws, folding as `tab-strip.tsx` tells it for the pointer. An Inbox item's crumbs, squeezed beside its bar's
+ * buttons to a glyph and a letter, take a line of their own in a bar too narrow for them, by the item's own width in any room, and Start
  * keeps its word rather than folding to ▶. A sent message's byline, ending
  * at the bubble's right edge, cuts a long sender short rather than pushing
  * it off the column's left edge, in a narrow room and on the desktop's and
@@ -29,17 +29,17 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A strip of two tabs in a shell of the room given, the first chosen, each 62px wide, answering the second's label. */
-function unchosenLabel(room: string): HTMLElement {
-  laid = layContainersAt({ "luke-tab": 62 }, { touch: room === "narrow" });
+/** A strip of two tabs in a shell of the room given, worked by a finger or a mouse, the first chosen, each 62px wide, answering the second's label. */
+function unchosenLabel(room: string, touch: boolean): HTMLElement {
+  laid = layContainersAt({ "luke-tab": 62 }, { touch });
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
   document.documentElement.dataset.lukeRoom = room;
   const strip = shell.appendChild(document.createElement("div"));
   strip.className = "luke-tabs";
-  // The strip folds as the room says (`tab-strip.tsx`): to labels in a narrow one, to glyphs otherwise.
-  strip.dataset.fold = room === "narrow" ? "label" : "glyph";
+  // The strip folds as the pointer says (`tab-strip.tsx`): to labels under a finger, to glyphs under a mouse.
+  strip.dataset.fold = touch ? "label" : "glyph";
   const labels = ["Call", "Refresh tokens before expiry"].map((name, at) => {
     const tab = strip.appendChild(document.createElement("div"));
     tab.className = "luke-tab";
@@ -58,21 +58,23 @@ function unchosenLabel(room: string): HTMLElement {
   return labels[1] ?? assert.fail("the second tab's label");
 }
 
-test("in a narrow room a tab other than the chosen one keeps its label however narrow it stands, its × giving the label its place", () => {
-  const label = unchosenLabel("narrow");
+test("on a phone a tab other than the chosen one keeps its label however narrow it stands, its × giving the label its place", () => {
+  const label = unchosenLabel("narrow", true);
   assert.ok(shown(label));
   const close =
     label.closest(".luke-tab")?.querySelector(".luke-tab-close") ?? assert.fail("its ×");
   assert.equal(getComputedStyle(close).visibility, "hidden");
 });
 
-test("on the desktop's width a tab other than the chosen one narrower than 72px stands as its glyph alone", () => {
-  assert.ok(!shown(unchosenLabel("wide")));
+test("under a mouse a tab other than the chosen one narrower than 72px stands as its glyph alone, in a narrow room and a wide one alike", () => {
+  assert.ok(!shown(unchosenLabel("wide", false)));
+  document.body.replaceChildren();
+  assert.ok(!shown(unchosenLabel("narrow", false)));
 });
 
-/** An Inbox item's bar at a phone's width, in a shell of the room given: the way back, the crumbs, and the Resolve, answering the crumbs. */
-function itemCrumbs(room: string): HTMLElement {
-  laid = layContainersAt({ "inbox-item": 390 }, { touch: room === "narrow" });
+/** An Inbox item's bar as wide as given, in a shell of the room given: the way back, the crumbs, and the Resolve, answering the bar and the crumbs. */
+function itemBar(room: string, width: number) {
+  laid = layContainersAt({ "inbox-item": width }, { touch: room === "narrow" });
   const shell = document.body.appendChild(document.createElement("div"));
   shell.className = "desktop-shell";
   shell.dataset.room = room;
@@ -87,17 +89,27 @@ function itemCrumbs(room: string): HTMLElement {
   const crumbs = box.appendChild(document.createElement("div"));
   crumbs.className = "inbox-crumbs";
   box.appendChild(document.createElement("button")).textContent = "Resolve";
-  return crumbs;
+  return {
+    ownLine:
+      getComputedStyle(crumbs).flexBasis === "100%" && getComputedStyle(crumbs).order === "1",
+    backFolded: getComputedStyle(box).getPropertyValue("--luke-fold").trim() === "folded",
+  };
 }
 
-test("in a narrow room an Inbox item's crumbs take a line of their own under the way back and the Resolve, so they are not squeezed to a letter", () => {
-  const crumbs = itemCrumbs("narrow");
-  assert.equal(getComputedStyle(crumbs).flexBasis, "100%");
-  assert.equal(getComputedStyle(crumbs).order, "1");
+test("an Inbox item a phone's width takes its crumbs onto a line of their own under the way back and the Resolve, so they are not squeezed to a letter, in a narrow room and a wide one alike", () => {
+  assert.deepEqual(itemBar("narrow", 390), { ownLine: true, backFolded: false });
+  document.body.replaceChildren();
+  assert.deepEqual(itemBar("wide", 390), { ownLine: true, backFolded: false });
 });
 
-test("on the desktop's width an Inbox item's crumbs stand in its bar's one row, at any width the bar holds them", () => {
-  assert.notEqual(getComputedStyle(itemCrumbs("wide")).flexBasis, "100%");
+test("an Inbox item with room for its crumbs keeps them in its bar's one row, in a narrow room too", () => {
+  assert.equal(itemBar("narrow", 520).ownLine, false);
+  document.body.replaceChildren();
+  assert.equal(itemBar("wide", 720).ownLine, false);
+});
+
+test("an Inbox item narrower still folds its way back to its glyph, by its own width alone", () => {
+  assert.deepEqual(itemBar("wide", 340), { ownLine: true, backFolded: true });
 });
 
 /** Start in a task's bar at a phone's width, in a shell of the room given, answering how it folds. */

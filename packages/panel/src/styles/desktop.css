@@ -186,14 +186,11 @@ body,
   display: none;
 }
 
-/* A place standing alone in a narrow room leads its head with the way back,
-   so its name keeps the room left and what is said beside it gives way; its
+/* A place standing alone, Chat one column by its own width or in a narrow
+   room (`desktop-chat.tsx`'s `single`), leads its head with the way back, so
+   its name keeps the room left and what is said beside it gives way; its
    menu stays at the head's end, the only way to edit or archive a topic. */
-:where(:root)[data-luke-room="narrow"]
-  .desktop-shell
-  .chat-stream
-  > .luke-pane-bar
-  .luke-pane-bar-detail {
+.chat-view[data-single="true"] .chat-stream > .luke-pane-bar .luke-pane-bar-detail {
   display: none;
 }
 
@@ -2736,10 +2733,12 @@ ul.actor-stack {
    column narrows is the box's own. An item standing alone narrower than its
    bar's crumbs, the way back, the pager, and the ⋯ menu draws its way back's
    glyph alone, named still, beside the pager and the menu, and the crumbs
-   take a line of their own under them. A narrow room's item bar has no room
-   for its crumbs beside the way back and the Resolve, which squeezed them to
-   a glyph and a letter, so they do alike, the whole bar wide, each cut short
-   by its share as anywhere. */
+   take a line of their own under them. A bar narrower than a crumb, the way
+   back, the pager, and the menu need beside one another, a phone's in any
+   room or a side panel's on the desktop, has no room for its crumbs beside
+   the way back and the Resolve, which squeezed them to a glyph and a letter,
+   so they take a line of their own, the whole bar wide, each cut short by
+   its share as anywhere; the item's own width says so, never the room. */
 .inbox-item-bar {
   display: flex;
   min-width: 0;
@@ -2748,10 +2747,8 @@ ul.actor-stack {
   gap: var(--luke-control-gap);
 }
 
-@container inbox-item (width < 360px) {
-  /* The way back folds to its glyph (`FoldingButton`). */
+@container inbox-item (width < 480px) {
   .inbox-item-bar {
-    --luke-fold: folded;
     flex-wrap: wrap;
     row-gap: var(--luke-tight-gap);
   }
@@ -2762,14 +2759,11 @@ ul.actor-stack {
   }
 }
 
-:where(:root)[data-luke-room="narrow"] .desktop-shell .inbox-item-bar {
-  flex-wrap: wrap;
-  row-gap: var(--luke-tight-gap);
-}
-
-:where(:root)[data-luke-room="narrow"] .desktop-shell .inbox-item-bar > .inbox-crumbs {
-  order: 1;
-  flex-basis: 100%;
+/* The way back folds to its glyph (`FoldingButton`). */
+@container inbox-item (width < 360px) {
+  .inbox-item-bar {
+    --luke-fold: folded;
+  }
 }
 
 /* Only the column's bar meets the folded sidebar's toggle, so the items' bar

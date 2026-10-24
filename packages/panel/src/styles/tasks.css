@@ -2386,7 +2386,10 @@
 
 /* On a phone the header would hold half the screen over the view under it,
    so once that view is scrolled it folds to its title's one line, the rest
-   back as the view returns to its top (`useHeaderFold`). */
+   back as the view returns to its top (`useHeaderFold`). Note that this is
+   the phone's chrome, answering the screen's height a narrow room stands
+   for, so it reads the room; how the title row lays out is the header's
+   own width's (above), in any room. */
 :where(:root)[data-luke-room="narrow"] .desktop-shell .pull-request-header[data-folded] {
   padding-block: var(--luke-item-gap);
 }
