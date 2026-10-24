@@ -6391,6 +6391,45 @@ test("Whose in the view's menu offers Anyone, the reader as Me, then each teamma
   assert.equal(listed(page).length, 5);
 });
 
+test("the Whose chip scales in as someone is chosen and out as its × lifts it, drawn on out of reach until its exit has played, the line standing hidden between", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  const played = playListMotions();
+  // Note that a chip arriving rides the quick beat, which the list's tokens leave out.
+  document.documentElement.style.setProperty("--luke-duration-quick", "140ms");
+  onTestFinished(() => {
+    document.documentElement.style.removeProperty("--luke-duration-quick");
+  });
+  const { page } = mount();
+  await settle();
+  const line = () => page.querySelector<HTMLElement>(".inbox-tasks-chips")?.parentElement;
+  const scaledIn = (element: Element | null | undefined) =>
+    played.some(
+      (each) =>
+        each.element === element &&
+        each.keyframes.some((frame) => String(frame.transform).includes("scale")),
+    );
+  assert.equal(line()?.hidden, true, "the line stands ready, hidden");
+
+  chooseView(page, "Whose", "Me");
+  const chip = page.querySelector("[data-motion-key='whose']");
+  assert.equal(line()?.hidden, false);
+  assert.ok(scaledIn(chip), "the chip scales in");
+
+  act(() => (chip?.querySelector("button") ?? assert.fail("a way to lift it")).click());
+  const leaving = page.querySelector("[data-motion-key='whose']");
+  assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn on while it goes");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach");
+  assert.equal(leaving?.querySelector(".luke-chip-name")?.textContent, "Me");
+  assert.ok(scaledIn(leaving), "it scales out");
+
+  act(() => {
+    for (const each of played.splice(0)) each.finish();
+  });
+  assert.equal(page.querySelector("[data-motion-key='whose']"), null);
+  assert.equal(line()?.hidden, true);
+});
+
 test("Whose offers Me though the window does not know the reader's id, and a Me chosen stays checked under Me's chip", async () => {
   listedWorkspace = SHARED_WORKSPACE;
   members = SHARED_MEMBERS;

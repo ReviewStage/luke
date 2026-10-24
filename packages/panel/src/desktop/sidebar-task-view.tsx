@@ -6,9 +6,13 @@ import {
   ChipName,
   dropBelowStart,
   IconButton,
+  LIST_MOTION_WAY,
+  ListMotion,
+  motionRows,
   TaskStatusMark,
   TextButton,
   Tooltip,
+  useLeaving,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
@@ -30,6 +34,7 @@ import {
   UserCheckIcon,
   UserIcon,
 } from "lucide-react";
+import { type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
@@ -294,24 +299,106 @@ export function HiddenStatusesLine({
   );
 }
 
-/** One chip under the Tasks head: `@luke/ui`'s removable filter, what it says led by a glyph, and its × that lifts it. */
-function ViewChip({
-  glyph,
-  words,
-  lift,
-  onLift,
-}: {
-  glyph: React.JSX.Element;
-  words: string;
+/** What each chip under the Tasks head is followed by, as it arrives and leaves. */
+const VIEW_CHIP = {
+  ASSIGNED_TO: "assignedTo",
+  CREATED_BY: "createdBy",
+} as const;
+
+type ViewChipKey = (typeof VIEW_CHIP)[keyof typeof VIEW_CHIP];
+
+/** One place under the Tasks head: a filter's chip, as last drawn, so it leaves looking as it did. */
+interface ViewChipEntry {
+  readonly key: ViewChipKey;
+  readonly actor: Actor;
+  readonly words: string;
   /** What the × does, said to a screen reader. */
-  lift: string;
-  onLift: () => void;
+  readonly lift: string;
+}
+
+/** The chips the view's filters by person call for, Assigned to's first. */
+function viewChipEntries(
+  createdBy: string | undefined,
+  assignedTo: string | undefined,
+  tasks: readonly TaskSummary[],
+  reader: ReturnType<typeof useMemberDirectory>,
+): ViewChipEntry[] {
+  const entries: ViewChipEntry[] = [];
+  if (assignedTo !== undefined) {
+    const actor = filteredActor(assignedTo, reader, tasks);
+    entries.push({
+      key: VIEW_CHIP.ASSIGNED_TO,
+      actor,
+      words: assignedTo === reader.readerId ? "Assigned to me" : `Assigned to ${actorName(actor)}`,
+      lift: "Show tasks assigned to anyone",
+    });
+  }
+  if (createdBy !== undefined) {
+    const actor = filteredActor(createdBy, reader, tasks);
+    entries.push({
+      key: VIEW_CHIP.CREATED_BY,
+      actor,
+      words: createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`,
+      lift: "Show tasks created by anyone",
+    });
+  }
+  return entries;
+}
+
+/** What a press on a chip leaving does, out of reach as it is: nothing. */
+function stays(): void {}
+
+/**
+ * The chips themselves. Note that this is its own component under the
+ * line's `ListMotion`, because `useLeaving` finds the motion through the
+ * context the motion provides.
+ */
+function ViewChipLine({
+  line,
+  createdBy,
+  assignedTo,
+  tasks,
+  onClearCreatedBy,
+  onClearAssignedTo,
+}: {
+  line: RefObject<HTMLDivElement | null>;
+  createdBy: string | undefined;
+  assignedTo: string | undefined;
+  tasks: readonly TaskSummary[];
+  onClearCreatedBy: () => void;
+  onClearAssignedTo: () => void;
 }): React.JSX.Element {
+  const reader = useMemberDirectory();
+  // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
+  const listed = useMemo(
+    () => viewChipEntries(createdBy, assignedTo, tasks, reader),
+    [createdBy, assignedTo, tasks, reader],
+  );
+  const drawn = useLeaving(listed, (entry) => entry.key);
+  // Note that the box around the row stands hidden while nothing is filtered, so the row's padding takes no room, and a chip arriving arrives into a row that stands.
   return (
-    <Chip look={CHIP_LOOK.FILTER} removeLabel={lift} onRemove={onLift}>
-      {glyph}
-      <ChipName>{words}</ChipName>
-    </Chip>
+    <div ref={line} hidden={drawn.length === 0}>
+      <div className="sidebar-view-chips" {...motionRows()}>
+        {drawn.map(({ key, value, leaving }) => (
+          <Chip
+            key={key}
+            motionKey={key}
+            look={CHIP_LOOK.FILTER}
+            removeLabel={value.lift}
+            onRemove={
+              leaving
+                ? stays
+                : value.key === VIEW_CHIP.ASSIGNED_TO
+                  ? onClearAssignedTo
+                  : onClearCreatedBy
+            }
+          >
+            <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
+            <ChipName>{value.words}</ChipName>
+          </Chip>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -319,7 +406,9 @@ function ViewChip({
  * The chips under the Tasks head, while the view leaves tasks out: one
  * member's face and "Assigned to me" or "Assigned to" their name, whose ×
  * lists anyone's again; then one member's face and "Created by me" or
- * "Created by" their name, whose × lists everyone's again.
+ * "Created by" their name, whose × lists everyone's again. Each scales in
+ * as it is filtered and out as it is lifted, as the Tasks page's filter
+ * chips do, under a `ListMotion` of its own.
  */
 export function ViewChips({
   createdBy,
@@ -334,32 +423,19 @@ export function ViewChips({
   tasks: readonly TaskSummary[];
   onClearCreatedBy: () => void;
   onClearAssignedTo: () => void;
-}): React.JSX.Element | null {
-  const reader = useMemberDirectory();
-  if (createdBy === undefined && assignedTo === undefined) return null;
-  const actor = createdBy === undefined ? undefined : filteredActor(createdBy, reader, tasks);
-  const assignee = assignedTo === undefined ? undefined : filteredActor(assignedTo, reader, tasks);
+}): React.JSX.Element {
+  const line = useRef<HTMLDivElement | null>(null);
   return (
-    <div className="sidebar-view-chips">
-      {assignee === undefined ? null : (
-        <ViewChip
-          glyph={<ActorMark actor={assignee} size={ACTOR_SIZE.MARK} />}
-          words={
-            assignedTo === reader.readerId ? "Assigned to me" : `Assigned to ${actorName(assignee)}`
-          }
-          lift="Show tasks assigned to anyone"
-          onLift={onClearAssignedTo}
-        />
-      )}
-      {actor === undefined ? null : (
-        <ViewChip
-          glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
-          words={createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`}
-          lift="Show everyone's tasks"
-          onLift={onClearCreatedBy}
-        />
-      )}
-    </div>
+    <ListMotion root={line} way={LIST_MOTION_WAY.SCALE}>
+      <ViewChipLine
+        line={line}
+        createdBy={createdBy}
+        assignedTo={assignedTo}
+        tasks={tasks}
+        onClearCreatedBy={onClearCreatedBy}
+        onClearAssignedTo={onClearAssignedTo}
+      />
+    </ListMotion>
   );
 }
 
