@@ -13,6 +13,7 @@ import {
   useHintRest,
   usePressAway,
 } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
@@ -287,6 +288,10 @@ export function PierreDiffList({
   // The hint over the gap control under the pointer or the focus, which Pierre draws in a shadow root no hint of the window's own reaches.
   const [hint, setHint] = useState<GapHint | undefined>(undefined);
   const hintId = useId();
+  // The pill is drawn through its exit as it last stood, so letting the hint go fades it rather than snapping it away.
+  const [hintDrawn, setHintDrawn] = useState<GapHint | undefined>(hint);
+  if (hint !== undefined && hint !== hintDrawn) setHintDrawn(hint);
+  const pill = useDisclosure(hint !== undefined);
   // Note that the hint waits the window's rest before it is drawn, as every
   // other hint does, so the pointer crossing the gaps mounts nothing.
   const { rest, stop } = useHintRest();
@@ -518,8 +523,14 @@ export function PierreDiffList({
           </Button>
         </MenuSurface>
       )}
-      {hint === undefined ? null : (
-        <TooltipPill id={hintId} anchor={hint.anchor} label={hint.label} />
+      {!pill.mounted || hintDrawn === undefined ? null : (
+        <TooltipPill
+          id={hintId}
+          anchor={hintDrawn.anchor}
+          label={hintDrawn.label}
+          leaving={pill.leaving}
+          ref={pill.ref}
+        />
       )}
       {entries.map((entry) => (
         <Fragment key={entry.path}>
