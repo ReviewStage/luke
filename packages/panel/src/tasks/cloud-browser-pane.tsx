@@ -20,6 +20,7 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  FailureNote,
   FILL_ELEMENT,
   Fill,
   IconButton,
@@ -188,8 +189,8 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
  * reaches too, and the address,
  * which opens what is typed as a browser's address bar reads it, then
  * whatever the caller hands it. What is typed is put back on a blur, unless
- * `holdTyped`; Escape answers `onEscape` where given, and leaves the bar
- * otherwise.
+ * `holdTyped`; Escape answers `onEscape` where given, once what is typed has
+ * been cleared, and leaves the bar otherwise.
  */
 function CloudBrowserBar({
   address,
@@ -224,6 +225,16 @@ function CloudBrowserBar({
       field.current?.blur();
     }
     onOpen(opened);
+  };
+  // Note that an `onEscape` ends the whole tab, so the first Escape clears the words and only one on an empty field answers it.
+  const leave = () => {
+    if (onEscape === undefined) {
+      setTyped(undefined);
+      field.current?.blur();
+      return;
+    }
+    if ((typed ?? address) === "") onEscape();
+    else setTyped("");
   };
   // Note that a step's hint is its name while it works, and the name with the reason while it is off.
   const hintOf = (name: string) => (onStep === undefined ? `${name}: ${whyOff}` : name);
@@ -302,13 +313,7 @@ function CloudBrowserBar({
             onChange={setTyped}
             onOpen={go}
             onBlur={holdTyped ? undefined : () => setTyped(undefined)}
-            onEscape={
-              onEscape ??
-              (() => {
-                setTyped(undefined);
-                field.current?.blur();
-              })
-            }
+            onEscape={leave}
           />
         </>
       }
@@ -709,7 +714,8 @@ export function CloudBrowserPane({
  * focused and its steps idle, over a line saying where the tab will open.
  * Enter opens it through the service, which may first wake the agent's
  * sandbox, and hands the tab, taken over by the member, to `onOpened`; a
- * refusal stays, said under the bar. Escape discards the draft.
+ * refusal stays, said under the bar as a failure, the address kept so Enter
+ * tries again. Escape clears the address, then discards the draft.
  */
 export function CloudBrowserDraftPane({
   taskId,
@@ -727,7 +733,6 @@ export function CloudBrowserDraftPane({
   const { act } = useAct();
   const [opening, setOpening] = useState(false);
   const [refused, setRefused] = useState<string | undefined>(undefined);
-  useAnnounceShown(ANNOUNCE.ALERT, refused ?? "");
   const open = (address: string) => {
     if (opening) return;
     setOpening(true);
@@ -766,9 +771,7 @@ export function CloudBrowserDraftPane({
       />
       {refused === undefined ? null : (
         <div className="cloud-browser-standing">
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {refused}
-          </Text>
+          <FailureNote>{refused}</FailureNote>
         </div>
       )}
       <Fill clip className="browser-view-body cloud-browser-body">
