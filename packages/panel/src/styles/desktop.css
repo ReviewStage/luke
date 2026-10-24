@@ -192,21 +192,16 @@ body,
 }
 
 /* A narrow room is a phone's, whose keyboard takes half the screen: a box's
-   field stops growing at a share of what is seen (`--luke-stage-height`)
-   short of its eight lines (tasks.css), and scrolls past it, so the words
-   written to and the box writing them both keep a part of the screen. Home's
-   card keeps its five lines under the cap, since Home scrolls. New task's
-   dialog portals out of the shell, so it reads the shell's room off the
-   document's root (`stage-room.ts`), and its Start stays in the card above
-   the keyboard. */
+   field stops growing at a smaller share of what is seen
+   (`--luke-stage-height`) than the two fifths every room keeps (tasks.css),
+   short of its eight lines, and scrolls past it, so the words written to and
+   the box writing them both keep a part of the screen. Home's card keeps its
+   five lines under the cap, since Home scrolls. New task's dialog portals out
+   of the shell, so it reads the shell's room off the document's root
+   (`stage-room.ts`), and its Start stays in the card above the keyboard. */
 :where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-field,
 [data-luke-room="narrow"] .new-task .agent-composer-field {
   --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
-}
-
-:where(:root)[data-luke-room="narrow"] .desktop-shell .agent-composer-input,
-[data-luke-room="narrow"] .new-task .new-task-composer .agent-composer-input {
-  max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
 }
 
 /* A thread opened over a narrow room's plan spans the column rather than
@@ -1347,7 +1342,6 @@ ul.actor-stack {
   --luke-fold: worded;
 }
 
-[data-luke-profile="desktop"] .toolbar-button,
 [data-luke-profile="desktop"] .luke-button,
 [data-luke-profile="desktop"] .luke-chip,
 [data-luke-profile="desktop"] .luke-choice-bar-option,
@@ -1367,44 +1361,6 @@ ul.actor-stack {
     height: var(--luke-control-icon);
     flex: 0 0 auto;
   }
-}
-
-/* The file tree's Retry, beside the words saying why it is empty
-   (`file-tree/index.ts`): a button the tree's own DOM builds, so it cannot
-   be `@luke/ui`'s, drawn as its quiet one is, in the muted voice of the
-   words it follows and lit on hover. */
-.toolbar-button {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-icon-gap);
-  height: var(--luke-control-height);
-  padding: 0 var(--luke-row-inset);
-  border-radius: var(--luke-control-radius);
-  background: transparent;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  white-space: nowrap;
-  transition:
-    background-color var(--luke-duration-hover) var(--luke-motion-exit),
-    color var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
-.toolbar-button svg {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 auto;
-}
-
-.toolbar-button:hover {
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
-}
-
-.toolbar-button:active {
-  background: var(--luke-color-fill-pressed);
 }
 
 /* Plan actions ---------------------------------------------------------- */
@@ -5595,14 +5551,6 @@ ul.actor-stack {
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-/* A row's repository is led by its owner's picture, or a folder's glyph
-   where it has none to draw, at a caption's size. */
-.tasks-list-cell[data-cell="repository"] > .tasks-list-repository-glyph {
-  flex: none;
-  width: var(--luke-space-16);
-  height: var(--luke-space-16);
 }
 
 /* A row's creator's face and each of its agents' and pull requests' marks

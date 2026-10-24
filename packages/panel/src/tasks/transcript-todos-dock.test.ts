@@ -5,13 +5,15 @@ import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { layContainersAt } from "../testing/container-width.js";
 import { TranscriptTodosDock } from "./transcript-blocks.js";
 
 /**
  * transcript-todos-dock.test.ts -- the docked to-do list says how far it
  * has got with counts that roll as they change; an item that changes where
  * it stands while drawn has its glyph arrive, and a list drawn as it stands
- * is still. Synthetic list.
+ * is still; and in a short window an open list stops growing at under a
+ * third of what is seen and scrolls past it. Synthetic list.
  */
 
 declare global {
@@ -27,6 +29,8 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  document.head.innerHTML = "";
+  document.documentElement.removeAttribute("style");
 });
 
 /** A list of three steps, the first `done` of them done and the next in progress. */
@@ -84,4 +88,18 @@ test("a step done springs its check in, the next taken up arrives, and the count
     '.todo-item[data-todo-status="done"] > .luke-glyph-slot[data-arrival="check"]',
   );
   assert.equal(mark?.getAttribute("aria-label"), "Done");
+});
+
+test("in a short window, an open list stops growing at under a third of what is seen and scrolls past it", () => {
+  const stage = 260;
+  layContainersAt({}, { only: ["@luke/ui/tokens.css", "./tasks.css"] });
+  document.documentElement.style.setProperty("--luke-stage-height", `${stage}px`);
+  const { view } = docked(steps(1));
+  act(() => (view.querySelector("summary") ?? assert.fail("the dock's line")).click());
+  const items = view.querySelector(".todo-items") ?? assert.fail("the list stands open");
+  const { maxHeight, overflowY } = getComputedStyle(items);
+  const [, share] = /^calc\(var\(--luke-stage-height\) \* ([\d.]+)\)$/u.exec(maxHeight) ?? [];
+  assert.ok(share !== undefined, `${maxHeight} is a share of the stage`);
+  assert.ok(Number(share) < 1 / 3, `${share} of ${stage}px is under a third`);
+  assert.equal(overflowY, "auto");
 });

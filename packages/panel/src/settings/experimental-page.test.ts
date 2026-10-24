@@ -149,7 +149,7 @@ test("with no experiment standing, the page draws the empty state", () => {
 test("signed out, the page says to sign in rather than drawing switches no account holds", () => {
   const page = draw({ entries: EXPERIMENTS, experiments: NO_EXPERIMENTS, signedIn: false });
 
-  assert.equal(page.textContent, "Sign in to try experiments.");
+  assert.equal(page.textContent, "Sign in to use this page.");
 });
 
 /** The words the elements an attribute's ids name say, as a reader hears them. */

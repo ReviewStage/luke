@@ -3,11 +3,11 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/cr
 import {
   ANNOUNCE,
   AuthPage,
+  BUTTON_VARIANT,
+  Button,
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
-  TEXT_BUTTON_TONE,
   TEXT_LINK_LOOK,
-  TextButton,
   TextLink,
   WingFace,
 } from "@luke/ui";
@@ -68,9 +68,9 @@ export function SignInGate({
             {waiting ? (
               <span>
                 {FINISH_IN_BROWSER}{" "}
-                <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onCancel}>
+                <Button variant={BUTTON_VARIANT.QUIET} onClick={onCancel}>
                   Cancel
-                </TextButton>
+                </Button>
               </span>
             ) : null}
             {macAppLink === undefined ? null : (
@@ -91,7 +91,7 @@ export function SignInGate({
           primary={primary === provider}
           lastUsed={lastUsed === provider}
           busy={waiting === provider}
-          busyLabel="Waiting for browser…"
+          busyLabel="Waiting for browser"
           disabled={busy}
           onPress={() => onBegin(provider)}
         />

@@ -63,7 +63,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import type { MenuAction } from "../desktop/action-menu.js";
+import type { TabActionGroups } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffListProps,
@@ -75,6 +75,8 @@ import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { deliveryOf, handSettings, stateWith } from "../testing/app-state.js";
@@ -260,6 +262,7 @@ const TREE_STAND_IN: FileTreeModule = {
       search: nothing,
       only: nothing,
       within: nothing,
+      relist: nothing,
       mark: nothing,
       unmount: nothing,
     };
@@ -393,13 +396,16 @@ function held<A>() {
 function Switching({
   control,
   first,
+  onRun,
 }: {
   control: CodingAgentsControl;
   /** The tab it opens on, as the chip that opened it asked. */
   first: PullRequestView;
+  /** Runs the branch on this Mac, as the side panel offers where the platform has a Mac terminal; none elsewhere. */
+  onRun?: () => void;
 }) {
   const [view, setView] = useState<PullRequestView>(first);
-  const [actions, setActions] = useState<MenuAction[] | undefined>(undefined);
+  const [actions, setActions] = useState<TabActionGroups | undefined>(undefined);
   return createElement(
     Fragment,
     null,
@@ -413,19 +419,26 @@ function Switching({
       view,
       onView: setView,
       onActions: setActions,
+      onRun,
     }),
   );
 }
 
 /** What the side panel's toolbar ⋯ offers for the tab, as a row of presses: its items as the tab hands them up. */
-function Toolbar({ actions }: { actions: MenuAction[] | undefined }) {
+function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
   return createElement(
     "div",
     { "data-toolbar": "" },
-    (actions ?? []).map((action) =>
+    (actions ?? []).flat().map((action) =>
       createElement(
         "button",
-        { key: action.label, type: "button", disabled: action.disabled, onClick: action.onSelect },
+        {
+          key: action.label,
+          type: "button",
+          disabled: action.disabled,
+          onClick: (event: React.MouseEvent<HTMLElement>) =>
+            "onAsk" in action ? action.onAsk(event.currentTarget) : action.onSelect(),
+        },
         action.label,
       ),
     ),
@@ -4780,6 +4793,97 @@ test("several comments stand open at once, each under its own lines with its own
   );
 });
 
+test("the words of a line comment outlast the tab: a window drawn again finds them where the same lines are picked, and Add single comment lets them go", async () => {
+  await drawCommentable();
+  const added = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  };
+  const removed = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.DELETIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.DELETIONS,
+  };
+  writeLineComment(await pickLines(added), "Why twice?");
+  writeLineComment(await pickLines(removed), "Gone?");
+
+  // Closing the tab and reading the window again, as a relaunch does.
+  act(() => root?.unmount());
+  root = undefined;
+  await drawCommentable();
+
+  assert.equal(commentDrawn(), false, "no comment stands open before the lines are picked");
+  assert.equal(boxWords(await pickLines(added)), "Why twice?", "the words come back on the lines");
+  assert.equal(boxWords(await pickLines(removed)), "Gone?", "and on the side they were written on");
+  const other = await pickLines({
+    start: 8,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 8,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+  assert.equal(boxWords(other), "", "other lines meet none of them");
+
+  const [first] = commentNotes();
+  act(() =>
+    commentOffer(first?.element ?? assert.fail("a comment stands"), "Add single comment").click(),
+  );
+  await settle();
+  act(() => root?.unmount());
+  root = undefined;
+  await drawCommentable();
+
+  assert.equal(boxWords(await pickLines(added)), "", "the words GitHub took are let go");
+  assert.equal(boxWords(await pickLines(removed)), "Gone?", "the others stay");
+});
+
+test("the words of a line comment are kept apart for each pull request a tab shows: the agent's own and one named by its number do not meet each other's", async () => {
+  const lines = {
+    start: 13,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  };
+  await drawCommentable();
+  writeLineComment(await pickLines(lines), "For the agent's own");
+  act(() => root?.unmount());
+  root = undefined;
+
+  const control = {
+    ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
+      Promise.resolve({
+        pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files: [INVITE_FILE] },
+      }),
+    ),
+    numberedPullRequests: new Map([
+      [AGENT.id, new Map([[41, published(PULL_REQUEST_STATE.OPEN)]])],
+    ]),
+  };
+  await drawn(
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      number: 41,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view: PULL_REQUEST_VIEW.FILES,
+      onView: () => undefined,
+    }),
+  );
+  await settle();
+  const numbered = await pickLines(lines);
+  assert.equal(boxWords(numbered), "", "the numbered pull request meets none of the agent's own");
+  writeLineComment(numbered, "For #41");
+  act(() => root?.unmount());
+  root = undefined;
+
+  await drawCommentable();
+  assert.equal(boxWords(await pickLines(lines)), "For the agent's own");
+});
+
 test("a comment opened on lines takes the keyboard once the list stands its note in the window", async () => {
   await drawCommentable();
   const comment = await pickLines({
@@ -6002,4 +6106,95 @@ test("the member's pending comments stand on their lines in Files changed, marke
   await act(async () => option(tab, "Conversation").click());
   await settle();
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
+});
+
+test("on a phone no Preview or Run stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
+  const ran: string[] = [];
+  const readChanges: CodingAgentsControl["readChanges"] = () =>
+    Promise.resolve({
+      pullRequest: {
+        url: PAGE,
+        truncated: false,
+        files: [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 1,
+            deletions: 0,
+            omitted: null,
+            patch: "@@ -1,1 +1,2 @@\n const seats = 3;\n+const plan = 1;",
+          },
+        ],
+      },
+    });
+  const control = controlAnswering(
+    {
+      checks: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CHECKS,
+            deployments: [
+              {
+                environment: "Preview – luke-web",
+                state: DEPLOYMENT_STATE.READY,
+                url: "https://luke-web-git-expiry.vercel.app",
+              },
+            ],
+          },
+        }),
+    },
+    PULL_REQUEST_STATE.OPEN,
+    readChanges,
+  );
+  const tab = await drawn(
+    createElement(
+      ShellRoomContext.Provider,
+      { value: SHELL_ROOM.NARROW },
+      createElement(Switching, {
+        control,
+        first: PULL_REQUEST_VIEW.CONVERSATION,
+        onRun: () => ran.push("run"),
+      }),
+    ),
+  );
+
+  assert.deepEqual(
+    words(tab, ".pull-request-title-actions button").filter((each) => /Preview|Run/u.test(each)),
+    [],
+    "beside the title stands the merge alone",
+  );
+  assert.deepEqual(toolbarItems(tab), [
+    "Open on GitHub",
+    "Refresh",
+    "Preview – luke-web",
+    "Run on this Mac",
+  ]);
+  await pressToolbar(tab, "Preview – luke-web");
+  await pressToolbar(tab, "Run on this Mac");
+  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+  assert.deepEqual(ran, ["run"]);
+
+  await choose(tab, "Files changed");
+  assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");
+  assert.deepEqual(toolbarItems(tab), [
+    "Open on GitHub",
+    "Refresh",
+    "Preview – luke-web",
+    "Run on this Mac",
+    "Show files",
+    "Open files on GitHub",
+    "View options",
+    "Collapse all files",
+    "Copy patch",
+    "Download patch",
+    "Refresh changes",
+  ]);
+
+  await choose(tab, "Conversation");
+  assert.deepEqual(
+    toolbarItems(tab).slice(4),
+    [],
+    "Files changed's items go with it once another view is shown",
+  );
 });

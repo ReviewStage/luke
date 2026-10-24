@@ -1,3 +1,4 @@
+import { readingWords } from "@luke/features/words";
 import {
   BUTTON_VARIANT,
   Button,
@@ -153,16 +154,19 @@ function SettingsSections(): React.JSX.Element {
       <CatalogSection id="settings-section-reading" title="Placeholders while a read is out">
         <div className="catalog-settings">
           <SettingsSection title="API keys">
-            <SettingsRowsSkeleton label="Loading your keys" rows={[KEY_ROW, KEY_ROW]} />
+            <SettingsRowsSkeleton label={readingWords("your keys")} rows={[KEY_ROW, KEY_ROW]} />
           </SettingsSection>
           <SettingsSection title="Members">
-            <SettingsRowsSkeleton label="Loading the members" rows={[MEMBER_ROW, MEMBER_ROW]} />
+            <SettingsRowsSkeleton
+              label={readingWords("the members")}
+              rows={[MEMBER_ROW, MEMBER_ROW]}
+            />
           </SettingsSection>
           <SettingsSection title="Every control a row ends in">
-            <SettingsRowsSkeleton label="Loading the controls" rows={EVERY_CONTROL} />
+            <SettingsRowsSkeleton label={readingWords("the controls")} rows={EVERY_CONTROL} />
           </SettingsSection>
           <SettingsSectionsSkeleton
-            label="Loading the integrations"
+            label={readingWords("the integrations")}
             sections={[
               { headed: false, rows: [MEMBER_ROW] },
               { headed: true, rows: [KEY_ROW, KEY_ROW, KEY_ROW] },

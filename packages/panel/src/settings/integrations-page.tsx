@@ -25,7 +25,7 @@ import {
   integrationAccountLabel,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
-import { readFailedWords } from "@luke/features/words";
+import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -175,9 +175,9 @@ const PAGE_LINE = {
   CONNECTED: "Connected",
   CHECKING: "Checking…",
   TOOLS_NOT_READ: readFailedWords("the tools"),
-  SIGNED_OUT: "Sign in to connect integrations.",
+  SIGNED_OUT: SIGNED_OUT_WORDS,
   READ_FAILED: "Your integrations could not be read.",
-  NONE_OFFERED: "No integrations are available for this account.",
+  NONE_OFFERED: "No integrations available",
   NOT_OPENED: "Luke could not open your browser to sign in.",
   GITHUB_SIGN_IN: "Uses your GitHub sign-in",
 } as const;
@@ -345,18 +345,20 @@ function ToolsLine({
   panelId: string;
   tools: RowTools;
 }): React.JSX.Element {
+  // Note that the name starts with the words the press shows, so a voice command that says them finds it.
+  const shown = tools.found
+    ? `${tools.shown.length} of ${toolsCount(tools.all.length)} match`
+    : toolsCount(tools.all.length);
   return (
     <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} wrap>
       {`${PAGE_LINE.CONNECTED} · `}
       <TextButton
-        aria-label={`${tools.expanded ? "Hide" : "Show"} ${name} tools`}
+        aria-label={`${shown}, ${tools.expanded ? "hide" : "show"} ${name} tools`}
         aria-expanded={tools.expanded}
         aria-controls={tools.expanded ? panelId : undefined}
         onClick={tools.onToggle}
       >
-        {tools.found
-          ? `${tools.shown.length} of ${toolsCount(tools.all.length)} match`
-          : toolsCount(tools.all.length)}
+        {shown}
         {tools.expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
       </TextButton>
     </SettingsRowStateLine>
@@ -820,7 +822,10 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) {
     return (
-      <SettingsSectionsSkeleton label="Loading the integrations" sections={INTEGRATIONS_SKELETON} />
+      <SettingsSectionsSkeleton
+        label={readingWords("the integrations")}
+        sections={INTEGRATIONS_SKELETON}
+      />
     );
   }
   const healthOf = (server: string) =>

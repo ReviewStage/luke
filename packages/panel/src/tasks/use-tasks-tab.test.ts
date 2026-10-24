@@ -42,6 +42,7 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
+import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
@@ -2421,6 +2422,7 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const checks = mount({ ...run, profile: RUN_PROFILE.AGENT_CHECKS });
   const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
+  const page = mount({ ...run, profile: RUN_PROFILE.AGENT_PAGE });
 
   assert.equal(tasks.control().agents.agents, undefined);
   assert.deepEqual(
@@ -2434,6 +2436,7 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   );
   assert.deepEqual(file.control().sidePanel.tab, { file: "src/members/invite.ts" });
   assert.deepEqual(terminal.control().sidePanel.tab, { terminal: FIXTURE_AGENT_ID });
+  assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE });
 });
 
 /** The task as the list names it. */

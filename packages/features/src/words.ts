@@ -53,6 +53,9 @@ export const FIELD_WORDS = {
   HIDE: "Hide",
 } as const;
 
+/** The one line a confirm closes with when its act cannot be undone, written once so no screen spells it its own way. */
+export const IRREVERSIBLE_WORDS = "This cannot be undone.";
+
 /** How English counts: "one" for 1, "other" for 0, 2, and 1.5. */
 const PLURAL = new Intl.PluralRules("en-US");
 
@@ -86,6 +89,9 @@ export function andList(names: readonly string[]): string {
 export function orList(names: readonly string[]): string {
   return OR.format(names);
 }
+
+/** What a page that needs an account says to someone not signed in. One line for every page, so none is worded its own way. */
+export const SIGNED_OUT_WORDS = "Sign in to use this page.";
 
 /** What a wait is called while something is read: "Reading tasks". A label, so no "…". */
 export function readingWords(things: string): string {

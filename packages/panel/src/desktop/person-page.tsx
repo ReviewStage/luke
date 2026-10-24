@@ -14,6 +14,7 @@ import {
   Button,
   DetailPage,
   ErrorState,
+  Fill,
   GAP,
   List,
   ListRow,
@@ -34,6 +35,7 @@ import {
   TEXT_VARIANT,
   Text,
   Time,
+  type ToolbarPickUp,
   useMenu,
   useMinute,
 } from "@luke/ui";
@@ -54,7 +56,7 @@ import {
   personRef,
 } from "@luke/ui/person-page-model";
 import { LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
-import { type ReactNode, useCallback, useRef } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
@@ -81,8 +83,10 @@ import {
   RowsSkeleton,
   SectionSkeleton,
 } from "./person-frame.js";
+import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
+import type { TaskHeadBack } from "./task-pane-switcher.js";
 import { useAutomations } from "./use-automations.js";
 
 /**
@@ -194,6 +198,7 @@ function PersonActions({
   person,
   shared,
   onShowTasks,
+  phone = false,
 }: {
   tasks: TasksControl;
   userId: string;
@@ -201,6 +206,8 @@ function PersonActions({
   /** Whether the workspace is shared, which alone filters the sidebar by person. */
   shared: boolean;
   onShowTasks: () => void;
+  /** Whether a phone heads the page, whose one ⋯ offers the sidebar's filter too, its button not drawn. */
+  phone?: boolean;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const copy = useCopyToast();
@@ -220,7 +227,11 @@ function PersonActions({
   // A page whose workspace is not known has no link, rather than one naming no workspace.
   const slug = home?.slug ?? homeId;
   const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
+  const showTasks = you ? "My tasks in sidebar" : "Their tasks in sidebar";
   const actions: MenuAction[][] = [
+    ...(phone && shared
+      ? [[{ label: showTasks, icon: <ListFilterIcon />, onSelect: onShowTasks }]]
+      : []),
     ...(link === undefined
       ? []
       : [
@@ -262,9 +273,9 @@ function PersonActions({
   ];
   return (
     <>
-      {shared ? (
+      {shared && !phone ? (
         <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ListFilterIcon />} onClick={onShowTasks}>
-          {you ? "My tasks in sidebar" : "Their tasks in sidebar"}
+          {showTasks}
         </Button>
       ) : null}
       {actions.length === 0 ? null : (
@@ -432,19 +443,26 @@ function PersonTasks({
   );
 }
 
+/** What a phone's bar over the page is named by. */
+const PERSON_PHONE_PLACE = "person-page";
+
 /** The page inside the workspace's member directory, which names the person. */
 function PersonColumn({
   tasks,
   userId,
   name: opened,
   staged,
+  away,
 }: {
   tasks: TasksControl;
   userId: string;
   name: string | undefined;
   staged: boolean;
+  away: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const now = useMinute();
+  // What a phone's bar picks up from the page's header once it scrolls away.
+  const [pickUp, setPickUp] = useState<ToolbarPickUp>({ name: "", shown: false });
   const listed = tasks.listed.tasks;
   // Named as the list names them, else as the members read does, else by the name the page was opened with, else as the former members read does; nobody's name where none does.
   const { members, readerId, former, refused, retry } = useMemberDirectory();
@@ -483,7 +501,17 @@ function PersonColumn({
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
-    return <NotFound thing={NOT_FOUND_THING.PERSON} bar={{}} />;
+    // A phone's page still leads with its way back, the drawer and the places bar out of reach.
+    return (
+      <NotFound
+        thing={NOT_FOUND_THING.PERSON}
+        bar={
+          away === undefined
+            ? {}
+            : phoneBar({ place: PERSON_PHONE_PLACE, start: <PhoneBack back={away} />, end: null })
+        }
+      />
+    );
   }
   // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
   const theirs = you ? "your" : "their";
@@ -498,9 +526,20 @@ function PersonColumn({
     ) : unnamed ? (
       <PersonReadingSkeleton />
     ) : null;
-  return (
+  const actions = (
+    <PersonActions
+      tasks={tasks}
+      userId={userId}
+      person={person}
+      shared={shared}
+      onShowTasks={showTasks}
+      phone={away !== undefined}
+    />
+  );
+  const detail = (
     <DetailPage
       frame={PAGE_FRAME.PAGE}
+      onPickUp={away === undefined ? undefined : setPickUp}
       title={
         unnamed ? (
           refused ? (
@@ -515,15 +554,8 @@ function PersonColumn({
       description={
         unnamed ? refused ? undefined : <PersonLineSkeleton /> : <PersonLine person={person} />
       }
-      actions={
-        <PersonActions
-          tasks={tasks}
-          userId={userId}
-          person={person}
-          shared={shared}
-          onShowTasks={showTasks}
-        />
-      }
+      // A phone's page offers its acts from its bar's one ⋯ instead.
+      actions={away === undefined ? actions : undefined}
     >
       <PersonTop>{note}</PersonTop>
       {tasks.listFailed ? (
@@ -636,6 +668,18 @@ function PersonColumn({
       ) : null}
     </DetailPage>
   );
+  if (away === undefined) return detail;
+  return (
+    <Fill className="person-phone">
+      <PhoneHead
+        place={PERSON_PHONE_PLACE}
+        start={<PhoneBack back={away} />}
+        pickUp={pickUp}
+        end={actions}
+      />
+      {detail}
+    </Fill>
+  );
 }
 
 /** A person's page, in the plan's place, read against the listed workspace's members. */
@@ -644,6 +688,7 @@ export function PersonPage({
   userId,
   name,
   staged = false,
+  away,
 }: {
   tasks: TasksControl;
   userId: string;
@@ -651,11 +696,13 @@ export function PersonPage({
   name?: string | undefined;
   /** Whether the run is a fixture's, whose sidebar view is kept nowhere. */
   staged?: boolean;
+  /** A phone's way back out of the page (`WindowHistory`'s `onLeave`), which heads it as a phone's page; none elsewhere. */
+  away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, tasks.personView.onClose);
   return (
     <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-      <PersonColumn tasks={tasks} userId={userId} name={name} staged={staged} />
+      <PersonColumn tasks={tasks} userId={userId} name={name} staged={staged} away={away} />
     </MemberDirectory>
   );
 }

@@ -64,7 +64,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 const AT = 1_792_000_000_000;
 
 /** What a page's card says where its page cannot be read, as the reader sees it. */
-const PAGE_UNREAD = "Luke can't read this page.";
+const PAGE_UNREAD = "Luke cannot read this page.";
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -43,13 +44,16 @@ import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/tes
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -422,19 +426,21 @@ afterEach(() => {
   takeDownTerminal = undefined;
 });
 
-/** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
+/** The page of the agent, standing in the task's place, as the window's tasks control holds it, its atoms held by `registry`. */
 function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
+  away?: { label: string; onPress: () => void },
+  registry = AtomRegistry.make(),
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID });
+  const page = createElement(DesktopAgentPage, { tasks, agentId: AGENT_ID, away });
   act(() =>
     root?.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(
           Fragment,
           null,
@@ -1208,6 +1214,23 @@ test("an agent the service will not hand the reader, as a link to another worksp
   );
 });
 
+test("on a phone an agent that is not found still leads with its way back", async () => {
+  pages = [{ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }];
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Not found/u);
+  const head = page.querySelector<HTMLElement>(".agent-head") ?? assert.fail("the phone's bar");
+  const back = head.querySelector<HTMLButtonElement>("button") ?? assert.fail("its way back");
+  assert.equal(back.textContent?.trim(), "Inbox");
+  act(() => back.click());
+  assert.deepEqual(left, ["away"]);
+});
+
 test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   const page = mount();
@@ -1908,75 +1931,110 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the slow tests");
 });
 
-test("an @ in the agent's box names an archived agent by its task's name, read from the window's tasks", async () => {
-  installEditorLayout();
-  installScrollIntoView();
-  const billing: Task = {
-    id: "2b2b2b2b-0000-4000-8000-000000000000",
-    workspaceId: PAGE.workspaceId,
-    name: "Billing",
-    createdAt: 1,
-    updatedAt: 2,
-    repository: "acme/relay",
-    document: { body: "", assumptions: [] },
-  };
-  workspace = [
-    {
-      id: "3c3c3c3c-0000-4000-8000-000000000000",
-      planId: billing.id,
-      model: PAGE.model,
-      effort: PAGE.effort,
-      title: "Bill by seat",
-      createdAt: 1,
-      status: CODING_AGENT_STATUS.COMPLETED,
-      turnId: null,
-      archivedAt: 3,
-    },
-  ];
-  const page = mount(tasksControl({ tasks: [billing] }));
-  await settle();
+/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
 
-  typeInComposer(page, "Ask @billing");
-  await settle();
-
-  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
-  assert.deepEqual(
-    rows.map((row) => [
-      row.querySelector(".luke-combobox-option-label")?.textContent,
-      row.querySelector(".luke-combobox-option-detail")?.textContent,
-    ]),
-    [["Bill by seat", "Billing · Archived"]],
-  );
+/** The clock moved past the pause the typing rests before agents are searched for, and what the search answered drawn. */
+const pastSearchPause = Effect.gen(function* () {
+  yield* TestClock.adjust("300 millis");
+  yield* Effect.promise(settle);
 });
 
-test("an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents", async () => {
-  installEditorLayout();
-  installScrollIntoView();
-  pages = [{ agent: { ...PAGE, repository: null } }];
-  workspace = [
-    {
-      id: "3c3c3c3c-0000-4000-8000-000000000000",
-      planId: null,
-      model: PAGE.model,
-      effort: PAGE.effort,
-      title: "Bill by seat",
-      createdAt: 1,
-      status: CODING_AGENT_STATUS.COMPLETED,
-      turnId: null,
-    },
-  ];
-  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
-  await settle();
+it.effect(
+  "an @ in the agent's box names an archived agent by its task's name, read from the window's tasks",
+  () =>
+    Effect.gen(function* () {
+      installEditorLayout();
+      installScrollIntoView();
+      const billing: Task = {
+        id: "2b2b2b2b-0000-4000-8000-000000000000",
+        workspaceId: PAGE.workspaceId,
+        name: "Billing",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+        document: { body: "", assumptions: [] },
+      };
+      workspace = [
+        {
+          id: "3c3c3c3c-0000-4000-8000-000000000000",
+          planId: billing.id,
+          model: PAGE.model,
+          effort: PAGE.effort,
+          title: "Bill by seat",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          archivedAt: 3,
+        },
+      ];
+      const page = mount(
+        tasksControl({ tasks: [billing] }),
+        undefined,
+        undefined,
+        registryOn(yield* Clock.Clock),
+      );
+      yield* Effect.promise(settle);
 
-  typeInComposer(page, "Ask @bill");
-  await settle();
+      typeInComposer(page, "Ask @billing");
+      yield* pastSearchPause;
 
-  const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
-  assert.deepEqual(
-    rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
-    ["Bill by seat"],
-  );
-});
+      const rows = [
+        ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+      ];
+      assert.deepEqual(
+        rows.map((row) => [
+          row.querySelector(".luke-combobox-option-label")?.textContent,
+          row.querySelector(".luke-combobox-option-detail")?.textContent,
+        ]),
+        [["Bill by seat", "Billing · Archived"]],
+      );
+    }),
+);
+
+it.effect(
+  "an agent working in no repository, as Luke does, still takes an @ in its box, which offers the workspace's agents",
+  () =>
+    Effect.gen(function* () {
+      installEditorLayout();
+      installScrollIntoView();
+      pages = [{ agent: { ...PAGE, repository: null } }];
+      workspace = [
+        {
+          id: "3c3c3c3c-0000-4000-8000-000000000000",
+          planId: null,
+          model: PAGE.model,
+          effort: PAGE.effort,
+          title: "Bill by seat",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+        },
+      ];
+      const page = mount(
+        tasksControl({ workspace: ACME, workspaces: [ACME] }),
+        undefined,
+        undefined,
+        registryOn(yield* Clock.Clock),
+      );
+      yield* Effect.promise(settle);
+
+      typeInComposer(page, "Ask @bill");
+      yield* pastSearchPause;
+
+      const rows = [
+        ...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+      ];
+      assert.deepEqual(
+        rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent),
+        ["Bill by seat"],
+      );
+    }),
+);
 
 test("on the page of an agent working in no repository, a GitHub page of a file or a folder in its words is that file's or folder's chip, of the repository its address names, and opens on GitHub", async () => {
   pages = [{ agent: { ...PAGE, repository: null } }];
@@ -2102,7 +2160,7 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   assert.equal(title?.textContent, "Permanently delete agent?");
   assert.match(
     body?.textContent ?? "",
-    /and its transcript will be deleted\. This can’t be undone\. To keep it out of the way instead, archive it\.$/u,
+    /and its transcript will be deleted\. This cannot be undone\. To keep it out of the way instead, archive it\.$/u,
   );
   assert.equal(
     document.activeElement,
@@ -2226,6 +2284,28 @@ test("code Luke showed on a call into the agent with no task stands in its page'
   // No File tab reads a repository no task names, so the card offers no way into one.
   assert.ok(panel.querySelector(".luke-code-card"), "the code's card stands");
   assert.equal(panel.querySelector(".luke-code-card [aria-label^='Open ']"), null);
+});
+
+test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {
+  const left: string[] = [];
+  const page = mount(tasksControl({}), undefined, {
+    label: "Inbox",
+    onPress: () => left.push("away"),
+  });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".agent-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Inbox", "Agent actions"],
+    "one control a corner",
+  );
+  assert.ok(head.querySelector("h1")?.textContent, "the agent's name is the title");
+  assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
+  act(() => head.querySelector<HTMLButtonElement>("button")?.click());
+  assert.deepEqual(left, ["away"], "the way back goes where the shell says");
 });
 
 test("the page drawn again over the same agent draws none of the links and chips in its words again", async () => {

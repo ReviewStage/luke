@@ -82,11 +82,23 @@ export function copyImageThroughShell(url: string): Promise<void> {
  * of it in a toast reading `label` ("Plan copied"), or the failure.
  */
 export function useCopyToast(): (words: string, label: string) => void {
+  const copied = useMenuCopy();
+  return (words, label) => copied(() => copyThroughShell(words), label);
+}
+
+/** Copies a picture from a menu, as `useCopyToast` copies words: put on the clipboard as a copy button puts one, and said in a toast. */
+export function useImageCopyToast(): (url: string, label: string) => void {
+  const copied = useMenuCopy();
+  return (url, label) => copied(() => copyImageThroughShell(url), label);
+}
+
+/** A menu's copy, said in a toast reading `label` once the clipboard answers, or its failure; only the latest press's answer is said. */
+function useMenuCopy(): (copying: () => Promise<void>, label: string) => void {
   const show = useToast();
-  return (words, label) => {
+  return (copying, label) => {
     latestMenuCopy += 1;
     const press = latestMenuCopy;
-    copyAnswer(appPlatform().copyText(words)).then((answer) => {
+    copyAnswer(copying()).then((answer) => {
       if (press !== latestMenuCopy) return;
       show(
         answer === COPY_STATE.COPIED

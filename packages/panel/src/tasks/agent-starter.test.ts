@@ -318,7 +318,7 @@ test("a key a teammate's agent failed on is named as theirs, with no Settings of
 
   assert.equal(
     failed(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
-    "Failed: Charles Pan's API key was refused or can't be read",
+    "Failed: Charles Pan's API key was refused or cannot be read",
   );
   assert.equal(
     endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),

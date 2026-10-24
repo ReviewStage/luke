@@ -1,14 +1,19 @@
 import {
+  BackButton,
   dropBelow,
   MoreButton,
   moreLabel,
+  NO_BACK_KEY,
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
+  type ToolbarPickUp,
+  type ToolbarProps,
   useMenu,
 } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
+import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
  * phone-head.tsx -- a phone's page header: one control in each corner and the page's title centred between them.
@@ -63,36 +68,52 @@ export function useMenuAsk(): {
   };
 }
 
-/** The row; see the module's head. */
-export function PhoneHead({
-  place,
-  start,
-  title,
-  tag,
-  end,
-}: {
+/** What a phone's row holds, corner by corner. */
+export interface PhoneHeadSlots {
   /** What the row heads, which its class names, as `task-head` for a task. */
   place: string;
   /** The start corner's one control. */
   start: React.ReactNode;
-  /** What is on screen, centred, or what stands in its place, such as a search's field. */
-  title: React.ReactNode;
+  /** What is on screen, centred, or what stands in its place, such as a search's field; none where the page's own header names it, the row then picking that name up (`pickUp`). */
+  title?: React.ReactNode;
+  /** A document's name, centred once its header has scrolled away; read only where there is no `title`. */
+  pickUp?: ToolbarPickUp | undefined;
   /** What names the page's state, after the title on its baseline (an experiment's mark). */
   tag?: React.ReactNode;
   /** The end corner's one control, the ⋯. */
   end: React.ReactNode;
-}): React.JSX.Element {
+}
+
+/** The bar a phone's row is, as `Toolbar` takes it, for a state that draws its own bar (`NotFound`). */
+export function phoneBar({ place, start, title, pickUp, tag, end }: PhoneHeadSlots): ToolbarProps {
+  return {
+    look: TOOLBAR_LOOK.PHONE,
+    place,
+    // A corner holds one control, so a way back is its glyph alone, named still.
+    folded: true,
+    start: TOOLBAR_INSET.COLUMN,
+    end: TOOLBAR_INSET.COLUMN,
+    lead: start,
+    title,
+    pickUp,
+    tag,
+    actions: end,
+  };
+}
+
+/** The row; see the module's head. */
+export function PhoneHead(slots: PhoneHeadSlots): React.JSX.Element {
+  return <Toolbar {...phoneBar(slots)} />;
+}
+
+/**
+ * A phone's way back, its start corner: the back's glyph, named by where it
+ * leads. Note that it names no key, because the window's Back takes one
+ * history step and this leaves the page, as the task's way back does.
+ */
+export function PhoneBack({ back }: { back: TaskHeadBack }): React.JSX.Element {
   return (
-    <Toolbar
-      look={TOOLBAR_LOOK.PHONE}
-      place={place}
-      start={TOOLBAR_INSET.COLUMN}
-      end={TOOLBAR_INSET.COLUMN}
-      lead={start}
-      title={title}
-      tag={tag}
-      actions={end}
-    />
+    <BackButton label={back.label} place={back.label} command={NO_BACK_KEY} onBack={back.onPress} />
   );
 }
 

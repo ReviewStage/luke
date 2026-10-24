@@ -188,9 +188,9 @@ test("while the default and the keys are read, placeholder rows stand in each gr
   act(() => root.render(createElement(CodingAgentsPage, { signedIn: true })));
 
   assert.deepEqual(placeholders(page), [
-    ["Loading your keys", 2],
-    ["Loading your default", 3],
-    ["Loading your chapters model", 1],
+    ["Reading your keys", 2],
+    ["Reading your default", 3],
+    ["Reading your chapters model", 1],
   ]);
   await settle();
   assert.deepEqual(placeholders(page), []);

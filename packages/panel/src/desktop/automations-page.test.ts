@@ -645,28 +645,70 @@ test("a switch turns its automation off, and the row takes the service's answer 
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
 });
 
-test("an older switch's answer landing after a newer one's draws nothing over it", async () => {
+test("a switch flips at once, before the service answers, and a press made meanwhile waits its turn", async () => {
   heldChanges = [];
   const page = mount();
   await settle();
-  listHeld = true;
-  const press = () =>
-    act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+  const sweep = () =>
+    rowOf(page, "Nightly flaky-test sweep").querySelector<HTMLButtonElement>("[role=switch]");
+  const press = () => act(() => sweep()?.click());
 
   press();
-  press();
   await settle();
-  const [older, newer] = heldChanges;
-  newer?.();
-  await settle();
-  older?.();
-  await settle();
-
-  assert.equal(changes.length, 2);
   assert.equal(
-    page.querySelector(".automation-row-name")?.textContent,
-    "Nightly flaky-test sweep, write 2",
+    sweep()?.getAttribute("aria-checked"),
+    "false",
+    "it reads off while the write is out",
   );
+  press();
+  await settle();
+  assert.equal(changes.length, 1, "the second press sends nothing while the first is out");
+  assert.equal(sweep()?.getAttribute("aria-checked"), "true", "but the switch already shows it");
+
+  heldChanges[0]?.();
+  await settle();
+
+  assert.deepEqual(changes, [
+    { automationId: SWEEP.id, change: { enabled: false } },
+    { automationId: SWEEP.id, change: { enabled: true } },
+  ]);
+});
+
+test("presses made while a write is out send only the newest, and none that repeats what was sent", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  const press = () =>
+    act(() =>
+      rowOf(page, "Nightly flaky-test sweep")
+        .querySelector<HTMLButtonElement>("[role=switch]")
+        ?.click(),
+    );
+
+  press();
+  press();
+  press();
+  await settle();
+  heldChanges[0]?.();
+  await settle();
+
+  assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { enabled: false } }]);
+});
+
+test("a switch the service refuses in the editor reads its new state at once, then goes back", async () => {
+  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+
+  assert.equal(
+    page.querySelector("[role=switch]")?.getAttribute("aria-checked"),
+    "false",
+    "it flipped before the refusal came",
+  );
+  await settle();
+  assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
 });
 
 test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {
@@ -1041,6 +1083,12 @@ function button(name: string): HTMLButtonElement {
   );
   assert.ok(found, `no button ${name}`);
   return found;
+}
+
+/** Stands a phone's automation's runs, from its head's ⋯, where its Runs now stands. */
+function phoneRuns(): void {
+  act(() => button("Automation actions").click());
+  act(() => menuItem("Runs").click());
 }
 
 /** Whether a copy button shows its copy landed, its glyph turned to the check, once the clipboard took it. */
@@ -3325,7 +3373,7 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
       "no Runs panel stands beside the setup, kept open or not",
     );
 
-    act(() => button("Runs").click());
+    phoneRuns();
     assert.deepEqual(screensShown(page), ["runs"]);
     const runsScreen = page.querySelector("section[aria-label='Runs']");
     assert.equal(runsScreen?.querySelectorAll("li").length, 1, "its runs are listed");
@@ -3337,15 +3385,17 @@ test("on a narrow stage an automation's setup stands the whole width with its ru
   }
 });
 
-test("on a narrow stage Runs takes the focus to the runs' way back, and the way back hands it to Runs", async () => {
+test("on a narrow stage Runs, from the head's ⋯, takes the focus to the runs' way back, and the way back hands it to the ⋯ it was chosen from", async () => {
   window.localStorage.clear();
   mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  const runsButton = button("Runs");
+  const more = button("Automation actions");
   act(() => {
-    runsButton.focus();
-    runsButton.click();
+    more.focus();
+    more.click();
   });
+  const runsItem = menuItem("Runs");
+  act(() => runsItem.click());
   const back = button(SWEEP.name);
   assert.ok(document.activeElement === back, "the way back to the setup");
 
@@ -3353,7 +3403,7 @@ test("on a narrow stage Runs takes the focus to the runs' way back, and the way 
     back.focus();
     back.click();
   });
-  assert.ok(document.activeElement === button("Runs"), "the setup's Runs");
+  assert.ok(document.activeElement === button("Automation actions"), "the setup's ⋯");
 });
 
 test("on a narrow stage a link to a run opens on its runs, with the run marked and the way back to the setup", async () => {
@@ -3617,6 +3667,50 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   await settle();
   assert.equal(creates.length, 0);
   assert.match(page.textContent ?? "", /Luke cannot receive Sentry events here/u);
+});
+
+test("on a phone the list is headed by New automation and one ⋯ holding Create with an agent, its title centred between them", async () => {
+  const page = mountNarrow({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".automations-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["New automation", "Automation list actions"],
+  );
+  assert.equal(head.querySelector("h1")?.textContent, "Automations");
+  act(() => button("Automation list actions").click());
+  assert.ok(menuItem("Create with an agent"), "the ⋯ holds Create with an agent");
+});
+
+test("on a phone an automation's page is headed by the way back to the list, its name, and one ⋯ holding Save, Run now, its switch, Runs, and the automation's own actions, where the draft stands its heading", async () => {
+  const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".automation-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map(
+      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
+    ),
+    ["Automations", "Automation actions"],
+  );
+  // The page's header names it, and the head picks the name up once that scrolls away, so it is the one h1.
+  assert.equal(head.querySelector("h1"), null);
+  assert.equal(page.querySelector("h1")?.textContent, SWEEP.name);
+  act(() => button("Automation actions").click());
+  const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+  assert.match(menu?.textContent ?? "", /Saved/, "the draft's standing heads the menu");
+  for (const offered of ["Save", "Run now", "Runs", "Copy link", "Delete"]) {
+    assert.ok(
+      [...(menu?.querySelectorAll(".luke-menu-item-label") ?? [])].some(
+        (each) => each.textContent === offered,
+      ),
+      `the ⋯ offers ${offered}`,
+    );
+  }
+  assert.ok(menu?.querySelector('[role="menuitemcheckbox"]'), "and the automation's switch");
 });
 
 test("a model catalog that could not be read says so in the model menu, and Retry reads it again", async () => {

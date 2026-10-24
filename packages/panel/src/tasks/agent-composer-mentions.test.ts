@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type {
   CodingAgentAgentAnswer,
   CodingAgentWorkspaceListParams,
@@ -33,12 +34,15 @@ import { IDLE_TASKS_VIEW, type TaskCodeShowing } from "@luke/features/tasks-view
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -357,13 +361,16 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
   return createElement(AgentComposer, { ...QUIET_COMPOSER, agentId: SELF_ID, composer, skills });
 }
 
-/** The node drawn on a task's page, or off any page where none is given; `redraw` draws it on the page given. */
-function drawing(node: ReactNode, page: TaskMentionsValue | undefined) {
+/** The node drawn on a task's page, or off any page where none is given, its atoms held by `registry`; `redraw` draws it on the page given. */
+function drawing(
+  node: ReactNode,
+  page: TaskMentionsValue | undefined,
+  registry = AtomRegistry.make(),
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const redraw = (on: TaskMentionsValue | undefined) =>
     act(() =>
       root.render(
@@ -920,8 +927,24 @@ function WorkspacePage({ children }: { children: ReactNode }): ReactNode {
   return createElement(TaskMentions, { value: { ...taskPage(), readAgents }, children });
 }
 
-/** The box on the plan's page that reads its workspace's agents, every message it sends written down. */
-async function workspaceBox() {
+/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
+/** Longer than the typing rests before the service is searched for the words typed. */
+const PAST_SEARCH_PAUSE = "300 millis";
+
+/** The clock moved past the search's pause, and what the search answered drawn. */
+const rest = Effect.gen(function* () {
+  yield* TestClock.adjust(PAST_SEARCH_PAUSE);
+  yield* Effect.promise(settle);
+});
+
+/** The box on the plan's page that reads its workspace's agents, every message it sends written down, its waits on `registry`'s clock. */
+async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
@@ -930,6 +953,7 @@ async function workspaceBox() {
   const { container } = drawing(
     createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
     undefined,
+    registry,
   );
   await settle();
   return { container, sent };
@@ -1023,58 +1047,129 @@ test("an @ whose read of the repository's files was refused ends its reading, sa
   assert.deepEqual(listed(container), ["rollout-store.ts", "Rollout"]);
 });
 
-test("a word typed after @ finds an agent of another task by its task's name, and an archived one, read then and marked archived", async () => {
-  const { container } = await workspaceBox();
+it.effect(
+  "a word typed after @ finds an agent of another task by its task's name, and an archived one, read then and marked archived",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const { container } = yield* Effect.promise(() => workspaceBox(registry));
 
-  typeInComposer(container, "See @billing");
-  await settle();
+      typeInComposer(container, "See @billing");
+      yield* rest;
 
-  assert.deepEqual(agentsListed(container), [
-    ["Bill by seat", "Billing"],
-    ["Old invoices", "Billing · Archived"],
-  ]);
-  // The word was typed whole, so the one read asked the service to find it, archived agents among them.
-  assert.deepEqual(workspaceReads(), [
-    { workspaceId: "workspace-1", words: "billing", includeArchived: true },
-  ]);
-});
+      assert.deepEqual(agentsListed(container), [
+        ["Bill by seat", "Billing"],
+        ["Old invoices", "Billing · Archived"],
+      ]);
+      // The word was typed whole, so the one read asked the service to find it, archived agents among them.
+      assert.deepEqual(workspaceReads(), [
+        { workspaceId: "workspace-1", words: "billing", includeArchived: true },
+      ]);
+    }),
+);
 
-test("an agent of another task picked from the @ list is sent as its link under its task, and one on no task under the workspace", async () => {
-  const { container, sent } = await workspaceBox();
+it.effect(
+  "words typed after @ ask the service once the typing rests on them, never letter by letter, while the bare @ asks at once",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const { container } = yield* Effect.promise(() => workspaceBox(registry));
 
-  typeInComposer(container, "Ask @bill");
-  await settle();
-  pressInComposer(container, "Enter");
-  await settle();
-  typeInComposer(container, "and @sweep");
-  await settle();
-  pressInComposer(container, "Enter");
-  await settle();
-  pressInComposer(container, "Enter");
-  await settle();
+      typeInComposer(container, "See @");
+      yield* Effect.promise(settle);
+      assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1" }]);
 
-  assert.deepEqual(sent, [
-    `Ask [@Bill by seat](https://tryluke.dev/acme/plan/${BILLING.id}/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
-  ]);
-});
+      typeInComposer(container, "b");
+      yield* Effect.promise(settle);
+      yield* TestClock.adjust("200 millis");
+      typeInComposer(container, "ill");
+      yield* Effect.promise(settle);
+      yield* TestClock.adjust("200 millis");
+      yield* Effect.promise(settle);
+      assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1" }], "nothing asked yet");
 
-test("a word typed after @ finds an agent the workspace's newest leave out, as the service searches every agent for it", async () => {
-  const { container } = await workspaceBox();
+      yield* rest;
+      assert.deepEqual(workspaceReads(), [
+        { workspaceId: "workspace-1" },
+        { workspaceId: "workspace-1", words: "bill", includeArchived: true },
+      ]);
+      assert.deepEqual(agentsListed(container), [
+        ["Bill by seat", "Billing"],
+        ["Old invoices", "Billing · Archived"],
+      ]);
+    }),
+);
 
-  typeInComposer(container, "See @");
-  await settle();
-  const bare = agentsListed(container).map(([name]) => name);
-  typeInComposer(container, "ledger");
-  await settle();
+it.effect(
+  "words typed after @ again, once they went, wait the pause afresh before the service is asked",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const { container } = yield* Effect.promise(() => workspaceBox(registry));
 
-  assert.ok(!bare.includes("Old ledger"), bare.join(", "));
-  assert.deepEqual(agentsListed(container), [["Old ledger", "No task"]]);
-  assert.deepEqual(workspaceReads().at(-1), {
-    workspaceId: "workspace-1",
-    words: "ledger",
-    includeArchived: true,
-  });
-});
+      typeInComposer(container, "See @bill");
+      yield* rest;
+      eraseInComposer(container, 4);
+      yield* Effect.promise(settle);
+      const asked = workspaceReads().length;
+      typeInComposer(container, "bill");
+      yield* Effect.promise(settle);
+      const typedAgain = workspaceReads().length;
+      yield* rest;
+
+      assert.equal(typedAgain, asked, "nothing asked before the pause");
+      assert.deepEqual(workspaceReads().slice(asked), [
+        { workspaceId: "workspace-1", words: "bill", includeArchived: true },
+      ]);
+    }),
+);
+
+it.effect(
+  "an agent of another task picked from the @ list is sent as its link under its task, and one on no task under the workspace",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const { container, sent } = yield* Effect.promise(() => workspaceBox(registry));
+
+      typeInComposer(container, "Ask @bill");
+      yield* rest;
+      pressInComposer(container, "Enter");
+      yield* Effect.promise(settle);
+      typeInComposer(container, "and @sweep");
+      yield* rest;
+      pressInComposer(container, "Enter");
+      yield* Effect.promise(settle);
+      pressInComposer(container, "Enter");
+      yield* Effect.promise(settle);
+
+      assert.deepEqual(sent, [
+        `Ask [@Bill by seat](https://tryluke.dev/acme/plan/${BILLING.id}/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a word typed after @ finds an agent the workspace's newest leave out, as the service searches every agent for it",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const { container } = yield* Effect.promise(() => workspaceBox(registry));
+
+      typeInComposer(container, "See @");
+      yield* Effect.promise(settle);
+      const bare = agentsListed(container).map(([name]) => name);
+      typeInComposer(container, "ledger");
+      yield* rest;
+
+      assert.ok(!bare.includes("Old ledger"), bare.join(", "));
+      assert.deepEqual(agentsListed(container), [["Old ledger", "No task"]]);
+      assert.deepEqual(workspaceReads().at(-1), {
+        workspaceId: "workspace-1",
+        words: "ledger",
+        includeArchived: true,
+      });
+    }),
+);
 
 /** The box on the plan's page that reads its workspace's agents, among the workspace's members. */
 async function workspaceMemberBox() {
@@ -1118,22 +1213,29 @@ test("an @ row for an agent ends in its starter's face where a teammate started 
   ]);
 });
 
-test("an @ row for an agent hangs the agent's own card while the pointer rests on it, naming its task, with nothing read for it", async () => {
-  const { container } = await workspaceBox();
+it.effect(
+  "an @ row for an agent hangs the agent's own card while the pointer rests on it, naming its task, with nothing read for it",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const { container } = yield* Effect.promise(() => workspaceBox(registry));
 
-  typeInComposer(container, "See @bill");
-  await settle();
-  const option =
-    container.querySelector<HTMLElement>('.mention-menu [aria-label="Agents"] [role="option"]') ??
-    assert.fail("the list offers the agent");
-  const reads = told.length;
-  restOn(option);
+      typeInComposer(container, "See @bill");
+      yield* rest;
+      const option =
+        container.querySelector<HTMLElement>(
+          '.mention-menu [aria-label="Agents"] [role="option"]',
+        ) ?? assert.fail("the list offers the agent");
+      const reads = told.length;
+      restOn(option);
 
-  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Bill by seat");
-  assert.match(card.textContent ?? "", new RegExp(`On ${BILLING.name}`, "u"));
-  assert.equal(told.length, reads, "the card is drawn from the agent the list read");
-});
+      const card =
+        document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
+      assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Bill by seat");
+      assert.match(card.textContent ?? "", new RegExp(`On ${BILLING.name}`, "u"));
+      assert.equal(told.length, reads, "the card is drawn from the agent the list read");
+    }),
+);
 
 /** Luke's note on a file of the repository, as he showed its lines at `commit`. */
 function shownAt(commit: string, note: string, at: number): TaskCodeShowing {
@@ -1501,6 +1603,37 @@ test("pressing the crumb's back arrow widens the list again and keeps the caret 
   assert.equal(composerEditor(container).textContent, "See @");
   assert.equal(crumb(container), undefined);
   assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
+});
+
+/** The `count` letters before the caret deleted, as ⌫ pressed that many times would. */
+function eraseInComposer(container: ParentNode, count: number): void {
+  const editor = composerEditor(container).editor ?? assert.fail("the box's editor is running");
+  act(() => {
+    const at = editor.state.selection.from;
+    editor.view.dispatch(editor.state.tr.delete(at - count, at));
+  });
+}
+
+test("files found by a word typed on are those the longer word finds, and the word typed back finds every file it found before", async () => {
+  const { container } = await wideBox();
+
+  typeInComposer(container, "See @files:invite-");
+  await settle();
+  const typed = listed(container);
+  typeInComposer(container, "5");
+  await settle();
+  const typedOn = listed(container);
+  eraseInComposer(container, 1);
+  await settle();
+
+  assert.equal(typed.length, 50);
+  assert.deepEqual(
+    [...typedOn].sort(),
+    ["05", "15", "25", "35", "45", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59"].map(
+      (number) => `invite-${number}.ts`,
+    ),
+  );
+  assert.deepEqual(listed(container), typed);
 });
 
 test("typing @files: narrows the list to the repository's paths, listing up to fifty where the wide list shows four", async () => {

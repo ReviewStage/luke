@@ -19,7 +19,7 @@
  * is drawn.
  */
 
-import { createContext, useCallback, useLayoutEffect, useState } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useState } from "react";
 import { COARSE_POINTER, coarsePointerNow } from "./coarse-pointer.js";
 import { compactStage } from "./desktop/sidebar-collapse.js";
 import { narrowStage, SHELL_ROOM, type ShellRoom } from "./shell-room.js";
@@ -44,6 +44,11 @@ const UNMEASURED: StageLines = { narrow: false, compact: false };
  * rather than turning to glyphs. Wide where nothing provides it.
  */
 export const ShellRoomContext = createContext<ShellRoom>(SHELL_ROOM.WIDE);
+
+/** Whether the stage is a phone's, where a task's tab draws no bar of its own and hands its controls to the task's header (`strip-tabs.tsx`'s `useTabActions`). */
+export function usePhoneRoom(): boolean {
+  return useContext(ShellRoomContext) === SHELL_ROOM.NARROW;
+}
 
 /** What the stage is measured by, and the room its width gives. */
 export interface StageRoom {

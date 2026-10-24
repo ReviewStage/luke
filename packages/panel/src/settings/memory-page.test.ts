@@ -214,8 +214,10 @@ test("what Luke kept in the workspace is read for it and listed in the service's
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }],
   );
-  assert.match(page.textContent ?? "", /work in Acme/u);
-  assert.match(page.textContent ?? "", /Everyone in the workspace shares these memories/u);
+  assert.match(
+    page.textContent ?? "",
+    /keep what you settle in Acme and recall it in later tasks/u,
+  );
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Kept by You · Oct 12, 2026/u);
   assert.match(rowOf(page, TESTS).textContent ?? "", /Kept by Dean · /u);
@@ -268,7 +270,6 @@ test("a private memory is marked Only you, a shared one is not, and its Forget s
 
   assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Only you/u);
   assert.doesNotMatch(rowOf(page, TESTS).textContent ?? "", /Only you/u);
-  assert.match(page.textContent ?? "", /except those marked Only you/u);
   const ellipsis =
     rowOf(page, DEPLOYS).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("no ⋯");
@@ -310,7 +311,7 @@ test("showing another workspace reads that workspace's memories in place of the 
     [{ workspaceId: ACME.id }, { workspaceId: GLOBEX.id }],
   );
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /work in Globex/u);
+  assert.match(page.textContent ?? "", /settle in Globex/u);
 });
 
 test("a forget answered after the page moved on to another workspace leaves that workspace's list as it read it", async () => {
@@ -325,7 +326,7 @@ test("a forget answered after the page moved on to another workspace leaves that
   await settle();
 
   assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /work in Globex/u);
+  assert.match(page.textContent ?? "", /settle in Globex/u);
 });
 
 test("a forget answered after the page left its workspace and came back reads that workspace again, so the forgotten memory is not left listed", async () => {
@@ -409,7 +410,7 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
   act(() => button(failed, "Retry").click());
   await settle();
   assert.deepEqual(words(failed), [DEPLOYS.text, TESTS.text]);
-  assert.equal(signedOut.textContent, "Sign in to see what Luke remembers.");
+  assert.equal(signedOut.textContent, "Sign in to use this page.");
   assert.equal(
     sent.filter((request) => request.kind === ACT_KIND.MEMORIES_READ).length,
     2,

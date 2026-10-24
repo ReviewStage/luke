@@ -663,11 +663,11 @@ test("a refusal for the member's own GitHub token reads with its remedy, Update 
   });
   assert.deepEqual(noAccess, {
     reason: FAILURE_REASON.GITHUB_TOKEN,
-    text: "Your GitHub token can't access acme/relay. Check the repository still exists under that name, or ask its owner to give your GitHub account access.",
+    text: "Your GitHub token cannot access acme/relay. Check the repository still exists under that name, or ask its owner to give your GitHub account access.",
   });
   assert.deepEqual(cannotPush, {
     reason: FAILURE_REASON.GITHUB_TOKEN,
-    text: "Your GitHub token can't push to acme/relay. Ask its owner to give your GitHub account write access.",
+    text: "Your GitHub token cannot push to acme/relay. Ask its owner to give your GitHub account write access.",
   });
   assert.equal(remedyLabel(cannotPush), "Update GitHub token");
 });

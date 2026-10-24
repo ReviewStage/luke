@@ -17,6 +17,7 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@luke/host/effect";
+import { callStaged } from "@luke/host/fixture-stage";
 import { openMacTerminals } from "@luke/host/node";
 import {
   confirmingHold,
@@ -25,6 +26,7 @@ import {
   type Leave,
   leaveGate,
   leaveQuestion,
+  reloadGate,
   type UnsavedWorkHolders,
   unsavedWorkHolders,
 } from "@luke/host/quit";
@@ -32,8 +34,8 @@ import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
-import { Context, Effect, Layer } from "effect";
-import { net, type WebContents } from "electron";
+import { Context, Effect, Layer, Stream } from "effect";
+import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
@@ -243,9 +245,10 @@ export function composeDesktop(
         launchStanding: quit.launchStanding,
       });
       // The host's avatar, bound from the launch on: its grants to the panel
-      // alone and where it stands to the document.
+      // alone and where it stands to the document, but where a call profile
+      // stages the avatar, which the host, holding no call, would put down.
       const avatar = yield* linkAvatar({
-        host: host.avatar,
+        host: callStaged(config.launch) ? { ...host.avatar, states: Stream.never } : host.avatar,
         state,
         panel: windows.panels,
         setVideo: (on) => operator.host.setVideo(on),
@@ -267,6 +270,23 @@ export function composeDesktop(
       const askFirst = leaveGate({
         atStake,
         ask: (question) => askBeforeLeaving(windows.panels.primaryPanel(), question),
+      });
+      // ⌘R reloads the window chosen over, asking first, as a sheet on that
+      // window, while its page holds edits that haven't saved.
+      const askBeforeReload = reloadGate<BrowserWindow>({
+        holds: (window) => unsavedWork.holds(window.webContents),
+        ask: askBeforeLeaving,
+      });
+      config.showMenuBar({
+        reload: {
+          // Note that only a browser window has a page to reload.
+          onReload: (window) => {
+            if (!(window instanceof BrowserWindow)) return;
+            void askBeforeReload(window).then((reload) => {
+              if (reload && !window.isDestroyed()) window.webContents.reload();
+            });
+          },
+        },
       });
       quit.holdWhile(
         confirmingHold({

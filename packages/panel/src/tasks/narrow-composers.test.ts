@@ -46,6 +46,8 @@ const INBOX_CARD_AT_360 = 288;
 
 const DESKTOP = {
   STAGE: 800,
+  /** A laptop's window with a dock, or a pane squeezed short. */
+  SHORT_STAGE: 260,
   CARD: 720,
   DIALOG_ROOM: 1232,
 } as const;
@@ -107,8 +109,9 @@ function pixels(element: Element, value: string): number {
   const arithmetic = resolved(element, value)
     .replace(/\bcalc\(/gu, "(")
     .replace(/\bmin\(/gu, "Math.min(")
+    .replace(/\bmax\(/gu, "Math.max(")
     .replace(/(-?\d*\.?\d+)px/gu, "$1");
-  assert.match(arithmetic, /^[\d\s.+\-*/(),Mathmin]+$/u, `${value} is pixels alone`);
+  assert.match(arithmetic, /^[\d\s.+\-*/(),Mathminx]+$/u, `${value} is pixels alone`);
   return Number(new Function(`return ${arithmetic};`)());
 }
 
@@ -142,14 +145,26 @@ test("on a phone with the keyboard up, the agent's field stops growing at under 
   assert.ok(cap < lines, "the share of the screen is less than eight lines");
 });
 
-test("on a desktop, the agent's field grows to its eight lines whatever the window's height", async () => {
+test("on a desktop, the agent's field grows to its eight lines in a window tall enough for them", async () => {
+  document.documentElement.setAttribute("data-luke-profile", "desktop");
   layContainersAt({ composer: DESKTOP.CARD });
   stageAt(DESKTOP.STAGE);
   const container = await draw(createElement(AgentBox), "wide");
   const field = container.querySelector(".agent-composer-input") ?? assert.fail("the field stands");
-  const cap = getComputedStyle(field).maxHeight;
-  assert.doesNotMatch(cap, /stage-height|field-cap/u, "the window's height bounds nothing");
-  assert.equal(custom(field, "--agent-composer-field-cap"), undefined);
+  const lines = pixels(field, custom(field, "--agent-composer-field-lines") ?? "");
+  assert.equal(pixels(field, getComputedStyle(field).maxHeight), lines);
+});
+
+test("in a short desktop window, the agent's field stops growing at two fifths of what is seen, short of its eight lines", async () => {
+  document.documentElement.setAttribute("data-luke-profile", "desktop");
+  layContainersAt({ composer: DESKTOP.CARD });
+  stageAt(DESKTOP.SHORT_STAGE);
+  const container = await draw(createElement(AgentBox), "wide");
+  const field = container.querySelector(".agent-composer-input") ?? assert.fail("the field stands");
+  const cap = pixels(field, getComputedStyle(field).maxHeight);
+  const lines = pixels(field, custom(field, "--agent-composer-field-lines") ?? "");
+  assert.equal(cap, DESKTOP.SHORT_STAGE * 0.4);
+  assert.ok(cap < lines, "the share of the window is less than eight lines");
 });
 
 /** New task's dialog open, as a press of New task opens it, portalled over the window outside any shell; answers its field. */
@@ -183,12 +198,14 @@ test("on a phone with the keyboard up, New task's dialog, drawn outside the shel
   assert.equal(pixels(field, getComputedStyle(field).maxHeight), PHONE.STAGE_WITH_KEYBOARD * 0.3);
 });
 
-test("on a desktop, New task's dialog lets its field grow to its eight lines whatever the window's height", async () => {
+test("on a desktop, New task's dialog lets its field grow to its eight lines in a window tall enough for them", async () => {
+  document.documentElement.setAttribute("data-luke-profile", "desktop");
   document.documentElement.setAttribute("data-luke-room", "wide");
   layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM, composer: DESKTOP.CARD });
   stageAt(DESKTOP.STAGE);
   const field = await openNewTask();
-  assert.doesNotMatch(getComputedStyle(field).maxHeight, /stage-height|field-cap/u);
+  const lines = pixels(field, custom(field, "--agent-composer-field-lines") ?? "");
+  assert.equal(pixels(field, getComputedStyle(field).maxHeight), lines);
 });
 
 /** A thread opened over a plan's column, as the plan lays it, in the room given. */

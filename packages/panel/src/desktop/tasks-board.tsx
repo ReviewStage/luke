@@ -1,5 +1,3 @@
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { TASK_ISSUE_PROVIDER, type TaskIssueProvider } from "@luke/features/task-issue-wire";
 import {
   TASK_BOUNDS,
   TASK_STATUS,
@@ -52,8 +50,6 @@ import {
   motionKey,
   PAGE_FRAME,
   PAGE_WIDTH,
-  PROVIDER_MARK_SIZE,
-  ProviderMark,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
@@ -97,14 +93,14 @@ import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
-import { issueTagWords } from "../tasks/task-issue-links-model.js";
+import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
   TaskKey,
 } from "../tasks/task-standing.js";
-import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
+import { linkPressOf } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -130,6 +126,7 @@ import {
   OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
+import { useHeldTasks } from "./use-held-tasks.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -202,43 +199,15 @@ const FIRST_SHOWN: string = TASK_STATUS.TODO;
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Columns";
 
-/** What a tag's hint calls who holds its issue, before its key. */
-const TAG_WORDS = {
-  [TASK_ISSUE_PROVIDER.GITHUB]: "GitHub issue",
-  [TASK_ISSUE_PROVIDER.LINEAR]: "Linear issue",
-} as const satisfies Record<TaskIssueProvider, string>;
-
-/** The mark a tag wears for who holds its issue. */
-const TAG_MARK = {
-  [TASK_ISSUE_PROVIDER.GITHUB]: INTEGRATION_PROVIDER.GITHUB,
-  [TASK_ISSUE_PROVIDER.LINEAR]: INTEGRATION_PROVIDER.LINEAR,
-} as const satisfies Record<TaskIssueProvider, string>;
-
 /**
- * The issues a card's task links, oldest first, a tag each among its pills:
- * the provider's mark and its key, a GitHub issue of the task's own
- * repository by its `#N` alone. A press on a tag opens the issue as a link
- * to it does elsewhere (`../tasks/use-open-link.ts`), never the task.
- * Nothing for a task that links none.
+ * The issues a card's task links, oldest first, a tag each among its pills
+ * (`../tasks/task-issue-links.tsx`). Nothing for a task that links none.
  */
 function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element {
-  const openLink = useOpenLink();
   return (
     <>
       {(task.issues ?? []).map((tag) => (
-        <Tooltip key={tag.id} label={`${TAG_WORDS[tag.provider]} ${tag.key}`}>
-          <Chip
-            look={CHIP_LOOK.PILL}
-            size={CHIP_SIZE.COMPACT}
-            data-task-tag=""
-            data-provider={tag.provider}
-            href={tag.url}
-            onClick={linkPressOf(openLink, tag.url)}
-          >
-            <ProviderMark provider={TAG_MARK[tag.provider]} size={PROVIDER_MARK_SIZE.CAPTION} />
-            <ChipName mono>{issueTagWords(tag, task.repository)}</ChipName>
-          </Chip>
-        </Tooltip>
+        <TaskIssueTagChip key={tag.id} tag={tag} taskId={task.id} repository={task.repository} />
       ))}
     </>
   );
@@ -567,9 +536,11 @@ function TaskBoardColumnView({
   });
   const { mark, words } = columnHead(column.head, people);
   const value = columnValue(column.head);
-  // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another.
-  const drawn =
-    column.head.kind === TASKS_GROUP.ASSIGNEE && !narrow
+  // Note that a phone's card keeps its assignee's chip under an assignee's column, since with no drag it is how the card moves to another, and so does a card held under a column that no longer names its assignee.
+  const drawn = (task: TaskSummary) =>
+    column.head.kind === TASKS_GROUP.ASSIGNEE &&
+    !narrow &&
+    column.head.assigneeId === (task.assignee?.userId ?? null)
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
@@ -623,7 +594,7 @@ function TaskBoardColumnView({
                   task={task}
                   workspaceName={workspaceName}
                   narrow={narrow}
-                  properties={drawn}
+                  properties={drawn(task)}
                   waiting={waitingOn.get(task.id) ?? 0}
                   now={now}
                   onOpen={() => onOpen(task)}
@@ -641,7 +612,7 @@ function TaskBoardColumnView({
 
 /** The Tasks page's Board: the listed workspace's tasks by status, by priority, or by assignee, under the page's filter. */
 export function TasksBoard({
-  tasks,
+  tasks: control,
   room,
   title,
   frame,
@@ -653,16 +624,15 @@ export function TasksBoard({
   /** The Tasks page's toolbar, filter chips, filter, and the Board's display. */
   frame: TasksViewFrame;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
-  const setStanding = useStandingDoor(tasks);
+  useAppCommand(APP_COMMAND.EXIT_BOARD, control.boardView.onClose);
   const now = useMinute();
-  const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
+  const { waiting } = useSettledWaiting(control.listed.inbox, control.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
   const board = useRef<HTMLDivElement>(null);
   const crossing = useRovingColumns<HTMLDivElement>();
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
-  const listed = tasks.listed.tasks;
+  const listed = control.listed.tasks;
   const { filter, display } = frame;
   const directory = useMemberDirectory();
   const people: ColumnPeople = {
@@ -671,14 +641,21 @@ export function TasksBoard({
     ),
     words: (userId) => assigneeWords(userId, directory, listed),
   };
-  const columns = tasksBoardColumns(listed, {
-    filter,
-    display,
-    readerId: tasks.me,
-    personName: people.words,
-    members: (directory.members ?? []).map((member) => member.userId),
-    now,
-  });
+  // While the page is shown each card keeps the column and the place it was first drawn in, so one a teammate's change would move stays under the reader's eye.
+  const { groups: columns, tasks } = useHeldTasks(
+    control,
+    { workspaceId: control.workspace?.id, filter, display },
+    (standing) =>
+      tasksBoardColumns(standing, {
+        filter,
+        display,
+        readerId: control.me,
+        personName: people.words,
+        members: (directory.members ?? []).map((member) => member.userId),
+        now,
+      }),
+  );
+  const setStanding = useStandingDoor(tasks);
   const narrow = room === SHELL_ROOM.NARROW;
   const values = columns.map((column) => columnValue(column.head));
   // Note that a column gone from the view lets the choice go, so its coming back does not bring it back unasked.

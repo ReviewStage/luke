@@ -66,6 +66,12 @@ export const RUN_PROFILE = {
   AGENT_TERMINAL_STOPPED: "agent-terminal-stopped",
   AGENT_TERMINAL_STARTING: "agent-terminal-starting",
   AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
+  /** The same agent beside a page it showed, open in a tab of its own. */
+  AGENT_PAGE: "agent-page",
+  /** The same agent mid-call, its video off, the floating call window standing over the panel. */
+  AGENT_CALL: "agent-call",
+  /** The same call with Luke's video on, its tile up in the floating call window and the agent's tab. */
+  AGENT_CALL_VIDEO: "agent-call-video",
   /** A synthetic account signed in, Settings opened at launch on its Account page. */
   SETTINGS_ACCOUNT: "settings-account",
   /** The same account, Settings on its team's workspace: its members, an invitation waiting, and its Linear's sign-in expired. */
@@ -121,8 +127,9 @@ interface AppVoiceSlice {
   /**
    * The live conversation as the voice window last reported it, so a panel
    * that opens mid-exchange draws the exchange rather than an idle voice.
-   * Absent until that window has reported once, and always in a fixture or
-   * capture run, which raises no voice window.
+   * Absent until that window has reported once, and in a fixture or capture
+   * run, which raises no voice window, but where a call profile stages one
+   * (`fixture-stage.ts`).
    *
    * The loudness beside it is deliberately not here. It is a reading taken
    * twenty times a second that expires in fifty milliseconds, so nothing

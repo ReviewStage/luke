@@ -45,6 +45,7 @@ import {
   useResizeEdge,
 } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
+import { ListIcon } from "@luke/ui/icons";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -171,20 +172,24 @@ import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
+import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
 import {
   type AddEntry,
   AddTabButton,
   AddTabSkeleton,
-  contentActionGroups,
   DoorsTab,
   entryRow,
+  HandTabActionsContext,
   type HeldTranscripts,
+  type TabActionGroups,
   type TabDoors,
   type TabLook,
   type TabPin,
   TabSkeleton,
   type TabViews,
   type TranscriptCopier,
+  tabActionItems,
+  tabContentGroups,
   useTranscriptCopier,
   type WorkerStandings,
 } from "./strip-tabs.js";
@@ -199,7 +204,8 @@ import { TabStrip } from "./tab-strip.js";
  */
 export interface ShownTab {
   readonly label: string;
-  readonly groups: () => MenuAction[][];
+  /** Its actions as the ⋯ at `opener` drops them, an item opening a menu of the tab's own under it. */
+  readonly groups: (opener: HTMLElement) => MenuAction[][];
 }
 
 /** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
@@ -440,7 +446,7 @@ export interface ChangesOffer {
 /** What the chosen tab's body hands its toolbar's ⋯ (`useHandedTabActions`), and the tab it was drawn for, which alone offers them. */
 interface HandedTabActions {
   readonly tab: SidePanelTab;
-  readonly actions: MenuAction[];
+  readonly actions: TabActionGroups;
 }
 
 /** What the "+" calls the row that opens a Browser tab. */
@@ -1317,14 +1323,18 @@ function useShownTab(
 ): void {
   const at = strip.findIndex((entry) => entry.look.selected);
   const chosen = strip[at];
-  const groups = useRef<MenuAction[][]>([]);
+  const groups = useRef<TabActionGroups>([]);
   useLayoutEffect(() => {
-    groups.current = chosen === undefined ? [] : contentActionGroups(doorsOf(chosen, at));
+    groups.current = chosen === undefined ? [] : tabContentGroups(doorsOf(chosen, at));
   });
   const label =
     chosen === undefined || chosen.tab === SIDE_PANEL_TAB.PLAN ? undefined : chosen.look.label;
   useEffect(() => {
-    onShown?.(label === undefined ? undefined : { label, groups: () => groups.current });
+    onShown?.(
+      label === undefined
+        ? undefined
+        : { label, groups: (opener) => tabActionItems(groups.current, opener) },
+    );
   }, [onShown, label]);
   useEffect(() => () => onShown?.(undefined), [onShown]);
 }
@@ -1797,7 +1807,7 @@ function TabContent({
   /** An agent's transcript and composer, drawn by the panel's holder: the Inbox's, beside an item. */
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
-  onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
+  onTabActions: (tab: SidePanelTab, actions: TabActionGroups | undefined) => void;
   /** Runs a branch in an agent's terminal of this Mac in this panel, which every Pull request tab's Run offers: the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
   onRunOnMac: ((agentId: string, number?: number) => void) | undefined;
 }): React.JSX.Element {
@@ -2043,6 +2053,22 @@ export function SidePanelToggle({
 }
 
 /**
+ * The panel's chord alone, where its toggle is not drawn: a phone's page,
+ * whose ⋯ offers Show panel and whose panel, open, heads itself with the
+ * way back that shuts it (`SidePanel`'s `phone`).
+ */
+export function SidePanelChord({
+  panel,
+  disabled,
+}: {
+  panel: SidePanelControl;
+  disabled: boolean;
+}): null {
+  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, disabled ? undefined : panel.onToggle);
+  return null;
+}
+
+/**
  * Grows the panel over the document, or brings it back beside it. It stands
  * while the panel is open, so it offers the full-screen chord, and the menu
  * bar's way out while the panel fills the window. Escape's own way out is the
@@ -2225,7 +2251,8 @@ export function SidePanel({
   inbox,
   chat,
   transcript,
-  activity,
+  activity: taskActivity,
+  phone,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -2290,7 +2317,24 @@ export function SidePanel({
         readonly onShown: (shown: ShownTab | undefined) => void;
       }
     | undefined;
+  /**
+   * Where the panel stands over a phone's page other than a task's, an
+   * Inbox item's or an agent's, which has no header of its own to name the
+   * tab: the panel heads itself (`phone-head.tsx`), its way back shutting it
+   * to the page named, the tab shown or the list of its tabs centred, and a
+   * ⋯ holding the list, the tab's own actions, and Close; none elsewhere.
+   */
+  phone?: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
+  // A phone's panel over a page other than a task's keeps its own Activity: whether it lists its tabs, and the tab shown.
+  const [ownListed, setOwnListed] = useState(false);
+  const [ownShown, setOwnShown] = useState<ShownTab | undefined>(undefined);
+  if (ownListed && !panel.open) setOwnListed(false);
+  const ownActivity =
+    phone !== undefined && taskActivity === undefined
+      ? { listed: ownListed, onListed: setOwnListed, onShown: setOwnShown }
+      : undefined;
+  const activity = taskActivity ?? ownActivity;
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // Where a phone's Activity lists the tabs, drawn there from the strip, which holds how each tab looks.
@@ -2299,7 +2343,7 @@ export function SidePanel({
   const listing = switched && activity.listed;
   // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
   const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
-  const handTabActions = useCallback((tab: SidePanelTab, actions: MenuAction[] | undefined) => {
+  const handTabActions = useCallback((tab: SidePanelTab, actions: TabActionGroups | undefined) => {
     setHanded((was) =>
       actions !== undefined
         ? { tab, actions }
@@ -2501,6 +2545,18 @@ export function SidePanel({
       label="Panel"
       banner={banner}
       switched={switched}
+      head={
+        switched && ownActivity !== undefined && phone !== undefined ? (
+          <PanelPhoneHead
+            back={phone}
+            title={listing ? TABS : (label ?? PANEL_LABEL)}
+            listing={listing}
+            shown={ownShown}
+            onList={() => setOwnListed(true)}
+            onCloseShown={tab === undefined ? undefined : () => panel.onClose(tab)}
+          />
+        ) : undefined
+      }
       tabs={
         <PanelTabs
           panel={panel}
@@ -2589,42 +2645,45 @@ export function SidePanel({
               if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
             }}
           >
-            <TabContent
-              tab={tab}
-              taskId={taskId}
-              codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
-              pagePlace={pagePlaceOf(holder, taskId)}
-              repository={repository}
-              board={board}
-              shownCode={shownCode}
-              codeFailed={codeFailed}
-              files={files}
-              pages={taskPages}
-              agents={agents}
-              standings={standings}
-              shown={keys}
-              findActive={keys && focused}
-              onOpenTarget={onOpenTarget}
-              onWorkerStatus={views.onWorkerStatus}
-              onWorkerHeld={views.onWorkerHeld}
-              onOpenFile={panel.onPreviewFile}
-              fileTree={fileTree}
-              onBrowseFile={panel.onBrowseFile}
-              onFileHistory={panel.onFileHistory}
-              onFoldNote={panel.onFoldNote}
-              onCloseTab={panel.onClose}
-              pullRequestViews={panel.pullRequestViews}
-              onPullRequestView={panel.onPullRequestView}
-              shellsList={shellsList}
-              cloudBrowsers={cloudBrowsers}
-              cloudDrafts={cloudDrafts}
-              plan={plan}
-              inbox={inbox?.body}
-              chat={chat}
-              transcript={transcript}
-              onTabActions={handTabActions}
-              onRunOnMac={macTerminalDoors.onOpenOnMac}
-            />
+            {/* Note that whatever the tab's body hands its ⋯ is handed for this tab, at any depth of the body (`useTabActions`). */}
+            <HandTabActionsContext.Provider value={(actions) => handTabActions(tab, actions)}>
+              <TabContent
+                tab={tab}
+                taskId={taskId}
+                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
+                pagePlace={pagePlaceOf(holder, taskId)}
+                repository={repository}
+                board={board}
+                shownCode={shownCode}
+                codeFailed={codeFailed}
+                files={files}
+                pages={taskPages}
+                agents={agents}
+                standings={standings}
+                shown={keys}
+                findActive={keys && focused}
+                onOpenTarget={onOpenTarget}
+                onWorkerStatus={views.onWorkerStatus}
+                onWorkerHeld={views.onWorkerHeld}
+                onOpenFile={panel.onPreviewFile}
+                fileTree={fileTree}
+                onBrowseFile={panel.onBrowseFile}
+                onFileHistory={panel.onFileHistory}
+                onFoldNote={panel.onFoldNote}
+                onCloseTab={panel.onClose}
+                pullRequestViews={panel.pullRequestViews}
+                onPullRequestView={panel.onPullRequestView}
+                shellsList={shellsList}
+                cloudBrowsers={cloudBrowsers}
+                cloudDrafts={cloudDrafts}
+                plan={plan}
+                inbox={inbox?.body}
+                chat={chat}
+                transcript={transcript}
+                onTabActions={handTabActions}
+                onRunOnMac={macTerminalDoors.onOpenOnMac}
+              />
+            </HandTabActionsContext.Provider>
           </div>
         </FindScope>
       )}
@@ -2667,6 +2726,75 @@ export function SidePanelSkeleton({
   );
 }
 
+/** What a phone's panel calls the list of its tabs, as a title and as the ⋯'s item that shows it. */
+const TABS = "Tabs";
+
+/** What the panel's ⋯ on a phone is called. */
+const PANEL_THING = "Panel";
+
+/** What a phone's panel is called where no tab is shown. */
+const PANEL_LABEL = "Panel";
+
+/**
+ * A phone's panel's header over a page other than a task's (`SidePanel`'s
+ * `phone`): the way back's glyph, shutting the panel to the page it names,
+ * the tab shown, or the list of tabs, centred, and a ⋯ holding the list,
+ * the tab's own actions, each naming the tab under it, and Close.
+ */
+function PanelPhoneHead({
+  back,
+  title,
+  listing,
+  shown,
+  onList,
+  onCloseShown,
+}: {
+  back: { readonly back: string; readonly onBack: () => void };
+  title: string;
+  listing: boolean;
+  shown: ShownTab | undefined;
+  onList: () => void;
+  /** Closes the tab shown; none where none is. */
+  onCloseShown: (() => void) | undefined;
+}): React.JSX.Element {
+  return (
+    <PhoneHead
+      place="panel"
+      start={<PhoneBack back={{ label: back.back, onPress: back.onBack }} />}
+      title={title}
+      end={
+        <PlaceMore
+          thing={PANEL_THING}
+          shown
+          groups={(opener) => {
+            const tabActions =
+              listing || shown === undefined
+                ? []
+                : shown
+                    .groups(opener)
+                    .map((group) =>
+                      group.map((item) => ({ ...item, detail: item.detail ?? shown.label })),
+                    );
+            return [
+              [{ label: TABS, icon: <ListIcon />, checked: listing, onSelect: onList }],
+              ...tabActions,
+              listing || onCloseShown === undefined
+                ? []
+                : [
+                    {
+                      label: `Close ${shown?.label ?? title}`,
+                      icon: <CloseIcon />,
+                      onSelect: onCloseShown,
+                    },
+                  ],
+            ].filter((group) => group.length > 0);
+          }}
+        />
+      }
+    />
+  );
+}
+
 /**
  * The frame every side panel stands in, the task's, an agent's page's, and
  * the Inbox's: the panel's pane at the window's
@@ -2689,6 +2817,7 @@ function PanelFrame({
   actions,
   banner,
   switched = false,
+  head,
   children,
 }: Omit<SidePanelDrawing, "panel"> & {
   panel: Pick<SidePanelControl, "width" | "fullScreen" | "fullScreenOnly" | "onToggleFullScreen">;
@@ -2702,6 +2831,8 @@ function PanelFrame({
   banner?: React.ReactNode;
   /** Whether a phone's header stands for the bar, which is then not drawn (`task-pane-switcher.tsx`). */
   switched?: boolean;
+  /** A phone's header drawn in the bar's place, where the panel heads itself (`SidePanel`'s `phone`). */
+  head?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
@@ -2741,6 +2872,7 @@ function PanelFrame({
             />
           )}
         </div>
+        {head}
         {panel.fullScreen ? banner : null}
         {children}
         {/* Last, so the drag region of the row above does not take the

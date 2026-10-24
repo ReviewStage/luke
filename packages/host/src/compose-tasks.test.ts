@@ -108,12 +108,13 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@luke/gateway";
-import { TURN_STATUS, type WireRecord, type WireValue } from "@luke/wire";
+import { isRecord, TURN_STATUS, type WireRecord, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
+import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
 import type { LiveClient } from "./live-follow.js";
 import { fakeRealtime as fakeServiceRealtime } from "./testing/fake-realtime.js";
 
@@ -1268,6 +1269,8 @@ function subject(
   service: FakeService,
   options: {
     signedIn?: boolean;
+    /** Whether the run reaches the service, which a fixture run does not. */
+    sendsNetwork?: boolean;
     call?: StandingCall;
     /** A view the window's channel throws on, the first time one is told. */
     breaksOn?: (view: TasksView) => boolean;
@@ -1295,7 +1298,7 @@ function subject(
     const realtime = fakeRealtime();
     const tasks = yield* composeTasks({
       kernel: {
-        runMode: { sendsNetwork: true },
+        runMode: { sendsNetwork: options.sendsNetwork ?? true },
         now: () => 0,
         emit: (kind, payload) => {
           if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
@@ -1387,6 +1390,27 @@ function subject(
     };
   });
 }
+
+it.effect(
+  "a run that sends nothing reads its fixture's page, each version it stages, and no other page",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call } = yield* subject(service, { sendsNetwork: false });
+      const read = (pageId: string, version: number) =>
+        call(GATEWAY_METHOD.TASKS_PAGE, { taskId: FIXTURE_IDS.TASK, pageId, version });
+
+      const newest = yield* read(FIXTURE_PAGE.id, FIXTURE_PAGE.version);
+      const first = yield* read(FIXTURE_PAGE.id, 1);
+      const other = yield* read("8b2d4f6a-0c1e-4b5d-9f7a-1c3e5b7d9f1a", 1);
+
+      assert.ok(isRecord(newest) && isRecord(newest.page));
+      assert.equal(newest.page.version, FIXTURE_PAGE.version);
+      assert.ok(isRecord(first) && isRecord(first.page));
+      assert.equal(first.page.version, 1);
+      assert.deepEqual(other, { failure: TASK_CALL_FAILURE.UNANSWERED });
+    }),
+);
 
 it.effect(
   "a plan's picture is answered to the window that asked as its bytes, and as not found where the service holds none for it",

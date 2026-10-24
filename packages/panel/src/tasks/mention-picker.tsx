@@ -1,3 +1,4 @@
+import { useAtom } from "@effect/atom-react";
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   type DateSpan,
@@ -57,6 +58,8 @@ import { commandScore } from "@luke/ui/command";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
+import { Duration, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import {
   AppWindowIcon,
@@ -67,13 +70,14 @@ import {
   HashIcon,
   UsersIcon,
 } from "lucide-react";
-import { type RefObject, useEffect, useId, useState } from "react";
+import { type RefObject, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import {
@@ -132,7 +136,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * face and the failed mark at its end, and its card on rest; the plan's own agents first, then the workspace's others,
  * on another task or on none, as the place reads them the first time the
  * list opens (`MentionSource.readAgents`), the agent whose box it is left
- * out. Once a word is typed, the service finds the agents it names by
+ * out. Once a word is typed and the typing rests (`SEARCH_PAUSE`), the service finds the agents it names by
  * their title or their task's name, however many the workspace holds. An
  * archived agent takes no message, so it is offered only once a word is
  * typed, and marked archived. A mention of a page or an
@@ -310,6 +314,9 @@ const PER_KIND = 50;
 
 /** The score a task takes whose key the words are whole: cmdk's best, which no fuzzy match beats. */
 const KEY_SCORE = 1;
+
+/** How long the typing rests before the service is searched for the agents the words name. */
+const SEARCH_PAUSE = Duration.millis(250);
 
 /** The window's tasks and workspaces, which tell their readers only when either is a new list, so a patch to the open plan draws no list again. */
 const listedTasksAtom: Atom.Atom<{
@@ -788,6 +795,72 @@ function best(rows: readonly MentionRow[], query: string, most: number): readonl
     .map((each) => each.row);
 }
 
+/** A path's row, and how well it answers the words it was found by. */
+interface FoundPath {
+  readonly entry: RepositoryPath;
+  readonly row: MentionRow;
+  readonly score: number;
+}
+
+/** The paths some words found: in the listing's order, and best first. */
+interface PathsFound {
+  readonly matched: readonly FoundPath[];
+  readonly ranked: readonly FoundPath[];
+}
+
+/** The repository's paths as read, and what each word typed found among them. */
+interface PathSearch {
+  readonly paths: readonly RepositoryPath[];
+  /** The paths the words found, best first, ties in the listing's order; the words are never blank. */
+  readonly found: (term: string) => readonly FoundPath[];
+}
+
+/**
+ * A search over the paths one read listed, which a repository may hold tens
+ * of thousands of. Each word's finds are kept while the word is typed on or
+ * back, so a word met again is answered from what it found; and a word typed
+ * on from one kept searches only what that one found. Note that the
+ * narrowing is sound because cmdk's score asks for every letter typed in
+ * order, so a letter more never finds a path the shorter word did not.
+ */
+function pathSearch(paths: readonly RepositoryPath[]): PathSearch {
+  const all = paths.map((entry) => ({ entry, row: pathRow(entry) }));
+  const kept = new Map<string, PathsFound>();
+  const found = (term: string): readonly FoundPath[] => {
+    const known = kept.get(term);
+    if (known !== undefined) return known.ranked;
+    // Only the words this one types on or back from stay kept.
+    for (const word of kept.keys()) {
+      if (!term.startsWith(word) && !word.startsWith(term)) kept.delete(word);
+    }
+    const shorter = [...kept.keys()]
+      .filter((word) => term.startsWith(word))
+      .sort((first, second) => second.length - first.length)
+      .at(0);
+    const among = shorter === undefined ? all : (kept.get(shorter)?.matched ?? all);
+    const matched = among
+      .map((each) => ({ ...each, score: commandScore(each.row.terms, term) }))
+      .filter((each) => each.score > 0);
+    const ranked = [...matched].sort((first, second) => second.score - first.score);
+    kept.set(term, { matched, ranked });
+    return ranked;
+  };
+  return { paths, found };
+}
+
+/** The best of the paths the words found, as many as `most`, under the folder where one was walked into. */
+function foundRows(
+  search: PathSearch,
+  folder: string | undefined,
+  term: string,
+  most: number,
+): readonly MentionRow[] {
+  const found = search.found(term);
+  const under =
+    folder === undefined ? found : found.filter((each) => each.entry.path.startsWith(`${folder}/`));
+  return under.slice(0, most).map((each) => each.row);
+}
+
 /**
  * The repository's paths a list narrowed to them offers: for no words, the
  * folder walked into, then what it holds, its folders first, or what the
@@ -795,13 +868,14 @@ function best(rows: readonly MentionRow[], query: string, most: number): readonl
  * under the folder by the words.
  */
 function fileRows(
-  paths: readonly RepositoryPath[],
+  search: PathSearch,
   folder: string | undefined,
   term: string,
 ): readonly MentionRow[] {
+  if (term.trim() !== "") return foundRows(search, folder, term, PER_KIND);
+  const { paths } = search;
   const under =
     folder === undefined ? paths : paths.filter((entry) => entry.path.startsWith(`${folder}/`));
-  if (term.trim() !== "") return best(under.map(pathRow), term, PER_KIND);
   // Note that a folder's own entries are said without the folder, which the crumb already names.
   const entries = under
     .filter((entry) => (fileFolder(entry.path) ?? "") === (folder ?? ""))
@@ -832,7 +906,7 @@ function narrowedRows(
   kind: MentionKind,
   folder: string | undefined,
   term: string,
-  paths: readonly RepositoryPath[] | undefined,
+  paths: PathSearch | undefined,
   rows: KindRows,
 ): readonly MentionRow[] {
   switch (kind.narrow.from) {
@@ -875,7 +949,7 @@ function kindRow(kind: MentionKind): MentionRow {
  */
 function groupsFor(
   scope: Scope,
-  paths: readonly RepositoryPath[] | undefined,
+  paths: PathSearch | undefined,
   rows: KindRows,
   kinds: readonly MentionKind[],
   membersFirst: boolean,
@@ -887,7 +961,7 @@ function groupsFor(
     return narrowed.length === 0 ? [] : [{ label: folder ?? kind.name, rows: narrowed }];
   }
   const bare = term.trim() === "";
-  const files = bare || paths === undefined ? [] : best(paths.map(pathRow), term, PER_GROUP);
+  const files = bare || paths === undefined ? [] : foundRows(paths, undefined, term, PER_GROUP);
   const plan = { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) };
   // The workspace's tasks are offered only once a word is typed.
   const tasks = {
@@ -1400,6 +1474,39 @@ function kindsOf(
   return [...ordered, ...connected];
 }
 
+/** Words typed in the `@` word that starts at `wordAt`. */
+interface WordsTyped {
+  readonly wordAt: number;
+  readonly words: string;
+}
+
+/**
+ * Words once they have stood the pause, as an atom whose work is the wait:
+ * setting it again starts the wait over, so only the newest words rest.
+ */
+const restAtom = () =>
+  rendererRuntime.fn((typed: WordsTyped) => Effect.as(Effect.sleep(SEARCH_PAUSE), typed));
+
+/**
+ * Whether the typing has rested on the words of the `@` word at `wordAt`,
+ * which no words always have. Note that the rest is forgotten once the
+ * words go, so words typed again, in this word or another, wait afresh.
+ */
+function useRested(wordAt: number | undefined, words: string | undefined): boolean {
+  const [atom] = useState(restAtom);
+  const [rested, rest] = useAtom(atom);
+  useEffect(() => {
+    rest(wordAt === undefined || words === undefined ? Atom.Reset : { wordAt, words });
+  }, [wordAt, words, rest]);
+  return (
+    words === undefined ||
+    (AsyncResult.isSuccess(rested) &&
+      !rested.waiting &&
+      rested.value.wordAt === wordAt &&
+      rested.value.words === words)
+  );
+}
+
 /**
  * The `@` list for an editor on a task's page: its rows read from the
  * plan's words as they stand and the repository's paths, hung by the word
@@ -1488,6 +1595,8 @@ export function useMentionPicker({
       ? paths
       : undefined;
   const read = readOf?.paths;
+  // Note that the paths are searched through one search per read, which keeps what each word found, rather than ranking every path on each render.
+  const pathsSearched = useMemo(() => (read === undefined ? undefined : pathSearch(read)), [read]);
   const pathsFailed = readOf !== undefined && readOf.paths === undefined;
   useEffect(() => {
     if (!open || readOf !== undefined) return;
@@ -1556,7 +1665,7 @@ export function useMentionPicker({
   const term = scope?.term ?? "";
 
   // The workspace's newest agents are read as each `@` word opens the list, and once a word is
-  // typed the service finds those it names, archived ones among them, however many the workspace
+  // typed and the typing rests the service finds those it names, archived ones among them, however many the workspace
   // holds; each read is kept while its word stands, and the last one shown until the next lands.
   // Note that where the members a mention tells are handed, the workspace's agents are not read, since naming one tells nobody.
   const readAgents = members === undefined ? source?.readAgents : undefined;
@@ -1576,8 +1685,10 @@ export function useMentionPicker({
   const wantsAgents = agentsRead === undefined || agentsRead.words !== words;
   const agentsFailed =
     agentsRead !== undefined && agentsRead.words === words && agentsRead.agents === undefined;
+  // Note that words are asked of the service once the typing rests on them, as the issue pickers' are, rather than letter by letter.
+  const rested = useRested(wordAt, words);
   useEffect(() => {
-    if (!wantsAgents || readAgents === undefined || wordAt === undefined) return;
+    if (!wantsAgents || readAgents === undefined || wordAt === undefined || !rested) return;
     let live = true;
     readAgents(words).then(
       (agents) => {
@@ -1590,7 +1701,7 @@ export function useMentionPicker({
     return () => {
       live = false;
     };
-  }, [wantsAgents, words, readAgents, wordAt]);
+  }, [wantsAgents, words, readAgents, wordAt, rested]);
 
   // Each server's tools are read while the list stands open, and forgotten once it closes.
   const tools = useIntegrationTools(
@@ -1603,7 +1714,7 @@ export function useMentionPicker({
       ? []
       : groupsFor(
           scope,
-          read,
+          pathsSearched,
           {
             plan: taskRows(taskId, source.taskName, planKey, source.text()),
             tasks: taskRowsOffered,

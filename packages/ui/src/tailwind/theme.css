@@ -256,13 +256,14 @@
   --container-dialog-media-max: min(var(--luke-dialog-media-max-width), 100%);
   /* off-scale: a command palette's card (`components/command/`), at its own
      measure, standing a fifth of the way down the window rather than in its
-     middle, and never more than two thirds of the window tall; in a narrow
-     room, a sheet hung from the top of what is seen, four fifths of it tall
-     at most. */
+     middle, and never more than two thirds of the window tall unless a short
+     window needs more to keep three rows of its list (`tokens/profiles.css`'s
+     `--luke-command-*`); in a narrow room, a sheet hung from the top of what
+     is seen, four fifths of it tall at most on the same terms. */
   --container-dialog-command: min(560px, 100%);
-  --spacing-dialog-command-top: calc(var(--luke-stage-height) * 0.18);
-  --spacing-dialog-command-room: calc(var(--luke-stage-height) * 0.64);
-  --spacing-dialog-command-sheet: calc(var(--luke-stage-height) * 0.8);
+  --spacing-dialog-command-top: var(--luke-command-top);
+  --spacing-dialog-command-room: var(--luke-command-room);
+  --spacing-dialog-command-sheet: var(--luke-command-sheet);
   --container-tooltip: var(--luke-tooltip-max-width);
   --container-tooltip-card: var(--luke-tooltip-card-width);
   /* Breadcrumbs and DataTable. */

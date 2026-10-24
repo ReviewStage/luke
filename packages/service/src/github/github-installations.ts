@@ -26,7 +26,8 @@ import type { StoreFailure } from "../http/store-failure.js";
  * installation, and so its GitHub account, stands for exactly one
  * workspace: connecting another adds it beside those standing, and an
  * installation already standing for another workspace is refused there
- * rather than moved. A connect is an intent first: a random state bound to
+ * rather than moved, until Luke is uninstalled from its account, which frees
+ * the account for any workspace. A connect is an intent first: a random state bound to
  * the account and the workspace, stored only as its SHA-256, carried to
  * GitHub on the install address. At the Setup URL the installation GitHub
  * named and a PKCE code verifier are written on it, and it is spent once
@@ -64,7 +65,8 @@ export interface ConnectedInstallation {
 
 /**
  * What a link settles on: linked; refused because the installation's
- * GitHub account already stands for another workspace; or refused because
+ * GitHub account already stands for another workspace with Luke still
+ * installed on it; or refused because
  * the account linking is no longer an owner or admin of the workspace.
  */
 export const LINK_OUTCOME = {
@@ -159,11 +161,14 @@ const deleteIntent = SqlSchema.findOneOption({
  * GitHub account: a new account's row is added beside the workspace's
  * others; the account's own row, where it stands for this workspace, takes
  * the installation's id, which a reinstall on the account changes, and its
- * login and kind; and a row standing for any other workspace is left as it
- * is and answers nothing. The row keeps the moment it was first linked, and
- * a relink of the installation it already holds keeps the status last
- * written, so a callback's read of an installation since suspended does not
- * bring it back.
+ * login and kind; a row standing for another workspace whose installation
+ * GitHub deleted, because Luke was uninstalled from the account, is taken
+ * over by this workspace as if newly linked; and a row standing for another
+ * workspace whose installation is still live, active or suspended, is left
+ * as it is and answers nothing. The row keeps the moment it was first linked
+ * to its workspace, and a relink of the installation it already holds keeps
+ * the status last written, so a callback's read of an installation since
+ * suspended does not bring it back.
  */
 const upsertInstallation = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -176,8 +181,9 @@ const upsertInstallation = SqlSchema.findOneOption({
     now: Schema.Date,
   }),
   Result: Schema.Struct({ installationId: Schema.Number }),
-  execute: (row) =>
-    Database.use((db) =>
+  execute: (row) => {
+    const sameWorkspace = eq(githubInstallation.organizationId, row.organizationId);
+    return Database.use((db) =>
       db
         .insert(githubInstallation)
         .values({
@@ -193,16 +199,19 @@ const upsertInstallation = SqlSchema.findOneOption({
         .onConflictDoUpdate({
           target: githubInstallation.accountId,
           set: {
+            organizationId: row.organizationId,
             installationId: row.installationId,
             accountLogin: row.accountLogin,
             accountType: row.accountType,
-            status: sql`case when ${githubInstallation.installationId} = ${row.installationId} then ${githubInstallation.status} else ${row.status} end`,
+            status: sql`case when ${sameWorkspace} and ${githubInstallation.installationId} = ${row.installationId} then ${githubInstallation.status} else ${row.status} end`,
+            createdAt: sql`case when ${sameWorkspace} then ${githubInstallation.createdAt} else ${row.now} end`,
             updatedAt: row.now,
           },
-          setWhere: eq(githubInstallation.organizationId, row.organizationId),
+          setWhere: sql`${sameWorkspace} or ${eq(githubInstallation.status, GITHUB_INSTALLATION_STATUS.DELETED)}`,
         })
         .returning({ installationId: githubInstallation.installationId }),
-    ),
+    );
+  },
 });
 
 /** The account's role text in the workspace, its member row held against a change until the transaction ends. */
@@ -353,8 +362,10 @@ export function spendConnectIntent(
 
 /**
  * The installation linked to the workspace beside any it holds, or the
- * workspace's row for the same GitHub account moved onto it; refused where
- * that account already stands for another workspace, which keeps it.
+ * workspace's row for the same GitHub account moved onto it, or another
+ * workspace's row for an account Luke was uninstalled from taken over;
+ * refused where that account's live installation stands for another
+ * workspace, which keeps it.
  */
 export function linkInstallation(
   organizationId: string,

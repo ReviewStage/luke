@@ -18,14 +18,14 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
   [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
   [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or can't be read; check Settings › Agents",
+    "your API key was refused or cannot be read; check Settings › Agents",
   [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started",
   [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
     "Fast isn't available on your own API key; choose the model with Fast off",
   [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
     "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
   [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "the conversation was too long for the model",
-  [CODING_AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and can't be reached again",
+  [CODING_AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and cannot be reached again",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
@@ -49,7 +49,7 @@ export function agentFailureWords(
   continuable = false,
 ): string | undefined {
   if (holder !== undefined && failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
-    return `${holder}'s API key was refused or can't be read`;
+    return `${holder}'s API key was refused or cannot be read`;
   }
   if (holder !== undefined && failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
     return `Fast isn't available on ${holder}'s own API key; choose the model with Fast off`;
