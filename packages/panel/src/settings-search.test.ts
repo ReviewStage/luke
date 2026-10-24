@@ -8,6 +8,7 @@ import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import {
   SETTINGS_NO_MATCH_WORDS,
+  type SettingsSearchEntry,
   type SettingsSearchInput,
   searchSettings,
   settingsSearchEntries,
@@ -333,4 +334,40 @@ test("no two rows on different pages wear the same label", () => {
 test("a search that finds nothing says what to try", () => {
   assert.equal(searchSettings(settingsSearchEntries(FULL_INPUT), "zzzz")?.matched, 0);
   assert.match(SETTINGS_NO_MATCH_WORDS, /^No results match\. Try /u);
+});
+
+/** Rows on one page, each its own words: what a query ranks and marks. */
+function entryOf(id: string, label: string, ...words: string[]): SettingsSearchEntry {
+  return { id, label, page: SETTINGS_VIEW.APPEARANCE, haystack: [label, ...words] };
+}
+
+test("a row named by the query or beginning with it ranks above one whose words are scattered, and one found by its description last", () => {
+  const entries = [
+    entryOf("described", "Colours", "Follows the system theme"),
+    entryOf("scattered", "Dark theme for diffs"),
+    entryOf("prefix", "Theme colours"),
+    entryOf("exact", "Theme"),
+  ];
+  const found = searchSettings(entries, "theme");
+
+  assert.deepEqual(
+    found?.groups.flatMap((group) => group.items.map((entry) => entry.id)),
+    ["exact", "prefix", "scattered", "described"],
+  );
+});
+
+test("a result marks the letters of its name that the words typed found, and one found by its description marks none", () => {
+  const found = searchSettings(
+    [entryOf("diffs", "Dark theme for diffs"), entryOf("colours", "Colours", "System theme")],
+    "theme",
+  );
+  const marks = new Map(found?.groups.flatMap((group) => group.items.map((e) => [e.id, e.marks])));
+
+  assert.deepEqual(marks.get("diffs"), [{ start: 5, end: 10 }]);
+  assert.deepEqual(marks.get("colours"), []);
+});
+
+test("letters typed in order do not find a row: thm no longer finds Theme", () => {
+  assert.equal(searchSettings(settingsSearchEntries(FULL_INPUT), "thm")?.matched, 0);
+  assert.ok(labelsFound("theme").includes("Theme"));
 });

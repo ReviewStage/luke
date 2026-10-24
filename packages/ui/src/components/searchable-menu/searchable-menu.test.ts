@@ -205,6 +205,59 @@ test("typing keeps the rows every word matches, and the first that may be picked
   assert.deepEqual(asked.said, []);
 });
 
+const THEME_ROWS: readonly MenuRow[] = [
+  { id: "dark", label: "Dark mode", terms: ["Theme"] },
+  { id: "colour", label: "Colour theme" },
+  { id: "theme", label: "Theme" },
+  { id: "tinted", label: "Themed tints" },
+];
+
+test("typing ranks a name typed whole or begun above a word within it, and that above a row found by its terms", () => {
+  mount({ placeholder: "Search models", rows: THEME_ROWS });
+  type("theme");
+
+  assert.deepEqual(listed(), ["Theme", "Themed tints", "Colour theme", "Dark mode"]);
+});
+
+test("a row's name marks the letters the words typed found, and a row found by its terms marks none", () => {
+  mount({ placeholder: "Search models", rows: THEME_ROWS });
+  type("the");
+  const marked = [...document.querySelectorAll("mark")].map((mark) => mark.textContent);
+  type("theme");
+  const darkMode = [...document.querySelectorAll('[role="option"]')].find(
+    (option) => option.textContent === "Dark mode",
+  );
+
+  assert.deepEqual(marked, ["The", "The", "the"]);
+  assert.equal(darkMode?.querySelector("mark"), null);
+});
+
+test("letters typed in order do not find a row: thm is not Theme", () => {
+  mount({ placeholder: "Search models", rows: THEME_ROWS });
+  type("thm");
+
+  assert.deepEqual(listed(), []);
+  assert.equal(document.querySelector('[role="listbox"]')?.textContent, "No models match");
+});
+
+test("a section's rows stay together under its one heading when a search ranks them", () => {
+  mount({
+    placeholder: "Search models",
+    rows: [
+      { id: "a1", label: "Fast model", section: "Anthropic" },
+      { id: "o1", label: "Model", section: "OpenAI" },
+      { id: "a2", label: "Model two", section: "Anthropic" },
+    ],
+  });
+  type("model");
+  const headings = [...document.querySelectorAll('[role="group"]')].map((group) =>
+    group.getAttribute("aria-label"),
+  );
+
+  assert.deepEqual(headings, ["OpenAI", "Anthropic"]);
+  assert.deepEqual(listed(), ["Model", "Model two", "Fast model"]);
+});
+
 test("the arrows pass over a row that cannot be picked, wrap both ways, and Enter picks the one named", () => {
   const asked = mount({ placeholder: "Search models" });
   const first = announced();
