@@ -10,7 +10,7 @@ import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { PlayIcon, SquareIcon, TerminalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { toastActFailure, useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
@@ -201,7 +201,13 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     const ran = lastRuns.get(agentId);
     if (ran !== undefined) ran.stopped = true;
     setStanding({ kind: "stopping" });
-    act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).catch(() => undefined);
+    act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).catch((refused: unknown) => {
+      // Note that a refused stop leaves the run going, so the tab says it is still running, unless the run has ended meanwhile.
+      stopAsked.current = false;
+      if (ran !== undefined) ran.stopped = false;
+      setStanding((now) => (now.kind === "stopping" ? { kind: "running" } : now));
+      toastActFailure(refused);
+    });
   };
   const openInTerminal = () => {
     // Note that a refusal is written on the screen, so a press that opened nothing says why.
