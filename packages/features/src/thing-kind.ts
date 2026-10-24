@@ -1,5 +1,10 @@
-import { issueAddressOf, pullRequestAddressOf } from "./github-repositories-wire.js";
-import { LINK_PLACE, type LinkPlace, type LinkPlaceKind } from "./link-grammar.js";
+import {
+  issueAddressOf,
+  LINK_PLACE,
+  type LinkPlace,
+  type LinkPlaceKind,
+  pullRequestAddressOf,
+} from "./link-grammar.js";
 import { MENTION_KIND, type Mention } from "./mention-link.js";
 import { OPERATOR_NAME } from "./model-label.js";
 import type { KnownNames } from "./place-chip-model.js";
