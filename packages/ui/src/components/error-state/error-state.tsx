@@ -13,7 +13,9 @@
  *
  * Only where it stands differs. Among rows, in a card, or under a
  * transcript it is a row of its own at a caption's size, laid out as a row
- * is: the glyph where a row's glyph stands, the sentence where a row's words
+ * is (`ROWS` stands it at a sidebar's or a list pane's rows' inset by a
+ * margin of its own, as `NoteLine`'s `ROWS` does, a little short of the
+ * row's end so Retry's glyph stands under the head's buttons'): the glyph where a row's glyph stands, the sentence where a row's words
  * stand, and Retry at the row's end, where a row's own buttons stand. Where
  * the row is narrow, a sidebar's or a list pane's, Retry is its glyph alone,
  * still named Retry, so the sentence keeps the room.
@@ -51,9 +53,10 @@ import { AlertIcon, RetryIcon } from "../../icons/lucide-glyphs.js";
 import { BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { EmptyState } from "../empty-state/empty-state.js";
 
-/** Where a failure stands: among the rows it failed to draw, alone in the region it would have filled, or on one line of a toolbar. */
+/** Where a failure stands: among the rows it failed to draw, at a list's rows' inset among them, alone in the region it would have filled, or on one line of a toolbar. */
 export const ERROR_STATE_PLACEMENT = {
   INLINE: "inline",
+  ROWS: "rows",
   CENTRED: "centred",
   TOOLBAR: "toolbar",
 } as const;
@@ -81,7 +84,7 @@ interface LineActions {
 /** Where a failure stands, with what it says and the presses it may offer there. */
 type Placed =
   | (LineActions & {
-      placement?: typeof ERROR_STATE_PLACEMENT.INLINE;
+      placement?: typeof ERROR_STATE_PLACEMENT.INLINE | typeof ERROR_STATE_PLACEMENT.ROWS;
       /** What did not land, as "The inbox could not be read." */
       children: ReactNode;
       onReload?: undefined;
