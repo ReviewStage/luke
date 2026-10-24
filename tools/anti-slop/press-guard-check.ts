@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { BUSY_GUARD_RULE } from "./shared/busy-guard.ts";
 import { TYPESCRIPT_SOURCE } from "./shared/effect-edges.ts";
 import { HEADING_GUARD_RULE } from "./shared/heading-guard.ts";
+import { LIVE_REGION_GUARD_RULE } from "./shared/live-region-guard.ts";
 import { LUCIDE_GUARD_RULE } from "./shared/lucide-guard.ts";
 import { OPEN_PAGE_GUARD_RULE } from "./shared/open-page-guard.ts";
 import {
@@ -27,7 +28,8 @@ import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
  * file holding one that would silence `skeleton-through-components` or
  * `async-press-needs-busy`, whose baseline is the only way past it, on a
  * JSX-capable file outside `@luke/ui` holding one that would silence
- * `no-open-page-from-button` or `no-raw-heading-outside-ui`, on any TypeScript file holding one that would
+ * `no-open-page-from-button`, `no-raw-heading-outside-ui` or
+ * `no-hand-written-live-region`, on any TypeScript file holding one that would
  * silence `no-lucide-outside-door` or, where it adds a listener,
  * `no-document-press-listener`, whose baselines are the only way past them, on
  * any TypeScript file that spells
@@ -91,6 +93,13 @@ const GUARDS = [
     watches: (absolute: string) => isOutsideUi(absolute),
     remedy:
       "Draw the heading with Text from @luke/ui (`as` for the element, a type role for the look) instead",
+  },
+  {
+    rule: LIVE_REGION_GUARD_RULE,
+    sources: JSX_SOURCE,
+    watches: (absolute: string) => isOutsideUi(absolute),
+    remedy:
+      "Say it with `announce` from @luke/ui, or draw the words in FailureNote, ErrorState, EmptyState or NoteLine, instead",
   },
   {
     rule: LUCIDE_GUARD_RULE,
