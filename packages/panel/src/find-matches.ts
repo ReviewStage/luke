@@ -16,7 +16,9 @@
  * `hidden` is not searched, nor what wears `FIND_SKIP_ATTRIBUTE`. A closed
  * `<details>` is searched, since what it folds is still the tab's to find,
  * and opened when its match is brought into view, as Chromium's own find
- * opens one.
+ * opens one; so is what is `hidden="until-found"`, the rest of a cut code
+ * card's lines (`CodeCard`), told of the match (`beforematch`) and shown
+ * as Chromium's own find shows it.
  *
  * What a shadow root draws is not searched, as a File tab's tree is not,
  * unless its host wears `FIND_SHADOW_ATTRIBUTE`, as a diff drawn by Pierre
@@ -67,6 +69,12 @@ const INLINE_TAGS = new Set([
   "VAR",
 ]);
 
+/** The `hidden` worn by what a find still searches, and shows when a match lands in it. */
+const UNTIL_FOUND = "until-found";
+
+/** The event fired at what `UNTIL_FOUND` hides before a match in it is shown. */
+const BEFORE_MATCH = "beforematch";
+
 /** The elements whose text is never read as words. */
 const UNREAD_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
 
@@ -113,11 +121,21 @@ export interface FindPainting {
 
 export const NO_PAINTING: FindPainting = { ranges: [], at: -1 };
 
+/** Whether an element is `hidden="until-found"`, as the attribute's value is read, without regard to case. */
+function hiddenUntilFound(element: Element): boolean {
+  return element.getAttribute("hidden")?.toLowerCase() === UNTIL_FOUND;
+}
+
+/** Whether an element is `hidden` from a find, as what is hidden until found is not. */
+function hiddenFromFind(element: Element): boolean {
+  return element.hasAttribute("hidden") && !hiddenUntilFound(element);
+}
+
 /** Whether an element's subtree is left out of the words searched, `skipped` naming more of it within a shadow root. */
 function unread(element: Element, skipped: string | undefined): boolean {
   return (
     UNREAD_TAGS.has(element.tagName) ||
-    element.hasAttribute("hidden") ||
+    hiddenFromFind(element) ||
     element.hasAttribute(FIND_SKIP_ATTRIBUTE) ||
     (skipped !== undefined && element.matches(skipped))
   );
@@ -380,8 +398,9 @@ export function repaint(previous: FindPainting, next: FindPainting): void {
 }
 
 /**
- * Brings a match into view: every closed `<details>` around it opened, as
- * Chromium's own find opens one, and every scroller up to `root` moved
+ * Brings a match into view: every closed `<details>` around it opened, and
+ * every element `hidden="until-found"` told (`beforematch`) and shown, as
+ * Chromium's own find does both, and every scroller up to `root` moved
  * until it stands in the middle.
  */
 export function reveal(range: Range, root: Element): void {
@@ -391,6 +410,10 @@ export function reveal(range: Range, root: Element): void {
     element = parentAcross(element)
   ) {
     if (element instanceof HTMLDetailsElement && !element.open) element.open = true;
+    if (hiddenUntilFound(element)) {
+      element.dispatchEvent(new Event(BEFORE_MATCH, { bubbles: true }));
+      element.removeAttribute("hidden");
+    }
   }
   scrollToRange(range, root);
 }
