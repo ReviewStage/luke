@@ -235,9 +235,7 @@ function groupNames(sidebar: HTMLElement): string[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
   return [
-    ...tasks.querySelectorAll(
-      ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
-    ),
+    ...tasks.querySelectorAll(".luke-group-header-head button[aria-expanded]:not([aria-haspopup])"),
   ].map(heardName);
 }
 
@@ -915,7 +913,9 @@ test("grouped by assignee, your tasks come first, then each teammate's by name, 
       ["Audit logs", false],
     ],
   );
-  const headers = sidebar.querySelectorAll(`${TASK_LIST} .sidebar-repository-header`);
+  const headers = sidebar.querySelectorAll(
+    `${TASK_LIST} .luke-group-header-head:has(button[aria-expanded])`,
+  );
   assert.equal(
     headers[3]?.querySelector('.actor-mark[data-kind="unassigned"]') === null,
     false,
@@ -996,7 +996,7 @@ test("a person's group header, by assignee or by creator, hangs their card", asy
   const header = (name: string) =>
     [
       ...sidebar.querySelectorAll<HTMLButtonElement>(
-        `${TASK_LIST} .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])`,
+        `${TASK_LIST} .luke-group-header-head button[aria-expanded]:not([aria-haspopup])`,
       ),
     ].find((button) => heardName(button) === name) ?? assert.fail(`${name} heads a group`);
   const hung: (string | undefined)[] = [];
@@ -1014,7 +1014,7 @@ test("an assignee's group folds, and stays folded across launches", async () => 
   choose(sidebar, "Group by", "Assignee");
   const fold = [
     ...sidebar.querySelectorAll<HTMLButtonElement>(
-      `${TASK_LIST} .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])`,
+      `${TASK_LIST} .luke-group-header-head button[aria-expanded]:not([aria-haspopup])`,
     ),
   ].find((button) => heardName(button) === "Unassigned");
   assert.ok(fold, "Unassigned has a fold");

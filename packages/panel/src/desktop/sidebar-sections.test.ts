@@ -230,7 +230,7 @@ function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
   const fold = [
     ...sidebar.querySelectorAll('nav[aria-label="Sections"] button[aria-expanded]'),
   ].find((each) => heardName(each) === title);
-  const found = fold?.closest<HTMLElement>(".sidebar-repository-header");
+  const found = fold?.closest<HTMLElement>(".luke-group-header-head");
   return found ?? assert.fail(`no ${title} section`);
 }
 
@@ -279,6 +279,32 @@ test("a section stands over its tasks, which Tasks leaves out", async () => {
   assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
   const header = sidebar.querySelector('nav[aria-label="Sections"] button[aria-expanded]');
   assert.equal(header === null ? undefined : heardName(header), "Launch");
+});
+
+test("a section folds on its title, aria-expanded following, counts its tasks folded, and keeps its ⋯ outside the fold", async () => {
+  const sidebar = await mountSidebar([]);
+  const launch = () =>
+    [
+      ...sidebar.querySelectorAll<HTMLButtonElement>(
+        'nav[aria-label="Sections"] button[aria-expanded]',
+      ),
+    ].find((each) => heardName(each) === "Launch") ?? assert.fail("no Launch fold");
+  assert.equal(launch().getAttribute("aria-expanded"), "true");
+  assert.equal(launch().textContent, "🚀Launch");
+  assert.deepEqual(namesIn(sidebar, "Sections"), ["Invite expiry"]);
+
+  act(() => launch().click());
+  assert.equal(launch().getAttribute("aria-expanded"), "false");
+  assert.equal(launch().textContent, "🚀Launch1 task");
+  assert.deepEqual(namesIn(sidebar, "Sections"), []);
+
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  act(() => actions?.click());
+  assert.equal(launch().getAttribute("aria-expanded"), "false", "the ⋯ folds nothing");
+
+  act(() => launch().click());
+  assert.equal(launch().getAttribute("aria-expanded"), "true");
+  assert.deepEqual(namesIn(sidebar, "Sections"), ["Invite expiry"]);
 });
 
 test("a filter by person leaves out a section's task it would leave out of the list", async () => {
@@ -504,15 +530,13 @@ test("a section's Delete question goes when the section does, deleted on another
   assert.deepEqual(writes, []);
 });
 
-test("a section without an icon draws its title alone, with no glyph before it", async () => {
+test("a section without an icon draws its title behind the fold's chevron alone, and one with an icon behind its icon", async () => {
   const sidebar = await mountSidebar([], ICONLESS);
 
   const toggle = sectionHeader(sidebar, "Someday").querySelector("button[aria-expanded]");
-  assert.equal(toggle?.querySelector('[aria-hidden="true"]'), null);
-  assert.equal(toggle?.querySelector("svg"), null);
-  const launch = sectionHeader(sidebar, "Launch").querySelector(
-    'button[aria-expanded] > [aria-hidden="true"]',
-  );
+  assert.ok(toggle?.querySelector(".luke-group-header-icon") === null, "no glyph is drawn");
+  assert.ok(toggle?.querySelector(".luke-group-header-chevron"), "the chevron stands at rest");
+  const launch = sectionHeader(sidebar, "Launch").querySelector(".luke-group-header-icon");
   assert.equal(launch?.textContent, "🚀");
 });
 

@@ -1,0 +1,35 @@
+import { type GroupFold, NAV_COUNT_SHOWN, type NavCount } from "@luke/ui";
+import type { CountNoun } from "./sidebar-group-header.js";
+
+/**
+ * sidebar-fold.ts -- how the sidebar's heads hand `GroupHeader` the fold and the count they keep.
+ *
+ * The sidebar keeps which of its groups are folded (`folded-groups.ts`) and
+ * toggles one by name, so a head is handed its open state and hears a press
+ * as the next state it is asked for. Note that a press the group already
+ * stands in is ignored rather than toggled, since a toggle on a state the
+ * keeper already holds would put it back.
+ */
+
+/** What a folded group's count is read as unless its group holds something else. */
+export const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
+
+/** A group folded as the sidebar keeps it, open unless `folded`, asking `onToggle` for each change. */
+export function sidebarFold(folded: boolean, onToggle: () => void): GroupFold {
+  return {
+    open: !folded,
+    onOpenChange: (open) => {
+      if (open === folded) onToggle();
+    },
+  };
+}
+
+/** The count a group shows while folded, read with its noun, and none while it stands open. */
+export function foldedCount(
+  folded: boolean,
+  count: number,
+  noun: CountNoun,
+  shown: NavCount["shown"] = NAV_COUNT_SHOWN.ON_HOVER,
+): NavCount | undefined {
+  return folded ? { value: count, noun: count === 1 ? noun.one : noun.many, shown } : undefined;
+}

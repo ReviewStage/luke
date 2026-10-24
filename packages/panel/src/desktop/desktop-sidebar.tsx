@@ -25,6 +25,8 @@ import {
   Fill,
   FolderIcon,
   GAP,
+  GROUP_HEADING,
+  GroupHeader,
   HoldPress,
   IconButton,
   LAYOUT_ELEMENT,
@@ -149,8 +151,9 @@ import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
+import { foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
+import type { CountNoun } from "./sidebar-group-header.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
@@ -741,7 +744,7 @@ function PinnedSection({
   onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
 }): React.JSX.Element {
   const folded = folds.pinnedFolded;
-  const drawn = folded ? rows.filter(shown) : rows;
+  const standing = rows.filter(shown);
   return (
     <nav
       className="sidebar-group"
@@ -754,22 +757,33 @@ function PinnedSection({
         count={rows.length}
         noun={PIN_NOUN}
         onToggle={folds.togglePinned}
+        standing={
+          standing.length === 0 ? undefined : (
+            <PinnedRows
+              rows={standing}
+              context={context}
+              onOpenTab={onOpenTab}
+              movable={false}
+              onDropOut={onDropOut}
+            />
+          )
+        }
+        rows={
+          rows.length === 0 ? (
+            <div className="sidebar-section-slot">
+              <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
+            </div>
+          ) : (
+            <PinnedRows
+              rows={rows}
+              context={context}
+              onOpenTab={onOpenTab}
+              movable
+              onDropOut={onDropOut}
+            />
+          )
+        }
       />
-      {drawn.length === 0 ? (
-        folded ? null : (
-          <div className="sidebar-section-slot">
-            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
-          </div>
-        )
-      ) : (
-        <PinnedRows
-          rows={drawn}
-          context={context}
-          onOpenTab={onOpenTab}
-          movable={!folded}
-          onDropOut={onDropOut}
-        />
-      )}
     </nav>
   );
 }
@@ -859,7 +873,7 @@ function RepositorySection({
   const { repository } = group;
   const folded = folds.folded(repository);
   const named = repository === null ? NO_REPOSITORY : label;
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
   // The menu is drawn over the window rather than inside the sidebar, so it
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
@@ -867,7 +881,8 @@ function RepositorySection({
   const actionGroups = repositoryActionGroups(group, context.tasks);
   return (
     <div className="sidebar-repository" {...motionKey(repositoryGroupKey(group))}>
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={
           repository === null ? (
             <FolderIcon />
@@ -880,10 +895,10 @@ function RepositorySection({
             />
           )
         }
-        name={named}
-        folded={folded}
-        count={group.rows.length}
-        trailing={
+        label={named}
+        fold={sidebarFold(folded, () => folds.toggle(repository))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        mark={
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
             <span className="sidebar-repository-pinned">
               <PinIcon />
@@ -894,7 +909,9 @@ function RepositorySection({
         tooltip={repository === null || label === repository ? undefined : repository}
         menuOpen={menu.open !== undefined}
         contextMenu={actionGroups.length === 0 ? undefined : menu.contextMenu(ellipsis)}
-        onToggle={() => folds.toggle(repository)}
+        standing={
+          standing.length === 0 ? undefined : <TaskRows rows={standing} context={context} />
+        }
         actions={
           <>
             {actionGroups.length === 0 ? null : (
@@ -920,7 +937,9 @@ function RepositorySection({
             )}
           </>
         }
-      />
+      >
+        {group.rows.length === 0 ? null : <TaskRows rows={group.rows} context={context} />}
+      </GroupHeader>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${named} actions`}
@@ -929,7 +948,6 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
 }
@@ -954,20 +972,27 @@ function CreatorSection({
   const first = group.rows[0];
   const actor = creatorActor(first === undefined ? {} : creatorOf(first), reader, undefined);
   const folded = folds.creatorFolded(group.creatorId);
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
+  const faces = { ...context.faces, creator: false };
   return (
     <div className="sidebar-repository" {...motionKey(creatorGroupKey(group))}>
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
-        name={actorName(actor)}
+        label={actorName(actor)}
         card={actorCard(actor)}
-        folded={folded}
-        count={group.rows.length}
-        onToggle={() => folds.toggleCreator(group.creatorId)}
-      />
-      {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, creator: false }} />
-      )}
+        fold={sidebarFold(folded, () => folds.toggleCreator(group.creatorId))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <TaskRows rows={standing} context={context} faces={faces} />
+          )
+        }
+      >
+        {group.rows.length === 0 ? null : (
+          <TaskRows rows={group.rows} context={context} faces={faces} />
+        )}
+      </GroupHeader>
     </div>
   );
 }
@@ -1001,10 +1026,12 @@ function AssigneeSection({
       ? undefined
       : personActor(assignee, reader.members, reader.readerId, reader.former);
   const folded = folds.assigneeFolded(group.assigneeId);
-  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  const standing = group.rows.filter(context.currentRow);
+  const faces = { ...context.faces, assignee: false };
   return (
     <div className="sidebar-repository">
-      <SidebarGroupHeader
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
         glyph={
           actor === undefined ? (
             <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />
@@ -1012,15 +1039,20 @@ function AssigneeSection({
             <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />
           )
         }
-        name={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
+        label={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
         card={actor === undefined ? undefined : actorCard(actor)}
-        folded={folded}
-        count={group.rows.length}
-        onToggle={() => folds.toggleAssignee(group.assigneeId)}
-      />
-      {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, assignee: false }} />
-      )}
+        fold={sidebarFold(folded, () => folds.toggleAssignee(group.assigneeId))}
+        count={foldedCount(folded, group.rows.length, TASK_NOUN)}
+        standing={
+          standing.length === 0 ? undefined : (
+            <TaskRows rows={standing} context={context} faces={faces} />
+          )
+        }
+      >
+        {group.rows.length === 0 ? null : (
+          <TaskRows rows={group.rows} context={context} faces={faces} />
+        )}
+      </GroupHeader>
     </div>
   );
 }
