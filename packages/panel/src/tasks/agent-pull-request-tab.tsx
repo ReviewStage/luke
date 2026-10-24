@@ -104,24 +104,19 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
-import { landedMark } from "@luke/ui/landed";
-import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
-  BookOpenIcon,
-  BotIcon,
   CheckIcon,
-  CircleCheckIcon,
-  CircleDotIcon,
   CircleSlashIcon,
   ExternalLinkIcon,
-  FileDiffIcon,
-  GitPullRequestIcon,
+  GLYPH,
   MessagesSquareIcon,
   PlayIcon,
   RotateCwIcon,
   ScanSearchIcon,
   XIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import { landedMark } from "@luke/ui/landed";
+import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   type ComponentProps,
   createContext,
@@ -428,7 +423,7 @@ function landed<A>(part: Part<A>): A | undefined {
 /** The glyph a check wears for where it stands. */
 const CHECK_GLYPHS = {
   [CHECK_STATE.FAILED]: <XIcon />,
-  [CHECK_STATE.PENDING]: <CircleDotIcon />,
+  [CHECK_STATE.PENDING]: <GLYPH.STATUS />,
   [CHECK_STATE.PASSED]: <CheckIcon />,
   [CHECK_STATE.SKIPPED]: <CircleSlashIcon />,
 } as const satisfies Record<CheckState, ReactNode>;
@@ -629,7 +624,7 @@ function CheckSquare({ name, src }: { name: string; src: string | undefined }): 
     <Avatar
       name={name}
       {...(src === undefined ? {} : { src })}
-      glyph={<BotIcon />}
+      glyph={<GLYPH.AGENT />}
       shape={AVATAR_SHAPE.SQUARE}
       size={AVATAR_SIZE.INLINE}
       tiled
@@ -975,7 +970,7 @@ function ThreadMenu({
           there === PULL_REQUEST_THREAD_VIEW.FILES
             ? {
                 label: THREAD_REVEAL_WORDS.VIEW_FILES,
-                icon: <FileDiffIcon aria-hidden="true" />,
+                icon: <GLYPH.PULL_REQUEST_CHANGES />,
                 onSelect: jump,
               }
             : {
@@ -1834,7 +1829,7 @@ function summaryCountOf(checks: readonly PullRequestCheck[], summary: CheckSumma
 /** The glyph the Checks tab wears for how its checks went, as the pull request's mark tells it; none where there are none. */
 const SUMMARY_GLYPHS = {
   [CHECK_SUMMARY.FAILING]: <XIcon />,
-  [CHECK_SUMMARY.PENDING]: <CircleDotIcon />,
+  [CHECK_SUMMARY.PENDING]: <GLYPH.STATUS />,
   [CHECK_SUMMARY.PASSING]: <CheckIcon />,
   [CHECK_SUMMARY.NONE]: null,
 } as const satisfies Record<CheckSummary, ReactNode>;
@@ -1955,7 +1950,7 @@ function tabsOf(
     },
     {
       value: PULL_REQUEST_VIEW.CHECKS,
-      icon: <CircleCheckIcon />,
+      icon: <GLYPH.CHECKS />,
       label: "Checks",
       count:
         held === undefined
@@ -1967,13 +1962,13 @@ function tabsOf(
     },
     {
       value: PULL_REQUEST_VIEW.CHAPTERS,
-      icon: <BookOpenIcon />,
+      icon: <GLYPH.PULL_REQUEST_CHAPTERS />,
       label: "Chapters",
       count: chapterCount === undefined ? undefined : formatCount(chapterCount),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
-      icon: <FileDiffIcon />,
+      icon: <GLYPH.PULL_REQUEST_CHANGES />,
       label: "Files changed",
       count: files?.count,
       hint: files?.hint,
@@ -2638,7 +2633,7 @@ function PullRequestTabBody({
           >
             <PullRequestWriteNote writes={writes} />
             {none ? (
-              <EmptyState icon={<GitPullRequestIcon />}>
+              <EmptyState icon={<GLYPH.PULL_REQUEST />}>
                 {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
               </EmptyState>
             ) : (

@@ -43,15 +43,15 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
-  PencilIcon,
-} from "lucide-react";
+  GLYPH,
+} from "@luke/ui/icons";
+import { useClipped } from "@luke/ui/use-clipped";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
@@ -589,7 +589,7 @@ export function PullRequestTitle({
         <span className="pull-request-title-edit">
           <Tooltip label={TITLE_WORDS.EDIT}>
             <IconButton
-              icon={<PencilIcon aria-hidden="true" />}
+              icon={<GLYPH.RENAME />}
               label={TITLE_WORDS.EDIT}
               size={BUTTON_SIZE.COMPACT}
               disabled={busy}

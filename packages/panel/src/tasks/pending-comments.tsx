@@ -16,8 +16,8 @@ import {
   STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { PencilIcon, Trash2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import { useNamer } from "./pull-request-people.js";
@@ -223,7 +223,7 @@ export function PendingComment({
           <Button
             size={BUTTON_SIZE.COMPACT}
             variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PencilIcon aria-hidden="true" />}
+            icon={<GLYPH.RENAME />}
             disabled={out !== undefined}
             onClick={() => setEditing(true)}
           >
@@ -232,7 +232,7 @@ export function PendingComment({
           <Button
             size={BUTTON_SIZE.COMPACT}
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<Trash2Icon aria-hidden="true" />}
+            icon={<GLYPH.DELETE />}
             disabled={out !== undefined}
             onClick={deleting.ask}
           >

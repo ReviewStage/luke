@@ -9,7 +9,6 @@ import {
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
 import {
-  CloseIcon,
   CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
@@ -27,7 +26,6 @@ import {
   OverPane,
   PaneBar,
   PanePin,
-  PlusIcon,
   ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
@@ -35,7 +33,7 @@ import {
   Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
-import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
+import { GLYPH } from "@luke/ui/icons";
 import { type ReactNode, type RefObject, useState } from "react";
 import { rowMenu } from "../desktop/action-menu.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
@@ -211,7 +209,7 @@ function ShellRow({
   return (
     <>
       <ListRow
-        leading={<TerminalIcon />}
+        leading={<GLYPH.TERMINAL />}
         title={
           renaming ? (
             <InlineEdit
@@ -240,7 +238,7 @@ function ShellRow({
         actions={
           renaming ? null : (
             <Tooltip label={kill}>
-              <IconButton icon={<CloseIcon />} label={kill} onClick={ending.ask} />
+              <IconButton icon={<GLYPH.CLOSE />} label={kill} onClick={ending.ask} />
             </Tooltip>
           )
         }
@@ -251,19 +249,19 @@ function ShellRow({
                 [
                   {
                     label: "Rename",
-                    icon: <PencilIcon aria-hidden="true" />,
+                    icon: <GLYPH.RENAME />,
                     onSelect: () => setRenaming(true),
                   },
                   {
                     label: "New shell",
-                    icon: <PlusIcon />,
+                    icon: <GLYPH.ADD />,
                     onSelect: session.onCreate,
                   },
                 ],
                 [
                   {
                     label: "End shell",
-                    icon: <Trash2Icon aria-hidden="true" />,
+                    icon: <GLYPH.DELETE />,
                     danger: true,
                     onSelect: ending.ask,
                   },
@@ -316,7 +314,7 @@ export function TerminalShells({
         actions={
           <Tooltip label="New shell">
             <IconButton
-              icon={<PlusIcon />}
+              icon={<GLYPH.ADD />}
               label="New shell"
               disabled={listed?.sandbox !== SANDBOX_STATE.RUNNING}
               onClick={session.onCreate}
