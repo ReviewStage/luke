@@ -1,4 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
@@ -91,7 +92,7 @@ import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { actPort } from "../app-bridge.js";
-import { useCopyToast } from "../copy-feedback.js";
+import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
@@ -193,6 +194,9 @@ const ROLE_DETAIL = {
 
 /** What an admin's role menu says under Admin, which only the owner invites. */
 const OWNER_INVITES_ADMINS = "Only the owner invites admins";
+
+/** What the toast says once an invitation's accept link is on the clipboard. */
+const INVITE_LINK_COPIED = "Invite link copied";
 
 /** What the invitations say where none is pending, with the one fact a reader cannot guess: Luke mails no one. */
 const INVITATIONS_EMPTY =
@@ -441,13 +445,13 @@ function useMembersRead(workspace: Workspace) {
 /**
  * One member's row: their face, their name with You on the reader's own,
  * their email under it, and their role as the row's value in one column,
- * then in its ⋯ their profile, where the window offers one, and what the
- * reader may do to them (`memberActs`). Make admin
- * and Make member take hold at once, since either is undone by the other;
- * Make owner and Remove from workspace ask first. A role change refused is
- * said under the row. A row with no ⋯ in a list where others have one
- * keeps the ⋯'s room, so every role ends in the same place. The row is
- * `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
+ * then in its ⋯ their profile, where the window offers one, Copy link to
+ * their person page, and what the reader may do to them (`memberActs`).
+ * Make admin and Make member take hold at once, since either is undone by
+ * the other; Make owner and Remove from workspace ask first. A role change
+ * refused is said under the row. A row with no ⋯ in a list where others
+ * have one keeps the ⋯'s room, so every role ends in the same place. The
+ * row is `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -487,8 +491,9 @@ function MemberRow({
     );
   };
   const openPerson = useOpenPerson();
-  const profileActs =
-    openPerson === undefined
+  const copy = useCopyToast();
+  const profileActs = [
+    ...(openPerson === undefined
       ? []
       : [
           {
@@ -496,7 +501,17 @@ function MemberRow({
             icon: <UserRoundIcon />,
             onSelect: () => openPerson(userId, member.name, workspaceId),
           },
-        ];
+        ]),
+    {
+      label: LINK_COPY.LABEL,
+      icon: <GLYPH.LINK />,
+      onSelect: () =>
+        copy(
+          linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
+          LINK_COPY.COPIED,
+        ),
+    },
+  ];
   const roleActs = [
     ...(may.promote
       ? [
@@ -1202,9 +1217,9 @@ function Invitations({
             control: (
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
-                onClick={() => copy(one.acceptUrl, "Link copied")}
+                onClick={() => copy(one.acceptUrl, INVITE_LINK_COPIED)}
               >
-                Copy link
+                Copy invite link
               </Button>
             ),
           }}
