@@ -156,3 +156,28 @@ test("a picture whose read did not land says it could not be read, and its Retry
   act(() => (presses[0] as HTMLButtonElement).click());
   expect(pressed).toEqual(["retry"]);
 });
+
+test("the last tile drawn, failed, keeps its Retry in reach rather than under how many more there are", () => {
+  const retried: string[] = [];
+  const container = mount(
+    createElement(
+      PictureSet,
+      { label: "Pictures", count: 7, children: undefined },
+      Array.from({ length: 6 }, (_, at) =>
+        createElement(PictureSetTile, {
+          key: String(at),
+          state:
+            at === 5 ? { kind: PICTURE_STATE.FAILED, retry: () => retried.push("sixth") } : READY,
+          words: `Screen ${String(at + 1)}`,
+          onOpen: () => undefined,
+        }),
+      ),
+    ),
+  );
+  const sixth = container.querySelectorAll("li")[5];
+
+  expect(sixth?.textContent).not.toContain("+1");
+  act(() => sixth?.querySelector("button")?.click());
+  expect(retried).toEqual(["sixth"]);
+  expect(container.querySelector("figcaption")?.textContent).toBe("7 pictures");
+});

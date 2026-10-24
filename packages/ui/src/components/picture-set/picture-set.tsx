@@ -22,7 +22,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * holds. A set that stands beside something else, as the pictures under a
  * call's row do, is thumbnails however few it holds (`thumbnails`). A set's
  * caller draws six (`PICTURE_SET_SHOWN`) and the last of them
- * wears a veil saying how many more the viewer holds.
+ * wears a veil saying how many more the viewer holds, unless its read
+ * failed, since the veil would cover its Retry.
  *
  * Each tile is a `PictureTile` whose face is the picture, the spinner while
  * its bytes are read, where they are gone the glyph and its words, or, where
@@ -180,7 +181,8 @@ export function PictureSetTile({
       className="luke-picture-set-frame grid w-full place-items-center"
     >
       <TileFace state={state} words={words} why={why} />
-      {more > 0 ? (
+      {/* Note that a failed tile wears no veil, because the veil would cover its Retry, and the words under the set still say how many it holds. */}
+      {more > 0 && !failed ? (
         <span className="luke-picture-set-more" aria-hidden="true">
           +{more}
         </span>
