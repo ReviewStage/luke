@@ -1249,8 +1249,8 @@ ul.actor-stack {
   display: none;
 }
 
-/* off-scale: 220px, where the update pill's word stops fitting beside a name */
-@container sidebar-foot (width < 220px) {
+/* off-scale: 280px, where the offline pill's word stops fitting beside "Not signed in" or a name as long as it, which would otherwise end cut short at the default sidebar's 264px */
+@container sidebar-foot (width < 280px) {
   .offline-mark {
     aspect-ratio: 1;
     justify-content: center;
