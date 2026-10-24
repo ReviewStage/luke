@@ -87,4 +87,32 @@
     align-items: center;
     gap: var(--luke-control-gap);
   }
+
+  /* A document's name, picked up from its header once that has scrolled
+     away: it stands where a title would, arriving over the quick duration
+     with a short rise on the spring, and leaving as a fade over the exit,
+     after which it is taken from the pointer and stands ready to rise
+     again. Reduced motion and a capture run zero the durations, so it
+     lands and leaves at once. */
+  .luke-toolbar-pick-up {
+    display: block;
+    min-width: 0;
+    opacity: 0;
+    transform: translateY(var(--luke-space-4));
+    visibility: hidden;
+    transition:
+      opacity var(--luke-duration-exit) var(--luke-motion-exit),
+      transform 0s var(--luke-duration-exit),
+      visibility 0s var(--luke-duration-exit);
+  }
+
+  .luke-toolbar-pick-up[data-shown="true"] {
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+    transition:
+      opacity var(--luke-duration-quick) var(--luke-motion-exit),
+      transform var(--luke-duration-fast) var(--luke-spring),
+      visibility 0s;
+  }
 }
