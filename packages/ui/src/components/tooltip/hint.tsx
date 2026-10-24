@@ -649,6 +649,9 @@ export function Tooltip({
     },
     onFocus: (event) => {
       own.onFocus?.(event);
+      // Note that a focus on a control inside, as a chip in a fold's line, is
+      // that control's to hint, so it raises nothing over it here.
+      if (event.target !== event.currentTarget) return;
       // Only focus the keyboard moved shows the pill: a press focuses its
       // control too, and has just taken the pill down.
       if (document.documentElement.dataset.keyboard === "true") show(event.currentTarget);

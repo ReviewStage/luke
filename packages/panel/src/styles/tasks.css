@@ -4129,8 +4129,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The docked list's card (transcript-blocks.tsx's `TranscriptTodosDock`),
    `@luke/ui`'s card fold as the task card is (`plan.tsx`): one line saying
-   how far the list has got, the item it is at cut to the line, and the
-   chevron at its end, which opens onto the whole list under a hairline. */
+   how far the list has got, after the chevron that leads it as every
+   fold's does, and the item it is at cut to the line, which opens onto the
+   whole list under a hairline. */
 .todos-dock-summary {
   flex-shrink: 0;
   color: var(--luke-color-text-muted);
@@ -4138,11 +4139,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .todos-dock-focus {
   flex: 1;
-}
-
-.todos-dock-chevron {
-  display: flex;
-  margin-left: auto;
 }
 
 /* The docked list's body keeps to under a third of what is seen and scrolls
