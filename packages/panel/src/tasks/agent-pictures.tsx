@@ -25,6 +25,7 @@ import {
   Card,
   GAP,
   Inline,
+  isVideoDataUrl,
   LAYOUT_ELEMENT,
   PictureTile,
   SPINNER_SIZE,
@@ -258,10 +259,12 @@ function ShownOne({
   onOpen: () => void;
 }): ReactNode {
   const state = usePicture(door.owner, shown.picture.id, door.read);
+  // Note that a picture is described by its file's name, since its caption is drawn beside it, but a video's player is named by the caption, because "Video: flow" says nothing of what it shows.
+  const video = state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url);
   return (
     <PictureBlock
       state={state}
-      alt={shown.caption}
+      alt={video && shown.caption !== "" ? shown.caption : shown.name}
       caption={shown.caption === "" ? undefined : shown.caption}
       onOpen={onOpen}
     />
@@ -448,7 +451,7 @@ function ShownStills({
   if (shown.length === 1 && only !== undefined && only.picture === undefined) {
     const caption = only.caption === "" ? undefined : only.caption;
     return (
-      <PictureBlock state={{ kind: PICTURE_STATE.READING }} alt={only.caption} caption={caption} />
+      <PictureBlock state={{ kind: PICTURE_STATE.READING }} alt={only.name} caption={caption} />
     );
   }
   if (shown.length === 1 && only?.picture !== undefined) {

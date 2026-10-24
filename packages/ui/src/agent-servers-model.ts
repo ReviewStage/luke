@@ -78,7 +78,7 @@ export const SERVER_ACTION = {
 } as const;
 
 /** What the popover and its button are called. */
-export const SERVERS_LABEL = "MCP servers";
+export const SERVERS_LABEL = "Integrations";
 
 /** One server's row. */
 export interface ServerRow {

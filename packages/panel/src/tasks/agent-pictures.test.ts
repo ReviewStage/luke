@@ -174,6 +174,13 @@ test("two shown sets one after another are one set, and one picture alone is its
   assert.equal(joined.container.querySelectorAll(".picture-set").length, 1);
   assert.equal(single.container.querySelectorAll(".picture-block").length, 1);
   assert.equal(single.container.querySelector(".picture-caption")?.textContent, "Screen 1");
+  const image = single.container.querySelector("img");
+  assert.ok(image, "the picture is drawn");
+  assert.notEqual(
+    image.getAttribute("alt"),
+    "Screen 1",
+    "the caption is drawn once, not read again as the picture's own alt",
+  );
 });
 
 test("an integration's call keeps its row and gains its pictures as chips, one left out saying so with its size", async () => {

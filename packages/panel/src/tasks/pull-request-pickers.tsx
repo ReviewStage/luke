@@ -177,7 +177,8 @@ function PickerButton({
     <Tooltip label={label}>
       <Button
         icon={<PlusIcon aria-hidden="true" />}
-        label={label}
+        // Note that the button is named by the word it draws, since "Edit reviewers" is the hint's and no reader hears a name the screen does not show.
+        label={word}
         variant={BUTTON_VARIANT.SUBTLE}
         size={BUTTON_SIZE.COMPACT}
         disabled={disabled}

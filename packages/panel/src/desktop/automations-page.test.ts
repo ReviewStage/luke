@@ -1091,6 +1091,25 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
 }
 
 /** The button named, wherever it is drawn. */
+/** What a reader names `control` by: the elements its `aria-labelledby` lists, itself among them, in order. */
+function nameOf(control: HTMLElement): string {
+  const ids = (control.getAttribute("aria-labelledby") ?? "").split(" ");
+  return ids
+    .map((id) => document.getElementById(id)?.textContent ?? "")
+    .join(" ")
+    .trim();
+}
+
+/** The servers chip, found as a reader names it: by its hidden field name, then its own face. */
+function serversChip(root: ParentNode = document): HTMLButtonElement | undefined {
+  return [...root.querySelectorAll<HTMLButtonElement>("button[aria-labelledby]")].find((each) => {
+    const [fieldName] = (each.getAttribute("aria-labelledby") ?? "").split(" ");
+    return (
+      fieldName !== undefined && document.getElementById(fieldName)?.textContent === "Integrations"
+    );
+  });
+}
+
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === name || each.getAttribute("aria-label") === name,
@@ -1661,7 +1680,7 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   standing = [{ ...SWEEP, mine: true }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  const chip = button("MCP servers");
+  const chip = serversChip() ?? assert.fail("the servers chip stands");
   assert.match(page.textContent ?? "", /Every connected server is on\./u);
   assert.equal(
     chip.querySelectorAll(".luke-provider-mark").length,
@@ -1678,6 +1697,15 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
   assert.equal(chip.querySelectorAll(".luke-provider-mark").length, 1, "Linear's mark alone");
+  assert.equal(nameOf(chip), "Integrations", "marks draw no words, so the field's name stands");
+  const linear = document.querySelector<HTMLButtonElement>(
+    "[role=switch][aria-label='Linear for this agent']",
+  );
+  assert.ok(linear, "Linear's switch stands");
+  act(() => linear.click());
+  assert.equal(nameOf(chip), "Integrations None", "the name carries the word the chip draws");
+  act(() => linear.click());
+  assert.equal(nameOf(chip), "Integrations");
   act(() => button("Save").click());
   await settle();
 
@@ -1696,13 +1724,7 @@ test("a new agent's MCP servers row claims nothing while the owner's connections
   const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
   assert.ok(reading.includes("Reading your connected servers…"), "the row says it is reading");
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected server/u);
-  assert.equal(
-    [...page.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label") === "MCP servers",
-    ),
-    undefined,
-    "no chip claims None while the read is out",
-  );
+  assert.equal(serversChip(page), undefined, "no chip claims None while the read is out");
 });
 
 test("a new agent's MCP servers row says a refused read of the owner's connections, and Retry reads them", async () => {
@@ -1718,7 +1740,12 @@ test("a new agent's MCP servers row says a refused read of the owner's connectio
   act(() => button("Retry").click());
   await settle();
   assert.match(page.textContent ?? "", /Every connected server is on\./u);
-  assert.equal(button("MCP servers").querySelectorAll(".luke-provider-mark").length, 2);
+  assert.equal(
+    (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(
+      ".luke-provider-mark",
+    ).length,
+    2,
+  );
 });
 
 test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
@@ -1736,12 +1763,7 @@ test("another member's automation says which servers its creator switched off, o
     page.textContent ?? "",
     /Its creator's connected servers, but Sentry and Notion \(account 2\) switched off\./u,
   );
-  assert.equal(
-    [...page.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label") === "MCP servers",
-    ),
-    undefined,
-  );
+  assert.equal(serversChip(page), undefined);
 });
 
 test("the Runs panel hides and shows by its toggle and by the side panel's chord, and stays as it was left", async () => {

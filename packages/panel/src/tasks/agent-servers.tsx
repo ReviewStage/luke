@@ -47,6 +47,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  VisuallyHidden,
   wholeWordsHint,
 } from "@luke/ui";
 import {
@@ -900,6 +901,8 @@ export function AgentServersButton({
   const open = heldOpen ?? ownOpen;
   const setOpen = onOpenChange ?? setOwnOpen;
   const popoverId = useId();
+  const labelId = useId();
+  const faceId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   // Note that the popover is drawn from its opening until its fade has run, and no longer, because its search, its page and its reads of every server's tools are its own and start afresh each time it opens.
@@ -931,15 +934,20 @@ export function AgentServersButton({
         </span>
       ) : (
         // A face is a form's field, at least the column its pickers share.
-        <Chip
-          look={CHIP_LOOK.FIELD}
-          width={CHIP_WIDTH.MIN_FIELD}
-          chevron
-          aria-label={SERVERS_LABEL}
-          {...press}
-        >
-          {face}
-        </Chip>
+        <>
+          <VisuallyHidden id={labelId}>{SERVERS_LABEL}</VisuallyHidden>
+          {/* Note that the chip is named by its field's name and then the words its face draws ("None", "+2"), through its own id, because a name that left them out would not match the screen. */}
+          <Chip
+            look={CHIP_LOOK.FIELD}
+            width={CHIP_WIDTH.MIN_FIELD}
+            chevron
+            id={faceId}
+            aria-labelledby={`${labelId} ${faceId}`}
+            {...press}
+          >
+            {face}
+          </Chip>
+        </>
       )}
       <AnchoredPopover open={open} align={POPOVER_ALIGN.END}>
         {drawn ? (

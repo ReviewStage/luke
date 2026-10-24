@@ -393,7 +393,7 @@ test("a reconnect that could not begin says so under the box, and Reconnect is o
 test("the MCP servers popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
   const tab = mount([]);
   await settle();
-  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]');
+  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]');
   assert.ok(servers, "the MCP button is drawn");
   act(() => servers.click());
   await settle();
@@ -409,7 +409,7 @@ test("the MCP popover's GitHub row connects GitHub in place, and the popover sta
   github = INTEGRATION_STATUS.DISCONNECTED;
   const tab = mount([]);
   await settle();
-  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]');
+  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]');
   assert.ok(servers, "the MCP button is drawn");
   act(() => servers.click());
   await settle();
@@ -434,7 +434,7 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
   slack = INTEGRATION_STATUS.DISCONNECTED;
   const tab = mount([]);
   await settle();
-  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]');
+  const servers = document.querySelector<HTMLButtonElement>('button[aria-label="Integrations"]');
   assert.ok(servers, "the MCP button is drawn");
   act(() => servers.click());
   await settle();

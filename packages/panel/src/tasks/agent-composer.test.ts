@@ -399,7 +399,7 @@ test("a box that opens again after a send leaves the caret on a press of its own
   pressInComposer(box.container, "Enter");
   await settle();
   const servers = box.container.querySelector<HTMLButtonElement>(
-    'button[aria-label="MCP servers"]',
+    'button[aria-label="Integrations"]',
   );
   assert.ok(servers);
   servers.focus();
