@@ -193,6 +193,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     followResponsiveness: (window) => {
       void run(followResponsiveness(window, reportUnresponsivePanel));
     },
+    onRendererGone: (reason) => config.report(`Panel renderer gone: ${reason}`),
   });
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({

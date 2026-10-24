@@ -1,6 +1,7 @@
 import type { RunMode } from "@luke/host";
 import { BrowserWindow, type WebContents } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
+import { MAXIMUM_REVIVALS_PER_LOAD, onRendererDeath, RendererRevival } from "./renderer-revival";
 
 export interface VoiceWindowOptions {
   runMode: RunMode;
@@ -15,17 +16,12 @@ export interface VoiceWindowOptions {
   onGone: (reason: string) => void;
   /**
    * Reopening has stopped for this run: the renderer went down
-   * `MAXIMUM_REOPENS_PER_RUN` times without once finishing a load. A hidden
+   * `MAXIMUM_REVIVALS_PER_LOAD` times without once finishing a load. A hidden
    * window that crash-looped would be seen by nobody, so it is reported once
    * and stood down, the way the trace writer answers a full disk.
    */
   onGaveUp: (reason: string) => void;
 }
-
-/** How many times a run may stand the voice renderer back up before a load succeeds. */
-const MAXIMUM_REOPENS_PER_RUN = 3;
-/** The pause before a replacement, so a renderer dying on load cannot spin the process. */
-const REOPEN_DELAY_MS = 1_000;
 
 /**
  * The one hidden window that will hold the live conversation, so that it
@@ -40,19 +36,24 @@ const REOPEN_DELAY_MS = 1_000;
  * process decides it is done, and this window is destroyed by the main process
  * on the way out rather than waited on. It owns its own lifetime otherwise: a
  * renderer that dies is replaced after a pause, at most a few times per run
- * before a load succeeds, so a renderer that dies on load cannot crash-loop
- * a window nobody can see.
+ * before a load succeeds (`renderer-revival.ts`, the panel's bound too), so a
+ * renderer that dies on load cannot crash-loop a window nobody can see.
  */
 export class VoiceWindow {
   readonly #options: VoiceWindowOptions;
   #window: BrowserWindow | undefined;
-  /** Reopens since the last load that finished; reset only by `did-finish-load`. */
-  #reopens = 0;
-  #reopenTimer: ReturnType<typeof setTimeout> | undefined;
-  #closedForGood = false;
+  readonly #revival: RendererRevival;
 
   constructor(options: VoiceWindowOptions) {
     this.#options = options;
+    this.#revival = new RendererRevival({
+      revive: () => this.open(),
+      onGone: options.onGone,
+      onGaveUp: (reason) =>
+        options.onGaveUp(
+          `${reason} It was replaced ${MAXIMUM_REVIVALS_PER_LOAD} times without loading, so it stays down for this run.`,
+        ),
+    });
   }
 
   open(): void {
@@ -74,19 +75,13 @@ export class VoiceWindow {
     });
     this.#window = window;
     refuseForeignNavigation(window, this.#options.rendererUrl);
-    window.webContents.on("did-finish-load", () => {
-      this.#reopens = 0;
-    });
-    window.webContents.on("render-process-gone", (_event, details) => {
-      this.#replace(window, `The voice renderer went: ${details.reason}`);
-    });
+    window.webContents.on("did-finish-load", () => this.#revival.loaded());
+    onRendererDeath(window.webContents, "voice", (reason) => this.#replace(window, reason));
     window.on("unresponsive", () => {
       this.#replace(window, "The voice renderer stopped responding.");
     });
-    window.webContents.on("did-fail-load", (_event, _code, description) => {
-      this.#replace(window, `The voice renderer failed to load: ${description}`);
-    });
-    void window.loadFile(this.#options.rendererHtmlPath);
+    // A load that fails is heard as `did-fail-load` above, so its promise's rejection says nothing more.
+    window.loadFile(this.#options.rendererHtmlPath).catch(() => undefined);
   }
 
   /**
@@ -95,22 +90,9 @@ export class VoiceWindow {
    * nothing: its listeners can still fire as it is torn down.
    */
   #replace(window: BrowserWindow, reason: string): void {
-    if (this.#closedForGood || window !== this.#window || this.#reopenTimer) return;
+    if (window !== this.#window) return;
     this.close();
-    if (this.#reopens >= MAXIMUM_REOPENS_PER_RUN) {
-      this.#closedForGood = true;
-      this.#options.onGaveUp(
-        `${reason} It was replaced ${MAXIMUM_REOPENS_PER_RUN} times without loading, so it stays down for this run.`,
-      );
-      return;
-    }
-    this.#reopens += 1;
-    this.#options.onGone(reason);
-    this.#reopenTimer = setTimeout(() => {
-      this.#reopenTimer = undefined;
-      if (!this.#closedForGood) this.open();
-    }, REOPEN_DELAY_MS);
-    this.#reopenTimer.unref?.();
+    this.#revival.gone(reason);
   }
 
   current(): BrowserWindow | undefined {
@@ -130,9 +112,7 @@ export class VoiceWindow {
 
   /** The quit's own close: nothing is stood back up after it. */
   closeForGood(): void {
-    this.#closedForGood = true;
-    if (this.#reopenTimer) clearTimeout(this.#reopenTimer);
-    this.#reopenTimer = undefined;
+    this.#revival.stop();
     this.close();
   }
 }
