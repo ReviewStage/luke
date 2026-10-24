@@ -2220,7 +2220,10 @@ function AgentTabView({
   // reads them, and a page that moved no rewind point must draw no message again.
   const points = useKept(
     useMemo(() => rewindPoints(kept), [kept]),
-    (a, b) => sameSet(a.editable, b.editable) && sameEntries(a.revertsAt, b.revertsAt),
+    (a, b) =>
+      sameSet(a.editable, b.editable) &&
+      sameEntries(a.revertsAt, b.revertsAt) &&
+      sameSet(a.followed, b.followed),
   );
   const editorNow = { agentId: agent.id, doors, keywords, skills, dictates: !onCall };
   const editorProps = useRef(editorNow);

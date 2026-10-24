@@ -92,6 +92,7 @@ async function opened(
               agentId: "agent-1",
               doors: { openGitHub: () => undefined, copy: () => undefined },
               dictates: true,
+              cuts: false,
               onCancel: () => {
                 cancelled += 1;
               },
