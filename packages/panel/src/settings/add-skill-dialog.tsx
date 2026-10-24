@@ -581,11 +581,18 @@ function TextSkill({
       problem !== INSTALLED_SKILL_PROBLEM.NAME_MISSING &&
       problem !== INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING,
   );
+  // Note that a problem of the name or the description is said on that field, so what is left is the text's own.
+  const nameProblem = shown.find((problem) => problem === INSTALLED_SKILL_PROBLEM.NAME_INVALID);
+  const descriptionProblem = shown.find(
+    (problem) => problem === INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG,
+  );
+  const rest = shown.filter((problem) => problem !== nameProblem && problem !== descriptionProblem);
   return (
     <Card look={CARD_LOOK.OUTLINE} padding={CARD_PADDING.COMPACT}>
       <Stack gap={GAP.FIELD}>
         <FormField
           label={SKILLS_LINE.NAME}
+          error={nameProblem === undefined ? undefined : problemsLine([nameProblem])}
           description={
             declares.name
               ? SKILLS_LINE.DECLARED
@@ -605,6 +612,7 @@ function TextSkill({
         </FormField>
         <FormField
           label={SKILLS_LINE.WHEN}
+          error={descriptionProblem === undefined ? undefined : problemsLine([descriptionProblem])}
           description={declares.description ? SKILLS_LINE.DECLARED : undefined}
           count={
             declares.description
@@ -625,8 +633,8 @@ function TextSkill({
             />
           )}
         </FormField>
-        {shown.length === 0 ? null : (
-          <DetectedText line={{ text: problemsLine(shown), tone: STATUS_TONE.ATTENTION }} />
+        {rest.length === 0 ? null : (
+          <DetectedText line={{ text: problemsLine(rest), tone: STATUS_TONE.ATTENTION }} />
         )}
         <FileText text={markdown} label="Pasted text" extent={FILE_TEXT_EXTENT.PEEK} />
       </Stack>

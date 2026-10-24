@@ -916,6 +916,56 @@ test("the When-to-use box stops at the description cap and counts toward it", as
   );
 });
 
+test("a name with a bad shape is marked invalid and says why on the Name field alone", async () => {
+  await mountDialog();
+  await paste(TEXT);
+  typeInto(fieldOf("When should agents use it?"), "How PRs read here.");
+  assert.equal(fieldOf("Name").getAttribute("aria-invalid"), null, "a good name is not marked");
+
+  typeInto(fieldOf("Name"), "PR Style");
+  await settle();
+  const name = fieldOf("Name");
+  const error = name.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]');
+  assert.equal(name.getAttribute("aria-invalid"), "true");
+  assert.equal(error?.textContent, "Name must be lowercase words joined by hyphens");
+  assert.ok(
+    name
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .includes(error?.id ?? "missing"),
+  );
+  assert.equal(fieldOf("When should agents use it?").getAttribute("aria-invalid"), null);
+  assert.equal(
+    document.querySelectorAll('[data-slot="field-error"]:not(:empty)').length,
+    1,
+    "the problem is said once, on its field, not again under both",
+  );
+  assert.equal(primary().disabled, true);
+});
+
+test("a When-to-use that runs past the cap is marked invalid and says so on its own field alone", async () => {
+  await mountDialog();
+  await paste(TEXT);
+
+  const box = fieldOf("When should agents use it?");
+  typeInto(box, "x".repeat(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS + 1));
+  await settle();
+  const error = box.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]');
+  assert.equal(box.getAttribute("aria-invalid"), "true");
+  assert.equal(
+    error?.textContent,
+    `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
+  );
+  assert.ok(
+    box
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .includes(error?.id ?? "missing"),
+  );
+  assert.equal(fieldOf("Name").getAttribute("aria-invalid"), null);
+  assert.equal(document.querySelectorAll('[data-slot="field-error"]:not(:empty)').length, 1);
+});
+
 test("a source on another host says only GitHub for now and asks the service nothing", async () => {
   await mountDialog();
   await paste("npx skills add https://gitlab.com/acme/skills");
