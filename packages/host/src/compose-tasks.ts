@@ -30,6 +30,7 @@ import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { issueTagOf, type TaskIssueTag } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import {
+  HOST_LIVE,
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
@@ -449,6 +450,12 @@ const BOARD_BACKOFF = Schedule.exponential(BOARD_RESEAL.FIRST).pipe(
   ),
 );
 
+/**
+ * How long after a resync another is let pass, so a wake that lands as
+ * several events at once (resume, then unlock) seals the list again once.
+ */
+const RESYNC_SETTLE = Duration.seconds(10);
+
 /** Why a live follow is not sealed again: the task is no longer the open one, or the gate closed. */
 const BOARD_FOLLOW_ENDED = "ended";
 
@@ -759,6 +766,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The list's wait for a write's transaction, while every part of it is followed over Realtime. */
   let listWait: TxWait | undefined;
 
+  /** When the list was last sealed again for a resync, by the host's clock; none before the first. */
+  let resyncedAt: number | undefined;
+
   const listed = (txid: string | undefined): Effect.Effect<void> =>
     Effect.suspend(() => confirmWrite(listWait, txid));
 
@@ -797,12 +807,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           tasklessAgents: list.planlessAgents ?? [],
           taskAgents,
           listStatus: TASKS_READ.READY,
+          live: HOST_LIVE.LIVE,
         });
         // A name the service gave the open task reaches its document as the list carries it.
         if (view.activeTaskId !== undefined) nameHeldAsListed(view.activeTaskId);
       },
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
-      failed: () => write({ listStatus: TASKS_READ.FAILED }),
+      failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
+      // A list that may be behind keeps drawing what it had, and says it is catching up until the next lands.
+      behind: () => write({ live: HOST_LIVE.CATCHING_UP }),
       onTxWait: (wait) => {
         listWait = wait;
       },
@@ -1681,6 +1694,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* followWorkspaces;
         yield* followSidebar;
         yield* Effect.all([tasks, readGithubWhenStale], { concurrency: "unbounded" });
+        return {};
+      }),
+    // A follow may have died in a sleep or a lost network without a word,
+    // and one waiting out a pause need not wait on: a list already followed
+    // is sealed again now, once for a wake's several events.
+    [GATEWAY_METHOD.TASKS_RESYNC]: () =>
+      Effect.gen(function* () {
+        if (!gate() || Option.isNone(yield* FiberHandle.get(listFollow))) return {};
+        const at = yield* Clock.currentTimeMillis;
+        if (resyncedAt !== undefined && at - resyncedAt < Duration.toMillis(RESYNC_SETTLE)) {
+          return {};
+        }
+        resyncedAt = at;
+        write({ live: HOST_LIVE.CATCHING_UP });
+        yield* FiberHandle.run(listFollow, followList);
         return {};
       }),
     // The panel coming forward, which may follow GitHub connected in the

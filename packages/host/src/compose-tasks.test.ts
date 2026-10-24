@@ -80,6 +80,7 @@ import {
 import {
   BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
+  HOST_LIVE,
   PICTURE_KEEP_FAILURE,
   type RepositoryCallFailure,
   TASK_CALL_FAILURE,
@@ -4462,6 +4463,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* realtime.settled;
       assert.equal(last()?.listStatus, TASKS_READ.FAILED);
+      assert.equal(last()?.live, HOST_LIVE.OFFLINE, "a service that answers no seal is offline");
 
       service.liveList = { ok: true, answer: SEALED_LIST };
       yield* TestClock.adjust(Duration.seconds(5));
@@ -4471,6 +4473,7 @@ it.effect(
       realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.listStatus, TASKS_READ.READY);
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
 
       // The session is another account's now: the subscription stops and the seal is refused for good.
@@ -4604,6 +4607,82 @@ it.effect(
       realtime.deliverPart("issues", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
+    }),
+);
+
+it.effect(
+  "a list whose rows stop decoding keeps what it drew and says it is catching up, and is live again once rows land",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const delivered = (name: string) =>
+        Effect.gen(function* () {
+          yield* realtime.listSubscribed;
+          realtime.deliverPart("plans", [taskRow(INVITES, name)]);
+          realtime.deliverPart("agents", []);
+          realtime.deliverPart("issues", []);
+          yield* realtime.settled;
+        });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* delivered("Teammate invitations, live");
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
+
+      // A deploy changed the row's shape, so it no longer decodes and the follow breaks.
+      realtime.deliverPart("plans", [{ id: INVITES, title: "Teammate invitations" }]);
+      yield* realtime.settled;
+      assert.equal(last()?.live, HOST_LIVE.CATCHING_UP);
+      assert.equal(last()?.listStatus, TASKS_READ.READY, "the list drawn stands");
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
+
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* delivered("Teammate invitations, again");
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
+    }),
+);
+
+it.effect(
+  "a resync seals a followed list again at once, once for a wake's several events, and asks nothing of a list not followed",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      const delivered = Effect.gen(function* () {
+        yield* realtime.listSubscribed;
+        realtime.deliverPart("plans", [taskRow(INVITES, "Teammate invitations, live")]);
+        realtime.deliverPart("agents", []);
+        realtime.deliverPart("issues", []);
+        yield* realtime.settled;
+      });
+
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* realtime.settled;
+      assert.equal(service.liveListReads, 0, "nothing is followed before the Tasks tab asks");
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* delivered;
+      const before = service.liveListReads;
+
+      // The Mac woke: a resume and an unlock land together.
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* realtime.settled;
+      assert.equal(service.liveListReads, before + 1, "one wake seals the list once");
+      assert.equal(last()?.live, HOST_LIVE.CATCHING_UP, "behind until the fresh rows land");
+
+      yield* delivered;
+      assert.equal(last()?.live, HOST_LIVE.LIVE);
+
+      yield* TestClock.adjust(Duration.seconds(10));
+      const later = service.liveListReads;
+      yield* call(GATEWAY_METHOD.TASKS_RESYNC);
+      yield* realtime.settled;
+      assert.equal(service.liveListReads, later + 1, "a later wake seals it again");
     }),
 );
 

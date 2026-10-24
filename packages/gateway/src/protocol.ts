@@ -15,6 +15,8 @@ export const GATEWAY_METHOD = {
   SHUTDOWN: "gateway.shutdown",
   /** The panel's Tasks tab shows: the task list read now, and the active task's document with it. */
   TASKS_REFRESH: "tasks.refresh",
+  /** The Mac woke, unlocked, or found its network again: a task list already followed is sealed and followed again now, once however many of those land together. */
+  TASKS_RESYNC: "tasks.resync",
   /** One task made the active one and its saved document read, replacing whichever was active. */
   TASKS_OPEN: "tasks.open",
   /** The developer left the open task: its call ends and no task is active. */

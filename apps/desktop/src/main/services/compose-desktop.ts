@@ -291,7 +291,11 @@ export function composeDesktop(
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
       // A run that sends nothing, a fixture's or a capture's, is never offline.
       if (config.runMode.sendsNetwork) {
-        yield* linkNetworkWatch({ state, isOnline: () => net.isOnline() });
+        yield* linkNetworkWatch({
+          state,
+          isOnline: () => net.isOnline(),
+          regained: operator.host.tasksResync(),
+        });
       }
       const updates = yield* createUpdateServiceHost({
         config,

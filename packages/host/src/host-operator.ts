@@ -504,6 +504,8 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** The Tasks tab shows: the host reads the task list and the active document now and follows both until it is paused. */
   tasksRefresh(): Effect.Effect<void>;
+  /** The Mac woke, unlocked, or found its network again: the host follows the task list again from a fresh seal. */
+  tasksResync(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
   /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
@@ -1309,6 +1311,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
+    tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     tasksOpen: (taskId) =>
       Effect.map(

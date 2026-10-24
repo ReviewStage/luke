@@ -414,6 +414,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     handleDisplayChange();
     // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
     if (eventName === "resume") void run(operator.host.terminalWake());
+    // So may the task list's follow; a resume and an unlock landing together seal it again once.
+    if (eventName !== "user-did-become-active") void run(operator.host.tasksResync());
   };
   const wakeHandlers = {
     resume: wake("resume"),
