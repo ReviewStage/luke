@@ -6,11 +6,13 @@ import type { Task } from "@luke/features/task-wire";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 
@@ -38,6 +40,14 @@ const TASK: Task = {
 };
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
+
+/** A registry of the test's own, as the window's root provides one, so words a plan left unsaved in one test are not the next one's. */
+function ownRegistry(): AtomRegistry.AtomRegistry {
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  return registry;
+}
 
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
@@ -47,8 +57,11 @@ beforeEach(() => {
   fakeAppBridge({});
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the saves a plan left as it went answer before its atoms go.
+  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.useRealTimers();
 });
@@ -61,17 +74,20 @@ function drawn(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: {
-          workspace: "acme",
-          onOpen: () => undefined,
-          onOpenFile: () => undefined,
-          reveal: undefined,
-        },
-      }),
+      onRegistry(
+        ownRegistry(),
+        createElement(PlanBody, {
+          task: TASK,
+          live: false,
+          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          sectionLinks: {
+            workspace: "acme",
+            onOpen: () => undefined,
+            onOpenFile: () => undefined,
+            reveal: undefined,
+          },
+        }),
+      ),
     ),
   );
   return container;
@@ -84,25 +100,29 @@ function drawnAtRest(task: Task = TASK, editable = true) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = ownRegistry();
   const draw = (plan: Task) =>
     act(() =>
       root.render(
-        createElement(PlanBody, {
-          task: plan,
-          live: false,
-          onEdit: editable
-            ? (request: PlanEditRequest) => {
-                saves.push(request);
-                return Promise.reject(new Error("Nothing is saved in this test."));
-              }
-            : undefined,
-          sectionLinks: {
-            workspace: "acme",
-            onOpen: () => undefined,
-            onOpenFile: () => undefined,
-            reveal: undefined,
-          },
-        }),
+        onRegistry(
+          registry,
+          createElement(PlanBody, {
+            task: plan,
+            live: false,
+            onEdit: editable
+              ? (request: PlanEditRequest) => {
+                  saves.push(request);
+                  return Promise.reject(new Error("Nothing is saved in this test."));
+                }
+              : undefined,
+            sectionLinks: {
+              workspace: "acme",
+              onOpen: () => undefined,
+              onOpenFile: () => undefined,
+              reveal: undefined,
+            },
+          }),
+        ),
       ),
     );
   draw(task);
