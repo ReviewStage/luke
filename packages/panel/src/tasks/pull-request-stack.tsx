@@ -57,13 +57,13 @@ function placeOf(agent: NonNullable<PullRequestStackEntry["agent"]>): LinkPlace 
 
 /** How a pull request of the stack opens: its agent's Pull request tab where an agent owns it and the window can open one, else its page on GitHub. */
 function useOpenEntry(): (entry: PullRequestStackEntry) => void {
-  const { tell } = useAct();
+  const { press } = useAct();
   const openPlace = useOpenPlace();
   return (entry) => {
     if (entry.agent !== undefined && openPlace !== undefined) {
       openPlace(placeOf(entry.agent));
     } else {
-      tell(ACT_KIND.GITHUB_OPEN, { url: entry.url });
+      press(ACT_KIND.GITHUB_OPEN, { url: entry.url });
     }
   };
 }

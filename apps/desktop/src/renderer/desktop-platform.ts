@@ -4,7 +4,7 @@
 
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { ACT_KIND } from "@luke/host/acts";
-import { askAct, tellAct } from "@luke/panel/act";
+import { askAct, pressAct, tellAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { openBrowserLiveOverPort } from "@luke/panel/browser-live-port";
@@ -30,10 +30,10 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   assetBase: () => new URL(".", document.baseURI).href,
   onMenuCommand: (listener) => appBridge().onMenuCommand(listener),
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),
-  openGitHub: (url) => tellAct(ACT_KIND.GITHUB_OPEN, { url }),
-  openWeb: (url) => tellAct(ACT_KIND.WEB_OPEN, { url }),
+  openGitHub: (url) => pressAct(ACT_KIND.GITHUB_OPEN, { url }),
+  openWeb: (url) => pressAct(ACT_KIND.WEB_OPEN, { url }),
   // The host names the dashboard's address on the service's origin, and main opens it in the default browser.
-  adminDashboard: () => ({ open: () => tellAct(ACT_KIND.ADMIN_OPEN) }),
+  adminDashboard: () => ({ open: () => pressAct(ACT_KIND.ADMIN_OPEN) }),
   // A cloud Browser tab's socket is the host's, under its bearer, and reaches this window on a port of its own.
   openBrowserLive: openBrowserLiveOverPort,
   applySessionReplay,
