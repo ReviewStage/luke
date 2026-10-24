@@ -54,6 +54,10 @@
     --luke-tabs-ground: var(--luke-color-ground);
   }
 
+  .luke-tabs[data-ground="frame"] {
+    --luke-tabs-ground: var(--luke-color-sidebar);
+  }
+
   /* A fade at either end where tabs go on past it, drawn over them in the
      strip's ground rather than as a mask, because a mask would fade the
      chosen tab pinned there too; each comes in as the strip scrolls from
@@ -208,6 +212,16 @@
       var(--luke-tabs-ground);
     color: var(--luke-color-text);
     container: pinned / scroll-state;
+  }
+
+  /* On the frame the chosen tab is lifted in the sheet's ground beneath it,
+     by a hairline and a soft shadow, as the sidebar draws the place standing
+     open (nav-item.css), so the strip and the sidebar choose alike. */
+  .luke-tabs[data-ground="frame"] .luke-tab[data-selected="true"] {
+    background: var(--luke-color-ground);
+    box-shadow:
+      0 0 0 1px var(--luke-color-border),
+      0 1px 2px var(--luke-color-shadow-soft);
   }
 
   /* A chosen tab alone in its strip keeps no share for others: it takes a

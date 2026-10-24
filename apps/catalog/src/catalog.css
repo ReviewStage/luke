@@ -860,6 +860,11 @@ body {
   width: 320px;
 }
 
+/* A strip on the window's frame stands on the frame's own colour. */
+.catalog-tab-row[data-frame="true"] {
+  background: var(--luke-color-sidebar);
+}
+
 /* A failure's mark at a tab's end, as an app draws its own: the alert in
    the danger colour, a size under the glyph it follows. */
 .catalog-end-mark {

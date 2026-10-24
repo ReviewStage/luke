@@ -1,6 +1,7 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   TABS_FOLD,
+  TABS_GROUND,
   Tab,
   type TabHint,
   type TabMove,
@@ -15,6 +16,8 @@ import {
 import { createContext, useContext, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { ROW_RUN, withRowMoves } from "./row-moves.js";
 
@@ -23,7 +26,9 @@ import { ROW_RUN, withRowMoves } from "./row-moves.js";
  *
  * The strip itself, its keys, its drag, its scroll, and its look, is
  * `@luke/ui`'s (`components/tabs`). What the window adds: how its tabs fold
- * for the pointer that works them (`useCoarsePointer`); the focused tab
+ * for the pointer that works them (`useCoarsePointer`), and where they
+ * stand, on the window's frame above the sheet they head wherever panes
+ * stand side by side (shell.css); the focused tab
  * stepped left or right by ⇧⌘← and ⇧⌘→, as VS Code moves an editor, while
  * one of the strip's tabs has the focus; each tab's hint, this window's
  * tooltip (`TabTooltip`); and a tab's own actions on a right-click, or from
@@ -60,7 +65,7 @@ export function TabStrip({
   children,
 }: {
   label: string;
-  /** The ground the strip stands on: the side panel's well, or the column's own. */
+  /** The ground the strip stands on in a narrow room, full bleed: the side panel's well, or the column's own. */
   ground?: TabsGround | undefined;
   onMove?: TabMove | undefined;
   children: React.ReactNode;
@@ -72,6 +77,9 @@ export function TabStrip({
   // (`@luke/ui`'s tabs.css), so a narrow window worked by a mouse folds as a
   // wide one does, its glyphs named under the pointer.
   const finger = useCoarsePointer();
+  // Where panes stand side by side the strip stands on the window's frame;
+  // a narrow room's stands full bleed on the ground its caller names.
+  const room = useContext(ShellRoomContext);
   // Whether one of the strip's tabs has focus, the one the move chords move.
   const [focused, setFocused] = useState(false);
   const stepping = onMove !== undefined && focused;
@@ -82,7 +90,7 @@ export function TabStrip({
     <TabPlaceContext.Provider value={placeOf}>
       <Tabs
         label={label}
-        ground={ground}
+        ground={room === SHELL_ROOM.NARROW ? ground : TABS_GROUND.FRAME}
         fold={finger ? TABS_FOLD.LABEL : TABS_FOLD.GLYPH}
         onMove={onMove}
         onFocusChange={setFocused}

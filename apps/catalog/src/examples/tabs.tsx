@@ -55,16 +55,25 @@ function movedTabs(tabs: readonly SampleTab[], from: number, to: number): Sample
   return moved;
 }
 
-/** A strip of the sample tabs, chosen, closed, kept, and moved for real. */
-function Strip({ narrow = false }: { narrow?: boolean }): React.JSX.Element {
+/** A strip of the sample tabs, chosen, closed, kept, and moved for real: on a column's ground, or on the window's frame above a sheet. */
+function Strip({
+  narrow = false,
+  frame = false,
+}: {
+  narrow?: boolean;
+  frame?: boolean;
+}): React.JSX.Element {
   const [tabs, setTabs] = useState<readonly SampleTab[]>(SAMPLE_TABS);
   const [chosen, setChosen] = useState("agent");
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   return (
-    <div className={narrow ? "catalog-tab-row catalog-tab-row-narrow" : "catalog-tab-row"}>
+    <div
+      className={narrow ? "catalog-tab-row catalog-tab-row-narrow" : "catalog-tab-row"}
+      data-frame={frame}
+    >
       <Tabs
-        label={narrow ? "Narrow tabs" : "Tabs"}
-        ground={TABS_GROUND.GROUND}
+        label={narrow ? "Narrow tabs" : frame ? "Tabs on the frame" : "Tabs"}
+        ground={frame ? TABS_GROUND.FRAME : TABS_GROUND.GROUND}
         onMove={(from, to) => setTabs((was) => movedTabs(was, from, to))}
       >
         {tabs.map((tab) => (
@@ -154,6 +163,12 @@ function TabsExamples(): React.JSX.Element {
     <>
       <CatalogSection id="tabs-strip" title="A strip: choose, close, double-click a preview, drag">
         <Strip />
+      </CatalogSection>
+      <CatalogSection
+        id="tabs-frame"
+        title="On the frame: the chosen tab lifted in the sheet's ground"
+      >
+        <Strip frame />
       </CatalogSection>
       <CatalogSection id="tabs-narrow" title="Narrow: the strip scrolls, the chosen tab pinned">
         <Strip narrow />
