@@ -19,7 +19,6 @@ import {
   Dialog,
   DialogActions,
   FootQuestion,
-  GAP,
   Inline,
   JUSTIFY,
   LAYOUT_ELEMENT,
@@ -111,25 +110,42 @@ function Problem({ children }: { children: string }): React.JSX.Element {
   );
 }
 
-/** What tells a saved token apart: its hint, login, expiry, and its status where it is not in use. */
+/** The space a fact ends in, so the text of the line reads its facts apart where the gap only draws them so; at a line's end it collapses. */
+const FACT_BREAK = " ";
+
+/** The expiry's words, whole: "Expires Dec 23, 2026" never breaks inside, so a narrow row moves it as one. */
+function expiryWords(expiresAt: number): string {
+  return `Expires ${dayText(expiresAt)}`.replaceAll(" ", "\u00a0");
+}
+
+/**
+ * What tells a saved token apart: its hint and login as one unit, then its
+ * expiry, then its status where it is not in use. Note that the units are set
+ * apart by their gap rather than by a dot, because a dot is strewn at a line's
+ * end or start wherever the line breaks, and the hint and login are joined
+ * so that the only dot never breaks.
+ */
 export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.Element {
   const status = statusLabel(token.status);
   return (
-    <SettingsFacts gap={GAP.TIGHT}>
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
-        {token.hint}
+    <SettingsFacts>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+          {token.hint}
+        </Text>
+        {"\u00a0·\u00a0"}
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+          {token.login}
+        </Text>
+        {FACT_BREAK}
       </Text>
-      {" · "}
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-        {token.login}
-      </Text>
-      {token.expiresAt === null ? null : ` · Expires ${dayText(token.expiresAt)}`}
-      {status === undefined ? null : (
-        <>
-          {" · "}
-          <Problem>{status}</Problem>
-        </>
+      {token.expiresAt === null ? null : (
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT}>
+          {expiryWords(token.expiresAt)}
+          {FACT_BREAK}
+        </Text>
       )}
+      {status === undefined ? null : <Problem>{status}</Problem>}
     </SettingsFacts>
   );
 }
