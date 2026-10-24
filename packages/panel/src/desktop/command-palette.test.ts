@@ -3234,9 +3234,10 @@ test("with a task open and nothing typed, ⌘K lists the task's commands first, 
   );
 });
 
-test("with files open or shown and nothing typed, Files lists them first, the rest of the repository after", async () => {
+test("with files open or shown and nothing typed, Files lists them first, the open ones in the strip's order, a tab moved there included, the rest of the repository after", async () => {
   const shown = "src/invites/accept.ts";
   const opened = "src/members/invite.ts";
+  const moved = "src/members/remove.ts";
   const showing: TaskCodeShowing = {
     callId: "c",
     turnId: "t",
@@ -3264,11 +3265,16 @@ test("with files open or shown and nothing typed, Files lists them first, the re
     ],
     sidePanel: {
       ...base.sidePanel,
-      files: [{ path: opened, range: undefined, opened: 1, browsedOn: "plan-1" }],
+      files: [
+        { path: opened, range: undefined, opened: 1, browsedOn: "plan-1" },
+        { path: moved, range: undefined, opened: 2, browsedOn: "plan-1" },
+      ],
+      // The later tab was moved before the earlier one in the strip, which leaves the files held as they were.
+      order: [{ file: moved }, { file: opened }],
     },
     shownCode: [showing],
   });
-  const tree = ["README.md", "package.json", "src/index.ts", shown, opened];
+  const tree = ["README.md", "package.json", "src/index.ts", shown, opened, moved];
   openPalette(tasks, () =>
     Promise.resolve({
       folder: {
@@ -3284,6 +3290,7 @@ test("with files open or shown and nothing typed, Files lists them first, the re
   await act(async () => undefined);
 
   assert.deepEqual(rows(), [
+    "remove.ts · src/members",
     "invite.ts · src/members",
     "accept.ts · src/invites",
     "README.md",

@@ -111,6 +111,7 @@ import {
   searchHit,
 } from "@luke/ui/search-score";
 import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import { inTaskOrder } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
   orderTaskRows,
@@ -175,7 +176,7 @@ import { cardTitle } from "../tasks/tool-call-model.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
-import { type OpenFile, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -497,19 +498,21 @@ function ranked<Item>(
 
 /**
  * The open task's files at hand, each once: its file tabs the strip draws,
- * in the strip's order, then the files shown on it in its repository, as
- * the "+" offers them (`side-panel.tsx`).
+ * in the strip's order, a tab moved among them included (`inTaskOrder`),
+ * then the files shown on it in its repository, as the "+" offers them
+ * (`side-panel.tsx`).
  */
 function filesAtHand(
-  open: readonly OpenFile[],
+  panel: Pick<SidePanelControl, "files" | "order">,
   shownCode: readonly TaskCodeShowing[],
   place: { readonly taskId: string | undefined; readonly repository: string | null },
 ): readonly string[] {
   const shown = shownFiles(shownCode.filter(({ code }) => code.repository === place.repository));
-  const drawn = open.filter(
+  const drawn = panel.files.filter(
     (file) => file.browsedOn === place.taskId || shown.some((ref) => ref.path === file.path),
   );
-  return [...new Set([...drawn.map((file) => file.path), ...shown.map((ref) => ref.path)])];
+  const placed = inTaskOrder(drawn, panel.order, (file) => ({ file: file.path }));
+  return [...new Set([...placed.map((file) => file.path), ...shown.map((ref) => ref.path)])];
 }
 
 /**
@@ -1937,7 +1940,7 @@ export function CommandPalette({
       : leadingPaths(
           paths,
           listedPaths,
-          filesAtHand(tasks.sidePanel.files, tasks.shownCode ?? [], { taskId, repository }),
+          filesAtHand(tasks.sidePanel, tasks.shownCode ?? [], { taskId, repository }),
           limit,
         );
 
