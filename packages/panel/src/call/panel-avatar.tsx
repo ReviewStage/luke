@@ -16,6 +16,9 @@ import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import {
+  AvatarVoice,
+  CALL_VIDEO_FIT,
+  CallVideoTile,
   cssCustomProperties,
   RESIZE_CORNER,
   ResizeCorner,
@@ -40,7 +43,6 @@ import {
   NO_AVATAR_TRACKS,
 } from "./call-avatar.js";
 import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card.js";
-import { AvatarVoice, CallVideoTile } from "./call-video-tile.js";
 import { CALL_VIDEO_HEIGHT, useCallVideoHeight } from "./use-call-video-size.js";
 
 /** The avatar's tracks as published so far, none before a session stands. */
@@ -157,6 +159,7 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
             video={video}
             status={status}
             endReason={endReason}
+            fit={CALL_VIDEO_FIT.PICTURE}
             onSetVideo={onSetVideo}
             toggles={false}
             onAspect={setAspect}

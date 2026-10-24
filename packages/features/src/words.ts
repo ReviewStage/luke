@@ -112,6 +112,14 @@ export function pasteCutWords(limit: number): string {
   return `Your paste was cut to fit the ${formatCount(limit)}-character limit.`;
 }
 
+/** What the foot of a capped list says of the rows it leaves out: "Show 3 more". */
+export function showMoreWords(count: number): string {
+  return `Show ${formatCount(count)} more`;
+}
+
+/** What the foot of a capped list says once it shows every row, which puts them back. */
+export const SHOW_LESS_WORDS = "Show less";
+
 /** What a refresh that failed says beside the last good read, which stays drawn; Retry stands with it. */
 export const REFRESH_FAILED_WORDS = "Could not refresh";
 

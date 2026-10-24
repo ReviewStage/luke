@@ -15,8 +15,6 @@
      the side panel or in a task's column, stands it this tall, so moving
      between tabs never moves the content under the bar. */
   --secondary-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px);
-  /* The call bar's own row, which the passing notices stand clear of. */
-  --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
      between controls, list items, and sections, a page's inset and measure, a
      menu's rows, glyph, and shadow, the keyboard's ring, the floating layers,
@@ -192,7 +190,7 @@ body,
 /* A place standing alone in a narrow room leads its head with the way back,
    so its name keeps the room left and what is said beside it gives way; its
    menu stays at the head's end, the only way to edit or archive a topic. */
-.desktop-shell[data-room="narrow"] .chat-head-meta {
+.desktop-shell[data-room="narrow"] .chat-stream > .luke-pane-bar .luke-pane-bar-detail {
   display: none;
 }
 
@@ -1705,55 +1703,6 @@ ul.actor-stack {
     luke-card-shrink var(--luke-duration-exit) var(--luke-motion-exit) both;
 }
 
-/* Who said or wrote a message on a shared plan, a teammate, Luke, or an
-   automation, named by their mark and name in the muted meta voice, the mark
-   centred on the words; the reader's own carry no name. A plan card and a
-   sent message alike name them under it (`.message-meta`). */
-.message-sender {
-  display: flex;
-  align-items: center;
-  padding-inline: var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The line under a sent message's bubble: its Copy and Copy link, shown
-   while the pointer or the keyboard is on it, then who sent it and when at
-   the bubble's right edge, so the name stays put as the buttons come and go. */
-.message-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-space-2);
-  max-width: 100%;
-}
-
-/* A column, a phone's or a narrow pane's on the desktop and the web, can be
-   too narrow for a long sender beside the buttons and the time, and a line
-   ending at the bubble's right edge would push it off the column's left
-   one, so who sent it gives way, cut short with an ellipsis (`@luke/ui`'s
-   inline ref), and the buttons and the time keep their whole width inside
-   the column. */
-.message-meta > .message-sender {
-  min-width: 0;
-}
-
-.message-meta > :is(.luke-message-actions, .message-sent-at) {
-  flex: none;
-}
-
-/* When it was sent, in the sender's own muted meta voice, its digits even. */
-.message-sent-at {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--luke-space-4) + var(--luke-space-2));
-  padding-inline-end: var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 /* What a transcript opens on, the plan, an automation's prompt, or a
    worker's task, stands as a sent message does, at the right over the line
    naming who sent it and when, its card across the message's whole measure,
@@ -1764,17 +1713,10 @@ ul.actor-stack {
   width: 100%;
 }
 
-/* Its meta line breaks before the time rather than squeeze who sent it: a
-   long sender keeps the card's whole measure, the time on a line under it. */
-.agent-origin > .message-meta {
-  flex-wrap: wrap;
-  row-gap: var(--luke-space-2);
-}
-
 /* Who sent it can name an automation, an issue, and a runner: too narrow
    for all three on one line, it breaks between them rather than cutting
    each name to its first letters. */
-.agent-origin > .message-meta > .message-sender > .actor-words {
+.agent-origin > .luke-message-line > .luke-message-line-sender > .actor-words {
   flex-wrap: wrap;
   row-gap: var(--luke-space-2);
 }
@@ -2021,28 +1963,6 @@ ul.actor-stack {
   aspect-ratio: var(--call-video-aspect);
 }
 
-/* The tile fills the frame, which stands at the picture's own aspect, so
-   the picture fills the tile whole and needs no blurred fill beside it. */
-.agent-call-video-frame .call-video-tile {
-  width: 100%;
-  height: 100%;
-}
-
-.agent-call-video .call-video-frame {
-  object-fit: cover;
-}
-
-.agent-call-video .call-video-fill {
-  display: none;
-}
-
-.agent-call-video .call-video-face {
-  width: 40%;
-  max-width: 56px;
-  height: auto;
-  aspect-ratio: 1;
-}
-
 /* Anywhere no call's tab is drawn (Settings, the home page, a panel
    filling the window) the notice line floats at the window's foot over the
    work column. */
@@ -2069,122 +1989,6 @@ ul.actor-stack {
   left: 50%;
   width: calc(100% - 2 * var(--luke-space-16));
   max-width: none;
-}
-
-/* The call bar's own row, laid out as a voice composer's controls are: at
-   rest one start pill in its middle; in a call the call's two lines at its
-   left and its controls at its right. Its height holds whichever it draws,
-   so the document above never moves when a call begins or ends, but where
-   it is too narrow for the call on one row (below). It answers its own
-   width, as the plan's page, the sidebar's card, the floating card, and the
-   floating window draw it, each at a width of its own. */
-.call-bar {
-  container: call-bar / inline-size;
-  display: flex;
-  max-width: var(--luke-page-measure);
-  min-height: var(--call-row-height);
-  flex-wrap: wrap;
-  align-items: center;
-  margin: 0 auto;
-  gap: var(--luke-space-8) var(--luke-space-12);
-}
-
-.call-bar[data-call="false"] {
-  justify-content: center;
-}
-
-.call-status {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-  white-space: nowrap;
-}
-
-/* Each line is cut short on one line, so a long command never wraps the row
-   or pushes the controls, and the dots are never cut. */
-.call-status-word {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.call-status-word[data-muted="true"] {
-  color: var(--luke-color-danger-text);
-}
-
-.call-backend {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.call-backend-dots {
-  display: flex;
-}
-
-/* Luke's part is the one that gives way to a long command; the notetaker's
-   says the same few words whole, or goes (below). */
-.call-backend-part[data-part="notes"] {
-  flex: none;
-}
-
-.call-backend-action {
-  font-family: var(--luke-font-mono);
-}
-
-.call-controls,
-.call-mutes {
-  display: flex;
-  flex: none;
-  align-items: center;
-}
-
-/* End call stands apart from the two mutes, so muting never hangs up. */
-.call-controls {
-  margin-left: auto;
-  gap: var(--luke-space-8);
-}
-
-.call-mutes {
-  gap: var(--luke-space-4);
-}
-
-/* Too narrow for both of the backend's parts: the notetaker's goes while
-   Luke's stands, so what Luke is doing keeps the line. */
-@container call-bar (max-width: 479px) {
-  .call-backend-part[data-part="brain"] ~ [data-part="notes"] {
-    display: none;
-  }
-}
-
-/* Narrower, the controls close up to the card head's own step, so the call
-   card's mutes and End call stand under its Video on and its way back, each
-   apart from the next, and the working dots go, the line's own words saying
-   Luke works, so Luke's command keeps their room. */
-@container call-bar (max-width: 279px) {
-  .call-backend > .call-backend-dots {
-    display: none;
-  }
-
-  .call-controls {
-    gap: var(--luke-space-4);
-  }
-}
-
-/* Too narrow for the status beside the controls (the sidebar's card at its
-   narrowest, the plan's bar in a 280px column): the status takes a row of
-   its own, the voice's word whole, and the controls stand under it at the
-   right. The floating window's bar is wider than this and must stay so,
-   since its window's height is fixed (call.css). */
-@container call-bar (max-width: 209px) {
-  .call-status {
-    flex-basis: 100%;
-  }
 }
 
 /* The repository chip ------------------------------------------------------ */
@@ -2247,26 +2051,6 @@ ul.actor-stack {
   color: var(--integration-ink-sentry);
 }
 
-/* The searchable menu, in the shape of a command menu: the search as the
-   first row, flush and edge to edge over a hairline; under it the list,
-   its rows inset by the list's own padding so a highlight never meets the
-   border, scrolling inside itself past a bounded height; and under the
-   list, behind another hairline, the rows pinned where the scrolling
-   cannot take them. A row is one fixed height whatever the list holds:
-   the list is a plain block and a row flexes in no column it stands in,
-   because a bounded flex column would otherwise shrink its rows towards
-   their words as the matches grew past the bound, and let them back out
-   as a search cut them down. The menu opens under its trigger, its list
-   and its foot each carrying the surface's inset. */
-.searchable-menu {
-  position: absolute;
-  z-index: 2;
-  top: calc(100% + var(--luke-space-4));
-  left: 0;
-  width: 340px;
-  padding: 0;
-}
-
 .task-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
@@ -2274,40 +2058,19 @@ ul.actor-stack {
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* A searchable menu hung from its own button (`@luke/ui`'s
-   `AnchoredPopover`) stands in the layer's place, and is what a listed
-   row's submenu stands against. */
-.luke-anchored-popover > .searchable-menu {
-  position: relative;
-  width: auto;
-}
-
 /* What pops up arrives on the pair every arriving element rides, the
    menu's (`@luke/ui`'s `luke-menu-arrive` and `luke-menu-drop`), its
    opacity over `--luke-duration-quick` and its travel on the spring, and leaves
    first on the menu's `luke-menu-leave`, fading over `--luke-duration-exit`
-   while its owner holds it drawn and inert (`use-disclosure.ts`; the
-   terminal picker's Radix dialog holds its own on `data-state`). A menu's own
+   while its owner holds it drawn and inert (`use-disclosure.ts`). A menu's own
    surface (`MenuSurface`) draws all three itself. */
-.task-summary-card[data-leaving="true"],
-:is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
+.task-summary-card[data-leaving="true"] {
   pointer-events: none;
   animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   /* Note that the hold waits on every motion the element runs, and losing
      focus would start the scrollbar's own fade (above), so the exit is the
      one motion it has. */
   transition: none;
-}
-
-/* The heading over the terminal picker's rows: inset as a row's words are,
-   and a little apart from the section above it. cmdk draws the heading's
-   box itself, so it is reached by its attribute; its words are a caption. */
-.command-palette [cmdk-group-heading] {
-  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
-}
-
-.command-palette [cmdk-group]:first-child [cmdk-group-heading] {
-  padding-top: var(--luke-space-2);
 }
 
 /* An integration's tools (`integration-tool-list.tsx`), in the MCP
@@ -2924,68 +2687,6 @@ ul.actor-stack {
   width: 2px;
   background: var(--luke-color-border);
   content: "";
-}
-
-/* The head starts where its chip's face stands centred on the gutter's
-   line, and stands over the line the comment before draws into it. It
-   keeps to one row, so nothing after the chip wraps under it onto the
-   line: a narrow pane cuts the writer's name short first, and what is said
-   of when wraps beside the chip only once the name can give no more. */
-.inbox-comment-head {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  min-height: var(--inbox-face);
-  align-items: center;
-  column-gap: var(--luke-space-6);
-  margin-left: calc((var(--inbox-face) - var(--inbox-mark)) / 2);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The writer is named by their chip in the thread's own ink, cut short
-   rather than run past a narrow pane. */
-.inbox-comment-name {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-}
-
-/* The chip's face masks the line running through it with a ring of the
-   ground, as a facepile's faces are cut from it, so the line reads as
-   joining the faces. A bare square, or someone's outline, is filled with
-   the ground too, so the line never shows through its glyph; a member who
-   left keeps their own tile. */
-/* Under the pointer the chip's wash (`InlineRef`'s own, handed on as
-   `--luke-inline-ref-wash`) runs on over the face's ring, so the ring reads
-   as the wash's own rather than a halo of the ground in it. */
-.inbox-comment-name .actor-mark {
-  box-shadow:
-    0 0 0 3px var(--luke-inline-ref-wash, transparent),
-    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
-}
-
-.inbox-comment-name .actor-mark:not([data-left="true"]) {
-  background: var(--luke-color-ground);
-}
-
-.inbox-comment-name .actor-mark[data-kind="someone"] {
-  box-shadow:
-    inset 0 0 0 1px var(--luke-color-border-strong),
-    0 0 0 3px var(--luke-inline-ref-wash, transparent),
-    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
-}
-
-.inbox-comment-when {
-  display: inline-flex;
-  min-width: min-content;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 var(--luke-space-4);
 }
 
 /* A comment's words are set as a message's are, indented past the gutter
@@ -3913,6 +3614,25 @@ ul.actor-stack {
   flex: 0 1000 auto;
 }
 
+/* The place's head is a `PaneBar`, whose detail keeps its width; here it is
+   the purpose, which gives way before the name does. */
+.chat-stream > .luke-pane-bar .luke-pane-bar-detail {
+  display: flex;
+  min-width: 0;
+  flex: 0 1000 auto;
+}
+
+/* A place standing alone under a folded sidebar's title-bar buttons starts
+   past them, where its way back stands, as a toolbar does (shell.css). */
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .chat-view[data-single="true"]
+  .chat-stream
+  > .luke-pane-bar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
 /* A task's channel is named by its task's glyph before its name, wherever
    Chat names it (`chat-channel-name.tsx`): set inline on the words'
    baseline, at the size a menu's glyph stands. */
@@ -4041,19 +3761,6 @@ ul.actor-stack {
     position: static;
     justify-content: flex-end;
   }
-}
-
-/* The author is named in bold in the stream's own ink, as Slack names them. */
-.chat-byline-name {
-  display: flex;
-  min-width: 0;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-bold);
-}
-
-.chat-byline-name :is(.luke-inline-ref, .luke-inline-ref-label) {
-  font-weight: inherit;
 }
 
 .chat-byline-where {
@@ -5278,153 +4985,6 @@ ul.actor-stack {
 }
 
 /* Dialog parts ---------------------------------------------------------------- */
-
-/* The terminal picker's palette ------------------------------------------ */
-
-/* The terminal picker over the window (`tasks/terminal-picker.tsx`), drawn as
-   ⌘K's palette was before ⌘K moved onto `@luke/ui/command`'s CommandDialog:
-   the dialog's dimmed window and card, a third of the way down, holding the
-   search row and rows, and the keys' hints at its foot. The highlight is
-   cmdk's `data-selected`, which the arrows and the pointer both move, so a
-   hover draws nothing of its own. The results are `@luke/ui`'s
-   `ComboboxListBox`, filling the card above the foot and scrolling inside
-   itself, so nothing here scrolls. These `command-palette*` rules are the
-   picker's alone now, and go once it moves onto CommandDialog too (CD3). */
-.command-palette-backdrop {
-  position: fixed;
-  z-index: var(--luke-z-dialog);
-  inset: 0;
-  background: var(--luke-color-scrim);
-  animation: luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-[data-luke-profile="desktop"] .command-palette-backdrop {
-  -webkit-app-region: no-drag;
-}
-
-.command-palette {
-  position: fixed;
-  z-index: var(--luke-z-dialog);
-  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) * 0.18);
-  left: 50%;
-  display: flex;
-  width: min(560px, calc(100vw - 2 * var(--luke-space-24)));
-  max-height: calc(var(--luke-stage-height) * 0.64);
-  flex-direction: column;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-dialog-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 16px 56px var(--luke-color-shadow);
-  color: var(--luke-color-text);
-  overflow: clip;
-  transform: translateX(-50%);
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-    luke-scale-in-centered-x var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-}
-
-[data-luke-profile="desktop"] .command-palette {
-  -webkit-app-region: no-drag;
-}
-
-.command-palette:focus,
-.command-palette [cmdk-root]:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
-}
-
-.command-palette [cmdk-root] {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-}
-
-.command-palette-search {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: 44px;
-  padding: 0 var(--luke-space-16);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-}
-
-.command-palette-search svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-}
-
-.command-palette-search input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: none; /* no ring: a menu's filter, which always holds the caret */
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-}
-
-.command-palette-search input::placeholder {
-  color: var(--luke-color-text-muted);
-}
-
-/* The keys' hints along the card's foot, each chord a step louder than the
-   words that say what it does, so the eye finds the keys first. */
-.command-palette-footer {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-space-16);
-  height: 36px;
-  padding: 0 var(--luke-space-16);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.command-palette-footer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
-/* A hint's keys set as one chord, ↑↓ and ←→, a step apart from their word. */
-.command-palette-footer-keys {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.04em;
-}
-
-.command-palette-footer {
-  --luke-shortcut-ink: var(--luke-color-text-muted);
-}
-
-/* Under a finger the foot's keys are none to press, so it is not drawn. */
-@media (hover: none) and (pointer: coarse) {
-  .command-palette-footer {
-    display: none;
-  }
-}
-
-/* In a narrow room, a phone's, the picker is a sheet hung from the top of
-   what is seen rather than a card floating in it: the screen's whole width,
-   its corners rounded only where it ends. It is drawn at the body, outside
-   the shell, so the room is asked of the document. */
-:root:has(.desktop-shell[data-room="narrow"]) .command-palette {
-  top: var(--luke-viewport-top);
-  left: 0;
-  width: 100%;
-  max-height: calc(var(--luke-stage-height) * 0.8);
-  border-width: 0 0 1px;
-  border-radius: 0 0 var(--luke-dialog-radius) var(--luke-dialog-radius);
-  transform: none;
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
-    luke-sheet-drop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-}
 
 /* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
    as a row of cards over the window, drawn as ⌘K's palette is, its ground,

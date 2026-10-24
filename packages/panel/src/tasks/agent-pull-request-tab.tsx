@@ -65,7 +65,6 @@ import {
   ErrorState,
   Fill,
   GAP,
-  IconButton,
   LAYOUT_ELEMENT,
   LINE_BUTTON_LOOK,
   LIST_DENSITY,
@@ -74,6 +73,8 @@ import {
   List,
   ListRow,
   linesCount,
+  MoreButton,
+  moreLabel,
   PAGE_FRAME,
   PaneBar,
   ProviderMark,
@@ -110,7 +111,6 @@ import {
   CircleCheckIcon,
   CircleDotIcon,
   CircleSlashIcon,
-  EllipsisIcon,
   ExternalLinkIcon,
   FileDiffIcon,
   GitPullRequestIcon,
@@ -979,13 +979,11 @@ function ThreadMenu({
     ...(copy === undefined ? [] : [copy]),
   ];
   if (actions.length === 0) return null;
-  const label = THREAD_REVEAL_WORDS.MENU;
+  const label = moreLabel(THREAD_REVEAL_WORDS.THING);
   return (
     <DisclosureAction>
       <span className="pull-request-thread-menu">
-        <Tooltip label={label}>
-          <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-        </Tooltip>
+        <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
         {menu.drawn === undefined ? null : (
           <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
         )}

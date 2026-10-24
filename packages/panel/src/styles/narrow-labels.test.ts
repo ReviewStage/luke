@@ -125,7 +125,7 @@ function byline(room: string) {
   shell.className = "desktop-shell";
   shell.dataset.room = room;
   const meta = shell.appendChild(document.createElement("div"));
-  meta.className = "message-meta";
+  meta.className = "luke-message-line";
   const part = (className: string) => {
     const element = meta.appendChild(document.createElement("div"));
     element.className = className;
@@ -133,8 +133,8 @@ function byline(room: string) {
   };
   return {
     actions: part("luke-message-actions"),
-    sender: part("message-sender"),
-    sentAt: part("message-sent-at"),
+    sender: part("luke-message-line-sender"),
+    sentAt: part("luke-message-line-time"),
   };
 }
 

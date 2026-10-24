@@ -11,12 +11,14 @@ import { BLOCK_MENU_EXAMPLE } from "./examples/block-menu";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
+import { CALL_CONTROLS_EXAMPLE } from "./examples/call-controls";
 import { CARD_PRESSES_EXAMPLE } from "./examples/card-presses";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { CHOICE_BAR_EXAMPLE } from "./examples/choice-bar";
 import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
+import { CODE_CARDS_EXAMPLE } from "./examples/code-cards";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
@@ -94,6 +96,7 @@ import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SHORTCUTS_EXAMPLE } from "./examples/shortcuts";
+import { SHOW_MORE_ROWS_EXAMPLE } from "./examples/show-more-rows";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
@@ -138,6 +141,7 @@ export const EXAMPLES: readonly Example[] = [
   BREADCRUMBS_EXAMPLE,
   BUTTONS_EXAMPLE,
   CALENDAR_EXAMPLE,
+  CALL_CONTROLS_EXAMPLE,
   CARDS_EXAMPLE,
   CARD_PRESSES_EXAMPLE,
   BLOCK_LISTS_EXAMPLE,
@@ -151,6 +155,7 @@ export const EXAMPLES: readonly Example[] = [
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   COPY_BUTTONS_EXAMPLE,
+  CODE_CARDS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
   COMMAND_DIALOG_EXAMPLE,
   COMMENTS_EXAMPLE,
@@ -186,6 +191,7 @@ export const EXAMPLES: readonly Example[] = [
   SWITCHES_EXAMPLE,
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
+  SHOW_MORE_ROWS_EXAMPLE,
   LIST_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,

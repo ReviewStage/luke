@@ -25,17 +25,19 @@ import {
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
-  EllipsisIcon,
   ErrorState,
   GAP,
   IconButton,
   Inline,
   JUSTIFY,
   LAYOUT_ELEMENT,
+  MoreButton,
+  moreLabel,
   PencilIcon,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
+  SecretField,
   SettingsFacts,
   SettingsLine,
   SettingsRow,
@@ -48,9 +50,7 @@ import {
   Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
-  TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_FONT,
-  TEXT_FIELD_TYPE,
   TEXT_FONT,
   TEXT_LINK_LOOK,
   TEXT_TONE,
@@ -64,7 +64,6 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu } from "../desktop/action-menu.js";
@@ -508,51 +507,44 @@ function ClaudeTokenPanel({
         </Inline>
       )}
       {editing ? (
-        <Inline
+        <Stack
           as={LAYOUT_ELEMENT.FORM}
-          justify={JUSTIFY.END}
-          growFirst
           onSubmit={(event) => {
             event.preventDefault();
             save();
           }}
         >
-          <TextField
-            type={TEXT_FIELD_TYPE.PASSWORD}
-            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+          <SecretField
             label="Claude setup-token"
-            placeholder={
-              plan === undefined
-                ? 'Paste the token from "claude setup-token"'
-                : "Paste your Claude setup-token"
-            }
-            spellCheck={false}
+            error={rejection}
+            saved={plan !== undefined}
+            placeholder='Paste the token from "claude setup-token"'
             disabled={saving}
             value={pasted}
-            invalid={rejection !== undefined}
             onEscape={plan === undefined ? undefined : cancel}
             onChange={(value) => {
               setPasted(value);
               setRejection(undefined);
             }}
           />
-          {plan === undefined ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
-              {WORDS.CANCEL}
+          <Inline justify={JUSTIFY.END}>
+            {plan === undefined ? null : (
+              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
+                {WORDS.CANCEL}
+              </Button>
+            )}
+            <Button
+              type={BUTTON_TYPE.SUBMIT}
+              variant={BUTTON_VARIANT.PRIMARY}
+              disabled={pasted.trim() === ""}
+              busy={saving}
+              busyLabel="Saving the token"
+            >
+              {WORDS.SAVE}
             </Button>
-          )}
-          <Button
-            type={BUTTON_TYPE.SUBMIT}
-            variant={BUTTON_VARIANT.PRIMARY}
-            disabled={pasted.trim() === ""}
-            busy={saving}
-            busyLabel="Saving the token"
-          >
-            {WORDS.SAVE}
-          </Button>
-        </Inline>
+          </Inline>
+        </Stack>
       ) : null}
-      {rejection === undefined ? null : <State ok={false}>{rejection}</State>}
       <ConfirmDialog
         confirm={removal}
         question={{
@@ -723,7 +715,7 @@ function ChatGptPanel({
 
 /* ----- The API key card ----- */
 
-/** The provider's API key: a masked field with its eye while one is pasted, else its hint with the pencil and a ⋯ holding Remove. */
+/** The provider's API key: a secret field while one is pasted, else its hint with the pencil and a ⋯ holding Remove. */
 function ApiKeyPanel({
   provider,
   stored,
@@ -738,7 +730,6 @@ function ApiKeyPanel({
   const field = useRef<HTMLInputElement | null>(null);
   const door = useRef<HTMLButtonElement | null>(null);
   const [editing, setEditing] = useState(false);
-  const [shown, setShown] = useState(false);
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
@@ -767,7 +758,6 @@ function ApiKeyPanel({
 
   const cancel = () => {
     setPasted("");
-    setShown(false);
     setRejection(undefined);
     setEditing(false);
   };
@@ -791,7 +781,6 @@ function ApiKeyPanel({
         }
         // Kept: the key leaves the field, and the card draws the service's hint of it.
         setPasted("");
-        setShown(false);
         setEditing(false);
       });
   };
@@ -800,54 +789,44 @@ function ApiKeyPanel({
   return (
     <>
       {open ? (
-        <Inline
+        <Stack
           as={LAYOUT_ELEMENT.FORM}
-          justify={JUSTIFY.END}
-          growFirst
           onSubmit={(event) => {
             event.preventDefault();
             save();
           }}
         >
-          <Inline grow wrap={false} gap={GAP.TIGHT} growFirst>
-            <TextField
-              ref={field}
-              type={shown ? TEXT_FIELD_TYPE.TEXT : TEXT_FIELD_TYPE.PASSWORD}
-              autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-              label={`${name} API key`}
-              placeholder={`Paste your ${name} API key`}
-              spellCheck={false}
-              disabled={saving}
-              value={pasted}
-              invalid={rejection !== undefined}
-              onEscape={stored === undefined ? undefined : cancel}
-              onChange={(value: string) => {
-                setPasted(value);
-                setRejection(undefined);
-              }}
-            />
-            <IconButton
-              icon={shown ? <EyeOffIcon /> : <EyeIcon />}
-              label={shown ? "Hide key" : "Show key"}
-              pressed={shown}
-              onClick={() => setShown((now) => !now)}
-            />
-          </Inline>
-          {stored === undefined ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
-              {WORDS.CANCEL}
+          <SecretField
+            ref={field}
+            label={`${name} API key`}
+            error={rejection}
+            saved={stored !== undefined}
+            placeholder={`Paste your ${name} API key`}
+            disabled={saving}
+            value={pasted}
+            onEscape={stored === undefined ? undefined : cancel}
+            onChange={(value: string) => {
+              setPasted(value);
+              setRejection(undefined);
+            }}
+          />
+          <Inline justify={JUSTIFY.END}>
+            {stored === undefined ? null : (
+              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
+                {WORDS.CANCEL}
+              </Button>
+            )}
+            <Button
+              type={BUTTON_TYPE.SUBMIT}
+              variant={BUTTON_VARIANT.PRIMARY}
+              disabled={pasted.trim() === ""}
+              busy={saving}
+              busyLabel="Checking the key"
+            >
+              {WORDS.SAVE}
             </Button>
-          )}
-          <Button
-            type={BUTTON_TYPE.SUBMIT}
-            variant={BUTTON_VARIANT.PRIMARY}
-            disabled={pasted.trim() === ""}
-            busy={saving}
-            busyLabel="Checking the key"
-          >
-            {WORDS.SAVE}
-          </Button>
-        </Inline>
+          </Inline>
+        </Stack>
       ) : (
         <Inline justify={JUSTIFY.BETWEEN}>
           <Inline grow wrap={false} gap={GAP.TIGHT} growFirst>
@@ -864,22 +843,16 @@ function ApiKeyPanel({
               disabled={removal.busy}
               onClick={() => setEditing(true)}
             />
-            <IconButton
-              ref={door}
-              icon={<EllipsisIcon />}
-              label={`${name} key actions`}
-              {...menu.trigger()}
-            />
+            <MoreButton ref={door} thing={`${name} key`} {...menu.trigger()} />
           </Inline>
         </Inline>
       )}
       {status === undefined || stored === undefined ? null : (
         <State ok={keyStanding(stored.status)}>{status}</State>
       )}
-      {rejection === undefined ? null : <State ok={false}>{rejection}</State>}
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={`${name} key actions`}
+          label={moreLabel(`${name} key`)}
           menu={menu.drawn}
           groups={[
             [

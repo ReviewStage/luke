@@ -20,7 +20,6 @@ import {
   ComposeIcon,
   commandKeyshortcuts,
   dropBelowStart,
-  EllipsisIcon,
   ErrorState,
   Fill,
   FolderIcon,
@@ -32,6 +31,7 @@ import {
   LAYOUT_ELEMENT,
   ListMotion,
   MarkDoneIcon,
+  MoreButton,
   motionKey,
   motionRows,
   NAV_CURRENT,
@@ -915,15 +915,12 @@ function RepositorySection({
         actions={
           <>
             {actionGroups.length === 0 ? null : (
-              <Tooltip label="Repository actions">
-                <IconButton
-                  ref={ellipsis}
-                  icon={<EllipsisIcon />}
-                  label={`Actions for ${named}`}
-                  size={BUTTON_SIZE.COMPACT}
-                  {...menu.trigger()}
-                />
-              </Tooltip>
+              <MoreButton
+                ref={ellipsis}
+                thing={named}
+                size={BUTTON_SIZE.COMPACT}
+                {...menu.trigger()}
+              />
             )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
@@ -2114,9 +2111,9 @@ function SidebarColumn({
                     !unlisted &&
                     tasks.listRead &&
                     !tasks.listFailed ? (
-                      <p className="sidebar-note">
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>
                         {NONE_MATCH} <Button onClick={taskView.onEveryone}>Show all</Button>
-                      </p>
+                      </NoteLine>
                     ) : null}
                     {tasks.listFailed ? (
                       <div className="sidebar-note sidebar-failure">
@@ -2131,10 +2128,10 @@ function SidebarColumn({
                       <ListSkeleton />
                     ) : null}
                     {tasks.signedIn && unlisted && tasks.listRead && !tasks.listFailed ? (
-                      <p className="sidebar-note">No tasks yet.</p>
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>No tasks yet.</NoteLine>
                     ) : null}
                     {tasks.signedIn ? null : (
-                      <p className="sidebar-note">Sign in to start a task.</p>
+                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>Sign in to start a task.</NoteLine>
                     )}
                     <TaskGroups
                       sections={sections}

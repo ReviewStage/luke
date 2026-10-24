@@ -118,8 +118,13 @@ async function mountAndOpen(open = true): Promise<void> {
 
 const dialog = () => document.querySelector('[role="dialog"]') ?? assert.fail("no dialog");
 
-const tokenField = () =>
-  document.querySelector<HTMLInputElement>('input[aria-label="Personal access token"]');
+/** The field its visible label names, as a reader finds it. */
+const tokenField = () => {
+  const label = [...document.querySelectorAll("label")].find(
+    (each) => each.textContent === "Personal access token",
+  );
+  return label?.control instanceof HTMLInputElement ? label.control : null;
+};
 
 const button = (words: string, within: ParentNode = document) =>
   [...within.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -183,7 +188,11 @@ test("each refused save says why and what to do next, and keeps the field", asyn
   for (const rejection of Object.values(GITHUB_TOKEN_REJECTION)) {
     refuseSave = rejection;
     await paste(PASTED);
-    said.set(rejection, document.querySelector('[role="alert"]')?.textContent ?? undefined);
+    said.set(
+      rejection,
+      document.getElementById(tokenField()?.getAttribute("aria-describedby") ?? "")?.textContent ??
+        undefined,
+    );
     assert.ok(tokenField(), "the field stands as pasted");
   }
 

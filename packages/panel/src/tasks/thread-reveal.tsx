@@ -35,7 +35,7 @@ export const THREAD_REVEAL_WORDS = {
   VIEW_FILES: "View in Files changed",
   VIEW_CONVERSATION: "View in Conversation",
   /** The name of a thread's ⋯. */
-  MENU: "Comment actions",
+  THING: "Comment",
 } as const;
 
 /** An ask to bring one review thread of an agent's pull request into view, on one of its tab's views; counted, so each ask is its own. */

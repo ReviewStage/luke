@@ -209,12 +209,25 @@ const radio = (dialog: Element, label: string) =>
 const card = (dialog: Element, label: string) =>
   radio(dialog, label).closest<HTMLElement>(".luke-choice-card") ?? assert.fail(`no ${label} card`);
 
-/** Types into a field as a paste would, then submits its form. */
-async function pasteAndSave(field: HTMLInputElement, value: string): Promise<void> {
+/** The field a visible label names, as a reader finds it. */
+function labelled(within: Element, words: string): HTMLInputElement {
+  const label = [...within.querySelectorAll("label")].find((each) => each.textContent === words);
+  const control = label?.control;
+  assert.ok(control instanceof HTMLInputElement, `no field labelled ${words}`);
+  return control;
+}
+
+/** Types into a field as a paste would. */
+function paste(field: HTMLInputElement, value: string): void {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+/** Types into a field as a paste would, then submits its form. */
+async function pasteAndSave(field: HTMLInputElement, value: string): Promise<void> {
+  paste(field, value);
   act(() => field.form?.requestSubmit());
   await settle();
 }
@@ -302,14 +315,14 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   const page = await mount();
   const dialog = await open(page, "Claude");
   const keyCard = card(dialog, "API key");
-  const field =
-    keyCard.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
-    assert.fail("no key field");
+  const field = labelled(keyCard, "Anthropic API key");
   assert.equal(field.type, "password");
   assert.equal(field.autocomplete, "off");
-  await press(keyCard, "Show key");
-  assert.equal(field.type, "text", "the eye shows what is being pasted");
-  await press(keyCard, "Hide key");
+  paste(field, KEY);
+  await press(keyCard, "Show");
+  assert.equal(field.type, "text", "Show reveals what is being pasted");
+  await press(keyCard, "Hide");
+  assert.equal(field.type, "password", "Hide masks it again");
   assert.ok(keyCard.querySelector('a[href="https://console.anthropic.com/settings/keys"]'));
 
   await pasteAndSave(field, `  ${KEY}  `);
@@ -351,14 +364,30 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   assert.equal(rowButton(page, "Claude").textContent, "Connect");
 });
 
+test("editing a saved API key shows Saved where the key would be, never the key, and offers no Show until one is typed", async () => {
+  held = { keys: [ANTHROPIC_KEY], subscriptions: [] };
+  const page = await mount();
+  const dialog = await open(page, "Claude");
+  const keyCard = card(dialog, "API key");
+  await press(keyCard, "Edit key");
+  const field = labelled(keyCard, "Anthropic API key");
+  assert.equal(field.placeholder, "Saved");
+  assert.equal(field.value, "");
+  assert.equal(field.type, "password");
+  assert.equal(button(keyCard, "Show").disabled, true, "there is nothing in the window to show");
+  assert.ok(
+    !keyCard.innerHTML.includes(ANTHROPIC_KEY.hint),
+    "not even the hint stands over the field",
+  );
+  paste(field, KEY);
+  assert.equal(button(keyCard, "Show").disabled, false);
+});
+
 test("a Claude setup-token is saved by its kind, refused with why, and disconnected after asking", async () => {
   refusal = PROVIDER_KEY_REJECTION.INVALID;
   const page = await mount();
   const dialog = await open(page, "Claude");
-  const field =
-    card(dialog, "Subscription").querySelector<HTMLInputElement>(
-      'input[aria-label="Claude setup-token"]',
-    ) ?? assert.fail("no token field");
+  const field = labelled(card(dialog, "Subscription"), "Claude setup-token");
   assert.equal(field.type, "password");
   assert.equal(field.placeholder, 'Paste the token from "claude setup-token"');
   await pasteAndSave(field, TOKEN);
@@ -404,10 +433,9 @@ test("a Claude token Anthropic rejected says so in its card and offers Replace t
   const plan = card(dialog, "Subscription");
   assert.match(plan.textContent ?? "", /Anthropic rejected this token\./u);
   await press(plan, "Replace token");
-  const field =
-    plan.querySelector<HTMLInputElement>('input[aria-label="Claude setup-token"]') ??
-    assert.fail("no token field");
-  assert.equal(field.placeholder, "Paste your Claude setup-token", "a saved token needs no hint");
+  const field = labelled(plan, "Claude setup-token");
+  assert.equal(field.placeholder, "Saved", "a saved token is said, not shown");
+  assert.equal(field.value, "");
 });
 
 test("Codex's subscription signs in with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {
@@ -442,9 +470,7 @@ test("without the sign-in's loopback, Codex's subscription card stands disabled 
   const plan = card(dialog, "Subscription");
   assert.equal(plan.textContent, "SubscriptionDesktop app only");
   assert.equal(radio(dialog, "Subscription").disabled, true);
-  const field =
-    card(dialog, "API key").querySelector<HTMLInputElement>('input[aria-label="OpenAI API key"]') ??
-    assert.fail("no key field");
+  const field = labelled(card(dialog, "API key"), "OpenAI API key");
   await pasteAndSave(field, KEY.replace("sk-ant-api03", "sk-proj"));
   assert.equal(rowButton(page, "Codex").textContent, "Connected via API key");
 });

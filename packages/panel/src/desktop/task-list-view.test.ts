@@ -408,7 +408,7 @@ test("a filter that leaves nothing says so, and Show all lists everyone's again"
   const sidebar = await mountRead(ACME, theirs);
   choose(sidebar, "Created by", "Me");
   assert.equal(taskRows(sidebar).length, 0);
-  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+  const note = [...sidebar.querySelectorAll(".luke-note-line")].find((each) =>
     each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");
@@ -430,7 +430,7 @@ test("with every task pinned, a filter still says it leaves nothing under Tasks,
   const pinnedAll = TASKS.map((each, at) => ({ ...each, pinnedAt: 900 + at }));
   const sidebar = await mountRead(ACME, pinnedAll);
   choose(sidebar, "Created by", "Charles Pan");
-  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  const notes = [...sidebar.querySelectorAll(".luke-note-line")].map((note) => note.textContent);
   assert.ok(
     notes.some((note) => note?.startsWith("No tasks match this view.")),
     "the empty filter says so",
@@ -458,7 +458,10 @@ test("in one run, a task with no repository says so on its row", async () => {
 test("an empty workspace under a filter says only that it holds no tasks", async () => {
   const sidebar = await mountRead(ACME, []);
   choose(sidebar, "Created by", "Me");
-  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  // Note that the pinned section's own "Drag tasks here to pin them" is a line of the sidebar too.
+  const notes = [...sidebar.querySelectorAll(".luke-note-line")]
+    .map((note) => note.textContent)
+    .filter((note) => !note?.startsWith("Drag tasks here"));
   assert.deepEqual(notes, ["No tasks yet."]);
 });
 
@@ -843,7 +846,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
 
   assert.equal(chipWords(sidebar), "Assigned to Charles Pan");
   assert.equal(taskRows(sidebar).length, 0);
-  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+  const note = [...sidebar.querySelectorAll(".luke-note-line")].find((each) =>
     each.textContent?.startsWith("No tasks match this view."),
   );
   const showAll = note?.querySelector("button");

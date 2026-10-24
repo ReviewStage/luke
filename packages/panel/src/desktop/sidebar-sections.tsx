@@ -11,19 +11,17 @@ import {
   ConfirmDialog,
   DIALOG_TONE,
   type DialogConfirm,
-  EllipsisIcon,
   GAP,
   GROUP_HEADING,
   GroupHeader,
-  IconButton,
   LAYOUT_ELEMENT,
   MarkDoneIcon,
+  MoreButton,
   NOTE_LINE_LOOK,
   NoteLine,
   PencilIcon,
   Stack,
   TextField,
-  Tooltip,
   TrashIcon,
   useConfirmDialog,
   useLeaving,
@@ -493,15 +491,12 @@ function SidebarSection({
           )
         }
         actions={
-          <Tooltip label="Section actions">
-            <IconButton
-              ref={ellipsis}
-              icon={<EllipsisIcon />}
-              label={`Actions for ${section.title}`}
-              size={BUTTON_SIZE.COMPACT}
-              {...menu.trigger()}
-            />
-          </Tooltip>
+          <MoreButton
+            ref={ellipsis}
+            thing={section.title}
+            size={BUTTON_SIZE.COMPACT}
+            {...menu.trigger()}
+          />
         }
       >
         {drawn.rows.length === 0 ? (

@@ -357,12 +357,11 @@
 }
 
 /* The list an @ opens (`mention-picker.tsx`): `@luke/ui`'s combobox list
-   on a searchable menu's surface, whose field is the editor it was typed
-   in, hung under the word's line inside it, under a narrowed kind's crumb
-   and over the keys it hears at its foot (`@luke/ui`'s `MenuKeys`). Named with the menu's own class,
-   since the menu's rule opens it under a trigger and is read later. */
-.searchable-menu.mention-menu {
-  z-index: 3;
+   on a menu's surface, whose field is the editor it was typed in, hung by
+   the word's line (`@luke/ui`'s `RectFloat`), under a narrowed kind's crumb
+   and over the keys it hears at its foot (`@luke/ui`'s `MenuKeys`), never
+   wider than the room the layer leaves it. */
+.mention-menu {
   width: 360px;
   max-width: 100%;
 }
@@ -828,10 +827,6 @@
     background: var(--luke-color-fill-strong);
   }
 
-  .transcript-message.is-chat .message-meta {
-    justify-content: flex-start;
-  }
-
   /* A working line and the line a finished turn or a call ends on: the
      caption type, muted, its words selectable. */
   .status-line {
@@ -1217,12 +1212,13 @@
   white-space: nowrap;
 }
 
-/* A crumb's tree, hung under the crumb over the window on a menu's surface
-   (file-breadcrumbs.tsx). */
+/* A crumb's tree, hung under the crumb on a menu's surface
+   (file-breadcrumbs.tsx), at a narrow popover's width, and never taller
+   than the room its side of the crumb leaves it (`--luke-popover-room`),
+   its rows scrolling within. */
 .file-crumb-tree {
-  position: fixed;
-  z-index: var(--luke-z-menu);
-  max-height: calc(var(--luke-stage-height) - 16px);
+  width: var(--luke-popover-width-narrow);
+  max-height: min(calc(var(--luke-stage-height) - 16px), var(--luke-popover-room, 100vh));
 }
 
 [data-luke-profile="desktop"] .file-crumb-tree {
@@ -2237,10 +2233,6 @@
 .changes-comment-state .review-state > svg {
   width: 12px;
   height: 12px;
-}
-
-.changes-comment-time {
-  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
@@ -3612,8 +3604,7 @@
   justify-content: center;
 }
 
-.annotation-card-face,
-.annotation-comment-face {
+.annotation-card-face {
   display: flex;
   width: var(--annotation-face);
   height: var(--annotation-face);
@@ -3676,17 +3667,6 @@
   column-gap: var(--annotation-gap);
   grid-template-columns: var(--annotation-face) minmax(0, 1fr);
   row-gap: var(--luke-space-4);
-}
-
-.annotation-comment-meta {
-  display: flex;
-  min-width: 0;
-  min-height: var(--annotation-face);
-  align-items: center;
-  gap: var(--luke-space-6);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  white-space: nowrap;
 }
 
 .annotation-comment-words {
@@ -4530,7 +4510,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex: none;
 }
 
-.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
+.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .luke-message-line) {
   opacity: 0.6;
 }
 
@@ -4916,13 +4896,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   opacity: 0.6;
 }
 
-/* The list a `/` opens: a searchable menu whose field is the composer,
-   standing over the caret's line at the left the line put it, inside the
-   box. Named with the menu's own class, since the menu's rule opens it
-   under a trigger and is read later. */
-.searchable-menu.skill-menu {
-  top: auto;
-  z-index: 3;
+/* The list a `/` opens: a menu whose field is the composer, hung by the
+   caret's line (`@luke/ui`'s `RectFloat`), never wider than the room the
+   layer leaves it. */
+.skill-menu {
   width: 320px;
   max-width: 100%;
 }
@@ -5140,7 +5117,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    the box's words, and over the developer's bubble in the transcript, at its
    right as the bubble is; and the pictures a call answered
    (`agent-pictures.tsx`), on the same chips. */
-.agent-composer .attached-files {
+.agent-composer .prompt-input > .attached-files {
   padding: var(--luke-space-12) var(--luke-space-12) 0;
 }
 
@@ -6664,37 +6641,6 @@ svg.lucide {
   padding: var(--luke-space-4) 0;
 }
 
-.comment-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-6);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-/* The writer gives way first, cut short at its end, so the time and the
-   tools beside it always stand whole. */
-.comment-head > :first-child {
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* The row's end: the time, and in its place under the pointer the thread's
-   tools, both in one cell, so the row never reflows and nothing stands
-   over the writer's name. */
-.comment-head-end {
-  display: grid;
-  flex: none;
-  align-items: center;
-  margin-left: auto;
-}
-
-.comment-head-end > * {
-  grid-area: 1 / 1;
-  justify-self: end;
-}
-
 .comment-time {
   color: var(--luke-color-text-muted);
   font-size: 11.5px;
@@ -6741,10 +6687,6 @@ svg.lucide {
   transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
-.comment-head-end > .comment-time {
-  transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
-}
-
 .comment-tools:focus-within,
 .comment-tools:has([aria-expanded="true"]) {
   opacity: 1;
@@ -6756,30 +6698,10 @@ svg.lucide {
   }
 }
 
-.comment-head-end:has(.comment-tools:focus-within) > .comment-time,
-.comment-head-end:has([aria-expanded="true"]) > .comment-time {
-  opacity: 0;
-}
-
-/* Note that the time gives the tools its place under the pointer, presses
-   included, so a press over where it stood lands on the tools. */
-@media (hover: hover) {
-  .comment-entry:hover .comment-head-end > .comment-time {
-    pointer-events: none;
-    opacity: 0;
-  }
-}
-
-/* A screen with no hover stands the tools in the time's place at rest, as
-   under the pointer; a thread's event line, offering no tools, keeps it. */
+/* A screen with no hover stands the tools at rest. */
 @media (hover: none) {
   .comment-tools {
     opacity: 1;
-  }
-
-  .comment-head-end:has(> .comment-tools) > .comment-time {
-    opacity: 0;
-    pointer-events: none;
   }
 }
 

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentOverviewChecksAnswerView,
@@ -3609,6 +3610,48 @@ test("the reviewer picker lists the repository's teams then its people, the auth
       reviewer: { kind: "team", name: "platform" },
     },
   ]);
+});
+
+test("a picker's choice shows its button busy once the change has waited the settle delay, and clears when GitHub answers; the other picker only stands disabled", async () => {
+  const answer = Promise.withResolvers<void>();
+  changeHeld = answer.promise;
+  const tab = await draw(
+    controlAnswering({
+      reviewOptions: () =>
+        Promise.resolve({
+          labels: [{ name: "docs", color: "0075ca" }],
+          users: [{ login: "priyan", bot: false }],
+          teams: [],
+        }),
+    }),
+  );
+  const picker = (name: string) =>
+    tab.querySelector<HTMLButtonElement>(`.pull-request-reviewers [aria-label^="${name}"]`);
+  const ringed = (name: string) => picker(name)?.querySelector(".luke-spinner-ring") != null;
+  const labels = () => picker("Edit labels") ?? picker("Updating labels");
+  const reviewers = () => picker("Edit reviewers") ?? picker("Updating reviewers");
+
+  act(() => labels()?.click());
+  await settle();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await pressItem("docs");
+    assert.equal(picker("Updating labels")?.getAttribute("aria-busy"), "true");
+    assert.equal(ringed("Updating labels"), false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE - 1));
+    assert.equal(ringed("Updating labels"), false);
+    act(() => vi.advanceTimersByTime(1));
+    assert.equal(ringed("Updating labels"), true);
+    assert.equal(reviewers()?.disabled, true, "the other picker is held, not busy");
+    assert.equal(reviewers()?.getAttribute("aria-busy"), null);
+
+    answer.resolve();
+    await settle();
+    assert.equal(picker("Updating labels"), null, "the button is named for what it adds again");
+    assert.equal(labels()?.getAttribute("aria-busy"), null);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("the label picker lists the repository's labels, those on the pull request checked, and takes one off or puts one on as chosen; a merged pull request is offered no reviewers", async () => {

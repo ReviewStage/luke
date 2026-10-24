@@ -568,6 +568,8 @@ export function ListRow({
         // Note that the row around the press is what is pressed, its fill and its actions with it.
         const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
         pulsePress(row ?? event.currentTarget, pressPulse);
+        // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
+        if (rowMenu.open !== undefined) rowMenu.close(false);
         onPress(event);
       }}
       onKeyDown={onKeyDown}

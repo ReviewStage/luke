@@ -4,6 +4,8 @@ import {
   cssCustomProperties,
   Fill,
   IconButton,
+  NOTE_LINE_LOOK,
+  NoteLine,
   OVER_PANE_WIDTH,
   OverPane,
   PanePin,
@@ -255,9 +257,9 @@ function FileTreeBody({
         )}
       </search>
       {module === undefined ? (
-        <p className="file-tree-notice">
+        <NoteLine look={NOTE_LINE_LOOK.LIST}>
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
-        </p>
+        </NoteLine>
       ) : (
         <Fill className="file-tree-host" ref={host} />
       )}

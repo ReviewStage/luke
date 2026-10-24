@@ -20,8 +20,8 @@ import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
  * raised bubble, Luke's at the left in plain text across the whole column,
  * as a chat app draws them. The actions on a message are the
  * registry's, each one a quiet icon button in `@luke/ui`'s `MessageActions`,
- * which shows while the pointer or the keyboard is on the message, floated
- * to its corner rather than drawn in a row under it, with the window's own
+ * which shows while the pointer or the keyboard is on the message, in the
+ * line under it (`MessageLine`), with the window's own
  * hover hint in place of the registry's tooltip. The registry's branches, attachments, and toolbar are
  * not here, because nothing draws them yet; each arrives with the surface
  * that first does.

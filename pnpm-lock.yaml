@@ -144,6 +144,9 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -942,9 +945,6 @@ importers:
       '@xterm/xterm':
         specifier: 6.0.0
         version: 6.0.0
-      cmdk:
-        specifier: 1.1.1
-        version: 1.1.1(@types/react-dom@19.2.4)(@types/react@19.2.18)(react-dom@19.2.8)(react@19.2.8)
       diff:
         specifier: 9.0.0
         version: 9.0.0

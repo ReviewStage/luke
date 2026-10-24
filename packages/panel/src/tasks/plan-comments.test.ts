@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -147,7 +148,7 @@ afterEach(() => {
 function drawn(
   view: "page" | "tab" | "other",
   threads: readonly PlanCommentThread[] = THREADS,
-  landing: () => boolean = () => true,
+  landing: () => boolean | Promise<boolean> = () => true,
   plan: Task = PLAN,
   reveal?: { readonly thread: string; readonly ask: number },
   mentions?: TaskMentionsValue,
@@ -300,7 +301,7 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   const { container, asked } = drawn("tab");
 
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
-  assert.ok(container.querySelector(".comments-head")?.textContent?.startsWith("Resolved"));
+  assert.ok(container.querySelector(".luke-pane-bar")?.textContent?.startsWith("Resolved"));
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="Reopen"]')?.click();
   });
@@ -325,7 +326,7 @@ test("the Comments tab's Resolved toggle starts the other list at its top", () =
   });
 
   act(() =>
-    container.querySelector<HTMLButtonElement>(".comments-head button[aria-pressed]")?.click(),
+    container.querySelector<HTMLButtonElement>(".luke-pane-bar button[aria-pressed]")?.click(),
   );
 
   assert.equal(top, 0);
@@ -457,7 +458,9 @@ test("deleting a thread asks first, and only the confirm deletes it", async () =
       ?.click(),
   );
   const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
-  act(() => card?.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  act(() =>
+    card?.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]')?.click(),
+  );
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
     (each) => each.textContent === "Delete thread",
   );
@@ -1691,11 +1694,13 @@ test("the margin drawn again for the pointer on a thread's words measures none o
 });
 
 /** The reader's own comment in the Comments tab, with presses that open its Edit and the field it opens. */
-function ownComment() {
-  const drawnTab = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })]);
+function ownComment(landing?: () => boolean | Promise<boolean>) {
+  const drawnTab = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })], landing);
   const { container } = drawnTab;
   const edit = () => {
-    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]')?.click(),
+    );
     const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
       (each) => each.textContent === "Edit",
     );
@@ -1742,6 +1747,66 @@ test("an edit's words outlast Cancel and Esc, come back as Edit opens it again, 
     "Ship by [@Oct 23, 2026](luke://date/2026-10-23).",
     "saved, its draft is let go",
   );
+});
+
+test("a comment's Save is busy from the press, shows its ring once the answer has waited the settle delay, and is a button again when the service answers", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const { container, edit, field, asked } = ownComment(() => answer.promise);
+
+  edit();
+  typeInto(field(), "Ship by Friday.");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const save = () =>
+      [...container.querySelectorAll<HTMLButtonElement>(".comment-editing button")].find(
+        (each) => each.textContent === "Save" || each.getAttribute("aria-label") === "Saving",
+      );
+    act(() => save()?.click());
+    assert.equal(save()?.getAttribute("aria-label"), "Saving");
+    assert.equal(save()?.querySelector(".luke-spinner-ring") != null, false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
+    assert.equal(save()?.querySelector(".luke-spinner-ring") != null, true);
+
+    // A press while it is out asks nothing more.
+    act(() => save()?.click());
+    assert.equal(asked.length, 1);
+
+    // The service refuses: the field stays, and Save is a button again.
+    await act(async () => answer.resolve(false));
+    assert.equal(save()?.getAttribute("aria-busy"), null);
+    assert.ok(field() !== null);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a thread's check shows busy while its Resolve is out, and stops when the service answers", async () => {
+  const answer = Promise.withResolvers<boolean>();
+  const { container, asked } = drawn("tab", THREADS, () => answer.promise);
+  const card = () =>
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  const check = () =>
+    card()?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Resolve"], button[aria-label="Resolving"]',
+    );
+  act(() => card()?.querySelector<HTMLElement>(".comment-entry")?.click());
+
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => check()?.click());
+    assert.equal(check()?.getAttribute("aria-label"), "Resolving");
+    assert.equal(check()?.querySelector(".luke-spinner-ring") != null, false);
+    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE));
+    assert.equal(check()?.querySelector(".luke-spinner-ring") != null, true);
+    act(() => check()?.click());
+    assert.equal(asked.length, 1);
+
+    await act(async () => answer.resolve(false));
+    assert.equal(check()?.getAttribute("aria-label"), "Resolve");
+    assert.equal(check()?.getAttribute("aria-busy"), null);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("an edit emptied and saved asks to delete the comment, and only the confirm deletes it", async () => {

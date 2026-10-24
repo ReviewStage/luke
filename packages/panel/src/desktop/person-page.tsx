@@ -16,9 +16,12 @@ import {
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  IconButton,
   List,
   ListRow,
+  MoreButton,
+  moreLabel,
+  NOTE_LINE_LOOK,
+  NoteLine,
   OneLine,
   PAGE_FRAME,
   RowHint,
@@ -28,7 +31,6 @@ import {
   TEXT_VARIANT,
   Text,
   Time,
-  Tooltip,
   useMenu,
   useMinute,
 } from "@luke/ui";
@@ -48,7 +50,7 @@ import {
   personPageEmpty,
   personRef,
 } from "@luke/ui/person-page-model";
-import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
+import { LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -177,7 +179,7 @@ function AgentRow({
 }
 
 /** What the page's ⋯ is called, on its button and its menu alike. */
-const MORE = "More";
+const PERSON = "Person";
 
 /**
  * The toolbar's end: their tasks in the sidebar, where the workspace is
@@ -265,11 +267,14 @@ function PersonActions({
       ) : null}
       {actions.length === 0 ? null : (
         <>
-          <Tooltip label={MORE}>
-            <IconButton icon={<EllipsisIcon />} label={MORE} {...menu.trigger()} />
-          </Tooltip>
+          <MoreButton thing={PERSON} {...menu.trigger()} />
           {menu.drawn === undefined ? null : (
-            <ActionMenu label={MORE} menu={menu.drawn} groups={actions} onClose={menu.close} />
+            <ActionMenu
+              label={moreLabel(PERSON)}
+              menu={menu.drawn}
+              groups={actions}
+              onClose={menu.close}
+            />
           )}
         </>
       )}
@@ -619,9 +624,9 @@ function PersonColumn({
         waiting.length === 0 &&
         automations.length === 0 ? (
         <div className="home-note">
-          <Text tone={TEXT_TONE.MUTED}>
+          <NoteLine look={NOTE_LINE_LOOK.INSET}>
             {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-          </Text>
+          </NoteLine>
         </div>
       ) : null}
     </DetailPage>

@@ -17,9 +17,9 @@ import { layContainersAt } from "../testing/container-width.js";
  * menu-surface.test.ts -- every list the window hangs and keys itself
  * stands on `@luke/ui`'s menu surface, as a menu does: its ground, edge,
  * corner, and shadow are the menu's whatever the owner's class places it.
- * A searchable menu, the `@` and `/` lists, and a submenu run their content
- * edge to edge; the one press over selected words and the comment bubble
- * keep the menu's inset; a crumb's tree stays hidden until it is placed; and
+ * The `@` and `/` lists and a submenu run their content edge to edge; the
+ * one press over selected words, the comment bubble, and a crumb's tree
+ * keep the menu's inset; and
  * a message's actions, a picture's tools, and the Comment press over selected
  * code float on the surface as a toolbar.
  * jsdom lays nothing out, so the sheets are laid as every app lays them
@@ -64,7 +64,6 @@ function declared(element: Element, property: string): string | undefined {
 function surface(
   className: string,
   inset?: MenuSurfaceInset,
-  placed?: boolean,
   flow?: MenuSurfaceFlow,
 ): (property: string) => string | undefined {
   laid?.remove();
@@ -72,7 +71,7 @@ function surface(
   laid = layContainersAt({});
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = renderToStaticMarkup(
-    createElement(MenuSurface, { className, inset, placed, flow }, "Row"),
+    createElement(MenuSurface, { className, inset, flow }, "Row"),
   );
   const drawn = host.firstElementChild;
   assert.ok(drawn instanceof HTMLElement, "the surface is drawn");
@@ -81,9 +80,8 @@ function surface(
 
 test("a list hung by its owner wears the menu's own ground, edge, corner, and shadow", () => {
   for (const owner of [
-    "searchable-menu",
-    "searchable-menu mention-menu",
-    "searchable-menu skill-menu",
+    "mention-menu",
+    "skill-menu",
     "luke-searchable-menu-submenu",
     "file-crumb-tree",
     "find-bar",
@@ -97,11 +95,7 @@ test("a list hung by its owner wears the menu's own ground, edge, corner, and sh
 });
 
 test("a searchable list runs edge to edge, and a press offered on the surface keeps the menu's inset", () => {
-  for (const owner of [
-    "searchable-menu",
-    "searchable-menu mention-menu",
-    "luke-searchable-menu-submenu",
-  ]) {
+  for (const owner of ["mention-menu", "skill-menu", "luke-searchable-menu-submenu"]) {
     assert.match(surface(owner, MENU_SURFACE_INSET.NONE)("padding") ?? "", /^0(px)?$/, owner);
   }
   for (const owner of ["file-crumb-tree"]) {
@@ -109,13 +103,8 @@ test("a searchable list runs edge to edge, and a press offered on the surface ke
   }
 });
 
-test("a crumb's tree stays hidden until it is measured into place", () => {
-  assert.equal(surface("file-crumb-tree", undefined, false)("visibility"), "hidden");
-  assert.equal(surface("file-crumb-tree", undefined, true)("visibility"), undefined);
-});
-
 test("a find bar lays its field and buttons side by side on the surface, a hair apart", () => {
-  const says = surface("find-bar", undefined, undefined, MENU_SURFACE_FLOW.ROW);
+  const says = surface("find-bar", undefined, MENU_SURFACE_FLOW.ROW);
   assert.equal(says("flex-direction"), "row");
   assert.equal(says("align-items"), "center");
   assert.equal(says("gap"), "var(--luke-space-2)");
@@ -130,7 +119,7 @@ test("a toolbar floats on the menu's ground, edge, and shadow, a hair round its 
     "reply-to-selection",
     "comment-bubble",
   ]) {
-    const says = surface(owner, undefined, undefined, MENU_SURFACE_FLOW.TOOLBAR);
+    const says = surface(owner, undefined, MENU_SURFACE_FLOW.TOOLBAR);
     assert.equal(says("background-color"), "var(--luke-color-overlay)", owner);
     assert.equal(says("border-width"), "1px", owner);
     assert.equal(says("border-color"), "var(--luke-color-border-strong)", owner);

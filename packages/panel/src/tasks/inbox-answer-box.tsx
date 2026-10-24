@@ -2,27 +2,12 @@ import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
-import {
-  BUTTON_TYPE,
-  BUTTON_VARIANT,
-  Button,
-  ErrorState,
-  LengthCounter,
-  STATUS_TONE,
-  SUBMIT_STATE,
-  Tooltip,
-} from "@luke/ui";
+import { ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input.js";
+import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import {
@@ -93,8 +78,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * Files go with a reply as they go with a message (`attached-files.ts`):
  * the + at the foot's left opens the system's file picker, an image pasted
  * into the box is taken, and files dropped on the card are, each drawn as a
- * chip over the foot with its way off; a file that cannot come says why
- * under the card. Files stand for the developer's own words where they
+ * chip over the foot's bar with its way off; a file that cannot come says
+ * why under it. Files stand for the developer's own words where they
  * wrote none, and while they are read the reply waits for them.
  *
  * Words selected in the agent's part of the thread and answered with Reply
@@ -107,7 +92,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * a press lets the selection go.
  *
  * Why a reply did not go, a file did not come, or a dictation left
- * nothing, is said under the card. A send refused because the agent is
+ * nothing, is said under the foot's bar. A send refused because the agent is
  * archived says so, with Unarchive after it, which brings the agent back and
  * lets the note go, so the words kept in the box are sent again by a press.
  * Once the item is settled, answered or taken back, the same box writes a
@@ -131,6 +116,9 @@ export const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /** What the box's round Send is called, which is its tooltip too. */
 const SEND = "Send";
+
+/** What Send is named while its send is out. */
+const SENDING = "Sending";
 
 /** What Send reads on an empty notice that waits on the reader's nod, which settles it without messaging the agent. */
 const GOT_IT = "Got it";
@@ -247,6 +235,8 @@ interface AnswerFormProps {
   readonly quote?: ((quote: ComposerQuote) => React.ReactNode) | undefined;
   /** What leads the foot, the + of files; nothing where the box takes none. */
   readonly tools?: React.ReactNode;
+  /** What the foot says under its bar: why a send did not go, a file did not come, or a dictation left nothing; nothing where it has nothing to say. */
+  readonly says?: ComposerNote | undefined;
   /** Whether Send reads Got it, a nod that messages nobody. */
   readonly nod: boolean;
   readonly sending: boolean;
@@ -260,10 +250,11 @@ interface AnswerFormProps {
 }
 
 /**
- * A box's card: the question's controls as its body, the files it holds,
- * the note line on its own over the foot, and the foot's + at its left and
- * the microphone and Send at its right, a dictation's strip in their place;
- * Send reading Got it where the box nods.
+ * A box's card: the question's controls as its body, the note line on its
+ * own over the foot, and the foot (`ComposerFoot`), which holds the files the
+ * box has, the + at its left, the counter, the microphone and Send at its
+ * right, a dictation's strip in their place, and what the box says under
+ * them; Send reading Got it where the box nods.
  */
 export function AnswerForm({
   field,
@@ -280,6 +271,7 @@ export function AnswerForm({
   onPasteCut,
   quote,
   tools,
+  says,
   nod,
   sending,
   held,
@@ -298,7 +290,6 @@ export function AnswerForm({
       onSubmit={onSubmit}
     >
       {controls}
-      {chips}
       {/* The note line stands on its own over the foot, as the agent's box's field does. */}
       <ComposerField
         module={module}
@@ -317,39 +308,22 @@ export function AnswerForm({
         onPasteCut={onPasteCut}
         quote={quote}
       />
-      {/* The foot is the agent box's: the + at its left, the microphone and Send at its right, a dictation's strip in their place. */}
-      <PromptInputFooter className="inbox-answer-foot">
-        {dictating ? (
-          <DictationStrip dictation={dictation} />
-        ) : (
-          <>
-            <PromptInputTools>{tools}</PromptInputTools>
-            <div className="inbox-answer-actions">
-              <LengthCounter length={note.length} limit={maxLength} />
-              <DictateButton dictation={dictation} disabled={module === undefined} />
-              {nod ? (
-                <Button
-                  type={BUTTON_TYPE.SUBMIT}
-                  variant={BUTTON_VARIANT.INK}
-                  busy={sending}
-                  busyLabel="Sending"
-                  disabled={held}
-                >
-                  {GOT_IT}
-                </Button>
-              ) : (
-                <Tooltip label={SEND}>
-                  <PromptInputSubmit
-                    label={SEND}
-                    status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                    disabled={held || !sendable}
-                  />
-                </Tooltip>
-              )}
-            </div>
-          </>
-        )}
-      </PromptInputFooter>
+      <ComposerFoot
+        files={chips}
+        tools={tools}
+        counter={{ length: note.length, limit: maxLength }}
+        actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
+        strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
+        send={{
+          label: nod ? GOT_IT : SEND,
+          inWords: nod,
+          empty: !sendable,
+          held,
+          busy: sending,
+          busyLabel: SENDING,
+        }}
+        note={says}
+      />
     </PromptInput>
   );
 }
@@ -485,6 +459,13 @@ function AnswerCard({
         onPasteFiles={files.paste}
         quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
         tools={<AttachFilesButton onFiles={files.attach} />}
+        says={
+          note === undefined
+            ? undefined
+            : noted?.unarchive === true
+              ? { words: note, remedy: { label: UNARCHIVE, onClick: unarchive } }
+              : { words: note }
+        }
         nod={nod}
         sending={sending}
         held={held}
@@ -495,15 +476,6 @@ function AnswerCard({
           else message();
         }}
       />
-      {note === undefined ? null : noted?.unarchive === true ? (
-        <div className="agent-composer-note">
-          <ErrorState remedy={{ label: UNARCHIVE, onClick: unarchive }}>{note}</ErrorState>
-        </div>
-      ) : (
-        <p className="error-message agent-composer-note" role="alert">
-          {note}
-        </p>
-      )}
       {quotes ? (
         <ReplyToSelection
           scope={replyScope}

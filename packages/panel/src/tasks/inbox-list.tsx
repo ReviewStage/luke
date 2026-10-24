@@ -29,9 +29,12 @@ import {
   ListRow,
   motionKey,
   motionRows,
+  NOTE_LINE_LOOK,
+  NoteLine,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  PaneBar,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   RowHint,
@@ -1076,6 +1079,7 @@ function ListHead({
           title={<h1 className="desktop-toolbar-title">{title}</h1>}
           end={
             <PlaceMore
+              thing="Inbox"
               shown={shown}
               groups={(opener) => [
                 [
@@ -1139,18 +1143,23 @@ function ListHead({
         </SidebarSectionHead>
       ) : (
         <>
-          <header className="desktop-toolbar inbox-tasks-bar">
-            <div className="desktop-toolbar-heading">
-              <OneLine
-                as={ONE_LINE_ELEMENT.H1}
-                end={ONE_LINE_END.ELLIPSIS}
-                className="desktop-toolbar-title"
-              >
-                {title}
-              </OneLine>
-            </div>
-            <div className="desktop-toolbar-actions">{options}</div>
-          </header>
+          {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
+          {view === undefined ? (
+            <PaneBar title={title} actions={options} />
+          ) : (
+            <header className="desktop-toolbar inbox-tasks-bar">
+              <div className="desktop-toolbar-heading">
+                <OneLine
+                  as={ONE_LINE_ELEMENT.H1}
+                  end={ONE_LINE_END.ELLIPSIS}
+                  className="desktop-toolbar-title"
+                >
+                  {title}
+                </OneLine>
+              </div>
+              <div className="desktop-toolbar-actions">{options}</div>
+            </header>
+          )}
           {search}
         </>
       )}
@@ -1161,7 +1170,7 @@ function ListHead({
 
 /** What a list its search left empty says, under its rows, on the window's Inbox and a task's own alike. */
 export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
-  return <p className="sidebar-note">{`No items match “${searched.trim()}”.`}</p>;
+  return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{`No items match “${searched.trim()}”.`}</NoteLine>;
 }
 
 /** What the Inbox says where a read of its items, or of the tasks holding them, did not answer. */
@@ -1237,7 +1246,7 @@ export function InboxListNote({
       </EmptyState>
     );
   }
-  return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
+  return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{NEEDS_YOU.NONE}</NoteLine>;
 }
 
 /** Where a list of the window's Inbox stands: a column of its own on the Inbox's page, or the sidebar, which the inbox-first sidebar makes it. */
