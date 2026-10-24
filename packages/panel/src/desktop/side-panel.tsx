@@ -2696,15 +2696,8 @@ export function SidePanel({
         <FindScope
           className="side-panel-content"
           role="tabpanel"
-          {...(planShown
-            ? { id: panelId, "aria-labelledby": tabId }
-            : {
-                "aria-label": tabLook({
-                  kind: TAB_KIND.PANEL,
-                  tab: SIDE_PANEL_TAB.PLAN,
-                  plan: task,
-                }).label,
-              })}
+          aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label}
+          {...(planShown ? { id: panelId, "aria-labelledby": tabId } : {})}
           hidden={!planShown}
           active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
           subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
@@ -2728,6 +2721,8 @@ export function SidePanel({
           className="side-panel-content"
           role="tabpanel"
           id={panelId}
+          // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
+          aria-label={label}
           aria-labelledby={tabId}
           active={
             keys &&

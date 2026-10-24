@@ -250,7 +250,6 @@ test("the panel's tab panel is labelled by its chosen tab, which controls it", (
   const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
   assert.ok(panel && chosen, "the panel shows its chosen tab");
   assert.equal(panel.getAttribute("aria-labelledby"), chosen.id);
-  assert.equal(panel.getAttribute("aria-label"), null);
   assert.equal(chosen.getAttribute("aria-controls"), panel.id);
   const others = side?.querySelectorAll("[role=tab][aria-selected=false][aria-controls]");
   assert.equal(others?.length, 0, "a tab with no panel standing names none");
