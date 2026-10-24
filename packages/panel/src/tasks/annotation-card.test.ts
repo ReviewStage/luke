@@ -72,7 +72,7 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
         createElement(AnnotationComment, { key: "first", children: FIRST }),
         createElement(AnnotationComment, {
           key: "reply",
-          reply: { face: "D", meta: "danak" },
+          reply: { author: { name: "danak" }, nameRef: "danak", at: 0, now: 7_200_000 },
           children: REPLY,
         }),
       ],
@@ -141,9 +141,14 @@ test("the head's face stands over every reply's face, and its name over every co
   const { headFace, headName, bodyFace, bodyWords } = columns(card);
   assert.equal(bodyFace, headFace, "one column of faces");
   assert.equal(bodyWords, headName, "one column of words");
-  const [first, reply] = card.querySelectorAll(".annotation-comment");
-  assert.equal(first?.querySelector(".annotation-comment-face"), null, "the head names the first");
-  assert.ok(reply?.querySelector(".annotation-comment-face"), "a reply wears its own face");
+  const [first, reply] = card.querySelectorAll(".annotation-comments > li");
+  assert.equal(first?.querySelector(".luke-comment-face"), null, "the head names the first");
+  assert.ok(reply?.querySelector(".luke-comment-face"), "a reply wears its own face");
+  assert.match(
+    reply?.querySelector(".luke-comment-head")?.textContent ?? "",
+    /^danak2h/u,
+    "a reply says who and how long ago",
+  );
   for (const words of card.querySelectorAll(".annotation-comment-words")) {
     assert.equal(
       getComputedStyle(words).getPropertyValue("grid-column"),

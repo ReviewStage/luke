@@ -1282,9 +1282,14 @@ test("the description, a comment, a review, and a thread comment wear their reac
     ["🚀1", "Charles Pan reacted with rocket", "false"],
   ]);
   const [reviewed, commented] = [...tab.querySelectorAll(".pull-request-entry")];
-  assert.deepEqual(pills(reviewed?.querySelector(":scope > .pull-request-reactions") ?? null), [
-    ["🎉1", "Charles Pan reacted with hooray", "false"],
-  ]);
+  assert.deepEqual(
+    pills(
+      reviewed?.querySelector(
+        ":scope > .luke-comment > .luke-comment-body > .pull-request-reactions",
+      ) ?? null,
+    ),
+    [["🎉1", "Charles Pan reacted with hooray", "false"]],
+  );
   assert.deepEqual(
     pills(reviewed?.querySelector(".pull-request-thread-comment") ?? null),
     [["👎3", "3 reacted with thumbs down", "false"]],
@@ -1497,7 +1502,7 @@ function filterNote(tab: HTMLElement, name: string): string {
 function drawnEntries(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll(".pull-request-entry")].map(
     (entry) =>
-      `${entry.querySelector(".changes-comment-head .luke-inline-ref-label")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
+      `${entry.querySelector(".luke-comment-head .luke-inline-ref-label")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
   );
 }
 
@@ -1828,7 +1833,7 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
     /^https:\/\/avatars\.githubusercontent\.com\/in\/4242\?/u,
   );
   assert.ok(
-    [...tab.querySelectorAll('.pull-request-entry .actor-mark[data-bot="true"] img')].some((each) =>
+    [...tab.querySelectorAll(".pull-request-entry .luke-comment-face img")].some((each) =>
       (each.getAttribute("src") ?? "").startsWith(
         "https://avatars.githubusercontent.com/in/811515?",
       ),
@@ -5464,11 +5469,7 @@ test("a link in the pull request's words to one of its own comments on GitHub op
   act(() => note.blur());
   await press("the note");
   await frames();
-  assert.equal(
-    note.hasAttribute("data-landed"),
-    true,
-    "the same link pressed again lands again",
-  );
+  assert.equal(note.hasAttribute("data-landed"), true, "the same link pressed again lands again");
   assert.equal(document.activeElement, note);
 
   await press("an older note");
@@ -5568,11 +5569,7 @@ test("a landing waits for the panel to be visible before it takes the focus, as 
 
   tab.style.visibility = "visible";
   await frames();
-  assert.equal(
-    card.hasAttribute("data-landed"),
-    true,
-    "the landing ends once the panel is seen",
-  );
+  assert.equal(card.hasAttribute("data-landed"), true, "the landing ends once the panel is seen");
   assert.equal(document.activeElement, card.querySelector("summary"));
 });
 

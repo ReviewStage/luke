@@ -6706,18 +6706,8 @@ svg.lucide {
 /* A comment's words, as Markdown spaces a message's blocks, under the name. */
 .comment-words {
   display: block;
-  margin-left: var(--comment-indent);
   color: var(--luke-color-text-body);
   overflow-wrap: anywhere;
-}
-
-/* The thread's quote under its first comment's writer, level with the words. */
-.comment-entry > :is(.comment-quote, .comment-gone) {
-  margin-left: var(--comment-indent);
-}
-
-.comment-entry > .comment-quote {
-  margin-top: var(--luke-space-4);
 }
 
 /* A thread at rest shows its first comment's first lines, chips and all. */
@@ -6926,10 +6916,6 @@ svg.lucide {
   padding-left: 0;
 }
 
-.comment-editing {
-  margin-left: var(--comment-indent);
-}
-
 /* The files a comment's field holds, over its words, at its padding. */
 .comment-field > .attached-files {
   padding: var(--luke-space-8) var(--comment-field-inline) 0;
@@ -6937,7 +6923,7 @@ svg.lucide {
 
 /* The files a sent comment carries, over its words, level with them. */
 .comment-files {
-  margin: var(--luke-space-4) 0 var(--luke-space-6) var(--comment-indent);
+  margin: var(--luke-space-4) 0 var(--luke-space-6);
 }
 
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
