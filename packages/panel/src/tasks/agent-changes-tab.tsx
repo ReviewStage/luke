@@ -1047,7 +1047,8 @@ function DraftedLineComment({
 }: Omit<ComponentProps<typeof LineComment>, "body" | "onBody"> & {
   draft: CommentDraft;
 }): React.JSX.Element {
-  const { draft: kept, update } = useDraft(lineCommentPlace(comment.agentId, draft));
+  const number = usePullRequestNumber();
+  const { draft: kept, update } = useDraft(lineCommentPlace(comment.agentId, number, draft));
   return (
     <LineComment
       {...comment}

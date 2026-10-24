@@ -26,7 +26,7 @@ import { readKept, writeKept } from "./kept-storage.js";
  * per workspace (`inbox-compose.tsx`), a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
  * (`plan-comments.tsx`), a line comment in Files changed its words per
- * agent, file, side, and last line (`comment-drafts.ts`), an agent's line
+ * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
  * written again its words and files per agent and line
  * (`edit-composer.tsx`), a chat ask's answer its
  * picks and note per message, at the revision it was written against
@@ -156,6 +156,8 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.LINE_COMMENT),
     /** The agent whose pull request's Files changed the comment is written in. */
     agentId: Schema.String,
+    /** The number of the pull request a tab names other than its agent's own, so two pull requests changing one file keep their words apart; none for the agent's own. */
+    number: Schema.optionalKey(Schema.Number),
     /** The changed file the comment is on. */
     path: Schema.String,
     /** The side of the diff the comment's last line counts on, as GitHub anchors a thread. */

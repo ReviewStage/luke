@@ -67,10 +67,15 @@ export function lightDraft(drafts: CommentDrafts, id: string): CommentDrafts {
   return drafts.lit === id ? drafts : { ...drafts, lit: id };
 }
 
-/** Where the words of a comment on an agent's changes are kept: by the agent, the file, and the side and last line it stands under. */
-export function lineCommentPlace(agentId: string, draft: CommentDraft): LineCommentPlace {
+/** Where the words of a comment on an agent's changes are kept: by the agent, the pull request its tab names (none for the agent's own), the file, and the side and last line it stands under. */
+export function lineCommentPlace(
+  agentId: string,
+  number: number | undefined,
+  draft: CommentDraft,
+): LineCommentPlace {
   const { side, line } = draft.lines;
-  return { kind: DRAFT_PLACE.LINE_COMMENT, agentId, path: draft.picked.path, side, line };
+  const place = { kind: DRAFT_PLACE.LINE_COMMENT, agentId, path: draft.picked.path, side, line };
+  return number === undefined ? place : { ...place, number };
 }
 
 /**
