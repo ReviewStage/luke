@@ -40,6 +40,7 @@ import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORMAT_TOOLBAR_EXAMPLE } from "./examples/format-toolbar";
 import { GLYPH_SLOTS_EXAMPLE } from "./examples/glyph-slots";
 import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
+import { ICONS_EXAMPLE } from "./examples/icons";
 import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
 import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { KEEP_FOCUS_EXAMPLE } from "./examples/keep-focus";
@@ -200,6 +201,7 @@ export const EXAMPLES: readonly Example[] = [
   SETTINGS_ROW_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
   GLYPH_SLOTS_EXAMPLE,
+  ICONS_EXAMPLE,
   CORNER_COUNTS_EXAMPLE,
   RESIZE_EDGES_EXAMPLE,
   REVEALS_EXAMPLE,

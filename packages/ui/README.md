@@ -43,7 +43,7 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | --- | ---: | ---: | ---: |
   | `--luke-control-height` | 30px | 44px | 32px |
   | `--luke-control-radius` | 10px | 10px | 10px |
-  | `--luke-control-icon` | 15px | 16px | 16px |
+  | `--luke-control-icon` | 16px | 16px | 16px |
   | `--luke-type-body-*` (size / leading) | 13 / 20 | 16 / 24 | 14 / 20 |
   | `--luke-type-label-*` | 13 / 18 | 14 / 20 | 13 / 18 |
   | `--luke-type-caption-*` | 12 / 16 | 12 / 16 | 12 / 16 |
@@ -162,6 +162,38 @@ Base UI. When a hint shows and goes stays `Tooltip`'s own (`hint.tsx`), and
 an open menu by the edge of the button it hangs from as that button grows;
 it, `PopoverPanel`, the hover card's parts, `DrawerScrim`, and `PortalFence`
 are drawn in the theme's utilities.
+
+## Icons
+
+Every icon is imported through one door, `@luke/ui/icons`, built on Lucide
+(`src/icons/`): Lucide's glyphs by Lucide's own names, `GLYPH`, and
+`ICON_SIZE`. Nothing outside `@luke/ui` imports `lucide-react` directly:
+`anti-slop/no-lucide-outside-door` refuses it from a baseline,
+`tools/anti-slop/lucide-baseline.json` (each file still importing it, with its
+count), which only shrinks. A file that holds fewer imports than its row fails
+until the row comes down, so the list is always what is still owed, and the
+rule takes no suppression.
+
+- **One glyph per meaning.** `GLYPH` (`glyph-registry.tsx`) names each concept
+  the app draws (a task, an agent, a pull request, an issue, a repository, copy,
+  stop, open externally, "Open on GitHub", ...) and the one glyph that stands
+  for it. A screen asks for `GLYPH.TASK` and picks no drawing. A concept has one
+  glyph and a glyph one concept: `CircleDot` is a GitHub issue and nothing else,
+  and a state wears its own (`SETTLED`, `FAILED`, `DISMISSED`).
+  `glyph-registry.test.ts` holds no two concepts to the same mark. A glyph a
+  screen needs that no concept names is a new row there.
+- **Three seats and one more.** `ICON_SIZE`: `SMALL` 12px beside a caption's
+  words, `MEDIUM` 16px in a button, a tab, a chip, and a menu row, `LARGE` 20px
+  as a row's lead, and `EMPTY` 40px over an empty state. `GlyphSlot` takes the
+  seat (`<GlyphSlot size={ICON_SIZE.MEDIUM}><GLYPH.TASK /></GlyphSlot>`); the
+  pixels are `--luke-icon-12|16|20|40` in `tokens/scale.css`, and
+  `--luke-control-icon` is the 16 seat on both profiles.
+- **One stroke.** Every glyph is drawn at 1.9 in its 24 box, Lucide's behind
+  `lucideGlyph` (`lucide-glyph.tsx`) as `glyphs.tsx`'s own.
+- **No copies.** `glyphs.tsx` holds only what no icon set draws as well.
+  The 27 that were copies of Lucide's (24) or Tabler's (3) are Lucide's now
+  (`lucide-glyphs.tsx`), under the names the screens still import; a name goes
+  when its last screen draws the glyph through `GLYPH`.
 
 ## Using a component
 

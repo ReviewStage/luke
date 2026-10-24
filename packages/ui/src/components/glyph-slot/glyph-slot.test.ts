@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { ICON_SIZE } from "../../icons/icon-size.js";
 import { GLYPH_INK, GlyphSlot } from "./glyph-slot.js";
 
 /**
@@ -56,4 +57,25 @@ test("a glyph that repeats its words is hidden from a reader, and one that says 
   assert.equal(named?.getAttribute("role"), "img");
   assert.equal(named?.getAttribute("aria-label"), "In progress");
   assert.equal(named?.getAttribute("aria-hidden"), null);
+});
+
+test("a slot that names a seat says so, and one that names none leaves its size to its container", () => {
+  const container = mount(
+    createElement(
+      "p",
+      null,
+      createElement(GlyphSlot, { size: ICON_SIZE.LARGE, children: createElement("svg") }),
+      createElement(GlyphSlot, {
+        label: "Done",
+        size: ICON_SIZE.SMALL,
+        children: createElement("svg"),
+      }),
+      createElement(GlyphSlot, { children: createElement("svg") }),
+    ),
+  );
+  const slots = [...container.querySelectorAll(".luke-glyph-slot")];
+  assert.deepEqual(
+    slots.map((slot) => slot.getAttribute("data-size")),
+    ["large", "small", null],
+  );
 });
