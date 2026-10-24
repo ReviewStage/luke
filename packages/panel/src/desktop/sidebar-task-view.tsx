@@ -6,9 +6,10 @@ import {
   ChipName,
   dropBelowStart,
   FoldingSearch,
+  GROUP_HEADING,
+  GroupHeader,
   IconButton,
-  NAV_ITEM_VARIANT,
-  NavItem,
+  NAV_COUNT_SHOWN,
   TaskStatusMark,
   TextButton,
   Tooltip,
@@ -41,6 +42,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { foldedCount, sidebarFold } from "./sidebar-fold.js";
 import type { CountNoun } from "./sidebar-group-header.js";
 import type { TaskListViewControl } from "./task-list-view.js";
 
@@ -76,54 +78,57 @@ const STATUS_FILTER = "Show statuses";
 type StatusFilterMenu = ReturnType<typeof useMenu>;
 
 /**
- * A section's head: its name, which folds the section where it may be
- * folded, and what stands at its end. Where the section is searched
- * (`search`), a magnifier after the name unfolds a field over it
- * (`FoldingSearch`), the end's buttons standing still as it opens and
- * folds, so a press on one lands though the press folded the field.
+ * A section's head, drawn through `GroupHeader`. A section that folds
+ * (`onToggle`, as Pinned does) is the fold itself, folding and unfolding
+ * the `rows` under it, counting them after its name while folded, and
+ * leaving `standing` drawn while it is. A section that does not fold, as
+ * Tasks' and the Inbox's do not, is its name and what stands at its end;
+ * where it is searched (`search`), a magnifier after the name unfolds a
+ * field over it (`FoldingSearch`), the end's buttons standing still as it
+ * opens and folds, so a press on one lands though the press folded the
+ * field.
  */
-export function SidebarSectionHead({
-  name,
-  search,
-  folded,
-  count,
-  noun,
-  onToggle,
-  children,
-}: {
-  name: string;
-  /** The search a magnifier after the name unfolds over it, where the section is searched. */
-  search?: { label: string; value: string; onChange: (value: string) => void } | undefined;
-  /** Whether the section is folded, where its head folds it. */
-  folded?: boolean;
-  /** How many rows a folded section holds, shown after its name while folded. */
-  count?: number;
-  /** What the count is read as, one and many. */
-  noun?: CountNoun;
-  onToggle?: () => void;
-  /** The head's buttons at its end. */
-  children?: ReactNode;
-}): React.JSX.Element {
-  const named =
-    onToggle === undefined ? (
-      <span className="sidebar-section-head-name">{name}</span>
-    ) : (
-      <NavItem
-        variant={NAV_ITEM_VARIANT.HEAD}
-        expanded={folded !== true}
-        count={
-          folded === true && count !== undefined
-            ? {
-                value: count,
-                noun: noun === undefined ? undefined : count === 1 ? noun.one : noun.many,
-              }
-            : undefined
-        }
-        onClick={onToggle}
+export function SidebarSectionHead(
+  props:
+    | {
+        name: string;
+        search?: { label: string; value: string; onChange: (value: string) => void } | undefined;
+        /** The head's buttons at its end. */
+        children?: ReactNode;
+        folded?: undefined;
+        onToggle?: undefined;
+      }
+    | {
+        name: string;
+        /** Whether the section is folded. */
+        folded: boolean;
+        /** How many rows a folded section holds, shown after its name while folded. */
+        count: number;
+        /** What the count is read as, one and many. */
+        noun: CountNoun;
+        onToggle: () => void;
+        /** What the folded section leaves drawn under its head. */
+        standing?: ReactNode;
+        /** The rows the section folds. */
+        rows?: ReactNode;
+      },
+): React.JSX.Element {
+  if (props.onToggle !== undefined) {
+    const { name, folded, count, noun, onToggle, standing, rows } = props;
+    return (
+      <GroupHeader
+        heading={GROUP_HEADING.NONE}
+        label={name}
+        fold={sidebarFold(folded, onToggle)}
+        count={foldedCount(folded, count, noun, NAV_COUNT_SHOWN.ALWAYS)}
+        standing={standing}
       >
-        {name}
-      </NavItem>
+        {rows}
+      </GroupHeader>
     );
+  }
+  const { name, search, children } = props;
+  const named = <GroupHeader heading={GROUP_HEADING.NONE} label={name} />;
   return (
     <div className="sidebar-section-head">
       {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}

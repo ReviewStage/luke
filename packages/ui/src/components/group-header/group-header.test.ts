@@ -13,7 +13,8 @@ import { type GroupFold, GroupHeader } from "./group-header.js";
  * rows and says so in `aria-expanded`, open or folded from the start or as
  * its holder keeps it; an action beside the fold presses without folding;
  * a head that folds nothing draws its rows always and no fold control; the
- * count is drawn as its caller gives it; a press that opens plays the
+ * count is drawn as its caller gives it; a folded group draws what it leaves
+ * standing; a press that opens plays the
  * Disclosure's motion, and every motion the fold and its chevron run is
  * timed on a token reduced motion holds still.
  */
@@ -153,6 +154,26 @@ test("a press that opens plays the fold's motion, and a group drawn open plays n
 
   const open = render(group({ defaultOpen: true }));
   assert.equal(open.firstElementChild?.getAttribute("data-disclosure"), null);
+});
+
+test("what a folded group leaves standing is drawn once the rows fade, and not while they stand", () => {
+  const container = render(group({ defaultOpen: true }, { standing: "Retry the audit" }));
+  assert.ok(container.textContent?.includes(ROWS));
+  assert.ok(!container.textContent?.includes("Retry the audit"));
+
+  act(() => headOf(container).click());
+  assert.ok(!container.textContent?.includes(ROWS));
+  assert.ok(container.textContent?.includes("Retry the audit"));
+
+  act(() => headOf(container).click());
+  assert.ok(container.textContent?.includes(ROWS));
+  assert.ok(!container.textContent?.includes("Retry the audit"));
+
+  const unfolding = render(group(undefined, { standing: "Retry the audit" }));
+  assert.ok(
+    !unfolding.textContent?.includes("Retry the audit"),
+    "a head that folds nothing keeps none",
+  );
 });
 
 /** The rule blocks a stylesheet draws for `selector`, joined. */

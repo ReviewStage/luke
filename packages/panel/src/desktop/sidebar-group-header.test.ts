@@ -17,8 +17,9 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
  * sidebar-group-header.test.ts -- every group that folds folds under one
- * header: the sidebar's repositories and Archived, and the summary's
- * archived agents, alike but for what each counts.
+ * header: the sidebar's Pinned and repositories, and the summary's archived
+ * agents, alike but for what each counts, each unrolling as it opens, and a
+ * folded group leaving the task open standing.
  */
 
 const roots: Root[] = [];
@@ -98,6 +99,81 @@ test("the summary's archived agents fold under a group header that counts them f
   act(() => fold(summary, "Archived").click());
   assert.equal(fold(summary, "Archived").getAttribute("aria-expanded"), "true");
   assert.ok(summary.querySelector('[aria-label="Archived agents"]'), "the agents are listed");
+});
+
+test("the archived agents' fold unrolls as it opens, which it did not before", () => {
+  const agent = {
+    planId: "plan-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.CANCELLED,
+    turnId: null,
+    archivedAt: 2,
+  } as const;
+  const summary = mount(
+    createElement(ArchivedAgents, {
+      agents: codingAgentsControl({
+        archived: [{ ...agent, id: "agent-1", title: "Retry audit" }],
+      }),
+      shown: true,
+    }),
+  );
+  const root = fold(summary, "Archived").closest(".luke-group-header");
+  assert.equal(root?.getAttribute("data-disclosure"), null);
+
+  act(() => fold(summary, "Archived").click());
+  assert.equal(root?.getAttribute("data-disclosure"), "opening");
+});
+
+test("Pinned folds on its name, counts its pins folded, and leaves the pin that is open standing", () => {
+  const pinned = (id: string, name: string, position: string) => ({
+    ...task(id, name, "acme/relay"),
+    pinnedAt: 5,
+    pinPosition: position,
+  });
+  const sidebar = mountSidebar(
+    tasksControl({
+      tasks: [pinned("p-1", "Invite expiry", "a0"), pinned("p-2", "Retry audit", "a1")],
+      activeTaskId: "p-2",
+    }),
+  );
+  const names = () =>
+    [...sidebar.querySelectorAll('nav[aria-label="Pinned"] .luke-list-row-title')].map(
+      (title) => title.firstChild?.textContent,
+    );
+  assert.equal(fold(sidebar, "Pinned").getAttribute("aria-expanded"), "true");
+  assert.equal(fold(sidebar, "Pinned").textContent, "Pinned");
+  assert.deepEqual(names(), ["Invite expiry", "Retry audit"]);
+
+  act(() => fold(sidebar, "Pinned").click());
+  assert.equal(fold(sidebar, "Pinned").getAttribute("aria-expanded"), "false");
+  assert.equal(fold(sidebar, "Pinned").textContent, "Pinned2 pins");
+  assert.deepEqual(names(), ["Retry audit"], "the pin on show stays");
+
+  act(() => fold(sidebar, "Pinned").click());
+  assert.equal(fold(sidebar, "Pinned").getAttribute("aria-expanded"), "true");
+  assert.deepEqual(names(), ["Invite expiry", "Retry audit"]);
+});
+
+test("a folded repository leaves the task that is open standing, and unfolds to every task", () => {
+  const sidebar = mountSidebar(
+    tasksControl({
+      tasks: [task("p-1", "Invite expiry", "acme/relay"), task("p-2", "Retry audit", "acme/relay")],
+      activeTaskId: "p-1",
+    }),
+  );
+  const names = () =>
+    [...sidebar.querySelectorAll('nav[aria-label="Tasks"] .luke-list-row-title')].map(
+      (title) => title.firstChild?.textContent,
+    );
+  assert.deepEqual(names().sort(), ["Invite expiry", "Retry audit"]);
+
+  act(() => fold(sidebar, "relay").click());
+  assert.deepEqual(names(), ["Invite expiry"]);
+
+  act(() => fold(sidebar, "relay").click());
+  assert.deepEqual(names().sort(), ["Invite expiry", "Retry audit"]);
 });
 
 test("a repository's header folds on its name, says its pin, counts its plans folded, keeps its + outside the fold, and opens its menu on a right-click", () => {
