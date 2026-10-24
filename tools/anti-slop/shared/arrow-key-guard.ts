@@ -27,6 +27,17 @@ export const ARROW_KEYS: ReadonlySet<string> = new Set([
   "End",
 ]);
 
+/** The shortcut registry's arrow entries (`SHORTCUT_KEY.LEFT.key`), which are the same keys spelled by a constant. */
+export const SHORTCUT_KEY_REGISTRY = "SHORTCUT_KEY";
+export const SHORTCUT_ARROW_NAMES: ReadonlySet<string> = new Set([
+  "UP",
+  "DOWN",
+  "LEFT",
+  "RIGHT",
+  "HOME",
+  "END",
+]);
+
 /** Where a key's name is read off an event: `event.key`, `event.code`, or a local bound to one. */
 export const KEY_PROPERTIES: ReadonlySet<string> = new Set(["key", "code"]);
 

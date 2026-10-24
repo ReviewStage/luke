@@ -22,6 +22,7 @@
     }
   ],
   "baseline": {
+    "packages/panel/src/desktop/command-palette.tsx": 2,
     "packages/panel/src/desktop/desktop-version-history.tsx": 2,
     "packages/panel/src/desktop/section-icon-picker.tsx": 5,
     "packages/panel/src/desktop/tab-switcher.tsx": 2,

@@ -8,6 +8,8 @@ import {
   isTestFile,
   isUiFile,
   KEY_PROPERTIES,
+  SHORTCUT_ARROW_NAMES,
+  SHORTCUT_KEY_REGISTRY,
 } from "../shared/arrow-key-guard.ts";
 import { baselineProblems } from "../shared/baseline.ts";
 import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
@@ -31,8 +33,29 @@ function readsKey(node: ESTree.Node): boolean {
   return node.property.type === "Identifier" && KEY_PROPERTIES.has(node.property.name);
 }
 
-/** The arrow key a node spells as a string, where it does. */
+/** The arrow a node names through the shortcut registry, `SHORTCUT_KEY.LEFT.key`, where it does. */
+function shortcutArrowOf(node: ESTree.Node): string | undefined {
+  if (node.type !== "MemberExpression" || node.computed) return undefined;
+  if (node.property.type !== "Identifier" || !KEY_PROPERTIES.has(node.property.name)) {
+    return undefined;
+  }
+  const entry = node.object;
+  if (entry.type !== "MemberExpression" || entry.computed) return undefined;
+  if (entry.property.type !== "Identifier" || !SHORTCUT_ARROW_NAMES.has(entry.property.name)) {
+    return undefined;
+  }
+  const registry = entry.object;
+  return registry.type === "Identifier" && registry.name === SHORTCUT_KEY_REGISTRY
+    ? entry.property.name
+    : undefined;
+}
+
+/** The arrow key a node spells, as a string or through the shortcut registry, where it does. */
 function arrowKeyOf(node: ESTree.Node | null | undefined): string | undefined {
+  if (node !== null && node !== undefined) {
+    const named = shortcutArrowOf(node);
+    if (named !== undefined) return named;
+  }
   if (node?.type === "Literal" && typeof node.value === "string" && ARROW_KEYS.has(node.value)) {
     return node.value;
   }
@@ -87,6 +110,10 @@ export const noHandWrittenArrowKeysRule = defineRule({
         // A `["ArrowDown", 1]` row: the key-to-step table a handler looks `event.key` up in.
         const [first, second] = node.elements;
         if (node.elements.length !== 2 || first === null || second === null) return;
+        if (first === undefined || second === undefined) return;
+        // Note that a row whose second cell is words is data (`["Home", "/"]`), not a step.
+        if (second.type === "Literal" && typeof second.value === "string") return;
+        if (second.type === "TemplateLiteral") return;
         const key = arrowKeyOf(first);
         if (key !== undefined) matches.push({ node, key });
       },

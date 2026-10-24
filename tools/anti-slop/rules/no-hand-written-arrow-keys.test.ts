@@ -49,6 +49,8 @@ tester.run("no-hand-written-arrow-keys", noHandWrittenArrowKeysRule, {
       filename: PANEL_FILE,
     },
     { code: 'const label = "End"; const same = label === "End";', filename: PANEL_FILE },
+    // A row of words is data, even where the first word is a key's name.
+    { code: 'const pages = [["Home", "/"], ["End", "/end"]];', filename: PANEL_FILE },
     // A list stepped through the helper names no key.
     {
       code: "function List({ rows }) { const roving = useRovingKeys({ orientation: ROVING_ORIENTATION.VERTICAL }); return <ul ref={roving.box}>{rows}</ul>; }",
@@ -84,6 +86,11 @@ tester.run("no-hand-written-arrow-keys", noHandWrittenArrowKeysRule, {
         { messageId: "arrowKey", data: { key: "ArrowDown" } },
         { messageId: "arrowKey", data: { key: "ArrowUp" } },
       ],
+    },
+    {
+      code: "function f(event) { if (event.key === SHORTCUT_KEY.LEFT.key) return -1; }",
+      filename: PANEL_FILE,
+      errors: [{ messageId: "arrowKey", data: { key: "LEFT" } }],
     },
     {
       code: 'const down = "ArrowDown" === key;',
