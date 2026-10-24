@@ -1,4 +1,4 @@
-import { integrationConnectionOf } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER, integrationConnectionOf } from "@luke/features/integration-wire";
 import { serverName } from "@luke/ui/agent-servers-model";
 import { createContext, type ReactNode, useCallback, useContext } from "react";
 import { useIntegrationStatuses } from "../integration-statuses.js";
@@ -25,8 +25,11 @@ function ConnectionNamesReading({ children }: { children: ReactNode }): ReactNod
   const { accountsOf } = statuses;
   const nameOf = useCallback<ConnectionNameOf>(
     (connection) => {
-      const provider = integrationConnectionOf(connection)?.provider;
-      if (provider === undefined) return undefined;
+      const held = integrationConnectionOf(connection);
+      if (held === undefined) return undefined;
+      const { provider, place } = held;
+      // Note that a workspace's own Linear runs under the bare `linear` connection (`turnServers`), the id of an account's first, so that id names a grant and no account, and keeps the provider's name.
+      if (provider === INTEGRATION_PROVIDER.LINEAR && place === 1) return undefined;
       const accounts = accountsOf(provider);
       // Note that an account the window does not hold keeps the name its id gives, since a provider's name alone would lose its place.
       return accounts.some((account) => account.connection === connection)

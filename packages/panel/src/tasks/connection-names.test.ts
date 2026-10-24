@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_REMOTE_TOOL,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
@@ -45,24 +46,25 @@ function statuses(): Record<IntegrationProvider, IntegrationStatus> {
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
 
-/** What the row of a call of Notion's tool on a connection says it ran on, once the accounts are read. */
+/** What the row of a call of a provider's tool on a connection says it ran on, once the accounts are read. */
 async function serverSaid(
   connection: string,
   accounts: readonly { connection: string; label?: string }[],
+  provider: IntegrationProvider = NOTION,
 ): Promise<string | undefined> {
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () =>
       Promise.resolve({
         integrations: statuses(),
         accounts: accounts.map((account) => ({
-          provider: NOTION,
+          provider,
           status: INTEGRATION_STATUS.CONNECTED,
           ...account,
         })),
       }),
   });
   const view = toolCallView({
-    tool: "notion_remote",
+    tool: INTEGRATION_REMOTE_TOOL[provider],
     input: { remoteTool: "fetch", parentCallId: "wrapper", input: {}, connection },
     output: undefined,
   });
@@ -92,4 +94,14 @@ test("a call on one of two labelled accounts says the account's name as its card
 test("a call on a provider's only account says the provider, and one the accounts do not hold says what its id gives", async () => {
   assert.equal(await serverSaid("notion", [{ connection: "notion", label: "Personal" }]), "Notion");
   assert.equal(await serverSaid("notion-2", []), "Notion 2");
+});
+
+test("a call on a bare linear connection says Linear, since a workspace's own Linear runs under it, while a later account says its name", async () => {
+  const accounts = [
+    { connection: "linear", label: "Home" },
+    { connection: "linear-2", label: "Side" },
+  ];
+  const linear = INTEGRATION_PROVIDER.LINEAR;
+  assert.equal(await serverSaid("linear", accounts, linear), "Linear");
+  assert.equal(await serverSaid("linear-2", accounts, linear), "Linear · Side");
 });
