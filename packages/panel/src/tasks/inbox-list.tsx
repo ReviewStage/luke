@@ -21,6 +21,7 @@ import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
+  LIST_ROW_LEAD,
   LIST_ROW_META,
   List,
   ListMotion,
@@ -37,7 +38,6 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SearchField,
-  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   Stack,
@@ -80,7 +80,7 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -116,13 +116,7 @@ import {
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
 import { NEW_THREAD } from "./inbox-compose.js";
-import {
-  HolderGlyph,
-  InboxItemCard,
-  InboxItemEnd,
-  ItemMark,
-  useInboxStanding,
-} from "./inbox-item-parts.js";
+import { HolderGlyph, InboxItemCard, InboxItemEnd, useInboxStanding } from "./inbox-item-parts.js";
 import {
   EVERYONES,
   holderKey,
@@ -269,9 +263,6 @@ const SKELETON_ROWS = [
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
-/** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
-const SKELETON_MARK = "16px";
-
 /** What each scope is called, in the view's menu and, but for To do, after the Inbox's name at its head, and its glyph in the menu. */
 const SCOPE_WORDS = {
   [INBOX_SHOW.TO_DO]: { label: "To do", icon: <ListTodoIcon /> },
@@ -363,18 +354,22 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
 }
 
 /**
- * One item as a `ListRow` of two lines, as a mail app lists a thread: the
- * agent's mark, the title, its task's status (`TaskStatusChip`), and how
- * long ago it changed, then the last word
- * in its thread, muted, led on a thread by what its open ask asks, the
- * steps its draft ticks counted (`inboxPreview`). One that needs the developer wears
- * the attention mark before its time, and a teammate's item their face
- * there where `face` allows it, the mark of their open item being theirs to
- * wear. The title hangs in the window's pill, since a narrow list cuts it
- * short. An unread item, changed since the developer last read it or marked
- * unread, wears the blue dot in a gutter before its tile, its title in the
- * unread weight and its preview in the body's ink; the gutter stands on
- * every row, so the tiles line up whether a row wears a dot or not. Where
+ * One item as a `ListRow` of up to three lines, as a mail app lists a
+ * thread, one thing to a line so nothing is cut short to make room for
+ * another: the title and how long ago it changed; then, in a list its tasks
+ * do not head, what holds it, its task's status and whole name (`chip`);
+ * then the last word in its thread, muted, led on a thread by what its open
+ * ask asks, the steps its draft ticks counted (`inboxPreview`). The agent
+ * that asked, and whether it needs the developer, are its card's to say
+ * (`InboxItemCard`), a reader still hearing the latter, since an open item
+ * nearly always does and a mark on every row would say nothing. A
+ * teammate's item wears their face before its time where `face` allows it,
+ * the mark of their open item being theirs to wear. The title hangs in the
+ * window's pill, since a narrow list cuts it short. An unread item, changed
+ * since the developer last read it or marked unread, wears the blue dot in
+ * a gutter before its words, its title in the unread weight and its
+ * preview in the body's ink; the gutter stands on every row, so the words
+ * line up whether a row wears a dot or not. Where
  * an answer or a message waits unsent in the item's box and that box is not
  * the one standing beside the list, which shows its own words, the row wears
  * the Draft pencil before its marks, as a sidebar task's row does
@@ -386,9 +381,8 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
- * do not head, the person page's or the Inbox's own grouped by anything but
- * task, names the item's task in a chip before the preview (`chip`), its
- * glyph and its name cut short, so the title keeps its whole line. Its right-click offers
+ * do not head is the person page's, or the Inbox's own grouped by anything
+ * but task. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list hands
  * down its media reads (`media`), the row shows the pictures and pages its
@@ -425,7 +419,7 @@ export function InboxItemRow({
   readerId: string | undefined;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
+  /** Whether the row names its task, or its automation, on a line of its own over its preview, as a list its tasks do not head does. */
   chip?: boolean;
   /** Whether the row draws its second line, what its item asks or how it ended; off, the row is its title's line alone, as the view's menu may choose. */
   line?: boolean;
@@ -493,20 +487,7 @@ export function InboxItemRow({
           ref={hold}
           motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
-          leading={
-            <>
-              {/* Note that the tile hangs no card of its own, as a sidebar task's mark hangs none: the row's card names the agent. */}
-              <InboxRowLeading unread={unread}>
-                <ItemMark
-                  holder={holder}
-                  agentId={item.agentId}
-                  models={models}
-                  readerId={readerId}
-                  plain
-                />
-              </InboxRowLeading>
-            </>
-          }
+          leading={<InboxRowLeading unread={unread} />}
           title={title}
           description={
             line ? (
@@ -521,6 +502,7 @@ export function InboxItemRow({
               ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) }
               : undefined
           }
+          leadAt={LIST_ROW_LEAD.LINE}
           attachments={
             !line || media === undefined || carried.length === 0 ? undefined : (
               <RowMedia media={carried} reads={media} />
@@ -533,6 +515,7 @@ export function InboxItemRow({
               readerId={readerId}
               open={open}
               face={face}
+              standing={false}
               before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
             />
           }
@@ -982,31 +965,22 @@ export function ShowEmpty({
 
 /**
  * An item row's leading: the gutter the unread dot stands in, on every row so
- * the tiles line up whether a row wears the dot or not, and the tile after
- * it. The list's rows and its placeholder rows both lead with it, so a tile
- * lands where its block stood.
+ * the words line up whether a row wears the dot or not. The list's rows and
+ * its placeholder rows both lead with it, so a title lands where its block
+ * stood.
  */
-function InboxRowLeading({
-  unread,
-  children,
-}: {
-  unread: boolean;
-  children: ReactNode;
-}): React.JSX.Element {
+function InboxRowLeading({ unread }: { unread: boolean }): React.JSX.Element {
   return (
-    <>
-      <span className="inbox-row-gutter">
-        {unread ? <span className="inbox-row-unread" /> : null}
-      </span>
-      <span className="inbox-row-mark">{children}</span>
-    </>
+    <span className="inbox-row-gutter">
+      {unread ? <span className="inbox-row-unread" /> : null}
+    </span>
   );
 }
 
 /**
  * The list while its items are first read: rows in an item's own row, a
- * block where its agent's tile, its title, its time, and the line under
- * them will stand, so the
+ * block where its title, its time, and the line under them will stand,
+ * so the
  * items land where the blocks stood rather than a lone ring in the list's
  * corner. The rows open nothing and the region says what is being read. A
  * short list asks for fewer rows than the five a whole Inbox stands.
@@ -1029,11 +1003,7 @@ export function InboxListSkeleton({
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
-            leading={
-              <InboxRowLeading unread={false}>
-                <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
-              </InboxRowLeading>
-            }
+            leading={<InboxRowLeading unread={false} />}
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={<Skeleton width={SKELETON_TIME} />}
@@ -1370,8 +1340,9 @@ function InboxRows({
   row: (listed: InboxListed, leaving: boolean) => React.ReactNode;
 }): React.JSX.Element {
   const drawn = useLeaving(items, (listed) => listed.item.id);
+  // Note that the rows stand a step further apart than a list's, because a row of three lines standing clear on its ground is told from the next by the room between them alone.
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks" moves>
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="sidebar-tasks" moves>
       {drawn.map(({ value, leaving }) => row(value, leaving))}
     </Stack>
   );

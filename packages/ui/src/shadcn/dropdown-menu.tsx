@@ -41,7 +41,7 @@ import { ChevronRightIcon } from "../face/glyphs.js";
 
 /** A menu row's shape, as every item, checkbox item, and submenu trigger draws it, which a row standing outside any menu wears too. */
 export const DROPDOWN_MENU_ITEM =
-  "group/menu-item relative flex h-menu-row w-full flex-none cursor-default items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-luke-8 py-0 text-left font-sans text-body leading-[normal] font-normal whitespace-nowrap text-foreground select-none data-[variant=destructive]:text-danger data-[detail=true]:h-auto data-[detail=true]:min-h-menu-row data-[detail=true]:py-luke-4 disabled:opacity-40 aria-disabled:opacity-40";
+  "group/menu-item relative flex h-menu-row w-full flex-none cursor-default items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-row-inset py-0 text-left font-sans text-body leading-[normal] font-text whitespace-nowrap text-foreground select-none data-[variant=destructive]:text-danger data-[detail=true]:h-auto data-[detail=true]:min-h-menu-row data-[detail=true]:py-luke-4 disabled:opacity-40 aria-disabled:opacity-40";
 
 /**
  * A row in a menu lit by the fill every row is lit by, never ringed: under
@@ -202,7 +202,7 @@ function DropdownMenuSeparator({ className, ...props }: MenuPrimitive.Separator.
     <MenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
       render={<hr />}
-      className={cn("mx-luke-8 my-menu-inset h-px flex-none border-0 bg-border", className)}
+      className={cn("mx-row-inset my-menu-inset h-px flex-none border-0 bg-border", className)}
       {...props}
     />
   );
@@ -210,11 +210,11 @@ function DropdownMenuSeparator({ className, ...props }: MenuPrimitive.Separator.
 
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuCheckboxItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
-  DropdownMenuSubTrigger,
   DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 };

@@ -18,6 +18,7 @@ import {
   EDITABLE_BLOCK_CLASS,
   EllipsisIcon,
   IconButton,
+  motionHeld,
   SavedTick,
   TEXT_BUTTON_LINES,
   TextButton,
@@ -46,7 +47,7 @@ import {
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { prefersReducedMotion } from "../use-reduced-motion.js";
+import { centreWithin } from "./code-pane.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,
@@ -181,6 +182,23 @@ const REVEAL_MARGIN = 16;
 function revealMargin(scroller: HTMLElement): number {
   const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
   return Number.isNaN(padding) ? REVEAL_MARGIN : Math.max(padding, REVEAL_MARGIN);
+}
+
+/**
+ * Scrolls `scroller` alone until `target` stands within it, clear of the faded
+ * edges its scroll padding reserves, and does nothing while it already does. Note
+ * that this is not `scrollIntoView`, which scrolls every box around the
+ * target too, and the document stands in a pane that may still be gliding.
+ */
+function keepInView(scroller: HTMLElement, target: HTMLElement): void {
+  const box = scroller.getBoundingClientRect();
+  const at = target.getBoundingClientRect();
+  const top = box.top + revealMargin(scroller);
+  // Note that the room below is the scroller's scroll padding, which clears its faded bottom edge.
+  const below = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom);
+  const bottom = box.bottom - (Number.isNaN(below) ? 0 : below);
+  if (at.top < top) scroller.scrollTop -= top - at.top;
+  else if (at.bottom > bottom) scroller.scrollTop += at.bottom - bottom;
 }
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
@@ -516,7 +534,7 @@ function aimed(chase: Chase, task: Task, reader: TaskReader): Chase {
     isReader(task.lastEdit, reader) &&
     lastEditAt !== chase.lastEditAt;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
-  const aim = { reduced: ownEdit || prefersReducedMotion() };
+  const aim = { reduced: ownEdit || motionHeld() };
   const state = chaseRetargeted(chase.state, body, aim);
   return { taskId: task.id, body, lastEditAt, state };
 }
@@ -1198,8 +1216,10 @@ export const PlanBody = memo(function PlanBody({
     const jumped = jumps !== followedJumps.current;
     followedJumps.current = jumps;
     if (!behind || scrolledAway.current) return;
-    const block = jumped ? "center" : "nearest";
-    scroller.current?.querySelector(".markdown-caret")?.scrollIntoView({ block });
+    const caret = scroller.current?.querySelector<HTMLElement>(".markdown-caret");
+    if (scroller.current === null || !caret) return;
+    if (jumped) centreWithin(scroller.current, caret);
+    else keepInView(scroller.current, caret);
   });
 
   // The sections as the plan's text holds them, where the chase draws them so, which is where comments are marked and measured.

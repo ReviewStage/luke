@@ -24,15 +24,15 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
     text-decoration: none;
     white-space: nowrap;
     cursor: pointer;
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease,
-      filter var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit),
+      filter var(--luke-duration-hover) var(--luke-motion-exit),
+      opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -101,9 +101,9 @@
   .luke-button[data-size="compact"]:not([data-icon-only="true"]) {
     height: var(--luke-space-24);
     padding-inline: var(--luke-space-8);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-semibold);
+    font-size: var(--luke-type-tag-size);
+    line-height: var(--luke-type-tag-leading);
+    font-weight: var(--luke-type-tag-weight);
   }
 
   .luke-button[data-size="compact"]:not([data-icon-only="true"]) .luke-button-face {
@@ -114,15 +114,9 @@
     --luke-button-edge: var(--luke-color-border-strong);
   }
 
-  /* Subtle, a quiet press among quiet words: their muted ink, and compact
-     with words their weight rather than a label's, so it never outweighs
-     the line it stands in. */
+  /* Subtle, a quiet press among quiet words: their muted ink. */
   .luke-button[data-variant="subtle"] {
     --luke-button-ink: var(--luke-color-text-muted);
-  }
-
-  .luke-button[data-variant="subtle"][data-size="compact"]:not([data-icon-only="true"]) {
-    font-weight: var(--luke-weight-medium);
   }
 
   .luke-button[data-variant="primary"] {
@@ -184,7 +178,7 @@
     border-radius: var(--luke-menu-row-radius);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-body-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
   }
 
   .luke-button[data-variant="row"]:is(:hover, :focus-visible, [aria-expanded="true"]):not(
@@ -344,7 +338,7 @@
   .luke-button-face {
     transition:
       transform var(--luke-duration-fast) var(--luke-spring-fast),
-      opacity var(--luke-duration-quick) ease-out;
+      opacity var(--luke-duration-quick) var(--luke-motion-exit);
   }
 
   /* Note that the face goes down on the quick exit beat and comes back on
@@ -353,7 +347,7 @@
   .luke-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"])
   .luke-button-face {
     transform: scale(0.9);
-    transition: transform var(--luke-duration-exit) ease-out;
+    transition: transform var(--luke-duration-exit) var(--luke-motion-exit);
   }
 
   /* Every press a button takes is answered once it lands, so even a click
@@ -492,7 +486,7 @@
     display: grid;
     place-items: center;
     animation:
-      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 
@@ -510,7 +504,7 @@
   .luke-button-done[data-hold="true"] {
     animation:
       luke-button-done-hold var(--luke-confirm-delay) linear,
-      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-fade var(--luke-duration-quick) var(--luke-motion-exit) backwards,
       luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
   }
 

@@ -44,6 +44,9 @@ const UNNAMED_AGENT = "9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f";
 const TRIAGE_AGENT = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
 const TRIAGE = "4e3d2c1b-0a9f-4e8d-9c7b-6a5f4e3d2c1b";
 const PAGE = "26494df1-595a-4364-abf7-85781c65a9f8";
+
+/** A page of the plan the window holds no title for. */
+const UNHELD_PAGE = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
 const ITEM = "item_4b9e";
 const SAM = "user-sam";
 const AT = 1_792_000_000_000;
@@ -114,6 +117,7 @@ const STATE: AppStateSnapshot = (() => {
           activityAt: AT,
         },
       ],
+      activeTaskId: TASK_ID,
       pages: [{ id: PAGE, title: "Unfurl matrix", version: 1, at: AT }],
     },
     inbox: {
@@ -218,12 +222,13 @@ test("a bare link to a place the window knows is called by its name, the task's 
   );
 });
 
-test("a place the window holds no name for is called by its kind, and a labelled link by its label", async () => {
+test("a place the window holds no name for is called by its kind, or by its label where it was labelled, and a labelled place it holds a name for by that name now", async () => {
   const container = await drawn(
     [
       `${HOME}/plan/${TASK_ID}/agent/${UNNAMED_AGENT}`,
       `${HOME}/automation/auto_1/run/run_1`,
       `${HOME}/inbox`,
+      `[the old matrix](${HOME}/plan/${TASK_ID}/page/${UNHELD_PAGE})`,
       `[the matrix](${HOME}/plan/${TASK_ID}/page/${PAGE})`,
     ].join(", "),
     [],
@@ -233,7 +238,8 @@ test("a place the window holds no name for is called by its kind, and a labelled
     ["agent", "Agent"],
     ["place", "Run"],
     ["place", "Inbox"],
-    ["page", "the matrix"],
+    ["page", "the old matrix"],
+    ["page", "Unfurl matrix"],
   ]);
 });
 

@@ -420,10 +420,16 @@ export interface VercelSandboxApi {
     commandId: string,
     text: string,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** A command's exit code, null while it runs, or gone where Vercel no longer knows the command or its session. */
+  /**
+   * A command's exit code, null while it runs, or gone where Vercel no longer
+   * knows the command or its session. The read waits for the exit for at most
+   * `within` (`EXIT_WAIT` unless the caller names longer), so a caller that
+   * waits on a command's end names how long rather than reading it again.
+   */
   readonly commandExit: (
     sandboxSessionId: string,
     commandId: string,
+    within?: Duration.Duration,
   ) => Effect.Effect<CommandExit, SandboxUnavailable>;
   /**
    * What a command that exited printed on stderr, the tail kept, every value
@@ -588,6 +594,12 @@ const UNREADABLE_DETAIL = "an answer that could not be read";
  */
 const PASSING = {
   STATUSES: new Set([429, 502, 503, 504]),
+  /**
+   * The passing refusals that say a call was never carried out: a 502 or a
+   * 504 is a gateway that lost the answer, and may stand for a call that
+   * went through.
+   */
+  NOT_CARRIED_OUT: new Set([429, 503]),
   FIRST_WAIT: Duration.millis(200),
   RETRIES: 3,
 } as const;
@@ -682,13 +694,14 @@ function refused(
   });
 }
 
-/** The call tried again where Vercel answered a passing refusal; any other failure answers at once. */
+/** The call tried again where Vercel answered one of the passing refusals given; any other failure answers at once. */
 function retryingPassing<A>(
   effect: Effect.Effect<A, SandboxUnavailable>,
+  statuses: ReadonlySet<number> = PASSING.STATUSES,
 ): Effect.Effect<A, SandboxUnavailable> {
   return Effect.retry(effect, {
     schedule: PASSING_RETRY,
-    while: (failure) => failure.status !== undefined && PASSING.STATUSES.has(failure.status),
+    while: (failure) => failure.status !== undefined && statuses.has(failure.status),
   });
 }
 
@@ -1319,8 +1332,8 @@ export function vercelSandboxApi(
               attachStdin: true,
             }),
           );
-          // Note that a start Vercel refused in passing is tried again, as the SDK's 3.8.0 client
-          // tries it, though a 502 or a 504 may stand for a start that went through.
+          // Note that a start is tried again only where Vercel said it never ran it, because a 502 or a
+          // 504 may stand for a start that went through, and a second would run the command twice.
           return yield* retryingPassing(
             Effect.flatMap(callApi(client, SANDBOX_CALL.CMD, request), (started) => {
               const read = readCommand(jsonOf(started.text));
@@ -1328,6 +1341,7 @@ export function vercelSandboxApi(
                 ? Effect.succeed(read.success.command.id)
                 : Effect.fail(refused(SANDBOX_CALL.CMD, started));
             }),
+            PASSING.NOT_CARRIED_OUT,
           );
         }),
       writeStdin: (sandboxSessionId, commandId, text) =>
@@ -1366,7 +1380,7 @@ export function vercelSandboxApi(
             offset += chunk.byteLength;
           }
         }),
-      commandExit: (sandboxSessionId, commandId) =>
+      commandExit: (sandboxSessionId, commandId, within = SANDBOX_API.EXIT_WAIT) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.CMD);
           const url = apiUrl(
@@ -1380,7 +1394,7 @@ export function vercelSandboxApi(
             client,
             SANDBOX_CALL.CMD,
             HttpClientRequest.get(url, { headers: asked.headers }),
-          ).pipe(Effect.timeoutOption(SANDBOX_API.EXIT_WAIT));
+          ).pipe(Effect.timeoutOption(within));
           if (Option.isNone(waited)) return null;
           const found = waited.value;
           if (found.status === NOT_FOUND_STATUS) return COMMAND_GONE;

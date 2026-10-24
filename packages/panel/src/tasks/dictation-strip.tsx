@@ -14,7 +14,7 @@ import {
 import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { usePrefersReducedMotion } from "../use-reduced-motion.js";
+import { useMotionHeld } from "../use-motion-held.js";
 import { frameLevel } from "../voice/voice-level-meter.js";
 import { DICTATION_PHASE, type DictationControl } from "./use-dictation.js";
 
@@ -91,7 +91,7 @@ export function DictateButton({
 /** The voice as it is heard: one bar per slice of time, the newest at the right. */
 function DictationWave({ analyser }: { analyser: AnalyserNode | undefined }): React.JSX.Element {
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
-  const reduced = usePrefersReducedMotion();
+  const reduced = useMotionHeld();
 
   useEffect(() => {
     if (analyser === undefined || reduced) return;

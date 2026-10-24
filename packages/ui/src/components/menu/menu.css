@@ -29,19 +29,11 @@
     outline: none; /* no ring: the row's fill marks it */
   }
 
-  /* A detail's words, a step under a caption, muted. They are drawn here
-     rather than in utilities, because a finger's size below must outrank
-     them, which a utility would not let it. */
+  /* A detail's words: a caption, muted. They are drawn here rather than in
+     utilities, so a row's own words cannot outrank them. */
   .luke-menu-item-detail {
     color: var(--luke-color-text-muted);
-    font-size: 11.5px;
-  }
-
-  /* Under a finger, on a phone held at arm's length, no smaller than 12px. */
-  @media (pointer: coarse) {
-    .luke-menu-item-detail {
-      font-size: 12px;
-    }
+    font-size: var(--luke-type-caption-size);
   }
 
   /* A row's shortcut at its end, the way a system menu prints a chord,

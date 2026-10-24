@@ -39,11 +39,10 @@ export type CalendarPlace = (typeof CALENDAR_PLACE)[keyof typeof CALENDAR_PLACE]
 export const CALENDAR = "inline-flex flex-col gap-luke-8";
 
 /** The caption: the month's name at the start, its steps at the end. */
-export const CALENDAR_CAPTION =
-  "flex items-center justify-between gap-control-gap ps-luke-6";
+export const CALENDAR_CAPTION = "flex items-center justify-between gap-control-gap ps-luke-6";
 
 /** The month's name. */
-export const CALENDAR_CAPTION_LABEL = "font-sans text-label font-semibold text-foreground";
+export const CALENDAR_CAPTION_LABEL = "font-sans text-label font-section text-foreground";
 
 /** The previous and next steps, a hair apart. */
 export const CALENDAR_NAV = "flex gap-luke-2";
@@ -53,7 +52,7 @@ export const CALENDAR_MONTH_GRID = "table-fixed border-separate border-spacing-0
 
 /** A weekday's heading over its column. */
 export const CALENDAR_WEEKDAY =
-  "h-control w-control p-0 text-center font-sans text-caption font-medium text-subtle-foreground";
+  "h-control w-control p-0 text-center font-sans text-tag font-tag text-subtle-foreground";
 
 /** A day's cell, a control's height across. */
 export const CALENDAR_DAY = "w-control p-0";
@@ -70,7 +69,7 @@ export const CALENDAR_RANGE: Readonly<Record<CalendarPlace, string>> = {
 
 /** A day's button: its number over the face drawn behind it. */
 export const CALENDAR_DAY_BUTTON =
-  "relative z-0 m-0 flex h-control w-full cursor-pointer items-center justify-center rounded-none border-0 bg-transparent p-0 font-sans focus-visible:rounded-control text-body tabular-nums before:absolute before:inset-0 before:-z-1 before:rounded-control before:transition-colors before:duration-(--luke-duration-hover) before:ease-[ease] before:content-[''] in-data-[luke-profile=desktop]:cursor-default";
+  "relative z-0 m-0 flex h-control w-full cursor-pointer items-center justify-center rounded-none border-0 bg-transparent p-0 font-sans focus-visible:rounded-control text-body tabular-nums before:absolute before:inset-0 before:-z-1 before:rounded-control before:transition-colors before:duration-(--luke-duration-hover) before:ease-motion-exit before:content-[''] in-data-[luke-profile=desktop]:cursor-default";
 
 /** A day's face: lit under the pointer, or filled in the accent where it is picked. */
 export const CALENDAR_DAY_FACE = {
@@ -88,4 +87,4 @@ export const CALENDAR_DAY_INK = {
 
 /** Today: semibold, a dot under its number in whatever ink the number is. */
 export const CALENDAR_TODAY =
-  "font-semibold after:absolute after:bottom-luke-2 after:left-1/2 after:size-luke-4 after:-translate-x-1/2 after:rounded-full after:bg-current after:content-['']";
+  "font-emphasis after:absolute after:bottom-luke-2 after:left-1/2 after:size-luke-4 after:-translate-x-1/2 after:rounded-full after:bg-current after:content-['']";

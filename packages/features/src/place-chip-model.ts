@@ -1,4 +1,5 @@
 import { LINK_PLACE, type LinkPlace } from "./link-grammar.js";
+import { UNTITLED_TASK_NAME } from "./task-wire.js";
 
 /**
  * place-chip-model.ts -- a Luke link drawn in words as its chip says it: the name of the place it opens, as the window already knows it, and the task it stands under.
@@ -8,10 +9,14 @@ import { LINK_PLACE, type LinkPlace } from "./link-grammar.js";
  * chip is named from what the window already holds: the task's title, the
  * page's, the agent's, the Inbox item's, the member's, the automation's.
  * Nothing is read for it, so a place the window holds no name for, an agent
- * past the few a task's row names say, is called by its kind until it does,
- * and a link someone labelled keeps the words they gave it, as a mention's
- * label is kept. The card under it says the task the place stands under,
- * where the window knows the task.
+ * past the few a task's row names say, is called by its kind until it does.
+ * A plan, a page, an agent, an Inbox item, or a person is called by the name
+ * the window holds for it now even where its link was labelled, since the
+ * label is the name it had when it was written and the card beside the chip
+ * says the name now; the label stands in only where the window holds none,
+ * or holds the plan Untitled. Any other place someone labelled keeps the
+ * words they gave it. The card under it says the task the place stands
+ * under, where the window knows the task.
  */
 
 /** The names the window holds, each by the id the service minted it under. */
@@ -20,7 +25,10 @@ export interface KnownNames {
   readonly agents: ReadonlyMap<string, string>;
   /** The catalog id of the model each agent the window holds runs on, which its harness's mark is read off; titled or not. */
   readonly agentModels: ReadonlyMap<string, string>;
+  /** The pages of the one task the window holds them for, `pagesTaskId`. */
   readonly pages: ReadonlyMap<string, string>;
+  /** The task whose pages `pages` names, the window's open one; none where it holds no task's pages. */
+  readonly pagesTaskId: string | undefined;
   readonly inboxItems: ReadonlyMap<string, string>;
   readonly people: ReadonlyMap<string, string>;
   readonly automations: ReadonlyMap<string, string>;
@@ -56,6 +64,15 @@ const KIND_NAME = {
   [LINK_PLACE.ADMIN]: "Admin",
 } as const satisfies Record<LinkPlace["kind"], string>;
 
+/** The places a chip calls by the name the window holds now over the words its link was labelled with. */
+const LIVE_NAMED: ReadonlySet<LinkPlace["kind"]> = new Set([
+  LINK_PLACE.TASK,
+  LINK_PLACE.PAGE,
+  LINK_PLACE.AGENT,
+  LINK_PLACE.INBOX_ITEM,
+  LINK_PLACE.PERSON,
+]);
+
 /** The name the window holds for the place itself, where it holds one. */
 function heldName(place: LinkPlace, known: KnownNames): string | undefined {
   switch (place.kind) {
@@ -66,7 +83,9 @@ function heldName(place: LinkPlace, known: KnownNames): string | undefined {
       return taskName === undefined ? undefined : `${taskName}, version ${place.revision}`;
     }
     case LINK_PLACE.PAGE:
-      return known.pages.get(place.pageId);
+      return "planId" in place && place.planId === known.pagesTaskId
+        ? known.pages.get(place.pageId)
+        : undefined;
     case LINK_PLACE.AGENT:
       return known.agents.get(place.agentId);
     case LINK_PLACE.CHANGES: {
@@ -96,9 +115,10 @@ function taskOf(place: LinkPlace): string | undefined {
 }
 
 /**
- * What a chip says of the place a Luke link opens: the words it was labelled
- * with where it was, else the name the window holds for the place, else its
- * kind; and the task it stands under, by the name the window holds for it.
+ * What a chip says of the place a Luke link opens: for a place named live
+ * (`LIVE_NAMED`), the name the window holds for it, else the words it was
+ * labelled with; for any other, the words first, then the name held; else
+ * its kind; and the task it stands under, by the name the window holds for it.
  */
 export function placeChipLook(
   place: LinkPlace,
@@ -107,6 +127,9 @@ export function placeChipLook(
 ): PlaceChipLook {
   const taskId = taskOf(place);
   const under = taskId === undefined ? undefined : known.tasks.get(taskId);
-  const name = label ?? heldName(place, known) ?? KIND_NAME[place.kind];
+  const held = heldName(place, known);
+  const untitled = place.kind === LINK_PLACE.TASK && held === UNTITLED_TASK_NAME;
+  const live = LIVE_NAMED.has(place.kind) && !untitled;
+  const name = (live ? (held ?? label) : (label ?? held)) ?? KIND_NAME[place.kind];
   return { name, under };
 }

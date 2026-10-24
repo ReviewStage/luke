@@ -5,6 +5,8 @@ import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
+  LIST_ROW_LEAD,
+  LIST_ROW_META,
   LIST_VARIANT,
   List,
   ListRow,
@@ -19,7 +21,8 @@ import { CatalogSection } from "../section";
 
 /**
  * list-row.tsx -- a list's rows with their metadata and acts lined up, the
- * one open now, unread rows, rows that open nothing, rows in a card,
+ * one open now, unread rows, what a row belongs to on a line of its own,
+ * rows that open nothing, rows in a card,
  * a row a finger's height on a coarse pointer, compact and dense, rows whose
  * acts show on hover, rows that go deeper, and long words in a narrow column.
  */
@@ -100,6 +103,31 @@ function ListRows(): React.JSX.Element {
               onPress={() => undefined}
             />
             <ListRow title="Pick a name for the workspace" meta="2d" onPress={() => undefined} />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-lead-line" title="What a row belongs to, on a line of its own">
+        <div className="catalog-column">
+          <List label="Inbox items">
+            <ListRow
+              title="PR: remove the leftover Call tab code"
+              lead={{ icon: <UserIcon />, label: "Revert agent to the previous layout" }}
+              leadAt={LIST_ROW_LEAD.LINE}
+              description="Merge / Request changes"
+              meta="1h"
+              metaAt={LIST_ROW_META.TITLE}
+              unread
+              onPress={() => undefined}
+            />
+            <ListRow
+              title="Board cards wrap and hover per part"
+              lead={{ icon: <UserIcon />, label: "Board card overflow fix" }}
+              leadAt={LIST_ROW_LEAD.LINE}
+              description="Approve / Request changes"
+              meta="2h"
+              metaAt={LIST_ROW_META.TITLE}
+              onPress={() => undefined}
+            />
           </List>
         </div>
       </CatalogSection>

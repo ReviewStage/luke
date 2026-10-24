@@ -65,6 +65,418 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.20.0 — 2026-10-23
+
+### Coding agents on your Claude or ChatGPT plan
+
+Run Luke's coding agents on Claude Code or Codex, paid by your own Claude or
+ChatGPT plan or your own API key. Settings › Agents has one row for each
+provider, where you choose what pays, and the composer names the plan it runs
+on and when a limit resets. Every model call Luke makes, calls, dictation, and
+titles among them, now runs on your own subscription or key, never Luke's.
+([#4405](https://github.com/ReviewStage/luke/pull/4405),
+[#4243](https://github.com/ReviewStage/luke/pull/4243),
+[#4298](https://github.com/ReviewStage/luke/pull/4298),
+[#4334](https://github.com/ReviewStage/luke/pull/4334),
+[#4313](https://github.com/ReviewStage/luke/pull/4313),
+[#4330](https://github.com/ReviewStage/luke/pull/4330),
+[#4331](https://github.com/ReviewStage/luke/pull/4331),
+[#4356](https://github.com/ReviewStage/luke/pull/4356),
+[#4385](https://github.com/ReviewStage/luke/pull/4385),
+[#4410](https://github.com/ReviewStage/luke/pull/4410),
+[#4421](https://github.com/ReviewStage/luke/pull/4421),
+[#4438](https://github.com/ReviewStage/luke/pull/4438),
+[#4473](https://github.com/ReviewStage/luke/pull/4473),
+[#4494](https://github.com/ReviewStage/luke/pull/4494),
+[#4534](https://github.com/ReviewStage/luke/pull/4534),
+[#4586](https://github.com/ReviewStage/luke/pull/4586),
+[#4606](https://github.com/ReviewStage/luke/pull/4606),
+[#4628](https://github.com/ReviewStage/luke/pull/4628),
+[#4632](https://github.com/ReviewStage/luke/pull/4632),
+[#4636](https://github.com/ReviewStage/luke/pull/4636),
+[#4638](https://github.com/ReviewStage/luke/pull/4638),
+[#4656](https://github.com/ReviewStage/luke/pull/4656),
+[#4660](https://github.com/ReviewStage/luke/pull/4660),
+[#4661](https://github.com/ReviewStage/luke/pull/4661),
+[#4803](https://github.com/ReviewStage/luke/pull/4803))
+
+### Installed skills
+
+Install skills for your coding agents from Settings › Skills: paste an
+`npx skills add` command, a GitHub repository, or a skill's own text, and keep
+it for yourself or the whole workspace. Every agent is handed your installed
+skills beside the repository's, and the / picker offers them with a Repo,
+Workspace, or Personal badge.
+([#4583](https://github.com/ReviewStage/luke/pull/4583),
+[#4585](https://github.com/ReviewStage/luke/pull/4585),
+[#4587](https://github.com/ReviewStage/luke/pull/4587),
+[#4592](https://github.com/ReviewStage/luke/pull/4592),
+[#4598](https://github.com/ReviewStage/luke/pull/4598),
+[#4599](https://github.com/ReviewStage/luke/pull/4599),
+[#4601](https://github.com/ReviewStage/luke/pull/4601),
+[#4751](https://github.com/ReviewStage/luke/pull/4751),
+[#4752](https://github.com/ReviewStage/luke/pull/4752),
+[#4754](https://github.com/ReviewStage/luke/pull/4754),
+[#4757](https://github.com/ReviewStage/luke/pull/4757),
+[#4830](https://github.com/ReviewStage/luke/pull/4830),
+[#4901](https://github.com/ReviewStage/luke/pull/4901))
+
+### A new look, in motion
+
+Luke wears a Scandinavian palette: warm paper grounds in the light, a slate
+night in the dark, and one muted fjord-blue accent, with the Mac's own frosted
+sidebar behind the window. Controls sink and spring back as you press them,
+list rows slide in and glide as they move, and toasts count down and swipe
+away, all held still under reduced motion.
+([#4705](https://github.com/ReviewStage/luke/pull/4705),
+[#4745](https://github.com/ReviewStage/luke/pull/4745),
+[#4877](https://github.com/ReviewStage/luke/pull/4877),
+[#4888](https://github.com/ReviewStage/luke/pull/4888),
+[#4902](https://github.com/ReviewStage/luke/pull/4902),
+[#4635](https://github.com/ReviewStage/luke/pull/4635),
+[#4680](https://github.com/ReviewStage/luke/pull/4680),
+[#4681](https://github.com/ReviewStage/luke/pull/4681),
+[#4682](https://github.com/ReviewStage/luke/pull/4682),
+[#4686](https://github.com/ReviewStage/luke/pull/4686),
+[#4703](https://github.com/ReviewStage/luke/pull/4703),
+[#4715](https://github.com/ReviewStage/luke/pull/4715),
+[#4720](https://github.com/ReviewStage/luke/pull/4720),
+[#4722](https://github.com/ReviewStage/luke/pull/4722),
+[#4736](https://github.com/ReviewStage/luke/pull/4736),
+[#4746](https://github.com/ReviewStage/luke/pull/4746),
+[#4749](https://github.com/ReviewStage/luke/pull/4749),
+[#4750](https://github.com/ReviewStage/luke/pull/4750),
+[#4800](https://github.com/ReviewStage/luke/pull/4800))
+
+### The Tasks page, assignees, and Mark done
+
+The sidebar's Tasks row (⇧⌘B) opens the Tasks page, a List beside the Board,
+which filters, groups, and orders by status, priority, creator, repository, or
+assignee, with each property in a column of its own. Tasks have an assignee,
+whose face the Board, the List, and the sidebar show. A task is no longer
+archived: Mark done (⇧⌘A) or Cancel task settles it, and Luke marks it Done by
+itself once its pull request merges and nothing waits on you.
+([#4209](https://github.com/ReviewStage/luke/pull/4209),
+[#4222](https://github.com/ReviewStage/luke/pull/4222),
+[#4126](https://github.com/ReviewStage/luke/pull/4126),
+[#4142](https://github.com/ReviewStage/luke/pull/4142),
+[#4306](https://github.com/ReviewStage/luke/pull/4306),
+[#4379](https://github.com/ReviewStage/luke/pull/4379),
+[#4414](https://github.com/ReviewStage/luke/pull/4414),
+[#4415](https://github.com/ReviewStage/luke/pull/4415),
+[#4416](https://github.com/ReviewStage/luke/pull/4416),
+[#4420](https://github.com/ReviewStage/luke/pull/4420),
+[#4448](https://github.com/ReviewStage/luke/pull/4448),
+[#4450](https://github.com/ReviewStage/luke/pull/4450),
+[#4522](https://github.com/ReviewStage/luke/pull/4522),
+[#4673](https://github.com/ReviewStage/luke/pull/4673),
+[#4678](https://github.com/ReviewStage/luke/pull/4678),
+[#4679](https://github.com/ReviewStage/luke/pull/4679),
+[#4816](https://github.com/ReviewStage/luke/pull/4816),
+[#4886](https://github.com/ReviewStage/luke/pull/4886))
+
+### Sections
+
+Sections leave Experimental for every account. Sort the sidebar's tasks and
+agents into sections of your own, move one with Move to section or a drag, and
+group the Tasks page by them.
+([#4250](https://github.com/ReviewStage/luke/pull/4250),
+[#3960](https://github.com/ReviewStage/luke/pull/3960),
+[#4464](https://github.com/ReviewStage/luke/pull/4464))
+
+### An Inbox that reads like a thread
+
+An Inbox thread reads like an issue's comments, each message under its
+writer's chip, opening at the newest with your reply as a draft at its end.
+While an agent waits on an ask, its choices, steps, or fields are your reply
+box, and the row shows the ask itself. Search the Inbox from ⌘K or its own
+field, and start a thread with any agent from New thread.
+([#4194](https://github.com/ReviewStage/luke/pull/4194),
+[#4224](https://github.com/ReviewStage/luke/pull/4224),
+[#4241](https://github.com/ReviewStage/luke/pull/4241),
+[#4248](https://github.com/ReviewStage/luke/pull/4248),
+[#4252](https://github.com/ReviewStage/luke/pull/4252),
+[#4264](https://github.com/ReviewStage/luke/pull/4264),
+[#4270](https://github.com/ReviewStage/luke/pull/4270),
+[#4279](https://github.com/ReviewStage/luke/pull/4279),
+[#4289](https://github.com/ReviewStage/luke/pull/4289),
+[#4297](https://github.com/ReviewStage/luke/pull/4297),
+[#4301](https://github.com/ReviewStage/luke/pull/4301),
+[#4316](https://github.com/ReviewStage/luke/pull/4316),
+[#4336](https://github.com/ReviewStage/luke/pull/4336),
+[#4364](https://github.com/ReviewStage/luke/pull/4364),
+[#4406](https://github.com/ReviewStage/luke/pull/4406),
+[#4484](https://github.com/ReviewStage/luke/pull/4484),
+[#4700](https://github.com/ReviewStage/luke/pull/4700),
+[#4909](https://github.com/ReviewStage/luke/pull/4909))
+
+### Calls on agents
+
+Call any agent from its tab, or start one with a call from the composer's
+Call. The transcript keeps the call's spoken lines between markers, folded
+over the agent's work, and a line you type while the call is up goes to it.
+([#4183](https://github.com/ReviewStage/luke/pull/4183),
+[#4195](https://github.com/ReviewStage/luke/pull/4195),
+[#4246](https://github.com/ReviewStage/luke/pull/4246),
+[#4260](https://github.com/ReviewStage/luke/pull/4260),
+[#4300](https://github.com/ReviewStage/luke/pull/4300),
+[#4307](https://github.com/ReviewStage/luke/pull/4307),
+[#4337](https://github.com/ReviewStage/luke/pull/4337),
+[#4338](https://github.com/ReviewStage/luke/pull/4338),
+[#4340](https://github.com/ReviewStage/luke/pull/4340),
+[#4362](https://github.com/ReviewStage/luke/pull/4362),
+[#4401](https://github.com/ReviewStage/luke/pull/4401),
+[#4455](https://github.com/ReviewStage/luke/pull/4455),
+[#4467](https://github.com/ReviewStage/luke/pull/4467),
+[#4495](https://github.com/ReviewStage/luke/pull/4495))
+
+### Formatting in plans and messages
+
+Format a plan from a toolbar over your selection, or type / to insert a
+heading, list, table, Mermaid diagram, divider, or picture. The agent, Inbox,
+and comment boxes take bold, italic, strikethrough, code, and links, typed as
+Markdown, by shortcut, or from the toolbar.
+([#4819](https://github.com/ReviewStage/luke/pull/4819),
+[#4820](https://github.com/ReviewStage/luke/pull/4820),
+[#4821](https://github.com/ReviewStage/luke/pull/4821),
+[#4831](https://github.com/ReviewStage/luke/pull/4831),
+[#4835](https://github.com/ReviewStage/luke/pull/4835),
+[#4838](https://github.com/ReviewStage/luke/pull/4838),
+[#4841](https://github.com/ReviewStage/luke/pull/4841),
+[#4844](https://github.com/ReviewStage/luke/pull/4844))
+
+### Preview tabs
+
+A link you press opens in the side panel's one preview tab, its name in
+italics, and the next link replaces it. Double-click it or type into it to keep
+it, or ⌘-click a link for a tab of its own. Tabs you have not looked at for a
+day close themselves, and ⇧⌘T brings them back.
+([#4490](https://github.com/ReviewStage/luke/pull/4490),
+[#4496](https://github.com/ReviewStage/luke/pull/4496))
+
+### Automations on Sentry, set up by agents
+
+Install Luke's Sentry integration in Settings › Workspace › Integrations, and
+a new Sentry issue or alert starts the automations that match it, whose agent
+reads the event. Coding agents can create, change, pause, and run your
+automations, and the Automations page's Create with an agent starts one that
+sets it up.
+([#3754](https://github.com/ReviewStage/luke/pull/3754),
+[#3769](https://github.com/ReviewStage/luke/pull/3769),
+[#3770](https://github.com/ReviewStage/luke/pull/3770),
+[#3776](https://github.com/ReviewStage/luke/pull/3776),
+[#4685](https://github.com/ReviewStage/luke/pull/4685),
+[#4692](https://github.com/ReviewStage/luke/pull/4692),
+[#4714](https://github.com/ReviewStage/luke/pull/4714),
+[#4716](https://github.com/ReviewStage/luke/pull/4716))
+
+### Improvements
+
+- Luke opens on the Inbox when no task is open, and Home, its sidebar row,
+  and ⇧⌘H are gone ([#4311](https://github.com/ReviewStage/luke/pull/4311))
+- Edit one of your messages to an agent and send it again, or Revert to here
+  on a reply, and Luke takes the conversation back to that point
+  ([#4721](https://github.com/ReviewStage/luke/pull/4721))
+- Find a task by its key in ⌘K and the @ list, and a key written anywhere
+  draws as the task's chip
+  ([#4801](https://github.com/ReviewStage/luke/pull/4801),
+  [#4900](https://github.com/ReviewStage/luke/pull/4900),
+  [#4916](https://github.com/ReviewStage/luke/pull/4916),
+  [#4920](https://github.com/ReviewStage/luke/pull/4920))
+- An agent can record its cloud browser as a video, with its pointer and
+  clicks, and play it in its transcript, the Inbox, or the plan
+  ([#4539](https://github.com/ReviewStage/luke/pull/4539),
+  [#4589](https://github.com/ReviewStage/luke/pull/4589),
+  [#4596](https://github.com/ReviewStage/luke/pull/4596),
+  [#4763](https://github.com/ReviewStage/luke/pull/4763),
+  [#4766](https://github.com/ReviewStage/luke/pull/4766),
+  [#4773](https://github.com/ReviewStage/luke/pull/4773),
+  [#4788](https://github.com/ReviewStage/luke/pull/4788),
+  [#4883](https://github.com/ReviewStage/luke/pull/4883))
+- Code draws one way everywhere, file tabs and the Code tab included, as
+  Files changed draws a diff, and ⌘F searches the whole file
+  ([#4262](https://github.com/ReviewStage/luke/pull/4262),
+  [#4283](https://github.com/ReviewStage/luke/pull/4283),
+  [#4285](https://github.com/ReviewStage/luke/pull/4285),
+  [#4293](https://github.com/ReviewStage/luke/pull/4293),
+  [#4653](https://github.com/ReviewStage/luke/pull/4653))
+- Review threads and Luke's notes share one comment card, which View settings
+  can minimize to a chip
+  ([#4203](https://github.com/ReviewStage/luke/pull/4203),
+  [#4214](https://github.com/ReviewStage/luke/pull/4214),
+  [#4225](https://github.com/ReviewStage/luke/pull/4225))
+- Settings › This Mac asks before an agent runs a command on your Mac, with
+  Allow once, Always allow, and Deny
+  ([#4862](https://github.com/ReviewStage/luke/pull/4862))
+- The merge control names what holds the merge up beside the one action you
+  can take, and a pull request in the merge queue shows as Queued everywhere
+  ([#4159](https://github.com/ReviewStage/luke/pull/4159),
+  [#4584](https://github.com/ReviewStage/luke/pull/4584),
+  [#4607](https://github.com/ReviewStage/luke/pull/4607),
+  [#4611](https://github.com/ReviewStage/luke/pull/4611),
+  [#4613](https://github.com/ReviewStage/luke/pull/4613),
+  [#4812](https://github.com/ReviewStage/luke/pull/4812))
+- The Pull request tab offers Run on its branch and Preview for its head
+  commit's deployments in its header
+  ([#4326](https://github.com/ReviewStage/luke/pull/4326),
+  [#4758](https://github.com/ReviewStage/luke/pull/4758),
+  [#4791](https://github.com/ReviewStage/luke/pull/4791))
+- Review is offered on a merged or closed pull request, and a fork's branch
+  reads owner:branch
+  ([#4200](https://github.com/ReviewStage/luke/pull/4200),
+  [#4165](https://github.com/ReviewStage/luke/pull/4165))
+- Hover cards hang from task, agent, person, repository, page, file, and pull
+  request rows across the Board, ⌘K, menus, and the tab switcher
+  ([#4688](https://github.com/ReviewStage/luke/pull/4688),
+  [#4760](https://github.com/ReviewStage/luke/pull/4760),
+  [#4768](https://github.com/ReviewStage/luke/pull/4768),
+  [#4769](https://github.com/ReviewStage/luke/pull/4769),
+  [#4772](https://github.com/ReviewStage/luke/pull/4772),
+  [#4775](https://github.com/ReviewStage/luke/pull/4775),
+  [#4782](https://github.com/ReviewStage/luke/pull/4782),
+  [#4787](https://github.com/ReviewStage/luke/pull/4787),
+  [#4789](https://github.com/ReviewStage/luke/pull/4789),
+  [#4794](https://github.com/ReviewStage/luke/pull/4794),
+  [#4795](https://github.com/ReviewStage/luke/pull/4795),
+  [#4810](https://github.com/ReviewStage/luke/pull/4810),
+  [#4868](https://github.com/ReviewStage/luke/pull/4868),
+  [#4917](https://github.com/ReviewStage/luke/pull/4917))
+- Pull request and issue chips read as their number and live title, and
+  Google, YouTube, and X links draw as chips with their brand's mark
+  ([#4911](https://github.com/ReviewStage/luke/pull/4911),
+  [#4704](https://github.com/ReviewStage/luke/pull/4704),
+  [#4709](https://github.com/ReviewStage/luke/pull/4709))
+- Repositories are listed with their owner's picture and name wherever you
+  pick one ([#4828](https://github.com/ReviewStage/luke/pull/4828),
+  [#4689](https://github.com/ReviewStage/luke/pull/4689))
+- ⌃Tab switches between your recently used screens, and a long press on Back
+  or Forward lists their steps
+  ([#4411](https://github.com/ReviewStage/luke/pull/4411),
+  [#4493](https://github.com/ReviewStage/luke/pull/4493),
+  [#4408](https://github.com/ReviewStage/luke/pull/4408),
+  [#4409](https://github.com/ReviewStage/luke/pull/4409))
+- Agent transcripts open at their newest messages and load older ones as you
+  scroll up ([#4381](https://github.com/ReviewStage/luke/pull/4381),
+  [#4404](https://github.com/ReviewStage/luke/pull/4404),
+  [#4425](https://github.com/ReviewStage/luke/pull/4425),
+  [#4428](https://github.com/ReviewStage/luke/pull/4428))
+- An agent with no task can be continued, forked, called, pinned, renamed,
+  moved to a section, and show pages, and any agent can be deleted
+  ([#4152](https://github.com/ReviewStage/luke/pull/4152),
+  [#4245](https://github.com/ReviewStage/luke/pull/4245),
+  [#4247](https://github.com/ReviewStage/luke/pull/4247),
+  [#4278](https://github.com/ReviewStage/luke/pull/4278),
+  [#4456](https://github.com/ReviewStage/luke/pull/4456),
+  [#4471](https://github.com/ReviewStage/luke/pull/4471),
+  [#4503](https://github.com/ReviewStage/luke/pull/4503),
+  [#4538](https://github.com/ReviewStage/luke/pull/4538),
+  [#4540](https://github.com/ReviewStage/luke/pull/4540))
+- A message to an agent whose session ended picks up where it left off, and
+  an agent can run with no repository
+  ([#4177](https://github.com/ReviewStage/luke/pull/4177))
+- Coding agents keep their task's status current, report to the agent that
+  started them, and post on Inbox threads only what is ready for you
+  ([#4144](https://github.com/ReviewStage/luke/pull/4144),
+  [#4151](https://github.com/ReviewStage/luke/pull/4151),
+  [#4561](https://github.com/ReviewStage/luke/pull/4561))
+- Attach pictures, PDFs, and text files to a plan comment, and copy a picture
+  from the file viewer
+  ([#4281](https://github.com/ReviewStage/luke/pull/4281),
+  [#4295](https://github.com/ReviewStage/luke/pull/4295),
+  [#4303](https://github.com/ReviewStage/luke/pull/4303))
+- Right-click any link to open or copy it
+  ([#4191](https://github.com/ReviewStage/luke/pull/4191))
+- ⌘F finds in a page an agent drew
+  ([#4193](https://github.com/ReviewStage/luke/pull/4193),
+  [#4204](https://github.com/ReviewStage/luke/pull/4204))
+- Select words in an Inbox ask and Reply quotes them, an ask can recommend
+  several options, and a withdrawn ask keeps its options, muted
+  ([#4713](https://github.com/ReviewStage/luke/pull/4713),
+  [#4808](https://github.com/ReviewStage/luke/pull/4808),
+  [#4536](https://github.com/ReviewStage/luke/pull/4536),
+  [#4771](https://github.com/ReviewStage/luke/pull/4771))
+- Ticking every step of an Inbox to-do counts as Mark done
+  ([#4275](https://github.com/ReviewStage/luke/pull/4275))
+- When GitHub refuses your token, Luke offers Update GitHub token, or
+  Authorize token for an organisation with single sign-on
+  ([#4164](https://github.com/ReviewStage/luke/pull/4164))
+- The web app has the Terminal tab
+  ([#4357](https://github.com/ReviewStage/luke/pull/4357),
+  [#4360](https://github.com/ReviewStage/luke/pull/4360))
+- On a phone, a bar along the foot of the screen holds the Inbox, Tasks, and
+  More, and each screen has one header with a way back
+  ([#4545](https://github.com/ReviewStage/luke/pull/4545),
+  [#4546](https://github.com/ReviewStage/luke/pull/4546),
+  [#4560](https://github.com/ReviewStage/luke/pull/4560),
+  [#4570](https://github.com/ReviewStage/luke/pull/4570),
+  [#4593](https://github.com/ReviewStage/luke/pull/4593),
+  [#4747](https://github.com/ReviewStage/luke/pull/4747))
+- Muted and accent text read at AA contrast
+  ([#4352](https://github.com/ReviewStage/luke/pull/4352),
+  [#4372](https://github.com/ReviewStage/luke/pull/4372),
+  [#4373](https://github.com/ReviewStage/luke/pull/4373))
+- Settings › Account's Share usage data turns product analytics off
+  ([#4796](https://github.com/ReviewStage/luke/pull/4796))
+- New task no longer offers File for later
+  ([#4843](https://github.com/ReviewStage/luke/pull/4843))
+
+### Fixes
+
+- Fixed a teammate who messaged your agent being able to have it run a
+  command on your Mac ([#4770](https://github.com/ReviewStage/luke/pull/4770))
+- Fixed model inputs, outputs, and request bodies sent to Sentry from Luke's
+  service ([#4792](https://github.com/ReviewStage/luke/pull/4792))
+- Fixed an answer never reaching an agent whose turn had ended
+  ([#4258](https://github.com/ReviewStage/luke/pull/4258))
+- Fixed agents answering an Inbox thread in their transcript
+  ([#4249](https://github.com/ReviewStage/luke/pull/4249))
+- Fixed a message to a busy agent hanging for minutes
+  ([#4463](https://github.com/ReviewStage/luke/pull/4463),
+  [#4568](https://github.com/ReviewStage/luke/pull/4568))
+- Fixed an Inbox reply draft lost when the agent posted again
+  ([#4579](https://github.com/ReviewStage/luke/pull/4579))
+- Fixed the sidebar's Inbox count not matching To do
+  ([#4516](https://github.com/ReviewStage/luke/pull/4516))
+- Fixed a picture drawn twice in an Inbox thread
+  ([#4186](https://github.com/ReviewStage/luke/pull/4186))
+- Fixed a pull request vanishing from its task once its agent was archived
+  ([#4687](https://github.com/ReviewStage/luke/pull/4687))
+- Fixed a token repository chosen in New task not staying chosen
+  ([#4287](https://github.com/ReviewStage/luke/pull/4287))
+- Fixed ⌘K and @-mentions finding nothing for several short words, and agent
+  search missing agents by their shown name
+  ([#4351](https://github.com/ReviewStage/luke/pull/4351),
+  [#4767](https://github.com/ReviewStage/luke/pull/4767),
+  [#4827](https://github.com/ReviewStage/luke/pull/4827))
+- Fixed Escape on a task always leaving for home rather than stepping back
+  ([#4308](https://github.com/ReviewStage/luke/pull/4308))
+- Fixed a transcript opening a few rows above its newest line
+  ([#4837](https://github.com/ReviewStage/luke/pull/4837))
+- Fixed loading placeholders that jumped when content arrived
+  ([#4797](https://github.com/ReviewStage/luke/pull/4797),
+  [#4813](https://github.com/ReviewStage/luke/pull/4813),
+  [#4815](https://github.com/ReviewStage/luke/pull/4815),
+  [#4817](https://github.com/ReviewStage/luke/pull/4817),
+  [#4822](https://github.com/ReviewStage/luke/pull/4822),
+  [#4823](https://github.com/ReviewStage/luke/pull/4823))
+- Fixed menus and submenus running past a narrow panel's edge
+  ([#4639](https://github.com/ReviewStage/luke/pull/4639),
+  [#4649](https://github.com/ReviewStage/luke/pull/4649))
+- Fixed code blocks drawn without colour after the colouring process exited
+  ([#4394](https://github.com/ReviewStage/luke/pull/4394))
+- Fixed app.notion.com links drawn as plain links
+  ([#4602](https://github.com/ReviewStage/luke/pull/4602))
+- Fixed the page sliding away from the caret when the iPhone keyboard opened
+  ([#4171](https://github.com/ReviewStage/luke/pull/4171))
+- Fixed a shortened chip name losing its last characters
+  ([#4185](https://github.com/ReviewStage/luke/pull/4185))
+
+### Misc
+
+- Updated the Mac app with Electron fuses, so no other process can run its
+  own code under Luke's permissions
+  ([#4784](https://github.com/ReviewStage/luke/pull/4784))
+
 ## 0.19.0 — 2026-10-20
 
 ### Luke in your browser and on your phone

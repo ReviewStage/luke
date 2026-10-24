@@ -27,8 +27,8 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      color var(--luke-duration-hover) ease,
-      text-decoration-color var(--luke-duration-hover) ease;
+      color var(--luke-duration-hover) var(--luke-motion-exit),
+      text-decoration-color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* Two lines, a card's name: the words wrap, and a third is cut short. */
@@ -91,7 +91,7 @@
 
   .luke-text-button[data-tone="accent"] {
     color: var(--luke-color-accent-text);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
   }
 
   .luke-text-button[data-tone="accent"]:is(:hover, :focus-visible) {

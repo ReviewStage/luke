@@ -20,6 +20,7 @@ import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { countWords, TERM } from "@luke/features/words";
 import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -487,14 +488,9 @@ function backFrom(
   return typed ? undefined : { to: undefined };
 }
 
-/** A count and its noun, as a kind's row says it. */
-function counted(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 /** What the plan's row says of its sections: how many, where it holds any. */
 function sectionCount(count: number): string | undefined {
-  return count === 0 ? undefined : counted(count, "section", "sections");
+  return count === 0 ? undefined : countWords(count, TERM.SECTION);
 }
 
 /** Whether → opens the row: a kind's, which narrows the list, or a folder's, which walks into it. */
@@ -1293,7 +1289,7 @@ function kindsOf(
           {
             from: MENTION_FROM.TASKS,
             name: MENTION_GROUP.TASKS,
-            detail: counted(tasks, "task", "tasks"),
+            detail: countWords(tasks, TERM.TASK),
           },
         ]),
     ...(pages === 0
@@ -1302,7 +1298,7 @@ function kindsOf(
           {
             from: MENTION_FROM.PAGES,
             name: MENTION_GROUP.PAGES,
-            detail: counted(pages, "page", "pages"),
+            detail: countWords(pages, TERM.PAGE),
           },
         ]),
     ...(agents
@@ -1314,7 +1310,9 @@ function kindsOf(
             detail:
               members === undefined
                 ? source.workspace || undefined
-                : counted(members.agents.length, "agent", "agents"),
+                : members.agents.length === 0
+                  ? undefined
+                  : countWords(members.agents.length, TERM.AGENT),
           },
         ]
       : []),
@@ -1324,7 +1322,7 @@ function kindsOf(
           {
             from: MENTION_FROM.PEOPLE,
             name: MENTION_GROUP.PEOPLE,
-            detail: counted(people, "member", "members"),
+            detail: countWords(people, TERM.MEMBER),
           },
         ]),
     ...(pullRequests === 0
@@ -1333,7 +1331,7 @@ function kindsOf(
           {
             from: MENTION_FROM.PULL_REQUESTS,
             name: MENTION_GROUP.PULL_REQUESTS,
-            detail: counted(pullRequests, "pull request", "pull requests"),
+            detail: countWords(pullRequests, TERM.PULL_REQUEST),
           },
         ]),
     ...(known.length === 0
@@ -1342,7 +1340,7 @@ function kindsOf(
           {
             from: MENTION_FROM.SKILLS,
             name: MENTION_GROUP.SKILLS,
-            detail: counted(known.length, "skill", "skills"),
+            detail: countWords(known.length, TERM.SKILL),
           },
         ]),
     { from: MENTION_FROM.DATES, name: MENTION_GROUP.DATES, detail: DATES_DETAIL },

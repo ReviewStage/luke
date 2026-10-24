@@ -50,9 +50,14 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | `--luke-type-section-*` | 13 / 18 | 16 / 24 | 16 / 24 |
   | `--luke-type-dialog-*` | 15 / 20 | 20 / 28 | 20 / 28 |
   | `--luke-type-title-*` | 26 / 34 | 28 / 36 | 22 / 30 |
+  | `--luke-type-group-*`, `--luke-type-tag-*` | 12 / 16 | 12 / 16 | 12 / 16 |
+  | `--luke-type-toolbar-title-*` | 15 / 20 | 15 / 20 | 15 / 20 |
   | `--luke-page-inset` | 48px (24px under 480px of content) | 24px | 24px |
   | `--luke-control-gap`, `--luke-icon-gap` | 8px | 8px | 8px |
   | `--luke-field-gap`, `--luke-section-gap` | 16px | 16px | 16px |
+  | `--luke-page-section-gap` | 32px | 32px | 32px |
+  | `--luke-tight-gap`, `--luke-item-gap`, `--luke-block-gap` | 4 / 6 / 12px | 4 / 6 / 12px | 4 / 6 / 12px |
+  | `--luke-row-inset`, `--luke-list-inset` | 8 / 12px | 8 / 12px | 8 / 12px |
   | `--luke-menu-row-height` | 32px | 44px | 32px |
   | `--luke-touch-target` | 44px | 44px | 44px |
   | `--luke-scroll-fade` | 26px | 24px | 24px |
@@ -65,6 +70,30 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   taken across on a coarse pointer: a `Button` or `IconButton` drawn smaller
   takes the press in a box that size centred on it (`button.css`), its glyph
   and its place unchanged.
+
+  **One weight to a type role**, set once in `profiles.css` as
+  `--luke-type-<role>-weight` and read by every component that draws the
+  job: the page title, the top bar's title, a dialog's and a section's
+  heading are semibold; a label (a row's name, a button's words) is medium;
+  body and caption are regular. `group` is the small heading over a group of
+  rows (caption size, medium, muted by default); `tag` is a badge's, a chip's,
+  a tooltip's, and a compact button's words (caption size, medium);
+  `emphasis` is the weight a word takes to stand out of its role's own (an
+  unread row, the current page). Only a title carries tracking
+  (`--luke-type-title-tracking`). A component's sheet names no weight, no
+  tracking, and no pixel size of its own, and a utility reads a role's
+  (`font-label`, `font-tag`, `text-group`), which `tokens/roles.test.ts`
+  holds. Words that count or tell time (`Time`, `Badge`, a count part) draw
+  tabular figures themselves.
+
+  **Spacing is named by role.** A page's sections stand
+  `--luke-page-section-gap` apart (`GAP.PAGE`), two groups in a pane or a
+  form `--luke-section-gap` (`GAP.SECTION`), a row holds its glyph and words
+  `--luke-row-inset` from its edge and a list holds its rows
+  `--luke-list-inset` from its own (`INSET.COLUMN`, `INSET.BLOCK`), and the
+  parts of one item stand `--luke-tight-gap`, `--luke-item-gap`, or
+  `--luke-block-gap` apart. A card's inset is one of the three
+  `--luke-card-inset*` roles.
 
   The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
   `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`
@@ -79,7 +108,8 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-duration-shape`, `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit|pane`,
   `--luke-row-stagger`, `--luke-hint-delay`, `--luke-late-delay`,
   `--luke-confirm-delay` (how long a `SavedTick` stands, which reduced motion
-  keeps, so the words stay to be read), and
+  keeps, so the words stay to be read), `--luke-settle-delay` (the beat a hover
+  card or a delayed spinner waits to see whether the state settles), and
   `--luke-loop-motion`, the play state an endless loop holds, and
   `--luke-face-motion`, the face's. Reduced motion zeroes the durations but
   hover's and pauses both loops. The face's own rules are `face/face.css`, and
@@ -119,6 +149,11 @@ combobox or react-day-picker would (the open list, its filter and
 highlight; a controlled `YYYY-MM-DD` month in UTC). What a component's
 classes cannot say (keyframes other surfaces share, a rule a finger's
 media query must outrank, the keyboard's ring) stays in its own sheet.
+The text entries and form pieces, `TextField`, `TextArea`,
+`SearchField`, `AddressField`, `FormField`, `InlineEdit`, and
+`LengthCounter`, stand on shadcn's Input, Textarea, Label, and Field. A name the
+theme adds that tailwind-merge cannot read as a size is listed in `cn.ts`, or
+`cn` drops it as a second colour.
 
 The overlays: `Dialog` and `ConfirmDialog` stand on shadcn's dialog, and
 `TooltipPill` and `TooltipCard` on its tooltip and hover card, placed by

@@ -56,7 +56,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     overflow-wrap: anywhere;
   }
 
@@ -73,7 +73,7 @@
   .luke-settings-skeleton {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-settings-section-gap);
+    gap: var(--luke-page-section-gap);
     min-width: 0;
   }
 }

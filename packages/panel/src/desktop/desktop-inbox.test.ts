@@ -724,18 +724,18 @@ async function settle(): Promise<void> {
 const ROW_TITLE = ".luke-list-row-title";
 
 /**
- * What marks a row as needing the developer: `*` where it wears the
- * attention mark and says "Needs you" beside it, nothing where it does
- * neither, and `?` where it does one alone, so a half-drawn mark fails
- * every listing.
+ * What marks a row as needing the developer: `*` where it says "Needs you"
+ * to a reader and draws no attention mark, which its card says instead,
+ * nothing where it does neither, and `?` where it draws the mark, so a mark
+ * drawn on every open row again fails every listing.
  */
 function needsYouMark(row: HTMLElement): string {
   const mark = row.querySelector(".luke-list-row-meta .attention-mark") !== null;
   const said = [...row.querySelectorAll(".luke-list-row-meta .luke-visually-hidden")].some(
     (each) => each.textContent === "Needs you",
   );
-  if (mark && said) return "*";
-  return mark || said ? "?" : "";
+  if (mark) return "?";
+  return said ? "*" : "";
 }
 
 /** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
@@ -2251,12 +2251,16 @@ test("an archived agent is still named by its name, its card saying it was archi
   assert.deepEqual(asked.previewedAgents, []);
 });
 
-test("an item's row hangs the thread's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own: its task, its title, where it stands, how it ended, and the agent that asked at its foot with the spinner while it works; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
+test("an item's row hangs the thread's card beside it, as a sidebar task's row hangs its task's, the row wearing no tile of the agent's: its task, its title, where it stands, how it ended, and the agent that asked at its foot with the spinner while it works; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
   const { page, asked } = mount();
   await settle();
   const row = rowNamed(page, "How is a failed email retried?");
   assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
-  assert.ok(wearsAgentTile(row), "the row wears the agent's tile");
+  assert.equal(
+    wearsAgentTile(row),
+    false,
+    "the row wears no agent's tile, its card naming the agent",
+  );
   const words = hoveredCard(row, "[data-inbox-row-card]") ?? "";
   assert.match(words, /^Billing usage alerts/u, "the card leads with its task");
   assert.match(words, /How is a failed email retried\?/u);
@@ -2279,8 +2283,6 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
   act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
-  const other = rowNamed(page, "Expire after 7 days?");
-  assert.ok(wearsAgentTile(other), "a row whose plan names no agent still wears an agent's tile");
 });
 
 test("an item's card says whom an open item waits on, the reader as Needs you and a teammate by name", async () => {
@@ -2688,7 +2690,7 @@ test("Sort in the view's menu offers Latest first and Oldest first, which lists 
   assert.equal(viewItem("Latest first").getAttribute("aria-checked"), "true");
 });
 
-test("grouped by person or by nothing, each row names its task in a chip before its preview, never on its title's line, which the title keeps whole; grouped by task, the header names it and the rows wear no chip", async () => {
+test("grouped by person or by nothing, each row names its task on a line of its own between its title and its preview, never on its title's line, which the title keeps whole, nor in the preview, which keeps its line whole; grouped by task, the header names it and the rows name none", async () => {
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount();
   await settle();
@@ -2696,7 +2698,8 @@ test("grouped by person or by nothing, each row names its task in a chip before 
     ["Alert at 80%?", "Expire after 7 days?"].map((title) => {
       const row = rowNamed(page, title);
       return {
-        chip: row.querySelector(".luke-list-row-description .luke-list-row-lead")?.textContent,
+        chip: row.querySelector('.luke-list-row-text > .luke-list-row-lead[data-at="line"]')
+          ?.textContent,
         firstLine: row.querySelector(".luke-list-row-head")?.textContent?.includes(title)
           ? row.querySelector(".luke-list-row-head .luke-list-row-lead, .home-row-context")
           : "the title is not on the first line",
@@ -2713,12 +2716,12 @@ test("grouped by person or by nothing, each row names its task in a chip before 
     {
       chip: "Billing usage alerts",
       firstLine: null,
-      preview: "Billing usage alertsRetry 3 times over an hour ★ / Retry once",
+      preview: "Retry 3 times over an hour ★ / Retry once",
     },
     {
       chip: "Invites",
       firstLine: null,
-      preview: "InvitesRetry 3 times over an hour ★ / Retry once",
+      preview: "Retry 3 times over an hour ★ / Retry once",
     },
   ]);
 
@@ -3918,7 +3921,10 @@ test("Got it on a notice whose agent waits to hear back reaches the agent, so th
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
+      // Note that only the answered items' task's agents are counted, because the item chosen next reads its own task's for its card.
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST && request.payload.taskId === BILLING.id) {
+        listReads.push(request);
+      }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
         nods.push(request.payload);
         const asked = request.payload.itemId === heard.id ? heard : quiet;
@@ -4145,7 +4151,7 @@ test("a task's group header hangs the task's card, as the automation's does its 
   assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
 });
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
   handState({});
   listedWorkspace = {
     id: "workspace-acme",
@@ -4187,7 +4193,11 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
 
   const mark = rowNamed(page, "Quarantine the flaky test?");
-  assert.ok(wearsAgentTile(mark), "the planless agent's row wears its tile");
+  assert.equal(
+    wearsAgentTile(mark),
+    false,
+    "the planless agent's row wears no tile, its card naming the agent",
+  );
   assert.match(
     hoveredCard(mark, "[data-inbox-row-card]") ?? "",
     /^Nightly flake sweep.*Sweep the flaky tests$/su,
@@ -5242,7 +5252,7 @@ test("an item's row reads as two lines, its title and time over the last word in
   ]);
 });
 
-test("the attention mark stands before the time on the reader's own open item alone: a teammate's open item wears their face there with no mark and no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
+test("no row draws the attention mark, which an open item nearly always would: the reader's own open item says to a reader before its time that it needs them, its card showing it; a teammate's open item wears their face there with no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount();
   await settle();
@@ -5258,7 +5268,7 @@ test("the attention mark stands before the time on the reader's own open item al
     };
   };
   assert.deepEqual(ends("Expire after 7 days?"), {
-    mark: true,
+    mark: false,
     face: undefined,
     said: "Needs you",
     dot: false,

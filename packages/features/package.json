@@ -1,6 +1,6 @@
 {
   "name": "@luke/features",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "description": "The client side of the hosted service: its paths and wire, its clients, the plan and board domain, the planner's run vocabulary, product events, and feedback delivery",
@@ -115,6 +115,7 @@
     "./workspace-live": "./src/workspace-live.js",
     "./workspace-wire": "./src/workspace-wire.js",
     "./workspace-key": "./src/workspace-key.js",
+    "./words": "./src/words.js",
     "./sign-in-provider": "./src/sign-in-provider.js",
     "./skill-file": "./src/skill-file.js",
     "./skill-paste": "./src/skill-paste.js",

@@ -114,7 +114,11 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * thread's task, say, in a list grouped by something else: a small chip
  * of a glyph and a name, cut short at a short name's width, the
  * description's words following it on the same line, as a mail app tags a
- * thread with its mailbox.
+ * thread with its mailbox. A fuller row may stand it on a line of its own
+ * instead (`LIST_ROW_LEAD.LINE`), between its title and its description,
+ * its glyph and its whole name in the description's quieter ink, as a
+ * mail app names a thread's sender over its preview, so neither the name
+ * nor the preview is cut short to make room for the other.
  *
  * A row may be swiped right to one act (`swipe`), as a mail app's thread
  * is swiped to mark it read: a short swipe leaves it open on the act's
@@ -147,6 +151,14 @@ export const LIST_ROW_ACTIONS = {
 } as const;
 
 export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
+
+/** Where what a row belongs to stands: a chip leading its description's line, or a line of its own over the description. */
+export const LIST_ROW_LEAD = {
+  DESCRIPTION: "description",
+  LINE: "line",
+} as const;
+
+export type ListRowLeadAt = (typeof LIST_ROW_LEAD)[keyof typeof LIST_ROW_LEAD];
 
 /** A row's one swipe: what its act is called, its glyph, and the act. */
 export interface ListRowSwipe {
@@ -216,7 +228,6 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
 function plainWords(words: ReactNode): string | undefined {
   // A slot is handed over as a loose ReactNode, and a string is the one form
   // whose words can be compared from render to render; this check is the boundary.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof words === "string" ? words : undefined;
 }
 
@@ -287,6 +298,7 @@ export function ListRow({
   title,
   description,
   lead,
+  leadAt = LIST_ROW_LEAD.DESCRIPTION,
   attachments,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
@@ -320,6 +332,8 @@ export function ListRow({
   description?: ReactNode;
   /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
   lead?: ListRowLead | undefined;
+  /** Where the lead stands: a chip before the description, on its line, or a line of its own between the title and the description. */
+  leadAt?: ListRowLeadAt | undefined;
   /** What the row's thing carries, its pictures or pages drawn small, on a line of their own under the description; decoration, since its words say what it is. */
   attachments?: ReactNode;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
@@ -420,6 +434,21 @@ export function ListRow({
         ) : null}
       </span>
     ) : null;
+  const leadMark =
+    lead === undefined ? null : (
+      <span className="luke-list-row-lead" data-at={leadAt}>
+        <span className="luke-list-row-lead-icon" aria-hidden="true">
+          {lead.icon}
+        </span>
+        <span
+          ref={leadMeasured}
+          className="luke-list-row-lead-label"
+          data-overflow={String(leadClipped)}
+        >
+          {lead.label}
+        </span>
+      </span>
+    );
   const face = (
     <>
       {said(leading) ? (
@@ -436,26 +465,14 @@ export function ListRow({
         ) : (
           heading
         )}
-        {said(description) || lead !== undefined ? (
+        {leadAt === LIST_ROW_LEAD.LINE ? leadMark : null}
+        {said(description) || (leadAt === LIST_ROW_LEAD.DESCRIPTION && lead !== undefined) ? (
           <span
             ref={described}
             className="luke-list-row-description"
             data-overflow={describedDense ? String(descriptionClipped) : undefined}
           >
-            {lead === undefined ? null : (
-              <span className="luke-list-row-lead">
-                <span className="luke-list-row-lead-icon" aria-hidden="true">
-                  {lead.icon}
-                </span>
-                <span
-                  ref={leadMeasured}
-                  className="luke-list-row-lead-label"
-                  data-overflow={String(leadClipped)}
-                >
-                  {lead.label}
-                </span>
-              </span>
-            )}
+            {leadAt === LIST_ROW_LEAD.DESCRIPTION ? leadMark : null}
             {description}
           </span>
         ) : null}

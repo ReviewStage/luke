@@ -737,6 +737,44 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a warm launch's IDLE settles its turn as a turn's end does, and the END that retires it later settles nothing more",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const turn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...envelope },
+          {
+            type: "assistant",
+            message: { content: [{ type: "text", text: "Done." }] },
+            ...envelope,
+          },
+          { type: "result", subtype: "success", is_error: false, ...envelope },
+          { type: RUNNER_EVENT.IDLE },
+        ];
+        const retired = [{ type: RUNNER_EVENT.END, reason: RUNNER_END.IDLED }];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = [...turn, ...retired].map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events.slice(0, turn.length));
+        const idle = yield* transcriptOf(agent.target.conversationId);
+        yield* post(agent.bearer, events.slice(turn.length));
+        const ended = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(
+          idle.turns.map(({ status, failureDetail }) => ({ status, failureDetail })),
+          [{ status: TURN_STATUS.SETTLED, failureDetail: null }],
+        );
+        assert.deepEqual(idle.rows.at(-1)?.parts.map(drawn), [["step-start"], ["text", "Done."]]);
+        assert.deepEqual(ended, idle);
+      }),
+  );
+
+  it.effect(
     "a background subagent's call stays running past Claude Code's launch notice, and its task notification settles it",
     () =>
       Effect.gen(function* () {

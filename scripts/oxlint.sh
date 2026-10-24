@@ -14,4 +14,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 luke_require_node
 
 cd "$LUKE_REPO_ROOT"
-exec pnpm exec oxlint --config .oxlintrc.json "$@"
+# A disable directive that silences nothing is an error, so one left behind by
+# a deleted rule, or by the code it once excused, never sits waiting to hide
+# the next problem on its line.
+exec pnpm exec oxlint --config .oxlintrc.json --report-unused-disable-directives-severity=error "$@"

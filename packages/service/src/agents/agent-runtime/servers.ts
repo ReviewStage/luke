@@ -61,6 +61,7 @@ import {
   integrationAccountNames,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
+import { andList } from "@luke/features/words";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth } from "eve/context";
@@ -145,9 +146,6 @@ function handedRow(row: IntegrationConnectionRow): boolean {
   );
 }
 
-/** The others an account note names, as one phrase: `"Personal"`, or `"Personal" and "Side"`. */
-const OTHERS_SAID = new Intl.ListFormat("en", { type: "conjunction" });
-
 /**
  * What the model is told of one account among its provider's others: its
  * label and the others' labels, never their connection names, which a
@@ -170,7 +168,7 @@ function accountNote(
   // Note that a label is quoted as a string literal, because a provider names it and the model reads it.
   const label = (each: IntegrationConnectionRow) =>
     JSON.stringify(names.get(each.connectionName) ?? "");
-  return `This connection is the developer's ${label(row)} ${name} account. They also connected ${OTHERS_SAID.format(others.map(label))}. If the developer hasn't said which account, ask before writing. Say which account you read from or wrote to.`;
+  return `This connection is the developer's ${label(row)} ${name} account. They also connected ${andList(others.map(label))}. If the developer hasn't said which account, ask before writing. Say which account you read from or wrote to.`;
 }
 
 /**

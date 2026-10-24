@@ -20,7 +20,7 @@ import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { personalWorkspace } from "../../schemas/personal-workspace.js";
 import { task } from "../../schemas/task.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, plansOf } from "../../testing/index.js";
 import {
   aimOperatorHeartbeat,
   automationRunsSince,
@@ -28,6 +28,7 @@ import {
   claimDueAutomations,
   createAutomation,
   deleteAutomation,
+  expireQueuedAutomationRuns,
   githubAutomationsOn,
   integrationAutomationsOn,
   listAutomationRuns,
@@ -39,6 +40,7 @@ import {
   readWebhookAutomation,
   recordAutomationRun,
   settleAutomationRun,
+  strandedAutomationRuns,
   subjectRunStartedSince,
   updateAutomation,
 } from "../automation-store.js";
@@ -878,6 +880,34 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
           Option.map(yield* readAutomation(owner, id), (read) => read.name),
           Option.some("Nightly flaky-test sweep"),
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the automation sweep's reads", (it) => {
+  const at = new Date("2026-10-20T12:00:00Z");
+
+  it.effect(
+    "the sweep finds the queued runs to start and to expire through the index of their status",
+    () =>
+      Effect.gen(function* () {
+        const [queued] = yield* plansOf(queuedAutomationRuns(at, 10));
+        const [expired] = yield* plansOf(
+          expireQueuedAutomationRuns(at, AUTOMATION_RUN_REASON.UNAVAILABLE),
+        );
+
+        assert.match(queued?.plan ?? "", /automation_run_status_fired/);
+        assert.match(expired?.plan ?? "", /automation_run_status_fired/);
+      }),
+  );
+
+  it.effect(
+    "the sweep finds the claimed runs no agent was recorded for through their own index",
+    () =>
+      Effect.gen(function* () {
+        const [stranded] = yield* plansOf(strandedAutomationRuns(at, 10));
+
+        assert.match(stranded?.plan ?? "", /automation_run_unrecorded_settled/);
       }),
   );
 });

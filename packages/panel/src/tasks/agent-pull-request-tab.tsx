@@ -803,7 +803,6 @@ function PartSkeleton({
     <SkeletonRegion label={label}>
       <div className="pull-request-skeleton">
         {widths.map((width, at) => (
-          // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
           <Skeleton key={at} width={width} />
         ))}
       </div>

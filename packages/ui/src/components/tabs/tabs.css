@@ -149,7 +149,7 @@
     border-radius: var(--luke-control-radius);
     color: var(--luke-color-text-muted);
     font-size: var(--luke-type-label-size);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
     line-height: var(--luke-type-label-leading);
     /* Every tab asks for an equal share and narrows by it, down to a
        glyph's width; each is a container of its own width, so it can stand
@@ -158,9 +158,9 @@
     /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
        dragged past it, and home again, on the bounce small elements ride. */
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease,
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit),
+      opacity var(--luke-duration-hover) var(--luke-motion-exit),
       transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
@@ -191,8 +191,8 @@
     box-shadow: 0 4px 12px var(--luke-color-shadow);
     color: var(--luke-color-text);
     transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease;
+      background-color var(--luke-duration-hover) var(--luke-motion-exit),
+      color var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* The chosen tab keeps a share of its own, its glyph, its label, and its
@@ -336,7 +336,7 @@
      ink until it is chosen, as a chat app's channels do. */
   .luke-tab[data-unread="true"] .luke-tab-label {
     color: var(--luke-color-text);
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   /* A preview tab, which the next one opened takes the place of, wears its
@@ -374,7 +374,7 @@
     display: flex;
     opacity: 0;
     transform: translateY(-50%);
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   .luke-tab[data-selected="true"] .luke-tab-close {
@@ -424,7 +424,7 @@
     align-items: center;
     justify-content: center;
     transform: translateY(-50%);
-    transition: opacity var(--luke-duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   @media (hover: hover) {
