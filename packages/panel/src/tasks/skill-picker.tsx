@@ -1,3 +1,4 @@
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   ALIGN,
   ComboboxList,
@@ -23,6 +24,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { SettingsPageLink } from "../open-settings.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -69,7 +71,12 @@ export type SkillSource = () => Promise<SkillsRead>;
 const SKILL_MENU_NOTE = {
   READING: "Reading skills…",
   NONE: "No skills yet",
-  NONE_HINT: "Install one in Settings › Skills, or add one at .agents/skills/<name>/SKILL.md",
+  /** Where a skill comes from, naming the page one is installed on by its link. */
+  noneHint: (page: ReactNode) => (
+    <>
+      Install one in {page} settings, or add one at {".agents/skills/<name>/SKILL.md"}
+    </>
+  ),
   NO_MATCH: "No skills match",
 } as const;
 
@@ -125,7 +132,7 @@ function MenuNote({ read }: { read: SkillsRead | undefined }): React.ReactNode {
         {SKILL_MENU_NOTE.NONE}
       </Text>
       <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-        {SKILL_MENU_NOTE.NONE_HINT}
+        {SKILL_MENU_NOTE.noneHint(<SettingsPageLink page={SETTINGS_VIEW.SKILLS} />)}
       </Text>
     </Stack>
   );

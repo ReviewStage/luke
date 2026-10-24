@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { type ReactNode, useId, useRef } from "react";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
 import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
@@ -33,6 +33,7 @@ export function CommandAsk({
   onAllowAlways,
   onDeny,
   onExited,
+  settingsPage,
 }: {
   /** Whether the ask stands; falling, the card fades out before it goes. */
   open: boolean;
@@ -46,6 +47,8 @@ export function CommandAsk({
   onDeny: () => void;
   /** Its fade has run and the card is gone, which its owner takes the ask down on. */
   onExited?: (() => void) | undefined;
+  /** The page of Settings the asking is changed in, as the window links it by name; settings at large where none. */
+  settingsPage?: ReactNode;
 }): React.JSX.Element {
   const deny = useRef<HTMLButtonElement | null>(null);
   const bodyId = useId();
@@ -76,7 +79,8 @@ export function CommandAsk({
         <Text tone={TEXT_TONE.MUTED} id={bodyId}>
           An agent wants to run this in your login shell, from your home folder. What it prints goes
           to the model and is kept with the conversation. Always allow stops the asking for every
-          later command, until you change it in Settings › This Mac.
+          later command, until you change it in{" "}
+          {settingsPage === undefined ? null : <>{settingsPage} </>}settings.
         </Text>
         <FileText text={command} label={COMMAND_LABEL} extent={FILE_TEXT_EXTENT.WHOLE} />
       </Stack>

@@ -11,11 +11,13 @@ import {
 } from "@luke/features/github-token-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
+import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { holdExits } from "@luke/ui/testing/held-exits";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
@@ -48,6 +50,8 @@ let sent: { kind: PortActKind; payload: unknown }[] = [];
 let refuseSave: GitHubTokenRejection | undefined;
 /** How many of the next reads go unanswered. */
 let unansweredReads = 0;
+/** Every place in Settings the window was asked to open, in order. */
+let opened: SettingsLink[] = [];
 
 const roots: Root[] = [];
 
@@ -57,6 +61,7 @@ beforeEach(() => {
   sent = [];
   refuseSave = undefined;
   unansweredReads = 0;
+  opened = [];
   fakeActPort({
     [ACT_KIND.GITHUB_TOKEN_READ]: (payload) => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_READ, payload });
@@ -102,17 +107,21 @@ async function mountAndOpen(open = true): Promise<void> {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(AccountSection, {
-        account: {
-          status: ACCOUNT_STATUS.SIGNED_IN,
-          id: "user-ada",
-          email: "ada@example.com",
-          name: "Ada",
-          provider: ACCOUNT_PROVIDER.GOOGLE,
-        },
-        onSignOut: () => Promise.resolve(),
-        onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      }),
+      createElement(
+        OpenSettingsProvider,
+        { value: (link: SettingsLink) => opened.push(link) },
+        createElement(AccountSection, {
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            id: "user-ada",
+            email: "ada@example.com",
+            name: "Ada",
+            provider: ACCOUNT_PROVIDER.GOOGLE,
+          },
+          onSignOut: () => Promise.resolve(),
+          onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+        }),
+      ),
     ),
   );
   await settle();
@@ -246,12 +255,24 @@ test("each refused save says why and what to do next, and keeps the field", asyn
     invalid: "GitHub rejected this token. Check that you copied all of it, or create a new one.",
     no_repo_scope: "This token is missing the repo scope. Create a new token with repo ticked.",
     no_github_account:
-      "No GitHub account is connected to your Luke account. Connect GitHub in Settings › Integrations, then save the token again.",
+      "No GitHub account is connected to your Luke account. Connect GitHub in Integrations settings, then save the token again.",
     other_user:
       "This token belongs to a different GitHub account than the one connected to Luke. Create it while signed in to the connected account.",
     unreachable: "Couldn't reach GitHub. Try again.",
     too_many_tries: "Too many tokens tried in the last hour. Try again later.",
   });
+});
+
+test("a save refused for want of a GitHub account names Integrations by a link that opens it", async () => {
+  await mountAndOpen();
+  refuseSave = GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT;
+  await paste(PASTED);
+  const line =
+    document.getElementById(tokenField()?.getAttribute("aria-describedby") ?? "") ??
+    assert.fail("no line says why");
+  assert.doesNotMatch(line.textContent ?? "", /›/u, "no path to the page is spelled");
+  act(() => button("Integrations", line).click());
+  assert.deepEqual(opened, [{ page: SETTINGS_VIEW.INTEGRATIONS }]);
 });
 
 test("a saved token GitHub rejected says to remove it and add a new one", async () => {

@@ -8,6 +8,7 @@ import {
   threadInChapter,
 } from "@luke/features/pull-request-chapters";
 import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@luke/features/pull-request-chapters-wire";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -70,6 +71,7 @@ import {
 } from "@luke/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
+import { SettingsPageLink } from "../open-settings.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -159,7 +161,8 @@ const CHAPTERS_WORDS = {
   NO_PULL_REQUEST: "No pull request yet.",
   NONE: "No chapters yet.",
   GENERATE: "Generate chapters",
-  UNAVAILABLE: "Save an API key in Settings › Agents to generate chapters.",
+  /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
+  unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
   ELSEWHERE: "Chapters are being generated",
   REFRESH: "Refresh",
@@ -959,7 +962,9 @@ function chaptersState(
           {CHAPTERS_WORDS.NONE}
         </EmptyState>
       ) : (
-        <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>{CHAPTERS_WORDS.UNAVAILABLE}</EmptyState>
+        <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
+          {CHAPTERS_WORDS.unavailable(<SettingsPageLink page={SETTINGS_VIEW.CODING_AGENTS} />)}
+        </EmptyState>
       );
     case CHAPTERS_SHOWN.GENERATING:
       return (
