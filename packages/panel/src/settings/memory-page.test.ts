@@ -121,9 +121,18 @@ async function settle(): Promise<void> {
   });
 }
 
+/** How the workspaces' own read stands, which the page is handed beside the workspace it shows. */
+interface WorkspacesRead {
+  readonly failed: boolean;
+  readonly retry: () => void;
+}
+
+const WORKSPACES_READ: WorkspacesRead = { failed: false, retry: () => undefined };
+
 async function mount(
   signedIn = true,
-  workspace: Workspace | undefined = ACME,
+  workspace: Workspace | null = ACME,
+  workspaces: WorkspacesRead = WORKSPACES_READ,
 ): Promise<{
   readonly page: HTMLElement;
   readonly show: (next: Workspace, readerId?: string) => Promise<void>;
@@ -132,8 +141,18 @@ async function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const draw = (shown: Workspace | undefined, readerId: string | undefined) =>
-    act(() => root.render(createElement(MemorySection, { signedIn, workspace: shown, readerId })));
+  const draw = (shown: Workspace | null, readerId: string | undefined) =>
+    act(() =>
+      root.render(
+        createElement(MemorySection, {
+          signedIn,
+          workspace: shown ?? undefined,
+          readerId,
+          workspacesFailed: workspaces.failed,
+          onRetryWorkspaces: workspaces.retry,
+        }),
+      ),
+    );
   draw(workspace, signedIn ? READER : undefined);
   await settle();
   return {
@@ -383,4 +402,31 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
     2,
     "the signed-out page reads nothing",
   );
+});
+
+test("while the memories are read the page says Reading, which is neither its failure nor its empty line", async () => {
+  holdReads = [];
+  const { page } = await mount();
+
+  const status = page.querySelector('[role="status"]') ?? assert.fail("no reading region");
+  assert.equal(status.textContent, "Reading Luke's memory");
+  assert.doesNotMatch(page.textContent ?? "", /could not be read|hasn't remembered/u);
+});
+
+test("before the workspaces are read the page says Reading, and does not say none is open", async () => {
+  const { page } = await mount(true, null);
+
+  const status = page.querySelector('[role="status"]') ?? assert.fail("no reading region");
+  assert.equal(status.textContent, "Reading your workspaces");
+  assert.doesNotMatch(page.textContent ?? "", /none is open/u);
+  assert.equal(sent.length, 0, "no workspace is a memory read of none");
+});
+
+test("workspaces that could not be read say so with Retry, which asks for them again", async () => {
+  let retried = 0;
+  const { page } = await mount(true, null, { failed: true, retry: () => (retried += 1) });
+
+  assert.match(page.textContent ?? "", /Your workspaces could not be read\./u);
+  act(() => button(page, "Retry").click());
+  assert.equal(retried, 1);
 });

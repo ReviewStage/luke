@@ -1,5 +1,6 @@
 import type { MemorySummary } from "@luke/features/memory-wire";
 import { dayText } from "@luke/features/time-format";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
@@ -47,9 +48,9 @@ import { MenuRow } from "./menu-row.js";
 
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  FAILED: "Luke's memory could not be read.",
+  FAILED: readFailedWords("Luke's memory"),
+  WORKSPACES_FAILED: readFailedWords("your workspaces"),
   SIGNED_OUT: "Sign in to see what Luke remembers.",
-  NO_WORKSPACE: "Luke's memory belongs to a workspace, and none is open yet.",
   EMPTY: "Luke hasn't remembered anything yet.",
   FORGET_FAILED: "The memory could not be forgotten. Try again.",
   PRIVATE: "Only you",
@@ -74,6 +75,12 @@ function keeperOf(memory: MemorySummary, readerId: string | undefined): string {
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
+
+/** What the skeletons say to a reader who cannot see them. */
+const READING_LABEL = {
+  MEMORY: readingWords("Luke's memory"),
+  WORKSPACES: readingWords("your workspaces"),
+} as const;
 
 /** The rows that stand while the memories are read: each its words over who kept it and when, and its ⋯. */
 const MEMORIES_SKELETON: readonly SettingsRowSkeletonShape[] = Array.from({ length: 3 }, () => ({
@@ -142,12 +149,18 @@ export function MemorySection({
   signedIn,
   workspace,
   readerId,
+  workspacesFailed,
+  onRetryWorkspaces,
 }: {
   signedIn: boolean;
   /** The workspace Settings shows, whose memories the page reads; absent before the workspaces are read. */
   workspace: Workspace | undefined;
   /** The signed-in account, whose own memories read as You. */
   readerId: string | undefined;
+  /** Whether the read the workspaces arrive with failed, so no workspace will arrive until it is asked again. */
+  workspacesFailed: boolean;
+  /** Asks for the workspaces again. */
+  onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const [memories, setMemories] = useState<readonly MemorySummary[] | undefined>(undefined);
@@ -242,7 +255,20 @@ export function MemorySection({
   );
 
   if (!signedIn) return <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>;
-  if (workspace === undefined) return <SettingsLine>{PAGE_LINE.NO_WORKSPACE}</SettingsLine>;
+  // Note that no workspace is a read not answered yet or one that failed, never a workspace-less account, which holds its own.
+  if (workspace === undefined) {
+    return (
+      <SettingsSection>
+        {workspacesFailed ? (
+          <SettingsLine>
+            <ErrorState onRetry={onRetryWorkspaces}>{PAGE_LINE.WORKSPACES_FAILED}</ErrorState>
+          </SettingsLine>
+        ) : (
+          <SettingsRowsSkeleton label={READING_LABEL.WORKSPACES} rows={MEMORIES_SKELETON} />
+        )}
+      </SettingsSection>
+    );
+  }
   return (
     <>
       <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -271,7 +297,7 @@ export function MemorySection({
               </ErrorState>
             </SettingsLine>
           ) : (
-            <SettingsRowsSkeleton label="Loading Luke's memory" rows={MEMORIES_SKELETON} />
+            <SettingsRowsSkeleton label={READING_LABEL.MEMORY} rows={MEMORIES_SKELETON} />
           )}
         </SettingsSection>
       </div>

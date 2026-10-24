@@ -90,13 +90,19 @@ test("a working server keeps its switch and the tools it listed", () => {
   assert.equal(row.problem, undefined);
 });
 
-test("a connection is checked until its server answers, and stands as the service says when Luke could not ask", () => {
+test("a connection is checked until its server answers, and says its tools could not be read when Luke could not ask", () => {
   assert.equal(
     connectionHealth(INTEGRATION_PROVIDER.SLACK, undefined).kind,
     CONNECTION_HEALTH.CHECKING,
   );
-  assert.equal(slackRow(undefined).kind, SERVER_ROW.SWITCH);
-  assert.equal(slackRow({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED }).kind, SERVER_ROW.SWITCH);
+  const checking = slackRow(undefined);
+  const failed = slackRow({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
+
+  assert.equal(checking.kind, SERVER_ROW.SWITCH);
+  assert.equal(checking.problem, undefined);
+  assert.equal(failed.kind, SERVER_ROW.SWITCH, "the agent's switch stays");
+  assert.equal(failed.problem, "The tools could not be read.");
+  assert.equal(failed.tools, undefined);
 });
 
 /** Every offered server's row where each stands as `standing` says, Linear's server answering `tools`. */

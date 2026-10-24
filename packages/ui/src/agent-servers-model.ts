@@ -13,6 +13,7 @@ import {
   type IntegrationStatus,
   integrationAccountNames,
 } from "@luke/features/integration-wire";
+import { readFailedWords } from "@luke/features/words";
 import { matchIntegration } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
 
@@ -139,7 +140,11 @@ function wordsOf(
   signIn: SignIn | undefined,
 ): Pick<ServerRow, "problem" | "note"> | undefined {
   if (status === INTEGRATION_STATUS.CONNECTED) {
-    return health.kind === CONNECTION_HEALTH.BROKEN ? { problem: health.problem } : undefined;
+    if (health.kind === CONNECTION_HEALTH.BROKEN) return { problem: health.problem };
+    // Note that a read Luke's own service could not answer is said, never drawn as a server that works.
+    return health.kind === CONNECTION_HEALTH.FAILED
+      ? { problem: readFailedWords("the tools") }
+      : undefined;
   }
   if (signIn === undefined) return undefined;
   const { text, problem } = signInLine(provider, signIn);
