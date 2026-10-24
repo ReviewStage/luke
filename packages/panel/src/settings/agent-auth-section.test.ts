@@ -235,8 +235,24 @@ async function pasteAndSave(field: HTMLInputElement, value: string): Promise<voi
   await settle();
 }
 
-const question = () =>
-  document.querySelector('[role="alertdialog"]') ?? assert.fail("no question stands");
+/**
+ * The question standing at the one open dialog's foot, never in a card of
+ * its own over it, with what the dialog holds stilled behind it.
+ */
+function question(): HTMLElement {
+  const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+  assert.equal(dialogs.length, 1, "the question opens no card over the dialog");
+  const [dialog] = dialogs;
+  assert.ok(dialog?.querySelector('[data-slot="dialog-body"][inert]'), "the dialog stands still");
+  assert.ok(
+    [...dialog.querySelectorAll("button")].every((each) => each.textContent !== "Done"),
+    "the foot's own answer gives way to the question",
+  );
+  return dialog.querySelector<HTMLElement>('[role="group"]') ?? assert.fail("no question stands");
+}
+
+/** The act a question asks, as its look says what it costs. */
+const actLook = (words: string) => button(question(), words).getAttribute("data-variant");
 
 const forAgentsSent = () =>
   sent
@@ -440,6 +456,8 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 
   await press(plan, "Disconnect");
+  assert.match(question().textContent ?? "", /Disconnect your Claude plan\?/u);
+  assert.equal(actLook("Disconnect"), "danger", "a token he deletes is past undoing");
   await press(question(), "Disconnect");
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
@@ -478,16 +496,19 @@ test("Codex's subscription signs in with ChatGPT on the desktop, meets the first
   assert.ok(dialog.querySelector('a[href="https://platform.openai.com/api-keys"]'));
   await press(card(dialog, "Subscription"), "Sign in with ChatGPT");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN).length, 1);
-  assert.ok(
-    [...document.querySelectorAll('[role="dialog"]')].some((each) =>
-      each.textContent?.includes("You're using your ChatGPT plan"),
-    ),
+  assert.equal(
+    document.querySelectorAll('[role="dialog"]').length,
+    1,
+    "OpenAI's notice opens no card over the dialog",
   );
-  await press(document, "Got it");
+  assert.match(card(dialog, "Subscription").textContent ?? "", /You're using your ChatGPT plan/u);
+  await press(card(dialog, "Subscription"), "Got it");
+  assert.doesNotMatch(dialog.textContent ?? "", /You're using your ChatGPT plan/u);
   assert.equal(rowButton(page, "Codex").textContent, "Connected via subscription");
   assert.equal(radio(dialog, "Subscription").getAttribute("aria-checked"), "true");
 
   await press(card(dialog, "Subscription"), "Disconnect");
+  assert.equal(actLook("Disconnect"), "danger", "an ended sign-in is past undoing");
   await press(question(), "Disconnect");
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
