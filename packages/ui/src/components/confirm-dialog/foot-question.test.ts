@@ -144,6 +144,20 @@ test("it takes the foot's place rather than a card of its own, lands on Cancel, 
   assert.ok(button("Delete key")?.closest("[inert]"), "what the dialog holds takes no press");
 });
 
+test("Tab and Shift-Tab go between the question's two answers, never into the stilled body", () => {
+  asked();
+  const tab = (shiftKey: boolean) =>
+    act(() => {
+      (document.activeElement ?? document.body).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true }),
+      );
+    });
+  tab(true);
+  assert.ok(holds(button("Delete")), "Shift-Tab from Cancel wraps to the act");
+  tab(false);
+  assert.ok(holds(button("Cancel")), "Tab from the act wraps to Cancel");
+});
+
 test("Cancel takes the question back, the dialog's answers come back, and focus goes back to what asked", () => {
   const { opener, onDone } = asked();
   press("Cancel");
