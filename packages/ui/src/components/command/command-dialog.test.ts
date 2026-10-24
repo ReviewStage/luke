@@ -43,10 +43,11 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The rows chosen, by name, and the keys the window behind the palette heard. */
+/** The rows chosen, by name, and the keys and presses the window behind the palette heard. */
 interface Heard {
   chosen: string[];
   keys: string[];
+  presses: number;
 }
 
 /** Two groups of rows, each row saying it was chosen. */
@@ -85,7 +86,14 @@ function Owner({
   const [open, setOpen] = useState(false);
   return createElement(
     "div",
-    { onKeyDown: (event: React.KeyboardEvent) => heard.keys.push(event.key) },
+    {
+      onKeyDown: (event: React.KeyboardEvent) => heard.keys.push(event.key),
+      onClick: (event: React.MouseEvent) => {
+        if (event.target instanceof Element && event.target.closest("button") === null) {
+          heard.presses += 1;
+        }
+      },
+    },
     createElement("button", { type: "button", onClick: () => setOpen(true) }, "Search"),
     createElement(CommandDialog, {
       open,
@@ -103,7 +111,7 @@ function openPalette(
   groups: (heard: Heard) => readonly CommandGroup[] = groupsFor,
   extra?: Partial<CommandDialogProps>,
 ): Heard {
-  const heard: Heard = { chosen: [], keys: [] };
+  const heard: Heard = { chosen: [], keys: [], presses: 0 };
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -171,8 +179,16 @@ test("typing narrows the rows to the ones whose words match", () => {
   expect(rows()).toEqual(["Open settings"]);
 });
 
+test("Return chooses the best row the words typed found", () => {
+  const heard = openPalette();
+  type("new");
+  expect(lit()).toBe("New task");
+  press("Enter");
+  expect(heard.chosen).toEqual(["New task"]);
+});
+
 test("where nothing matches the list says so", () => {
-  openPalette();
+  openPalette((heard) => groupsFor(heard).map(({ note: _note, ...group }) => group));
   type("zzzz");
   expect(rows()).toEqual([]);
   expect(dialog()?.textContent).toContain("No results match");
@@ -201,6 +217,7 @@ test("a press on a row chooses it", () => {
   );
   act(() => row?.click());
   expect(heard.chosen).toEqual(["Open settings"]);
+  expect(heard.presses).toBe(0);
 });
 
 test("each group stands under its heading with its note after its rows", () => {
@@ -215,6 +232,18 @@ test("each group stands under its heading with its note after its rows", () => {
     ["Actions", 2],
   ]);
   expect(groups[0]?.textContent?.endsWith("Older tasks could not be read.")).toBe(true);
+});
+
+test("a group's note stands whatever is typed, in place of the no-match line", () => {
+  openPalette((heard) => [
+    { id: "failed", label: "Inbox", items: [], note: "Your items could not be read." },
+    ...groupsFor(heard).slice(1),
+  ]);
+  expect(dialog()?.textContent).toContain("Your items could not be read.");
+  type("zzzz");
+  expect(rows()).toEqual([]);
+  expect(dialog()?.textContent).toContain("Your items could not be read.");
+  expect(dialog()?.textContent).not.toContain("No results match");
 });
 
 test("a list still being read says so rather than that nothing matches", () => {

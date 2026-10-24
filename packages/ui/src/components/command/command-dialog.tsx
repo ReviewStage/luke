@@ -20,8 +20,10 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * It is the one place cmdk is drawn, so no caller imports it: the field,
  * the list's keys (↑ and ↓ wrapping, Home and End, Return choosing), and
- * the matching of typed words are cmdk's, and everything seen is this
- * component's. shadcn/ui's command pattern is the reference: cmdk's root
+ * the scoring of typed words are cmdk's, and everything seen is this
+ * component's. The rows are narrowed here by that scoring, each group in
+ * the caller's order with its rows best first, so a group's note stays
+ * after its rows, and stays when none of them match. shadcn/ui's command pattern is the reference: cmdk's root
  * inside shadcn's dialog (`../../shadcn/dialog.tsx`, on Base UI), which
  * traps focus, hears Escape and a press on the dimmed window as asking the
  * dialog away, and hands focus back to whatever held it once it has gone.
@@ -109,6 +111,26 @@ const NOTE = "px-row-inset pt-luke-4 pb-luke-8 text-caption text-muted-foregroun
 
 /** A group's heading, as a list's group heading is drawn. */
 const HEADING = cn("block", COMBOBOX_LABEL);
+
+/**
+ * The `groups` narrowed to the rows whose words match `typed`, best first
+ * within each group, by cmdk's own scoring; every row where nothing is typed.
+ * Note that the groups keep the caller's order, each its note.
+ */
+function matching(groups: readonly CommandGroup[], typed: string): readonly CommandGroup[] {
+  if (typed === "") return groups;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items
+      .map((item) => ({
+        item,
+        score: defaultFilter(item.words, typed, item.keywords ? [...item.keywords] : undefined),
+      }))
+      .filter((scored) => scored.score > 0)
+      .sort((first, second) => second.score - first.score)
+      .map((scored) => scored.item),
+  }));
+}
 
 /** One row, handed through cmdk's item, hanging its card beside it where it has one. */
 function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
@@ -214,12 +236,9 @@ export function CommandDialog({
     setOwnQuery(next);
     onQueryChange?.(next);
   };
-  // Note that cmdk is handed each row's id as its value and matched against the row's words here, so no words reach an attribute.
-  const wordsOf = new Map(
-    groups.flatMap((group) => group.items.map((item) => [item.id, item.words])),
-  );
-  const match = (value: string, search: string, keywords?: string[]) =>
-    defaultFilter(wordsOf.get(value) ?? "", search, keywords);
+  const shown = filter === COMMAND_FILTER.WORDS ? matching(groups, words.trim()) : groups;
+  // Note that a group's note stands whatever is typed, so a source that failed or is still reading is never taken for no match.
+  const standing = shown.filter((group) => group.items.length > 0 || group.note !== undefined);
   const rows = groups.reduce((count, group) => count + group.items.length, 0);
 
   return (
@@ -239,13 +258,17 @@ export function CommandDialog({
         finalFocus={false}
         // Note that no key pressed in the card goes on to the window, as no dialog's does.
         onKeyDown={(event) => event.stopPropagation()}
-        viewport={{ className: ROOM }}
+        viewport={{
+          className: ROOM,
+          // Note that a press goes no further than the dialog, because the surface that opened it is its parent in React's tree and may take presses of its own.
+          onClick: (event) => event.stopPropagation(),
+        }}
       >
         <Command
           label={label}
           className={ROOT}
-          shouldFilter={filter === COMMAND_FILTER.WORDS}
-          filter={match}
+          // Note that the rows are matched here rather than by cmdk, which would hide a group's note with its rows and move rows past it in the page.
+          shouldFilter={false}
           {...(selected === undefined ? {} : { value: selected })}
           {...(onSelectedChange === undefined ? {} : { onValueChange: onSelectedChange })}
           loop
@@ -274,12 +297,10 @@ export function CommandDialog({
             <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
               {loading !== undefined && rows === 0 ? (
                 <NoteLine status>{loading}</NoteLine>
-              ) : (
-                <Command.Empty>
-                  <NoteLine>{empty}</NoteLine>
-                </Command.Empty>
-              )}
-              {groups.map((group) => (
+              ) : standing.length === 0 ? (
+                <NoteLine>{empty}</NoteLine>
+              ) : null}
+              {standing.map((group) => (
                 <Command.Group
                   key={group.id}
                   heading={
