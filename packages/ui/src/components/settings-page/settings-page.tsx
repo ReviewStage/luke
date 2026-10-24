@@ -1,11 +1,11 @@
 import { type ReactNode, useRef } from "react";
+import { PAGE_HEADER_END, PageHeader } from "../page-header/page-header.js";
 import { RevealArea, revealArea } from "../reveal/reveal.js";
 import {
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
 } from "../settings-section/settings-section.js";
 import { Skeleton } from "../skeleton/skeleton.js";
-import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
  * settings-page.tsx -- a settings page: its title and what acts on the whole page above its sections, in a column that scrolls.
@@ -17,11 +17,12 @@ import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
  * and the next. Its column of sections is a reveal area (`RevealArea`), so
  * as a setting's rows unroll in (`Reveal`), the sections under them glide
  * down with the rows. A section owns its heading and card, and a row its padding,
- * so a caller sets no length anywhere on a settings page. The title is the
- * page's `h1`, which each section's `h2` heads a part of. What acts on the
- * whole page, a quiet reset, ends the title's line flush with the cards'
- * edge, its words rather than its hover's pill standing in the column, and
- * drops below the title when the column is too narrow for both, rather than
+ * so a caller sets no length anywhere on a settings page. The page heads
+ * itself with a document's header (`PageHeader`): the title is the page's
+ * `h1`, which each section's `h2` heads a part of. What acts on the whole
+ * page, a quiet reset, ends the title's line flush with the cards' edge,
+ * its words rather than its hover's pill standing in the column, and drops
+ * below the title when the column is too narrow for both, rather than
  * breaking the title inside a word.
  *
  * A section whose read is still out stands as placeholder rows shaped as
@@ -62,14 +63,9 @@ export function SettingsPage({
   return (
     <div className="luke-settings-page">
       <div className="luke-settings-page-column">
-        <header className="luke-settings-page-head">
-          <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.H1}>
-            {title}
-          </Text>
-          {actions === undefined ? null : (
-            <div className="luke-settings-page-actions">{actions}</div>
-          )}
-        </header>
+        <div className="luke-settings-page-head">
+          <PageHeader title={title} actions={actions} end={PAGE_HEADER_END.WORDS} />
+        </div>
         <RevealArea root={sections}>
           <div ref={sections} className="luke-settings-page-sections" {...revealArea()}>
             {children}

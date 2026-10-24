@@ -1,3 +1,4 @@
+import { SELECTION_WORDS } from "@luke/features/words";
 import {
   type ComponentType,
   createContext,
@@ -32,7 +33,15 @@ import {
 } from "../menu/menu.js";
 import { MoreButton, moreLabel } from "../more-button/more-button.js";
 import { rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
+import {
+  type ListSelection,
+  ListSelectionContext,
+  selectableRow,
+  useListSelection,
+} from "../selection/list-selection.js";
 import { useRowSwipe } from "./use-row-swipe.js";
+
+export type { ListSelection } from "../selection/list-selection.js";
 
 /**
  * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
@@ -252,6 +261,16 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
 }
 
 /**
+ * A ⇧-press on a row that can be chosen, which would otherwise select the
+ * words from the last press to this one: it takes the focus itself instead.
+ */
+function holdRun(event: MouseEvent<HTMLElement>): void {
+  if (!event.shiftKey) return;
+  event.preventDefault();
+  event.currentTarget.focus();
+}
+
+/**
  * The words a slot is measured by, where they are a plain string: a box whose
  * words are a tree is watched for any change under it instead, which a long
  * list of rows would pay for once a row.
@@ -309,15 +328,26 @@ function said(words: ReactNode): boolean {
  * End go to the first and the last, and an unavailable row is passed over.
  * A row whose list steers it from elsewhere, a field holding the keys, says
  * whether it is a Tab stop itself (`tabbable`) and stays out of the walk.
+ *
+ * A list asked to (`selection`) chooses rows at once, as a Mac's list does
+ * (`list-selection.ts`): ⌘-click one in or out, ⇧-click a run from the
+ * last one pressed, ⇧↑↓ grow the run from the row in hand, ⌘A every row,
+ * and Esc none, while a plain press still opens its row. Each row takes
+ * part by its key (`selectKey`), and one chosen is filled and described as
+ * selected. A list not asked chooses nothing.
  */
 export function List({
+  id,
   label,
   variant = LIST_VARIANT.PLAIN,
   density = LIST_DENSITY.REGULAR,
   fingerTall = false,
   moves = false,
+  selection,
   children,
 }: {
+  /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
+  id?: string | undefined;
   label: string;
   variant?: ListVariant;
   density?: ListDensity;
@@ -325,12 +355,19 @@ export function List({
   fingerTall?: boolean | undefined;
   /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion` (`motionRows`). */
   moves?: boolean;
+  /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
+  selection?: ListSelection | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   const roving = useRovingKeys<HTMLUListElement>();
+  const chooser = useListSelection(selection);
   return (
     <ul
       {...roving}
+      onKeyDown={(event) => {
+        if (!chooser.onKeyDown(event)) roving.onKeyDown(event);
+      }}
+      id={id}
       className="luke-list"
       data-variant={variant}
       data-density={density}
@@ -339,7 +376,11 @@ export function List({
       {...(moves ? motionRows() : {})}
     >
       <ListVariantContext.Provider value={variant}>
-        <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
+        <ListDensityContext.Provider value={density}>
+          <ListSelectionContext.Provider value={chooser.selecting}>
+            {children}
+          </ListSelectionContext.Provider>
+        </ListDensityContext.Provider>
       </ListVariantContext.Provider>
     </ul>
   );
@@ -372,6 +413,7 @@ export function ListRow({
   tabbable,
   onTitleClipped,
   id,
+  selectKey,
   motionKey: followedBy,
   ref,
   onKeyDown,
@@ -428,6 +470,8 @@ export function ListRow({
   onTitleClipped?: ((clipped: boolean) => void) | undefined;
   /** The id of the row's item, which a field driving the list names as its active row. */
   id?: string | undefined;
+  /** What the row is chosen by in a `List` that chooses rows (`selection`); a row with none is never chosen. */
+  selectKey?: string | undefined;
   /** The key a `ListMotion` follows the row by, out of one list and into another (`motionKey`). */
   motionKey?: string | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
@@ -471,6 +515,9 @@ export function ListRow({
   const pressPulse =
     useContext(ListVariantContext) === LIST_VARIANT.CARD ? PRESS_PULSE.FLUSH : PRESS_PULSE.QUIET;
   const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
+  const selecting = useContext(ListSelectionContext);
+  const choosable = selecting !== undefined && selectKey !== undefined;
+  const chosen = choosable && selecting.selected.has(selectKey);
   const described = useCallback(
     (element: HTMLElement | null) => {
       if (element === null || !describedDense) return undefined;
@@ -559,17 +606,20 @@ export function ListRow({
       type="button"
       className="luke-list-row-main"
       aria-current={current}
+      aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
       disabled={disabled}
       tabIndex={tabbable === false ? -1 : undefined}
       {...(tabbable === undefined ? rovingItem() : {})}
+      {...(choosable ? selectableRow(selectKey) : {})}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
-      onMouseDown={keepFocus ? preventFocusMove : undefined}
+      onMouseDown={keepFocus ? preventFocusMove : choosable ? holdRun : undefined}
       onClick={(event) => {
         // Note that the row around the press is what is pressed, its fill and its actions with it.
         const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
         pulsePress(row ?? event.currentTarget, pressPulse);
         // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
         if (rowMenu.open !== undefined) rowMenu.close(false);
+        if (choosable && selecting.press(selectKey, event)) return;
         onPress(event);
       }}
       onKeyDown={onKeyDown}
@@ -630,6 +680,7 @@ export function ListRow({
         data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
         data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
         data-current={current === undefined ? undefined : "true"}
+        data-selected={chosen ? "true" : undefined}
         data-unread={unread === true ? "true" : undefined}
         data-muted={muted === true ? "true" : undefined}
         data-density={density}

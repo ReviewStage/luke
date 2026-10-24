@@ -1,5 +1,6 @@
 import { type ReactNode, useId } from "react";
 import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
+import { PageHeader } from "../page-header/page-header.js";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
 /**
@@ -22,7 +23,8 @@ import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.j
  * by the toolbar's title. A board that scrolls sideways stands its content
  * across the whole room (`PAGE_WIDTH.FULL`) rather than at the measure.
  *
- * The empty and failed states are the caller's, handed in whole, since an
+ * The page heads itself with a document's header (`PageHeader`), its title
+ * the page's one `h1`. The empty and failed states are the caller's, handed in whole, since an
  * empty collection says what to do about it and a failed one how to retry.
  * The page names itself by its title and takes no class or style.
  */
@@ -130,19 +132,14 @@ export function CollectionPage({
         </>
       ) : (
         <div className="luke-collection-page-top">
-          <header className="luke-collection-page-header">
-            <div className="luke-collection-page-heading">
-              <h1 className="luke-collection-page-title" id={titleId}>
-                {heading.title}
-              </h1>
-              {said(heading.description) ? (
-                <p className="luke-collection-page-description">{heading.description}</p>
-              ) : null}
-            </div>
-            {said(heading.actions) ? (
-              <div className="luke-collection-page-actions">{heading.actions}</div>
-            ) : null}
-          </header>
+          <div className="luke-collection-page-header">
+            <PageHeader
+              title={heading.title}
+              titleId={titleId}
+              description={heading.description}
+              actions={heading.actions}
+            />
+          </div>
           {filterLine}
         </div>
       )}

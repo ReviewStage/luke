@@ -64,6 +64,7 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
+import { modEnterSends } from "./enter-sends.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { TOAST_HOLD, type ToastNotice, useToast } from "./toast.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
@@ -328,9 +329,9 @@ export function FeedbackDialog({
     showToast(SENT_NOTICE);
   };
 
-  // Command-Return sends from anywhere in the card.
+  // Command or Ctrl with Return sends from anywhere in the card.
   const sendKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    if (!modEnterSends(event)) return;
     event.preventDefault();
     void send();
   };

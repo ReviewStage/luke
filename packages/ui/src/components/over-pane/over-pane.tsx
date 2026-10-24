@@ -12,6 +12,11 @@
  * outside already put it somewhere else. Reduced motion and a capture run,
  * which zero the tokens, let it go at once.
  *
+ * A pane may come as a peek instead, as the pointer rests on its toggle: a
+ * beat late, taking no keyboard and holding none against Tab, and put away
+ * by its owner as the pointer leaves it. A press of its toggle makes it
+ * open, which takes the keyboard.
+ *
  * Escape in it, and a press anywhere outside it and its toggle, ask its
  * owner to close it (`onClose`); a menu or a dialog it raised takes its own
  * Escape first, and a press in one is the pane's own, since React carries
@@ -57,10 +62,25 @@ export const OVER_PANE_WIDTH = {
 
 export type OverPaneWidth = (typeof OVER_PANE_WIDTH)[keyof typeof OVER_PANE_WIDTH];
 
+/** The control that opens and closes the pane, or the controls, where the owner draws it twice. */
+type OverPaneToggle = RefObject<HTMLElement | null> | readonly RefObject<HTMLElement | null>[];
+
+/** Whether `target` is in the toggle, or any of them. */
+function onToggle(toggle: OverPaneToggle | undefined, target: Node): boolean {
+  if (toggle === undefined) return false;
+  const all = "current" in toggle ? [toggle] : toggle;
+  return all.some((each) => each.current?.contains(target) === true);
+}
+
 /** Where the pane stands in its coming and going, which its sheet slides it by. */
 const OVER_PANE_STATE = {
   OPEN: "open",
   LEAVING: "leaving",
+} as const;
+
+/** How a pane came, where it is not simply opened. */
+const OVER_PANE_ARRIVAL = {
+  PEEK: "peek",
 } as const;
 
 /** The layers that answer their own Escape before the pane hears it. */
@@ -169,12 +189,14 @@ function useHeldKeyboard(
  */
 function usePressOutside(
   open: boolean,
-  toggle: RefObject<HTMLElement | null> | undefined,
+  toggle: OverPaneToggle | undefined,
   onClose: () => void,
 ): () => void {
   const within = useRef(false);
   const close = useRef(onClose);
   close.current = onClose;
+  const toggles = useRef(toggle);
+  toggles.current = toggle;
   useEffect(() => {
     if (!open) return undefined;
     within.current = false;
@@ -182,15 +204,40 @@ function usePressOutside(
       const own = within.current;
       within.current = false;
       const target = event.target;
-      if (own || (target instanceof Node && toggle?.current?.contains(target) === true)) return;
+      if (own || (target instanceof Node && onToggle(toggles.current, target))) return;
       close.current();
     };
     document.addEventListener("pointerdown", press);
     return () => document.removeEventListener("pointerdown", press);
-  }, [open, toggle]);
+  }, [open]);
   return useCallback(() => {
     within.current = true;
   }, []);
+}
+
+/**
+ * Asks the owner to close a peek at Escape wherever the keyboard stands,
+ * since a peek takes none and so hears no key of its own. Note that it is
+ * heard at the window as the key bubbles, after what the keyboard stands in
+ * has had it, so a terminal that takes Escape for its shell keeps it, and
+ * that a key aimed into a menu or a dialog is left to that layer, and one
+ * aimed into the pane to the pane's own handler.
+ */
+function useEscapedPeek(peeking: boolean, onClose: () => void): void {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!peeking) return undefined;
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(`${KEY_LAYERS}, .luke-over-pane`) != null) return;
+      event.preventDefault();
+      close.current();
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [peeking]);
 }
 
 /** The pane floating over a tab, drawn while `open` and through its slide out. */
@@ -202,6 +249,8 @@ export function OverPane({
   width = OVER_PANE_WIDTH.SHEET,
   toggle,
   initialFocus,
+  peek = false,
+  onPointerLeave,
   children,
 }: {
   /** Whether it stands over the tab; falling, it slides out before it is let go. */
@@ -212,21 +261,26 @@ export function OverPane({
   label: string;
   edge?: OverPaneEdge | undefined;
   width?: OverPaneWidth | undefined;
-  /** The control that opens and closes it, whose presses are its own rather than a press outside. */
-  toggle?: RefObject<HTMLElement | null> | undefined;
+  /** The control that opens and closes it, or each of them where it is drawn twice, whose presses are its own rather than a press outside. */
+  toggle?: OverPaneToggle | undefined;
   /** The control that takes the keyboard as it opens; the pane itself where it names none. */
   initialFocus?: RefObject<HTMLElement | null> | undefined;
+  /** Whether it stands as a peek, which the pointer opened: it comes a beat late and takes no keyboard until the toggle's press makes it open. */
+  peek?: boolean | undefined;
+  /** The pointer leaving the pane, which is how its owner puts a peek away. */
+  onPointerLeave?: ((event: React.PointerEvent<HTMLElement>) => void) | undefined;
   children: ReactNode;
 }): React.JSX.Element | null {
   const pane = useRef<HTMLElement>(null);
   const leaving = useLeaving(open);
-  useHeldKeyboard(open, pane, initialFocus);
+  useHeldKeyboard(open && !peek, pane, initialFocus);
   const pin = usePressOutside(open, toggle, onClose);
+  useEscapedPeek(open && peek, onClose);
   if (!open && !leaving) return null;
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Tab") {
-      trappedTab(event);
+      if (!peek) trappedTab(event);
       return;
     }
     if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
@@ -246,9 +300,11 @@ export function OverPane({
       data-edge={edge}
       data-width={width}
       data-state={open ? OVER_PANE_STATE.OPEN : OVER_PANE_STATE.LEAVING}
+      data-arrival={open && peek ? OVER_PANE_ARRIVAL.PEEK : undefined}
       inert={!open}
       onPin={open ? pin : undefined}
       onKeyDown={open ? onKeyDown : undefined}
+      onPointerLeave={onPointerLeave}
     >
       {children}
     </PanePin>

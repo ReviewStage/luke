@@ -308,16 +308,16 @@ function closeMenus(): void {
   }
 }
 
-test("Show completed stands Done with a line counting the tasks finished before its window, which shows them all, kept on this Mac", async () => {
+test("Show completed stands Done with a foot counting the tasks finished before its window, which shows them all, kept on this Mac", async () => {
   const page = await mountPage();
   openOptions(page, "View options");
   choose("Show completed", "Past week");
   closeMenus();
   assert.deepEqual(groups(page).at(-1), ["Done", []]);
   const older = [...page.querySelectorAll<HTMLButtonElement>(".tasks-list-group button")].find(
-    (button) => button.textContent === "+ 1 older",
+    (button) => button.textContent === "Show 1 more",
   );
-  act(() => (older ?? assert.fail("no older line under Done")).click());
+  act(() => (older ?? assert.fail("no Show more line under Done")).click());
   assert.deepEqual(groups(page).at(-1), ["Done", ["ACME-35"]]);
 
   act(() => {
