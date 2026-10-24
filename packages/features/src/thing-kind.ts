@@ -9,7 +9,7 @@ import type { KnownNames } from "./place-chip-model.js";
  *
  * A thing is named in words in two ways: a mention (`mention-link.ts`), a
  * plan, a file, an agent, a pull request's page, and a link to a place in
- * Luke (`luke-link.ts`), an Inbox item, an automation, a version of a
+ * Luke (`link-grammar.ts`), an Inbox item, an automation, a version of a
  * plan. Both name some of the same things, a plan, a section, a page, an
  * agent, a person, so `THING_KIND` is the one list of them all, and a
  * mention or a place is read as the `Thing` it names (`thingOfMention`,
