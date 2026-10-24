@@ -365,6 +365,28 @@ test("a message refused after the developer wrote on keeps their words in the bo
   assert.equal(box.shown(), "Still writing", "and are never sent over");
 });
 
+test("a message refused while another waits behind it still lets that one go, and comes back into the box with its Retry", async () => {
+  const box = await answeredInTurn();
+  typeInComposer(box.container, "First");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  typeInComposer(box.container, "Second");
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["First", "Second"],
+    "the refusal drops nothing behind it",
+  );
+  assert.equal(box.shown(), "First", "the refused words wait in the box");
+  assert.ok(
+    [...box.container.querySelectorAll("button")].some((each) => each.textContent === "Retry"),
+    "with Retry beside them",
+  );
+});
+
 test("a message sent with Send hands the caret to the box as it opens again", async () => {
   const box = await answeredLater();
   typeInComposer(box.container, "Fix the bug");
