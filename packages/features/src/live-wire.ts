@@ -342,9 +342,9 @@ export const taskBoardLiveRowsSchema = EffectSchema.Struct({
 export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
 
 /**
- * An open task's pages, calls, and agents' code sealed for following: the
+ * An open task's plan, pages, calls, and agents' code sealed for following: the
  * address, and one statement a part, each a mark that moves as its rows do
- * and carries none of their words: the pages agents showed (`pages`), the
+ * and carries none of their words: the plan's last save (`plan`), the pages agents showed (`pages`), the
  * calls about the task (`calls`), and the `show_code` calls its agents'
  * journals answered (`code`). The desktop reads a part again once its mark moves,
  * rather than when a call's activity or end suggests it might have; the
@@ -356,6 +356,7 @@ export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
 export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
+    plan: sealedLiveQuerySchema,
     pages: sealedLiveQuerySchema,
     calls: sealedLiveQuerySchema,
     code: sealedLiveQuerySchema,
@@ -363,6 +364,12 @@ export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
 });
 
 export type TaskRecordLiveAnswer = typeof taskRecordLiveAnswerSchema.Type;
+
+/** The task's plan as its row delivers it: when its text was last saved, epoch milliseconds, as the open document's `updatedAt` reads it. */
+const taskPlanLiveRowSchema = EffectSchema.Struct({
+  taskId: EffectSchema.String,
+  savedAt: EffectSchema.Finite,
+});
 
 /** One page shown on the task as its row delivers it: its newest version's number. */
 const taskPageLiveRowSchema = EffectSchema.Struct({
@@ -389,8 +396,9 @@ const taskCodeLiveRowSchema = EffectSchema.Struct({
   calls: EffectSchema.String,
 });
 
-/** The task's pages, calls, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+/** The task's plan, pages, calls, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
+  plan: EffectSchema.Array(taskPlanLiveRowSchema),
   pages: EffectSchema.Array(taskPageLiveRowSchema),
   calls: EffectSchema.Array(taskCallLiveRowSchema),
   code: EffectSchema.Array(taskCodeLiveRowSchema),

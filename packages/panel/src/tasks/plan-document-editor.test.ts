@@ -985,3 +985,69 @@ test("words left by an editor closed as another plan opens move nothing in it", 
   assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
   assert.equal(scroller.scrollTop, 500);
 });
+
+/** The plan as a teammate's save left it: their text, saved after the one the page opened on, by them. */
+function savedBy(body: string, updatedAt: number, by = CHARLES): Task {
+  return {
+    ...DOCUMENT_TASK,
+    updatedAt,
+    document: { ...DOCUMENT_TASK.document, body },
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by, at: updatedAt, duringCall: false },
+  };
+}
+
+test("a teammate's save reaching an open editor holding nothing unsaved is laid into it, and the editor's next save is a change from their text", async () => {
+  const theirs = `${BODY}Charles's.\n`;
+  const { container, sent, render } = mount();
+  act(() => block(container, "Goal").click());
+  const [editor] = mounted;
+
+  render(savedBy(theirs, 3));
+  await settle();
+
+  assert.deepEqual(editor?.took, [[BODY, theirs]]);
+  act(() => open().onDraft(`${theirs}Mine.\n`));
+  act(() => open().onFinish(1, FINISH.ESCAPE));
+  await settle();
+  assert.deepEqual(sent, [{ document: { base: theirs, value: `${theirs}Mine.\n` } }]);
+});
+
+test("an open editor holding unsaved words keeps them as a teammate saves, saves them as a change from what it opened on, and takes the merged answer", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const mine = `${BODY}Mine.\n`;
+    const merged = `${BODY}Charles's.\n\nMine.\n`;
+    const sent: PlanEditRequest[] = [];
+    let answer: (answered: TasksEditAnswer) => void = () => undefined;
+    const door = (request: PlanEditRequest) => {
+      sent.push(request);
+      return new Promise<TasksEditAnswer>((resolve) => {
+        answer = resolve;
+      });
+    };
+    const { container, render } = mount();
+    render(DOCUMENT_TASK, door);
+    act(() => block(container, "Goal").click());
+    const [editor] = mounted;
+    act(() => open().onDraft(mine));
+    // The editor hands its words over once the typing pauses.
+    act(() => vi.advanceTimersByTime(200));
+
+    render(savedBy(`${BODY}Charles's.\n`, 3), door);
+    await settle();
+    assert.deepEqual(editor?.took, [], "nothing is laid over words not yet saved");
+
+    // The words save a beat later, as a change from the text they were typed over, which the service lays over Charles's.
+    act(() => vi.advanceTimersByTime(1_000));
+    await settle();
+    assert.deepEqual(sent, [{ document: { base: BODY, value: mine } }]);
+
+    // The host draws the plan the save answered, the developer's last, before the save's answer arrives.
+    render(savedBy(merged, 4, { userId: "user-me", name: "Me" }), door);
+    answer({ saved: true });
+    await settle();
+    assert.deepEqual(editor?.took, [[mine, merged]]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
