@@ -93,7 +93,7 @@ import { useAutomations } from "./use-automations.js";
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
  * heading each where both stand, and every row names its owner besides, a
- * building for the workspace and a lock for Personal. A row's glyph wears
+ * building for the workspace and a lock for Only you. A row's glyph wears
  * where its newest run stands, a failure keeps its mark at the row's end,
  * and an automation turned off reads "Off" where its next run would.
  * Under the list, or under the line saying there is none yet, stand the
@@ -129,10 +129,10 @@ function toggleRefusal(answer: AutomationView, enabled: boolean): string | undef
   if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
     return "Only its creator, or the workspace's owners and admins, can change it.";
   }
-  return enabled ? "Couldn't turn it on. Try again." : "Couldn't turn it off. Try again.";
+  return enabled ? "Could not turn it on. Try again." : "Could not turn it off. Try again.";
 }
 
-/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Personal, its name whole on hover where the column cuts it short. */
+/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Only you, its name whole on hover where the column cuts it short. */
 function OwnerCell({
   owner,
   mine,
@@ -457,7 +457,7 @@ function ListPage({
       {/* Note that a list with none is ready rather than empty, because the suggestions under its empty state are content. */}
       {groups.length === 0 ? (
         <div className="automations-empty">
-          <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
+          <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
           <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </div>
       ) : (

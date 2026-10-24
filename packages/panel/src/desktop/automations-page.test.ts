@@ -582,12 +582,12 @@ test("the listed workspace's automations stand before the personal ones, under a
   assert.deepEqual(listed, [WORKSPACE.id]);
   assert.deepEqual(
     [...page.querySelectorAll(".automation-group h2")].map((heading) => heading.textContent),
-    ["Acme", "Personal"],
+    ["Acme", "Only you"],
   );
   assert.deepEqual(rows(page), [
     ["Nightly flaky-test sweep", "Acme"],
     ["Dependency bumps", "Acme"],
-    ["Morning digest", "Personal"],
+    ["Morning digest", "Only you"],
   ]);
 });
 
@@ -597,7 +597,7 @@ test("one owner's automations alone stand under no heading, still naming their o
   await settle();
 
   assert.equal(page.querySelectorAll(".automation-group h2").length, 0);
-  assert.deepEqual(rows(page), [["Morning digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
 });
 
 test("an automation turned off reads Off where its next run would, and a failed newest run is marked at its row's end", async () => {
@@ -707,7 +707,7 @@ test("what changed elsewhere is drawn as the host pushes it, and a switch reads 
   assert.deepEqual(rows(page), [
     ["Nightly flaky-test sweep", "Acme"],
     ["Dependency bumps, weekly", "Acme"],
-    ["Morning digest", "Personal"],
+    ["Morning digest", "Only you"],
   ]);
 });
 
@@ -721,7 +721,7 @@ test("a window moved to another workspace lets the list it followed go, and foll
   render(tasksControl({ workspace: beta }));
   await settle();
 
-  assert.deepEqual(rows(page), [["Beta's digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Beta's digest", "Only you"]]);
   assert.deepEqual(listed, [WORKSPACE.id, beta.id]);
   assert.deepEqual(
     followers.map((each) => [each.id, each.closed]),
@@ -766,7 +766,7 @@ test("a list that could not be read says so, and Retry reads it again", async ()
   await settle();
 
   assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
-  assert.deepEqual(rows(page), [["Morning digest", "Personal"]]);
+  assert.deepEqual(rows(page), [["Morning digest", "Only you"]]);
 });
 
 test("with no automations the page says what one is, and with no workspace listed it asks for none", async () => {
@@ -774,7 +774,7 @@ test("with no automations the page says what one is, and with no workspace liste
   const page = mount();
   await settle();
 
-  assert.match(page.textContent ?? "", /No automations yet/u);
+  assert.match(page.textContent ?? "", /No automations yet\./u);
   act(() => root?.unmount());
   root = undefined;
   listed = [];
@@ -885,7 +885,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
     page.querySelector("[role=status][aria-busy=true]")?.textContent,
     "Reading your automations…",
   );
-  assert.doesNotMatch(page.textContent ?? "", /No automations yet/u);
+  assert.doesNotMatch(page.textContent ?? "", /No automations yet\./u);
 
   act(() => root?.unmount());
   root = undefined;
@@ -1408,7 +1408,7 @@ test("a new automation with nothing written leaves at once, and one just created
 test("the Owner row stands in a shared workspace, and not in the account's personal one", async () => {
   const shared = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.equal(picked(shared, "Owner"), "Personal");
+  assert.equal(picked(shared, "Owner"), "Only you");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1434,7 +1434,7 @@ test("who owns an automation is the editor's first setting, and nowhere else on 
   assert.equal(page.querySelector("h1 .automation-owner"), null);
 });
 
-test("the Owner picker draws Personal by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
+test("the Owner picker draws Only you by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
   handState({});
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
@@ -1442,7 +1442,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   const chip = picker(page, "Owner");
   assert.ok(
     chip.querySelector(".actor-mark[data-kind='person']"),
-    "Personal wears the account's mark",
+    "Only you wears the account's mark",
   );
   act(() => chip.click());
   const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
@@ -1454,7 +1454,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
         : "none",
   ]);
   assert.deepEqual(marks, [
-    ["Personal", "person"],
+    ["Only you", "person"],
     ["Acme", "tile"],
   ]);
 
@@ -2492,7 +2492,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   await settle();
   assert.match(
     page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
-    /^No runs yet$/u,
+    /^No runs yet\.$/u,
     "the panel with no run stands the empty state",
   );
 
@@ -2522,7 +2522,7 @@ test("a Run now the service refuses says why under the name, and a new automatio
   const fresh = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
-  assert.match(fresh.textContent ?? "", /No runs yet/u);
+  assert.match(fresh.textContent ?? "", /No runs yet\./u);
 });
 
 /** A run of the sweep that started the CI digest agent, which a press on its row opens. */
@@ -3030,7 +3030,7 @@ test("Code review is suggested under an empty list as under a full one, and a bl
   standing = [];
   const empty = mount();
   await settle();
-  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.match(empty.textContent ?? "", /No automations yet\./u);
   assert.ok(suggestion(empty, "Code review"));
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -3057,7 +3057,7 @@ test("while Code review is off nothing is suggested, under an empty list or a fu
   standing = [];
   const empty = mount();
   await settle();
-  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.match(empty.textContent ?? "", /No automations yet\./u);
   assert.equal(empty.querySelector("[aria-label='Suggested']"), null);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -3529,7 +3529,7 @@ test("Sentry chosen before the read says the deployment holds no Sentry integrat
   act(() => button("Create").click());
   await settle();
   assert.equal(creates.length, 0);
-  assert.match(page.textContent ?? "", /Luke can't receive Sentry events here/u);
+  assert.match(page.textContent ?? "", /Luke cannot receive Sentry events here/u);
 });
 
 test("a model catalog that could not be read says so in the model menu, and Retry reads it again", async () => {

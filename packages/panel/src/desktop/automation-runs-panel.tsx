@@ -79,7 +79,7 @@ const CREATOR = "its creator";
 const RUN_THING = "Run";
 
 /** What the panel says while the automation has no run, over how to have one. */
-const NO_RUNS_LINE = "No runs yet";
+const NO_RUNS_LINE = "No runs yet.";
 
 /** What the placeholder rows say to a reader while the runs are first read. */
 const READING_RUNS = "Reading its runs…";
