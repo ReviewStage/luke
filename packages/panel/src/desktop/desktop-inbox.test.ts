@@ -1979,7 +1979,9 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   assert.deepEqual(
     [...pane.querySelectorAll("[data-inbox-field]")].map((each) => [
       each.getAttribute("data-inbox-field"),
-      each.querySelector(".inbox-field-optional") !== null,
+      each
+        .querySelector(".luke-field-label, .luke-checkbox-words")
+        ?.textContent?.endsWith("Optional") === true,
     ]),
     [
       ["select", true],
@@ -4129,8 +4131,8 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
 function answeredFields(within: Element): (string | null | undefined)[][] {
   return [...within.querySelectorAll<HTMLElement>("[data-inbox-answered-field]")].map((field) => {
     const kind = field.dataset.inboxAnsweredField;
-    const name = field.querySelector(".luke-field-label, .inbox-field-name, .luke-checkbox-words")
-      ?.firstChild?.textContent;
+    const name = field.querySelector(".luke-field-label, .luke-checkbox-words")?.firstChild
+      ?.textContent;
     const box = field.querySelector<HTMLElement>('[role="checkbox"]');
     const number = field.querySelector<HTMLInputElement>('input[type="number"]');
     const words = field.querySelector('[role="textbox"]');
