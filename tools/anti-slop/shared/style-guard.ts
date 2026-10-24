@@ -111,6 +111,8 @@ interface CssDeclaration {
 
 interface CssBlock {
   readonly preludes: readonly string[];
+  /** The line its own prelude starts on. */
+  readonly line: number;
   readonly declarations: CssDeclaration[];
   /** `@apply` lists in the block, each a class string. */
   readonly applies: { readonly classes: string; readonly line: number }[];
@@ -163,7 +165,7 @@ export function scanCss(text: string): {
   readonly blocks: readonly CssBlock[];
   readonly comments: readonly CssComment[];
 } {
-  const top: CssBlock = { preludes: [], declarations: [], applies: [] };
+  const top: CssBlock = { preludes: [], line: 1, declarations: [], applies: [] };
   const blocks: CssBlock[] = [top];
   const stack: CssBlock[] = [top];
   const comments: CssComment[] = [];
@@ -199,6 +201,7 @@ export function scanCss(text: string): {
     if (depth === 0 && char === "{") {
       const block: CssBlock = {
         preludes: [...current.preludes, buffer.trim()],
+        line: bufferLine,
         declarations: [],
         applies: [],
       };
