@@ -75,6 +75,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -1172,6 +1173,12 @@ function stripTabs(input: {
   ];
 }
 
+/** The ids the chosen tab and the panel it shows stand under: the tab controls the panel, and the panel is labelled by the tab. */
+interface PanelWiring {
+  readonly tab: string;
+  readonly panel: string;
+}
+
 /**
  * The strip of tabs across the panel's top: the open fixed tabs, then the
  * subagents and the files, then the "+". A fixed tab's own word is all it
@@ -1223,6 +1230,7 @@ function PanelTabs({
   inbox,
   inboxDrafted,
   activity,
+  wiring,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
@@ -1268,6 +1276,8 @@ function PanelTabs({
   inboxDrafted: boolean;
   /** Where a phone's Activity lists the tabs in the strip's place, how a row's press leaves the list, and where the tab shown is handed on; none where the strip is the way between them. */
   activity?: StripActivity | undefined;
+  /** The ids the chosen tab and the panel it shows stand under, so each names the other; none while no panel stands for the tab. */
+  wiring: PanelWiring | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -1356,7 +1366,11 @@ function PanelTabs({
         {strip.map((entry, at) => (
           <DoorsTab
             key={tabKey(entry.tab)}
-            look={entry.look}
+            look={
+              entry.look.selected && wiring !== undefined
+                ? { ...entry.look, id: wiring.tab, controls: wiring.panel }
+                : entry.look
+            }
             doors={doorsOf(entry, at)}
             slot={activity === undefined ? actionsSlot : null}
           />
@@ -2576,6 +2590,11 @@ export function SidePanel({
                       ? cloudBrowserLabel(tab.cloudBrowser)
                       : tabLook({ kind: TAB_KIND.PANEL, tab, plan: task }).label;
   const keys = shown && leaving === PANEL_LEAVING.NONE;
+  // Note that only one tab panel stands at a time, so the one pair of ids serves whichever tab is chosen.
+  const tabId = useId();
+  const panelId = useId();
+  const wiring: PanelWiring | undefined = listing ? undefined : { tab: tabId, panel: panelId };
+  const planShown = !listing && tab === SIDE_PANEL_TAB.PLAN;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
   // A Pull request tab's Run opens the agent's branch on this Mac in this panel, which already holds the keys.
@@ -2646,6 +2665,7 @@ export function SidePanel({
           repository={repository}
           offers={offers}
           held={drawnTranscripts}
+          wiring={wiring}
           actionsSlot={actionsSlot}
           handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
@@ -2677,7 +2697,8 @@ export function SidePanel({
           className="side-panel-content"
           role="tabpanel"
           aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label}
-          hidden={listing || tab !== SIDE_PANEL_TAB.PLAN}
+          {...(planShown ? { id: panelId, "aria-labelledby": tabId } : {})}
+          hidden={!planShown}
           active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
           subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
         >
@@ -2699,7 +2720,10 @@ export function SidePanel({
         <FindScope
           className="side-panel-content"
           role="tabpanel"
+          id={panelId}
+          // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
           aria-label={label}
+          aria-labelledby={tabId}
           active={
             keys &&
             focused &&

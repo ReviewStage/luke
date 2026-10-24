@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 // Note that the row a list engine owns is reached through the barrel, as an app reaches it.
 import { ComboboxListBox, ComboboxOptionItem } from "../../index.js";
+import { Announcer } from "../announcer/announcer.js";
 import { Combobox, ComboboxList, type ComboboxOption, comboboxOptionId } from "./combobox.js";
 import { useComboboxField } from "./use-combobox-field.js";
 
@@ -345,6 +346,33 @@ test("a list standing alone with headings draws them, and says so where nothing 
     none.container.querySelector('[role="listbox"]')?.textContent ?? "",
     /Nothing matches/u,
   );
+});
+
+test("the line a list says where nothing matches is read aloud once the options are gone", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const list = (options: readonly string[]) =>
+    createElement(
+      "div",
+      null,
+      createElement(Announcer),
+      createElement(ComboboxList, {
+        label: "Fruit",
+        groups: [{ label: "Fruit", options: options.map((name) => ({ id: name, label: name })) }],
+        active: 0,
+        onActiveChange: () => undefined,
+        onChoose: () => undefined,
+        empty: "Nothing matches",
+      }),
+    );
+  const status = () => container.querySelector('[role="status"]')?.textContent;
+  act(() => root.render(list(["Apricot"])));
+  assert.equal(status(), "");
+  act(() => root.render(list([])));
+  assert.equal(status(), "Nothing matches");
+  act(() => root.render(list(["Apricot"])));
+  assert.equal(status(), "", "the words are taken back once an option stands again");
 });
 
 test("a group's heading, drawn over its own options, says its name in the group role", () => {

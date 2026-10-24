@@ -450,6 +450,8 @@ export function Tabs({
  * good, never moved.
  */
 export function Tab({
+  id,
+  controls,
   icon,
   label,
   detail,
@@ -469,6 +471,10 @@ export function Tab({
   contextMenu,
   onMenu,
 }: {
+  /** The id the tab stands under, which the panel it shows names itself by (`aria-labelledby`). */
+  id?: string | undefined;
+  /** The id of the tab panel this tab shows while chosen (`aria-controls`); none where no panel stands for it. */
+  controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
   /** Words after the label, dimmed: a count, as an Inbox tab's. */
@@ -514,8 +520,10 @@ export function Tab({
       ref={button}
       type="button"
       role="tab"
+      id={id}
       className={TAB_BUTTON}
       aria-selected={selected}
+      aria-controls={controls}
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       {...rovingItem()}
       onClick={(event) => {

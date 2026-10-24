@@ -1,5 +1,5 @@
 import type { BaseUIEvent } from "@base-ui/react/types";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "../../cn.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
@@ -180,6 +180,8 @@ export interface OpenMenu {
 
 /** A menu drawn: standing open, or on its way out, and the element its exit is waited on. */
 export interface DrawnMenu extends OpenMenu {
+  /** The id the menu stands under, which its trigger's `aria-controls` names. */
+  id: string;
   leaving: boolean;
   ref: (element: HTMLElement | null) => void;
 }
@@ -342,6 +344,7 @@ export function useMenu(shown: boolean) {
   if (standing && !shown) setStanding(false);
   const { mounted, leaving, ref } = useDisclosure(standing);
   const opener = useRef<HTMLElement | null>(null);
+  const id = useId();
   const close = useCallback((returnFocus: boolean) => {
     setStanding(false);
     if (returnFocus) opener.current?.focus();
@@ -352,10 +355,12 @@ export function useMenu(shown: boolean) {
     setStanding(true);
   }, []);
   const drawn: DrawnMenu | undefined =
-    mounted && menu !== undefined ? { ...menu, leaving, ref } : undefined;
+    mounted && menu !== undefined ? { ...menu, id, leaving, ref } : undefined;
   const trigger = (place: (button: HTMLElement) => MenuPlacement = dropBelow) => ({
     "aria-haspopup": "menu" as const,
     "aria-expanded": standing,
+    // Note that the menu is named only while it stands open, as `aria-expanded` says, because one on its way out controls nothing.
+    "aria-controls": standing && drawn !== undefined ? id : undefined,
     onClick: (event: React.MouseEvent<HTMLElement>) => {
       if (standing) close(true);
       else show(place(event.currentTarget), event.currentTarget);
@@ -866,7 +871,7 @@ export function Menu({
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {
-  const { placement, opener, leaving, ref: hold } = menu;
+  const { id, placement, opener, leaving, ref: hold } = menu;
   const element = useRef<HTMLDivElement | null>(null);
   // Note that the popup is held in state too, because Base UI's portal draws it a render after the menu's own.
   const [popup, setPopup] = useState<HTMLDivElement | null>(null);
@@ -971,6 +976,7 @@ export function Menu({
     <DropdownMenu open={!leaving} modal={false}>
       <DropdownMenuContent
         ref={drawn}
+        id={id}
         className="luke-menu"
         aria-label={label}
         layer={layer}

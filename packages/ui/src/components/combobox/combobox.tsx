@@ -16,6 +16,7 @@ import {
   COMBOBOX_LIST,
   COMBOBOX_WELL,
 } from "../../shadcn/combobox.js";
+import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { OneLine } from "../one-line/one-line.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -316,6 +317,8 @@ export function ComboboxList({
   const list = useRef<HTMLDivElement>(null);
   useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => list.current, []);
   const options = groups.flatMap((group) => group.options);
+  // Note that the empty line is said as it appears, because a line drawn into a list is not itself a live region.
+  useAnnounce(ANNOUNCE.POLITE, options.length === 0 ? (empty ?? "") : "");
   // Note that an active index outside the options washes none, because a
   // caller's highlight may stand past them, on a row of its own.
   const at = active >= 0 && active < options.length ? active : -1;

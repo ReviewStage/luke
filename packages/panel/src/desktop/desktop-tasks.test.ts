@@ -244,6 +244,17 @@ test("the Code tab waits while the task's code is unread, and says there is none
   assert.equal(none.querySelector("[role=status]"), null);
 });
 
+test("the panel's tab panel is labelled by its chosen tab, which controls it", () => {
+  const side = codeTab([]).querySelector("aside[aria-label='Panel']");
+  const panel = side?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])");
+  const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
+  assert.ok(panel && chosen, "the panel shows its chosen tab");
+  assert.equal(panel.getAttribute("aria-labelledby"), chosen.id);
+  assert.equal(chosen.getAttribute("aria-controls"), panel.id);
+  const others = side?.querySelectorAll("[role=tab][aria-selected=false][aria-controls]");
+  assert.equal(others?.length, 0, "a tab with no panel standing names none");
+});
+
 test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
   let retries = 0;
   const container = document.createElement("div");
