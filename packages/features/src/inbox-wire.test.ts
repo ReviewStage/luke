@@ -46,6 +46,10 @@ test("an ask kept open reads as the item holds it: open, replaced, answered, or 
   );
 });
 
+test("a thread started with neither words nor a file is titled Untitled item", () => {
+  assert.equal(inboxStartTitle({ text: "" }), "Untitled item");
+});
+
 test("a thread started with no subject is titled by its message's first line that says anything, as plain words cut on a word, else by its first file's name", () => {
   const PDF = { name: "invoice.pdf", mediaType: "application/pdf", data: "JVBERi0=" } as const;
   assert.equal(inboxStartTitle({ title: "Pricing", text: "Anything." }), "Pricing");

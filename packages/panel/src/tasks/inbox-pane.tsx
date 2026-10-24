@@ -1372,7 +1372,7 @@ export function InboxPane({
                     as={LAYOUT_ELEMENT.OL}
                     gap={GAP.NONE}
                     className="inbox-thread"
-                    aria-label="Thread"
+                    aria-label="Messages"
                   >
                     {thread.map((message, at) => (
                       <Fragment key={message.id}>
