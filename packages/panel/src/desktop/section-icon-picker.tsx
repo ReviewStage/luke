@@ -9,7 +9,7 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
-import { readingWords } from "@luke/features/words";
+import { noMatchWords, readingWords } from "@luke/features/words";
 import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
@@ -134,6 +134,12 @@ const READING = {
   [ICON_TAB.EMOJI]: readingWords("emoji"),
 } as const satisfies Record<IconTab, string>;
 
+/** What the picker says where the search found nothing in a set. */
+const NO_MATCH = {
+  [ICON_TAB.ICONS]: noMatchWords({ one: "icon", many: "icons" }),
+  [ICON_TAB.EMOJI]: noMatchWords({ one: "emoji", many: "emoji" }),
+} as const satisfies Record<IconTab, string>;
+
 /** Whether a value is an icon the wire takes. */
 const isSectionIcon = Schema.is(taskSectionIconSchema);
 
@@ -249,16 +255,14 @@ function GridChoice({
 function PanelNote({
   loaded,
   tab,
-  query,
 }: {
   loaded: AsyncResult.AsyncResult<unknown, Error>;
   tab: IconTab;
-  query: string;
 }): React.JSX.Element {
   const words = AsyncResult.isFailure(loaded)
     ? LOAD_FAILED[tab]
     : AsyncResult.isSuccess(loaded)
-      ? `Nothing matches “${query.trim()}”.`
+      ? NO_MATCH[tab]
       : READING[tab];
   return <NoteLine look={NOTE_LINE_LOOK.LIST}>{words}</NoteLine>;
 }
@@ -280,7 +284,7 @@ const GlyphPanel = memo(function GlyphPanel({
   const choices = useMemo(() => glyphChoices(Object.keys(icons ?? {})), [icons]);
   const found = useMemo(() => findGlyphs(choices, query), [choices, query]);
   if (icons === undefined || found.length === 0) {
-    return <PanelNote loaded={loaded} tab={ICON_TAB.ICONS} query={query} />;
+    return <PanelNote loaded={loaded} tab={ICON_TAB.ICONS} />;
   }
   const stop = found.find((choice) => chosenGlyph(icon, choice.glyph)) ?? found[0];
   return (
@@ -315,7 +319,7 @@ const EmojiPanel = memo(function EmojiPanel({
   const loaded = useAtomValue(emojiAtom);
   const groups = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const found = useMemo(() => findEmoji(groups ?? [], query), [groups, query]);
-  if (found.length === 0) return <PanelNote loaded={loaded} tab={ICON_TAB.EMOJI} query={query} />;
+  if (found.length === 0) return <PanelNote loaded={loaded} tab={ICON_TAB.EMOJI} />;
   const all = found.flatMap((group) => group.emojis);
   const stop = all.find((one) => chosenEmoji(icon, one.emoji)) ?? all[0];
   return (
