@@ -1141,7 +1141,7 @@
    way only where the tab beside it would fall below the least a diff reads
    at, so a panel at its default width keeps the tree near the width it was
    left at rather than at a share of the panel. */
-/* off-scale: 200px, the least a diff reads at, its file heads keeping their Viewed box */
+/* off-scale: 200px, the least a diff reads at, its file heads keeping their Viewed box; a drag leaves it the same (`TAB_RESERVE`) */
 .file-tree-pane {
   position: relative;
   display: flex;
@@ -1244,8 +1244,8 @@
 /* A panel with no room for the tree's least width beside the tab's own
    keeps the tree at its share of the panel, with no edge to drag, since
    any width a drag asked for would be drawn no wider (`useTreeEdge`). */
-/* off-scale: 540px, where a tree at its least width leaves the tab too little */
-@container side-panel (width < 540px) {
+/* off-scale: 420px, where a tree at its least width leaves the tab too little */
+@container side-panel (width < 420px) {
   .file-view .file-tree-pane > .luke-resize-edge {
     display: none;
   }
