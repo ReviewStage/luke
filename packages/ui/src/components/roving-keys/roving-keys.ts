@@ -155,9 +155,15 @@ export function rovingStep(
   return landing(start, forward ? 1 : -1, count, skipped) ?? at;
 }
 
-/** Hands the focus to the Tab stop of the set `box` holds, as Tab entering it would; answers whether one took it. */
+/**
+ * Hands the focus to the Tab stop of the set `box` holds, as Tab entering
+ * it would; answers whether one took it. Note that a stop just taken away
+ * leaves none until the box settles again, so its first available item
+ * takes the focus then, as it would take the stop.
+ */
 export function focusRovingStop(box: HTMLElement): boolean {
-  const stop = itemsOf(box).find((item) => item.tabIndex === 0 && available(item));
+  const open = itemsOf(box).filter(available);
+  const stop = open.find((item) => item.tabIndex === 0) ?? open[0];
   stop?.focus();
   return stop !== undefined;
 }

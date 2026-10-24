@@ -274,13 +274,24 @@ test("a list not asked to choose rows opens its row on a âŒ˜-click, and leaves â
   expect(key("Escape")).toBe(false);
 });
 
-/** A bar over `count` chosen rows of a list of places, what its acts did listed after it; Archive takes the rows away. */
+/**
+ * A bar over `count` chosen rows of a list of places, what its acts did
+ * listed after it; Archive takes the chosen rows away, Inbox, the list's
+ * Tab stop, among them.
+ */
 function Bar({ count }: { count: number }): React.JSX.Element {
   const [left, setLeft] = useState(count);
+  const [places, setPlaces] = useState<readonly string[]>(PLACES);
   const [heard, setHeard] = useState<string[]>([]);
   const acts: SelectionAct[] = [
     { label: "Mark done", onAct: () => setHeard((all) => [...all, "done"]) },
-    { label: "Archive", onAct: () => setLeft(0) },
+    {
+      label: "Archive",
+      onAct: () => {
+        setPlaces((all) => all.filter((name) => name !== "Inbox"));
+        setLeft(0);
+      },
+    },
     {
       label: "Move to section",
       menu: [[{ label: "Later", onSelect: () => setHeard((all) => [...all, "later"]) }]],
@@ -298,7 +309,7 @@ function Bar({ count }: { count: number }): React.JSX.Element {
     createElement(List, {
       id: "places",
       label: "Places",
-      children: PLACES.map((name) =>
+      children: places.map((name) =>
         createElement(ListRow, { key: name, title: name, onPress: () => undefined }),
       ),
     }),
@@ -330,9 +341,13 @@ test("the bar does its acts, drops an act's menu of choices, and Clear chooses n
   expect(container.querySelector('[role="toolbar"]')).toBeNull();
 });
 
-test.each(["Clear selection", "Escape", "Archive"])(
-  "the bar holding the focus as its rows go hands it to its list's Tab stop: %s",
-  (leave) => {
+test.each([
+  ["Clear selection", "Inbox"],
+  ["Escape", "Inbox"],
+  ["Archive", "Tasks"],
+])(
+  "the bar holding the focus as its rows go hands it to its list's Tab stop, or its first row where the stop went with them: %s",
+  (leave, landed) => {
     const container = draw(createElement(Bar, { count: 2 }));
     act(() => button(container, "Mark done").focus());
     if (leave === "Escape") key("Escape");
@@ -341,7 +356,8 @@ test.each(["Clear selection", "Escape", "Archive"])(
       act(() => button(container, leave).click());
     }
     expect(container.querySelector('[role="toolbar"]')).toBeNull();
-    expect(document.activeElement).toBe(button(container, "Inbox"));
+    expect(document.activeElement).toBe(button(container, landed));
+    expect(button(container, landed).tabIndex).toBe(0);
   },
 );
 
