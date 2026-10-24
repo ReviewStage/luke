@@ -770,11 +770,14 @@ ul.actor-stack {
    reads apart from a task. */
 .sidebar-agent-glyph {
   display: inline-flex;
-  --state-glyph-size: 14px;
+  --state-glyph-size: var(--luke-icon-16);
 }
 
 .sidebar-task-time {
+  display: flex;
   flex: none;
+  align-items: center;
+  justify-content: flex-end;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--luke-space-2));
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -787,10 +790,9 @@ ul.actor-stack {
    glyph's size, while an agent works on the plan, else the pull request's
    mark, in its own colours (`tasks.css`). The card reuses the glyphs. */
 .sidebar-task-time .state-glyph {
-  --state-glyph-size: 12px;
+  --state-glyph-size: var(--luke-icon-12);
 
   margin-right: var(--luke-tight-gap);
-  vertical-align: -1.5px; /* off-scale */
 }
 
 /* Where its group does not say it, a row names its repository, muted,
@@ -803,7 +805,6 @@ ul.actor-stack {
   overflow: hidden;
   margin-right: var(--luke-item-gap);
   color: var(--luke-color-text-muted);
-  vertical-align: bottom;
   white-space: nowrap;
 }
 
@@ -811,17 +812,15 @@ ul.actor-stack {
    the same slot, so it takes the room a short time leaves there before any
    of the name's, and steps out with the time while the row is hovered. */
 .sidebar-task-time > .actor-mark {
-  top: -1px; /* off-scale: centres the face on the time's figures */
   margin-right: var(--luke-tight-gap);
 }
 
 .task-mark-glyph {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: var(--luke-icon-12);
+  height: var(--luke-icon-12);
   flex: none;
   color: var(--luke-color-text-muted);
-  vertical-align: -1.5px; /* off-scale */
 }
 
 .sidebar-task-time .task-mark-glyph {
@@ -831,10 +830,9 @@ ul.actor-stack {
 /* A row holding a draft wears its pencil at the glyph's size, before the mark
    of its work (`draft-mark.tsx`). */
 .sidebar-task-time .draft-mark {
-  width: 12px;
-  height: 12px;
+  width: var(--luke-icon-12);
+  height: var(--luke-icon-12);
   margin-right: var(--luke-tight-gap);
-  vertical-align: -1.5px; /* off-scale */
 }
 
 /* A plan whose repository belongs to another workspace wears the attention
@@ -846,9 +844,8 @@ ul.actor-stack {
 }
 
 .task-mark-attention .attention-mark {
-  width: 12px;
-  height: 12px;
-  vertical-align: -1.5px; /* off-scale */
+  width: var(--luke-icon-12);
+  height: var(--luke-icon-12);
 }
 
 .task-mark-attention .attention-mark svg {
@@ -1128,8 +1125,8 @@ ul.actor-stack {
 }
 
 .sidebar-repository-pinned svg {
-  width: 11px;
-  height: 11px;
+  width: var(--luke-icon-12);
+  height: var(--luke-icon-12);
 }
 
 /* A side panel tab pinned to the sidebar, in a plan row's shape: the tab's
@@ -1140,12 +1137,12 @@ ul.actor-stack {
 }
 
 .sidebar-pinned-tab-glyph svg {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-icon-16);
+  height: var(--luke-icon-16);
 }
 
 .sidebar-pinned-tab-glyph .state-glyph {
-  --state-glyph-size: 14px;
+  --state-glyph-size: var(--luke-icon-16);
 }
 
 /* A pin whose plan no longer holds what it opens stands dimmed, still
