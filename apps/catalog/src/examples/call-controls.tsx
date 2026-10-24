@@ -1,10 +1,11 @@
 /**
- * call-controls.tsx -- a call's bar at a card's width and at its narrowest, while Luke works and with the microphone muted; each mute round and square, Video on and off, the one red End call; a box's call status live and muted; and Luke's video tile connecting and as a still face on a card, and ended with why in a frame at the picture's own aspect, since a card never draws an ended tile.
+ * call-controls.tsx -- a call's bar at a card's width and at its narrowest, while Luke works and with the microphone muted; each mute round and square, Video on and off, the one red End call; a box's call status connecting, live, muted, and ending; and Luke's video tile connecting and as a still face on a card, and ended with why in a frame at the picture's own aspect, since a card never draws an ended tile.
  */
 
 import {
   BUTTON_SHAPE,
   CALL_DEVICE,
+  CALL_STAGE,
   CALL_VIDEO_FIT,
   CallBar,
   type CallDevice,
@@ -127,10 +128,20 @@ function CallControls(): React.JSX.Element {
           <EndCallButton onPress={stay} />
         </Inline>
       </CatalogSection>
-      <CatalogSection id="call-live" title="A call's status in a box's foot, live and muted">
+      <CatalogSection
+        id="call-live"
+        title="A call's status in a box's foot: connecting, live, muted, and ending"
+      >
         <Inline gap={GAP.SECTION}>
-          <CallLive startedAt={CALL_STARTED_AT} muted={false} now={CALL_NOW} />
-          <CallLive startedAt={CALL_STARTED_AT} muted now={CALL_NOW} />
+          <CallLive stage={CALL_STAGE.CONNECTING} />
+          <CallLive
+            stage={CALL_STAGE.LIVE}
+            startedAt={CALL_STARTED_AT}
+            muted={false}
+            now={CALL_NOW}
+          />
+          <CallLive stage={CALL_STAGE.LIVE} startedAt={CALL_STARTED_AT} muted now={CALL_NOW} />
+          <CallLive stage={CALL_STAGE.ENDING} />
         </Inline>
       </CatalogSection>
       <CatalogSection id="call-video-card" title="Luke's video on a card">

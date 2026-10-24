@@ -32,7 +32,7 @@ import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
-import { layContainersAt } from "../testing/container-width.js";
+import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -296,6 +296,50 @@ test("on a call into the agent, its box's foot says the call is live and how lon
     callGroup(muted).textContent ?? "",
     new RegExp(`^${CALL_LIVE_WORD.MUTED}\\d+s$`, "u"),
   );
+});
+
+test("while the call comes up or goes down, the box's foot says Connecting… or Ending…, with no count, rather than that the call is live", async () => {
+  for (const [voiceStatus, word] of [
+    [LIVE_STATUS.CONNECTING, CALL_LIVE_WORD.CONNECTING],
+    [LIVE_STATUS.CLOSING, CALL_LIVE_WORD.ENDING],
+  ] as const) {
+    const page = await mountOn(
+      { onPress: () => undefined },
+      {
+        ...ON_CALL,
+        voiceStatus,
+        listening: false,
+      },
+    );
+    const call = callGroup(page);
+    assert.match(call.textContent ?? "", new RegExp(`^${word}`, "u"));
+    assert.doesNotMatch(call.textContent ?? "", new RegExp(CALL_LIVE_WORD.LIVE, "u"));
+    assert.equal(call.querySelector('[role="timer"]'), null, "no count before or after the call");
+    act(() => roots.pop()?.unmount());
+  }
+});
+
+test("in a narrow box the call's status gives way, its word first and then the whole, while End call and Send stay", async () => {
+  const page = await mountOn({ onPress: () => undefined }, ON_CALL);
+  const call = callGroup(page);
+  const status = call.querySelector(".luke-call-live");
+  const word = call.querySelector(".luke-call-live-word");
+  const timer = call.querySelector('[role="timer"]');
+  const end = call.querySelector(`button[aria-label="${CALL_CONTROL_LABEL.END_CALL}"]`);
+  const send = page.querySelector('.agent-composer button[aria-label="Send"]');
+  assert.ok(status && word && timer && end && send);
+  /** What stands in the box's foot with its bar `width` wide: the word, the count, End call and Send. */
+  const standingAt = (width: number) => {
+    const laid = layContainersAt({ "luke-composer-foot": width });
+    try {
+      return [word, timer, end, send].map(shown);
+    } finally {
+      laid.remove();
+    }
+  };
+  assert.deepEqual(standingAt(600), [true, true, true, true], "a wide box says it all");
+  assert.deepEqual(standingAt(440), [false, true, true, true], "narrower, the word goes");
+  assert.deepEqual(standingAt(300), [false, false, true, true], "narrower still, the status goes");
 });
 
 test("on a call no line says what Luke is doing: no Listening, no Thinking, and no dots", async () => {

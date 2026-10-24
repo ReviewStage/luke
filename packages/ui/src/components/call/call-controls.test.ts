@@ -9,6 +9,7 @@ import {
   CALL_CONTROL_LABEL,
   CALL_DEVICE,
   CALL_LIVE_WORD,
+  CALL_STAGE,
   CallBar,
   CallLive,
   CallMute,
@@ -21,7 +22,8 @@ import {
  * itself pressed while on, and carries its chord; End call is the bar's one
  * control that is no toggle and hands its press back; Video on or off
  * asks for the other; and a box's call status says the call is live, or
- * muted, and how long it has run. Synthetic call.
+ * muted, and how long it has run, or that it is connecting or ending, with
+ * no count. Synthetic call.
  */
 
 declare global {
@@ -138,16 +140,32 @@ test("Video on or off asks for the other, named for what its press will do", () 
 test("a box's call status says the call is live and how long it has run, and says Muted, quietly, with the struck microphone while the microphone is muted", () => {
   const startedAt = Date.UTC(2026, 9, 24, 15, 0, 0);
   const now = startedAt + 72_000;
-  const live = draw(createElement(CallLive, { startedAt, muted: false, now }));
+  const live = draw(
+    createElement(CallLive, { stage: CALL_STAGE.LIVE, startedAt, muted: false, now }),
+  );
   expect(live.textContent).toBe(`${CALL_LIVE_WORD.LIVE}1m 12s`);
   const timer = live.querySelector('[role="timer"]');
   expect(timer?.getAttribute("dateTime")).toBe("PT72S");
 
-  const muted = draw(createElement(CallLive, { startedAt, muted: true, now }));
+  const muted = draw(
+    createElement(CallLive, { stage: CALL_STAGE.LIVE, startedAt, muted: true, now }),
+  );
   expect(muted.textContent).toBe(`${CALL_LIVE_WORD.MUTED}1m 12s`);
   expect(muted.textContent).not.toContain(CALL_LIVE_WORD.LIVE);
   expect(muted.querySelector("svg")?.outerHTML).toBe(
     renderToStaticMarkup(createElement(MicrophoneOffIcon)),
   );
   expect(muted.querySelector('[data-tone="danger"]')).toBeNull();
+});
+
+test("a box's call status says Connecting… and Ending… either side of the call, quietly and with no count", () => {
+  for (const [stage, word] of [
+    [CALL_STAGE.CONNECTING, CALL_LIVE_WORD.CONNECTING],
+    [CALL_STAGE.ENDING, CALL_LIVE_WORD.ENDING],
+  ] as const) {
+    const scope = draw(createElement(CallLive, { stage }));
+    expect(scope.textContent).toBe(word);
+    expect(scope.querySelector('[role="timer"]')).toBeNull();
+    expect(scope.querySelector('[data-tone="complete"]')).toBeNull();
+  }
 });

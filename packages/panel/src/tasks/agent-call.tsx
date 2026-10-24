@@ -1,10 +1,13 @@
 import { ACT_KIND } from "@luke/host/acts";
+import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import {
   BUTTON_SHAPE,
   CALL_CONTROL_LABEL,
   CALL_DEVICE,
+  CALL_STAGE,
   CallLive,
   CallMute,
+  type CallStage,
   EndCallButton,
   IconButton,
   Tooltip,
@@ -147,13 +150,29 @@ function CallVideoButton({ agentId }: { agentId: string }): React.JSX.Element | 
 }
 
 /**
- * The call's status, counted from `startedAt`, the moment the transcript's
- * Call started marker says, where the call's first line has been heard.
- * Note that before that line the count runs from when this tab first saw
- * the call, because the voice reports no start of its own, and a status
- * with no count would not say how long the call has run.
+ * Where the call stands by the voice's status: coming up while it
+ * connects, up while it listens, speaks, or is muted, and going down while
+ * it closes or once it failed, which no call into the agent draws long.
  */
-function AgentCallStatus({
+const CALL_STAGE_OF = {
+  [LIVE_STATUS.UNAVAILABLE]: CALL_STAGE.ENDING,
+  [LIVE_STATUS.IDLE]: CALL_STAGE.ENDING,
+  [LIVE_STATUS.CONNECTING]: CALL_STAGE.CONNECTING,
+  [LIVE_STATUS.MUTED]: CALL_STAGE.LIVE,
+  [LIVE_STATUS.LISTENING]: CALL_STAGE.LIVE,
+  [LIVE_STATUS.SPEAKING]: CALL_STAGE.LIVE,
+  [LIVE_STATUS.CLOSING]: CALL_STAGE.ENDING,
+  [LIVE_STATUS.FAILED]: CALL_STAGE.ENDING,
+} as const satisfies Record<LiveStatus, CallStage>;
+
+/**
+ * An up call's status, counted from `startedAt`, the moment the
+ * transcript's Call started marker says, where the call's first line has
+ * been heard. Note that before that line the count runs from when this tab
+ * first saw the call up, because the voice reports no start of its own,
+ * and a status with no count would not say how long the call has run.
+ */
+function UpCallStatus({
   startedAt,
   muted,
 }: {
@@ -161,7 +180,22 @@ function AgentCallStatus({
   muted: boolean;
 }): React.JSX.Element {
   const [seen] = useState(Date.now);
-  return <CallLive startedAt={startedAt ?? seen} muted={muted} />;
+  return <CallLive stage={CALL_STAGE.LIVE} startedAt={startedAt ?? seen} muted={muted} />;
+}
+
+/** The call's status: "Connecting…" or "Ending…" either side of it, and between them the call up and how long it has run. */
+function AgentCallStatus({
+  status,
+  startedAt,
+  muted,
+}: {
+  status: LiveStatus;
+  startedAt: number | undefined;
+  muted: boolean;
+}): React.JSX.Element {
+  const stage = CALL_STAGE_OF[status];
+  if (stage !== CALL_STAGE.LIVE) return <CallLive stage={stage} />;
+  return <UpCallStatus startedAt={startedAt} muted={muted} />;
 }
 
 /**
@@ -226,7 +260,7 @@ export function AgentCallControls({
   const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
   return (
     <fieldset className="agent-call-controls" aria-label={CALL_CONTROLS_LABEL}>
-      <AgentCallStatus startedAt={startedAt} muted={button.muted} />
+      <AgentCallStatus status={view.voiceStatus} startedAt={startedAt} muted={button.muted} />
       <CallMute
         device={CALL_DEVICE.SPEAKER}
         shape={BUTTON_SHAPE.SQUARE}

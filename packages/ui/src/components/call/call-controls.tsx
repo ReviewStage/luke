@@ -49,10 +49,21 @@ export const CALL_CONTROL_LABEL = {
   END_CALL: "End call",
 } as const;
 
-/** What a call's status in a message box's foot says: that it is live, or that the microphone is muted. */
+/** Where a call stands, as its status in a message box's foot says it: coming up, up, or on its way down. */
+export const CALL_STAGE = {
+  CONNECTING: "connecting",
+  LIVE: "live",
+  ENDING: "ending",
+} as const;
+
+export type CallStage = (typeof CALL_STAGE)[keyof typeof CALL_STAGE];
+
+/** What a call's status in a message box's foot says: coming up, live, muted, or on its way down. */
 export const CALL_LIVE_WORD = {
+  CONNECTING: "Connecting…",
   LIVE: "On call",
   MUTED: "Muted",
+  ENDING: "Ending…",
 } as const;
 
 /** What a mute silences: the developer's microphone, or Luke's voice on this Mac alone. */
@@ -128,39 +139,70 @@ export function EndCallButton({ onPress }: { onPress: () => void }): React.JSX.E
   );
 }
 
-/**
- * A call's status where a message box steers it: a live mark and "On call",
- * or while the microphone is muted the struck microphone and "Muted" in the
- * quiet ink, since muting is no failure and red is for danger alone, and
- * how long the call has run, counted each second. It stands beside the call's
- * controls in the box's foot (`ComposerFoot`'s call), so a call standing
- * reads as one at a glance from the place it is ended. Given a `now` the
- * count stands still at it.
- */
-export function CallLive({
-  startedAt,
-  muted,
-  now,
-}: {
-  /** Epoch milliseconds the call started, which its count runs from. */
-  startedAt: number;
-  /** Whether the call's microphone is muted. */
-  muted: boolean;
-  now?: number | undefined;
-}): React.JSX.Element {
-  return (
-    <span className="luke-call-live" data-muted={String(muted)}>
-      {muted ? (
-        <span className="luke-call-live-muted" aria-hidden="true">
-          <MicrophoneOffIcon />
-        </span>
-      ) : (
-        <span className="luke-call-live-mark" data-tone={STATUS_TONE.COMPLETE} aria-hidden="true" />
-      )}
-      <span className="luke-call-live-word">
-        {muted ? CALL_LIVE_WORD.MUTED : CALL_LIVE_WORD.LIVE}
+/** What a call's status is drawn from: a call coming up or going down, which has no count yet or any more, or one that is up. */
+export type CallLiveProps =
+  | { stage: typeof CALL_STAGE.CONNECTING | typeof CALL_STAGE.ENDING }
+  | {
+      stage: typeof CALL_STAGE.LIVE;
+      /** Epoch milliseconds the call started, which its count runs from. */
+      startedAt: number;
+      /** Whether the call's microphone is muted. */
+      muted: boolean;
+      now?: number | undefined;
+    };
+
+/** The mark a call's status leads with: the live tone while up, the struck microphone while muted, and the quiet tone either side of it. */
+function CallLiveMark({ props }: { props: CallLiveProps }): React.JSX.Element {
+  if (props.stage === CALL_STAGE.LIVE && props.muted) {
+    return (
+      <span className="luke-call-live-muted" aria-hidden="true">
+        <MicrophoneOffIcon />
       </span>
-      <Time at={startedAt} look={TIME_LOOK.DURATION} now={now} className="luke-call-live-time" />
+    );
+  }
+  const tone = props.stage === CALL_STAGE.LIVE ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL;
+  return <span className="luke-call-live-mark" data-tone={tone} aria-hidden="true" />;
+}
+
+/** The word a call's status says, by its stage and, while it is up, whether it is muted. */
+function callLiveWord(props: CallLiveProps): string {
+  if (props.stage !== CALL_STAGE.LIVE) {
+    return props.stage === CALL_STAGE.CONNECTING
+      ? CALL_LIVE_WORD.CONNECTING
+      : CALL_LIVE_WORD.ENDING;
+  }
+  return props.muted ? CALL_LIVE_WORD.MUTED : CALL_LIVE_WORD.LIVE;
+}
+
+/**
+ * A call's status where a message box steers it. While the call is up it
+ * is a live mark and "On call", or while the microphone is muted the
+ * struck microphone and "Muted" in the quiet ink, since muting is no
+ * failure and red is for danger alone, and how long the call has run,
+ * counted each second. While it comes up or goes down it is the quiet
+ * mark and "Connecting…" or "Ending…", with no count, since no call runs
+ * yet or any more. It stands beside the call's controls in the box's foot
+ * (`ComposerFoot`'s call), so a call standing reads as one at a glance
+ * from the place it is ended. Given a `now` the count stands still at it.
+ */
+export function CallLive(props: CallLiveProps): React.JSX.Element {
+  const live = props.stage === CALL_STAGE.LIVE;
+  return (
+    <span
+      className="luke-call-live"
+      data-stage={props.stage}
+      data-muted={String(props.stage === CALL_STAGE.LIVE && props.muted)}
+    >
+      <CallLiveMark props={props} />
+      <span className="luke-call-live-word">{callLiveWord(props)}</span>
+      {live ? (
+        <Time
+          at={props.startedAt}
+          look={TIME_LOOK.DURATION}
+          now={props.now}
+          className="luke-call-live-time"
+        />
+      ) : null}
     </span>
   );
 }

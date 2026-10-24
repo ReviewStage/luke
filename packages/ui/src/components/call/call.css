@@ -116,7 +116,7 @@
     color: var(--luke-color-text);
   }
 
-  .luke-call-live[data-muted="true"] .luke-call-live-word {
+  .luke-call-live:is([data-muted="true"], :not([data-stage="live"])) .luke-call-live-word {
     color: var(--luke-color-text-muted);
   }
 
@@ -128,6 +128,23 @@
   .luke-call-live-muted > svg {
     width: var(--luke-icon-12);
     height: var(--luke-icon-12);
+  }
+
+  /* In a narrow box's foot the status gives way before the call's controls
+     or the send do: first its word, the mark and the count saying the call
+     is up, and then the whole, where the box folds its own presses into its
+     ⋯ (a card under 400px), the mutes' struck glyphs and End call still
+     saying a call stands (composer-foot.css). */
+  @container luke-composer-foot (max-width: 495px) {
+    .luke-call-live-word {
+      display: none;
+    }
+  }
+
+  @container luke-composer-foot (max-width: 375px) {
+    .luke-call-live {
+      display: none;
+    }
   }
 
   /* Too narrow for both of the backend's parts: the notetaker's goes while
