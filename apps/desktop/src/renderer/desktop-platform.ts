@@ -37,4 +37,6 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   // A cloud Browser tab's socket is the host's, under its bearer, and reaches this window on a port of its own.
   openBrowserLive: openBrowserLiveOverPort,
   applySessionReplay,
+  // Main asks before a quit, a restart to update, and a sign-out while a panel holds unsaved work, with its own sheet.
+  holdsUnsavedWork: (holding) => tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding }),
 };

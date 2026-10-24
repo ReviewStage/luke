@@ -71,6 +71,7 @@ import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/re
 import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
+import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { TOAST_HOLD, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
@@ -294,8 +295,17 @@ function AppWindow(): React.JSX.Element {
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY));
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, so its own ways out of the page ask first.
-  const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
+  // The shell hears the ask too, so its own ways out of the page ask first, and hears whether
+  // that or a plan's words not saved stand, so its ways out of the app ask first.
+  const [pageAsks, setPageAsks] = useState(false);
+  const leaveGuard = useLeaveGuard((ask) => {
+    tellShellUnsavedWork(ask);
+    setPageAsks(ask !== undefined);
+  });
+  const planWordsUnsaved = usePlanWordsUnsaved();
+  useEffect(() => {
+    appPlatform().holdsUnsavedWork?.(pageAsks || planWordsUnsaved);
+  }, [pageAsks, planWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>

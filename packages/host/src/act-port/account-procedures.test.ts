@@ -7,7 +7,7 @@ import {
   type SignInAnswer,
 } from "@luke/credentials/snapshot";
 import { SIGN_IN_FAILURE } from "@luke/features/words";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import { accountProcedures } from "./account-procedures.js";
 import type { ActSender } from "./base.js";
@@ -18,7 +18,9 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  * The account's acts, through the act port as a window calls them: a
  * sign-in reaches the host with its provider and the host's answer crosses
  * back; a sign-out or a deletion stops the recording before it runs, and
- * gives it back where the host never answered; and a frame this build does
+ * gives it back where the host never answered; a sign-out the developer
+ * cancels at the shell's question answers the account as it stands and
+ * stops nothing; and a frame this build does
  * not trust is refused each act in its own words, before the host is asked.
  */
 
@@ -58,6 +60,7 @@ function windowPort(
   options: {
     trusted?: boolean;
     ended?: Effect.Effect<AccountSnapshot>;
+    askBeforeSignOut?: () => Promise<boolean>;
     signedIn?: SignInAnswer;
   } = {},
 ) {
@@ -73,12 +76,16 @@ function windowPort(
     signOut: () => Effect.sync(() => happened.push(["signOut"])).pipe(Effect.andThen(ended)),
     deleteAccount: () =>
       Effect.sync(() => happened.push(["deleteAccount"])).pipe(Effect.andThen(ended)),
+    accountSnapshot: () => Effect.succeed(Option.some(SIGNED_IN)),
   };
   port = testActPort(
     accountProcedures({
       host,
       haltSessionReplay: () => happened.push(["halt"]),
       resumeSessionReplay: () => happened.push(["resume"]),
+      ...(options.askBeforeSignOut === undefined
+        ? {}
+        : { askBeforeSignOut: options.askBeforeSignOut }),
     }),
   );
   const client = port.as(PANEL, { trusted: options.trusted ?? true });
@@ -127,6 +134,20 @@ it("a sign-out and a deletion stop the recording before the host is asked, and a
   assert.deepEqual(await client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT](), SIGNED_OUT);
   assert.deepEqual(await client[ACCOUNT_ACT_KIND.ACCOUNT_DELETE](), SIGNED_OUT);
   assert.deepEqual(happened, [["halt"], ["signOut"], ["halt"], ["deleteAccount"]]);
+});
+
+it("a sign-out the developer cancels at the shell's question answers the account as it stands, and stops nothing", async () => {
+  const { client, happened } = windowPort({ askBeforeSignOut: async () => false });
+
+  assert.deepEqual(await client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT](), SIGNED_IN);
+  assert.deepEqual(happened, []);
+});
+
+it("a sign-out the developer agrees to at the shell's question signs out", async () => {
+  const { client, happened } = windowPort({ askBeforeSignOut: async () => true });
+
+  assert.deepEqual(await client[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT](), SIGNED_OUT);
+  assert.deepEqual(happened, [["halt"], ["signOut"]]);
 });
 
 it("a sign-out or a deletion the host never answered gives the recording back, and is refused in the kind's own words", async () => {

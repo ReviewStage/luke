@@ -15,6 +15,7 @@ import {
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { PUSH } from "@luke/host/contract";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
+import { LEAVE } from "@luke/host/quit";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import type { WireBoundaryInput } from "@luke/wire";
 import {
@@ -187,6 +188,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         return true;
       },
       captureStill: (sender, rect) => windowStill(sender, rect),
+      tellUnsavedWork: services.unsavedWork.tell,
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };
@@ -248,6 +250,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           host: operator.host,
           haltSessionReplay: operator.haltSessionReplay,
           resumeSessionReplay: operator.resumeSessionReplay,
+          askBeforeSignOut: () => services.askBeforeLeaving(LEAVE.SIGN_OUT),
         },
         accountAsks: { host: operator.host },
         agentInbox: { host: operator.host },
