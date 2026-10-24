@@ -1,6 +1,6 @@
 import { Schema, SchemaTransformation } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readKept, writeKept } from "./kept-storage.js";
+import { readKept, readKeptText, writeKept } from "./kept-storage.js";
 
 /**
  * use-kept.ts -- a view choice this window remembers across launches (a fold, a filter, a sort, where a list stood scrolled), read and written through one hook.
@@ -44,8 +44,8 @@ export const keptFlag = Schema.Literals(["true", "false"]).pipe(
   ),
 );
 
-/** The keys whose last write storage refused, so what a surface draws is newer than what storage holds. */
-const UNWRITTEN = new Set<string>();
+/** The keys whose last write storage refused, so what a surface draws is newer than what storage holds, each with the text storage held then. */
+const UNWRITTEN = new Map<string, string | null>();
 
 /** The surfaces drawn now that hold each key, so a choice made in one is drawn in every other. */
 const HOLDERS = new Map<string, Set<(kept: unknown) => void>>();
@@ -89,15 +89,16 @@ export function useKept<A>(
       drawn.current = next;
       setValue(next);
       if (writeKept(key.name, key.schema, next)) UNWRITTEN.delete(key.name);
-      else UNWRITTEN.add(key.name);
+      else UNWRITTEN.set(key.name, readKeptText(key.name));
       for (const holder of HOLDERS.get(key.name) ?? []) holder(next);
     },
     [key],
   );
   const change = useCallback(
     (changed: (kept: A) => A) => {
-      // Note that where storage refused the last write, the choice drawn is newer than the one it holds, so it is changed instead.
-      const was = UNWRITTEN.has(key.name)
+      // Note that where storage refused the last write, the choice drawn is newer than the one it holds, so it is changed instead, unless another window has kept one since.
+      const refused = UNWRITTEN.has(key.name) && UNWRITTEN.get(key.name) === readKeptText(key.name);
+      const was = refused
         ? drawn.current
         : readKept(key.name, key.schema, drawn.current, key.earlier);
       const next = changed(was);

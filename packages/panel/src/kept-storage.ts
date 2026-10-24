@@ -32,6 +32,15 @@ export function readKeptOption<A>(
   }
 }
 
+/** What storage holds under `key` as text, or none where nothing is held or storage refuses the read. */
+export function readKeptText(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 /** A kept value, or `fallback` where none reads (`readKeptOption`). */
 export function readKept<A>(
   key: string,

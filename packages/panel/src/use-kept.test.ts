@@ -143,3 +143,39 @@ test("where storage refuses a write, a change goes on from the choice drawn, not
   act(() => doors?.change(flip));
   expect(shown()).toBe(`${SORT.OLDEST} ${SORT.OLDEST}`);
 });
+
+/** A record of sorts by list, which a change of one list's sort keeps the others' of. */
+const storedSorts = Schema.fromJsonString(
+  Schema.Record(Schema.String, Schema.Literals([SORT.LATEST, SORT.OLDEST])),
+);
+
+type Sorts = typeof storedSorts.Type;
+
+const SORTS = keptKey("luke.testSorts", storedSorts);
+
+let sortsDoors: { change: (change: (kept: Sorts) => Sorts) => void } | undefined;
+
+function Lists(): null {
+  const [, , change] = useKept<Sorts>(SORTS, {});
+  sortsDoors = { change };
+  return null;
+}
+
+test("where storage refused a write, an entry another window kept since is changed over, not lost", () => {
+  window.localStorage.setItem(SORTS.name, JSON.stringify({ a: SORT.LATEST }));
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(Lists)));
+  const refuse = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  act(() => sortsDoors?.change((held) => ({ ...held, a: SORT.OLDEST })));
+  refuse.mockRestore();
+  // Another window keeps an entry of its own, which this one's next change must not undo.
+  window.localStorage.setItem(SORTS.name, JSON.stringify({ a: SORT.LATEST, b: SORT.OLDEST }));
+  act(() => sortsDoors?.change((held) => ({ ...held, a: SORT.OLDEST })));
+  expect(JSON.parse(window.localStorage.getItem(SORTS.name) ?? "{}")).toEqual({
+    a: SORT.OLDEST,
+    b: SORT.OLDEST,
+  });
+});
