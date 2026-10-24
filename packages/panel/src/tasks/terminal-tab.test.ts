@@ -920,6 +920,49 @@ test("a shell renamed from its row's menu is renamed in place, and the list says
   assert.equal(tab.rows()[0]?.name, "server");
 });
 
+test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename, New shell and End shell", async () => {
+  const tab = await mount();
+  const item = tab.container.querySelector<HTMLElement>('[aria-label="Shell list"] > li');
+  const row = item?.querySelector<HTMLButtonElement>(":scope > button, :scope button");
+  const more = item?.querySelector<HTMLButtonElement>('button[aria-label="Shell actions"]');
+  assert.ok(row && more, "the row stands with its ⋯");
+  const offered = () => {
+    const menu = document.querySelector('[role="menu"]:not([data-leaving])');
+    return {
+      label: menu?.getAttribute("aria-label"),
+      items: [...(menu?.querySelectorAll('[role="menuitem"]') ?? [])].map(
+        (each) => each.textContent,
+      ),
+    };
+  };
+  const closeMenu = async () => {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+  };
+  const SAME = { label: "Shell actions", items: ["Rename", "New shell", "End shell"] };
+
+  act(() => more.click());
+  assert.deepEqual(offered(), SAME, "the ⋯ opens it");
+  await closeMenu();
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  assert.deepEqual(offered(), SAME, "a right-click opens it");
+  await closeMenu();
+
+  act(() => {
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.deepEqual(offered(), SAME, "the menu key opens it");
+});
+
 test("the shells list folds away beside the screen, and its toggle asks the panel to bring it back", async () => {
   const tab = await mount(true, false);
   assert.equal(tab.container.querySelector(".terminal-shells"), null);

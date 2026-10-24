@@ -89,7 +89,7 @@ import { markReadItem } from "../tasks/task-menu-items.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
@@ -637,7 +637,7 @@ function RailRow({
  * where something in it needs the reader, as an Inbox item's needing them
  * wears it, what its row says there and when it last spoke, and under it
  * who said what last. It hangs its card, or its name alone, while the
- * pointer rests on it, a right-click opens its menu where it has one, and
+ * pointer rests on it, its ⋯, a right-click and the menu key open its menu where it has one, and
  * while something waits unread in it, Mark as read stands at its end on
  * hover and a swipe right does it, as an Inbox row's do.
  */
@@ -667,7 +667,7 @@ function PlaceRow({
   card: React.ReactNode;
   /** Said at the line's end before its time: a task's agent at work or its pull request, or a direct message's agent's failed mark. */
   end: React.ReactNode;
-  /** Its menu's groups of actions, a right-click away; none opens no menu. */
+  /** Its menu's groups of actions, behind its ⋯, a right-click and the menu key; none opens no menu. */
   groups: readonly MenuAction[][];
   /** Whether Chat is on screen, which its menu does not outlive. */
   shown: boolean;
@@ -675,79 +675,65 @@ function PlaceRow({
   onRead: (() => void) | undefined;
   onChoose: () => void;
 }): React.JSX.Element {
-  const menu = useMenu(shown);
-  const press = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
   const region = useRef<HTMLElement | null>(null);
   const hold = useCallback((element: HTMLElement | null) => {
-    press.current = element;
     region.current = element?.parentElement ?? null;
   }, []);
   return (
-    <>
-      <RowHintOptions card={card} cardBeside cardRegion={region}>
-        <ListRow
-          ref={hold}
-          leading={
-            <>
-              {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
-              <span className="inbox-row-gutter">
-                {unread ? <span className="inbox-row-unread" /> : null}
-              </span>
-              <span className="inbox-row-mark">{mark}</span>
-            </>
-          }
-          title={title}
-          description={preview}
-          meta={
-            <span className="home-row-meta">
-              {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
-              {needsYou ? (
-                <span className="inbox-row-attention">
-                  <AttentionMark />
-                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-                </span>
-              ) : null}
-              {end}
-              {at === undefined ? null : <Time at={at} hint={false} />}
+    <RowHintOptions card={card} cardBeside cardRegion={region}>
+      <ListRow
+        ref={hold}
+        leading={
+          <>
+            {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
+            <span className="inbox-row-gutter">
+              {unread ? <span className="inbox-row-unread" /> : null}
             </span>
-          }
-          ink={LIST_ROW_INK.SIDEBAR}
-          current={current ? LIST_ROW_CURRENT.PAGE : undefined}
-          unread={unread}
-          menuOpen={menu.open !== undefined}
-          hint={{ Hint: RowHint, label: title }}
-          onPress={onChoose}
-          contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
-          actions={
-            onRead === undefined ? undefined : (
-              <Tooltip label={MARK_READ}>
-                <IconButton
-                  icon={<MailOpenIcon />}
-                  label={MARK_READ}
-                  size={BUTTON_SIZE.COMPACT}
-                  onClick={onRead}
-                />
-              </Tooltip>
-            )
-          }
-          actionsAt={LIST_ROW_ACTIONS.HOVER}
-          swipe={
-            onRead === undefined
-              ? undefined
-              : { label: SWIPE_READ, icon: <MailOpenIcon />, onAct: onRead }
-          }
-        />
-      </RowHintOptions>
-      {menu.drawn === undefined || groups.length === 0 ? null : (
-        <ActionMenu
-          label={`${title} actions`}
-          menu={menu.drawn}
-          groups={groups}
-          onClose={menu.close}
-        />
-      )}
-    </>
+            <span className="inbox-row-mark">{mark}</span>
+          </>
+        }
+        title={title}
+        description={preview}
+        meta={
+          <span className="home-row-meta">
+            {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
+            {needsYou ? (
+              <span className="inbox-row-attention">
+                <AttentionMark />
+                <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
+              </span>
+            ) : null}
+            {end}
+            {at === undefined ? null : <Time at={at} hint={false} />}
+          </span>
+        }
+        ink={LIST_ROW_INK.SIDEBAR}
+        current={current ? LIST_ROW_CURRENT.PAGE : undefined}
+        unread={unread}
+        hint={{ Hint: RowHint, label: title }}
+        onPress={onChoose}
+        menu={rowMenu(title, groups, shown)}
+        actions={
+          onRead === undefined ? undefined : (
+            <Tooltip label={MARK_READ}>
+              <IconButton
+                icon={<MailOpenIcon />}
+                label={MARK_READ}
+                size={BUTTON_SIZE.COMPACT}
+                onClick={onRead}
+              />
+            </Tooltip>
+          )
+        }
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
+        swipe={
+          onRead === undefined
+            ? undefined
+            : { label: SWIPE_READ, icon: <MailOpenIcon />, onAct: onRead }
+        }
+      />
+    </RowHintOptions>
   );
 }
 
