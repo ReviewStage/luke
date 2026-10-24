@@ -19,14 +19,14 @@ import {
   SpinnerRegion,
   Tooltip,
 } from "@luke/ui";
-import { Option, Schema } from "effect";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  ClipboardCopyIcon,
   CodeXmlIcon,
+  GLYPH,
   RotateCwIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
+import { Option, Schema } from "effect";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -335,7 +335,7 @@ function sourceMenu(
       [
         {
           label: "Copy source",
-          icon: <ClipboardCopyIcon aria-hidden="true" />,
+          icon: <GLYPH.COPY />,
           disabled: read?.kind !== SOURCE_READ.READY,
           onSelect: () => {
             if (read?.kind === SOURCE_READ.READY) copy(sourceText(read.lines), "Source copied");

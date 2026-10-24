@@ -19,8 +19,8 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { GLYPH, MessageSquarePlusIcon } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { modEnterSends } from "../enter-sends.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
@@ -201,7 +201,7 @@ function ReviewPanel({
         {pending == null ? null : (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<Trash2Icon aria-hidden="true" />}
+            icon={<GLYPH.DELETE />}
             disabled={sending}
             onClick={onDiscard}
           >

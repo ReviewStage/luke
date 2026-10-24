@@ -1,6 +1,6 @@
-import { CopyIcon, DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
+import { DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
+import { FolderTreeIcon, GLYPH } from "@luke/ui/icons";
 import { fileName } from "@luke/voice/code-pane-model";
-import { ClipboardCopyIcon, FolderTreeIcon } from "lucide-react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import type { MenuAction } from "../desktop/action-menu.js";
@@ -97,13 +97,13 @@ export function useFileMenu({
       [
         {
           label: "Copy file name",
-          icon: <CopyIcon />,
+          icon: <GLYPH.COPY />,
           onSelect: () => copyWithToast(name, "File name copied"),
         },
         copyPathAction(path, copyWithToast),
         {
           label: "Copy file contents",
-          icon: <ClipboardCopyIcon aria-hidden="true" />,
+          icon: <GLYPH.COPY />,
           disabled: !ready,
           onSelect: () => withText((text) => copyWithToast(text, "File contents copied")),
         },

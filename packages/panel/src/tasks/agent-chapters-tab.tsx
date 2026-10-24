@@ -63,13 +63,12 @@ import {
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  BookOpenIcon,
   CheckIcon,
-  FileDiffIcon,
+  GLYPH,
   PanelLeftIcon,
   RotateCwIcon,
   SparklesIcon,
-} from "lucide-react";
+} from "@luke/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import {
@@ -725,7 +724,7 @@ function ChaptersReading({
     run();
   };
   if (chapter === undefined || row === undefined) {
-    return <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.NOTHING}</EmptyState>;
+    return <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>{CHAPTERS_WORDS.NOTHING}</EmptyState>;
   }
   const done = viewed(row.paths);
   const previous = chapters[at - 1];
@@ -868,9 +867,11 @@ function ChaptersReading({
             </ScrollArea>
           </div>
           {stale ? (
-            <EmptyState icon={<FileDiffIcon />}>{CHAPTERS_WORDS.STALE_DIFF}</EmptyState>
+            <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>
+              {CHAPTERS_WORDS.STALE_DIFF}
+            </EmptyState>
           ) : chapterFiles.length === 0 ? (
-            <EmptyState icon={<FileDiffIcon />}>{CHAPTERS_WORDS.NO_FILES}</EmptyState>
+            <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHAPTERS_WORDS.NO_FILES}</EmptyState>
           ) : (
             <AgentChangesTab
               // Note that each chapter's list stands on its own, its folds and the file stood on its own, as a chapter is its own page.
@@ -942,11 +943,15 @@ function chaptersState(
         </ErrorState>
       );
     case CHAPTERS_SHOWN.NO_PULL_REQUEST:
-      return <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.NO_PULL_REQUEST}</EmptyState>;
+      return (
+        <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
+          {CHAPTERS_WORDS.NO_PULL_REQUEST}
+        </EmptyState>
+      );
     case CHAPTERS_SHOWN.NONE:
       return state.generatable ? (
         <EmptyState
-          icon={<BookOpenIcon />}
+          icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
           action={{
             label: CHAPTERS_WORDS.GENERATE,
             icon: <SparklesIcon aria-hidden="true" />,
@@ -957,7 +962,7 @@ function chaptersState(
           {CHAPTERS_WORDS.NONE}
         </EmptyState>
       ) : (
-        <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.UNAVAILABLE}</EmptyState>
+        <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>{CHAPTERS_WORDS.UNAVAILABLE}</EmptyState>
       );
     case CHAPTERS_SHOWN.GENERATING:
       return (
@@ -1026,7 +1031,11 @@ export function AgentChaptersTab({
     );
   }
   if (pullRequest === null) {
-    return <EmptyState icon={<BookOpenIcon />}>{CHAPTERS_WORDS.NO_PULL_REQUEST}</EmptyState>;
+    return (
+      <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
+        {CHAPTERS_WORDS.NO_PULL_REQUEST}
+      </EmptyState>
+    );
   }
   return (
     <ChaptersReading

@@ -2,7 +2,13 @@
   "instead": "Draw the way back with BackButton from @luke/ui, or the toolbar's crumbs lead; the back arrow glyph is imported only there. A history step's Back, a chapter's Previous, a row's Move left and a calendar's previous month are not a way back and name their files.",
   "glyphs": [
     { "glyph": "GLYPH.BACK", "allow": ["packages/ui/src/components/back-button/"] },
-    { "glyph": "ArrowLeft", "allow": ["packages/ui/src/components/back-button/"] }
+    {
+      "glyph": "ArrowLeft",
+      "allow": [
+        "packages/ui/src/components/back-button/",
+        "packages/panel/src/tasks/agent-chapters-tab.tsx"
+      ]
+    }
   ],
   "patterns": [
     {
