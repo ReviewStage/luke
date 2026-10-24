@@ -2247,6 +2247,29 @@ test("⌘K's Show chat is offered only while the account has Chat on, as the sid
   assert.ok(rows().includes("Show board"), "the tabs that exist are still offered");
 });
 
+test("⌘K still offers Show inbox for a task an item waits on while its agents are unread and its Inbox tab is closed", async () => {
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    sidePanel: { ...base.sidePanel, tabs: [] },
+    inbox: [{ taskId: DOCUMENT_TASK.id, items: [] }],
+  });
+  await paletteUnderState(tasks);
+  chooseFilter("Actions");
+  assert.ok(rows().includes("Show inbox"), "a waiting item holds the Inbox");
+});
+
 /** Answers Luke's ensure with his id, every other act with nothing, and keeps every act sent. */
 function servingLuke(agentId: string): SentPortAct[] {
   const sent: SentPortAct[] = [];

@@ -970,7 +970,10 @@ function panelTabRows(
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   const plan = openPlanStanding(tasks);
   const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK, {
-    inbox: inboxOffered(tasks.agents, tasks.sidePanel),
+    // Note that an item main says waits on the task holds its Inbox with no agent read yet (`use-tasks-tab.ts`'s `inboxHeld`).
+    inbox:
+      inboxOffered(tasks.agents, tasks.sidePanel) ||
+      tasks.listed.inbox.some((waiting) => waiting.taskId === tasks.activeTaskId),
     chat: chatOn && tasks.chatView.available,
     code: true,
   });
