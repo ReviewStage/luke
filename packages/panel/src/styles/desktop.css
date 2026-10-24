@@ -3775,6 +3775,17 @@ ul.actor-stack {
   flex: 0 1000 auto;
 }
 
+/* A place standing alone under a folded sidebar's title-bar buttons starts
+   past them, where its way back stands, as a toolbar does (shell.css). */
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .page-find
+  > .chat-view[data-single="true"]
+  .chat-stream
+  > .luke-pane-bar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
 /* A task's channel is named by its task's glyph before its name, wherever
    Chat names it (`chat-channel-name.tsx`): set inline on the words'
    baseline, at the size a menu's glyph stands. */

@@ -66,6 +66,35 @@ test("in a wide room a topic's head shows its purpose and its menu", () => {
   assert.ok(shown(menu), "the topic's menu");
 });
 
+/**
+ * The padding a place's bar starts with, in a shell whose sidebar is folded, where the chat stands as one column or beside its rail: the bar is read through the title-bar buttons' clearance or not.
+ */
+function foldedBarStart(single: boolean): string {
+  laid = layContainersAt({}, { touch: false });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = "wide";
+  shell.dataset.sidebarCollapsed = "true";
+  const main = shell.appendChild(document.createElement("main"));
+  main.className = "desktop-main";
+  const find = main.appendChild(document.createElement("div"));
+  find.className = "page-find";
+  const view = find.appendChild(document.createElement("div"));
+  view.className = "chat-view";
+  view.dataset.single = String(single);
+  const stream = view.appendChild(document.createElement("section"));
+  stream.className = "chat-stream";
+  const bar = stream.appendChild(document.createElement("header"));
+  bar.className = "luke-pane-bar";
+  return getComputedStyle(bar).paddingLeft;
+}
+
+test("a place standing alone under a folded sidebar starts its bar past the title-bar buttons, and beside its rail keeps the bar's own inset", () => {
+  assert.match(foldedBarStart(true), /sidebar-toggle-clearance/u);
+  document.body.replaceChildren();
+  assert.doesNotMatch(foldedBarStart(false), /sidebar-toggle-clearance/u);
+});
+
 /** How wide a phone's window stands, in CSS pixels: the narrowest the web app is laid out for. */
 const PHONE = 360;
 
