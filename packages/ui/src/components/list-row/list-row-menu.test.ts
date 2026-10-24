@@ -271,3 +271,51 @@ test("the arrows walk a list's rows past their ⋯, which stays a Tab stop of it
   ];
   expect(mores.map((more) => more.tabIndex)).toEqual([0, 0]);
 });
+
+/** A pointer event on the row's swipe, `x` across, left held. */
+function pointer(type: string, x: number): PointerEvent {
+  return new PointerEvent(type, {
+    bubbles: true,
+    button: 0,
+    clientX: x,
+    clientY: 10,
+    pointerId: 1,
+  });
+}
+
+test("a row swiped open still opens its menu on its ⋯'s first press, the swipe doing nothing", () => {
+  const acted: string[] = [];
+  draw(
+    createElement(List, {
+      label: "Tasks",
+      children: createElement(ListRow, {
+        title: TASK,
+        onPress: () => undefined,
+        swipe: { label: "Done", icon: createElement("svg"), onAct: () => acted.push("Done") },
+        menu: taskMenu([]),
+      }),
+    }),
+  );
+  const item = document.querySelector("li") ?? expect.fail("the row stands");
+  vi.spyOn(item, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 360, height: 56 }),
+  );
+  Object.assign(item, { setPointerCapture: () => undefined });
+  const press = button(TASK);
+  act(() => {
+    press.dispatchEvent(pointer("pointerdown", 10));
+    press.dispatchEvent(pointer("pointermove", 20));
+    press.dispatchEvent(pointer("pointermove", 50));
+    press.dispatchEvent(pointer("pointerup", 50));
+    press.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+  });
+  expect(item.dataset.swipe).toBe("open");
+  const more = button("Task actions");
+  act(() => {
+    more.dispatchEvent(pointer("pointerdown", 340));
+    more.dispatchEvent(pointer("pointerup", 340));
+    more.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+  });
+  expect(offered()).toEqual(SAME_MENU);
+  expect(acted).toEqual([]);
+});
