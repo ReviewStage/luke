@@ -32,7 +32,7 @@ export function CallWindowCard(): React.JSX.Element {
   useStaleHoverAfterMove();
   // The window's own keys: the mute chords its hints name, which the voice view offers below.
   useAppKeymap(true);
-  const { tell } = useAct();
+  const { press } = useAct();
   const planning = useAppSlice(APP_SLICE.TASKS);
   const { view } = useVoiceView();
   const videoStatus = useCardVideoStatus();
@@ -41,8 +41,8 @@ export function CallWindowCard(): React.JSX.Element {
     <CallCard
       card={callCard({ view, tasks: planning ?? IDLE_TASKS_VIEW })}
       speakerMuted={view.speakerMuted}
-      controls={callControls(tell, view.speakerMuted)}
-      video={cardVideo(videoStatus, track, tell)}
+      controls={callControls(press, view.speakerMuted)}
+      video={cardVideo(videoStatus, track, press)}
       surface={CALL_CARD_SURFACE.WINDOW}
     />
   );
