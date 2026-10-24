@@ -19,9 +19,9 @@ import { linkNoteOf } from "./task-issue-links-model.js";
  * never keeps; a link made is read again with the rest, so its state is
  * drawn too. A relation changed stands at once and is put back where the
  * service refused it, unless a newer change of the same link went out since,
- * whose answer is the one that stands; an unlink asks nothing, lets the row
- * go once the service answers, and offers Undo in a toast, which links the
- * same issue again under the keyword it had. What did not land is said in one note, the latest, until
+ * whose answer is the one that stands; an unlink lets the row go once the
+ * service answers and offers Undo in a toast, which links the same issue
+ * again under the keyword it had, where its provider can still be read. What did not land is said in one note, the latest, until
  * the next change; a read that did not land is asked again by `onRetry`.
  */
 
@@ -43,8 +43,15 @@ export interface TaskIssueLinksControl {
 /** What the toast says once an issue is unlinked. */
 const UNLINKED = "Issue unlinked";
 
-/** The choice that links a link's issue again under its keyword; none for a GitHub link read with no repository or number. */
-function relinkOf(link: TaskIssueLinkView): TaskIssueChoice | undefined {
+/**
+ * The choice that links a link's issue again under its keyword, which an
+ * unlink's Undo asks; none where it could not land: an issue its provider
+ * did not answer on the read, since a link reads its issue afresh, or a
+ * GitHub link read with no repository or number. Such a link's unlink is
+ * past undoing, so it asks first (`task-issue-links.tsx`).
+ */
+export function relinkOf(link: TaskIssueLinkView): TaskIssueChoice | undefined {
+  if (link.standing === undefined) return undefined;
   const { relation } = link;
   if (link.provider === TASK_ISSUE_PROVIDER.LINEAR) {
     return { provider: TASK_ISSUE_PROVIDER.LINEAR, id: link.externalId, relation };

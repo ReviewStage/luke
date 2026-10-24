@@ -305,6 +305,31 @@ test("an issue unlinked asks nothing and offers Undo, which links the same issue
   ]);
 });
 
+test("an issue its provider did not answer asks before it is unlinked, in red, since Undo could not link it again", async () => {
+  const { standing: _, ...unread } = ENG;
+  const { container, sent } = await mount({ links: [SAFARI, unread] });
+
+  choose(container, 1, "Unlink");
+  await settle();
+  const asked = sent.some(([kind]) => kind === ACT_KIND.TASK_ISSUES_UNLINK);
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+  const answer =
+    [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === "Unlink",
+    ) ?? assert.fail("no Unlink in the question");
+  const variant = answer.getAttribute("data-variant");
+  await act(async () => answer.click());
+  await settle();
+
+  assert.equal(asked, false, "nothing is sent while it asks");
+  assert.equal(variant, "danger");
+  assert.deepEqual(sent.slice(1), [
+    [ACT_KIND.TASK_ISSUES_UNLINK, { taskId: TASK_ID, linkId: ENG.id }],
+  ]);
+  assert.equal(newestToastAction(), undefined, "no Undo is offered");
+});
+
 test("Link issue opens the picker over the task's repository, the linked issue dimmed, and an issue picked is linked and read back", async () => {
   const { container, sent } = await mount({ links: [SAFARI] });
 

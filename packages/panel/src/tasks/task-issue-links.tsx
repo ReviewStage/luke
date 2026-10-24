@@ -13,6 +13,8 @@ import {
   Chip,
   ChipName,
   CloseIcon,
+  CONFIRM_LOSS,
+  ConfirmDialog,
   dropBelowStart,
   ExternalIcon,
   FailureNote,
@@ -23,16 +25,19 @@ import {
   PROVIDER_MARK_SIZE,
   ProviderMark,
   Tooltip,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { CircleDotIcon } from "lucide-react";
+import { useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { IssueCard } from "./issue-card.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
 import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
 import { useOpenLink } from "./use-open-link.js";
-import { useTaskIssueLinks } from "./use-task-issue-links.js";
+import { relinkOf, useTaskIssueLinks } from "./use-task-issue-links.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -43,7 +48,10 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * card says where the issue stands now and the keyword its pull requests
  * write, under its repository's key. Its menu, headed by the same, opens the issue with its provider,
  * offers Closes and Part of with the one chosen checked, and unlinks it,
- * which leaves the issue itself as it is with its provider. Where it
+ * which leaves the issue itself as it is with its provider. Unlink asks
+ * nothing and offers Undo, which links the issue again; one whose provider
+ * did not answer on the read could not be linked again, so its Unlink asks
+ * first, in red. Where it
  * stands is read as the row opens and never kept (`use-task-issue-links.ts`),
  * so a link its provider did not answer says no state. Link issue, at the
  * row's end, opens New task's own picker (`issue-picker-chip.tsx`) over the
@@ -199,6 +207,38 @@ export function TaskIssueLinks({
   const control = useTaskIssueLinks(taskId);
   const openLink = useOpenLink();
   const { links, note } = control;
+  const [doomed, setDoomed] = useState<TaskIssueLinkView>();
+  // Note that the question goes with its link, unlinked from another window meanwhile.
+  const unlinking = useConfirmDialog(
+    {
+      subject: doomed !== undefined && (links ?? []).some((link) => link.id === doomed.id),
+      surfaceOpen: true,
+    },
+    () => {
+      if (doomed !== undefined) control.onUnlink(doomed.id);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  const unlink = (link: TaskIssueLinkView) => {
+    if (relinkOf(link) !== undefined) {
+      control.onUnlink(link.id);
+      return;
+    }
+    setDoomed(link);
+    unlinking.ask();
+  };
+  const question = (
+    <ConfirmDialog
+      confirm={unlinking}
+      question={{
+        title: `Unlink ${doomed?.key ?? ""}?`,
+        body: "Its provider can't be reached, so it can't be linked again until it can.",
+        verb: LINKS_WORDS.UNLINK,
+        running: "Unlinking",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
+      }}
+    />
+  );
   const offered = linearIn(workspaceId) !== undefined || githubIn(workspaceId) !== undefined;
   // A first read that did not land says why, rather than standing for a task that links nothing.
   if (links === undefined && note !== undefined) {
@@ -219,7 +259,7 @@ export function TaskIssueLinks({
             link={link}
             onOpen={() => openLink(link.url)}
             onRelate={(relation) => control.onRelate(link.id, relation)}
-            onUnlink={() => control.onUnlink(link.id)}
+            onUnlink={() => unlink(link)}
           />
         ))}
         {offered ? (
@@ -250,6 +290,7 @@ export function TaskIssueLinks({
         ) : null}
       </Inline>
       {note === undefined ? null : <FailureNote>{note}</FailureNote>}
+      {question}
     </section>
   );
 }
