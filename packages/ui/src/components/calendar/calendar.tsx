@@ -21,6 +21,7 @@ import {
 } from "../../shadcn/calendar.js";
 import { ANNOUNCE, useAnnounce } from "../announcer/announcer.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * calendar.tsx -- one month of days to pick one day or a range from, a week to a row, Sunday first.
@@ -301,20 +302,24 @@ export function Calendar({
           {caption}
         </span>
         <span className={cn("luke-calendar-steps", CALENDAR_NAV)}>
-          <IconButton
-            icon={<BackIcon />}
-            label="Previous month"
-            size={BUTTON_SIZE.COMPACT}
-            disabled={month <= monthOf(FIRST_DAY)}
-            onClick={() => showMonth(-1)}
-          />
-          <IconButton
-            icon={<ForwardIcon />}
-            label="Next month"
-            size={BUTTON_SIZE.COMPACT}
-            disabled={month >= monthOf(LAST_DAY)}
-            onClick={() => showMonth(1)}
-          />
+          <Tooltip label="Previous month">
+            <IconButton
+              icon={<BackIcon />}
+              label="Previous month"
+              size={BUTTON_SIZE.COMPACT}
+              disabled={month <= monthOf(FIRST_DAY)}
+              onClick={() => showMonth(-1)}
+            />
+          </Tooltip>
+          <Tooltip label="Next month">
+            <IconButton
+              icon={<ForwardIcon />}
+              label="Next month"
+              size={BUTTON_SIZE.COMPACT}
+              disabled={month >= monthOf(LAST_DAY)}
+              onClick={() => showMonth(1)}
+            />
+          </Tooltip>
         </span>
       </div>
       <table

@@ -52,6 +52,7 @@ import { CloseIcon } from "../../face/glyphs.js";
 import { AlertIcon, RetryIcon } from "../../icons/lucide-glyphs.js";
 import { BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { EmptyState } from "../empty-state/empty-state.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /** Where a failure stands: among the rows it failed to draw, at a list's rows' inset among them, alone in the region it would have filled, or on one line of a toolbar. */
 export const ERROR_STATE_PLACEMENT = {
@@ -181,7 +182,9 @@ export function ErrorState(
             </Button>
           )}
           {onDismiss === undefined ? null : (
-            <IconButton icon={<CloseIcon />} label={WORDS.DISMISS} onClick={onDismiss} />
+            <Tooltip label={WORDS.DISMISS}>
+              <IconButton icon={<CloseIcon />} label={WORDS.DISMISS} onClick={onDismiss} />
+            </Tooltip>
           )}
         </span>
       )}

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -346,4 +347,37 @@ test("a toast drawn compact shows its words alone, and its stack stands across t
       [TOAST_LOOK.COMPACT, "Couldn't end the call", null],
     ],
   );
+});
+
+/** The words of the hint the pointer resting on `target` raises, past the hint's wait, on a faked clock. */
+function hintOn(target: Element): string | undefined {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+    return document.querySelector('[role="tooltip"]')?.textContent ?? undefined;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+test("a toast's × says Dismiss in a hint on hover", () => {
+  const view = render(
+    createElement(
+      "ol",
+      null,
+      acting(
+        () => undefined,
+        () => undefined,
+        () => undefined,
+      ),
+    ),
+  );
+  const dismiss = view.querySelector('button[aria-label="Dismiss"]');
+  assert.ok(dismiss !== null);
+  assert.equal(hintOn(dismiss), "Dismiss");
 });
