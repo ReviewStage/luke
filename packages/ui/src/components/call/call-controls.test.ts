@@ -81,6 +81,31 @@ test("a mute toggles with its label: named for its next press, pressed while mut
   );
 });
 
+test("a mute whose chord is not offered names no chord, and one offered names it", () => {
+  const withheld = draw(
+    createElement(CallMute, {
+      device: CALL_DEVICE.MICROPHONE,
+      muted: false,
+      offered: false,
+      onPress: () => {},
+    }),
+  );
+  expect(
+    button(withheld, CALL_CONTROL_LABEL.MUTE_MICROPHONE).hasAttribute("aria-keyshortcuts"),
+  ).toBe(false);
+  const offered = draw(
+    createElement(CallMute, {
+      device: CALL_DEVICE.MICROPHONE,
+      muted: false,
+      offered: true,
+      onPress: () => {},
+    }),
+  );
+  expect(
+    button(offered, CALL_CONTROL_LABEL.MUTE_MICROPHONE).getAttribute("aria-keyshortcuts"),
+  ).toMatch(/Shift\+M/u);
+});
+
 test("the speaker's mute is its own, named for the speaker and toggled by its own chord", () => {
   const scope = draw(
     createElement(CallMute, { device: CALL_DEVICE.SPEAKER, muted: true, onPress: () => {} }),

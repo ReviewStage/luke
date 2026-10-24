@@ -29,7 +29,7 @@ import { useAct } from "../act.js";
 import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";
-import { useStandingVoiceView, useVoiceLost } from "../use-voice-view.js";
+import { useMicrophoneGranted, useStandingVoiceView, useVoiceLost } from "../use-voice-view.js";
 
 /**
  * agent-call.tsx -- an agent's tab taking calls: the call's status and controls in the composer's foot, and while a call into the agent stands, Luke's video centred above the composer.
@@ -253,6 +253,7 @@ export function AgentCallControls({
 }): React.JSX.Element {
   const { press } = useAct();
   const { view, button } = useCallButton(agentId);
+  const microphoneGranted = useMicrophoneGranted();
   if (!onCallInto(view, agentId)) {
     return <CallButton subject={agentId} onPress={() => doors.onPress(agentId)} />;
   }
@@ -273,6 +274,7 @@ export function AgentCallControls({
         device={CALL_DEVICE.MICROPHONE}
         shape={BUTTON_SHAPE.SQUARE}
         muted={button.muted}
+        offered={microphoneGranted}
         onPress={() => doors.onPress(agentId)}
       />
       <CallVideoButton agentId={agentId} />
