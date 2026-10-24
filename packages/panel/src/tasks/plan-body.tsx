@@ -185,8 +185,8 @@ function revealMargin(scroller: HTMLElement): number {
 }
 
 /**
- * Scrolls `scroller` alone until `target` stands within it, with the room
- * `revealMargin` leaves above, and does nothing while it already does. Note
+ * Scrolls `scroller` alone until `target` stands within it, clear of the faded
+ * edges its scroll padding reserves, and does nothing while it already does. Note
  * that this is not `scrollIntoView`, which scrolls every box around the
  * target too, and the document stands in a pane that may still be gliding.
  */
@@ -194,8 +194,11 @@ function keepInView(scroller: HTMLElement, target: HTMLElement): void {
   const box = scroller.getBoundingClientRect();
   const at = target.getBoundingClientRect();
   const top = box.top + revealMargin(scroller);
+  // Note that the room below is the scroller's scroll padding, which clears its faded bottom edge.
+  const below = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom);
+  const bottom = box.bottom - (Number.isNaN(below) ? 0 : below);
   if (at.top < top) scroller.scrollTop -= top - at.top;
-  else if (at.bottom > box.bottom) scroller.scrollTop += at.bottom - box.bottom;
+  else if (at.bottom > bottom) scroller.scrollTop += at.bottom - bottom;
 }
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */

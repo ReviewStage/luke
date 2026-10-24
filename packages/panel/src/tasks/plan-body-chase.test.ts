@@ -71,10 +71,13 @@ test("a caret typing below the document's view scrolls the document's own scroll
   vi.useFakeTimers();
   const scrollIntoView = vi.fn();
   Element.prototype.scrollIntoView = scrollIntoView;
+  let caretY = 480;
   // jsdom lays nothing out: the scroller is 300px tall at the window's top and the caret stands 500px down.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const caret = this.classList.contains("markdown-caret");
-    return DOMRect.fromRect(caret ? { y: 480, height: 20 } : { y: 0, height: 300 });
+    // The caret moves up the window as the scroller scrolls, as a laid-out one does.
+    const scrolledBy = document.querySelector(".luke-scroll-area")?.scrollTop ?? 0;
+    return DOMRect.fromRect(caret ? { y: caretY - scrolledBy, height: 20 } : { y: 0, height: 300 });
   });
   // jsdom keeps no scroll position, so a scroller's offset is kept here.
   const scrolled = new WeakMap<Element, number>();
@@ -106,9 +109,21 @@ test("a caret typing below the document's view scrolls the document's own scroll
     );
   draw(task(BEFORE, 1));
   draw(task(AFTER, 2));
+  const scroller =
+    container.querySelector<HTMLElement>(".luke-scroll-area") ?? assert.fail("a scroller");
+  // The room its faded bottom edge reserves, which the caret is kept clear of.
+  scroller.style.setProperty("scroll-padding-bottom", "26px");
   // The caret travels to the new section for a moment, then types.
   act(() => vi.advanceTimersByTime(500));
-  const scroller = container.querySelector(".luke-scroll-area") ?? assert.fail("a scroller");
-  assert.ok(scroller.scrollTop > 0, "the document's own scroller followed the caret");
+  // A jump of the caret is brought to the middle of the view.
+  assert.equal(scroller.scrollTop, 340, "the caret's arrival is centred");
+  // Typing on past the foot of the view brings the caret just clear of the faded edge.
+  caretY = 700;
+  act(() => vi.advanceTimersByTime(16));
+  assert.equal(
+    scroller.scrollTop,
+    340 + (700 + 20 - 340 - (300 - 26)),
+    "the caret stands clear of the faded edge",
+  );
   assert.equal(scrollIntoView.mock.calls.length, 0, "no box around it was scrolled");
 });

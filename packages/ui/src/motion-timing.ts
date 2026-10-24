@@ -50,11 +50,14 @@ export function tokenTiming(
 
 /**
  * Whether motion is held still where `element` stands, as reduced motion and a
- * capture run hold it: the tokens' durations zeroed. Note that a document no
+ * capture run hold it: the tokens' durations zeroed. Note that the body is
+ * where it reads by default, because a capture run zeroes the tokens on the
+ * body and its stage rather than on the root, and the body inherits the root's
+ * for reduced motion. A document no
  * stylesheet has drawn sets none, and is not held, so a script plays its motion
  * there as it would on a window that asked for nothing.
  */
-export function motionHeld(element: Element = document.documentElement): boolean {
+export function motionHeld(element: Element = document.body): boolean {
   const duration = getComputedStyle(element).getPropertyValue(MOTION_TOKEN.DURATION_FAST);
   if (duration.trim() === "") return false;
   return milliseconds(duration) <= 1;

@@ -41,6 +41,16 @@ test("a motion plays nothing where the tokens are zeroed by a capture run or lef
   }
 });
 
+test("a capture run, which zeroes the tokens on the body and not the root, holds motion still", () => {
+  document.body.style.setProperty(MOTION_TOKEN.DURATION_FAST, "0s");
+  try {
+    stand("280ms", "ease-out");
+    expect(motionHeld()).toBe(true);
+  } finally {
+    document.body.style.removeProperty(MOTION_TOKEN.DURATION_FAST);
+  }
+});
+
 test("motion is held only where a stylesheet zeroed its tokens, not where none was drawn", () => {
   expect(motionHeld()).toBe(false);
   stand("280ms", "ease-out");
