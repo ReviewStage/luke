@@ -1760,10 +1760,13 @@ function ModelPicker({
 /** A new agent's model: the agent box's chip and menu at a form's look, on the account's default until one is chosen. */
 function ModelRow({
   draft,
+  mine,
   choices,
   onDraft,
 }: {
   draft: AutomationDraft;
+  /** Whether the reading account made it, so the catalog's marks of what its credentials lack are its runs' own. */
+  mine: boolean;
   choices: RunChoices;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
@@ -1790,7 +1793,7 @@ function ModelRow({
             usage={undefined}
             look={CHIP_LOOK.FIELD}
             width={CHIP_WIDTH.MIN_FIELD}
-            startsNew
+            startsNew={mine}
           />
         ) : choices.defaultFailed ? (
           <ModelPicker
@@ -2017,7 +2020,7 @@ function RunsGroup({
             />
           ) : (
             <>
-              <ModelRow draft={draft} choices={choices} onDraft={onDraft} />
+              <ModelRow draft={draft} mine={mine} choices={choices} onDraft={onDraft} />
               <ServersRow
                 mine={mine}
                 disabled={draft.disabledServers}
