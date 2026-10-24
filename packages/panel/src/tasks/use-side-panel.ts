@@ -669,9 +669,10 @@ export interface SidePanelControl {
   /**
    * Shows the file browsed to from the File tab of `from`: its own tab
    * where one stands, else in `from`'s tab, in its place, or in a tab of
-   * its own at the strip's end where `newTab` asks.
+   * its own at the strip's end where `newTab` asks or no `from` is named,
+   * as from the Changes tree, which is no File tab's.
    */
-  onBrowseFile: (from: string, path: string, newTab: boolean) => void;
+  onBrowseFile: (from: string | undefined, path: string, newTab: boolean) => void;
   /**
    * Walks the history of the File tab of `from` a step back or forward,
    * showing the file it showed there in its place; a file with a tab of its
@@ -2103,9 +2104,10 @@ export function useSidePanel(
   // Note that a file with a tab of its own is chosen there, because a file
   // stands in one tab at most (`withFileShown`).
   const onBrowseFile = useCallback(
-    (from: string, path: string, newTab: boolean) =>
+    (from: string | undefined, path: string, newTab: boolean) =>
       update((held) => {
-        const standing = newTab ? undefined : held.files.find((each) => each.path === from);
+        const standing =
+          newTab || from === undefined ? undefined : held.files.find((each) => each.path === from);
         if (standing === undefined || held.files.some((each) => each.path === path)) {
           return withFileShown(held, path, drawn, taskId);
         }
@@ -2113,7 +2115,7 @@ export function useSidePanel(
         return withPreviewMoved(
           withFileBrowsed(viewed, taskId, standing, path),
           taskId,
-          from,
+          standing.path,
           path,
         );
       }),
