@@ -46,6 +46,7 @@ const DOCUMENTS: readonly { page: string; draw: () => HTMLElement }[] = [
     draw: () =>
       draw(
         createElement(DetailPage, {
+          frame: PAGE_FRAME.PAGE,
           title: "Launch checklist",
           actions: shareButton(),
           children: createElement("h2", null, "Steps"),
@@ -57,6 +58,7 @@ const DOCUMENTS: readonly { page: string; draw: () => HTMLElement }[] = [
     draw: () =>
       draw(
         createElement(CollectionPage, {
+          frame: PAGE_FRAME.PAGE,
           title: "Launch checklist",
           actions: shareButton(),
           state: COLLECTION_STATE.READY,

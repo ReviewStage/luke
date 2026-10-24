@@ -118,7 +118,7 @@ export function CollectionPage({
   return (
     <section
       className="luke-collection-page"
-      data-frame={heading.frame ?? PAGE_FRAME.PAGE}
+      data-frame={heading.frame}
       data-width={heading.width ?? PAGE_WIDTH.MEASURE}
       aria-labelledby={underToolbar ? undefined : titleId}
       aria-label={underToolbar ? heading.label : undefined}

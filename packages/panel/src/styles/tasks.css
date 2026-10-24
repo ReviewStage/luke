@@ -228,12 +228,6 @@
     var(--luke-control-height) -
     var(--luke-space-6)
   );
-  /* What the title keeps of the column for its ⋯ alone, which has no byline. */
-  --plan-unit-menu-room: calc(
-    var(--luke-control-height) +
-    var(--luke-space-4) -
-    var(--luke-space-6)
-  );
 }
 
 .plan-unit-attributed {
@@ -252,12 +246,6 @@
 .plan-unit-attributed > .plan-unit > .luke-markdown-heading:first-child,
 .plan-document-editor .plan-unit > .luke-markdown-heading:is([data-level="1"], [data-level="2"]) {
   padding-right: var(--plan-unit-row-room);
-}
-
-/* The title wraps short of its ⋯ in the same way, read or edited, so a name
-   long enough to fill its line never runs under it. */
-.plan-unit-attributed .task-title > .luke-markdown-heading {
-  padding-right: var(--plan-unit-menu-room);
 }
 
 /* The byline and the section's ⋯ stand in one row at the heading's line, a
@@ -450,33 +438,6 @@
    not jump as it opens or closes. */
 .plan-document-editor > * + * {
   margin-top: 0.5em;
-}
-
-/* A title that is not edited, with what stands at its right end on its line,
-   as a page's actions stand at the end of its title. */
-.task-title-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--luke-space-12);
-}
-
-.task-title-line > .task-title {
-  min-width: 0;
-}
-
-.task-title-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-space-6);
-}
-
-/* The title breaks inside a word only where the word is wider than the
-   column, so a narrow column never splits "teammates" for want of a few
-   pixels. Note that it outranks `.luke-markdown p`, which breaks anywhere. */
-.task-title .luke-markdown-heading {
-  overflow-wrap: break-word;
 }
 
 /* The space between two sections, resolved at the text's own size so a
