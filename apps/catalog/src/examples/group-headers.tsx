@@ -1,0 +1,121 @@
+import {
+  EllipsisIcon,
+  FolderIcon,
+  GROUP_HEADING,
+  GroupHeader,
+  IconButton,
+  NAV_COUNT_SHOWN,
+  PinIcon,
+  PlusIcon,
+  STATUS_TONE,
+  Text,
+} from "@luke/ui";
+import { useState } from "react";
+import type { Example } from "../examples";
+import { CatalogSection } from "../section";
+
+/**
+ * group-headers.tsx -- a group's head folding its rows, open and folded,
+ * with its glyph, a pin, a count shown at rest or under the pointer, and
+ * its actions beside the fold; a group its holder keeps; a head with no
+ * glyph, whose chevron stands at rest; and heads that fold nothing.
+ */
+
+const ignore = (): void => undefined;
+
+function Rows({ names }: { names: readonly string[] }): React.JSX.Element {
+  return (
+    <>
+      {names.map((name) => (
+        <Text key={name}>{name}</Text>
+      ))}
+    </>
+  );
+}
+
+const TASKS = ["Fix the sign-in loop", "Ship the spring release", "Tidy the settings page"];
+
+function Folding(): React.JSX.Element {
+  return (
+    <div className="catalog-narrow">
+      <GroupHeader
+        label="acme/web"
+        glyph={<FolderIcon />}
+        mark={<PinIcon />}
+        count={{ value: TASKS.length, noun: "tasks", shown: NAV_COUNT_SHOWN.ON_HOVER }}
+        actions={
+          <>
+            <IconButton label="acme/web actions" icon={<EllipsisIcon />} onClick={ignore} />
+            <IconButton label="New task in acme/web" icon={<PlusIcon />} onClick={ignore} />
+          </>
+        }
+        fold={{ defaultOpen: true }}
+      >
+        <Rows names={TASKS} />
+      </GroupHeader>
+      <GroupHeader
+        label="Nightly review"
+        glyph={<FolderIcon />}
+        count={{ value: 2, noun: "need you", tone: STATUS_TONE.ATTENTION }}
+        fold={{ defaultOpen: false }}
+      >
+        <Rows names={["Review the nightly run", "Answer the flaky test"]} />
+      </GroupHeader>
+      <GroupHeader label="Someday" fold={{ defaultOpen: true }}>
+        <Rows names={["Write the onboarding guide"]} />
+      </GroupHeader>
+    </div>
+  );
+}
+
+/** A group whose holder keeps whether it is folded, as the sidebar keeps it across launches. */
+function Held(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="catalog-narrow">
+      <GroupHeader
+        label={open ? "Held open" : "Held folded"}
+        glyph={<FolderIcon />}
+        count={{ value: TASKS.length, noun: "tasks" }}
+        fold={{ open, onOpenChange: setOpen }}
+      >
+        <Rows names={TASKS} />
+      </GroupHeader>
+    </div>
+  );
+}
+
+function Still(): React.JSX.Element {
+  return (
+    <div className="catalog-narrow">
+      <GroupHeader label="Workspace" heading={GROUP_HEADING.H3}>
+        <Rows names={["General", "Members", "Billing"]} />
+      </GroupHeader>
+      <GroupHeader label="Agents" count={{ value: 0, noun: "agents" }} heading={GROUP_HEADING.H3}>
+        <Text>No agents yet.</Text>
+      </GroupHeader>
+    </div>
+  );
+}
+
+function GroupHeaders(): React.JSX.Element {
+  return (
+    <>
+      <CatalogSection id="group-header-folds" title="Groups that fold, open and folded">
+        <Folding />
+      </CatalogSection>
+      <CatalogSection id="group-header-held" title="A group its holder keeps">
+        <Held />
+      </CatalogSection>
+      <CatalogSection id="group-header-still" title="Heads that fold nothing">
+        <Still />
+      </CatalogSection>
+    </>
+  );
+}
+
+export const GROUP_HEADERS_EXAMPLE: Example = {
+  id: "group-headers",
+  title: "Group headers",
+  Render: GroupHeaders,
+};
