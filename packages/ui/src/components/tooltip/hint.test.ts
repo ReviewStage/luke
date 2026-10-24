@@ -3,10 +3,12 @@
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import { COMMAND_KEY, installCommandKey } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { Button } from "../button/button.js";
 import { Tooltip } from "./hint.js";
 
 /**
@@ -25,6 +27,12 @@ import { Tooltip } from "./hint.js";
  * only crossing a control mounts nothing for it, a card's row moved on from
  * lets the next row wait its own wait, so a pointer sweeping down a list
  * hangs no card, and a pill seen still lets the next control's show at once.
+ *
+ * The keyboard enters a card: ⌥↓ on its control, on a Mac or where Command
+ * is Ctrl, opens it with focus on its first button, Tab walks its buttons
+ * with the card still standing, and Escape takes it down and hands focus
+ * back to the control, the window's layered Escape left alone; a card
+ * already showing on the control's focus is entered the same way.
  */
 
 const roots: Root[] = [];
@@ -562,4 +570,112 @@ test("a pill seen warms the window, so the next control's shows at once", () => 
   assert.equal(pill(), "Back");
   move(back, forward);
   assert.equal(pill(), "Forward", "the next shows at once");
+});
+
+/**
+ * A control hanging a card that holds two buttons, as an agent's chip's card
+ * holds its acts. Note that the control is `@luke/ui`'s own Button, which
+ * takes only the handlers a hint hands it, so ⌥↓ must reach it without one.
+ */
+const CARDED_CONTROL = createElement(Tooltip, {
+  label: "Agent",
+  card: createElement(
+    Fragment,
+    null,
+    createElement("p", { key: "name" }, "Fix the refresh"),
+    createElement("button", { key: "open", type: "button" }, "Open transcript"),
+    createElement("button", { key: "stop", type: "button" }, "Stop"),
+  ),
+  children: createElement(Button, { onClick: () => undefined, children: "Agent" }),
+});
+
+/** A key going down on `target`, as the browser sends it; answers the event, to read whether it was refused. */
+function keyDown(target: Element, init: KeyboardEventInit): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => {
+    target.dispatchEvent(event);
+  });
+  return event;
+}
+
+/** ⌥↓, as either command key presses it: Option or Alt, and the down arrow. */
+const SHOW_DETAILS = { key: "ArrowDown", code: "ArrowDown", altKey: true } as const;
+
+/** The element holding focus now. */
+const focused = () => document.activeElement;
+
+test.each([
+  ["on a Mac", COMMAND_KEY.META],
+  ["where Command is Ctrl", COMMAND_KEY.CONTROL],
+])(
+  "%s, ⌥↓ on a focused control opens its card with focus inside, Tab walks its buttons, and Escape hands focus back",
+  (_where, commandKey) => {
+    const putBack = installCommandKey(commandKey);
+    try {
+      const control = mount(CARDED_CONTROL).querySelector("button") ?? assert.fail("drawn");
+      act(() => control.focus());
+      assert.equal(card(), null, "focus alone, not moved by the keyboard, hangs nothing");
+
+      const opened = keyDown(control, SHOW_DETAILS);
+      assert.ok(opened.defaultPrevented, "the control takes ⌥↓");
+      assert.ok(cardStands());
+      assert.equal(
+        card()?.getAttribute("role"),
+        "dialog",
+        "an entered card is a popover, no tooltip",
+      );
+      assert.equal(card()?.getAttribute("aria-label"), "Agent");
+      assert.equal(card()?.getAttribute("aria-modal"), null, "and no modal one");
+      const [open, stop] = card()?.querySelectorAll("button") ?? [];
+      assert.ok(open && stop);
+      assert.ok(focused() === open, "focus is on the card's first button");
+
+      // Tab, then the browser moving focus on to the next button.
+      keyDown(open, { key: "Tab", code: "Tab" });
+      act(() => stop.focus());
+      assert.ok(cardStands(), "Tab walks the card rather than taking it down");
+      assert.ok(focused() === stop, "focus is on its next button");
+
+      const closed = keyDown(stop, { key: "Escape", code: "Escape" });
+      assert.ok(closed.defaultPrevented, "the window's layered Escape is left alone");
+      assert.ok(!cardStands());
+      assert.ok(focused() === control, "focus is back on the control");
+    } finally {
+      putBack();
+    }
+  },
+);
+
+test("a card already showing on a control's keyboard focus is entered by ⌥↓, and focus leaving it takes it down", () => {
+  document.documentElement.dataset.keyboard = "true";
+  try {
+    const container = mount(
+      createElement(
+        Fragment,
+        null,
+        CARDED_CONTROL,
+        createElement("button", { type: "button", "data-elsewhere": "" }, "Elsewhere"),
+      ),
+    );
+    const control = container.querySelector("button") ?? assert.fail("drawn");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    act(() => control.focus());
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+    vi.useRealTimers();
+    assert.ok(cardStands(), "the keyboard's focus shows the card");
+    assert.equal(card()?.getAttribute("role"), "tooltip");
+    assert.match(control.getAttribute("aria-keyshortcuts") ?? "", /Alt\+ArrowDown/);
+
+    keyDown(control, SHOW_DETAILS);
+    assert.ok(cardStands(), "the card standing is the one entered");
+    assert.ok(focused() === card()?.querySelector("button"), "focus is in the card");
+
+    const elsewhere = container.querySelector("[data-elsewhere]") ?? assert.fail("drawn");
+    act(() => (elsewhere as HTMLElement).focus());
+    assert.ok(!cardStands(), "focus leaving the card takes it down");
+  } finally {
+    delete document.documentElement.dataset.keyboard;
+  }
 });

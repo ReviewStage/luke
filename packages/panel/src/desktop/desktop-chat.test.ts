@@ -2275,7 +2275,7 @@ test("a row's right-click offers Mark as read while something waits unread in it
   const offered = rightClick(railRow(page, "teammate-invitations"));
   assert.deepEqual(
     offered.map((each) => each.textContent),
-    ["Mark as read", "Copy link"],
+    ["Mark as read", "Show details⌥↓", "Copy link"],
   );
   act(() => menuItem(offered, "Mark as read").click());
   assert.ok(rail(page).includes("teammate-invitations"), "the row is read, its dot gone");

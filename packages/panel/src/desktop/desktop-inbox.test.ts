@@ -3783,7 +3783,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.equal(offered()?.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
   assert.ok(wordsOf(offered())?.endsWith("J"));
-  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J Alt+ArrowDown");
 
   pressKey("j");
   pressKey("k");
@@ -3793,7 +3793,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(next.querySelector(".inbox-next-lead")?.textContent, "Next ↑");
   assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
   assert.ok(wordsOf(next)?.endsWith("K"));
-  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K Alt+ArrowDown");
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   act(() => keys.unmount());
@@ -5830,7 +5830,7 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
   );
 
   // Note that U acts only on the chosen item, so another row's menu does not name it.
-  assert.deepEqual(rowMenu(page, retry), ["Mark as read", "—", "Copy link"]);
+  assert.deepEqual(rowMenu(page, retry), ["Mark as read", "—", "Show details⌥↓", "—", "Copy link"]);
   act(() => menuItem("Mark as read").click());
   await settle();
   assert.equal(unreadOf(page, retry), false);
@@ -5838,6 +5838,8 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
     "Mark as unreadU",
     "—",
     "Copy link",
+    "—",
+    "Show details⌥↓",
     "—",
     "Resolve without answering",
   ]);

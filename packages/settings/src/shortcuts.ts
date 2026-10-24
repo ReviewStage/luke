@@ -1,8 +1,8 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape, the Inbox's and Chat's J and K, and the tab switcher's
- * ⌃Tab holds Command, the way a
+ * Every shortcut but Escape, the Inbox's and Chat's J and K, the tab switcher's
+ * ⌃Tab, and the ⌥↓ that opens a focused control's card holds Command, the way a
  * Mac app's own chords do, since Command chords belong to whichever app is
  * frontmost; in a browser on Windows or Linux, Command is pressed as Ctrl, as
  * every app there has it, and drawn so (`COMMAND_KEY`). J
@@ -106,6 +106,7 @@ export const APP_COMMAND = {
   INSERT_PICTURE: "insert-picture",
   NEXT_RECENT_TAB: "next-recent-tab",
   PREVIOUS_RECENT_TAB: "previous-recent-tab",
+  SHOW_DETAILS: "show-details",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -647,6 +648,11 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.TAB, control: true, shift: true, switching: true },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
+  // Note that a card opens on ⌥↓ without Command, as a closed list box opens on it, because only the focused control that hangs the card answers it (`hint.tsx` in `@luke/ui`), so nothing offers it to the window's keymap and a field keeps it for its caret.
+  [APP_COMMAND.SHOW_DETAILS]: {
+    label: "Show details",
+    chord: { key: SHORTCUT_KEY.DOWN, option: true, plain: true },
+  },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
@@ -664,6 +670,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.FIND,
       APP_COMMAND.FIND_NEXT,
       APP_COMMAND.FIND_PREVIOUS,
+      APP_COMMAND.SHOW_DETAILS,
       APP_COMMAND.EXIT_SETTINGS,
       APP_COMMAND.HIDE,
       APP_COMMAND.HIDE_OTHERS,
