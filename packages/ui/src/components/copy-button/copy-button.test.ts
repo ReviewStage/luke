@@ -116,6 +116,21 @@ test("a refused copy shows the alert and says so, then turns back after the hold
   expect(said("alert")).toBe("");
 });
 
+test("a copy act that throws before it answers is a refused copy too", async () => {
+  draw(
+    createElement(CopyButton, {
+      text: "pnpm test",
+      what: "code",
+      copy: () => {
+        throw new Error("No clipboard here");
+      },
+    }),
+  );
+  await press();
+  expect(shownGlyph()).toBe(drawing(GLYPH.FAILED));
+  expect(said("alert")).toBe("Could not copy");
+});
+
 test("a second press starts the hold over from its own answer", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   draw(createElement(CopyButton, { text: "main", what: "branch name", copy: async () => {} }));

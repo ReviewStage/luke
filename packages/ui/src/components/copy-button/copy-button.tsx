@@ -134,10 +134,14 @@ export function CopyButton({
       turn(state);
       hold({ settle: () => turn(COPY_STATE.IDLE) });
     };
-    copy(text).then(
-      () => answer(COPY_STATE.COPIED),
-      () => answer(COPY_STATE.FAILED),
-    );
+    // Note that the act is called inside a promise, because one that throws
+    // before it hands a promise back is a refused copy too.
+    Promise.resolve(text)
+      .then(copy)
+      .then(
+        () => answer(COPY_STATE.COPIED),
+        () => answer(COPY_STATE.FAILED),
+      );
   };
   const { state, turns } = shown;
   return (
