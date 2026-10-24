@@ -703,15 +703,16 @@ function AppWindow(): React.JSX.Element {
       workspaceId: settingsWorkspace.shownId,
       // A leave closes Settings onto the Tasks tab, which rests on its page with no task open.
       onLeft: leftWorkspace,
-      listFailed: tasks.listFailed,
-      onRetryList: tasks.onRetryList,
+      // Note that the workspaces are followed apart from the tasks, so a task list that read says nothing of them.
+      listFailed: tasks.workspacesFailed,
+      onRetryList: tasks.onRetryWorkspaces,
     }),
     [
       tasks.workspaces,
       settingsWorkspace.shownId,
       leftWorkspace,
-      tasks.listFailed,
-      tasks.onRetryList,
+      tasks.workspacesFailed,
+      tasks.onRetryWorkspaces,
     ],
   );
   // What Settings and ⌘K answer through; the settings themselves they read where they draw them.
