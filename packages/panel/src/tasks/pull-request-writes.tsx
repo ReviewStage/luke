@@ -333,7 +333,7 @@ const CLOSED_TOAST = {
  * opens the changes that may be made from there, and a merged pull request,
  * which no change leaves, is a badge. An open one GitHub holds in its merge
  * queue says so in the pill, as stage-cli's does: Queued and its place, in
- * the working tone with the merge's mark, its menu offering Close alone,
+ * the attention tone with the merge's mark, its menu offering Close alone,
  * which asks first, since reopening does not queue it again; any other Close
  * acts at once and a toast offers Reopen.
  * Note that the pill is a compact one, which `@luke/ui` draws in a badge's
@@ -386,7 +386,7 @@ export function PullRequestStateMenu({
   // Note that the pill is named by the words it draws, so a change out reads "Merging…" as the screen does.
   const shownWords = writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`;
   const label = `Pull request ${shownWords}`;
-  const tone = inQueue ? STATUS_TONE.WORKING : PULL_REQUEST_TONE[pullRequest.state];
+  const tone = inQueue ? STATUS_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
   // The pill says queued from the merge control's own read alone, so its mark never says it from the row's older one.
   const mark = (
     <PullRequestMark

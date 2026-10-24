@@ -4252,7 +4252,7 @@ test("Close on a queued pull request draws its act in the accent, since it reach
   assert.equal(act?.getAttribute("data-variant"), "primary");
 });
 
-test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the working tone rather than the needs-you one, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
+test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the attention tone with the merge's glyph, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
   const tab = await draw(
     merging(MERGE_STATE.CLEAN, {
       queue: true,
@@ -4263,7 +4263,11 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
   const pill = pillOf(tab) ?? assert.fail("the pill stands");
   assert.deepEqual(
     [standing(tab), pill.getAttribute("data-tone"), pill.getAttribute("aria-label")],
-    ["Queued #2", "working", "Pull request Queued #2"],
+    ["Queued #2", "attention", "Pull request Queued #2"],
+  );
+  assert.equal(
+    pill.querySelector("[data-pull-request-mark]")?.getAttribute("data-pull-request-state"),
+    "queued",
   );
   assert.deepEqual(offered(tab), ["Close pull request"]);
   assert.equal(mergeControl(tab)?.querySelector(".merge-chip"), null, "no chip says it again");

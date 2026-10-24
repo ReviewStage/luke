@@ -19,7 +19,6 @@ import {
   GitBranch,
   GitPullRequest,
   Hash,
-  Hourglass,
   Layers,
   ListChecks,
   ListTodo,
@@ -108,8 +107,6 @@ export const GLYPH = {
   PULL_REQUEST_CHAPTERS: lucideGlyph(BookBookmark),
   // A pull request's CI checks, GitHub's Checks tab and its summary.
   CHECKS: lucideGlyph(ClipboardCheck),
-  // An open pull request GitHub's merge queue holds, which is neither merged nor still waiting on a person.
-  PULL_REQUEST_QUEUED: lucideGlyph(Hourglass),
   ISSUE: lucideGlyph(CircleDot),
   // A linked GitHub issue whose provider did not answer, so it says no state: neither open nor closed.
   ISSUE_UNREAD: lucideGlyph(CircleDashed),

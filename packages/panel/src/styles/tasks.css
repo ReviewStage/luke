@@ -5357,9 +5357,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* An open pull request GitHub holds in its merge queue, as its Pull request
-   tab's pill says it: in the working tone, since it is on its way in. */
+   tab's pill says it: in the attention orange, with the merge's glyph. */
 [data-pull-request-state="queued"] {
-  --pull-request-tone: var(--luke-color-working);
+  --pull-request-tone: var(--luke-color-attention);
 }
 
 .pull-request-mark {
@@ -5372,13 +5372,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    class of its own (`.task-mark-glyph`) does not take its colour too. */
 .pull-request-mark[data-pull-request-state] {
   color: var(--pull-request-tone);
-}
-
-/* The queued mark stands in a box, since a registry glyph takes no props. */
-.pull-request-mark > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 /* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
