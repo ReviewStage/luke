@@ -62,6 +62,8 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
+  KEY_REFUSAL,
+  type KeyRefusal,
   PLAN_REFUSAL,
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
@@ -112,6 +114,7 @@ function recording(sessionPrefix: string) {
     planRefusal?: PlanRefusal;
     planResetsAt?: number;
     halts: boolean;
+    keyRefusal?: KeyRefusal;
   } = {
     open: EVE_SEND_OUTCOME.ACCEPTED,
     status: 0,
@@ -144,13 +147,14 @@ function recording(sessionPrefix: string) {
       Effect.sync(() => {
         calls.push(`send:${sessionId}`);
         messages.push(message);
-        return answers.planRefusal === undefined
+        return answers.planRefusal === undefined && answers.keyRefusal === undefined
           ? { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: randomUUID() }
           : {
               outcome: EVE_SEND_OUTCOME.FAILED,
               status: answers.status,
-              planRefusal: answers.planRefusal,
+              ...(answers.planRefusal === undefined ? {} : { planRefusal: answers.planRefusal }),
               ...(answers.planResetsAt === undefined ? {} : { planResetsAt: answers.planResetsAt }),
+              ...(answers.keyRefusal === undefined ? {} : { keyRefusal: answers.keyRefusal }),
             };
       }),
     cancel: (sessionId, turnId) =>
@@ -903,6 +907,48 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               HOSTED_REFUSAL.AGENT_PLAN_SIGNED_OUT,
               { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt },
             ],
+          );
+          assert.deepEqual(eve.calls, []);
+        }),
+    );
+
+    it.effect(
+      "a Claude Code agent whose starter's API key is saved but unreadable, or gone, is refused by name rather than as the service down, and nothing turns to eve",
+      () =>
+        Effect.gen(function* () {
+          const { owner, taskId } = yield* openTeam;
+          const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
+          const { eve, claudeCode, native } = runtimes();
+          yield* claimRuntimeSession(
+            { userId: owner, conversationId: onClaudeCode.conversationId },
+            `${NATIVE_SESSION_PREFIX.claude_code}000000000001-x`,
+            new Date(0),
+          );
+          const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
+          const send = Effect.result(
+            steerCodingAgent(
+              sessions,
+              storeWriter({ tools: CODER_TOOL_SET }),
+              owner,
+              onClaudeCode,
+              {
+                text: "Also the emails.",
+                clientKey: randomUUID(),
+                sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+              },
+            ),
+          );
+
+          claudeCode.answers.status = 422;
+          claudeCode.answers.keyRefusal = KEY_REFUSAL.UNREADABLE;
+          const unreadable = yield* send;
+          claudeCode.answers.keyRefusal = KEY_REFUSAL.MISSING;
+          const missing = yield* send;
+
+          assert.ok(Result.isFailure(unreadable) && Result.isFailure(missing));
+          assert.deepEqual(
+            [unreadable.failure, missing.failure],
+            [HOSTED_REFUSAL.AGENT_API_KEY_UNREADABLE, HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING],
           );
           assert.deepEqual(eve.calls, []);
         }),

@@ -130,6 +130,7 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
+  type KeyRefusal,
   PLAN_REFUSAL,
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
@@ -208,11 +209,13 @@ export interface RunnerSessionsOptions {
   readonly run: SandboxRunner;
 }
 
-/** A launch could not start: no agent, no credential, no snapshot, a model the harness cannot name, or the account's plan refused. */
+/** A launch could not start: no agent, no credential, no snapshot, a model the harness cannot name, or the account's plan or API key refused. */
 export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
   readonly reason: string;
   /** How the account's plan failed, where it is why. */
   readonly planRefusal?: PlanRefusal | undefined;
+  /** How the account's API key failed, for an agent it pays for, where it is why. */
+  readonly keyRefusal?: KeyRefusal | undefined;
   /** When a reached limit resets, in epoch milliseconds, where the provider said. */
   readonly planResetsAt?: number | undefined;
 }> {}
@@ -932,6 +935,9 @@ export const runnerSessions = <
             : undefined),
           ...(failure instanceof LaunchRefused && failure.planResetsAt !== undefined
             ? { planResetsAt: failure.planResetsAt }
+            : undefined),
+          ...(failure instanceof LaunchRefused && failure.keyRefusal !== undefined
+            ? { keyRefusal: failure.keyRefusal }
             : undefined),
         } as const,
       );

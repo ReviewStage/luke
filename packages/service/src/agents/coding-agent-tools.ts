@@ -401,6 +401,8 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
   CREDENTIAL_MISSING:
     "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no coding agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
+  API_KEY_UNREADABLE:
+    "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -448,6 +450,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_CODING_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
+  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_CODING_AGENT_REFUSAL.API_KEY_UNREADABLE],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */

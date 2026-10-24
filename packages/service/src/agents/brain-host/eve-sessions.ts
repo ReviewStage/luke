@@ -237,6 +237,19 @@ export const PLAN_REFUSAL = {
 export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];
 
 /**
+ * Why the starter's own API key, which pays for an agent started on it,
+ * could not launch the agent: none is saved any more, or the saved one does
+ * not open under this deployment's key ring. Neither is mended by a retry,
+ * only by saving the key in Settings › Agents, and neither turns to the plan.
+ */
+export const KEY_REFUSAL = {
+  MISSING: "missing",
+  UNREADABLE: "unreadable",
+} as const;
+
+export type KeyRefusal = (typeof KEY_REFUSAL)[keyof typeof KEY_REFUSAL];
+
+/**
  * Why a coding agent's native runtime did not take a call, where that is
  * why it failed: its conversation runs on a native harness that this
  * function has no way to launch or write to, nor to relay to one that can, or
@@ -252,8 +265,8 @@ export const RUNTIME_REFUSAL = {
 export type RuntimeRefusal = (typeof RUNTIME_REFUSAL)[keyof typeof RUNTIME_REFUSAL];
 
 /**
- * A call that failed: the status for the operator, and the plan's or the
- * runtime's refusal where that is why. The one shape a failed open or send
+ * A call that failed: the status for the operator, and the plan's, the
+ * API key's, or the runtime's refusal where that is why. The one shape a failed open or send
  * has, here and as the native relay reads it off the wire.
  */
 export const EveFailedSchema = EffectSchema.Struct({
@@ -262,6 +275,7 @@ export const EveFailedSchema = EffectSchema.Struct({
   planRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(PLAN_REFUSAL))),
   /** When the plan's reached limit resets, in epoch milliseconds, where the provider said. */
   planResetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+  keyRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(KEY_REFUSAL))),
   runtimeRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(RUNTIME_REFUSAL))),
 });
 

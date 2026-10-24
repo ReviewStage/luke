@@ -51,6 +51,8 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
+  KEY_REFUSAL,
+  type KeyRefusal,
   PLAN_REFUSAL,
   type PlanRefusal,
   RUNTIME_REFUSAL,
@@ -329,15 +331,19 @@ export const runnerHalted = (
  * native harness this function cannot reach, said by name; the starter's
  * plan refusing the launch, said by name, whose sign-in is signed in again
  * or whose provider is asked again later, and never turned to another
- * payer; or the service down, as every other failure of eve's or a
- * harness's reads.
+ * payer; the starter's API key gone or unreadable, said by name, which only
+ * saving it again mends; or the service down, as every other failure of
+ * eve's or a harness's reads.
  */
 export function failedCallRefusal(failed: {
   readonly status: number;
   readonly runtimeRefusal?: RuntimeRefusal | undefined;
   readonly planRefusal?: PlanRefusal | undefined;
   readonly planResetsAt?: number | undefined;
+  readonly keyRefusal?: KeyRefusal | undefined;
 }): HostedRefusal {
+  if (failed.keyRefusal === KEY_REFUSAL.UNREADABLE) return HOSTED_REFUSAL.AGENT_API_KEY_UNREADABLE;
+  if (failed.keyRefusal === KEY_REFUSAL.MISSING) return HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING;
   if (failed.planRefusal === PLAN_REFUSAL.UNREACHABLE) {
     return HOSTED_REFUSAL.AGENT_PLAN_UNREACHABLE;
   }

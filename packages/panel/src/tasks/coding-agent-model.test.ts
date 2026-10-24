@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_PAYER,
@@ -748,6 +751,61 @@ test("a missing credential's press names the harness to connect, and Settings wh
   assert.deepEqual(
     [missing(MODEL_PROVIDER.ANTHROPIC), missing(MODEL_PROVIDER.OPENAI), missing()],
     ["Connect Claude", "Connect Codex", "Open Settings"],
+  );
+});
+
+test("a Start or a message refused for an API key saved but unreadable says so and offers Settings, where saving it again mends it; a Start its plan refused for good offers Settings too, a message the plan refused does not", () => {
+  const unreadable = { failure: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE } as const;
+
+  assert.deepEqual(
+    [
+      startFailureNote(unreadable, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10"),
+      messageFailureNote(unreadable, null, CODING_AGENT_PAYER.API_KEY),
+      startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null),
+      startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null),
+      messageFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null).reason,
+    ],
+    [
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your saved API key can't be read. Save it again in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your saved API key can't be read. Save it again in Settings to message this agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your subscription is signed out. Sign in again in Settings to start an agent.",
+      },
+      {
+        reason: FAILURE_REASON.CONNECT_AGENTS,
+        text: "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
+      },
+      FAILURE_REASON.OTHER,
+    ],
+  );
+});
+
+test("a message to a teammate's agent its starter's own key refused names the starter and offers the reader no Settings of their own", () => {
+  const note = (failure: CodingAgentCallFailure) =>
+    messageFailureNote({ failure }, null, CODING_AGENT_PAYER.API_KEY, "Ada");
+
+  assert.deepEqual(
+    [
+      note(CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE),
+      note(CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING),
+    ],
+    [
+      {
+        reason: FAILURE_REASON.OTHER,
+        text: "Ada's saved API key can't be read. They save it again in Settings to unblock this agent.",
+      },
+      {
+        reason: FAILURE_REASON.OTHER,
+        text: "Ada has no API key or subscription connected for this agent. They connect one in Settings to unblock it.",
+      },
+    ],
   );
 });
 
