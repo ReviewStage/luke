@@ -54,7 +54,7 @@ test("a request to an organization's owner leaves nothing to return to", async (
   const page = await openPage(GITHUB_INSTALL_STATUS.REQUESTED);
 
   expect(said(page)).toEqual([
-    "Your request went to the GitHub organization's owner",
+    "Your request went to your organization's owner",
     "You can close this tab.",
   ]);
 });
@@ -64,7 +64,7 @@ test("an account another workspace holds says how to connect it here", async () 
 
   expect(said(page)).toEqual([
     "That GitHub account is connected to another workspace",
-    "Disconnect it there first, or choose another account.",
+    "Uninstall Luke from that account on GitHub first, or choose another account.",
   ]);
 });
 

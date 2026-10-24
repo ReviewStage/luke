@@ -96,12 +96,10 @@ const LANDING_WORDS = {
         : `Luke's ${name} repositories were updated`,
     line: undefined,
   }),
-  [LANDING_OUTCOME.REQUESTED]: (name) => ({
+  [LANDING_OUTCOME.REQUESTED]: () => ({
     tone: LANDING_TONE.SETTLED,
-    title:
-      name === undefined
-        ? "Your request went to the organization's owner"
-        : `Your request went to the ${name} organization's owner`,
+    // The page knows the provider, never the organization, so it cannot name one.
+    title: "Your request went to your organization's owner",
     line: undefined,
   }),
   [LANDING_OUTCOME.NOT_CONFIRMED]: (name) => ({
@@ -136,7 +134,7 @@ const LANDING_WORDS = {
       name === undefined
         ? "That account is connected to another workspace"
         : `That ${name} account is connected to another workspace`,
-    line: "Disconnect it there first, or choose another account.",
+    line: `Uninstall Luke from that account on ${name ?? "its provider"} first, or choose another account.`,
   }),
   [LANDING_OUTCOME.NOTHING_TO_CONNECT]: (name) => ({
     tone: LANDING_TONE.FAILED,

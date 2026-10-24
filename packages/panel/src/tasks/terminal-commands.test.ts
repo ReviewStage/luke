@@ -417,14 +417,14 @@ test("where no agent can start, the picker says why beside the offer and starts 
   let started = 0;
   const task = await mount({
     agents: [],
-    cannotStart: "Choose a repository first",
+    cannotStart: "Choose a repository",
     started: () => (started += 1),
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
     {
       name: "Start a coding agent",
-      detail: "Choose a repository first",
+      detail: "Choose a repository",
       working: false,
       chosen: false,
     },
