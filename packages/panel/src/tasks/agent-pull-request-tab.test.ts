@@ -74,6 +74,7 @@ import {
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
+import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
@@ -478,7 +479,7 @@ async function settle(): Promise<void> {
 /** The words of the Markdown box inside `within`, the one named `label` where given. */
 function boxWordsElement(within: ParentNode, label?: string): TiptapEditorHTMLElement | null {
   return within.querySelector<TiptapEditorHTMLElement>(
-    label === undefined ? '.ProseMirror[role="textbox"]' : `.ProseMirror[aria-label="${label}"]`,
+    label === undefined ? EDITOR_ROOT_SELECTOR : `${EDITOR_ROOT_SELECTOR}[aria-label="${label}"]`,
   );
 }
 

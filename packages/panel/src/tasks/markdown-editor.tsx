@@ -267,6 +267,8 @@ export function MarkdownEditor({
       if (block === SLASH_INSERT.PICTURE) pictures?.choose?.();
     },
   });
+  // The text names itself a combobox for whichever list stands over it, the `@` list or the block menu, and a textbox while neither does.
+  useLayoutEffect(() => handle.current?.setAria(mentioning ? picker.aria : blocks.aria));
   // The words selected raise the format toolbar over them, which stands aside while the `@` list or the block menu stands.
   const toolbar = useSelectionToolbar({
     editor: handle,

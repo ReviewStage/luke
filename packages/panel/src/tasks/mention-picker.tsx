@@ -79,7 +79,12 @@ import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
-import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import {
+  type ComposerTrigger,
+  type EditorAria,
+  listAria,
+  type MentionNode,
+} from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
@@ -1265,7 +1270,8 @@ function MentionMenu({
 /** What an editor drawing an `@` list wires: the list and the date picker while they stand, the field's ties to the list for assistive technology, the reports and keys the editor hands it, and what opens the date picker over a chip. */
 export interface MentionPicker {
   readonly menu: React.ReactNode;
-  readonly aria: Readonly<Record<string, string | undefined>>;
+  /** What ties the editor to the list (`listAria`), which names it a combobox while the list stands. */
+  readonly aria: EditorAria;
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   /** The `#` word's report, where the list names channels (`channels`). */
   readonly onChannelTrigger: (trigger: ComposerTrigger | undefined) => void;
@@ -2006,17 +2012,10 @@ export function useMentionPicker({
     </>
   );
 
-  // The field names the list it opened and the row highlighted in it, as any combobox's does.
-  const aria = {
-    "aria-autocomplete": "list",
-    "aria-expanded": String(shown),
-    "aria-controls": shown ? listId : undefined,
-    "aria-activedescendant": shown ? activeId : undefined,
-  };
-
   return {
     menu,
-    aria,
+    // The field names the list it opened and the row highlighted in it, as any combobox's does.
+    aria: listAria(field.field),
     onTrigger: reportFor(MENTION_WORD.MENTION),
     onChannelTrigger: reportFor(MENTION_WORD.CHANNEL),
     onKey,

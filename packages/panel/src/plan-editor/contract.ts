@@ -19,7 +19,7 @@ import type {
   WritingInsert,
   WritingMark,
 } from "@luke/settings/shortcuts";
-import type { TextAreaSubmit } from "@luke/ui";
+import type { ComboboxFieldProps, TextAreaSubmit } from "@luke/ui";
 
 /** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
 export interface EditorBox {
@@ -357,6 +357,8 @@ export interface PlanEditorHandle extends EditorFormatting {
   readonly insertBlock: (block: SlashChoice) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
+  /** The attributes that tie the text to the `@` list or the `/` menu over it (`listAria`), which name it a combobox while the list stands (`rootAria`). */
+  readonly setAria: (aria: EditorAria) => void;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
   readonly focusAt: (placement: PlanEditorPlacement) => void;
   /** Where the line of the words a click opened the editor on stands in the window, down from its top; none where it opened elsewhere, the words not found, or the caret has since been put elsewhere, or where it cannot be measured. */
@@ -396,6 +398,53 @@ export function sameTrigger(
     a.rect.left === b.rect.left &&
     a.rect.top === b.rect.top &&
     a.rect.bottom === b.rect.bottom
+  );
+}
+
+/** The editor's root element, whichever it names itself: a textbox, or a combobox while a list over it stands (`rootAria`). */
+export const EDITOR_ROOT_SELECTOR = ".ProseMirror";
+
+/** An editor root's attributes for assistive technology, each a string, or none where it takes one away. */
+export type EditorAria = Readonly<Record<string, string | undefined>>;
+
+/** The names a list's field carries (`useComboboxField`'s), as the editor root that steers the list takes them; the root's role is the editor's own (`rootAria`). */
+export function listAria(field: ComboboxFieldProps): EditorAria {
+  return {
+    "aria-expanded": String(field["aria-expanded"]),
+    "aria-controls": field["aria-controls"],
+    "aria-autocomplete": field["aria-autocomplete"],
+    "aria-activedescendant": field["aria-activedescendant"],
+  };
+}
+
+/** Whether two sets of attributes say the same, so an editor handed what it holds already is not updated again. */
+export function sameAria(a: EditorAria, b: EditorAria): boolean {
+  const names = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...names].every((name) => a[name] === b[name]);
+}
+
+/**
+ * The editor root's attributes beside its list's (`listAria`): the combobox
+ * that names the list and its active row while the list stands, and the
+ * multi-line textbox it is otherwise, which takes none of a combobox's
+ * relationships. Note that an attribute with no value is left out rather
+ * than handed on, because ProseMirror writes every value it is handed as a
+ * string.
+ */
+export function rootAria(aria: EditorAria): Readonly<Record<string, string>> {
+  const open = aria["aria-expanded"] === "true";
+  const named: EditorAria = open
+    ? { ...aria, role: "combobox" }
+    : {
+        ...aria,
+        role: "textbox",
+        "aria-multiline": "true",
+        "aria-expanded": undefined,
+        "aria-controls": undefined,
+        "aria-activedescendant": undefined,
+      };
+  return Object.fromEntries(
+    Object.entries(named).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 }
 
@@ -486,8 +535,8 @@ export interface ComposerEditorHandle extends EditorFormatting {
   readonly setSkills: (skills: ReadonlySet<string>) => void;
   /** Whether the words take a change: off while a message is held, read-only while a dictation stands, which keeps the caret. */
   readonly setInput: (input: ComposerInput) => void;
-  /** The editor element's attributes that tie it to an open list, for assistive technology. */
-  readonly setAria: (aria: Readonly<Record<string, string | undefined>>) => void;
+  /** The attributes that tie the editor element to its list (`listAria`), which name it a combobox while the list stands (`rootAria`). */
+  readonly setAria: (aria: EditorAria) => void;
   readonly blur: () => void;
   readonly destroy: () => void;
 }

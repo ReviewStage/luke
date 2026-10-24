@@ -1,5 +1,6 @@
 import { DIALOG_SIZE, Dialog, type DialogHandle } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
+import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer, useNewTaskHolding } from "./new-task-composer.js";
@@ -35,8 +36,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * asked as New task asks.
  */
 
-/** The composer's words field, the editor's own textbox, which the card hands focus to. */
-const FIELD_SELECTOR = '[role="textbox"]';
+/** The composer's words field, the editor's own root, which the card hands focus to. */
+const FIELD_SELECTOR = EDITOR_ROOT_SELECTOR;
 
 /** The dialog's own card, which holds focus while the field has not landed. */
 const CARD_SELECTOR = '[aria-modal="true"]';

@@ -12,6 +12,7 @@ import { markdownClass } from "@luke/ui/markdown-class";
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { modEnterSends } from "../enter-sends.js";
 import {
+  EDITOR_ROOT_SELECTOR,
   FINISH,
   type Finish,
   PLACEMENT_END,
@@ -161,7 +162,7 @@ export function CommentEditor({
 
   useEffect(() => {
     if (fieldRef !== undefined) {
-      fieldRef.current = room.current?.querySelector<HTMLElement>('[role="textbox"]') ?? null;
+      fieldRef.current = room.current?.querySelector<HTMLElement>(EDITOR_ROOT_SELECTOR) ?? null;
     }
   });
 

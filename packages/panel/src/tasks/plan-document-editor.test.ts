@@ -74,6 +74,7 @@ const STAND_IN: PlanEditorModule = {
       chooseMention: () => undefined,
       insertBlock: () => undefined,
       markdown: () => props.markdown,
+      setAria: () => undefined,
       focusAt: (placement) => {
         placed.push(placement);
       },

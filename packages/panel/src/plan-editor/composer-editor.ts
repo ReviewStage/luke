@@ -49,7 +49,10 @@ import {
   type ComposerMark,
   type ComposerQuote,
   type ComposerTrigger,
+  type EditorAria,
   type MentionNode,
+  rootAria,
+  sameAria,
   sameTrigger,
 } from "./contract.js";
 import {
@@ -662,10 +665,11 @@ function unmarkedChips(tr: Transaction): Transaction {
   return tr;
 }
 
-/** What a mounted box keeps between its events: the skills it chips, whether it takes words, the last words and word it reported, and its marks. */
+/** What a mounted box keeps between its events: the skills it chips, whether it takes words, what ties it to its list, the last words and word it reported, and its marks. */
 interface ComposerState {
   skills: ReadonlySet<string>;
   input: ComposerInput;
+  aria: EditorAria;
   emitted: string;
   reported: ComposerTrigger | undefined;
   trigger: ReturnType<typeof triggerAt>;
@@ -783,11 +787,10 @@ function pasted(
 /** How the box's editor hears keys, input, focus, a paste, a drop, and the clipboard. */
 function composerProps(state: ComposerState, props: ComposerEditorProps): EditorProps {
   return {
-    // Note that the attributes are read again on every update, so the return key's label follows a pointer that changes.
+    // Note that the attributes are read again on every update, so the return key's label follows a pointer that changes, and the box names itself a combobox while its list stands.
     attributes: () => ({
       class: `${props.className} ${EDITOR_CLASS}`,
-      role: "textbox",
-      "aria-multiline": "true",
+      ...rootAria(state.aria),
       "aria-label": props.label,
       enterkeyhint: enterKeyHint(),
     }),
@@ -1015,6 +1018,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
   const state: ComposerState = {
     skills: props.skills,
     input: COMPOSER_INPUT.EDITABLE,
+    aria: {},
     emitted: props.text,
     reported: undefined,
     trigger: undefined,
@@ -1078,7 +1082,12 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
         "aria-readonly": input === COMPOSER_INPUT.READ_ONLY ? "true" : undefined,
       });
     },
-    setAria: (aria) => attributed(editor, aria),
+    setAria: (aria) => {
+      if (sameAria(state.aria, aria) || editor.isDestroyed) return;
+      state.aria = aria;
+      // Note that an input method's words are never redrawn under it: the next change it makes names the list.
+      if (!editor.view.composing) editor.view.updateState(editor.state);
+    },
     blur: () => editor.view.dom.blur(),
     destroy: () => editor.destroy(),
   };

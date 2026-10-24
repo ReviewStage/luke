@@ -24,7 +24,9 @@ import {
 import { type ReactNode, type RefObject, useEffect, useId, useState } from "react";
 import {
   type ComposerTrigger,
+  type EditorAria,
   type EditorBox,
+  listAria,
   SLASH_INSERT,
   type SlashBlock,
   type SlashChoice,
@@ -219,6 +221,8 @@ interface Highlight {
 export interface BlockPicker {
   readonly menu: ReactNode;
   readonly open: boolean;
+  /** What ties the editor to the menu (`listAria`), which names it a combobox while the menu stands. */
+  readonly aria: EditorAria;
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
 }
@@ -328,6 +332,7 @@ export function useBlockPicker({
   return {
     menu,
     open,
+    aria: listAria(field.field),
     // Note that the room is measured as the word is reported, a callback's moment, never in a draw.
     onTrigger: (next) =>
       setSaid(
