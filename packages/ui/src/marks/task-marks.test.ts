@@ -16,8 +16,9 @@ import { TaskPriorityMark, TaskStatusMark } from "./task-marks.js";
 /**
  * A task's status mark wears the status tone of where it stands: under way
  * in the working blue rather than the needs-you orange, done in the green
- * every other done wears, and the rest at rest. A priority's mark spans the
- * same box a settled status's disc does, so the two stand the same size.
+ * every other done wears, and the rest at rest. A priority's mark is a
+ * square of about a settled status's disc's area, centred on it, so the two
+ * read the same size, each with the same room around it.
  */
 
 function toneOf(status: TaskStatus): string | null {
@@ -70,14 +71,28 @@ function filledSpan(mark: React.ReactElement): {
   };
 }
 
-test("every priority's mark spans the box a settled status's disc does, so neither stands smaller beside the other", () => {
+/** How far a priority's square may stray from the disc's area, as a share of it. */
+const AREA_TOLERANCE = 0.02;
+
+test("every weighed priority's mark is a square of the settled status's disc's area, centred on it, so neither reads larger beside the other", () => {
   const disc = filledSpan(createElement(TaskStatusMark, { status: TASK_STATUS.DONE }));
+  const discCentre = (disc.across[0] + disc.across[1]) / 2;
+  const discArea = Math.PI * ((disc.across[1] - disc.across[0]) / 2) ** 2;
   for (const priority of Object.values(TASK_PRIORITY) as TaskPriority[]) {
-    const span = filledSpan(createElement(TaskPriorityMark, { priority }));
-    assert.deepEqual(span.across, disc.across, `${priority} spans the disc's width`);
-    // Note that an unweighed task's dashes lie across the middle, so only a weighed one stands the disc's height.
-    if (priority !== TASK_PRIORITY.NONE) {
-      assert.deepEqual(span.down, disc.down, `${priority} spans the disc's height`);
-    }
+    if (priority === TASK_PRIORITY.NONE) continue;
+    const { across, down } = filledSpan(createElement(TaskPriorityMark, { priority }));
+    const side = across[1] - across[0];
+    assert.deepEqual(down, across, `${priority} stands a square`);
+    assert.equal((across[0] + across[1]) / 2, discCentre, `${priority} is centred on the disc`);
+    assert.ok(
+      Math.abs(side * side - discArea) / discArea <= AREA_TOLERANCE,
+      `${priority} holds about the disc's area`,
+    );
   }
+});
+
+test("an unweighed task's dashes lie across the same width a weighed priority's bars do", () => {
+  const bars = filledSpan(createElement(TaskPriorityMark, { priority: TASK_PRIORITY.HIGH }));
+  const dashes = filledSpan(createElement(TaskPriorityMark, { priority: TASK_PRIORITY.NONE }));
+  assert.deepEqual(dashes.across, bars.across);
 });
