@@ -39,7 +39,7 @@ import {
   Tooltip,
   useAnnounce,
 } from "@luke/ui";
-import { Duration } from "effect";
+import { Clock, Duration, Effect, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import {
@@ -317,18 +317,42 @@ function CloudBrowserBar({
   );
 }
 
+/** Whether the agent acted at `lastActedAt` within `CLOUD_BROWSER_AGENT_RECENT` of now, and false again once that span has passed. */
+function agentLately(lastActedAt: number): Stream.Stream<boolean> {
+  const span = Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT);
+  return Stream.fromEffect(Clock.currentTimeMillis).pipe(
+    Stream.flatMap((now) => {
+      const left = lastActedAt + span - now;
+      if (left <= 0) return Stream.make(false);
+      return Stream.make(true).pipe(
+        Stream.concat(Stream.fromEffect(Effect.as(Effect.sleep(Duration.millis(left)), false))),
+      );
+    }),
+  );
+}
+
+/** `agentLately` for a component: the words it draws go on the clock's own edge, so nothing else need redraw the bar. */
+function useAgentLately(lastActedAt: number): boolean {
+  const atom = useMemo(() => rendererRuntime.atom(agentLately(lastActedAt)), [lastActedAt]);
+  return AsyncResult.getOrElse(
+    useAtomValue(atom),
+    () => Date.now() - lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT),
+  );
+}
+
 /** What the bar says of who has the tab: the member, another member, its agent lately, or nothing. */
 function standingOf(input: {
   view: CloudBrowserView;
   tab: AgentBrowserTab;
   owner: CloudBrowserOwner;
   memberName: (userId: string) => string | undefined;
+  /** Whether the agent acted within `CLOUD_BROWSER_AGENT_RECENT`, as `useAgentLately` reads it. */
+  lately: boolean;
 }): string | undefined {
-  const { view, tab, owner, memberName } = input;
+  const { view, tab, owner, memberName, lately } = input;
   const driver = view.driver?.driver ?? tab.driver;
   if (view.driver?.yours === true) return "You're driving";
   if (driver !== null) return `${memberName(driver.userId) ?? "A teammate"} is driving`;
-  const lately = Date.now() - tab.lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT);
   return lately ? `${owner.name} is using this tab` : undefined;
 }
 
@@ -579,7 +603,8 @@ export function CloudBrowserPane({
   const resumable =
     view.phase === CLOUD_BROWSER_PHASE.ENDED && view.ended === BROWSER_LIVE_CLOSE_REASON.IDLE;
   const notice = noticeOf(view);
-  const standing = standingOf({ view, tab, owner, memberName });
+  const lately = useAgentLately(tab.lastActedAt);
+  const standing = standingOf({ view, tab, owner, memberName, lately });
   const address = view.page?.address ?? tab.address;
   const driver = view.driver?.driver ?? tab.driver;
   const driven = driver !== null;
