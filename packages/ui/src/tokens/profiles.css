@@ -131,6 +131,10 @@
   --luke-card-inset: var(--luke-space-24);
   --luke-card-inset-compact: var(--luke-space-16);
   --luke-card-inset-snug: var(--luke-space-12);
+  /* How tall a set of pictures stands (`PictureSet`): a row of a few, aimed
+     at before it is stretched to the column, and each of many's thumbnails. */
+  --luke-picture-row: 120px;
+  --luke-picture-thumb: 112px;
 
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --luke-inline-ref-pill-width: 240px;
@@ -370,6 +374,10 @@
   --luke-card-inset: var(--luke-space-24);
   --luke-card-inset-compact: var(--luke-space-16);
   --luke-card-inset-snug: var(--luke-space-12);
+  /* How tall a set of pictures stands (`PictureSet`): a row of a few, aimed
+     at before it is stretched to the column, and each of many's thumbnails. */
+  --luke-picture-row: 120px;
+  --luke-picture-thumb: 112px;
 
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --luke-inline-ref-pill-width: 240px;

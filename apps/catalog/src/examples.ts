@@ -80,6 +80,7 @@ import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PANE_BARS_EXAMPLE } from "./examples/pane-bars";
 import { PANE_PINS_EXAMPLE } from "./examples/pane-pins";
+import { PICTURE_SETS_EXAMPLE } from "./examples/picture-sets";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PORTAL_FENCE_EXAMPLE } from "./examples/portal-fence";
@@ -236,6 +237,7 @@ export const EXAMPLES: readonly Example[] = [
   PAGE_THUMBS_EXAMPLE,
   PAGE_TOOLBAR_EXAMPLE,
   PANE_BARS_EXAMPLE,
+  PICTURE_SETS_EXAMPLE,
   PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PRESS_SHORTCUTS_EXAMPLE,
