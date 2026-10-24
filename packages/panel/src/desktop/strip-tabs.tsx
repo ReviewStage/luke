@@ -1,16 +1,17 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  AnchoredPopover,
   CloseIcon,
   CopyIcon,
   EllipsisIcon,
   IconButton,
+  type MenuRow,
   PencilIcon,
   PinIcon,
   PlusIcon,
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
+  SearchableMenu,
   SKELETON_SHAPE,
   Skeleton,
   STATUS_TONE,
@@ -23,7 +24,6 @@ import { ListXIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCopyToast } from "../copy-feedback.js";
-import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import type { HeldTranscript } from "../tasks/agent-tab-card.js";
 import {
   type CopiedTranscript,
@@ -443,24 +443,23 @@ export function AddTabButton({
         />
       </Tooltip>
       {drawn.mounted ? (
-        <AnchoredPopover align={POPOVER_ALIGN.START} bounds={POPOVER_BOUNDS.WINDOW}>
-          <SearchableMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            className="tab-add-menu"
-            label={label}
-            placeholder={placeholder}
-            rows={entries.map(entryRow)}
-            value={undefined}
-            noMatch={noMatch}
-            onPick={pick}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </AnchoredPopover>
+        <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          label={label}
+          placeholder={placeholder}
+          rows={entries.map(entryRow)}
+          value={undefined}
+          noMatch={noMatch}
+          align={POPOVER_ALIGN.START}
+          bounds={POPOVER_BOUNDS.WINDOW}
+          onPick={pick}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );

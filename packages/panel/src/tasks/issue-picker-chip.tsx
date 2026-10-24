@@ -13,7 +13,12 @@ import {
   Chip,
   ChipName,
   ErrorState,
+  type MenuRow,
+  POPOVER_ALIGN,
+  POPOVER_WIDTH,
+  type PopoverAlign,
   ProviderMark,
+  SearchableMenu,
   STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -29,8 +34,6 @@ import { CircleDotIcon, ExternalLinkIcon, ListTodoIcon, PlusIcon } from "lucide-
 import { useEffect, useId, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
 import {
   GITHUB_ISSUES_STANDING,
   type GitHubIssuesStanding,
@@ -362,7 +365,7 @@ export function IssuePickerChip({
   full,
   disabled,
   openRequest,
-  align = PICKER_ALIGN.START,
+  align = POPOVER_ALIGN.START,
   trigger,
   onChoose,
   onChooseGitHub,
@@ -383,7 +386,7 @@ export function IssuePickerChip({
   /** Counts the asks from elsewhere to open the menu, such as the field's ⌘L, each opening it. */
   openRequest?: number | undefined;
   /** Which of the chip's edges its menu hangs from: the leading one, or the trailing one where the chip ends its row. */
-  align?: PickerAlign | undefined;
+  align?: PopoverAlign | undefined;
   /** The words of a quiet chip drawn in the issue chip's place, as a task page's "Link issue"; the issue chip where none are given. */
   trigger?: string | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
@@ -410,7 +413,6 @@ export function IssuePickerChip({
   const menuId = useId();
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, button, align, menuId);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // A switch of workspace closes the menu, in the render that brings it,
@@ -492,7 +494,7 @@ export function IssuePickerChip({
   };
 
   return (
-    <div className="issue-picker-chip" {...placement} ref={box}>
+    <div className="issue-picker-chip" ref={box}>
       {trigger !== undefined ? (
         <Chip
           ref={button}
@@ -552,6 +554,8 @@ export function IssuePickerChip({
             ) : undefined
           }
           noMatch={ISSUE_WORDS.NONE}
+          align={align}
+          width={POPOVER_WIDTH.WIDE}
           onSearch={(words) => {
             setTyped(words);
             searchLinear(words, workspaceId);

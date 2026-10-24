@@ -17,6 +17,8 @@ import {
   ErrorState,
   GAP,
   Inline,
+  type MenuRow,
+  POPOVER_ALIGN,
   Spinner,
   TaskPriorityMark,
   TaskStatusMark,
@@ -30,8 +32,7 @@ import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
-import type { MenuRow } from "../searchable-menu.js";
-import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
+import { Picker } from "../settings/picker-row.js";
 
 /**
  * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands and how much it matters.
@@ -156,7 +157,7 @@ function TaskAssigneePicker({
           <Spinner delay label="Reading members" />
         ) : undefined
       }
-      align={PICKER_ALIGN.START}
+      align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
       onPick={(id) => {
@@ -250,7 +251,7 @@ function TaskStatusPicker({
       valueIcon={<TaskStatusMark status={status} />}
       rows={STATUS_ROWS}
       noMatch="No statuses match"
-      align={PICKER_ALIGN.START}
+      align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
       onPick={(id) => {
@@ -285,7 +286,7 @@ export function TaskStandingChips({
           valueIcon={<TaskPriorityMark priority={priority} />}
           rows={PRIORITY_ROWS}
           noMatch="No priorities match"
-          align={PICKER_ALIGN.START}
+          align={POPOVER_ALIGN.START}
           width={CHIP_WIDTH.AUTO}
           disabled={onSet === undefined}
           onPick={(id) => {

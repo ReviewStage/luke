@@ -18,6 +18,7 @@ import {
   GAP,
   Inline,
   LAYOUT_ELEMENT,
+  POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   TEXT_BUTTON_TONE,
@@ -27,7 +28,6 @@ import {
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { IssueCard } from "./issue-card.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
@@ -234,7 +234,7 @@ export function TaskIssueLinks({
             {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
             <IssuePickerChip
               trigger={LINKS_WORDS.LINK}
-              align={PICKER_ALIGN.START}
+              align={POPOVER_ALIGN.START}
               linearIn={linearIn}
               githubIn={githubIn}
               workspaceId={workspaceId}

@@ -283,9 +283,9 @@ test("the panel's + lists each agent's terminal under Terminal, says how it stan
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
-  const rows = [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].filter(
-    (row) => row.closest('[role="group"]')?.textContent?.startsWith("Terminal") === true,
-  );
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>('.luke-searchable-menu [role="option"]'),
+  ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Terminal") === true);
   assert.deepEqual(
     rows.map((row) => [
       row.querySelector(".luke-combobox-option-label")?.textContent,
@@ -401,7 +401,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
-  const groups = [...document.querySelectorAll('.tab-add-menu [role="group"]')].map(
+  const groups = [...document.querySelectorAll('.luke-searchable-menu [role="group"]')].map(
     (group) => group.textContent ?? "",
   );
 
