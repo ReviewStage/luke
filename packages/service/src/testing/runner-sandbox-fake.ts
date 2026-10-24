@@ -11,7 +11,11 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { gunzipSync } from "node:zlib";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { sandboxListRefusal, sandboxStopRefusal } from "./vercel-sandbox-fake.js";
+import {
+  sandboxListRefusal,
+  sandboxStopRefusal,
+  sandboxTagsRefusal,
+} from "./vercel-sandbox-fake.js";
 
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
@@ -183,6 +187,8 @@ export function runnerSandboxApi() {
       if (sandboxes.some((each) => !each.deleted && each.name === asked.name)) {
         return Response.json({ error: { code: "conflict" } }, { status: 409 });
       }
+      const tagsRefused = sandboxTagsRefusal(asked.tags);
+      if (tagsRefused !== undefined) return tagsRefused;
       const sandbox: FakeSandbox = {
         name: asked.name,
         status: "running",
@@ -224,6 +230,8 @@ export function runnerSandboxApi() {
       if (method === "PATCH") {
         // Only the fields given change, as Vercel's update takes them.
         const asked = await body();
+        const tagsRefused = sandboxTagsRefusal(asked.tags);
+        if (tagsRefused !== undefined) return tagsRefused;
         if (asked.tags !== undefined) sandbox.tags = asked.tags;
         if (asked.timeout !== undefined) sandbox.timeout = asked.timeout;
         return Response.json({ sandbox: listed(sandbox) });

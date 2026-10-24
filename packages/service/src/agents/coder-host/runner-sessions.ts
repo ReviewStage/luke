@@ -251,16 +251,22 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   ) => Effect.Effect<HarnessAhead, E | LaunchRefused, RunnerServices>;
 }
 
-/** The tags a sandbox Luke opens carries beside its session's: its agent, and the runner it runs, so a later call finds both. */
+/**
+ * The tags a sandbox Luke opens carries beside its session's: its agent, and
+ * the runner it runs, so a later call finds both. Note that Vercel refuses a
+ * sandbox more than five tags, the session's among them, so a launch's
+ * fingerprint rides in its launch tag rather than a tag of its own.
+ */
 export const RUNNER_TAG = {
   AGENT: "lukeAgent",
   SANDBOX_SESSION: "lukeRunnerSession",
   COMMAND: "lukeRunnerCommand",
-  /** The launch's first event number. */
+  /** The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
   LAUNCH: "lukeRunnerLaunch",
-  /** What the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
-  FINGERPRINT: "lukeRunnerFingerprint",
 } as const;
+
+/** What parts a launch tag's first event number from its fingerprint. */
+const LAUNCH_FINGERPRINT_MARK = "-";
 
 /** How many hex characters of a launch's fingerprint its tag keeps. */
 const FINGERPRINT_CHARS = 32;
@@ -543,14 +549,16 @@ export interface TaggedRunner {
   readonly fingerprint?: string;
 }
 
-/** The launch tag read: its first event number; none where the tag is missing or unreadable. */
+/** The launch tag read: its first event number and its fingerprint where it has one; none where the tag is missing or unreadable. */
 function taggedLaunch(
   tags: Readonly<Record<string, string>>,
-): { readonly firstSequence: number } | undefined {
-  const launch = tags[RUNNER_TAG.LAUNCH] ?? "";
-  const firstSequence = Number(launch);
-  if (launch === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return { firstSequence };
+): { readonly firstSequence: number; readonly fingerprint?: string } | undefined {
+  const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
+    LAUNCH_FINGERPRINT_MARK,
+  );
+  const firstSequence = Number(sequence);
+  if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
+  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }) };
 }
 
 export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
@@ -561,13 +569,7 @@ export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
     return undefined;
   }
-  const fingerprint = tags[RUNNER_TAG.FINGERPRINT];
-  return {
-    sandboxSessionId,
-    commandId,
-    ...launch,
-    ...(fingerprint === undefined ? {} : { fingerprint }),
-  };
+  return { sandboxSessionId, commandId, ...launch };
 }
 
 /** The tags of a sandbox whose runner is no longer told of: its session, its agent, and its launch, so a late END still reads as that launch's. */
@@ -606,8 +608,10 @@ function runnerTags(sessionId: string, agentId: string, runner: TaggedRunner) {
     [RUNNER_TAG.AGENT]: agentId,
     [RUNNER_TAG.SANDBOX_SESSION]: runner.sandboxSessionId,
     [RUNNER_TAG.COMMAND]: runner.commandId,
-    [RUNNER_TAG.LAUNCH]: String(runner.firstSequence),
-    ...(runner.fingerprint === undefined ? {} : { [RUNNER_TAG.FINGERPRINT]: runner.fingerprint }),
+    [RUNNER_TAG.LAUNCH]:
+      runner.fingerprint === undefined
+        ? String(runner.firstSequence)
+        : [runner.firstSequence, runner.fingerprint].join(LAUNCH_FINGERPRINT_MARK),
   };
 }
 
