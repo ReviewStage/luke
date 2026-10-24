@@ -109,6 +109,8 @@ const SKELETON_SCRIPT = `![...document.querySelectorAll('[class*="skeleton"]')].
   const r = box.getBoundingClientRect();
   return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
 })`;
+// The video player's example draws only this line until its stand-in is recorded, some frames on (`apps/catalog/src/examples/video-player.tsx`).
+const RECORDED_SCRIPT = `!document.querySelector(".catalog-example").textContent.includes("Recording a stand-in video")`;
 // How long a scene waits for its skeletons to give way before it is shot anyway, with a note.
 const READING_TIMEOUT_MS = 10_000;
 // The desktop's renderer pages, by what their address ends with.
@@ -398,11 +400,12 @@ async function shootDesktop(
   try {
     const page = await desktopPage(app, shot.scene);
     page.on("pageerror", (error) => problems.push(error.message));
-    // The window takes the size and the machine's appearance; the page holds the theme on its root.
+    // The panel's window takes the size and the machine's appearance, the call window the appearance alone,
+    // since it is fitted to its card; the page holds the theme on its root.
     await app.evaluate(
       (
         { BrowserWindow, nativeTheme }: never,
-        arg: { theme: Theme; frame: Frame; suffix: string },
+        arg: { theme: Theme; frame: Frame | undefined; suffix: string },
       ) => {
         const electron = { BrowserWindow, nativeTheme } as {
           BrowserWindow: {
@@ -417,10 +420,15 @@ async function shootDesktop(
         const window = electron.BrowserWindow.getAllWindows().find((open) =>
           open.webContents.getURL().endsWith(arg.suffix),
         );
-        window?.setSize(arg.frame.width, arg.frame.height);
-        window?.webContents.setZoomFactor(arg.frame.zoom);
+        if (window === undefined || arg.frame === undefined) return;
+        window.setSize(arg.frame.width, arg.frame.height);
+        window.webContents.setZoomFactor(arg.frame.zoom);
       },
-      { theme: shot.theme, frame, suffix: WINDOW_PAGE[shot.scene.window ?? WINDOW.PANEL] },
+      {
+        theme: shot.theme,
+        frame: shot.scene.window === WINDOW.CALL ? undefined : frame,
+        suffix: WINDOW_PAGE[shot.scene.window ?? WINDOW.PANEL],
+      },
     );
     await page.emulateMedia({ colorScheme: shot.theme, reducedMotion: "reduce" });
     await page.evaluate(stillPageScript(shot.theme));
@@ -464,7 +472,9 @@ async function shootBrowser(
   const viewport = frame.phone && !phone ? WIDE_FRAME : frame;
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
-    ...(phone ? { hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : {}),
+    // A finger works either phone, as the catalog's own shoot gives its phone frame.
+    ...(frame.phone ? { hasTouch: true } : {}),
+    ...(phone ? { isMobile: true, deviceScaleFactor: 2 } : {}),
     colorScheme: shot.theme,
     reducedMotion: "reduce",
   });
@@ -476,6 +486,11 @@ async function shootBrowser(
       await page.goto(catalogAddress(base, shot));
       await page.waitForSelector(".catalog-example h1");
       await page.evaluate("document.fonts.ready.then(() => true)");
+      try {
+        await page.waitForFunction(RECORDED_SCRIPT, undefined, { timeout: READING_TIMEOUT_MS });
+      } catch {
+        problems.push("still recording its stand-in when shot");
+      }
       await page.waitForTimeout(STEP_SETTLE_MS);
       await page
         .locator(".catalog-example")
