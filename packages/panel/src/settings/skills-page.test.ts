@@ -18,6 +18,7 @@ import type { PortActKind } from "@luke/host/contract";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -811,6 +812,7 @@ test("only what a paste would install scrolls: the box's folded line, the search
 test("a refused install says which skill and why in words, keeps the dialog, and marks that skill so it no longer installs", async () => {
   refuseInstall = true;
   await mountDialog();
+  mountAnnouncer();
   await paste(COMMAND);
 
   act(() => primary().click());
@@ -819,7 +821,11 @@ test("a refused install says which skill and why in words, keeps the dialog, and
     document.body.textContent ?? "",
     /web-design-guidelines holds more than 64 files\./u,
   );
-  assert.ok(document.querySelector('[role="alert"]'));
+  assert.equal(
+    announcedAsAlert(),
+    "More than 64 files",
+    "the skill's mark is announced as an alert",
+  );
   assert.match(document.body.textContent ?? "", /More than 64 files/u);
   assert.equal(primary().textContent, "Install");
   assert.equal(primary().disabled, true);

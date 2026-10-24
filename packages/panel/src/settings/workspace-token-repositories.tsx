@@ -5,6 +5,7 @@ import {
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -29,6 +30,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { repositoryMenuRow } from "../repository-row.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 
 /**
  * workspace-token-repositories.tsx -- the repositories members added to a workspace on their own GitHub tokens, under GitHub's row on Settings › Workspace.
@@ -301,10 +303,12 @@ export function TokenRepositoryRows({
 }: {
   repositories: TokenRepositories;
 }): React.JSX.Element {
-  if (repositories.read === TOKEN_REPOSITORIES_READ.READING) {
+  const reading = repositories.read === TOKEN_REPOSITORIES_READ.READING;
+  useAnnounceShown(ANNOUNCE.POLITE, reading ? WORDS.ROWS_READING : "");
+  if (reading) {
     return (
       <SettingsLine>
-        <span role="status">{WORDS.ROWS_READING}</span>
+        <span>{WORDS.ROWS_READING}</span>
       </SettingsLine>
     );
   }

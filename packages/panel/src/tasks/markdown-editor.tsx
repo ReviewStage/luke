@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { decodeMention } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ANNOUNCE } from "@luke/ui";
 import { AsyncResult } from "effect/reactivity";
 import {
   type ReactNode,
@@ -29,6 +30,7 @@ import {
   SLASH_INSERT,
   type SlashBlock,
 } from "../plan-editor/contract.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { type OwnBlock, useBlockPicker } from "./block-picker.js";
 import type { EditorPictures } from "./editor-pictures.js";
 import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
@@ -279,14 +281,13 @@ export function MarkdownEditor({
     roomClassName === undefined
       ? `${ROOM_CLASS} ph-no-capture`
       : `${ROOM_CLASS} ${roomClassName} ph-no-capture`;
+  useAnnounceShown(ANNOUNCE.ALERT, AsyncResult.isFailure(module) ? EDITOR_LOAD_FAILED : "");
   if (!AsyncResult.isSuccess(module)) {
     return (
       <section ref={room} className={roomClass} aria-busy="true">
         {loading}
         {AsyncResult.isFailure(module) ? (
-          <p className="plan-editor-note" role="alert">
-            {EDITOR_LOAD_FAILED}
-          </p>
+          <p className="plan-editor-note">{EDITOR_LOAD_FAILED}</p>
         ) : null}
       </section>
     );

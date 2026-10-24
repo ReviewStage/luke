@@ -26,6 +26,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
+import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { installEditorLayout } from "../testing/composer.js";
@@ -336,6 +337,7 @@ test("an edit is written to GitHub with the words it began from, line endings ke
 });
 
 test("a description changed on GitHub keeps the draft open and says so, and Reload, asked first, opens GitHub's words in its place", async () => {
+  mountAnnouncer();
   const container = await drawTab();
   await clickWords(container, "Expires invitations after seven days.");
   const editor = editorIn(container) ?? assert.fail("the editor opens");
@@ -352,8 +354,9 @@ test("a description changed on GitHub keeps the draft open and says so, and Relo
   const kept = editorIn(container) ?? assert.fail("the editor stays open");
   assert.match(kept.textContent ?? "", /seven days\. Mine\./u, "the draft stays");
   const alert =
-    description(container).querySelector('[role="alert"]') ?? assert.fail("a refusal is said");
+    description(container).querySelector(".plan-editor-note") ?? assert.fail("a refusal is said");
   assert.match(alert.textContent ?? "", /changed on GitHub/u);
+  assert.match(announcedAsAlert(), /changed on GitHub/u, "and announced as an alert");
 
   act(() => button(alert, "Reload").click());
   await settle();

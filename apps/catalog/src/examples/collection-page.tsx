@@ -7,6 +7,7 @@ import {
   CollectionPage,
   type CollectionState,
   EllipsisIcon,
+  FailureNote,
   IconButton,
   LIST_ROW_CURRENT,
   List,
@@ -112,7 +113,7 @@ function Tasks({
       loadingLabel="Reading tasks"
       skeleton={skeleton}
       empty={<p>No tasks yet. Start one by talking it through.</p>}
-      error={<p role="alert">Tasks could not be read. Try again in a moment.</p>}
+      error={<FailureNote>Tasks could not be read. Try again in a moment.</FailureNote>}
     >
       <List label="Tasks">
         {TASKS.map((task) => (
@@ -162,7 +163,7 @@ function TasksUnderToolbar({ state }: { state: CollectionState }): React.JSX.Ele
       state={state}
       loadingLabel="Reading tasks"
       empty={<p>No tasks yet. Start one by talking it through.</p>}
-      error={<p role="alert">Tasks could not be read. Try again in a moment.</p>}
+      error={<FailureNote>Tasks could not be read. Try again in a moment.</FailureNote>}
     >
       <List label="Tasks">
         {TASKS.map((task) => (

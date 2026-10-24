@@ -15,6 +15,7 @@ import {
 } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ANNOUNCE,
   BUTTON_SIZE,
   CARD_CORNER,
   CARD_ELEMENT,
@@ -100,6 +101,7 @@ import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
 import { groupCount } from "./sidebar-fold.js";
@@ -261,6 +263,7 @@ function TaskBoardCard({
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
+  useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
@@ -363,11 +366,7 @@ function TaskBoardCard({
           </CardPress>
         </Tooltip>
       )}
-      {rename.refused ? (
-        <span className="tasks-board-card-note" role="alert">
-          {RENAME_FAILED_NOTE}
-        </span>
-      ) : null}
+      {rename.refused ? <span className="tasks-board-card-note">{RENAME_FAILED_NOTE}</span> : null}
       <TaskBoardTags task={task} />
       <div className="tasks-board-card-foot">
         {/* Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo. */}

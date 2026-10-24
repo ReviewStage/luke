@@ -21,6 +21,7 @@ import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ANNOUNCE,
   BUTTON_VARIANT,
   Button,
   CodeCard,
@@ -40,6 +41,7 @@ import {
   TEXT_TONE,
   Text,
   TextLink,
+  useAnnounce,
   useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
@@ -1465,6 +1467,8 @@ function AgentEndLine({
   endReason: FailureReason | undefined;
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
+  // Note that a failure's words are the note's to say, so only a stop's are said here.
+  useAnnounce(ANNOUNCE.POLITE, ended.failed ? "" : ended.words);
   // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
@@ -1489,7 +1493,7 @@ function AgentEndLine({
     );
   }
   return (
-    <p className="agent-end-line" data-ended="" aria-live="polite">
+    <p className="agent-end-line" data-ended="">
       <span className="agent-end-words">{ended.words}</span>
       {remedyButton}
     </p>

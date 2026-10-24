@@ -16,6 +16,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
+  ANNOUNCE,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -73,6 +74,7 @@ import { ActionMenu } from "../desktop/action-menu.js";
 import { HarnessMark } from "../harness-marks.js";
 import { useSettleOpenAiKey } from "../openai-key.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { useCapability } from "../use-app-state.js";
 
 /**
@@ -376,11 +378,9 @@ function markNoticeSeen(): void {
 
 /** A status in the connected or the attention tint, announced where it needs a hand. */
 function State({ ok, children }: { ok: boolean; children: string }): React.JSX.Element {
+  useAnnounceShown(ANNOUNCE.ALERT, ok ? "" : children);
   return (
-    <SettingsRowStateLine
-      state={ok ? SETTINGS_ROW_STATE.CONNECTED : SETTINGS_ROW_STATE.ATTENTION}
-      role={ok ? undefined : "alert"}
-    >
+    <SettingsRowStateLine state={ok ? SETTINGS_ROW_STATE.CONNECTED : SETTINGS_ROW_STATE.ATTENTION}>
       {children}
     </SettingsRowStateLine>
   );

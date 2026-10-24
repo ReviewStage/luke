@@ -1,5 +1,5 @@
 import { HOST_LIVE } from "@luke/features/tasks-view";
-import { Tooltip } from "@luke/ui";
+import { ANNOUNCE, Tooltip, useAnnounce } from "@luke/ui";
 import { RefreshCwIcon, WifiOffIcon } from "@luke/ui/icons";
 import * as Atom from "effect/reactivity/Atom";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -58,11 +58,12 @@ export function useOffline(): boolean {
 /** The pill, or nothing while the Mac is online and live updates are current. */
 export function OfflineMark(): React.JSX.Element | null {
   const mark = useAppSlice(liveMarkAtom);
+  useAnnounce(ANNOUNCE.POLITE, mark === undefined ? "" : LIVE_MARK_LOOK[mark].word);
   if (mark === undefined) return null;
   const { word, hint, Icon } = LIVE_MARK_LOOK[mark];
   return (
     <Tooltip label={hint}>
-      <span className="offline-mark" role="status" aria-label={word}>
+      <span className="offline-mark" role="img" aria-label={word}>
         <Icon aria-hidden="true" />
         <span className="offline-mark-word">{word}</span>
       </span>

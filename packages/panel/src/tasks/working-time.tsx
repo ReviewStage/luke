@@ -1,7 +1,7 @@
 import type { TurnRecord } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
-import { cn, Shimmer, TIME_LOOK, Time, Tooltip, useMinute } from "@luke/ui";
+import { ANNOUNCE, cn, Shimmer, TIME_LOOK, Time, Tooltip, useAnnounce, useMinute } from "@luke/ui";
 import type { ReactNode } from "react";
 import { TurnCard } from "./turn-card.js";
 
@@ -105,9 +105,10 @@ export function WorkingLine({
   /** What the agent is doing, as far as its transcript shows it: "Working…" unless said otherwise. */
   words?: string;
 }): ReactNode {
+  useAnnounce(ANNOUNCE.POLITE, words);
   // Note that only its top margin is cleared, because the conversation's gap below it is a bottom margin a cleared one would override, leaving what is said next touching it.
   return (
-    <p className={STATUS_LINE_CLASS} data-working="" aria-live="polite">
+    <p className={STATUS_LINE_CLASS} data-working="">
       <Shimmer>{words}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
     </p>
