@@ -26,10 +26,13 @@
  * while it stands, as ⌘K's palette does, and leaves ⌃Tab to a dialog over
  * the window.
  *
- * A task's card is named as Back's list named the screen while it stood
+ * A task's card is named as Back's list names the screen
  * (`history-titles.ts`): the task's status glyph and name, then its panes'
- * tabs, "Fix token refresh · Code", the column's agent wearing its glyph as
- * its tab drew it (`switcher-looks.ts`), at work or failed as everywhere.
+ * tabs, "Fix token refresh · Code", the task and an agent's tab by the
+ * names they go by now and a person's card by the name the workspace's
+ * members give them, each falling back to what was kept as it stood, the
+ * column's agent wearing its glyph as its tab drew it (`switcher-looks.ts`),
+ * at work or failed as everywhere.
  * Its preview is a still of the whole work area, taken once the window
  * settles on the screen and again as ⌃Tab leaves it: main takes a downscaled
  * picture of that part of the window (`window.capture`). A still is a picture
@@ -41,6 +44,7 @@
 
 import { useAtomSet } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
+import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@luke/settings/shortcuts";
@@ -64,8 +68,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { overlayHoldsKeyboard, useAppCommand, useOverlayHold } from "../app-commands.js";
-import { stepTitle } from "../history-titles.js";
-import { MemberDirectory, usePerson } from "../member-directory.js";
+import { liveStepTitle, memberName, NAMED_STEP, stepTitle } from "../history-titles.js";
+import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -186,8 +190,18 @@ function PersonStopFace({ userId, name }: { userId: string; name: string }): Rea
   return <ActorMark actor={usePerson({ userId, name })} size={ACTOR_SIZE.INLINE} />;
 }
 
-/** How a card wears its stop, from what the window holds of it now and what Back's list named it while it stood. */
-function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined): CardLook {
+/**
+ * How a card wears its stop, from what the window holds of it now and what
+ * Back's list named it while it stood: a task, its agent's tab, and a person
+ * by the names they go by now, as Back's list names a step again
+ * (`liveStepTitle`), and by what was kept where nothing names them now.
+ */
+function cardLook(
+  stop: Stop,
+  tasks: TasksControl,
+  title: StepTitle | undefined,
+  members: readonly WorkspaceMember[] | undefined,
+): CardLook {
   switch (stop.kind) {
     case STOP_KIND.TASK: {
       const task = tasks.tasks.find((each) => each.id === stop.taskId);
@@ -200,12 +214,15 @@ function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined)
         stop.panel === undefined
           ? undefined
           : (heldLook(LOOK_STRIP.PANEL, stop.taskId, stop.panel) ?? tabWordLook(stop.panel, task));
-      // The words are the ones Back's list named the screen by while it stood, where it did.
+      const { taskId } = stop;
+      const named = { kind: NAMED_STEP.TASK, taskId, column: stop.column, side: stop.panel };
+      const live = liveStepTitle(named, title, tasks, members);
+      // The words are the tabs as their strips drew them, where nothing names the screen now or as it stood.
       const words = [column?.label, panel?.label].filter((word) => word !== undefined);
       return {
         icon: <PlanGlyph status={task?.status} />,
-        label: title?.label ?? task?.name ?? TASK_WORDS,
-        detail: title === undefined ? words.join(" · ") || undefined : title.detail,
+        label: live?.label ?? TASK_WORDS,
+        detail: live?.detail ?? (words.join(" · ") || undefined),
         detailIcon: column?.icon,
         endMark: column?.endMark,
       };
@@ -230,13 +247,55 @@ function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined)
         endMark: agentEndMark(agent, false),
       };
     }
-    case STOP_KIND.PERSON:
+    case STOP_KIND.PERSON: {
+      const name = memberName(members, stop.userId) ?? stop.name ?? PERSON_WORDS;
       return {
-        icon: <PersonStopFace userId={stop.userId} name={stop.name ?? PERSON_WORDS} />,
-        label: stop.name ?? PERSON_WORDS,
+        icon: <PersonStopFace userId={stop.userId} name={name} />,
+        label: name,
         detail: undefined,
       };
+    }
   }
+}
+
+/** One card of a stop, named against the workspace's members around it (`cardLook`). */
+function StopCard({
+  stop,
+  tasks,
+  title,
+  still,
+  here,
+  chosen,
+  onPoint,
+  onPick,
+}: {
+  stop: Stop;
+  tasks: TasksControl;
+  title: StepTitle | undefined;
+  still: string | undefined;
+  here: boolean;
+  chosen: boolean;
+  onPoint: () => void;
+  onPick: () => void;
+}): React.JSX.Element {
+  const { members } = useMemberDirectory();
+  const look = cardLook(stop, tasks, title, members);
+  return (
+    <TabCard
+      icon={look.icon}
+      label={look.label}
+      detail={look.detail}
+      detailIcon={look.detailIcon}
+      endMark={look.endMark}
+      still={still}
+      here={here}
+      chosen={chosen}
+      // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
+      pickOnPress
+      onPoint={onPoint}
+      onPick={onPick}
+    />
+  );
 }
 
 /** Where the window stands now, as the switcher reads it. */
@@ -555,33 +614,22 @@ export function TabSwitcher({
       <VisuallyHidden id={titleId}>Recent tabs</VisuallyHidden>
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
         <TabCards label="Recent tabs">
-          {cards.map((stop, at) => {
-            const look = cardLook(
-              stop,
-              tasks,
-              titles.current.find((held) => sameStop(held.stop, stop))?.title,
-            );
-            return (
-              <TabCard
-                key={at}
-                icon={look.icon}
-                label={look.label}
-                detail={look.detail}
-                detailIcon={look.detailIcon}
-                endMark={look.endMark}
-                still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
-                here={face.here && at === 0}
-                chosen={at === chosen}
-                // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
-                pickOnPress
-                onPoint={() => move(switcherChose(latest.current, at))}
-                onPick={() => {
-                  move(switcherChose(latest.current, at));
-                  letGo(true);
-                }}
-              />
-            );
-          })}
+          {cards.map((stop, at) => (
+            <StopCard
+              key={at}
+              stop={stop}
+              tasks={tasks}
+              title={titles.current.find((held) => sameStop(held.stop, stop))?.title}
+              still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
+              here={face.here && at === 0}
+              chosen={at === chosen}
+              onPoint={() => move(switcherChose(latest.current, at))}
+              onPick={() => {
+                move(switcherChose(latest.current, at));
+                letGo(true);
+              }}
+            />
+          ))}
         </TabCards>
       </MemberDirectory>
     </Dialog>

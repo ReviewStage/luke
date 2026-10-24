@@ -1,5 +1,6 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -34,6 +35,7 @@ import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
@@ -76,8 +78,10 @@ import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
  * A pin outlives what it opens only on the open task's word: an agent the
  * task's agents no longer hold, its Changes too, or a file no longer among those Luke showed
  * on it, leaves the row dimmed, opening nothing, with a quiet note on its
- * card, until it is unpinned. Another task's pins are drawn as they were kept, since
- * nothing of that task is read.
+ * card, until it is unpinned. Another task's pins are never gone, since
+ * nothing of that task is read but its row; a pin is named as its tab is
+ * now, from that row where it is another task's (`namedPin`), and by the
+ * label it was pinned under where nothing the window reads names it.
  */
 
 /** What a pin's Unpin button says and wears, as the pin's menu does. */
@@ -177,13 +181,23 @@ function pinPullRequest(
   return lines.find((line) => line.agentId === tab.changes);
 }
 
-/** A pin as the sidebar names it: by the label it was pinned under, but a Plan tab's by its task's name and a Changes tab's by its pull request's number and title as they stand now, as the tab itself is named. */
+/**
+ * A pin as the sidebar names it, as the tab itself is named now: a Plan
+ * tab's by its task's name, an agent's by the agent's name where the window
+ * reads the agent (`pinAgent`), and a Changes tab's by its pull request's
+ * number and title. Note that the label it was pinned under is what it falls
+ * back to, because another task's agents are read only as far as its row's
+ * agent lines name them.
+ */
 function namedPin(
   pin: PinnedTab,
   task: TaskSummary,
+  agent: TaskAgentLine | undefined,
   pullRequest: PinnedPullRequest | undefined,
+  models: readonly CatalogModel[] | undefined,
 ): PinnedTab {
   if (pin.tab === SIDE_PANEL_TAB.PLAN) return { ...pin, label: task.name };
+  if (agent !== undefined) return { ...pin, label: agentName(agent, models) };
   return pullRequest === undefined ? pin : { ...pin, label: pullRequestLabelOf(pullRequest) };
 }
 
@@ -414,7 +428,8 @@ export function SidebarPinnedTab({
   onOpenTask: () => void;
 }): React.JSX.Element {
   const livePullRequest = pinPullRequest(kept, task, tasks);
-  const pin = namedPin(kept, task, livePullRequest);
+  const agent = pinAgent(kept, task, tasks);
+  const pin = namedPin(kept, task, agent, livePullRequest, tasks.agents.models);
   const copied = useTranscriptCopier();
   const now = useMinute();
   const place = useRowPlace();
@@ -424,7 +439,6 @@ export function SidebarPinnedTab({
     item.current = press?.parentElement ?? null;
   }, []);
   const gone = pinGone(pin, tasks);
-  const agent = pinAgent(pin, task, tasks);
   const changesCard = pinChangesCard(pin, tasks, gone, (agentId) =>
     tasks.onOpenPinnedTab({ ...pin, tab: { agent: agentId } }),
   );
