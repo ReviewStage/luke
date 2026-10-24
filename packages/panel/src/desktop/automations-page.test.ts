@@ -645,6 +645,47 @@ test("a switch turns its automation off, and the row takes the service's answer 
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
 });
 
+test("a switch flips at once, before the service answers, and a second press is a toggle back, never the same write twice", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  const sweep = () =>
+    rowOf(page, "Nightly flaky-test sweep").querySelector<HTMLButtonElement>("[role=switch]");
+  const press = () => act(() => sweep()?.click());
+
+  press();
+  await settle();
+  assert.equal(
+    sweep()?.getAttribute("aria-checked"),
+    "false",
+    "it reads off while the write is out",
+  );
+  press();
+  await settle();
+
+  assert.deepEqual(changes, [
+    { automationId: SWEEP.id, change: { enabled: false } },
+    { automationId: SWEEP.id, change: { enabled: true } },
+  ]);
+  assert.equal(sweep()?.getAttribute("aria-checked"), "true", "the second press put it back");
+});
+
+test("a switch the service refuses in the editor reads its new state at once, then goes back", async () => {
+  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
+
+  assert.equal(
+    page.querySelector("[role=switch]")?.getAttribute("aria-checked"),
+    "false",
+    "it flipped before the refusal came",
+  );
+  await settle();
+  assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
+});
+
 test("an older switch's answer landing after a newer one's draws nothing over it", async () => {
   heldChanges = [];
   const page = mount();

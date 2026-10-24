@@ -12,6 +12,7 @@ import {
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
+import type { AutomationView } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { momentText } from "@luke/features/time-format";
@@ -34,15 +35,12 @@ import {
   FoldingButton,
   type FoldingButtonHint,
   ListRow,
-  NO_CONTEXT_MENU,
   NOT_FOUND_THING,
   NotFound,
   OneLine,
   PAGE_FRAME,
   RowHint,
   RowHintOptions,
-  STATUS_TONE,
-  Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -64,14 +62,13 @@ import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { rowMenu } from "./action-menu.js";
 import {
   AutomationEditor,
   AutomationPageSkeleton,
+  AutomationSwitch,
   type SentryOffer,
-  toggleRefusal,
 } from "./automation-editor.js";
 import {
   AutomationGroupCard,
@@ -197,7 +194,7 @@ function AutomationRow({
   now: number;
   narrow: boolean;
   onOpen: () => void;
-  onToggle: (enabled: boolean) => void;
+  onToggle: (enabled: boolean) => Promise<AutomationView>;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
@@ -267,16 +264,7 @@ function AutomationRow({
             />
           )
         }
-        actions={
-          <Switch
-            checked={automation.enabled}
-            label={
-              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-            }
-            onChange={(enabled) => onToggle(enabled)}
-            {...NO_CONTEXT_MENU}
-          />
-        }
+        actions={<AutomationSwitch automation={automation} write={onToggle} />}
         hint={{ Hint: RowHint, label: automation.name }}
         onPress={onOpen}
         menu={copyLink === undefined ? undefined : rowMenu(ROW_THING, [[copyLink]])}
@@ -306,7 +294,7 @@ function AutomationList({
   /** Whether the room is a phone's, where a lone owner's card is headed too, since its rows name no owner. */
   narrow: boolean;
   onOpen: (automation: AutomationSummary) => void;
-  onToggle: (automation: AutomationSummary, enabled: boolean) => void;
+  onToggle: (automation: AutomationSummary, enabled: boolean) => Promise<AutomationView>;
 }): React.JSX.Element {
   return (
     <>
@@ -408,18 +396,9 @@ function ListPage({
 }): React.JSX.Element {
   const view = tasks.automationsView;
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
-  const toast = useToast();
   const now = useMinute();
   const workspace = tasks.workspace;
   const { read, reload, toggle } = automations;
-  const onToggle = (automation: AutomationSummary, enabled: boolean) => {
-    toggle(automation.id, enabled).then((answer) => {
-      const refusal = toggleRefusal(answer, enabled);
-      if (refusal !== undefined) {
-        toast({ words: refusal, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
-      }
-    });
-  };
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   const openSuggested = (preset: AutomationPresetName) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
@@ -485,7 +464,7 @@ function ListPage({
             onOpen={(automation) =>
               view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
             }
-            onToggle={onToggle}
+            onToggle={(automation, enabled) => toggle(automation.id, enabled)}
           />
           <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </>
