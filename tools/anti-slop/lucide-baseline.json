@@ -19,7 +19,6 @@
   "packages/panel/src/desktop/desktop-tasks.tsx": 1,
   "packages/panel/src/desktop/desktop-version-history.tsx": 1,
   "packages/panel/src/desktop/mobile-bar.tsx": 1,
-  "packages/panel/src/desktop/offline-mark.tsx": 1,
   "packages/panel/src/desktop/person-page.tsx": 1,
   "packages/panel/src/desktop/section-icon-picker.tsx": 2,
   "packages/panel/src/desktop/sidebar-foot.tsx": 1,

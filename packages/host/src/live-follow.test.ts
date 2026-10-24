@@ -339,6 +339,57 @@ it.effect("a poll that fails is asked again a second later, then longer, up to f
   }),
 );
 
+it.effect(
+  "a poll that fails says the rows may be behind, and the next poll that answers hands its rows on again, moved or not",
+  () =>
+    Effect.gen(function* () {
+      let failing = false;
+      let behind = 0;
+      const rows: unknown[] = [];
+      const following = yield* Effect.forkChild(
+        Stream.runForEach(
+          liveRows<Part>(
+            {
+              openLive: () => fakeRealtime().client,
+              reseal: () => Effect.succeed({ failure: "unavailable" }),
+              // A poll past a digest answers it unchanged with no rows, as the held poll does; one past none answers the rows whole.
+              poll: (after) =>
+                Effect.succeed(
+                  failing
+                    ? { failure: "unavailable" }
+                    : polledRead(after === undefined ? [] : undefined, "1"),
+                ),
+              now: () => 0,
+              behind: () => {
+                behind += 1;
+              },
+            },
+            polledRead([], "1"),
+          ),
+          (whole) => Effect.sync(() => void rows.push(whole)),
+        ),
+      );
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.equal(rows.length, 1, "rows that did not move are handed on once");
+      assert.equal(behind, 0);
+
+      failing = true;
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.ok(behind > 0, "the failed poll says the rows may be behind");
+      assert.equal(rows.length, 1);
+
+      failing = false;
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* settled;
+      assert.equal(rows.length, 2, "the poll that answers hands the same rows on again");
+      assert.deepEqual(rows[1], rows[0]);
+      yield* Fiber.interrupt(following);
+    }),
+);
+
 it.effect("a read whose session the service refuses as signed out ends, and is asked no more", () =>
   Effect.gen(function* () {
     const exit = yield* liveRows<Part>(

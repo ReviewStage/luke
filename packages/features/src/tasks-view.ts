@@ -127,6 +127,20 @@ export const TASKS_READ = {
 const tasksReadSchema = EffectSchema.Literals(Object.values(TASKS_READ));
 
 /**
+ * Whether what the host follows live is current, as the task list's follow
+ * last found it: live while its rows arrive, catching up while a poll that
+ * failed is asked again or a follow that broke is started again, and
+ * offline while the service answers no seal at all.
+ */
+export const HOST_LIVE = {
+  LIVE: "live",
+  CATCHING_UP: "catching-up",
+  OFFLINE: "offline",
+} as const;
+
+export type HostLive = (typeof HOST_LIVE)[keyof typeof HOST_LIVE];
+
+/**
  * The active task's document as last read: the plan whole while a read has
  * landed, kept through a later read that failed, so the window never draws a
  * document it did not read and never drops one it did.
@@ -255,6 +269,8 @@ export const tasksViewSchema = EffectSchema.Struct({
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
   listStatus: tasksReadSchema,
+  /** Whether what the host follows live is current (`HOST_LIVE`); absent before the list's follow first says, which reads as live. */
+  live: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(HOST_LIVE))),
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
   /** Where the read of the workspaces stands, a failed one keeping those held; absent before the first is asked. */
