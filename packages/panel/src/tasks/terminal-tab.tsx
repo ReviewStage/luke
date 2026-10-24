@@ -11,12 +11,12 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
-  useAnnounce,
 } from "@luke/ui";
 import { useMemo } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
+import { useAnnounceShown } from "../use-announce-shown.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { TreeToggle, usePaneRoom } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -84,7 +84,7 @@ function StateBar({
   onAction: (action: TerminalAction) => void;
 }): React.JSX.Element {
   const { action } = bar;
-  useAnnounce(ANNOUNCE.POLITE, bar.words);
+  useAnnounceShown(ANNOUNCE.POLITE, bar.words);
   return (
     <div className="terminal-bar" data-late={String(bar.late)}>
       {bar.busy ? (

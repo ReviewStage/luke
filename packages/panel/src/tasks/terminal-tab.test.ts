@@ -32,6 +32,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
+import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -551,9 +552,15 @@ test("a sandbox that refuses a shell because it stopped meanwhile shows the stop
 
 test("a service it cannot reach shows a bar that says so, whose action asks again", async () => {
   main.down.add(ACT_KIND.TERMINAL_LIST);
+  mountAnnouncer();
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
   assert.equal(tab.bar(), "Luke's service did not answer.");
+  assert.equal(
+    announcedPolitely(),
+    "Luke's service did not answer.",
+    "the bar is said as it lands",
+  );
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();
