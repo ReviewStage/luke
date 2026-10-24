@@ -708,7 +708,7 @@ export function SidebarTask({
               />
             ) : (
               <>
-                {task.name}
+                <OneLine words={task.name}>{task.name}</OneLine>
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : <AssigneeFaceHeard face={worn} />}
               </>
