@@ -665,11 +665,14 @@ export function Tooltip({
     const key = (event: KeyboardEvent) => {
       const stood = latest();
       if (stood?.entered === true) {
-        // Note that a card stacked over this one, hung from a control on it, takes Escape first, so the press steps back one card at a time.
-        const at = standing.findIndex((each) => each.id === id);
-        if (event.key !== "Escape" || at < standing.length - 1) return;
+        if (event.key !== "Escape") return;
+        // Note that the press is spent here even where a card stacked over
+        // this one, hung from a control on it, is the one to go, because
+        // that card may be the pointer's, which leaves the press to the
+        // window; so Escape steps back one card at a time and no further.
         event.preventDefault();
-        hide();
+        const at = standing.findIndex((each) => each.id === id);
+        if (at === standing.length - 1) hide();
         return;
       }
       const { target } = event;

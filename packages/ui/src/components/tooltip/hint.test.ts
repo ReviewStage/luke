@@ -33,7 +33,9 @@ import { Tooltip } from "./hint.js";
  * with the card still standing, and Escape takes it down and hands focus
  * back to the control, the window's layered Escape left alone; a card
  * already showing on the control's focus is entered the same way. A card
- * entered from a control on another card steps back one card per Escape.
+ * entered from a control on another card steps back one card per Escape,
+ * as does one the pointer hung over an entered card, the window's own
+ * Escape left alone either way.
  */
 
 const roots: Root[] = [];
@@ -711,4 +713,30 @@ test("a card entered from a control on another entered card goes alone on Escape
   keyDown(sweep, { key: "Escape", code: "Escape" });
   assert.equal(cardsStanding(), 0);
   assert.ok(focused() === control, "focus is back on the outer card's control");
+});
+
+test("a card the pointer hangs over an entered card goes alone on Escape, and the window's own Escape is left alone", () => {
+  const inner = createElement(Tooltip, {
+    label: "Sweep",
+    card: createElement("p", null, "Every night at 2"),
+    children: createElement(Button, { onClick: () => undefined, children: "Sweep" }),
+  });
+  const outer = createElement(Tooltip, {
+    label: "Agent",
+    card: createElement(Fragment, null, createElement("p", { key: "by" }, "Started by"), inner),
+    children: createElement(Button, { onClick: () => undefined, children: "Agent" }),
+  });
+  const control = mount(outer).querySelector("button") ?? assert.fail("drawn");
+  act(() => control.focus());
+  keyDown(control, SHOW_DETAILS);
+  const sweep = focused() ?? assert.fail("focus is somewhere");
+  const cardsStanding = () =>
+    [...document.querySelectorAll(".luke-tooltip-card:not([data-leaving])")].length;
+  restOn(sweep);
+  assert.equal(cardsStanding(), 2, "the pointer hangs the inner card over the entered one");
+
+  const pressed = keyDown(sweep, { key: "Escape", code: "Escape" });
+  assert.equal(cardsStanding(), 1, "only the inner card goes");
+  assert.ok(pressed.defaultPrevented, "the window's layered Escape is left alone");
+  assert.ok(focused() === sweep, "focus stays in the entered card");
 });
