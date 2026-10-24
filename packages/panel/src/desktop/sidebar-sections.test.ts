@@ -298,7 +298,7 @@ test("a section folds on its title, aria-expanded following, counts its tasks fo
   assert.equal(launch().textContent, "🚀Launch1 task");
   assert.deepEqual(namesIn(sidebar, "Sections"), []);
 
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
   act(() => actions?.click());
   assert.equal(launch().getAttribute("aria-expanded"), "false", "the ⋯ folds nothing");
 
@@ -367,7 +367,7 @@ test("a task's Move to section puts it on top of the section chosen", async () =
 test("a section's Delete section asks first, then deletes the section and none of its tasks", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
   assert.ok(actions);
 
   act(() => actions.click());
@@ -395,7 +395,7 @@ const BOTH_IN_LAUNCH: TaskSections = {
 
 /** Opens the section titled `title`'s menu from its ⋯. */
 function openSectionMenu(sidebar: HTMLElement, title: string): void {
-  const actions = sidebar.querySelector<HTMLButtonElement>(`[aria-label="Actions for ${title}"]`);
+  const actions = sidebar.querySelector<HTMLButtonElement>(`[aria-label="${title} actions"]`);
   assert.ok(actions);
   act(() => actions.click());
 }
@@ -518,7 +518,7 @@ test("a section's Mark all as read stands while a task in it is unread, and mark
 test("a section's Delete question goes when the section does, deleted on another Mac", async () => {
   const writes: TaskSectionWrite[] = [];
   const { container, draw } = await mountSidebarRedrawn(writes);
-  const actions = container.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  const actions = container.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
   assert.ok(actions);
   act(() => actions.click());
   act(() => item("Delete section").click());
@@ -578,7 +578,9 @@ test("a title typed after a refusal keeps the card up, takes the refusal away, a
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section…").click());
   await act(async () => dialogButton("Create section").click());
-  const refused = document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent;
+  const refused = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  )?.textContent;
   const title = document.querySelector<HTMLInputElement>('[aria-label="Section title"]');
   assert.ok(title);
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -589,7 +591,9 @@ test("a title typed after a refusal keeps the card up, takes the refusal away, a
   const typed = document.querySelector<HTMLInputElement>(
     '[role="alertdialog"] [aria-label="Section title"]',
   )?.value;
-  const refusalAfterTyping = document.querySelector('[role="alertdialog"] [role="alert"]');
+  const refusalAfterTyping = document.querySelector(
+    '[role="alertdialog"] [data-slot="field-error"]:not(:empty)',
+  );
   await act(async () => dialogButton("Create section").click());
 
   assert.equal(refused, "Name the section.");
@@ -602,7 +606,7 @@ test("a title typed after a refusal keeps the card up, takes the refusal away, a
 test("choosing No icon and saving clears a section's icon", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
   assert.ok(actions);
 
   act(() => actions.click());
@@ -853,7 +857,7 @@ test("an icon found by searching, in a color chosen, is the new section's", asyn
 test("a color chosen recolors the glyph a section wears", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes, GLYPHS);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Stars"]');
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Stars actions"]');
   assert.ok(actions);
 
   act(() => actions.click());
@@ -1018,7 +1022,7 @@ test("editing a section in an emoji the grid leaves out names it in the emoji fi
     agentEntries: [],
   };
   const sidebar = await mountSidebar([], newest);
-  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Launch actions"]');
   assert.ok(actions);
 
   act(() => actions.click());
@@ -1132,7 +1136,7 @@ test("under a finger, a section's menu moves it up among the sections", async ()
   const sidebar = await mountSidebar(writes, ICONLESS);
   const drawn = workspaceSections(ICONLESS, WORKSPACE.id).map((section) => section.title);
   const last = drawn.at(-1) ?? assert.fail("two sections stand");
-  const actions = sidebar.querySelector<HTMLButtonElement>(`[aria-label="Actions for ${last}"]`);
+  const actions = sidebar.querySelector<HTMLButtonElement>(`[aria-label="${last} actions"]`);
   assert.ok(actions);
 
   act(() => actions.click());

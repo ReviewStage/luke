@@ -1,4 +1,4 @@
-import { dropBelow, EllipsisIcon, IconButton, Tooltip, useMenu } from "@luke/ui";
+import { dropBelow, MoreButton, moreLabel, useMenu } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 
@@ -81,7 +81,6 @@ export function PhoneHead({
 }
 
 /** What a place's ⋯ is called. */
-const MORE = "More";
 
 /**
  * A place's ⋯ and the menu it drops: `groups`, made as the menu is drawn
@@ -89,9 +88,12 @@ const MORE = "More";
  * under (`MenuAsk`).
  */
 export function PlaceMore({
+  thing,
   shown,
   groups,
 }: {
+  /** What the place is, which names its ⋯ and its menu: "Inbox" makes "Inbox actions". */
+  thing: string;
   /** Whether the place is on screen, for the menu not to outlive it. */
   shown: boolean;
   groups: (opener: HTMLElement) => readonly (readonly MenuEntry[])[];
@@ -99,12 +101,10 @@ export function PlaceMore({
   const menu = useMenu(shown);
   return (
     <>
-      <Tooltip label={MORE}>
-        <IconButton icon={<EllipsisIcon />} label={MORE} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={thing} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={MORE}
+          label={moreLabel(thing)}
           menu={menu.drawn}
           groups={groups(menu.drawn.opener)}
           onClose={menu.close}

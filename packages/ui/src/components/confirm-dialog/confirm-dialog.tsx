@@ -11,6 +11,7 @@ import {
 } from "../../confirm-state.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
+import { ErrorLine } from "../error-line/error-line.js";
 import { FormField } from "../form-field/form-field.js";
 import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js";
 
@@ -28,8 +29,9 @@ import { TEXT_FIELD_AUTO_COMPLETE, TextField } from "../text-field/text-field.js
  *
  * The question is `confirm-state.ts`'s, so it withdraws the render its subject
  * or its surface goes. An answer already given finishes where it stands with
- * both buttons stilled; one that was refused keeps the card up saying why, so
- * the act can be tried again or let go.
+ * both buttons stilled; one that was refused keeps the card up saying why,
+ * in the one `ErrorLine` every form part says what went wrong in, so the act
+ * can be tried again or let go.
  */
 
 /** How the act's button is drawn: red for an act that destroys, the accent for one that can be undone. */
@@ -87,7 +89,6 @@ export function useConfirmDialog(
  */
 const BODY = "m-0 text-body text-muted-foreground wrap-anywhere";
 const GATE = "font-mono text-foreground wrap-anywhere";
-const REFUSAL = "m-0 text-caption text-danger wrap-anywhere";
 
 /** What the act's button is told by the stage of its answer. */
 interface ActState {
@@ -203,11 +204,7 @@ function ConfirmCard({
           )}
         </FormField>
       )}
-      {rejection !== undefined && !acting ? (
-        <p className={REFUSAL} role="alert">
-          {rejection}
-        </p>
-      ) : null}
+      <ErrorLine>{rejection !== undefined && !acting ? rejection : null}</ErrorLine>
     </Dialog>
   );
 }

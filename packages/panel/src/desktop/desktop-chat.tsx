@@ -11,7 +11,6 @@ import {
   ArchiveIcon,
   BackIcon,
   BUTTON_SIZE,
-  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -24,6 +23,8 @@ import {
   LIST_ROW_INK,
   List,
   ListRow,
+  MoreButton,
+  moreLabel,
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
@@ -792,20 +793,12 @@ function RailGroup({
         contextMenu={menu.contextMenu(ellipsis)}
         onToggle={onToggle}
         actions={
-          <Tooltip label="Group actions">
-            <IconButton
-              ref={ellipsis}
-              icon={<EllipsisIcon />}
-              label={`Actions for ${name}`}
-              size={BUTTON_SIZE.COMPACT}
-              {...menu.trigger()}
-            />
-          </Tooltip>
+          <MoreButton ref={ellipsis} thing={name} size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />
         }
       />
       {menu.drawn === undefined ? null : (
         <ActionMenu
-          label={`${name} actions`}
+          label={moreLabel(name)}
           menu={menu.drawn}
           groups={groups}
           onClose={menu.close}
@@ -1210,6 +1203,7 @@ function RailBar({
           }
           end={
             <PlaceMore
+              thing="Chat"
               shown
               groups={(opener) =>
                 [
@@ -1329,7 +1323,7 @@ function ChannelActions({
   const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.CHAT, channelId: channel.id });
   const taskStatus = useTaskStatus(channel.planId);
-  const label = `${title} actions`;
+  const label = moreLabel(title);
   const read: MenuAction = {
     ...markReadItem({ unread: true, onMark: onMarkRead }),
     disabled: !unread,
@@ -1354,9 +1348,7 @@ function ChannelActions({
   );
   return (
     <>
-      <Tooltip label="Channel actions">
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
+      <MoreButton thing={title} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}

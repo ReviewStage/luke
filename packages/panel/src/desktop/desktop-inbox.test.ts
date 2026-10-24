@@ -8032,7 +8032,7 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
   assert.ok(head, "the phone's head stands");
   assert.deepEqual(
     [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    ["New task", "More"],
+    ["New task", "Inbox actions"],
   );
   assert.match(head.querySelector("h1")?.textContent ?? "", /^Inbox/);
   const field = page.querySelector<HTMLInputElement>(
@@ -8042,7 +8042,8 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
   assert.equal(head.contains(field), false, "outside the head, which keeps its title");
 
   const more = () =>
-    head.querySelector<HTMLButtonElement>('[aria-label="More"]') ?? assert.fail("the ⋯ stands");
+    head.querySelector<HTMLButtonElement>('[aria-label="Inbox actions"]') ??
+    assert.fail("the ⋯ stands");
   const pick = (name: string) => {
     act(() => more().click());
     const item = [

@@ -382,3 +382,27 @@ describe("a pinned Changes tab's card", () => {
     assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
   });
 });
+
+test("a pinned tab's ⋯ and its right-click open the same menu, the ⋯ a Tab stop after its press", () => {
+  const press = drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 });
+  const more = document.querySelector<HTMLButtonElement>('button[aria-label="Pinned tab actions"]');
+  assert.ok(more, "the row draws a ⋯");
+  assert.equal(more.tabIndex, 0);
+  const offered = () =>
+    [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
+      (each) => each.textContent,
+    );
+  act(() => more.click());
+  const fromMore = offered();
+  assert.ok(fromMore.includes("Unpin"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.deepEqual(offered(), []);
+  act(() => {
+    press.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 4, clientY: 4 }));
+  });
+  assert.deepEqual(offered(), fromMore);
+});

@@ -63,7 +63,7 @@
   .luke-provider-button:disabled:not([aria-busy="true"]),
   .luke-provider-button:disabled:not([aria-busy="true"]) + .luke-provider-button-last-used,
   .luke-button:disabled + .luke-provider-button-last-used {
-    opacity: 0.4;
+    opacity: var(--luke-disabled-opacity);
   }
 
   /* The ring that stands in the mark's place while its sign-in is waited on,

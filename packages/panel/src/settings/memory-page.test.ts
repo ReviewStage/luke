@@ -244,7 +244,7 @@ test("a forget that fails says so in the dialog and keeps the memory listed", as
 
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   assert.equal(
-    dialog().querySelector('[role="alert"]')?.textContent,
+    dialog().querySelector('[data-slot="field-error"]:not(:empty)')?.textContent,
     "The memory could not be forgotten. Try again.",
   );
 });

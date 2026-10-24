@@ -1,5 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { isComposingKey } from "../../composing-key.js";
+import { ROVING_ORIENTATION, rovingStep } from "../roving-keys/roving-keys.js";
 
 /**
  * use-combobox-field.ts -- the keys and the names of a field that steers a list while the caret stays in it, which `Combobox` and the desktop's searchable menu share.
@@ -41,30 +42,20 @@ export interface ComboboxField {
 }
 
 /**
- * Where a key takes the active row among `count`: the arrows a step on,
- * wrapping at either end, and on past any row skipped; from nowhere, to the
- * first or the last; Home and End to the first or the last not skipped.
- * Where every row is skipped, it stays; a key that moves none answers undefined.
+ * Where a key takes the active row among `count`, as any roving set walks
+ * its items (`rovingStep`), down a column. Note that a key that moves along
+ * a list with no rows makes the first row active, so the row the list
+ * stands with once it fills is the first.
  */
 function steppedTo(
   key: string,
   at: number,
   count: number,
-  skipped: (index: number) => boolean,
+  skipped: ((index: number) => boolean) | undefined,
 ): number | undefined {
-  const down = key === "ArrowDown" || key === "Home";
-  if (!down && key !== "ArrowUp" && key !== "End") return undefined;
-  if (count === 0) return 0;
-  const edge = key === "Home" || key === "End";
-  const step = down ? 1 : -1;
-  let next = at < 0 || edge ? (down ? 0 : count - 1) : (at + step + count) % count;
-  for (let steps = 1; steps < count && skipped(next); steps += 1) {
-    next = (next + step + count) % count;
-  }
-  return skipped(next) ? at : next;
+  const to = rovingStep(key, ROVING_ORIENTATION.VERTICAL, at, count, skipped);
+  return to !== undefined && count === 0 ? 0 : to;
 }
-
-const NONE_SKIPPED = () => false;
 
 /** The field's names and its key handler, over a list of `count` rows whose active one is `active`. */
 export function useComboboxField(input: {
@@ -96,9 +87,7 @@ export function useComboboxField(input: {
     const ime = isComposingKey(event);
     if (event.key === "Escape" && (open || ime)) event.stopPropagation();
     if (ime) return false;
-    const moved = open
-      ? steppedTo(event.key, active, count, input.skipped ?? NONE_SKIPPED)
-      : undefined;
+    const moved = open ? steppedTo(event.key, active, count, input.skipped) : undefined;
     if (moved !== undefined) {
       event.preventDefault();
       input.onActiveChange(moved);

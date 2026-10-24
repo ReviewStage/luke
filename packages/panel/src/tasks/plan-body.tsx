@@ -17,8 +17,8 @@ import { agoText, momentText, sinceText } from "@luke/features/time-format";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
-  EllipsisIcon,
-  IconButton,
+  MoreButton,
+  moreLabel,
   motionHeld,
   SavedTick,
   STATUS_TONE,
@@ -172,10 +172,10 @@ interface LinkedTask {
 }
 
 /** What a section's ⋯ is called. */
-const SECTION_MENU_LABEL = "Section actions";
+const SECTION_THING = "Section";
 
 /** What the title's ⋯ is called. */
-const TITLE_MENU_LABEL = "Title actions";
+const TITLE_THING = "Title";
 
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
@@ -744,11 +744,12 @@ function attributed(
  * menu over `items`, shown while the pointer or the keyboard is on its unit.
  */
 function UnitMenu({
-  label,
+  thing,
   items,
   tabbable,
 }: {
-  label: string;
+  /** What the unit is, which names its ⋯ and its menu. */
+  thing: string;
   items: readonly MenuAction[];
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
@@ -759,22 +760,24 @@ function UnitMenu({
     <>
       {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
       <span className="plan-unit-more">
-        <Tooltip label={label}>
-          <IconButton
-            icon={<EllipsisIcon />}
-            label={label}
-            tabbable={tabbable}
-            {...trigger}
-            onClick={(event) => {
-              // Note that the press stops here, because a click into a section opens its editor.
-              event.stopPropagation();
-              trigger.onClick(event);
-            }}
-          />
-        </Tooltip>
+        <MoreButton
+          thing={thing}
+          tabbable={tabbable}
+          {...trigger}
+          onClick={(event) => {
+            // Note that the press stops here, because a click into a section opens its editor.
+            event.stopPropagation();
+            trigger.onClick(event);
+          }}
+        />
       </span>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
+        <ActionMenu
+          label={moreLabel(thing)}
+          menu={menu.drawn}
+          groups={[items]}
+          onClose={menu.close}
+        />
       )}
     </>
   );
@@ -802,7 +805,7 @@ function SectionMenu({
     icon: <LinkIcon aria-hidden="true" />,
     onSelect: copyLink,
   };
-  return <UnitMenu label={SECTION_MENU_LABEL} items={[item]} tabbable={tabbable} />;
+  return <UnitMenu thing={SECTION_THING} items={[item]} tabbable={tabbable} />;
 }
 
 /**
@@ -832,7 +835,7 @@ function TitleMenu({
     ...(onRename === undefined ? [] : [renameTaskItem(onRename)]),
     ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
   ];
-  return <UnitMenu label={TITLE_MENU_LABEL} items={items} tabbable={tabbable} />;
+  return <UnitMenu thing={TITLE_THING} items={items} tabbable={tabbable} />;
 }
 
 /**

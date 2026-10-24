@@ -42,6 +42,17 @@ export const VERB = {
   RESET_TO_DEFAULTS: "Reset to defaults",
 } as const;
 
+/**
+ * What a form says beside a field: that it may be left empty, that the secret
+ * it takes is already kept, and the press that shows or hides what is typed.
+ */
+export const FIELD_WORDS = {
+  OPTIONAL: "Optional",
+  SAVED: "Saved",
+  SHOW: "Show",
+  HIDE: "Hide",
+} as const;
+
 /** How English counts: "one" for 1, "other" for 0, 2, and 1.5. */
 const PLURAL = new Intl.PluralRules("en-US");
 

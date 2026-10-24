@@ -2898,10 +2898,11 @@ test("Review stands at the end of the tabs' row however the pull request stands,
       ),
     );
     const row =
-      tab.querySelector<HTMLElement>(".pull-request-tabs") ?? assert.fail("the tabs' row stands");
+      tab.querySelector<HTMLElement>(".pull-request-tab > .luke-pane-bar") ??
+      assert.fail("the tabs' row stands");
     const review = buttonWith(row, /^Review$/u);
     assert.equal(review !== undefined, offered, state);
-    const before = review?.closest(".pull-request-review")?.previousElementSibling;
+    const before = review?.closest(".pull-request-review")?.parentElement?.previousElementSibling;
     assert.equal(
       before?.firstElementChild?.getAttribute("role") ?? null,
       offered ? "tablist" : null,
@@ -2919,7 +2920,7 @@ test("Review stands at the end of the tabs' row however the pull request stands,
 /** The Review press at the end of the tabs' row. */
 function reviewPress(tab: HTMLElement): HTMLButtonElement {
   return (
-    buttonWith(tab.querySelector(".pull-request-tabs") ?? tab, /^Review$/u) ??
+    buttonWith(tab.querySelector(".pull-request-tab > .luke-pane-bar") ?? tab, /^Review$/u) ??
     assert.fail("an open pull request's tabs offer Review")
   );
 }

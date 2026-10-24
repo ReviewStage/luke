@@ -451,6 +451,54 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
   assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}`]);
 });
 
+test("the @ list hangs at the caret, by the word's line, and narrows as the word is typed on while the caret stays in the box", async () => {
+  // Note that jsdom lays out nothing, so the word's letters stand where a line would put them, and the layer is laid in the page.
+  vi.spyOn(Range.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 120, y: 300, width: 8, height: 16 }),
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(document.body);
+  try {
+    const { container } = await box(planPage([]));
+
+    typeInComposer(container, "Follow @r");
+    await settle();
+    const layer =
+      container.querySelector<HTMLElement>(".luke-rect-float") ?? assert.fail("the list hangs");
+    const hung = { side: layer.dataset.side, left: layer.style.left, top: layer.style.top };
+    const first = listed(container);
+    typeInComposer(container, "oll");
+    await settle();
+
+    assert.deepEqual(hung, { side: "above", left: "120px", top: "300px" });
+    assert.ok(first.length > 2, "a letter offers more than the word does");
+    assert.deepEqual(listed(container), ["rollout-store.ts", "Rollout"]);
+    assert.ok(composerEditor(container).contains(document.activeElement), "the caret stays");
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+test("the @ list closes on a press outside it and the box, stays open for a press in the box, and stays closed while the caret is in its word", async () => {
+  const { container } = await box(planPage([]));
+  const press = (target: Element) =>
+    act(() => {
+      target.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+  typeInComposer(container, "Follow @roll");
+  await settle();
+  press(composerEditor(container));
+  const keptByTheBox = listed(container);
+  press(document.body);
+  const afterAway = container.querySelector(".mention-menu") !== null;
+  typeInComposer(container, "o");
+  await settle();
+
+  assert.deepEqual(keptByTheBox, ["rollout-store.ts", "Rollout"]);
+  assert.equal(afterAway, false, "a press outside closes it");
+  assert.equal(container.querySelector(".mention-menu") !== null, false, "and it stays closed");
+});
+
 test("the box names the @ list it opened and the row highlighted in it, as any combobox's field does, and names none once the list closes", async () => {
   const { container } = await box(planPage([]));
 

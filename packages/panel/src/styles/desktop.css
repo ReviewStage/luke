@@ -1705,55 +1705,6 @@ ul.actor-stack {
     luke-card-shrink var(--luke-duration-exit) var(--luke-motion-exit) both;
 }
 
-/* Who said or wrote a message on a shared plan, a teammate, Luke, or an
-   automation, named by their mark and name in the muted meta voice, the mark
-   centred on the words; the reader's own carry no name. A plan card and a
-   sent message alike name them under it (`.message-meta`). */
-.message-sender {
-  display: flex;
-  align-items: center;
-  padding-inline: var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The line under a sent message's bubble: its Copy and Copy link, shown
-   while the pointer or the keyboard is on it, then who sent it and when at
-   the bubble's right edge, so the name stays put as the buttons come and go. */
-.message-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-space-2);
-  max-width: 100%;
-}
-
-/* A column, a phone's or a narrow pane's on the desktop and the web, can be
-   too narrow for a long sender beside the buttons and the time, and a line
-   ending at the bubble's right edge would push it off the column's left
-   one, so who sent it gives way, cut short with an ellipsis (`@luke/ui`'s
-   inline ref), and the buttons and the time keep their whole width inside
-   the column. */
-.message-meta > .message-sender {
-  min-width: 0;
-}
-
-.message-meta > :is(.luke-message-actions, .message-sent-at) {
-  flex: none;
-}
-
-/* When it was sent, in the sender's own muted meta voice, its digits even. */
-.message-sent-at {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--luke-space-4) + var(--luke-space-2));
-  padding-inline-end: var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 /* What a transcript opens on, the plan, an automation's prompt, or a
    worker's task, stands as a sent message does, at the right over the line
    naming who sent it and when, its card across the message's whole measure,
@@ -1764,17 +1715,10 @@ ul.actor-stack {
   width: 100%;
 }
 
-/* Its meta line breaks before the time rather than squeeze who sent it: a
-   long sender keeps the card's whole measure, the time on a line under it. */
-.agent-origin > .message-meta {
-  flex-wrap: wrap;
-  row-gap: var(--luke-space-2);
-}
-
 /* Who sent it can name an automation, an issue, and a runner: too narrow
    for all three on one line, it breaks between them rather than cutting
    each name to its first letters. */
-.agent-origin > .message-meta > .message-sender > .actor-words {
+.agent-origin > .luke-message-line > .luke-message-line-sender > .actor-words {
   flex-wrap: wrap;
   row-gap: var(--luke-space-2);
 }
@@ -2247,39 +2191,11 @@ ul.actor-stack {
   color: var(--integration-ink-sentry);
 }
 
-/* The searchable menu, in the shape of a command menu: the search as the
-   first row, flush and edge to edge over a hairline; under it the list,
-   its rows inset by the list's own padding so a highlight never meets the
-   border, scrolling inside itself past a bounded height; and under the
-   list, behind another hairline, the rows pinned where the scrolling
-   cannot take them. A row is one fixed height whatever the list holds:
-   the list is a plain block and a row flexes in no column it stands in,
-   because a bounded flex column would otherwise shrink its rows towards
-   their words as the matches grew past the bound, and let them back out
-   as a search cut them down. The menu opens under its trigger, its list
-   and its foot each carrying the surface's inset. */
-.searchable-menu {
-  position: absolute;
-  z-index: 2;
-  top: calc(100% + var(--luke-space-4));
-  left: 0;
-  width: 340px;
-  padding: 0;
-}
-
 .task-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
   padding: var(--luke-menu-inset);
   border-top: 1px solid var(--luke-color-border);
-}
-
-/* A searchable menu hung from its own button (`@luke/ui`'s
-   `AnchoredPopover`) stands in the layer's place, and is what a listed
-   row's submenu stands against. */
-.luke-anchored-popover > .searchable-menu {
-  position: relative;
-  width: auto;
 }
 
 /* What pops up arrives on the pair every arriving element rides, the
@@ -2924,68 +2840,6 @@ ul.actor-stack {
   width: 2px;
   background: var(--luke-color-border);
   content: "";
-}
-
-/* The head starts where its chip's face stands centred on the gutter's
-   line, and stands over the line the comment before draws into it. It
-   keeps to one row, so nothing after the chip wraps under it onto the
-   line: a narrow pane cuts the writer's name short first, and what is said
-   of when wraps beside the chip only once the name can give no more. */
-.inbox-comment-head {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  min-height: var(--inbox-face);
-  align-items: center;
-  column-gap: var(--luke-space-6);
-  margin-left: calc((var(--inbox-face) - var(--inbox-mark)) / 2);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The writer is named by their chip in the thread's own ink, cut short
-   rather than run past a narrow pane. */
-.inbox-comment-name {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-}
-
-/* The chip's face masks the line running through it with a ring of the
-   ground, as a facepile's faces are cut from it, so the line reads as
-   joining the faces. A bare square, or someone's outline, is filled with
-   the ground too, so the line never shows through its glyph; a member who
-   left keeps their own tile. */
-/* Under the pointer the chip's wash (`InlineRef`'s own, handed on as
-   `--luke-inline-ref-wash`) runs on over the face's ring, so the ring reads
-   as the wash's own rather than a halo of the ground in it. */
-.inbox-comment-name .actor-mark {
-  box-shadow:
-    0 0 0 3px var(--luke-inline-ref-wash, transparent),
-    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
-}
-
-.inbox-comment-name .actor-mark:not([data-left="true"]) {
-  background: var(--luke-color-ground);
-}
-
-.inbox-comment-name .actor-mark[data-kind="someone"] {
-  box-shadow:
-    inset 0 0 0 1px var(--luke-color-border-strong),
-    0 0 0 3px var(--luke-inline-ref-wash, transparent),
-    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
-}
-
-.inbox-comment-when {
-  display: inline-flex;
-  min-width: min-content;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 var(--luke-space-4);
 }
 
 /* A comment's words are set as a message's are, indented past the gutter
@@ -4041,19 +3895,6 @@ ul.actor-stack {
     position: static;
     justify-content: flex-end;
   }
-}
-
-/* The author is named in bold in the stream's own ink, as Slack names them. */
-.chat-byline-name {
-  display: flex;
-  min-width: 0;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-bold);
-}
-
-.chat-byline-name :is(.luke-inline-ref, .luke-inline-ref-label) {
-  font-weight: inherit;
 }
 
 .chat-byline-where {

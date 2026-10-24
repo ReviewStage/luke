@@ -28,6 +28,9 @@
   --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
+  /* How far every control fades while it cannot be used: one look, so a
+     switched-off button, field, switch and menu row read as the same state. */
+  --luke-disabled-opacity: 0.5;
   --luke-icon-gap: var(--luke-space-8);
   /* A settings row's pop-up stands in one column whatever value it names. */
   --luke-select-field-width: 200px;
@@ -235,6 +238,9 @@
   --luke-pane-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-tight-gap) + 1px);
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
+  /* How far every control fades while it cannot be used: one look, so a
+     switched-off button, field, switch and menu row read as the same state. */
+  --luke-disabled-opacity: 0.5;
   --luke-icon-gap: var(--luke-space-8);
   --luke-select-field-width: auto;
   --luke-field-gap: var(--luke-space-16);
