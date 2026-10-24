@@ -1686,8 +1686,12 @@ ul.actor-stack {
   line-height: var(--luke-type-reading-leading);
 }
 
-/* A document's blocks, and the sections of a text drawn inside one block,
-   stand a section's gap apart. */
+/* A plan is a document rather than a message, so its sections breathe: its
+   blocks, and the sections of a text drawn inside one block, stand a
+   section's gap apart, wherever it is drawn, the side panel's plan tab
+   included. Note that the gap is the body's children's rather than
+   `.plan-unit`'s own, because a unit is drawn inside a wrapper where it
+   carries a byline. */
 .desktop-document .plan-body > * + * {
   margin-top: 1.5em;
 }
@@ -1713,16 +1717,11 @@ ul.actor-stack {
 
 /* Each section is named by a heading with room above it rather than a rule
    under it; a plan's title is its page's header (`PageHeader`), not a
-   heading of the text. */
+   heading of the text. Note that the headings keep prose's own scale and
+   weight (`@luke/ui`'s prose.css), so a plan's h1, h2 and h3 read as three
+   steps, as they do in every other note. */
 .desktop-document .luke-markdown-heading:is([data-level="1"], [data-level="2"]) {
   margin-top: 1.6em;
-  font-size: 1.3em;
-  font-weight: var(--luke-weight-semibold);
-}
-
-.desktop-document .luke-markdown-heading[data-level="3"] {
-  font-size: 1.05em;
-  font-weight: var(--luke-weight-medium);
 }
 
 /* The call's room --------------------------------------------------------- */

@@ -96,19 +96,6 @@
   user-select: text;
 }
 
-.plan-body {
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
-}
-
-/* A plan is a document rather than a message, so its sections breathe. Every
-   unit after the header block opens on a section heading. Note that the gap
-   is the body's children's rather than `.plan-unit`'s own, because a unit is
-   drawn inside a wrapper where it carries a byline. */
-.plan-body > * + * {
-  margin-top: 1.1em;
-}
-
 /* The caret a save is typed behind: solid, as a caret is while someone types.
    Note that it and the selection are inline, so they take none of the gap
    a note (`@luke/ui`'s prose.css) opens between a list item's blocks, which as an inline-block
