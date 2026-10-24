@@ -81,6 +81,8 @@ const NO_PRESS = [
   // Words a hint hangs from, whose tap shows the hint rather than pressing anything (`hint.tsx`).
   ".luke-one-line",
   "span.luke-inline-ref",
+  // A time, whose hint hangs from its hover and whose tap shows it (`time.tsx`).
+  "time.luke-time",
   // A file's chip, which hangs its card from the chip's hover and whose own presses are its Open and Remove buttons (`attachment-chip.tsx`).
   "li.luke-attachment-chip",
   // A turn of a conversation, whose tap on a touch screen shows its actions rather than pressing anything (`message.tsx`).

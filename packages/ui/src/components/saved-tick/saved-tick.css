@@ -17,7 +17,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     white-space: nowrap;
     animation:
       luke-saved-tick-fade var(--luke-duration-quick) ease-out backwards,

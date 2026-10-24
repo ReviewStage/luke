@@ -61,7 +61,7 @@
   }
 
   .luke-settings-row[data-density="list"] .luke-settings-row-label {
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
   }
 
   /* A compact row keeps its controls beside its words at any width, since
@@ -118,7 +118,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-medium);
+    font-weight: var(--luke-type-label-weight);
   }
 
   :is(.luke-settings-row-description, .luke-settings-row-error) {
@@ -126,7 +126,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     overflow-wrap: anywhere;
   }
 
@@ -283,8 +283,8 @@
   .luke-settings-changed-mark {
     color: var(--luke-color-text-subtle);
     font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-medium);
+    line-height: var(--luke-type-tag-leading);
+    font-weight: var(--luke-type-tag-weight);
   }
 
   .luke-settings-attention-mark {

@@ -150,7 +150,6 @@ function RowSkeleton({
     >
       {() =>
         shape.controls.map((control, place) => (
-          // oxlint-disable-next-line react/no-array-index-key -- a placeholder's controls have nothing but their place.
           <SettingsControlSkeleton key={place} control={control} />
         ))
       }
@@ -163,7 +162,6 @@ function RowsSkeleton({ rows }: { rows: readonly SettingsRowSkeletonShape[] }): 
   return (
     <div className="luke-settings-skeleton-rows">
       {rows.map((shape, at) => (
-        // oxlint-disable-next-line react/no-array-index-key -- a placeholder's rows have nothing but their place.
         <RowSkeleton key={at} at={at} shape={shape} />
       ))}
     </div>
@@ -226,7 +224,6 @@ export function SettingsSectionsSkeleton({
     <SkeletonRegion label={label}>
       <div className="luke-settings-skeleton">
         {sections.map((shape, at) => (
-          // oxlint-disable-next-line react/no-array-index-key -- a placeholder's sections have nothing but their place.
           <SectionSkeleton key={at} at={at} shape={shape} />
         ))}
       </div>

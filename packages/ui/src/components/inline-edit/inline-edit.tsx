@@ -58,7 +58,7 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
  * stands is its container's to say. Note that the field look's line and
  * weight are `revert-layer`, which hands them back to the engine's own for an
  * input (no `base` layer rule, `@luke/panel`'s base.css included, sets an
- * input's), because the input's `text-body` and `font-normal` would set them
+ * input's), because the input's `text-body` and `font-text` would set them
  * where the hand-written rule never did.
  */
 const INLINE_EDIT =

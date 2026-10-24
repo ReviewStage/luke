@@ -1168,7 +1168,13 @@ test("a page's address pasted in the app's own scheme is called by the name the 
       Promise.resolve(
         stateWith(
           {},
-          { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
+          {
+            tasks: {
+              ...IDLE_TASKS_VIEW,
+              activeTaskId: TASK_ID,
+              pages: [{ ...PAGE, version: 1, at: 1_000 }],
+            },
+          },
         ),
       ),
   });
@@ -1606,7 +1612,7 @@ test("a person picked from the @ list is drawn as their chip and sent as their p
   assert.deepEqual(sent, ["Ask [@Dana Reyes](https://tryluke.dev/acme/person/u_dana)"]);
 });
 
-test("a sent message's mention of a person is drawn as the chip wearing their mark that opens their page, its target on no attribute", async () => {
+test("a sent message's mention of a person is drawn as the chip wearing their mark and their name now that opens their page, its target on no attribute", async () => {
   const opened: ReadLink[] = [];
   const person = mentionMarkdown({ kind: MENTION_KIND.PERSON, userId: DANA_ID }, "Dana", PLACE);
   const container = drawn(
@@ -1625,7 +1631,7 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
   assert.ok(chip);
   act(() => chip.click());
 
-  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Dana");
+  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Dana Reyes");
   assert.equal(chip.dataset.kind, MENTION_KIND.PERSON);
   assert.equal(chip.querySelector(".actor-mark")?.getAttribute("data-kind"), ACTOR_KIND.PERSON);
   assert.deepEqual(opened, [

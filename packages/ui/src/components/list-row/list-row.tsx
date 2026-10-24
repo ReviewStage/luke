@@ -228,7 +228,6 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
 function plainWords(words: ReactNode): string | undefined {
   // A slot is handed over as a loose ReactNode, and a string is the one form
   // whose words can be compared from render to render; this check is the boundary.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof words === "string" ? words : undefined;
 }
 

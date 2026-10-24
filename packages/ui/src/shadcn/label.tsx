@@ -20,7 +20,7 @@ export function Label({ className, ...props }: React.ComponentProps<"label">) {
     <label
       data-slot="label"
       className={cn(
-        "font-body text-label font-medium text-foreground wrap-anywhere in-[.luke-stepped-back]:text-muted-foreground",
+        "font-body text-label font-label text-foreground wrap-anywhere in-[.luke-stepped-back]:text-muted-foreground",
         className,
       )}
       {...props}

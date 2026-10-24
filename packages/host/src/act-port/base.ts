@@ -53,7 +53,6 @@ export function refusedBy(procedure: AnyProcedure, cause?: unknown): ORPCError<s
 }
 
 /** Whether an error is a declared refusal, which crosses as it is. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- What a call threw is unknown until this guard reads it; it is the guard.
 export function isRefusal(error: unknown): error is ORPCError<string, unknown> {
   return error instanceof ORPCError && error.code === ACT_ERROR.REFUSED;
 }

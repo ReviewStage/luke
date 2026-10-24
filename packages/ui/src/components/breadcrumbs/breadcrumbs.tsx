@@ -367,13 +367,7 @@ export function Breadcrumbs({
     <nav className="luke-breadcrumbs" data-variant={variant} aria-label={label}>
       <ol>
         {crumbs.map((crumb, at) => (
-          <CrumbItem
-            // oxlint-disable-next-line react/no-array-index-key -- a path's crumbs are its places, and the same words may stand twice.
-            key={at}
-            crumb={crumb}
-            chevron={chevronBefore(crumbs, at)}
-            hint={hint}
-          />
+          <CrumbItem key={at} crumb={crumb} chevron={chevronBefore(crumbs, at)} hint={hint} />
         ))}
       </ol>
     </nav>
