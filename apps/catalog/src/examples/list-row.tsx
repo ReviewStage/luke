@@ -1,5 +1,4 @@
 import {
-  EllipsisIcon,
   IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -12,6 +11,7 @@ import {
   type ListDensity,
   ListRow,
   type MenuEntry,
+  MoreButton,
   PencilIcon,
   Switch,
   TrashIcon,
@@ -49,7 +49,7 @@ function Members(): React.JSX.Element {
           meta={member.role}
           current={open === member.id ? LIST_ROW_CURRENT.ITEM : undefined}
           onPress={() => setOpen(member.id)}
-          actions={<IconButton icon={<EllipsisIcon />} label={`More for ${member.name}`} />}
+          actions={<MoreButton thing={member.name} />}
         />
       ))}
     </List>

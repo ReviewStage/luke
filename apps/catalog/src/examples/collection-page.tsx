@@ -6,12 +6,11 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
-  EllipsisIcon,
   FailureNote,
-  IconButton,
   LIST_ROW_CURRENT,
   List,
   ListRow,
+  MoreButton,
   PAGE_FRAME,
   PAGE_WIDTH,
   PlusIcon,
@@ -124,7 +123,7 @@ function Tasks({
             meta={task.when}
             current={open === task.id ? LIST_ROW_CURRENT.ITEM : undefined}
             onPress={() => setOpen(task.id)}
-            actions={<IconButton icon={<EllipsisIcon />} label={`More for ${task.name}`} />}
+            actions={<MoreButton thing={task.name} />}
           />
         ))}
       </List>

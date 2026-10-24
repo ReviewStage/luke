@@ -92,7 +92,7 @@ export function useFileMenu({
     });
 
   return {
-    label: "File actions",
+    thing: "File",
     groups: [
       [
         {

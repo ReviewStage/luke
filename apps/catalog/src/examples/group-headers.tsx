@@ -1,10 +1,10 @@
 import {
-  EllipsisIcon,
   FolderIcon,
   GROUP_HEADING,
   GROUP_SURFACE,
   GroupHeader,
   IconButton,
+  MoreButton,
   NAV_COUNT_SHOWN,
   PinIcon,
   PlusIcon,
@@ -47,7 +47,7 @@ function Folding(): React.JSX.Element {
         count={{ value: TASKS.length, noun: "tasks", shown: NAV_COUNT_SHOWN.ON_HOVER }}
         actions={
           <>
-            <IconButton label="acme/web actions" icon={<EllipsisIcon />} onClick={ignore} />
+            <MoreButton thing="acme/web" onClick={ignore} />
             <IconButton label="New task in acme/web" icon={<PlusIcon />} onClick={ignore} />
           </>
         }

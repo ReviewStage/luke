@@ -28,7 +28,7 @@ function stay(): void {}
 const PAGE_TITLE = "Quarterly review of the onboarding funnel";
 
 const PAGE_MENU: PaneBarMenu = {
-  label: "Page actions",
+  thing: "Page",
   groups: [
     [
       { label: "Copy link", icon: <CopyIcon />, onSelect: stay },
@@ -38,7 +38,7 @@ const PAGE_MENU: PaneBarMenu = {
 };
 
 const FILE_MENU: PaneBarMenu = {
-  label: "File actions",
+  thing: "File",
   groups: [[{ label: "Copy path", icon: <CopyIcon />, onSelect: stay }]],
 };
 
