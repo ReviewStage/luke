@@ -53,7 +53,8 @@ import {
 } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { land } from "@luke/ui/landed";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+import { searchHit } from "@luke/ui/search-score";
+import { type MatchRange, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
@@ -475,16 +476,19 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     }));
 }
 
-/** One page's matches: the page that heads the group, and the rows under it. */
+/** A row a query found, with the stretches of its name that say why. */
+export interface SettingsSearchResult extends SettingsSearchEntry {
+  marks: readonly MatchRange[];
+}
+
+/** One page's matches: the page that heads the group, and the rows under it, best first. */
 interface SettingsSearchGroup {
   page: SettingsView;
-  items: readonly SettingsSearchEntry[];
+  items: readonly SettingsSearchResult[];
 }
 
 /** What became of the query, reported so no narrowing is ever silent. */
 export interface SettingsSearchOutcome {
-  /** The query's words, lowercased — what each entry was actually read against. */
-  tokens: readonly string[];
   /** The kept rows grouped under their pages, in the Settings sidebar's own order. */
   groups: readonly SettingsSearchGroup[];
   /** How many rows the query kept, across every group. */
@@ -492,22 +496,32 @@ export interface SettingsSearchOutcome {
 }
 
 /**
- * The query read over the corpus: every word must land somewhere in an
- * entry's haystack. A blank query is no search at all. The kept rows come
- * back grouped by page, because that is how the results are drawn.
+ * The query read over the corpus by the one tiered scorer (`searchHit`), the
+ * way ⌘K reads its rows: every word must land somewhere in an entry, its
+ * name first and the words it is known by after, and a row whose name is the
+ * query or begins with it ranks above one whose words are scattered, a row
+ * found only by what its name does not say last. Letters typed in order
+ * find nothing, so "thm" is not Theme. A blank query is no search at all.
+ * The kept rows come back grouped by page, because that is how the results
+ * are drawn, each page's rows best first and equals in the corpus's order.
  */
 export function searchSettings(
   entries: readonly SettingsSearchEntry[],
   query: string,
 ): SettingsSearchOutcome | undefined {
-  const tokens = searchTokens(query);
-  if (tokens.length === 0) return undefined;
-  const kept = entries.filter((entry) => matchesTokens(entry.haystack, tokens));
+  if (searchTokens(query).length === 0) return undefined;
+  const kept = entries.flatMap((entry): { entry: SettingsSearchResult; score: number }[] => {
+    const hit = searchHit({ label: entry.label, keywords: entry.haystack }, query);
+    return hit === undefined ? [] : [{ entry: { ...entry, marks: hit.label }, score: hit.score }];
+  });
   const groups = SETTINGS_PAGE_LIST.flatMap((page): SettingsSearchGroup[] => {
-    const items = kept.filter((entry) => entry.page === page);
+    const items = kept
+      .filter(({ entry }) => entry.page === page)
+      .sort((a, b) => b.score - a.score)
+      .map(({ entry }) => entry);
     return items.length > 0 ? [{ page, items }] : [];
   });
-  return { tokens, groups, matched: kept.length };
+  return { groups, matched: kept.length };
 }
 
 /** Whether the landing can hold the keyboard, or only be scrolled into view. */
@@ -699,7 +713,7 @@ export function SettingsSearchResults({
                     roving
                     onClick={() => onOpen(entry)}
                   >
-                    <Highlighted text={entry.label} tokens={search.tokens} />
+                    <Highlighted text={entry.label} ranges={entry.marks} />
                   </NavItem>
                 </li>
               ))}

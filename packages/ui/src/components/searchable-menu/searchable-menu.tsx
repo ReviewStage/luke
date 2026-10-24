@@ -1,6 +1,8 @@
 import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
+import { type SearchSubject, searchHit } from "../../search-score.js";
+import { searchTokens } from "../../search-tokens.js";
 import {
   AnchoredPopover,
   POPOVER_BOUNDS,
@@ -188,23 +190,63 @@ function firstOpen(rows: readonly MenuRow[]): number {
   return rows.findIndex((row) => row.disabled === undefined);
 }
 
-/** The rows whose label, terms, or section hold every word of the query, case aside; for no query, every row not kept for a search. */
+/** What a row is searched by: its name, and as keywords the words it is found by and never draws on its own. */
+function rowSubject(row: MenuRow): SearchSubject {
+  return {
+    label: row.label,
+    keywords: [
+      ...(row.terms ?? []),
+      ...(row.section === undefined ? [] : [row.section]),
+      ...(row.submenu?.rows.map((each) => each.label) ?? []),
+    ],
+  };
+}
+
+/**
+ * The matching rows, ranked as ⌘K ranks its own (`searchHit`): a name typed
+ * whole or begun first, then words that start a word of it, then words
+ * anywhere, then the row's terms, section, and submenu rows; equals keep the
+ * owner's order, and a section's rows stay together under its one heading,
+ * the sections in the order of their best row. For no query, every row not
+ * kept for a search, as the owner ordered them.
+ */
 export function matchingRows<Row extends MenuRow>(
   rows: readonly Row[],
   query: string,
 ): readonly Row[] {
-  const words = query.toLowerCase().split(/\s+/u).filter(Boolean);
-  if (words.length === 0) return rows.filter((row) => row.searchOnly !== true);
-  return rows.filter((row) => {
-    const named = [
-      row.label,
-      ...(row.terms ?? []),
-      ...(row.section === undefined ? [] : [row.section]),
-      ...(row.submenu?.rows.map((each) => each.label) ?? []),
-    ];
-    const terms = named.map((term) => term.toLowerCase());
-    return words.every((word) => terms.some((term) => term.includes(word)));
-  });
+  if (searchTokens(query).length === 0) return rows.filter((row) => row.searchOnly !== true);
+  const ranked = rows
+    .flatMap((row) => {
+      const hit = searchHit(rowSubject(row), query);
+      return hit === undefined ? [] : [{ row, score: hit.score }];
+    })
+    .sort((a, b) => b.score - a.score);
+  const bySection = new Map<string | undefined, Row[]>();
+  for (const { row } of ranked) {
+    const stood = bySection.get(row.section);
+    if (stood === undefined) bySection.set(row.section, [row]);
+    else stood.push(row);
+  }
+  return [...bySection.values()].flat();
+}
+
+/** A row's name with the stretches a search matched marked, or as it is where nothing is typed. */
+function markedLabel(row: MenuRow, query: string): React.ReactNode {
+  const ranges = searchHit(rowSubject(row), query)?.label ?? [];
+  if (ranges.length === 0) return row.label;
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  for (const range of ranges) {
+    if (range.start > from) parts.push(row.label.slice(from, range.start));
+    parts.push(
+      <mark className="luke-searchable-menu-match" key={range.start}>
+        {row.label.slice(range.start, range.end)}
+      </mark>,
+    );
+    from = range.end;
+  }
+  if (from < row.label.length) parts.push(row.label.slice(from));
+  return parts;
 }
 
 /** Where no row is highlighted: nothing matches and the arrows have not moved on to a pinned row. */
@@ -248,12 +290,17 @@ function rowHint(row: MenuRow): React.ReactNode {
  * menu with a row chosen keeps every row's check room, so their hints end
  * in one line; one with none chosen keeps none.
  */
-function optionGroups(rows: readonly MenuRow[], value: string | undefined): ComboboxGroup[] {
+function optionGroups(
+  rows: readonly MenuRow[],
+  value: string | undefined,
+  query: string,
+): ComboboxGroup[] {
   return sectionsOf(rows).map((section) => ({
     label: section.heading,
     options: section.rows.map(({ row }) => ({
       id: row.id,
-      label: row.label,
+      label: markedLabel(row, query),
+      words: row.label,
       icon: row.icon,
       detail: row.detail,
       hint: rowHint(row),
@@ -736,7 +783,7 @@ export function SearchableMenu(props: {
           ref={list}
           id={listId}
           label={props.label}
-          groups={optionGroups(matches, value)}
+          groups={optionGroups(matches, value, answered ? "" : query)}
           active={at}
           onActiveChange={hoverRow}
           onChoose={(index) => {

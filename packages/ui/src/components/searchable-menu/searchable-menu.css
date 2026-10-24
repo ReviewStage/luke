@@ -13,6 +13,15 @@
     max-height: var(--luke-popover-room, none);
   }
 
+  /* Where the query's words landed in a row's name, so the row says why it
+     matched: a wash, as the settings search marks its own, with no padding,
+     which would push a cut name's fade around as the query changed. */
+  .luke-searchable-menu-match {
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-match);
+    color: inherit;
+  }
+
   /* The rows pinned under the list, behind a hairline, where the scrolling
      cannot take them. */
   .luke-searchable-menu-foot {
