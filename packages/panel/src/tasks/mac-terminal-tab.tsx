@@ -3,23 +3,29 @@ import {
   MAC_TERMINAL_PORT_MESSAGE,
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_FLOW,
   Fill,
   PaneBar,
+  useConfirmDialog,
 } from "@luke/ui";
 import { GLYPH, PlayIcon } from "@luke/ui/icons";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
-import { toastActFailure, useAct } from "../act.js";
+import { askActResult, useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { useBusyPress } from "../settings/busy-press.js";
@@ -37,16 +43,18 @@ import { useOpenLink } from "./use-open-link.js";
  * agent to push where it has none, and asks main to run it at the screen's
  * size (`mac-terminal-acts.ts`): main brings the branch into a worktree of
  * Luke's own clone and runs the repository's command there. The screen
- * shows what the run prints and takes nothing typed. Stop ends the run, the
+ * shows what the run prints and takes nothing typed. Stop asks first, then ends the run, the
  * tab hearing it end; Run starts it anew; Open in Terminal opens the Mac's
  * own Terminal in the worktree for what the developer wants to do by hand.
  * Out of sight, the tab lets go of its port and the run goes on; drawn
  * again, it is shown the run's output so far, or as it ended, and only a
  * Run press starts another. Closing the tab ends the run
- * (`use-side-panel.ts`). A refusal from main is written on the screen. What
+ * (`use-side-panel.ts`), asking first while it is going (`side-panel.tsx`). A refusal from main is written on the screen. What
  * the run prints reaches this screen and nowhere else, so the tab is left
  * out of the screen recording.
  */
+
+const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 const readOutbound = Schema.decodeUnknownOption(macTerminalPortOutboundSchema);
 
@@ -95,6 +103,37 @@ const lastRuns = new Map<
   string,
   ReadBranch & { readonly asked: number; readonly presses: number; stopped: boolean }
 >();
+
+/**
+ * Whether each agent's run is going, as its tab last drew it: kept past the
+ * tab, which lets go of its port out of sight, so a close asks for a run it
+ * last saw going. A run never drawn is not here, and is not going.
+ */
+const goingRuns = new Map<string, boolean>();
+
+/** Whether the agent's run is going, or was when its tab was last drawn: what a close of its tab ends. */
+export function macTerminalGoing(agentId: string): boolean {
+  return goingRuns.get(agentId) === true;
+}
+
+/** What each end of a run asks first: what is running in it cannot be got back. */
+const ENDS_WHAT_RUNS = `What's running in it ends. ${IRREVERSIBLE_WORDS}`;
+
+export const MAC_TERMINAL_STOP_QUESTION: DialogQuestion = {
+  title: "Stop the run?",
+  body: ENDS_WHAT_RUNS,
+  verb: "Stop",
+  running: "Stopping",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
+};
+
+export const MAC_TERMINAL_CLOSE_QUESTION: DialogQuestion = {
+  title: "Close this terminal?",
+  body: ENDS_WHAT_RUNS,
+  verb: "Close",
+  running: "Closing",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
+};
 
 export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX.Element {
   const { macTerminal: agentId, repository, asked, number } = tab;
@@ -210,19 +249,29 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   }, [module, element, act, agentId, repository, asked, number, presses]);
 
   const running = standing.kind === "running" || standing.kind === "stopping";
-  const stop = () => {
+  const going = running || standing.kind === "starting";
+  useEffect(() => {
+    goingRuns.set(agentId, going);
+  }, [agentId, going]);
+  const stopRun = (): Promise<ActionResult> => {
     stopAsked.current = true;
     const ran = lastRuns.get(agentId);
     if (ran !== undefined) ran.stopped = true;
     setStanding({ kind: "stopping" });
-    act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).catch((refused: unknown) => {
-      // Note that a refused stop leaves the run going, so the tab says it is still running, unless the run has ended meanwhile.
-      stopAsked.current = false;
-      if (ran !== undefined) ran.stopped = false;
-      setStanding((now) => (now.kind === "stopping" ? { kind: "running" } : now));
-      toastActFailure(refused);
-    });
+    return askActResult(act(ACT_KIND.MAC_TERMINAL_STOP, { agentId }).then(() => ACCEPTED)).then(
+      (answer) => {
+        if (answer.status === ACTION_RESULT_STATUS.ACCEPTED) return answer;
+        // Note that a refused stop leaves the run going, so the tab says it is still running, unless the run has ended meanwhile.
+        stopAsked.current = false;
+        if (ran !== undefined) ran.stopped = false;
+        setStanding((now) => (now.kind === "stopping" ? { kind: "running" } : now));
+        return answer;
+      },
+    );
   };
+  // Stopping ends what runs, which nothing brings back, so it asks first; a refusal is said in the question.
+  const stopping = useConfirmDialog({ subject: running, surfaceOpen: true }, stopRun);
+  const stop = stopping.ask;
   // Note that a refusal is written on the screen, so a press that opened nothing says why.
   const opening = useBusyPress(() =>
     act(ACT_KIND.MAC_TERMINAL_REVEAL, { agentId }).catch((refused: Error) =>
@@ -327,6 +376,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           )}
         </div>
       </Fill>
+      <ConfirmDialog open confirm={stopping} question={MAC_TERMINAL_STOP_QUESTION} />
     </Fill>
   );
 }
