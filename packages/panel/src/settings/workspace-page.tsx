@@ -104,6 +104,7 @@ import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
+import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
 import { useSentryRead } from "./use-sentry-read.js";
 import {
@@ -119,7 +120,7 @@ import {
  * there is one choice of workspace in the window: a Settings link that names
  * another lists it in the sidebar first. It is drawn in the shape of the
  * other Settings pages, one kind of thing to a group. Its first row is the
- * workspace as Profile's first row is the account: its tile, its name, who
+ * workspace as Account's first row is the account: its tile, its name, who
  * shares it and the reader's role, and for an owner or an admin Rename and
  * the photo's acts; an account's first workspace is named by its owner's
  * account name, so it offers no Rename. The members follow as the service
@@ -128,8 +129,9 @@ import {
  * removes anyone else, and an admin removes members. An owner or an admin
  * then invites people by address and role, an admin as a member alone,
  * sees the invitations still pending with each one's accept link to copy and
- * send, and cancels one. Integrations holds what the workspace connects for
- * everyone, each drawn as Settings › Integrations draws its rows. GitHub,
+ * send, and cancels one. Workspace connections holds what the workspace
+ * connects for everyone, named apart from the account's own Integrations
+ * page, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
  * account whose installation of the Luke GitHub App is connected, each
  * inset under GitHub's row with its picture on GitHub, Connected or suspended;
@@ -336,7 +338,7 @@ const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
   controls: [SETTINGS_SKELETON_CONTROL.BUTTON, SETTINGS_SKELETON_CONTROL.MORE],
 };
 
-/** The services the Integrations group draws a row for, in order, each by its own row. */
+/** The services the Workspace connections group draws a row for, in order, each by its own row. */
 const WORKSPACE_INTEGRATIONS = [
   { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
   { service: INTEGRATION_PROVIDER.LINEAR, Row: WorkspaceLinear },
@@ -607,7 +609,7 @@ function useOwnAutomations(workspaceId: string) {
 }
 
 /**
- * The leave for a member or an admin: drawn as Profile's Delete account is,
+ * The leave for a member or an admin: drawn as Account's Delete account is,
  * its name, a line saying what goes, and the red button, which asks first,
  * naming what stays and what stops, the automations the reader made among
  * them by name where the service says whose they are. A leave the service
@@ -1714,7 +1716,7 @@ function identityLine(workspace: Workspace): string {
 }
 
 /**
- * The page's first row, drawn as Profile's account row is: the workspace's
+ * The page's first row, drawn as Account's account row is: the workspace's
  * tile, its name, who shares it and the reader's role in one line, then for
  * an owner or an admin Rename, and the photo's acts in its ⋯. Rename opens
  * the name in place on its own line, as the sidebar renames a task, and
@@ -1935,7 +1937,7 @@ function ShownWorkspace({
           <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
         </SettingsSection>
       ) : null}
-      <SettingsSection title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+      <SettingsSection title={WORKSPACE_CONNECTIONS} anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         {WORKSPACE_INTEGRATIONS.map(({ service, Row }) => (
           <Row key={service} workspace={workspace} />
         ))}

@@ -325,6 +325,31 @@ it.effect(
 );
 
 it.effect(
+  "Open Luke at login, which stands on This Mac, keeps the choice already stored through a reopen and through Appearance's reset",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const opened = () =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: testCipher(),
+          overrides: overridesFor({}),
+          fileSystem: FILE_SYSTEM,
+          path: PATH,
+        });
+      yield* opened().set("openAtLogin", false);
+      yield* opened().set("theme", THEME.DARK);
+
+      const reset = yield* opened().resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE, []);
+
+      assert.equal(reset.reason, undefined);
+      const reopened = opened();
+      assert.equal(yield* reopened.get("theme"), undefined);
+      assert.equal(yield* reopened.get("openAtLogin"), false);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
   "usage data is shared by default in a packaged build, not in a run from source, and as chosen in either",
   () =>
     Effect.gen(function* () {

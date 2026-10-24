@@ -68,7 +68,7 @@ export function integrationUnavailable(provider: IntegrationProvider): Unavailab
     NOT_CONFIGURED: `${name} is not set up on this deployment of Luke; carry on without it.`,
     UNREACHABLE: `Luke could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
     NO_ACCOUNT: `This session stands for no account that can use ${name}.`,
-    WORKSPACE_EXPIRED: `The workspace's ${name} connection has expired. An owner or admin can connect it again in Luke's Settings › Workspace › Integrations; carry on without it.`,
+    WORKSPACE_EXPIRED: `The workspace's ${name} connection has expired. An owner or admin can connect it again in Luke's Settings › Workspace › Workspace connections; carry on without it.`,
   };
 }
 

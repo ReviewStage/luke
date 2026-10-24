@@ -20,13 +20,13 @@ interface SettingsPage {
  * What each page is called in the Settings sidebar and at its own head. One
  * table, because the row that opens a page and the title over it must never
  * disagree about its name. The name and the glyph are the whole row: what a
- * page holds is one press away. Account's own page is Profile, so its row
- * does not repeat the heading it stands under; the Workspace page's row is
- * Workspace under the listed workspace's name, and its head names that
- * workspace.
+ * page holds is one press away. Account's own page is Account, because it is
+ * where the account itself is kept, and "Your profile" in the account menu
+ * opens the person page; the Workspace page's row is Workspace under the
+ * listed workspace's name, and its head names that workspace.
  */
 const SETTINGS_PAGE = {
-  [SETTINGS_VIEW.ACCOUNT]: { title: "Profile", icon: <GLYPH.PERSON /> },
+  [SETTINGS_VIEW.ACCOUNT]: { title: "Account", icon: <GLYPH.PERSON /> },
   [SETTINGS_VIEW.WORKSPACE]: { title: "Workspace", icon: <GLYPH.PEOPLE /> },
   [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
@@ -41,6 +41,14 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.ABOUT]: { title: "About", icon: <InfoIcon /> },
   [SETTINGS_VIEW.SHORTCUTS]: { title: "Keyboard shortcuts", icon: <KeyboardIcon /> },
 } satisfies Record<SettingsView, SettingsPage>;
+
+/**
+ * The Workspace page's group of what the workspace connects for everyone, its
+ * heading and its search result alike. Named for the workspace, because the
+ * account's own Integrations page holds what the reader connects for
+ * themself, and the two once shared one name.
+ */
+export const WORKSPACE_CONNECTIONS = "Workspace connections";
 
 /** What each of the Settings sidebar's groups is headed by where no workspace is listed to name the first. */
 const SETTINGS_GROUP_HEADING = {

@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
- * mac-repository-settings.tsx -- the Workspace page's Repositories group: the command Run, in an agent tab's ⋯, runs for each repository on this Mac.
+ * mac-repository-settings.tsx -- the Workspace page's Repositories on this Mac group: the command Run, in an agent tab's ⋯, runs for each repository on this Mac.
  *
  * A row stands for each repository the workspace reaches on GitHub, and for
  * any with a command on this Mac that it no longer lists. The command is
@@ -176,7 +176,7 @@ function MacRepositoryRow({
 export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const read = useMacRepositoriesRead(workspaceId);
   return (
-    <SettingsSection title="Repositories" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
+    <SettingsSection title="Repositories on this Mac" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
       <SettingsLine>
         Run checks an agent&apos;s pushed branch out on this Mac with your own git login, then runs
         the repository&apos;s command. Commands are kept on this Mac only.

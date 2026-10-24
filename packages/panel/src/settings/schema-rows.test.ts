@@ -3,7 +3,12 @@
 
 import assert from "node:assert/strict";
 import { SETTINGS_ACT_KIND } from "@luke/host/contract";
-import { type AppSettingField, SETTING_SECTION, SETTINGS_PAGE } from "@luke/settings";
+import {
+  type AppSettingField,
+  SETTING_SECTION,
+  SETTINGS_PAGE,
+  type SettingSection,
+} from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, Fragment } from "react";
@@ -59,9 +64,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** A page these tests draw: Appearance's own rows, Voice's controls, or This Mac's Startup, whose one row is a switch. */
+type DrawnPage =
+  | typeof SETTINGS_PAGE.APPEARANCE
+  | typeof SETTINGS_PAGE.VOICE
+  | typeof SETTINGS_PAGE.THIS_MAC;
+
+/** The section of `page` these tests draw. */
+const DRAWN_SECTION = {
+  [SETTINGS_PAGE.APPEARANCE]: SETTING_SECTION.MAIN,
+  [SETTINGS_PAGE.VOICE]: SETTING_SECTION.CONTROLS,
+  [SETTINGS_PAGE.THIS_MAC]: SETTING_SECTION.STARTUP,
+} as const satisfies Record<DrawnPage, SettingSection>;
+
 /** The rows the page draws over `settings`, beside the window's toasts, drawn with `writes`. */
 function rows(
-  page: typeof SETTINGS_PAGE.APPEARANCE | typeof SETTINGS_PAGE.VOICE,
+  page: DrawnPage,
   settings: ReturnType<typeof settingsView>,
   rowWrites: SettingsWrites,
 ) {
@@ -71,7 +89,7 @@ function rows(
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
   };
-  const section = page === SETTINGS_PAGE.VOICE ? SETTING_SECTION.CONTROLS : SETTING_SECTION.MAIN;
+  const section = DRAWN_SECTION[page];
   return createElement(
     Fragment,
     null,
@@ -80,10 +98,8 @@ function rows(
   );
 }
 
-/** The Appearance page's own rows over the shipped defaults, or the Voice page's controls with voice ready. */
-function mount(
-  page: typeof SETTINGS_PAGE.APPEARANCE | typeof SETTINGS_PAGE.VOICE = SETTINGS_PAGE.APPEARANCE,
-): HTMLElement {
+/** The Appearance page's own rows over the shipped defaults, or another page's drawn section with voice ready. */
+function mount(page: DrawnPage = SETTINGS_PAGE.APPEARANCE): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -92,7 +108,7 @@ function mount(
   return container;
 }
 
-/** The Appearance page drawn through the window's own writes, which reach the fake act port, and a way to draw it again over the settings the store then holds. */
+/** This Mac's Startup drawn through the window's own writes, which reach the fake act port, and a way to draw it again over the settings the store then holds. */
 function mountThroughActs(): {
   page: HTMLElement;
   redraw: (settings: ReturnType<typeof settingsView>) => void;
@@ -102,7 +118,7 @@ function mountThroughActs(): {
   const root = createRoot(container);
   roots.push(root);
   function Page({ settings }: { settings: ReturnType<typeof settingsView> }) {
-    return rows(SETTINGS_PAGE.APPEARANCE, settings, useSettingsWrites());
+    return rows(SETTINGS_PAGE.THIS_MAC, settings, useSettingsWrites());
   }
   const redraw = (settings: ReturnType<typeof settingsView>) =>
     act(() => root.render(createElement(Page, { settings })));
@@ -169,7 +185,7 @@ test("choosing the size a pop-up already names writes nothing", async () => {
 });
 
 test("a switch flips at once, before the store answers, and is never rested for the write", async () => {
-  const page = mount();
+  const page = mount(SETTINGS_PAGE.THIS_MAC);
   held = Promise.withResolvers<ActionResult>();
 
   act(() => control(page, "Open Luke at login").click());
@@ -206,7 +222,7 @@ test("a switch follows the settings again once they agree with what it flipped t
 });
 
 test("a switch the store refuses flips back and says why in a toast, and can be pressed again", async () => {
-  const page = mount();
+  const page = mount(SETTINGS_PAGE.THIS_MAC);
   held = Promise.withResolvers<ActionResult>();
 
   act(() => control(page, "Open Luke at login").click());

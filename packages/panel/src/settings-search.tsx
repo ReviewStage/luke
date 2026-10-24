@@ -59,7 +59,7 @@ import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { settingsPageOf } from "./settings/pages.js";
+import { settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
 import { settingsPageShown } from "./settings/settings-rows.js";
 
 /**
@@ -329,11 +329,11 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.workspace
       ? {
           id: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-          label: "Integrations",
+          label: WORKSPACE_CONNECTIONS,
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [
-            "Integrations",
-            "GitHub Linear issues repositories connect choose manage disconnect organization",
+            WORKSPACE_CONNECTIONS,
+            "integrations GitHub Linear Sentry issues repositories connect choose manage disconnect organization",
           ],
         }
       : undefined,
