@@ -423,7 +423,7 @@ test("a press on a video in a section, on its frame, its scrubber, Play, Full sc
   }
 });
 
-test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused, and opens no editor", async () => {
+test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused and says so, and opens no editor", async () => {
   const body = [
     "## Goal",
     "Invite a *teammate*.",
@@ -465,16 +465,19 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     await settle();
   }
 
+  // Note that the plan is not drawn again here, so each tick is written over the text the one before it saved.
+  const written = body.replace("  - [ ] Write", "  - [x] Write");
   assert.deepEqual(
     sent.map((request) => request.document),
     [
-      { base: body, value: body.replace("  - [ ] Write", "  - [x] Write") },
-      { base: body, value: body.replace("* [X] Pick", "* [ ] Pick") },
-      { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
+      { base: body, value: written },
+      { base: written, value: written.replace("* [X] Pick", "* [ ] Pick") },
+      { base: written, value: written.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
   assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
   assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
@@ -500,13 +503,16 @@ test("a press on the label around a task's checkbox, which takes a finger's pres
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
-test("a press while a tick is out sends nothing and goes back, and a box is named by its item's words or its picture's", async () => {
+test("a press while a tick is out waits its turn, and both land, the second over the text the first saved", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] ![Upload screenshot](shot.png)\n";
-  const first = Promise.withResolvers<TasksEditAnswer>();
+  const answers = [
+    Promise.withResolvers<TasksEditAnswer>(),
+    Promise.withResolvers<TasksEditAnswer>(),
+  ];
   const sent: PlanEditRequest[] = [];
   const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
     sent.push(request);
-    return first.promise;
+    return answers[sent.length - 1]?.promise ?? Promise.resolve({ saved: true });
   };
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
@@ -520,17 +526,66 @@ test("a press while a tick is out sends nothing and goes back, and a box is name
   act(() => {
     for (const box of boxes) box.click();
   });
-  first.resolve({ saved: true });
+  await settle();
+  assert.equal(sent.length, 1, "the second waits for the first");
+  answers[0]?.resolve({ saved: true });
+  await settle();
+  answers[1]?.resolve({ saved: true });
   await settle();
 
+  const first = body.replace("[ ] One", "[x] One");
   assert.deepEqual(
     sent.map((request) => request.document),
-    [{ base: body, value: body.replace("[ ] One", "[x] One") }],
+    [
+      { base: body, value: first },
+      { base: first, value: first.replace("[ ] ![Upload", "[x] ![Upload") },
+    ],
   );
   assert.deepEqual(
     boxes.map((box) => box.getAttribute("aria-checked") === "true"),
-    [true, false],
+    [true, true],
   );
+  assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
+});
+
+test("a tick the service did not answer goes back and says the plan could not be saved", async () => {
+  const body = "## Steps\n- [ ] One\n";
+  const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  await settle();
+
+  assert.equal(sent.length, 1);
+  assert.equal(box.getAttribute("aria-checked"), "false", "the box goes back");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
+});
+
+test("a box pressed twice while its first tick is out, whose first is refused, stands as last pressed", async () => {
+  const body = "## Steps\n- [ ] One\n";
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: PlanEditRequest[] = [];
+  const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return first.promise;
+  };
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  act(() => box.click());
+  first.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+  await settle();
+
+  assert.equal(sent.length, 1, "the second asks for what the plan already holds, so sends nothing");
+  assert.equal(box.getAttribute("aria-checked"), "false");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {

@@ -7,13 +7,15 @@ import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
 
 /**
@@ -22,7 +24,8 @@ import { PlanBody } from "./plan-body.js";
  * change the chip in place once the picker closes, and the `@` list narrowed
  * to dates opens the same picker to write a new one. A date chip in the
  * plan's words at rest opens the same picker with no editor opened, and a
- * date changed there saves the plan with it written anew. A date in words
+ * date changed there saves the plan with it written anew, or says it could
+ * not where the save is refused. A date in words
  * that take no change opens nothing. Synthetic plan; day-only dates
  * wherever the reader's zone would otherwise change what is written.
  */
@@ -93,7 +96,7 @@ function drawn(): HTMLElement {
   return container;
 }
 
-/** The plan's page drawn at rest, every save asked kept, and drawn again over a plan written anew. */
+/** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, and drawn again over a plan written anew. */
 function drawnAtRest(task: Task = TASK, editable = true) {
   const saves: PlanEditRequest[] = [];
   const container = document.createElement("div");
@@ -106,22 +109,27 @@ function drawnAtRest(task: Task = TASK, editable = true) {
       root.render(
         onRegistry(
           registry,
-          createElement(PlanBody, {
-            task: plan,
-            live: false,
-            onEdit: editable
-              ? (request: PlanEditRequest) => {
-                  saves.push(request);
-                  return Promise.reject(new Error("Nothing is saved in this test."));
-                }
-              : undefined,
-            sectionLinks: {
-              workspace: "acme",
-              onOpen: () => undefined,
-              onOpenFile: () => undefined,
-              reveal: undefined,
-            },
-          }),
+          createElement(
+            Fragment,
+            null,
+            createElement(PlanBody, {
+              task: plan,
+              live: false,
+              onEdit: editable
+                ? (request: PlanEditRequest) => {
+                    saves.push(request);
+                    return Promise.reject(new Error("Nothing is saved in this test."));
+                  }
+                : undefined,
+              sectionLinks: {
+                workspace: "acme",
+                onOpen: () => undefined,
+                onOpenFile: () => undefined,
+                reveal: undefined,
+              },
+            }),
+            createElement(ToastHost),
+          ),
         ),
       ),
     );
@@ -618,6 +626,25 @@ test("a day picked from the plan at rest saves the plan with the date named anew
       },
     },
   ]);
+});
+
+test("a day picked from the plan at rest whose save is refused leaves the date as it was and says the plan could not be saved", async () => {
+  const { container, saves } = drawnAtRest();
+  const before = chipAtRest(container).textContent;
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  pickDay(dialog, "Saturday, October 24, 2026");
+  await pressKey(dialog, "Escape");
+  await act(async () => {
+    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  });
+
+  assert.equal(saves.length, 1, "the save was asked");
+  assert.equal(chipAtRest(container).textContent, before, "the chip names the date as it was");
+  assert.equal(newestToastSays(), "The plan could not be saved.");
 });
 
 test("Clear from the plan at rest saves the plan with the date taken out", async () => {
