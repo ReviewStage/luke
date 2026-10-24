@@ -247,6 +247,10 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
 - **Finite variants.** Every choice is an `as const` object with its type
   derived from it (`BUTTON_VARIANT` / `ButtonVariant`, `GAP` / `Gap`); pass the
   constant, never a string.
+- **A press that waits is busy.** A button whose press starts an act or returns
+  a promise passes `busy` and `busyLabel`, the one busy shape every kind takes
+  (`anti-slop/async-press-needs-busy` refuses one that does not, past
+  `tools/anti-slop/busy-baseline.json`, which only shrinks).
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
   `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
