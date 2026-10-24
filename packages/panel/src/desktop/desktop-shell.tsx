@@ -26,13 +26,14 @@ import {
   useDrawerSwipe,
 } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
+import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
@@ -91,8 +92,8 @@ import { useWindowTitle } from "./window-title.js";
  * open, the voice window's included, and Settings is opened seldom. The chunk is a local file, so it stands a frame
  * later, over its frame of placeholders in the meantime (`SettingsLoading`).
  */
-const DesktopSettings = lazy(() =>
-  import("./desktop-settings.js").then((loaded) => ({ default: loaded.DesktopSettings })),
+const SETTINGS_ROUTE = lazyRoute(() =>
+  import("./desktop-settings.js").then((loaded) => loaded.DesktopSettings),
 );
 
 /**
@@ -102,16 +103,12 @@ const DesktopSettings = lazy(() =>
  * among them, are opened seldom. What stands while
  * the chunk loads is the pages' own empty frame, for a frame.
  */
-const AutomationsPage = lazy(() =>
-  import("./automations-page.js").then((loaded) => ({
-    default: loaded.AutomationsPage,
-  })),
+const AUTOMATIONS_ROUTE = lazyRoute(() =>
+  import("./automations-page.js").then((loaded) => loaded.AutomationsPage),
 );
 
 /** The Tasks page, its List and its Board, its own chunk, loaded the first time it is opened. */
-const TasksPage = lazy(() =>
-  import("./tasks-page.js").then((loaded) => ({ default: loaded.TasksPage })),
-);
+const TASKS_ROUTE = lazyRoute(() => import("./tasks-page.js").then((loaded) => loaded.TasksPage));
 
 /** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
 function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
@@ -783,7 +780,7 @@ export function DesktopShell({
             />
           }
         >
-          <DesktopSettings
+          <SETTINGS_ROUTE.Route
             sidebar={sidebar}
             room={room}
             step={settingsStep}
@@ -958,7 +955,7 @@ export function DesktopShell({
             ) : boardOpen ? (
               // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
               <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
-                <TasksPage tasks={tasks} room={room} />
+                <TASKS_ROUTE.Route tasks={tasks} room={room} />
               </Suspense>
             ) : automationsOpen ? (
               <PageFind
@@ -971,7 +968,7 @@ export function DesktopShell({
                     <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />
                   }
                 >
-                  <AutomationsPage tasks={tasks} room={room} />
+                  <AUTOMATIONS_ROUTE.Route tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : (

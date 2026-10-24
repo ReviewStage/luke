@@ -120,7 +120,6 @@ import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   type ComponentProps,
   createContext,
-  lazy,
   type ReactNode,
   Suspense,
   useCallback,
@@ -142,6 +141,7 @@ import {
   type TabActionGroups,
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
+import { lazyRoute } from "../lazy-route.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -324,8 +324,8 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * chapter logic are opened seldom. What stands while
  * the chunk loads is the view's own wait, for a frame.
  */
-const AgentChaptersTab = lazy(() =>
-  import("./agent-chapters-tab.js").then((loaded) => ({ default: loaded.AgentChaptersTab })),
+const CHAPTERS_TAB = lazyRoute(() =>
+  import("./agent-chapters-tab.js").then((loaded) => loaded.AgentChaptersTab),
 );
 
 /** The tab's own words. */
@@ -2841,7 +2841,7 @@ function PullRequestTabBody({
                       <HandTabActionsContext.Provider
                         value={viewActions.handFor(PULL_REQUEST_VIEW.CHAPTERS)}
                       >
-                        <AgentChaptersTab
+                        <CHAPTERS_TAB.Route
                           agentId={agentId}
                           control={control}
                           shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
