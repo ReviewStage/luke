@@ -108,6 +108,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { ToastHost } from "../toast.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
@@ -561,6 +562,7 @@ function mount(
     holding: firstHolding = HOLDING,
     withSidebar = false,
     readerKnown = true,
+    toasts = false,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -575,6 +577,8 @@ function mount(
     withSidebar?: boolean;
     /** Whether the window knows the reader's own account id, as an account stored without one does not. */
     readerKnown?: boolean;
+    /** Whether the window's toasts stand beside the Inbox, where the test presses one's action. */
+    toasts?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -682,10 +686,11 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page =
+  const inbox =
     room === undefined
       ? createElement(Page, { sidePanel: panel })
       : createElement(Panelled, { at: room });
+  const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
 }
@@ -8264,6 +8269,164 @@ test("Discard takes a New thread away and shows the item it stood over again, as
   act(() => rowNamed(page, RETRY.title).click());
   await settle();
   assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
+});
+
+/** Opens a New thread from the Inbox's head and hands back its pane. */
+async function openNewThread(page: HTMLElement): Promise<HTMLElement> {
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(pane.getAttribute("aria-label"), "New thread");
+  return pane;
+}
+
+/** Types `words` into a New thread's Subject. */
+function typeSubject(pane: HTMLElement, words: string): void {
+  const subject =
+    pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
+    assert.fail("the draft has a Subject");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(subject, words);
+    subject.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** What a New thread's pane holds, as a reader sees it: To, Subject, the words in its box, and its files. */
+function threadDraft(pane: HTMLElement) {
+  return {
+    to: pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
+    subject: pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]')?.value,
+    words: composerEditor(pane).textContent,
+    files: attachedNames(pane),
+  };
+}
+
+test("a New thread's To, Subject, words, and files outlast a row pressed meanwhile, and stand again as New thread opens once more", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  const pane = await openNewThread(page);
+  typeSubject(pane, "Annual plan copy");
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "pick");
+  const written = threadDraft(pane);
+
+  act(() => rowNamed(page, RETRY.title).click());
+  await settle();
+  assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
+
+  assert.deepEqual(threadDraft(await openNewThread(page)), written);
+  assert.deepEqual(written, {
+    to: "To: Alerts",
+    subject: "Annual plan copy",
+    words: "Draft the annual plan's line too.",
+    files: ["spec.pdf"],
+  });
+});
+
+test("Discard takes a written New thread away at once and offers Undo, which opens it again holding everything written", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  heldStarts([AGENT]);
+  const { page } = mount([], { toasts: true });
+  await settle();
+  const pane = await openNewThread(page);
+  typeSubject(pane, "Annual plan copy");
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  const written = threadDraft(pane);
+
+  act(() =>
+    (
+      [...pane.querySelectorAll("button")].find((button) => button.textContent === "Discard") ??
+      assert.fail("the draft offers Discard")
+    ).click(),
+  );
+  await settle();
+  assert.equal(itemPane(page).getAttribute("aria-label"), THRESHOLD.title, "it goes at once");
+  const undo =
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Undo",
+    ) ?? assert.fail("a toast offers Undo");
+  act(() => undo.click());
+  await settle();
+
+  assert.deepEqual(threadDraft(itemPane(page)), written);
+  assert.equal(itemPane(page).getAttribute("aria-label"), "New thread");
+});
+
+test("a file dropped on a New thread's box is attached, and goes with the thread it starts", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const starts = heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  const pane = await openNewThread(page);
+
+  await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "drop");
+  assert.deepEqual(attachedNames(pane), ["spec.pdf"]);
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    starts.map(({ attachments }) => attachments),
+    [[{ name: "spec.pdf", mediaType: "application/pdf", data: btoa("%PDF-1.7") }]],
+  );
+});
+
+test("an @ in a New thread's box offers the workspace's agents and people, but for the agent To names", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const SEATS: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27",
+    planId: INVITES.id,
+    title: "Seat limits",
+  };
+  heldStarts([AGENT, SEATS]);
+  const { page } = mount();
+  await settle();
+  const pane = await openNewThread(page);
+
+  typeInComposer(pane, "@");
+  await settle();
+  const offered = [...pane.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+    (name) => name.textContent,
+  );
+  assert.ok(offered.includes("Seat limits"), `the agent is offered among ${offered.join(", ")}`);
+  assert.ok(offered.includes(TEAMMATE.name), `the teammate is offered among ${offered.join(", ")}`);
+  assert.equal(offered.includes("Alerts"), false, "To's agent is not offered");
+});
+
+test("a / in a New thread's box offers the skills of the task of the agent To names", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  heldStarts([AGENT]);
+  skillReads();
+  const { page } = mount();
+  await settle();
+  const pane = await openNewThread(page);
+
+  typeInComposer(pane, "/");
+  await settle();
+  assert.deepEqual(
+    [...pane.querySelectorAll(".skill-menu .luke-combobox-option-label")].map(
+      (name) => name.textContent,
+    ),
+    ["/release"],
+  );
 });
 
 /** The menu To opens, as a reader sees it: each task's heading, then each agent's name and what it says beside it. */

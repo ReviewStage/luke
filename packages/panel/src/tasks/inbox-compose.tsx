@@ -11,12 +11,20 @@
  * taken leaves everything written where it was, with why under the box,
  * and one sent again with nothing changed goes under the same key, so it
  * starts one thread however often it is pressed.
+ *
+ * What is written is a draft of the workspace's Inbox (`composer-drafts.ts`),
+ * so a row pressed, a relaunch, or another item chosen leaves it where it was
+ * for the next New thread. Discard lets it go at once and offers Undo, which
+ * opens New thread again holding it. The box takes files dropped on it as an
+ * item's does, and its `@` and `/` offer what the workspace holds and the
+ * skills of the agent To names, read through its task where it has one.
  */
 
 import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
@@ -27,22 +35,40 @@ import {
   type FoldingButtonHint,
   PageToolbar,
   Spinner,
+  STATUS_TONE,
   TEXT_FIELD_SIZE,
   TextField,
   Tooltip,
 } from "@luke/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAct } from "../act.js";
+import { appPlatform } from "../app-platform.js";
+import {
+  DRAFT_PLACE,
+  type Draft,
+  EMPTY_DRAFT,
+  type NewThreadPlace,
+  useDraft,
+} from "../composer-drafts.js";
 import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { matchingRows } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
+import { UNDO_LABEL, useToast } from "../toast.js";
+import { useFileDrop } from "../use-file-drop.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
+import type { MentionDoors } from "./mention-chip.js";
 import type { MentionAgentsReader, MentionableAgent } from "./mention-picker.js";
+import { keptSkills } from "./repository-skills.js";
+import { SkillFiles } from "./skill-chip.js";
+import type { SkillSource } from "./skill-picker.js";
+import type { SkillWithFile } from "./skill-ref.js";
+import { TaskMentions, tasklessMentions } from "./task-mentions.js";
 import type { InboxThreadStarter } from "./use-task-inbox.js";
 
 /** The pane's name, as its bar and a reader say it. */
@@ -57,6 +83,7 @@ const NO_AGENTS = "No agents in this workspace yet.";
 const AGENTS_FAILED = "The workspace's agents could not be read.";
 const SUBJECT_PLACEHOLDER = "Optional";
 const BACK_TO_INBOX = "Back to inbox";
+const DISCARDED = "Draft discarded";
 
 /** The way back's pill, which names Back's chord as the item pane's does. */
 const BackHint: FoldingButtonHint = ({ children }) => (
@@ -68,14 +95,13 @@ const BackHint: FoldingButtonHint = ({ children }) => (
 /** The workspace's agents as To offers them: read, failed, or not yet read. */
 type AgentsRead = { readonly agents: readonly MentionableAgent[] } | { readonly failed: true };
 
-/** What a thread is written as before it is sent. */
-interface ComposeDraft {
-  readonly subject: string;
-  readonly note: string;
-  readonly attachments: readonly CodingAgentAttachment[];
-}
-
-const EMPTY_DRAFT: ComposeDraft = { subject: "", note: "", attachments: [] };
+/**
+ * The agents picked in this window, by their ids. Note that a draft keeps
+ * only its agent's id, and the workspace's newest may not hold one a search
+ * found, so the agent itself is kept here for To to name when the draft is
+ * opened again.
+ */
+const pickedAgents = new Map<string, MentionableAgent>();
 
 /** A started thread, and the agent it went to, whose task the Inbox opens it under. */
 interface InboxStarted {
@@ -83,9 +109,20 @@ interface InboxStarted {
   readonly agent: MentionableAgent;
 }
 
-/** What the pane is handed: where it stands, how it reads the agents and sends, and what follows a send or a discard. */
+/** The workspace whose Inbox the thread is written in, by its id and as a link names it. */
+interface ComposeWorkspace {
+  readonly workspace: string;
+  readonly workspaceId: string;
+}
+
+/** What the pane is handed: where it stands, how it reads the agents and sends, and what follows a send, a discard, or its Undo. */
 export interface InboxComposeProps {
   readonly hidden: boolean;
+  /** The workspace the Inbox lists, whose draft the pane holds; none before the workspaces are read. */
+  readonly workspace: ComposeWorkspace | undefined;
+  /** The repository of a task of the workspace, which an agent's `@` reads files from; null where it names none. */
+  readonly repositoryOf: (taskId: string) => string | null;
+  readonly onShowMention: MentionDoors["onOpenTask"];
   /** The way back to the list, where the Inbox shows one column; none where the list stands beside it. */
   readonly onBack: (() => void) | undefined;
   /** Reads the workspace's agents To offers; none where no workspace is known. */
@@ -96,6 +133,8 @@ export interface InboxComposeProps {
   readonly start: InboxThreadStarter;
   readonly onStarted: (started: InboxStarted) => void;
   readonly onDiscard: () => void;
+  /** Opens New thread again, as Discard's Undo does. */
+  readonly onRestore: () => void;
 }
 
 /** The agents To may name: those not archived, since none of them hears a thread. */
@@ -133,57 +172,95 @@ function listedAgents(
 }
 
 /** The words a send is known by, so the same thread sent again goes under the key it went under. */
-function sendWords(agentId: string, draft: ComposeDraft): string {
-  return JSON.stringify([agentId, draft.subject.trim(), draft.note.trim(), draft.attachments]);
+function sendWords(agentId: string, draft: Draft): string {
+  return JSON.stringify([agentId, subjectOf(draft), draft.text.trim(), draft.attachments]);
 }
 
-/** The agent the pane opened on, where the workspace's newest still hold it. */
-function openedOn(
+/** The draft's Subject, as a send carries it. */
+function subjectOf(draft: Draft): string {
+  return (draft.title ?? "").trim();
+}
+
+/** Whether a draft holds anything Discard would lose. */
+function written(draft: Draft): boolean {
+  return draft.text !== "" || (draft.title ?? "") !== "" || draft.attachments.length > 0;
+}
+
+/** Where New thread's draft is kept: the workspace whose Inbox it is written in. */
+function threadPlace(workspace: ComposeWorkspace | undefined): NewThreadPlace {
+  return { kind: DRAFT_PLACE.NEW_THREAD, workspaceId: workspace?.workspaceId ?? null };
+}
+
+/** The agent an id names, as this window picked it or the workspace's newest hold it. */
+function agentOf(
   read: AgentsRead | undefined,
-  to: string | undefined,
+  id: string | undefined,
 ): MentionableAgent | undefined {
-  if (read === undefined || "failed" in read || to === undefined) return undefined;
-  return read.agents.find((agent) => agent.id === to);
+  if (id === undefined) return undefined;
+  const newest = read !== undefined && "agents" in read ? read.agents : [];
+  return pickedAgents.get(id) ?? newest.find((agent) => agent.id === id);
 }
 
-/** The pane: To, Subject, and the box, under the bar that names it. */
-export function InboxCompose({
-  hidden,
-  onBack,
-  readAgents,
-  to,
-  keywords,
-  start,
-  onStarted,
-  onDiscard,
-}: InboxComposeProps): React.JSX.Element {
+/** What To offers and names, which the pane reads as it opens and as a word is typed in its search. */
+interface ComposeTo {
+  readonly read: AgentsRead | undefined;
+  readonly listed: readonly MentionableAgent[];
+  readonly asked: string;
+  readonly agent: MentionableAgent | undefined;
+  readonly onSearch: (words: string) => void;
+  readonly onPick: (agent: MentionableAgent) => void;
+}
+
+/**
+ * The pane: To, Subject, and the box, under the bar that names it. Note
+ * that the agent To names is settled here, over the card, because the
+ * box's `@` and `/` read what it offers from the providers around the card,
+ * which name that agent's task.
+ */
+export function InboxCompose(props: InboxComposeProps): React.JSX.Element {
+  const { workspace, repositoryOf, onShowMention, readAgents, to } = props;
+  const { act } = useAct();
   const [read, setRead] = useState<AgentsRead | undefined>(undefined);
   // The agents the last search found, standing until the next answers.
   const [found, setFound] = useState<readonly MentionableAgent[] | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
-  const [draft, setDraft] = useState<ComposeDraft>(EMPTY_DRAFT);
-  const [sending, setSending] = useState(false);
-  const [reading, setReading] = useState(0);
-  const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const latest = useRef(draft);
-  latest.current = draft;
-  const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
-  const statuses = useIntegrationStatuses();
+  const { draft, update } = useDraft(threadPlace(workspace));
   const place = useAgentRowPlace();
-  const agent = picked ?? openedOn(read, to);
-  const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
-  const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
-  const field = useAnswerField({
-    draft: draft.note,
-    placeholder,
-    self: agent?.id,
-    agent: undefined,
-    skills: undefined,
-    keywords,
-    statuses,
-    onNote: setRefusal,
-  });
+  // Note that a draft's own agent outranks the item read as it opened, and one it names that this window cannot name leaves To to be chosen again.
+  const agent = picked ?? (draft.to === undefined ? agentOf(read, to) : agentOf(read, draft.to));
+  // What the box's `@` and `/` offer: the workspace's, with the files and skills of the task of the agent To names.
+  const taskId = agent?.task?.id;
+  const repository = taskId === undefined ? null : repositoryOf(taskId);
+  const workspaceSlug = workspace?.workspace;
+  const workspaceId = workspace?.workspaceId;
+  const mentions = useMemo(
+    () =>
+      workspaceSlug === undefined || workspaceId === undefined
+        ? undefined
+        : tasklessMentions(
+            { workspace: workspaceSlug, workspaceId, repository },
+            onShowMention,
+            readAgents,
+          ),
+    [workspaceSlug, workspaceId, repository, onShowMention, readAgents],
+  );
+  const skills = useMemo(
+    () =>
+      workspaceId === undefined
+        ? undefined
+        : keptSkills(() =>
+            act(ACT_KIND.TASKS_SKILLS, taskId === undefined ? { workspaceId } : { planId: taskId }),
+          ),
+    [act, workspaceId, taskId],
+  );
+  // A skill's chip opens its `SKILL.md` on GitHub, as New task's does, since no File tab stands here.
+  const openSkill = (skill: SkillWithFile) => {
+    if (mentions === undefined || repository === null) return;
+    appPlatform().openGitHub(
+      encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, mentions.doors.place),
+    );
+  };
   // The agents are read as the pane opens.
   useEffect(() => {
     if (readAgents === undefined) return;
@@ -217,7 +294,83 @@ export function InboxCompose({
       live = false;
     };
   }, [readAgents, asked]);
-  const text = draft.note.trim();
+  const composeTo: ComposeTo = {
+    read,
+    listed: listedAgents(read, found, asked, place),
+    asked,
+    agent,
+    onSearch: setQuery,
+    onPick: (pick) => {
+      pickedAgents.set(pick.id, pick);
+      setPicked(pick);
+      update((was) => ({ ...was, to: pick.id }));
+    },
+  };
+  return (
+    <TaskMentions value={mentions}>
+      <SkillFiles source={skills} onOpen={openSkill}>
+        <ComposeCard
+          {...props}
+          composeTo={composeTo}
+          draft={draft}
+          update={update}
+          skills={skills}
+        />
+      </SkillFiles>
+    </TaskMentions>
+  );
+}
+
+/** The card under the providers: the bar, To, Subject, and the box, and what a send, a discard, or a file does to the draft. */
+function ComposeCard({
+  hidden,
+  onBack,
+  keywords,
+  start,
+  onStarted,
+  onDiscard,
+  onRestore,
+  composeTo,
+  draft,
+  update,
+  skills,
+}: InboxComposeProps & {
+  readonly composeTo: ComposeTo;
+  readonly draft: Draft;
+  readonly update: (next: (was: Draft) => Draft) => void;
+  readonly skills: SkillSource | undefined;
+}): React.JSX.Element {
+  const { read, listed, asked, agent } = composeTo;
+  const toast = useToast();
+  const [sending, setSending] = useState(false);
+  const [reading, setReading] = useState(0);
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
+  const statuses = useIntegrationStatuses();
+  const place = useAgentRowPlace();
+  const latestAgent = useRef(agent);
+  latestAgent.current = agent;
+  const chosen = agent === undefined ? undefined : agentMenuRow(agent, place);
+  const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
+  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
+  const field = useAnswerField({
+    draft: draft.text,
+    placeholder,
+    self: agent?.id,
+    agent: undefined,
+    skills,
+    keywords,
+    statuses,
+    onNote: setRefusal,
+  });
+  // Every change keeps the agent To names beside what it writes, so the draft opens again on it.
+  const write = (next: (was: Draft) => Draft) =>
+    update((was) => {
+      const drafted = next(was);
+      const id = latestAgent.current?.id;
+      return id === undefined ? drafted : { ...drafted, to: id };
+    });
+  const text = draft.text.trim();
   const sendable =
     agent !== undefined &&
     (text !== "" || draft.attachments.length > 0) &&
@@ -229,9 +382,10 @@ export function InboxCompose({
     attempt.current = { key, words };
     setSending(true);
     setRefusal(undefined);
+    const subject = subjectOf(draft);
     start({
       agentId: agent.id,
-      ...(draft.subject.trim() === "" ? undefined : { title: draft.subject.trim() }),
+      ...(subject === "" ? undefined : { title: subject }),
       text,
       ...(draft.attachments.length === 0 ? undefined : { attachments: draft.attachments }),
       clientKey: key,
@@ -241,9 +395,31 @@ export function InboxCompose({
       )
       .then((answer) => {
         setSending(false);
-        if ("failure" in answer) setRefusal(messageFailureWords(answer.failure));
-        else onStarted({ item: answer.item, agent });
+        if ("failure" in answer) {
+          setRefusal(messageFailureWords(answer.failure));
+          return;
+        }
+        update(() => EMPTY_DRAFT);
+        onStarted({ item: answer.item, agent });
       });
+  };
+  // Note that Discard acts at once, the draft being one Undo away, which puts it back and opens New thread on it again.
+  const discard = () => {
+    const kept = draft;
+    update(() => EMPTY_DRAFT);
+    onDiscard();
+    if (!written(kept)) return;
+    toast({
+      words: DISCARDED,
+      tone: STATUS_TONE.COMPLETE,
+      action: {
+        label: UNDO_LABEL,
+        onPress: () => {
+          update(() => kept);
+          onRestore();
+        },
+      },
+    });
   };
   const attach = (files: readonly File[]) => {
     if (files.length === 0) return;
@@ -251,13 +427,16 @@ export function InboxCompose({
     readFiles(files)
       .then((filesRead) => {
         // Taken after whatever the box holds as the read lands, so a chip taken off meanwhile is not undone.
-        const taken = withFiles(latest.current.attachments, filesRead);
-        setRefusal(taken.refusal);
-        setDraft((was) => ({ ...was, attachments: taken.attachments }));
+        let refused = filesRead.refusal;
+        write((was) => {
+          const taken = withFiles(was.attachments, filesRead);
+          refused = taken.refusal;
+          return { ...was, attachments: taken.attachments };
+        });
+        setRefusal(refused);
       })
       .finally(() => setReading((count) => count - 1));
   };
-  const listed = listedAgents(read, found, asked, place);
   const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
@@ -269,7 +448,7 @@ export function InboxCompose({
         }
         heading={<h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>}
         actions={
-          <Button variant={BUTTON_VARIANT.QUIET} onClick={onDiscard} disabled={sending}>
+          <Button variant={BUTTON_VARIANT.QUIET} onClick={discard} disabled={sending}>
             {DISCARD}
           </Button>
         }
@@ -298,11 +477,12 @@ export function InboxCompose({
                 ) : undefined
               }
               disabled={sending}
-              onOpen={() => setQuery("")}
-              onSearch={setQuery}
+              onOpen={() => composeTo.onSearch("")}
+              onSearch={composeTo.onSearch}
               onPick={(id) => {
                 setRefusal(undefined);
-                setPicked(listed.find((each) => each.id === id));
+                const pick = listed.find((each) => each.id === id);
+                if (pick !== undefined) composeTo.onPick(pick);
               }}
             />
           </div>
@@ -311,18 +491,19 @@ export function InboxCompose({
             <TextField
               label={SUBJECT}
               size={TEXT_FIELD_SIZE.INLINE}
-              value={draft.subject}
+              value={draft.title ?? ""}
               placeholder={SUBJECT_PLACEHOLDER}
               maxLength={INBOX_BOUNDS.MAX_TITLE_CHARS}
               disabled={sending}
               autoFocus
-              onChange={(subject) => setDraft((was) => ({ ...was, subject }))}
+              onChange={(title) => write((was) => ({ ...was, title }))}
               onEnter={() => field.editor.current?.focus()}
             />
           </div>
         </div>
-        <div className="agent-composer inbox-compose-box">
+        <div className="agent-composer inbox-compose-box" {...fileDrop.target}>
           <AnswerForm
+            dropping={fileDrop.dropping}
             field={field}
             asks={false}
             messages
@@ -332,15 +513,15 @@ export function InboxCompose({
                 files={attachmentChips(draft.attachments)}
                 onRemove={(index) => {
                   setRefusal(undefined);
-                  setDraft((was) => ({
+                  write((was) => ({
                     ...was,
                     attachments: was.attachments.filter((_, at) => at !== index),
                   }));
                 }}
               />
             }
-            note={draft.note}
-            onNote={(words) => setDraft((was) => ({ ...was, note: words }))}
+            note={draft.text}
+            onNote={(words) => write((was) => ({ ...was, text: words }))}
             placeholder={placeholder}
             maxLength={INBOX_BOUNDS.MAX_MESSAGE_CHARS}
             onEnter={() => field.room.current?.closest("form")?.requestSubmit()}
