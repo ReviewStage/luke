@@ -31,6 +31,7 @@ import {
   withContextMenu,
 } from "../menu/menu.js";
 import { MoreButton, moreLabel } from "../more-button/more-button.js";
+import { rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { useRowSwipe } from "./use-row-swipe.js";
 
 /**
@@ -94,9 +95,10 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * the row a right-click is about, so the menu is plainly about it. A row that goes somewhere deeper wears a
  * chevron at its end (`chevron`). A row whose press must leave the focus
  * where it is, on a search field beside the list that holds the keys, keeps
- * it (`keepFocus`), as a Button does; one of a roving list, which the
- * keyboard enters at its current row and moves through by its own keys, is
- * out of the tab order and takes the focus it is handed (`tabbable`), and
+ * it (`keepFocus`), as a Button does. A `List`'s rows are one Tab stop, the
+ * arrows walking them; one whose list steers it by keys of its own says
+ * whether it is a Tab stop itself (`tabbable`), takes the focus it is
+ * handed, and is left out of the arrows' walk, and
  * one a field drives names its item by `id`, the field's active row. A row
  * unavailable (`disabled`) refuses its press and leaves the tab order, as a
  * deleting row's does. Where an app hints a row's whole title only when it
@@ -301,6 +303,12 @@ function said(words: ReactNode): boolean {
  * One whose rows a finger opens (`fingerTall`) stands each a finger's press
  * tall on a coarse pointer, its words centred in it, as a call's line does
  * of its own; a mouse keeps the row's own height.
+ *
+ * The list is one Tab stop (`useRovingKeys`): Tab enters it at the row last
+ * focused, or its first, ↑↓ walk its rows, wrapping at the ends, Home and
+ * End go to the first and the last, and an unavailable row is passed over.
+ * A row whose list steers it from elsewhere, a field holding the keys, says
+ * whether it is a Tab stop itself (`tabbable`) and stays out of the walk.
  */
 export function List({
   label,
@@ -319,8 +327,10 @@ export function List({
   moves?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
+  const roving = useRovingKeys<HTMLUListElement>();
   return (
     <ul
+      {...roving}
       className="luke-list"
       data-variant={variant}
       data-density={density}
@@ -359,7 +369,7 @@ export function ListRow({
   chevron = false,
   keepFocus = false,
   disabled = false,
-  tabbable = true,
+  tabbable,
   onTitleClipped,
   id,
   motionKey: followedBy,
@@ -412,7 +422,7 @@ export function ListRow({
   keepFocus?: boolean | undefined;
   /** Whether its press is unavailable: refused and out of the tab order. */
   disabled?: boolean | undefined;
-  /** Whether Tab stops on its press; one that is not still takes the focus a roving list hands it. */
+  /** Whether Tab stops on its press, said where something other than its `List` steers its rows, which leaves it out of the list's arrows; one that is not still takes the focus it is handed. Left out, its `List` keeps one row a Tab stop and walks the rest with the arrows. */
   tabbable?: boolean | undefined;
   /** Hears whether the title is cut short, whenever that changes, so a hint can say it whole only then. */
   onTitleClipped?: ((clipped: boolean) => void) | undefined;
@@ -550,7 +560,8 @@ export function ListRow({
       className="luke-list-row-main"
       aria-current={current}
       disabled={disabled}
-      tabIndex={tabbable ? undefined : -1}
+      tabIndex={tabbable === false ? -1 : undefined}
+      {...(tabbable === undefined ? rovingItem() : {})}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus ? preventFocusMove : undefined}
       onClick={(event) => {

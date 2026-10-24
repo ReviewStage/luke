@@ -243,3 +243,31 @@ test("an unavailable row draws no ⋯ and opens its menu by no door", () => {
   });
   expect(openMenu()).toBeNull();
 });
+
+test("the arrows walk a list's rows past their ⋯, which stays a Tab stop of its own", () => {
+  const names = ["Fix the sign-in loop", "Ship the spring release"] as const;
+  draw(
+    createElement(List, {
+      label: "Tasks",
+      children: names.map((name) =>
+        createElement(ListRow, {
+          key: name,
+          title: name,
+          onPress: () => undefined,
+          menu: taskMenu([]),
+        }),
+      ),
+    }),
+  );
+  const [first, second] = names.map((name) => button(name));
+  if (first === undefined || second === undefined) throw new Error("No rows");
+  act(() => first.focus());
+  key(first, "ArrowDown");
+  expect(document.activeElement).toBe(second);
+  key(second, "ArrowDown");
+  expect(document.activeElement).toBe(first);
+  const mores = [
+    ...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Task actions"]'),
+  ];
+  expect(mores.map((more) => more.tabIndex)).toEqual([0, 0]);
+});

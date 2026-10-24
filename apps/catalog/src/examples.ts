@@ -34,6 +34,7 @@ import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FACTS_EXAMPLE } from "./examples/facts";
+import { FAILURE_NOTES_EXAMPLE } from "./examples/failure-notes";
 import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
 import { FILE_TEXT_EXAMPLE } from "./examples/file-text";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
@@ -77,6 +78,7 @@ import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
+import { ROVING_KEYS_EXAMPLE } from "./examples/roving-keys";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
@@ -151,6 +153,7 @@ export const EXAMPLES: readonly Example[] = [
   EMPTY_STATES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,
+  FAILURE_NOTES_EXAMPLE,
   FILE_PICKERS_EXAMPLE,
   FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
@@ -173,6 +176,7 @@ export const EXAMPLES: readonly Example[] = [
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   LIST_MOTION_EXAMPLE,
+  ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,
   MORE_BUTTONS_EXAMPLE,
   FORMAT_TOOLBAR_EXAMPLE,
