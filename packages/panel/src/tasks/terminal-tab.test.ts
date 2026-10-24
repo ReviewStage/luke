@@ -1506,3 +1506,16 @@ test("in a wide room a connecting terminal draws no bar, the title bar saying so
   assert.equal(tab.standing(), "· sandbox · connecting…");
   assert.equal(tab.bar(), undefined);
 });
+
+test("on a phone a drop after connecting waits out its own reveal, as a drop after a connection does", async () => {
+  mountAnnouncer();
+  const tab = await mount(true, false, undefined, false, SIDE_BUNDLES, true);
+  revealBar();
+  assert.equal(announcedPolitely(), "Connecting…");
+
+  main.post(OLDEST).say({ type: "state", state: "reconnecting" });
+  assert.equal(tab.bar(), "Connection lost. Reconnecting…");
+  assert.equal(announcedPolitely(), "", "the drop's bar is hidden, so it says nothing yet");
+  revealBar();
+  assert.equal(announcedPolitely(), "Connection lost. Reconnecting…");
+});

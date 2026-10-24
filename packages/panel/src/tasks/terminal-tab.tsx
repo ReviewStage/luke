@@ -204,8 +204,8 @@ export function TerminalTab({
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
           {bar === undefined ? null : (
-            // Note that each entry into a late bar is a bar of its own, because its reveal runs again and its words wait for it.
-            <StateBar key={String(bar.late)} bar={bar} onAction={session.onAction} />
+            // Note that each entry into a state's bar is a bar of its own, because a late bar's reveal runs again and its words wait for it, even when the state it follows was late too.
+            <StateBar key={session.state.kind} bar={bar} onAction={session.onAction} />
           )}
           {session.failed ? (
             <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={session.retryBundle}>
