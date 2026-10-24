@@ -302,6 +302,18 @@ function focusedTask(): string | null | undefined {
   return document.activeElement?.closest("li[data-task-id]")?.getAttribute("data-task-id");
 }
 
+test("each column's cards scroll in an area that keeps a scroll bar's room, so a bar that takes room never rewraps the cards past the column's height", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
+    ...DEFAULT_BOARD_DISPLAY,
+    completed: COMPLETED_WINDOW.ALL,
+  });
+
+  const areas = [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map((column) =>
+    column.querySelector(".luke-scroll-area")?.getAttribute("data-gutter"),
+  );
+  assert.deepEqual(areas, ["stable", "stable", "stable", "stable", "stable"]);
+});
+
 test("each column's cards are one Tab stop that ↓ and ↑ walk, and ← and → cross to the next column's stop, wrapping at the board's ends", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
     ...DEFAULT_BOARD_DISPLAY,
