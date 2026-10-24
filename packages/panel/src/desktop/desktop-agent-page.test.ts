@@ -1342,7 +1342,9 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender [data-actor-ref]");
+  const sender = page.querySelector(
+    ".is-user:not(.agent-origin) .luke-message-line-sender [data-actor-ref]",
+  );
   assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
@@ -1383,7 +1385,7 @@ function origin(page: HTMLElement): OpenedOrigin {
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
   const head = card.querySelector<HTMLElement>("[data-task-card] > summary");
   act(() => head?.click());
-  return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
+  return { card, sender: card.querySelector<HTMLElement>(".luke-message-line-sender") };
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
