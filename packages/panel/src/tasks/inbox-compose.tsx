@@ -39,7 +39,6 @@ import {
   PageToolbar,
   POPOVER_ALIGN,
   Spinner,
-  STATUS_TONE,
   TEXT_FIELD_SIZE,
   TextField,
   Tooltip,
@@ -57,7 +56,7 @@ import {
 } from "../composer-drafts.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { Picker } from "../settings/picker-row.js";
-import { UNDO_LABEL, useToast } from "../toast.js";
+import { undoToast, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
@@ -428,17 +427,12 @@ function ComposeCard({
     update(() => EMPTY_DRAFT);
     onDiscard();
     if (!written(kept)) return;
-    toast({
-      words: DISCARDED,
-      tone: STATUS_TONE.COMPLETE,
-      action: {
-        label: UNDO_LABEL,
-        onPress: () => {
-          update(() => kept);
-          onRestore();
-        },
-      },
-    });
+    toast(
+      undoToast(DISCARDED, () => {
+        update(() => kept);
+        onRestore();
+      }),
+    );
   };
   const note =
     refusal ??
