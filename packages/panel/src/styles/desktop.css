@@ -2617,15 +2617,11 @@ ul.actor-stack {
   overflow-wrap: anywhere;
 }
 
-/* The press an answer gave wears its glyph in the tone of what it did,
-   green going ahead and red holding back, as the answer's stamp does. */
+/* The press an answer gave wears its glyph in the status tone of what it
+   did, green going ahead and grey holding back, as the answer's stamp does. */
 .inbox-ask-pressed {
   display: inline-flex;
-  color: var(--luke-color-complete);
-}
-
-.inbox-ask-pressed[data-tone="back"] {
-  color: var(--luke-color-danger-text);
+  color: var(--luke-tone-ink);
 }
 
 .inbox-ask-presses {
@@ -4191,13 +4187,18 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
-/* The Inbox row's count of what waits, at its end in the quiet count a
-   folded sidebar group shows after its name. */
+/* A count at a summary row's end, in the quiet count a folded sidebar group
+   shows after its name; the Inbox's, of what needs the reader, in the tone
+   its `data-tone` names, the attention the rows it counts wear. */
 .inbox-row-count {
   flex: none;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
+}
+
+.inbox-row-count[data-tone] {
+  color: var(--luke-tone-ink);
 }
 
 /* The archived agents, folded under Archived at the foot of Coding agents

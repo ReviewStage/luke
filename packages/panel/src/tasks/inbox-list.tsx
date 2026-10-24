@@ -74,7 +74,6 @@ import {
 import {
   CheckCheckIcon,
   CheckIcon,
-  CircleCheckIcon,
   ClockArrowDownIcon,
   ClockArrowUpIcon,
   GLYPH,
@@ -332,6 +331,7 @@ const STATUS_WORDS = {
   [INBOX_STATUS_GROUP.NEEDS_YOU]: NEEDS_YOU.LABEL,
   [INBOX_STATUS_GROUP.WAITING]: "Waiting on others",
   [INBOX_STATUS_GROUP.ANSWERED]: "Answered",
+  [INBOX_STATUS_GROUP.CLOSED]: "Closed",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
 /** What the view's submenu of whose items is called. */
@@ -668,10 +668,19 @@ function HolderHeader({
   );
 }
 
+/** The glyph each status group's header wears. */
+const STATUS_GLYPH = {
+  [INBOX_STATUS_GROUP.NEEDS_YOU]: <AttentionMark />,
+  [INBOX_STATUS_GROUP.WAITING]: <HourglassIcon />,
+  [INBOX_STATUS_GROUP.ANSWERED]: <GLYPH.SETTLED />,
+  [INBOX_STATUS_GROUP.CLOSED]: <GLYPH.DISMISSED />,
+} as const satisfies Record<InboxStatusGroupKind, React.JSX.Element>;
+
 /**
  * A status's group header: Needs you by the attention mark, Waiting on
- * others by the hourglass, and Answered by a check. A press folds the
- * group, which then fades its rows out, as every group header's does.
+ * others by the hourglass, Answered by a check, and Closed by the slashed
+ * circle a withdrawn ask wears. A press folds the group, which then fades
+ * its rows out, as every group header's does.
  */
 function StatusHeader({
   status,
@@ -686,16 +695,12 @@ function StatusHeader({
   onToggle: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
-  const glyph =
-    status === INBOX_STATUS_GROUP.NEEDS_YOU ? (
-      <AttentionMark />
-    ) : status === INBOX_STATUS_GROUP.WAITING ? (
-      <HourglassIcon />
-    ) : (
-      <CircleCheckIcon />
-    );
   return (
-    <GroupHeader glyph={glyph} label={STATUS_WORDS[status]} {...groupHead(folded, count, onToggle)}>
+    <GroupHeader
+      glyph={STATUS_GLYPH[status]}
+      label={STATUS_WORDS[status]}
+      {...groupHead(folded, count, onToggle)}
+    >
       {children}
     </GroupHeader>
   );

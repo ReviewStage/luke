@@ -668,7 +668,7 @@ export function inboxThreadSend(
   return refusal === undefined ? { text, attachments, answers } : undefined;
 }
 
-/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in red. */
+/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in grey, since holding back failed nothing. */
 export const ANSWER_TONE = {
   AHEAD: "ahead",
   BACK: "back",
@@ -686,7 +686,7 @@ export interface AnswerStamp {
 const DONE_WORDS: ReadonlyMap<string, string> = new Map([
   ["Approve", "Approved"],
   ["Decline", "Declined"],
-  ["Request changes", "Requested changes"],
+  ["Request changes", "Changes requested"],
 ]);
 
 /** The two buttons' pick an answer makes, and which of the two it is; none where the ask is no pair of buttons. */
@@ -737,7 +737,7 @@ const SENT_WORDS = {
 
 /**
  * What a sent answer's stamp says on the thread, in the past: "Approved",
- * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
+ * "Changes requested", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
  * a to-do's steps ticked with no press, "Ticked 2/3", "Submitted", or
  * "Answered". The ask it answers is read where the thread
  * still carries it.
@@ -1381,13 +1381,14 @@ export const EVERYONES: InboxWhose = { kind: INBOX_WHOSE.EVERYONE };
 
 /**
  * Where an item stands, as a list grouped by status heads it: needing the
- * reader, waiting on the teammate whose agent asks it, or answered, which
- * an item its agent took back stands under too.
+ * reader, waiting on the teammate whose agent asks it, answered, or closed
+ * with no answer, its ask withdrawn by its agent or resolved by a member.
  */
 export const INBOX_STATUS_GROUP = {
   NEEDS_YOU: "needs-you",
   WAITING: "waiting",
   ANSWERED: "answered",
+  CLOSED: "closed",
 } as const;
 
 export type InboxStatusGroupKind = (typeof INBOX_STATUS_GROUP)[keyof typeof INBOX_STATUS_GROUP];
@@ -1397,6 +1398,7 @@ const STATUS_KEY = {
   [INBOX_STATUS_GROUP.NEEDS_YOU]: "status:needs-you",
   [INBOX_STATUS_GROUP.WAITING]: "status:waiting",
   [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
+  [INBOX_STATUS_GROUP.CLOSED]: "status:closed",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
 /** How many items each scope lists, filtered out by the scope shown or not. */
@@ -1576,7 +1578,8 @@ const SORT_ORDER = {
 
 /** Where an item stands for the reader, as a list grouped by status heads it. */
 function statusOf(item: InboxItem, readerId: string | undefined): InboxStatusGroupKind {
-  if (item.status !== INBOX_STATUS.OPEN) return INBOX_STATUS_GROUP.ANSWERED;
+  if (item.status === INBOX_STATUS.ANSWERED) return INBOX_STATUS_GROUP.ANSWERED;
+  if (item.status === INBOX_STATUS.CLOSED) return INBOX_STATUS_GROUP.CLOSED;
   return readersItem(item, readerId) ? INBOX_STATUS_GROUP.NEEDS_YOU : INBOX_STATUS_GROUP.WAITING;
 }
 
@@ -1594,7 +1597,7 @@ export interface InboxPlace {
 /** No item's place held: every item stands where it is now. */
 export const NO_PLACES: ReadonlyMap<string, InboxPlace> = new Map();
 
-/** The items, in the order given, under where each stands: what needs the reader, what waits on others, and what is answered, a status with nothing in it left out. */
+/** The items, in the order given, under where each stands: what needs the reader, what waits on others, what is answered, and what closed with no answer, a status with nothing in it left out. */
 function statusGroups(
   items: readonly InboxListed[],
   statusOfItem: (item: InboxItem) => InboxStatusGroupKind,

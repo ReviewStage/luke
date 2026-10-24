@@ -522,7 +522,8 @@ test("an item whose place is held stands where the list drew it, under the statu
     ),
     [
       [INBOX_STATUS_GROUP.NEEDS_YOU, ["expiry", "threshold"]],
-      [INBOX_STATUS_GROUP.ANSWERED, ["retry", "channel"]],
+      [INBOX_STATUS_GROUP.ANSWERED, ["retry"]],
+      [INBOX_STATUS_GROUP.CLOSED, ["channel"]],
     ],
   );
 });
@@ -1484,7 +1485,7 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
   });
   assert.deepEqual(sentStamp(chose("Request changes"), pair), {
     tone: ANSWER_TONE.BACK,
-    words: "Requested changes",
+    words: "Changes requested",
   });
   assert.equal(sentStamp(chose("7 days"), undefined).words, "Chose 7 days");
 

@@ -13,6 +13,7 @@ import {
   INLINE_EDIT_LOOK,
   InlineEdit,
   RetryButton,
+  STATUS_TONE,
   TABS_GROUND,
   VisuallyHidden,
 } from "@luke/ui";
@@ -317,15 +318,15 @@ export function agentEntries(
 
 /**
  * The task's Inbox as a row: its tray and its name, then what waits on the
- * developer counted at its end in the sidebar's quiet count, and nothing at
- * none. It names no section, so the summary lists it under Tabs, beside the
+ * developer counted at its end in the attention tone the rows it counts
+ * wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
  * panel's other kinds; picking it opens the side panel's Inbox.
  */
 export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
   const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
   const endMark =
     waiting === 0 ? undefined : (
-      <span className="inbox-row-count">
+      <span className="inbox-row-count" data-tone={STATUS_TONE.ATTENTION}>
         {waiting}
         <VisuallyHidden>
           {" "}

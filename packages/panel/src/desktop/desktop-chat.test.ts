@@ -849,7 +849,10 @@ test("an approval's Approve is held until Send sends it, a note with no decision
   const settled = settledAsk(page, 51);
   const approve = pressNamed(settled, "Approve");
   assert.equal(approve.getAttribute("aria-pressed"), "true");
-  assert.ok(approve.querySelector('.inbox-ask-pressed[data-tone="ahead"]'), "Approve wears green");
+  assert.ok(
+    approve.querySelector('.inbox-ask-pressed[data-tone="complete"]'),
+    "Approve wears green",
+  );
   assert.equal(pressNamed(settled, "Decline").getAttribute("aria-pressed"), "false");
   assert.equal(settled.querySelector("[data-inbox-note]")?.textContent?.trim(), "go ahead");
 

@@ -6511,6 +6511,56 @@ test("grouped by status, what needs you stands under the attention mark, then wh
   act(() => keys.unmount());
 });
 
+test("grouped by status, an item its agent withdrew stands under Closed, apart from Answered, its header and its row's card wearing the slashed circle where an answered item's card wears a check", async () => {
+  const [asking] = EXPIRY.thread ?? [];
+  assert.ok(asking?.ask !== undefined, "the item opens with its ask");
+  const withdrawn: InboxItem = {
+    ...EXPIRY,
+    status: INBOX_STATUS.CLOSED,
+    closedReason: "Product picked 14 days.",
+    settledAt: 4_500,
+    thread: [
+      {
+        ...asking,
+        ask: {
+          ...asking.ask,
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+          withdrawnReason: "Product picked 14 days.",
+        },
+      },
+    ],
+  };
+  inboxes.set(BILLING.id, [THRESHOLD, RETRY]);
+  inboxes.set(INVITES.id, [withdrawn]);
+  const { page } = mount();
+  await settle();
+  chooseView(page, "Group by", "Status");
+  assert.deepEqual(
+    listed(page).filter((line) => line.startsWith("# ")),
+    ["# Needs you", "# Answered", "# Closed"],
+  );
+  assert.deepEqual(listed(page).slice(-2), ["# Closed", "Expire after 7 days?"]);
+  const closed = headerNamed(page, "Closed").closest(".luke-group-header-head");
+  assert.ok(closed?.querySelector("svg.lucide-circle-slash"), "Closed wears the slashed circle");
+
+  const settledGlyph = (title: string) => {
+    hoveredCard(rowNamed(page, title), "[data-inbox-row-card]");
+    const card =
+      document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+      assert.fail("the row's card is hung");
+    return [
+      card.querySelector("svg.lucide-circle-slash") !== null,
+      card.querySelector("svg.lucide-check") !== null,
+    ];
+  };
+  assert.deepEqual(settledGlyph("Expire after 7 days?"), [true, false], "withdrawn: slashed");
+  assert.deepEqual(
+    settledGlyph("How is a failed email retried?"),
+    [false, true],
+    "answered: check",
+  );
+});
+
 test("an item marked read as it opened stays read once another plan's item is chosen, though the list's read of its plan, which a mark never moves, still holds it unread", async () => {
   inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
   const { page } = mount();
@@ -7482,8 +7532,8 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
     pane.querySelector(".inbox-thread > li:nth-last-child(2)") ?? assert.fail("the reply");
   assert.equal(answeredCard(reply), "ApproveRequest changes");
   assert.equal(
-    reply.querySelector('[aria-pressed="true"] .inbox-ask-pressed[data-tone="back"]')?.parentElement
-      ?.textContent,
+    reply.querySelector('[aria-pressed="true"] .inbox-ask-pressed[data-tone="neutral"]')
+      ?.parentElement?.textContent,
     "Request changes",
     "the press given says how it was answered",
   );
@@ -7659,7 +7709,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
       reply.querySelector<HTMLElement>("[data-inbox-answered]") ?? assert.fail("the card"),
     ),
     [
-      ["Mark done", true, "ahead"],
+      ["Mark done", true, "complete"],
       ["Couldn't do it", false, undefined],
     ],
   );
@@ -8000,7 +8050,7 @@ test("an answered yes-or-no heads its reply with its two small buttons, the one 
   assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(answeredPresses(answeredBox(pane)), [
     ["Approve", false, undefined],
-    ["Request changes", true, "back"],
+    ["Request changes", true, "neutral"],
   ]);
   assert.equal(answeredBox(pane).querySelector('[role="radio"]'), null, "no radio list stands");
 });
@@ -8035,7 +8085,7 @@ test("an answered do heads its reply with its steps ticked as they were sent, ov
   assert.deepEqual(steps()[1], ["Add the secret", false], "a press ticks nothing");
   assert.deepEqual(answeredPresses(box), [
     ["Mark done", false, undefined],
-    ["Couldn't do it", true, "back"],
+    ["Couldn't do it", true, "neutral"],
   ]);
 
   act(() => root?.unmount());
@@ -8052,7 +8102,7 @@ test("an answered do heads its reply with its steps ticked as they were sent, ov
     [["How long should invites last?", true]],
   );
   assert.deepEqual(answeredPresses(legacyBox), [
-    ["Mark done", true, "ahead"],
+    ["Mark done", true, "complete"],
     ["Couldn't do it", false, undefined],
   ]);
 });

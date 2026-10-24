@@ -34,7 +34,7 @@ import {
   TextField,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
-import { CheckIcon, CircleSlashIcon, Undo2Icon } from "lucide-react";
+import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
 import { modEnterSends } from "../enter-sends.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
@@ -55,6 +55,7 @@ import {
   withStep,
   withValue,
 } from "./inbox-model.js";
+import { ANSWER_STATUS_TONE } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 
@@ -639,10 +640,10 @@ function OpenControls({
   }
 }
 
-/** The glyph a press given wears: a check in green going ahead, a turn back in red holding back. */
+/** The glyph a press given wears in its answer's tone (`ANSWER_STATUS_TONE`): a check in green going ahead, a turn back in grey holding back. */
 function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
   return (
-    <span className="inbox-ask-pressed" data-tone={tone}>
+    <span className="inbox-ask-pressed" data-tone={ANSWER_STATUS_TONE[tone]}>
       {tone === ANSWER_TONE.AHEAD ? (
         <CheckIcon aria-hidden="true" />
       ) : (
@@ -863,14 +864,14 @@ export function WithdrawnWords({
   if (reason !== undefined) {
     return (
       <span className="inbox-ask-standing">
-        <CircleSlashIcon aria-hidden="true" />
+        <GLYPH.DISMISSED />
         {WITHDRAWN}
       </span>
     );
   }
   return (
     <span className="inbox-ask-standing">
-      <CircleSlashIcon aria-hidden="true" />
+      <GLYPH.DISMISSED />
       {closer === undefined ? (
         CLOSED_WORDS
       ) : (
