@@ -1429,7 +1429,7 @@ test("Escape leaves a page with nothing unsaved for the list, and asks first whe
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.equal(places.length, 1, "the unsaved draft stands");
-  assert.ok(leaveAsked(), "the leave question stands");
+  assert.match(leaveAsked() ?? "", /Your changes to this automation are lost\./u);
   act(() => button("Cancel").click());
   await settle();
   assert.equal(leaveAsked(), undefined);
@@ -2830,7 +2830,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   act(() => {
     const confirm = [
       ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-    ].find((each) => each.textContent === "New secret");
+    ].find((each) => each.textContent === "Make secret");
     confirm?.click();
   });
   await settle();
@@ -2893,7 +2893,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   act(() => {
     const confirm = [
       ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-    ].find((each) => each.textContent === "New secret");
+    ].find((each) => each.textContent === "Make secret");
     assert.ok(confirm, "the dialog asks first");
     confirm.click();
   });

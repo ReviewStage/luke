@@ -367,7 +367,7 @@ test("a red Unlink the service refuses keeps its question up saying why, and the
 
   assert.match(
     document.querySelector('[role="alertdialog"]')?.textContent ?? "",
-    /Luke didn't answer\. Try again\./u,
+    /Luke did not answer\. Try again\./u,
   );
   assert.deepEqual(
     rows(container).map(({ key }) => key),
@@ -431,7 +431,7 @@ test("a link refused and a keyword the service did not take are said", async () 
   assert.equal(fullNote, "A task links at most 10 issues.");
   assert.equal(
     full.container.querySelector('[role="alert"]')?.textContent,
-    "Luke didn't answer. Try again.",
+    "Luke did not answer. Try again.",
   );
   assert.deepEqual(
     rows(full.container).map(({ keyword }) => keyword),
@@ -465,7 +465,7 @@ test("a first read that did not land says so in the row's place, and Try again r
   press([...container.querySelectorAll("button")].find((each) => each.textContent === "Retry"));
   await settle();
 
-  assert.equal(said, "Luke didn't answer. Try again.");
+  assert.equal(said, "Luke did not answer. Try again.");
   assert.deepEqual(
     rows(container).map(({ key }) => key),
     ["#312"],

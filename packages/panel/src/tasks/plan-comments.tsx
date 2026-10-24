@@ -14,7 +14,7 @@ import {
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
-import { pasteCutWords } from "@luke/features/words";
+import { IRREVERSIBLE_WORDS, pasteCutWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
@@ -407,16 +407,17 @@ interface ThreadDoors {
 /** What deleting asks first, a comment's or a whole thread's, since neither comes back. */
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this comment?",
+  body: `The comment is deleted for everyone. ${IRREVERSIBLE_WORDS}`,
   verb: "Delete",
-  running: "Deleting…",
+  running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 const DELETE_THREAD_QUESTION: DialogQuestion = {
   title: "Delete this thread?",
-  body: "Every comment in it is deleted with it.",
+  body: `Every comment in it is deleted with it. ${IRREVERSIBLE_WORDS}`,
   verb: "Delete thread",
-  running: "Deleting…",
+  running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 

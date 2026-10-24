@@ -923,6 +923,11 @@ test("a shell's × asks first, then ends it, and ending the one shown shows the 
   const before = main.sent.length;
   await tab.press("End zsh");
   assert.equal(document.querySelector('[role="alertdialog"] h2')?.textContent, "End zsh?");
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /Whatever is running in it stops.*This cannot be undone\./u,
+    "the question says what goes",
+  );
   assert.deepEqual(tab.kinds(before), [], "nothing is ended before the answer");
   await confirmWith("End shell");
   await settle();

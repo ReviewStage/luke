@@ -1578,8 +1578,8 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   ].find((each) => each.textContent === "Bring back channel");
   assert.ok(bring, "the archived topic's foot offers to bring it back");
   act(() => bring.click());
-  assert.equal(dialogButton("Bring back").getAttribute("data-variant"), "primary");
-  act(() => dialogButton("Bring back").click());
+  assert.equal(dialogButton("Bring back channel").getAttribute("data-variant"), "primary");
+  act(() => dialogButton("Bring back channel").click());
   await settle();
   assert.ok(
     rail(page).includes("▸ release-train"),

@@ -146,7 +146,7 @@ function failureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
       return "Luke's GitHub App no longer reaches this repository.";
     default:
-      return "Could not reach GitHub. Try again in a moment.";
+      return "GitHub could not be reached. Try again in a moment.";
   }
 }
 

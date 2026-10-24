@@ -77,7 +77,14 @@ import {
   type SentryLevel,
   type SentryTriggerEvent,
 } from "@luke/features/trigger-catalog";
-import { andList, noMatchWords, readFailedWords, readingWords, TERM } from "@luke/features/words";
+import {
+  andList,
+  IRREVERSIBLE_WORDS,
+  noMatchWords,
+  readFailedWords,
+  readingWords,
+  TERM,
+} from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -352,13 +359,13 @@ const NO_MATCH = {
 
 /** Why a save the service refused did not land, as the line under the name says it. */
 const SAVE_REFUSAL_WORDS = {
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not save it. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be saved. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
   [AUTOMATION_CALL_FAILURE.NO_REPOSITORY]: "Choose the repository it works in.",
   [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
     "Luke cannot reach that repository from this workspace on GitHub.",
   [AUTOMATION_CALL_FAILURE.INVALID]:
-    "Luke could not save it as written. Check its schedule and prompt.",
+    "The automation could not be saved as written. Check its schedule and prompt.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can change it.",
 } as const satisfies Record<AutomationCallFailure, string>;
@@ -1529,7 +1536,7 @@ function CodeReviewGroup({
 /** Why a new secret could not be made, as its dialog says it. */
 const NEW_SECRET_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
-  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not make a new secret. Try again.",
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The secret could not be made. Try again.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /**
@@ -1666,8 +1673,8 @@ function WebhookRows({
         confirm={rotation}
         question={{
           title: "Make a new secret?",
-          body: "The secret your sender uses now stops working until you give it the new one, which Luke shows you once.",
-          verb: "New secret",
+          body: `The secret your sender uses now stops working until you give it the new one, which Luke shows you once. ${IRREVERSIBLE_WORDS}`,
+          verb: "Make secret",
           running: "Making",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
@@ -2694,6 +2701,7 @@ export function AutomationEditor({
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
+          body: `Your changes to this automation are lost. ${IRREVERSIBLE_WORDS}`,
           verb: "Leave",
           running: "Leaving",
           loss: CONFIRM_LOSS.IRREVERSIBLE,

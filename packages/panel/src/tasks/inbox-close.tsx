@@ -152,7 +152,7 @@ function closeQuestion(item: InboxItem): DialogQuestion {
       ? "The agent is told you resolved it. Only the agent can open it again."
       : "The agent reads that you resolved it the next time it reads its inbox. Only the agent can open it again.",
     verb: "Resolve",
-    running: "Resolving…",
+    running: "Resolving",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };
 }
@@ -169,7 +169,7 @@ export function closeAllQuestion(items: readonly InboxItem[]): DialogQuestion {
     title: `Resolve ${countWords(items.length, TERM.INBOX_ITEM)} without answering?`,
     body: "Their agents are told. Only an item's agent can open it again.",
     verb: "Resolve",
-    running: "Resolving…",
+    running: "Resolving",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };
 }

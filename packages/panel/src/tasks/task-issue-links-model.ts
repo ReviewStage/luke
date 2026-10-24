@@ -43,9 +43,9 @@ const REFUSAL_WORDS = {
 
 /** Why a change of a task's links found no answer, by what the host said. */
 const FAILURE_WORDS = {
-  [TASK_CALL_FAILURE.UNANSWERED]: "Luke didn't answer. Try again.",
-  [TASK_CALL_FAILURE.NOT_FOUND]: "That issue couldn't be read, or the task is gone.",
-  [TASK_CALL_FAILURE.LINEAR_UNAVAILABLE]: "The workspace's Linear couldn't read that issue.",
+  [TASK_CALL_FAILURE.UNANSWERED]: "Luke did not answer. Try again.",
+  [TASK_CALL_FAILURE.NOT_FOUND]: "That issue could not be read, or the task is gone.",
+  [TASK_CALL_FAILURE.LINEAR_UNAVAILABLE]: "The workspace's Linear could not read that issue.",
 } as const satisfies Record<TaskIssueCallFailure, string>;
 
 /** What the box says of a change that did not land: a link refused, or a call that found no answer. */
