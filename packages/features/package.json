@@ -115,6 +115,7 @@
     "./workspace-live": "./src/workspace-live.js",
     "./workspace-wire": "./src/workspace-wire.js",
     "./workspace-key": "./src/workspace-key.js",
+    "./words": "./src/words.js",
     "./sign-in-provider": "./src/sign-in-provider.js",
     "./skill-file": "./src/skill-file.js",
     "./skill-paste": "./src/skill-paste.js",

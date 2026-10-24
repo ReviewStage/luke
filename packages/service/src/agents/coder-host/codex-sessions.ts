@@ -208,6 +208,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         integrations: yield* options.integrations(agent),
         tokenUrl,
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
+        // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
+        warm: true,
       };
       return written;
     });
