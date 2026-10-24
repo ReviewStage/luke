@@ -109,6 +109,16 @@ export function tellAct<Kind extends PortActKind>(
 }
 
 /**
+ * Says an act's failure in a FAILED toast: a refusal in its own words, and
+ * any other failure that it did not go through. A press that must also undo
+ * what it drew before the answer (`askAct`'s caller) says its failure here.
+ */
+export function toastActFailure(error: unknown): void {
+  const words = error instanceof ActRefusal ? error.message : PRESS_FAILED_WORDS;
+  showToast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+}
+
+/**
  * An act a person pressed for, whose answer nothing reads: a refusal raises a
  * FAILED toast in its own words, and any other failure one saying it did
  * not go through.
@@ -117,10 +127,7 @@ export function pressAct<Kind extends PortActKind>(
   kind: Kind,
   ...[payload]: ActArguments<Kind>
 ): void {
-  void performAct(kind, payload).catch((error: unknown) => {
-    const words = error instanceof ActRefusal ? error.message : PRESS_FAILED_WORDS;
-    showToast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
-  });
+  void performAct(kind, payload).catch(toastActFailure);
 }
 
 /**

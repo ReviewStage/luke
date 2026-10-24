@@ -34,7 +34,7 @@ function keepAnnounced(version: string): void {
 /** Says, once for each version, that Luke was updated to the version running. */
 export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
   const toast = useToast();
-  const { tell } = useAct();
+  const { press } = useAct();
   const version = update?.status === UPDATE_STATUS.UPDATED ? update.currentVersion : undefined;
   useEffect(() => {
     if (version === undefined || readAnnounced() === version) return;
@@ -42,7 +42,7 @@ export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
     toast({
       words: `Updated to ${version}`,
       tone: STATUS_TONE.COMPLETE,
-      action: { label: "What's new", onPress: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG) },
+      action: { label: "What's new", onPress: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG) },
     });
-  }, [toast, tell, version]);
+  }, [toast, press, version]);
 }

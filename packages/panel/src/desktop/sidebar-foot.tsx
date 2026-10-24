@@ -278,7 +278,7 @@ function AccountMenu({
   onSettings: () => void;
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
-  const { tell } = useAct();
+  const { press } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   const { drawn, close, trigger } = useMenu(shown);
   const logOut = useConfirmDialog(
@@ -304,9 +304,9 @@ function AccountMenu({
     onProfile:
       openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
     onSettings,
-    onOpenChangelog: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG),
+    onOpenChangelog: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
     onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
-    onEmail: () => tell(ACT_KIND.CONTACT_EMAIL),
+    onEmail: () => press(ACT_KIND.CONTACT_EMAIL),
     onLogOut: logOut.ask,
   });
   return (

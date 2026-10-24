@@ -1830,16 +1830,16 @@ export function useSidePanel(
   const taskId = task.id;
   const state = stage === undefined ? kept : (moved ?? stage);
   // A terminal of this Mac whose tab closes, whichever way it closes, is closed with it (`mac-terminal-acts.ts`).
-  const { tell } = useAct();
+  const { press } = useAct();
   const heldMacTerminals = useRef(kept.macTerminals);
   useEffect(() => {
     for (const tab of heldMacTerminals.current) {
       if (!kept.macTerminals.some((each) => sameTab(each, tab))) {
-        tell(ACT_KIND.MAC_TERMINAL_CLOSE, { agentId: tab.macTerminal });
+        press(ACT_KIND.MAC_TERMINAL_CLOSE, { agentId: tab.macTerminal });
       }
     }
     heldMacTerminals.current = kept.macTerminals;
-  }, [kept.macTerminals, tell]);
+  }, [kept.macTerminals, press]);
   // The files the task draws tabs of: those Luke showed on it, and those browsed to on it.
   const taskFiles = useMemo(() => {
     const browsed = state.files.flatMap((each) =>

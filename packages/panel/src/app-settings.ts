@@ -56,7 +56,7 @@ export function useShownUpdate(): UpdateControl["update"] | undefined {
  * draw the sidebar again.
  */
 export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | undefined {
-  const { act, tell } = useAct();
+  const { act, press } = useAct();
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const run = useAppSlice(APP_SLICE.RUN);
   const settings = useAppSlice(APP_SETTINGS_VIEW);
@@ -77,10 +77,10 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
             onCheck: async () => {
               await act(ACT_KIND.UPDATE_CHECK);
             },
-            onInstall: () => tell(ACT_KIND.UPDATE_INSTALL),
-            onOpenLatest: () => tell(ACT_KIND.UPDATE_OPEN_RELEASE),
+            onInstall: () => press(ACT_KIND.UPDATE_INSTALL),
+            onOpenLatest: () => press(ACT_KIND.UPDATE_OPEN_RELEASE),
           },
-    [update, packaged, commit, act, tell],
+    [update, packaged, commit, act, press],
   );
   return useMemo(() => {
     if (account === undefined || run === undefined || audio === undefined) return undefined;
@@ -91,13 +91,13 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
       status: audio.microphoneStatus,
       voiceAvailable: settings?.voiceAvailable === true,
       onRequest: doors.onRequestMicrophone,
-      onOpenSettings: () => tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
+      onOpenSettings: () => press(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
     };
     const notifications: NotificationsControl = {
       status: notificationsStatus,
       grantor: appPlatform().notificationsGrantor?.() ?? NOTIFICATIONS_GRANTOR.MACOS,
       packaged: run.packaged,
-      onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+      onOpenSettings: () => press(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
       onTest: testNotifications,
     };
     return {
@@ -113,5 +113,5 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
       capabilities: run.capabilities,
       workspace: doors.workspace,
     };
-  }, [account, run, settings, audio, notificationsStatus, updates, doors, tell]);
+  }, [account, run, settings, audio, notificationsStatus, updates, doors, press]);
 }
