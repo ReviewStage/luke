@@ -38,7 +38,7 @@ import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
-import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
+import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
@@ -91,6 +91,7 @@ const PAGE_LINE = {
   RESET_DONE: "Plan template reset",
   RESET_FAILED: "The template could not be reset. Try again.",
   UNDO_FAILED: "The template could not be put back. Try again.",
+  UNDO_CHANGED: "The template changed since the reset, so it was not put back.",
 } as const;
 
 /** The id the template is drawn under as a plan's document, which names no task of the account's. */
@@ -120,6 +121,17 @@ const TEMPLATE_READ = {
 } as const;
 
 type TemplateRead = (typeof TEMPLATE_READ)[keyof typeof TEMPLATE_READ];
+
+/** Why a replacement of the whole template was not written: the service did not take it, or what it keeps is no longer what the replacement was asked over. */
+const REPLACE_REFUSAL = {
+  UNANSWERED: "unanswered",
+  CHANGED: "changed",
+} as const;
+
+type ReplaceRefusal = (typeof REPLACE_REFUSAL)[keyof typeof REPLACE_REFUSAL];
+
+/** What a replacement of the whole template came to: the words kept before and after it, or why it was not written. */
+type Replaced = { before: string; after: string } | { refused: ReplaceRefusal };
 
 /** One write of the template, read as the template kept or nothing at all. */
 function written(
@@ -165,8 +177,12 @@ interface TemplateControl {
   /** Its newest revision, or the developer's edit here since; none for a template never edited. */
   lastEdit: PlanLastEdit | undefined;
   edit: PlanEditDoor;
-  /** Writes `template` over the whole of it, the default for `null`, answering the words it held before, or nothing where the write was refused. */
-  replace: (template: string | null) => Promise<string | undefined>;
+  /**
+   * Writes `template` over the whole of it, the default for `null`, only
+   * while the service still keeps `over` where it is named, answering the
+   * words kept before and after.
+   */
+  replace: (template: string | null, over?: string) => Promise<Replaced>;
 }
 
 /**
@@ -187,9 +203,14 @@ interface HeldWrites {
  * a template the service no longer keeps is dropped, because it was queued
  * behind a reset or its Undo, and landing after it would take it back.
  * Words whose save failed as the page went are kept and said by the
- * document's own leaving (`../tasks/use-plan-editing.ts`).
+ * document's own leaving (`../tasks/use-plan-editing.ts`). `onSaved` hears
+ * each edit the service took.
  */
-function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl {
+function useTemplate(
+  signedIn: boolean,
+  act: ActHandle["act"],
+  onSaved: () => void,
+): TemplateControl {
   const [read, setRead] = useState<TemplateRead>(TEMPLATE_READ.READING);
   const [attempt, setAttempt] = useState(0);
   const [text, setText] = useState("");
@@ -243,6 +264,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     const sent = written(act, words).then((answer): TasksEditAnswer => {
       if (answer === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED };
       take(answer, editedNow());
+      onSaved();
       return { saved: true };
     });
     writes.flight = sent;
@@ -262,45 +284,92 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
       }
       return save(request.document.value);
     },
-    replace: async (template: string | null): Promise<string | undefined> => {
+    replace: async (template: string | null, over?: string): Promise<Replaced> => {
       // The write already out lands before this one is sent, so what this sends is what the service keeps.
       const writes = held.current;
       writes.replacing += 1;
       await writes.flight;
       const before = writes.kept;
+      if (over !== undefined && before !== over) {
+        writes.replacing -= 1;
+        return { refused: REPLACE_REFUSAL.CHANGED };
+      }
       const sent = written(act, template);
       writes.flight = sent;
       const answer = await sent;
       writes.replacing -= 1;
-      if (answer === undefined) return undefined;
+      if (answer === undefined) return { refused: REPLACE_REFUSAL.UNANSWERED };
       take(answer, editedNow());
-      return before;
+      return { before, after: answer.template };
     },
+  };
+}
+
+/** The reset's Undo standing, by its toast's subject: stood as a reset lands, withdrawn on `withdraw` and as the page goes. */
+interface UndoStanding {
+  stand: (subject: string) => void;
+  withdraw: () => void;
+}
+
+/**
+ * The reset's Undo, which stands only while it would put back what the reset
+ * took and nothing since: an edit the service takes after the reset, or the
+ * page leaving, whose next opening reads the template afresh and would not
+ * hear the Undo's write, withdraws it.
+ */
+function useUndoStanding(): UndoStanding {
+  const standing = useRef<string | undefined>(undefined);
+  const withdrawToast = useWithdrawToast();
+  const withdraw = useCallback(() => {
+    if (standing.current !== undefined) withdrawToast(standing.current);
+    standing.current = undefined;
+  }, [withdrawToast]);
+  useEffect(() => withdraw, [withdraw]);
+  return {
+    stand: (subject) => {
+      withdraw();
+      standing.current = subject;
+    },
+    withdraw,
   };
 }
 
 /**
  * The reset of the whole template, at once: a refusal is said in a failure's
  * toast, and a reset that landed in a toast whose Undo writes back the
- * words the page held before it. The control rests while the reset is out;
- * the Undo needs none, since the reset takes the control away with the
- * template of the account's own, and the Undo's write brings both back.
+ * words the page held before it, over the default the reset left and
+ * nothing else. The control rests while the reset is out; the Undo needs
+ * none, since the reset takes the control away with the template of the
+ * account's own, and the Undo's write brings both back.
  */
-function useTemplateReset(template: TemplateControl): { busy: boolean; reset: () => void } {
+function useTemplateReset(
+  template: TemplateControl,
+  undoable: UndoStanding,
+): { busy: boolean; reset: () => void } {
   const toast = useToast();
   const failed = (words: string) =>
     toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
-  const undo = (before: string) =>
-    template.replace(before).then((put) => {
-      if (put === undefined) failed(PAGE_LINE.UNDO_FAILED);
+  const undo = (before: string, after: string) => {
+    undoable.withdraw();
+    return template.replace(before, after).then((put) => {
+      if (!("refused" in put)) return;
+      failed(
+        put.refused === REPLACE_REFUSAL.CHANGED ? PAGE_LINE.UNDO_CHANGED : PAGE_LINE.UNDO_FAILED,
+      );
     });
+  };
   const { busy, run } = useSettingWrite(() =>
-    template.replace(null).then((before): ActionResult => {
-      if (before === undefined) {
+    template.replace(null).then((put): ActionResult => {
+      if ("refused" in put) {
         failed(PAGE_LINE.RESET_FAILED);
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
       }
-      toast(undoToast(PAGE_LINE.RESET_DONE, () => void undo(before)));
+      const subject = crypto.randomUUID();
+      undoable.stand(subject);
+      toast({
+        ...undoToast(PAGE_LINE.RESET_DONE, () => void undo(put.before, put.after)),
+        subject,
+      });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     }),
   );
@@ -575,9 +644,10 @@ export function PlanTemplatePage({
 }): React.JSX.Element {
   const signedIn = account !== undefined;
   const { act } = useAct();
-  const template = useTemplate(signedIn, act);
+  const undoable = useUndoStanding();
+  const template = useTemplate(signedIn, act, undoable.withdraw);
   const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
-  const reset = useTemplateReset(template);
+  const reset = useTemplateReset(template, undoable);
   const phone = lead !== undefined;
   const note = <TemplateNote keep={keep} />;
   return (
