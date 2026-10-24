@@ -168,16 +168,16 @@ test("what was written is there again when Edit opens the line after an Escape, 
   assert.equal(composerEditor(sent.container).textContent, "Also email the inviter.");
 });
 
-test("a file taken off before an Escape stays off when Edit opens the line again", async () => {
-  const registry = AtomRegistry.make();
-  const first = await opened(LINE, undefined, "Also email the inviter.", registry);
+test("a file taken off before an Escape stays off when Edit opens the line again, after a relaunch too", async () => {
+  const first = await opened(LINE, undefined, "Also email the inviter.");
   const remove = first.button(`Remove invite-expired.png`);
   assert.ok(remove !== undefined, "the file's chip offers its removal");
   act(() => remove.click());
   pressInComposer(first.container, "Escape");
   first.close();
 
-  const again = await opened(LINE, undefined, "Also email the inviter.", registry);
+  // A window of its own, as a relaunch opens, which finds the draft's words and none of its files.
+  const again = await opened(LINE, undefined, "Also email the inviter.", AtomRegistry.make());
   pressInComposer(again.container, "Enter");
   await settle();
   assert.deepEqual(again.ended, [{ words: "Also email the inviter.", files: [] }]);
@@ -198,6 +198,34 @@ const KEPT: CodingAgentMessage = {
     },
   ],
 };
+
+test("a picture that lands after words were written goes with them when Edit opens the line again", async () => {
+  let land: (() => void) | undefined;
+  const door: AgentPictureDoor = {
+    owner: `owner-${Math.random()}`,
+    read: () =>
+      new Promise((resolve) => {
+        land = () => resolve({ contentType: "image/png", base64: PIXEL });
+      }),
+  };
+  const registry = AtomRegistry.make();
+  const first = await opened(KEPT, door, "And this one.", registry);
+  typeInComposer(first.container, " Look closely.");
+  await act(async () => land?.());
+  await settle();
+  pressInComposer(first.container, "Escape");
+  first.close();
+
+  const again = await opened(KEPT, door, "And this one.", registry);
+  pressInComposer(again.container, "Enter");
+  await settle();
+  assert.deepEqual(again.ended, [
+    {
+      words: "And this one. Look closely.",
+      files: [{ name: "kept.png", mediaType: "image/png", data: PIXEL }],
+    },
+  ]);
+});
 
 test("a picture still being read holds Send, and joins the box once it lands", async () => {
   let land: (() => void) | undefined;

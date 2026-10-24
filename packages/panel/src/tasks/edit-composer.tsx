@@ -22,7 +22,7 @@ import {
   useDraftWriter,
 } from "../composer-drafts.js";
 import { AgentComposer } from "./agent-composer.js";
-import { LinePicturesWatch, useLineAttachments } from "./agent-pictures.js";
+import { type LineAttachment, LinePicturesWatch, useLineAttachments } from "./agent-pictures.js";
 import type { PublishedDoors } from "./agent-published.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -42,7 +42,9 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
  * Its draft is its own, kept by agent and line (`composer-drafts.ts`), so
  * the foot's box keeps whatever it held, and a Cancel, an Escape, or a
  * switch away keeps what was written, which Edit opens on again; Send lets
- * it go, and so does writing the line back as it was. Where messages follow the line, Send asks first, as Revert to here
+ * it go, and so does writing the line back as it was. The line's files
+ * join the box again as it opens on a draft, but for those it took off,
+ * since a relaunch keeps a draft's words alone. Where messages follow the line, Send asks first, as Revert to here
  * does, since the send drops them and what it drops is gone.
  */
 
@@ -72,6 +74,19 @@ export interface EditComposerDoors {
 
 const noop = () => undefined;
 
+/** The box's files with the line's joined after them, but for those already there and those it took off. */
+function joined(
+  files: readonly CodingAgentAttachment[],
+  line: readonly LineAttachment[],
+  dropped: readonly string[],
+): readonly CodingAgentAttachment[] {
+  const joining = line
+    .filter((each) => !dropped.includes(each.key))
+    .filter((each) => !files.some((file) => Equal.equals(file, each.attachment)))
+    .map((each) => each.attachment);
+  return [...files, ...joining];
+}
+
 export function EditComposer({
   message,
   words,
@@ -87,37 +102,61 @@ export function EditComposer({
   const place: EditPlace = { kind: DRAFT_PLACE.EDIT, agentId: edit.agentId, messageId: message.id };
   const kept = useDraft(place).draft;
   const writer = useDraftWriter();
-  // Note that a draft kept from an earlier Edit is what the box opens on, its files and all, so
-  // none of the line's files joins it again, even one whose picture lands after.
+  // Note that a draft kept from an earlier Edit is what the box opens on, and the line's files
+  // join it but for those it took off, since a relaunch keeps a draft's words and not its files.
   const [resumed] = useState(() => kept !== EMPTY_DRAFT);
   const [draft, setDraft] = useState(() => (resumed ? kept.text : words));
   const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>(() =>
-    resumed ? kept.attachments : line.attachments.map((each) => each.attachment),
+    resumed
+      ? joined(kept.attachments, line.attachments, kept.dropped ?? [])
+      : line.attachments.map((each) => each.attachment),
   );
   // What the box holds as last drawn, which a change landing before the next draw moves on from.
-  const held = useRef({ text: draft, attachments });
-  held.current = { text: draft, attachments };
+  const held = useRef({ text: draft, attachments, dropped: resumed ? (kept.dropped ?? []) : [] });
+  held.current = { ...held.current, text: draft, attachments };
   // Note that each of the line's files joins the box once, as it opens or as its picture lands,
   // so one taken off stays off when a read lands after.
   const offered = useRef(new Set(line.attachments.map((each) => each.key)));
-  useEffect(() => {
-    if (resumed) return;
-    const landed = line.attachments.filter((each) => !offered.current.has(each.key));
-    if (landed.length === 0) return;
-    for (const each of landed) offered.current.add(each.key);
-    setAttachments((held) => [...held, ...landed.map((each) => each.attachment)]);
-  }, [resumed, line.attachments]);
-  // What the developer changes in the box is kept as they change it, and let go where the box holds the line as it stands.
+  // What the box holds is kept, the files of the line it took off named beside it, and let go where it holds the line as it stands.
   const keep = (text: string, files: readonly CodingAgentAttachment[]) => {
-    held.current = { text, attachments: files };
+    const dropped = [
+      ...held.current.dropped.filter((key) => !line.attachments.some((each) => each.key === key)),
+      ...line.attachments
+        .filter(
+          (each) =>
+            offered.current.has(each.key) &&
+            !files.some((file) => Equal.equals(file, each.attachment)),
+        )
+        .map((each) => each.key),
+    ];
+    held.current = { text, attachments: files, dropped };
     const asLine =
       text === words &&
+      dropped.length === 0 &&
       Equal.equals(
         files,
         line.attachments.map((each) => each.attachment),
       );
-    writer.update(place, (was) => (asLine ? EMPTY_DRAFT : { ...was, text, attachments: files }));
+    writer.update(place, (was) =>
+      asLine
+        ? EMPTY_DRAFT
+        : {
+            ...was,
+            text,
+            attachments: files,
+            dropped: dropped.length === 0 ? undefined : dropped,
+          },
+    );
   };
+  // A picture that lands joins the box and its draft, as one there as it opened did.
+  useEffect(() => {
+    const landed = line.attachments.filter((each) => !offered.current.has(each.key));
+    if (landed.length === 0) return;
+    for (const each of landed) offered.current.add(each.key);
+    const files = joined(held.current.attachments, landed, held.current.dropped);
+    setAttachments(files);
+    keep(held.current.text, files);
+  });
   const send = () => {
     writer.update(place, () => EMPTY_DRAFT);
     edit.onSend(draft, attachments);

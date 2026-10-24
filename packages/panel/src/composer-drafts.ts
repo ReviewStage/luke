@@ -203,6 +203,7 @@ const storedDrafts = Schema.fromJsonString(
       press: Schema.optionalKey(Schema.Literals(Object.values(INBOX_REPLY))),
       title: Schema.optionalKey(Schema.String),
       to: Schema.optionalKey(Schema.String),
+      dropped: Schema.optionalKey(Schema.Array(Schema.String)),
     }),
   ),
 );
@@ -223,6 +224,8 @@ export interface Draft {
   readonly title?: string | undefined;
   /** The agent the draft goes to, by its id; kept only beside something written, since a pick alone is no draft. */
   readonly to?: string | undefined;
+  /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
+  readonly dropped?: readonly string[] | undefined;
 }
 
 /** One place's draft. */
@@ -262,7 +265,8 @@ function stored(draft: Draft): boolean {
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
     draft.press !== undefined ||
-    (draft.title ?? "") !== ""
+    (draft.title ?? "") !== "" ||
+    (draft.dropped ?? []).length > 0
   );
 }
 
@@ -280,7 +284,7 @@ function readStored(): readonly StoredDraft[] {
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .flatMap(({ place, text, choices = [], values = [], steps, press, title, to }) =>
+    .flatMap(({ place, text, choices = [], values = [], steps, press, title, to, dropped }) =>
       isDraftPlace(place)
         ? [
             {
@@ -293,6 +297,7 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
               ...(press === undefined ? undefined : { press }),
               ...(title === undefined ? undefined : { title }),
               ...(to === undefined ? undefined : { to }),
+              ...(dropped === undefined ? undefined : { dropped }),
             },
           ]
         : [],
@@ -311,7 +316,8 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     Equal.equals(entry.steps ?? [], kept.steps ?? []) &&
     entry.press === kept.press &&
     (entry.title ?? "") === (kept.title ?? "") &&
-    entry.to === kept.to
+    entry.to === kept.to &&
+    Equal.equals(entry.dropped ?? [], kept.dropped ?? [])
   );
 }
 
@@ -330,7 +336,7 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
   );
   const written = kept
     .filter((draft) => !standing.some((entry) => storedAs(owner, draft, entry)))
-    .map(({ place, text, choices, values, steps = [], press, title = "", to }) => ({
+    .map(({ place, text, choices, values, steps = [], press, title = "", to, dropped = [] }) => ({
       accountId: owner,
       place,
       text,
@@ -340,6 +346,7 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
       ...(press === undefined ? undefined : { press }),
       ...(title === "" ? undefined : { title }),
       ...(to === undefined ? undefined : { to }),
+      ...(dropped.length === 0 ? undefined : { dropped }),
     }));
   const entries = [...standing, ...written].slice(-MAX_KEPT);
   writeKept(STORAGE_KEY, storedDrafts, entries);
