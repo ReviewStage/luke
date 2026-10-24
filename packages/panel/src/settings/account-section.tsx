@@ -10,7 +10,6 @@ import {
   Button,
   CONFIRM_LOSS,
   ConfirmDialog,
-  DIALOG_TONE,
   FailureNote,
   OneLine,
   PROVIDER_MARK_SIZE,
@@ -189,7 +188,6 @@ export function AccountSection({
           verb: VERB.SIGN_OUT,
           running: "Signing out",
           loss: CONFIRM_LOSS.REVERSIBLE,
-          tone: DIALOG_TONE.PRIMARY,
         }}
       />
       <ConfirmDialog

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { FEEDBACK_KIND } from "@luke/features/feedback";
-import { ConfirmDialog, useConfirmDialog } from "@luke/ui";
+import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
@@ -64,7 +64,13 @@ function ConfirmOwner({ shown }: OwnerProps): ReactElement {
     confirm.ask,
     createElement(ConfirmDialog, {
       confirm,
-      question: { title: "Delete plan?", body: "It goes for good.", verb: "Delete", running: "" },
+      question: {
+        title: "Delete plan?",
+        body: "It goes for good.",
+        verb: "Delete",
+        running: "",
+        loss: CONFIRM_LOSS.IRREVERSIBLE,
+      },
     }),
   );
 }

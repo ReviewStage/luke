@@ -61,21 +61,14 @@ const LOSS_TONE = {
   [CONFIRM_LOSS.REVERSIBLE]: DIALOG_TONE.PRIMARY,
 } as const satisfies Record<ConfirmLoss, DialogTone>;
 
-/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs; the act is red unless its loss, or failing that its tone, says otherwise. */
+/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs. */
 export interface DialogQuestion {
   title: string;
   body?: string;
   verb: string;
   running: string;
-  /** What the act costs, which decides its colour over `tone`. */
-  loss?: ConfirmLoss;
-  tone?: DialogTone;
-}
-
-/** The act's tone: its loss's where it states one, else its own, else red. */
-function actTone({ loss, tone }: DialogQuestion): DialogTone {
-  if (loss !== undefined) return LOSS_TONE[loss];
-  return tone ?? DIALOG_TONE.DANGER;
+  /** What the act costs, which decides its colour: no question asks without saying it. */
+  loss: ConfirmLoss;
 }
 
 /** One confirming act as a dialog holds it: the confirm, and whether its subject and surface still stand. */
@@ -186,7 +179,7 @@ function ConfirmCard({
           cancelRef={cancel}
           act={{
             verb: question.verb,
-            tone: actTone(question),
+            tone: LOSS_TONE[question.loss],
             onPress: () => confirm.run(),
             running: question.running,
             busy: acting,

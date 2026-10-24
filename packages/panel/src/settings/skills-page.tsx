@@ -16,7 +16,6 @@ import {
   CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_SIZE,
-  DIALOG_TONE,
   Dialog,
   DialogActions,
   DocumentIcon,
@@ -380,7 +379,6 @@ function SkillRowView({
         question={{
           ...shareQuestion(skill.name, workspace),
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-          tone: DIALOG_TONE.PRIMARY,
         }}
       />
       {viewing ? <SkillFileDialog skill={skill} onClose={() => setViewing(false)} /> : null}

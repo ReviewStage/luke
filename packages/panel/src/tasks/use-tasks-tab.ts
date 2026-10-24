@@ -51,7 +51,6 @@ import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   CONFIRM_LOSS,
-  DIALOG_TONE,
   type DialogConfirm,
   type DialogQuestion,
   STATUS_TONE,
@@ -1178,7 +1177,6 @@ function secondCallQuestion(taskName: string): DialogQuestion {
     verb: "Start new call",
     running: "Starting",
     loss: CONFIRM_LOSS.REVERSIBLE,
-    tone: DIALOG_TONE.PRIMARY,
   };
 }
 
