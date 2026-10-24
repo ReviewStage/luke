@@ -46,6 +46,7 @@ import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
+import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
@@ -672,13 +673,14 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
  * stands, with the way back at their head and the call card at their foot,
  * as the sidebar holds them, and the version chosen beside them. `onExit`
  * leaves for wherever it was opened from, and `onRestored` for what a
- * restore landed on. A narrow room shows the list or the version, one at a
- * time (`hiddenColumns`): a version or a section chosen stands alone the
- * whole width, under a way back to the list. Each is headed as a phone heads
- * every page (`phone-head.tsx`): the list by its way out, or from a
- * revision's sections the way back to every version, and its title, with no
- * Back and Forward; a version by the way back, when it was saved, and its
- * restore in a ⋯.
+ * restore landed on. A narrow room, or a history narrower than the split's
+ * line by its own width (`column-split.ts`), shows the list or the version,
+ * one at a time (`hiddenColumns`): a version or a section chosen stands alone
+ * the whole width, under a way back to the list, headed as a phone heads
+ * every page (`phone-head.tsx`), by the way back, when it was saved, and its
+ * restore in a ⋯. A narrow room heads the list so too: by its way out, or
+ * from a revision's sections the way back to every version, and its title,
+ * with no Back and Forward.
  */
 export function DesktopVersionHistory({
   sidebar,
@@ -764,13 +766,14 @@ export function DesktopVersionHistory({
   const sectionKeys = goThroughRow(sectionRows, { back: closeSections });
   useSectionsFocused(opened?.seq, unit, sectionRows);
   useOpenedRowShown(versions.selected, rows, log);
-  const hidden = hiddenColumns(room, versions.listed);
-  const screen = useNarrowFocus(room, versions.listed);
+  const split = useScreenSplit(room);
+  const hidden = hiddenColumns(split.columns, versions.listed);
+  const screen = useScreenRef(useNarrowFocus(split.columns, versions.listed), split.ref);
   const narrow = room === SHELL_ROOM.NARROW;
   const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun);
 
   return (
-    <div ref={screen} className="desktop-version-history">
+    <div ref={screen} className="desktop-version-history" data-single={String(split.single)}>
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
         {narrow ? (
           // A phone's header: the way out, or from a revision's sections back to every version, and the title.
@@ -928,7 +931,7 @@ export function DesktopVersionHistory({
         </div>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
+        {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version" hidden={hidden.item}>
         <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>
@@ -937,7 +940,7 @@ export function DesktopVersionHistory({
             restore={restore}
             section={opened === undefined ? undefined : unit}
             lead={
-              room === SHELL_ROOM.NARROW ? (
+              split.single ? (
                 <BackButton
                   label={VERSION_LIST}
                   place={VERSION_LIST_PLACE}

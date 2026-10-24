@@ -1,14 +1,16 @@
 /**
- * column-split.ts -- whether a screen that lists things beside the one chosen, the Inbox or Chat, shows the two side by side or one at a time, by the room the screen itself has.
+ * column-split.ts -- whether a screen that lists things beside the one chosen, the Inbox, Chat, Settings, a version history, Admin, or an automation's setup and its runs, shows the two side by side or one at a time, by the room the screen itself has.
  *
  * The line is drawn by the screen's own width rather than the window's,
  * because the window's Inbox and Chat and a task's own Inbox tab stand in
- * columns of their own, beside a sidebar, a side panel, or neither. A screen
+ * columns of their own, beside a sidebar, a side panel, or neither, and a
+ * screen that takes the whole window is only as wide as the window. A screen
  * that measures nothing is not laid out, and keeps the two columns it starts
  * with.
  */
 
-import { useCallback, useState } from "react";
+import { type RefObject, useCallback, useState } from "react";
+import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 
 /**
  * The widths, in CSS pixels, between which a screen shows one column or
@@ -49,4 +51,42 @@ export function useColumnSplit(): ColumnSplit {
     return () => observer.disconnect();
   }, []);
   return { ref, single };
+}
+
+/** A screen's split as its room and its own width draw it: the ref to measure it by, whether it shows one column, and the room its columns stand in. */
+interface ScreenSplit {
+  readonly ref: (element: HTMLElement | null) => (() => void) | undefined;
+  readonly single: boolean;
+  /** Narrow where it shows one column, which `hiddenColumns` and `useNarrowFocus` read; the stage's own room still heads it. */
+  readonly columns: ShellRoom;
+}
+
+/**
+ * Whether a screen in a room shows one column: always in a narrow room, and
+ * in a wide one where the screen measures under the line, so a screen too
+ * narrow for both stands one at a time as a phone's does, though headed as
+ * the window heads it.
+ */
+export function useScreenSplit(room: ShellRoom): ScreenSplit {
+  const { ref, single: measured } = useColumnSplit();
+  const single = room === SHELL_ROOM.NARROW || measured === true;
+  return { ref, single, columns: single ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE };
+}
+
+/** One ref for a screen's root, which both the focus's hold on it (`useNarrowFocus`) and its split's measure take. */
+export function useScreenRef<Element extends HTMLElement>(
+  held: RefObject<Element | null>,
+  measure: ScreenSplit["ref"],
+): (element: Element | null) => () => void {
+  return useCallback(
+    (element: Element | null) => {
+      held.current = element;
+      const unmeasure = measure(element);
+      return () => {
+        held.current = null;
+        unmeasure?.();
+      };
+    },
+    [held, measure],
+  );
 }

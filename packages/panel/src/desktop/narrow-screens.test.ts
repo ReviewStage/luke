@@ -104,6 +104,12 @@ const WIDE = 1280;
 /** A phone's width. */
 const PHONE = 390;
 
+/** A stage wide enough for the window's panes side by side, though under the split's line for a screen that fills it, as a narrow Mac window or browser tab is. */
+const UNDER_SPLIT = 800;
+
+/** The screens that take the whole window, and so are as wide as the stage they fill. */
+const WHOLE_WINDOW_SCREENS = ["app-stage", "desktop-settings", "desktop-version-history"];
+
 /** A revision of the plan by the notetaker. */
 function line(seq: number) {
   return {
@@ -280,7 +286,8 @@ async function mount(width: number, window: React.JSX.Element): Promise<HTMLElem
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return DOMRect.fromRect({ width: this.classList.contains("app-stage") ? stageWidth : 0 });
+    const fills = WHOLE_WINDOW_SCREENS.some((name) => this.classList.contains(name));
+    return DOMRect.fromRect({ width: fills ? stageWidth : 0 });
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -368,6 +375,32 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
   assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
 });
 
+test("Settings on a stage wide enough for panes, but under the split's line by its own width, shows its list, then a page chosen alone under a way back, and splits again once wide", async () => {
+  const page = await mount(UNDER_SPLIT, createElement(SettingsWindow, { link: undefined }));
+  assert.equal(the(page, ".desktop-shell").dataset["room"], "wide", "the stage is no phone's");
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
+
+  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
+
+  press(the(page, SETTINGS_COLUMNS.page), "Settings");
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
+
+  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  resizeStage(WIDE);
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list", "page"]);
+  assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
+});
+
+test("Settings' page list is as wide as the sidebar kept, but never more than its share of the stage", async () => {
+  const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
+  assert.equal(
+    getComputedStyle(the(page, ".desktop-settings")).gridTemplateColumns,
+    "min(var(--sidebar-width), 35%) minmax(0, 1fr)",
+    "the list's column is held to the share the split's line leaves its least list",
+  );
+});
+
 test("a link to a Settings page on a narrow stage opens on that page, with the way back to the list", async () => {
   const page = await mount(
     PHONE,
@@ -442,6 +475,21 @@ test("a version history on a narrow stage opens on its versions, a version chose
   resizeStage(WIDE);
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list", "version"]);
   assert.equal(buttonSaying(the(page, HISTORY_COLUMNS.version), "Versions"), undefined);
+});
+
+test("a version history under the split's line by its own width, on a stage wide enough for panes, opens on its versions and stands a version chosen alone under a way back", async () => {
+  const page = await mount(UNDER_SPLIT, createElement(HistoryWindow, { returnTo: undefined }));
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
+
+  act(() => versionRow(page, 1).click());
+  await settle();
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
+
+  press(the(page, HISTORY_COLUMNS.version), "Versions");
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
+
+  resizeStage(WIDE);
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list", "version"]);
 });
 
 test("a link to a version on a narrow stage opens on that version, with the way back to the list", async () => {

@@ -10,12 +10,14 @@
  * sidebar and resizes it from its own edge, but never folds, since the
  * place has no other way to its sections.
  *
- * A narrow room shows the list or the view, one at a time
- * (`hiddenColumns`): the place opens on its list, a section chosen there
- * stands alone the whole width, and each is headed as a phone heads every
- * page (`phone-head.tsx`): the list by its way out and its name, with no
- * Back and Forward, and a view by one way back, to the list or to the
- * section a page stands under, its title, and its View options.
+ * A narrow room, or the place narrower than the split's line by its own
+ * width (`column-split.ts`), shows the list or the view, one at a time
+ * (`hiddenColumns`): the place opens on its list, and a section chosen there
+ * stands alone the whole width under a way back to the list. In a narrow
+ * room each is headed as a phone heads every page (`phone-head.tsx`): the
+ * list by its way out and its name, with no Back and Forward, and a view by
+ * one way back, to the list or to the section a page stands under, its
+ * title, and its View options.
  * A view's toolbar stands in the title bar's row, as a page's does beside
  * the plans' sidebar, rather than under a drag strip of its own, and ⌘F
  * finds in the view standing (`PageFind`). The views themselves are
@@ -48,6 +50,7 @@ import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
+import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -98,10 +101,10 @@ export interface DesktopAdminProps {
   readonly room: ShellRoom;
   readonly history: NavigationHistory;
   readonly view: AdminView;
-  /** Whether the list stands rather than the view, which only a narrow room draws apart. */
+  /** Whether the list stands rather than the view, which only one column draws apart. */
   readonly listed: boolean;
   readonly onOpen: (view: AdminView) => void;
-  /** Stands the list, from a view standing alone in a narrow room. */
+  /** Stands the list, from a view standing alone in one column. */
   readonly onList: () => void;
   /** Leaves the place for wherever it was opened from. */
   readonly onExit: () => void;
@@ -119,11 +122,12 @@ export function DesktopAdmin({
 }: DesktopAdminProps): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ADMIN, onExit);
   const edge = useSidebarEdge(sidebar);
-  const hidden = hiddenColumns(room, listed);
-  const screen = useNarrowFocus(room, listed);
+  const split = useScreenSplit(room);
+  const hidden = hiddenColumns(split.columns, listed);
+  const screen = useScreenRef(useNarrowFocus(split.columns, listed), split.ref);
   const current = adminSectionOf(view);
   return (
-    <div ref={screen} className="desktop-admin">
+    <div ref={screen} className="desktop-admin" data-single={String(split.single)}>
       <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
         {room === SHELL_ROOM.NARROW ? (
           // A phone's header: the way out alone, the history's buttons left out, and the place's name centred.
@@ -187,15 +191,15 @@ export function DesktopAdmin({
         </Fill>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        {room === SHELL_ROOM.WIDE ? <ResizeEdge edge={edge} /> : null}
+        {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
       <section className="admin-page" aria-label={ADMIN_TITLE} hidden={hidden.item}>
         {/* The view's own toolbar stands in the title bar's row, as a page's
             does beside the plans' sidebar, so no drag strip stands over it;
-            a narrow room makes it a phone's header, led by the way back to the list. */}
+            a narrow room makes it a phone's header, and one column leads it by the way back to the list. */}
         <AdminToolbarLead
           value={
-            room === SHELL_ROOM.NARROW ? (
+            split.single ? (
               <BackButton label={ADMIN_TITLE} place={ADMIN_PLACE_NAME} onBack={onList} />
             ) : undefined
           }

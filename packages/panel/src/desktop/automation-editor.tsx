@@ -171,6 +171,7 @@ import {
 } from "react";
 import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
@@ -2234,7 +2235,7 @@ function AutomationPageFrame({
   beside,
   children,
 }: {
-  screenRef?: RefObject<HTMLDivElement | null> | undefined;
+  screenRef?: Ref<HTMLDivElement> | undefined;
   layoutRef?: RefObject<HTMLDivElement | null> | undefined;
   /** Whether the setup's screen is hidden, as a narrow room hides it while its runs stand. */
   hidden?: boolean | undefined;
@@ -2419,12 +2420,13 @@ const EDITOR_SCREENS: NarrowColumns = {
  * this one stood. A deleted one is handed to `onDeleted`, which goes back
  * to the list.
  *
- * A narrow room, a phone's, has no room for the runs beside the setup, so
- * it stands the setup the whole width and the runs as a screen of their
+ * A narrow room, a phone's, or a page narrower than the split's line by its
+ * own width (`column-split.ts`), has no room for the runs beside the setup,
+ * so it stands the setup the whole width and the runs as a screen of their
  * own (`hiddenColumns`), reached by the toolbar's Runs and left by the way
- * back at their head, each a step of the window's history; the focus goes
- * with each swap (`useNarrowFocus`). The Runs panel's width and fold are
- * the wide room's alone.
+ * back at their head, each a step of the window's history in a narrow room;
+ * the focus goes with each swap (`useNarrowFocus`). The Runs panel's width
+ * and fold are the split page's alone.
  */
 export function AutomationEditor({
   automation,
@@ -2468,7 +2470,7 @@ export function AutomationEditor({
   leaveGuard: LeaveGuard;
   /** The room the panel's stage gives, narrow where the runs are a screen of their own. */
   room: ShellRoom;
-  /** Whether a narrow room stands the runs rather than the setup. */
+  /** Whether one column stands the runs rather than the setup. */
   runsShown: boolean;
   /** Stands the runs' screen, or the setup again, through the window's history. */
   onRuns: (shown: boolean) => void;
@@ -2511,16 +2513,18 @@ export function AutomationEditor({
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
   const narrow = room === SHELL_ROOM.NARROW;
-  // A narrow room's runs stand as a screen of their own over the setup, and the setup the whole width.
-  const runsAlone = narrow && runsShown;
-  const hidden = hiddenColumns(room, !runsAlone);
-  const screen = useNarrowFocus(room, !runsAlone, EDITOR_SCREENS);
+  // One column's runs stand as a screen of their own over the setup, and the setup the whole width.
+  const split = useScreenSplit(room);
+  const { single } = split;
+  const runsAlone = single && runsShown;
+  const hidden = hiddenColumns(split.columns, !runsAlone);
+  const screen = useScreenRef(useNarrowFocus(split.columns, !runsAlone, EDITOR_SCREENS), split.ref);
   const runsScreen = useId();
   // Escape goes back to the list, asking first, as every way out does, where something written would be lost;
-  // from a narrow room's runs, it goes back to the setup first.
+  // from the runs standing alone, it goes back to the setup first.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, runsAlone ? () => onRuns(false) : onBack);
   const runsPanel = useRunsPanel();
-  const toggleRuns = narrow ? () => onRuns(!runsShown) : runsPanel.onToggle;
+  const toggleRuns = single ? () => onRuns(!runsShown) : runsPanel.onToggle;
   // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
   const editorLayout = useRef<HTMLDivElement>(null);
   // The name's Escape lets go of the caret and keeps the press, as every field's here does.
@@ -2647,7 +2651,7 @@ export function AutomationEditor({
           onRunNow={runNow}
           runs={{
             shown: runsPanel.open,
-            screen: narrow ? runsScreen : undefined,
+            screen: single ? runsScreen : undefined,
             onPress: toggleRuns,
           }}
           narrow={narrow}
@@ -2687,12 +2691,12 @@ export function AutomationEditor({
       }
       beside={
         <>
-          {narrow ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
-          <PaneGlide root={editorLayout} layout={{ runsOpen: !narrow && runsPanel.open }} />
+          {single ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
+          <PaneGlide root={editorLayout} layout={{ runsOpen: !single && runsPanel.open }} />
         </>
       }
     >
-      {narrow ? (
+      {single ? (
         <AutomationRunsScreen
           id={runsScreen}
           name={automation === undefined ? NEW_AUTOMATION : automation.name}
