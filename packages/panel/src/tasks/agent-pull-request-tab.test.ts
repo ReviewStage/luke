@@ -4781,6 +4781,97 @@ test("several comments stand open at once, each under its own lines with its own
   );
 });
 
+test("the words of a line comment outlast the tab: a window drawn again finds them where the same lines are picked, and Add single comment lets them go", async () => {
+  await drawCommentable();
+  const added = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  };
+  const removed = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.DELETIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.DELETIONS,
+  };
+  writeLineComment(await pickLines(added), "Why twice?");
+  writeLineComment(await pickLines(removed), "Gone?");
+
+  // Closing the tab and reading the window again, as a relaunch does.
+  act(() => root?.unmount());
+  root = undefined;
+  await drawCommentable();
+
+  assert.equal(commentDrawn(), false, "no comment stands open before the lines are picked");
+  assert.equal(boxWords(await pickLines(added)), "Why twice?", "the words come back on the lines");
+  assert.equal(boxWords(await pickLines(removed)), "Gone?", "and on the side they were written on");
+  const other = await pickLines({
+    start: 8,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 8,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+  assert.equal(boxWords(other), "", "other lines meet none of them");
+
+  const [first] = commentNotes();
+  act(() =>
+    commentOffer(first?.element ?? assert.fail("a comment stands"), "Add single comment").click(),
+  );
+  await settle();
+  act(() => root?.unmount());
+  root = undefined;
+  await drawCommentable();
+
+  assert.equal(boxWords(await pickLines(added)), "", "the words GitHub took are let go");
+  assert.equal(boxWords(await pickLines(removed)), "Gone?", "the others stay");
+});
+
+test("the words of a line comment are kept apart for each pull request a tab shows: the agent's own and one named by its number do not meet each other's", async () => {
+  const lines = {
+    start: 13,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  };
+  await drawCommentable();
+  writeLineComment(await pickLines(lines), "For the agent's own");
+  act(() => root?.unmount());
+  root = undefined;
+
+  const control = {
+    ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
+      Promise.resolve({
+        pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files: [INVITE_FILE] },
+      }),
+    ),
+    numberedPullRequests: new Map([
+      [AGENT.id, new Map([[41, published(PULL_REQUEST_STATE.OPEN)]])],
+    ]),
+  };
+  await drawn(
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      number: 41,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view: PULL_REQUEST_VIEW.FILES,
+      onView: () => undefined,
+    }),
+  );
+  await settle();
+  const numbered = await pickLines(lines);
+  assert.equal(boxWords(numbered), "", "the numbered pull request meets none of the agent's own");
+  writeLineComment(numbered, "For #41");
+  act(() => root?.unmount());
+  root = undefined;
+
+  await drawCommentable();
+  assert.equal(boxWords(await pickLines(lines)), "For the agent's own");
+});
+
 test("a comment opened on lines takes the keyboard once the list stands its note in the window", async () => {
   await drawCommentable();
   const comment = await pickLines({
