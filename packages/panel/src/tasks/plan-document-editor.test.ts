@@ -727,6 +727,28 @@ test("a press anywhere on an empty plan's room opens its text with the caret in 
   assert.ok(body.contains(container.querySelector(".plan-document-editor")));
 });
 
+test("an empty plan at rest says to write it, a button whose press opens its text with the caret in it", () => {
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
+  const line = [...container.querySelectorAll("button")].find(
+    (each) => each.textContent === "Write the plan",
+  );
+  assert.ok(line, "the empty plan's line");
+
+  act(() => line.focus());
+  assert.equal(document.activeElement, line, "the keyboard reaches it");
+  act(() => line.click());
+
+  assert.equal(open().markdown, "");
+  assert.deepEqual(open().placement, PLACEMENT_END);
+  assert.ok(
+    ![...container.querySelectorAll("button")].some(
+      (each) => each.textContent === "Write the plan",
+    ),
+    "the line goes once the editor stands in its place",
+  );
+});
+
 test("a press on a plan's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
   layTextOut();
   const under = mount();
