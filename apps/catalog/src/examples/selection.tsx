@@ -1,0 +1,74 @@
+import { List, ListRow, SelectionBar } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
+import { useState } from "react";
+import type { Example } from "../examples";
+import { CatalogSection } from "../section";
+
+/**
+ * selection.tsx -- a list whose rows are chosen at once: ⌘-click one in or
+ * out, ⇧-click a run, ⇧↑↓ grow the run, ⌘A every row, Esc none, a plain
+ * click still opening its row; one row unavailable, which nothing chooses;
+ * and the bar over it while any is chosen, its count, its acts, and Clear.
+ */
+
+const TASKS = [
+  { id: "sign-in", title: "Fix the sign-in loop", status: "Working" },
+  { id: "release", title: "Ship the spring release", status: "Ready" },
+  { id: "inbox", title: "Move the Inbox to one list", status: "Ready" },
+  { id: "workers", title: "Name the workers", status: "Done" },
+  { id: "deleting", title: "Old onboarding notes", status: "Deleting" },
+  { id: "folds", title: "Remember the chat rail's folds", status: "Ready" },
+] as const;
+
+const UNAVAILABLE = "deleting";
+
+const SECTIONS = ["Today", "This week", "Later"] as const;
+
+function ChoosingTasks(): React.JSX.Element {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set(["release", "inbox"]));
+  const [open, setOpen] = useState<string | undefined>(undefined);
+  const clear = () => setSelected(new Set());
+  return (
+    <div className="catalog-column">
+      <SelectionBar
+        count={selected.size}
+        onClear={clear}
+        acts={[
+          { label: "Mark done", icon: <GLYPH.DONE />, onAct: clear },
+          {
+            label: "Move to section",
+            icon: <GLYPH.MOVE />,
+            menu: [SECTIONS.map((section) => ({ label: section, onSelect: clear }))],
+          },
+        ]}
+      />
+      <List label="Tasks" selection={{ selected, onChange: setSelected }}>
+        {TASKS.map((task) => (
+          <ListRow
+            key={task.id}
+            selectKey={task.id}
+            leading={<GLYPH.TASK />}
+            title={open === task.id ? `${task.title} (open)` : task.title}
+            meta={task.status}
+            disabled={task.id === UNAVAILABLE}
+            onPress={() => setOpen(task.id)}
+          />
+        ))}
+      </List>
+    </div>
+  );
+}
+
+function Selection(): React.JSX.Element {
+  return (
+    <CatalogSection id="selection-tasks" title="Rows chosen with ⌘ and ⇧, and the bar over them">
+      <ChoosingTasks />
+    </CatalogSection>
+  );
+}
+
+export const SELECTION_EXAMPLE: Example = {
+  id: "selection",
+  title: "Selection",
+  Render: Selection,
+};
