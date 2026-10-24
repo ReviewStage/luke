@@ -6,11 +6,12 @@ import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillFailedView,
 } from "@luke/features/installed-skill-view";
-import { INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import { formatBytes } from "@luke/features/number-format";
 import { readingWords } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { SETTING_KEEP, settingKeepWords } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -105,6 +106,14 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * drawn; each GitHub skill the account may change is then checked for an
  * update, once.
  */
+
+/**
+ * The sentence the workspace group's rows end in: the page's head says the
+ * account keeps what the page holds, and the workspace's skills are the
+ * exception, shared with every member. A workspace is no device, so no
+ * capability changes its words.
+ */
+const WORKSPACE_KEEP_LINE = `${settingKeepWords(SETTING_KEEP.WORKSPACE, [])}.`;
 
 /** An installed skill's row while the skills are read: its book, its words over its source, its switch, and its ⋯. */
 const SKILL_ROW_SKELETON: SettingsRowSkeletonShape = {
@@ -366,7 +375,10 @@ function SkillRowView({
                 </SettingsRowMark>
               ),
               label: skill.name,
-              description: `${skill.description} · ${row.line}`,
+              description:
+                skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE
+                  ? `${skill.description} · ${row.line}. ${WORKSPACE_KEEP_LINE}`
+                  : `${skill.description} · ${row.line}`,
               error,
               landed,
               control: <SkillSourceBadge source={row.source} />,
@@ -502,11 +514,11 @@ function ShownSkills({
 
   const groups = skills === undefined ? undefined : skillGroups(skills, readerId, members);
   // A group still being read stands its placeholder row in the card the rows will.
-  const rows = (shown: readonly SkillRow[] | undefined) =>
+  const rows = (shown: readonly SkillRow[] | undefined, none: string = SKILLS_LINE.NONE) =>
     shown === undefined ? (
       <SettingsRowsSkeleton label={readingWords("your skills")} rows={SKILL_GROUP_SKELETON.rows} />
     ) : shown.length === 0 ? (
-      <SettingsLine>{SKILLS_LINE.NONE}</SettingsLine>
+      <SettingsLine>{none}</SettingsLine>
     ) : (
       shown.map((row) => (
         <SkillRowView
@@ -546,7 +558,7 @@ function ShownSkills({
         <>
           {workspace.personal === true ? null : (
             <SettingsSection title={workspaceGroupTitle(workspace)}>
-              {rows(groups?.workspace)}
+              {rows(groups?.workspace, `${SKILLS_LINE.NONE} ${WORKSPACE_KEEP_LINE}`)}
             </SettingsSection>
           )}
           <SettingsSection title={SKILLS_LINE.PERSONAL}>{rows(groups?.personal)}</SettingsSection>
