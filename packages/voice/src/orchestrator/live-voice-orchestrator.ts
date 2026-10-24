@@ -1,6 +1,7 @@
 import { VOICE_FAILURE, type VoiceFailure } from "@luke/features/words";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
 import {
+  LIVE_CLOSE_REASON,
   LIVE_STATUS,
   type LiveStatus,
   liveExchangeActive,
@@ -461,6 +462,11 @@ export class LiveVoiceOrchestrator {
           // finishes its own hang-up behind.
           this.#releasePress();
           if (this.#call) {
+            // Note that a connection the host lost, every try to get it back
+            // spent, is said as dropped, because nobody asked for this end.
+            if (change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST) {
+              this.#strip.showError(VOICE_FAILURE.CALL_DROPPED);
+            }
             this.#status = LIVE_STATUS.IDLE;
             this.#speakers = SILENT;
             this.#rows = [];

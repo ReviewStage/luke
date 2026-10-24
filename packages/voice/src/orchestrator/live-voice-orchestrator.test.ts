@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { VOICE_FAILURE, type VoiceFailure } from "@luke/features/words";
-import type { VoiceLiveSessionChanged } from "@luke/gateway";
-import { LIVE_STATUS, type LiveStatus } from "@luke/live";
+import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
+import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
 import { Context, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
@@ -492,5 +492,43 @@ it.effect(
       yield* TestClock.adjust(Duration.millis(200));
       yield* Effect.yieldNow;
       assert.equal(error(), undefined);
+    }),
+);
+
+it.effect(
+  "a call whose connection the host lost, its reconnects run out, says it dropped by its key, and a close the host asked for says nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), { startImmediately: true });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      assert.ok(call.sessionId);
+      yield* f.obey({
+        sessionId: call.sessionId,
+        phase: LIVE_SESSION_PHASE.CLOSED,
+        reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+      });
+      yield* Effect.yieldNow;
+      assert.equal(f.views.at(-1)?.voiceError, VOICE_FAILURE.CALL_DROPPED);
+      assert.equal(f.views.at(-1)?.call, undefined);
+
+      const g = fixture();
+      const again = yield* Effect.forkChild(g.talkTo(INVITES_AGENT), { startImmediately: true });
+      const asked = g.latest();
+      assert.ok(asked);
+      asked.started();
+      yield* Fiber.join(again);
+      assert.ok(asked.sessionId);
+      yield* g.obey({
+        sessionId: asked.sessionId,
+        phase: LIVE_SESSION_PHASE.CLOSED,
+        reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+      });
+      yield* Effect.yieldNow;
+      assert.equal(g.views.at(-1)?.call, undefined);
+      assert.equal(g.views.at(-1)?.voiceError, undefined);
     }),
 );

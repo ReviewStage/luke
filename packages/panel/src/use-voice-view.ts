@@ -63,6 +63,22 @@ const voiceAvatarAtom: Atom.Atom<AvatarState> = Atom.map(
   (voice) => voice?.avatar ?? AVATAR_OFF,
 );
 
+/** Whether the voice window was given up on for this run, which redraws its reader only as it turns. */
+const voiceLostAtom: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.unavailable === true,
+);
+
+/** Whether the voice window was given up on for this run, so no call can run until Luke is reopened. */
+export function useVoiceLost(): boolean {
+  return useAppSlice(voiceLostAtom);
+}
+
+/** The same, read as a press lands. */
+export function voiceLostNow(): boolean {
+  return appStateNow()?.voice?.unavailable === true;
+}
+
 /** Whether the microphone is granted, which redraws its reader only as it turns. */
 const microphoneGrantedAtom: Atom.Atom<boolean> = Atom.map(
   APP_SLICE.AUDIO,

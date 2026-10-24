@@ -5,6 +5,7 @@ export {
   AppStateStore,
   initialAppState,
   publishAppStateChanges,
+  voiceWindowGaveUp,
   voiceWindowGone,
   windowAppState,
 } from "./app-state-store.js";

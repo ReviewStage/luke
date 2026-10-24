@@ -23,6 +23,7 @@ import {
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/tasks-view";
+import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
@@ -768,7 +769,7 @@ const STATUS_WORD = {
   [LIVE_STATUS.LISTENING]: "Listening",
   [LIVE_STATUS.SPEAKING]: "Luke speaking",
   [LIVE_STATUS.CLOSING]: "Closing",
-  [LIVE_STATUS.FAILED]: undefined,
+  [LIVE_STATUS.FAILED]: "Call failed",
 } as const satisfies Record<LiveStatus, string | undefined>;
 
 /** The voice's word for each of its waits the service names, in place of the call's own. */
@@ -886,7 +887,9 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * A call runs on the account's own OpenAI key, so an account known to have
  * none is sent to save one before anything else, even the microphone, which
  * is worth asking for only once a call can run; a call of the agent's own
- * still standing keeps its mute.
+ * still standing keeps its mute. A voice window given up on runs no call for
+ * the rest of the run, so the button says that, and how to get voice back,
+ * in place of a press that would reach nothing.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
@@ -901,9 +904,15 @@ export function microphoneButton(input: {
   voiceStatus: LiveStatus;
   /** Whether the account is known to have no OpenAI API key; unknown is not missing. */
   openAiKeyMissing?: boolean;
+  /** Whether the voice window was given up on for this run, so no call can run until Luke is reopened. */
+  voiceLost?: boolean;
 }): MicrophoneButton {
   if (!input.voiceAvailable) {
     return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE, muted: false };
+  }
+  if (input.voiceLost === true) {
+    const { words } = VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST];
+    return { press: MICROPHONE_PRESS.NONE, label: words, muted: false };
   }
   const ownCall = input.call?.agentId === input.agentId;
   const ownCallStands = ownCall && (input.listening || CALL_STANDING.has(input.voiceStatus));

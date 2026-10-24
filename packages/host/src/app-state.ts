@@ -95,6 +95,14 @@ interface AppVoiceSlice {
    * the voice window's, so a replaced voice window leaves it standing.
    */
   avatar: AvatarState;
+  /**
+   * Set once the voice window has been given up on for this run, after it
+   * failed to load again and again: no call can run until Luke is reopened,
+   * so where voice is offered says so rather than offering a press that
+   * reaches nothing. Main's own fact, never the window's, and absent
+   * otherwise.
+   */
+  unavailable?: true;
 }
 
 /**
