@@ -36,11 +36,12 @@ import {
   type FoldingButtonHint,
   FormField,
   matchingRows,
-  PageToolbar,
   POPOVER_ALIGN,
   Spinner,
   TEXT_FIELD_SIZE,
   TextField,
+  TOOLBAR_INSET,
+  Toolbar,
   Tooltip,
 } from "@luke/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -440,13 +441,14 @@ function ComposeCard({
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
-      <PageToolbar
+      <Toolbar
+        start={TOOLBAR_INSET.COLUMN}
         lead={
           onBack === undefined ? null : (
             <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
           )
         }
-        heading={<h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>}
+        title={NEW_THREAD}
         actions={
           <Button variant={BUTTON_VARIANT.QUIET} onClick={discard} disabled={sending}>
             {DISCARD}
