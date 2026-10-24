@@ -56,7 +56,7 @@ export const PANEL_SPAN_ATTRIBUTE = {
   CACHE_HIT: "transcript.cache_hit",
   /** The size of the plan the task opened on, in characters. */
   PLAN_CHARS: "task.plan_chars",
-  /** How many tasks of the chosen workspace the sidebar listed as its first list read answered. */
+  /** How many tasks, of every workspace, the sidebar's first list read answered. */
   TASK_COUNT: "window.task_count",
   /** How long a keystroke waited before its handlers ran, in milliseconds. */
   INPUT_DELAY: "keystroke.input_delay_ms",
@@ -211,7 +211,9 @@ export function leaveWindowSpan(name: WindowSpanName): void {
 /**
  * Ends one of the window's spans once `root` is first drawn into, which is
  * the commit of the first surface rendered there: a root draws into its
- * element only as it commits.
+ * element only as it commits. Note that the draw is heard just after the
+ * commit, so a span left as the commit runs, a surface that failed and drew
+ * its fallback, is never recorded.
  */
 export function endWindowSpanOnFirstDraw(root: Element, name: WindowSpanName): void {
   const drawn = new MutationObserver(() => {

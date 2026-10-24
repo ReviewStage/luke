@@ -1558,14 +1558,15 @@ function NewTaskButton({
 
 /**
  * Times the window's first usable screen: its start to the sidebar's first
- * task list read answered, saying how many tasks it listed. A window whose
+ * task list read answered, saying how many tasks the read answered, every
+ * workspace's, since the workspace chosen may not stand yet. A window whose
  * first read fails is left untimed rather than timed through the
  * developer's Retry. Note that a window opening signed out is not left,
  * because every window opens so until the account's session is restored.
  */
 function useFirstUsableSpan(tasks: TasksControl): void {
   const { listRead, listFailed } = tasks;
-  const listed = tasks.listed.tasks.length;
+  const listed = tasks.tasks.length;
   useEffect(() => {
     if (listFailed) leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE);
     else if (listRead)

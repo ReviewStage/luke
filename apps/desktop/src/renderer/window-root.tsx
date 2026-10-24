@@ -17,6 +17,7 @@ import { installAppPlatform } from "@luke/panel/app-platform";
 import {
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
+  leaveWindowSpan,
   markWindowStart,
   PANEL_SPAN,
 } from "@luke/panel/panel-spans";
@@ -82,7 +83,17 @@ export function mountWindow(
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");
-  const draw = createReportingRoot(rootElement, sentry);
+  // A surface that fails to render draws its Reload instead, which is no
+  // first paint or usable screen, so both are left untimed as it is reported:
+  // the root reports it as it commits, before the commit's draw is heard.
+  const draw = createReportingRoot(rootElement, {
+    ...sentry,
+    reportBlankWindow: (error, why) => {
+      leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_PAINT);
+      leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_USABLE);
+      sentry.reportBlankWindow(error, why);
+    },
+  });
 
   void (async () => {
     try {

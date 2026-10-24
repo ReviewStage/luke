@@ -10,6 +10,7 @@ import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import {
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
+  leaveWindowSpan,
   markWindowStart,
   PANEL_SPAN,
   type PanelSpan,
@@ -129,7 +130,20 @@ test("the window's first paint is timed from its start to the first surface draw
   ]);
 });
 
-test("the window's first usable screen is timed from its start to the sidebar's first task list read, saying how many tasks it listed, once", async () => {
+test("a window whose first surface fails, its fallback drawn and the failure reported as it commits, has no first paint", async () => {
+  const rootElement = document.body.appendChild(document.createElement("div"));
+  markWindowStart();
+  endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);
+
+  vi.setSystemTime(5_000_300);
+  rootElement.append(document.createElement("section"));
+  leaveWindowSpan(PANEL_SPAN.WINDOW_FIRST_PAINT);
+  await settle();
+
+  assert.deepEqual(recorded(), []);
+});
+
+test("the window's first usable screen is timed from its start to the sidebar's first task list read, saying how many tasks the read answered, once", async () => {
   markWindowStart();
   const reading = tasksControl({ listRead: false, tasks: [INVITES] });
   const draw = await sidebarOver(reading);
