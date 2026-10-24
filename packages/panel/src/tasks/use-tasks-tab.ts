@@ -9,6 +9,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
+import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type {
   GitHubRepositoryIssuesAnswer,
@@ -583,7 +584,7 @@ export interface NewTaskPreset {
   /** What the card starts; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
-  readonly refused?: { readonly card: NewTaskCardKept; readonly note: string };
+  readonly refused?: { readonly card: NewTaskCardKept; readonly note: Failure };
 }
 
 /**
@@ -848,14 +849,15 @@ export interface TasksControl {
      * which closes the dialog and opens the task; with an agent handed over it opens the
      * task on a draft agent's tab holding the agent's prompt, files, and
      * model, which starts the agent at once; answers why the task did not
-     * start, or nothing once it has.
+     * start, with the press that mends it where there is one, or nothing
+     * once it has.
      */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
       from?: NewTaskStart,
-    ) => Promise<string | undefined>;
+    ) => Promise<Failure | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
     /** Whether the last read of the models did not land. */
@@ -2834,7 +2836,7 @@ export function useTasksTab(input: {
     repository: string | null,
     workspaceId: string | undefined,
     from: NewTaskStart = {},
-  ): Promise<string | undefined> => {
+  ): Promise<Failure | undefined> => {
     // An agent's start opens on its task's page at once, its words drawn as
     // the agent's first line, rather than holding the card until the
     // service answers; a refusal opens the card again where it was left.
@@ -2854,7 +2856,7 @@ export function useTasksTab(input: {
       setStandIn(undefined);
       setHistoryFor(undefined);
     }
-    const refusedWith = (note: string): string => {
+    const refusedWith = (note: Failure): Failure => {
       if (handed !== undefined) {
         setStartingTask(undefined);
         setStandIn((now) => now ?? standingBefore);
@@ -2882,7 +2884,12 @@ export function useTasksTab(input: {
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
       (answer) => {
-        if ("failure" in answer) return refusedWith(startFailureNote(answer.failure));
+        if ("failure" in answer) {
+          return refusedWith({
+            reason: FAILURE_REASON.OTHER,
+            text: startFailureNote(answer.failure),
+          });
+        }
         setNewTaskAsk(undefined);
         setStartingTask(undefined);
         setStandIn(undefined);
@@ -2890,7 +2897,7 @@ export function useTasksTab(input: {
         if (handed !== undefined) openAgent(answer.planId, handed, answer.agentStart);
         return undefined;
       },
-      (refused: Error) => refusedWith(refused.message),
+      (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),
     );
   };
 

@@ -15,6 +15,7 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import {
   LINK_PLACE,
   PULL_REQUEST_THREAD_VIEW,
@@ -646,7 +647,7 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
     "a press while the dialog stands leaves it as it is",
   );
 
-  let note: string | undefined;
+  let note: Failure | undefined;
   await act(async () => {
     note = await tab
       .control()
@@ -3317,7 +3318,7 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
   const prompt = "Make the sidebar keep its folds.";
   act(() => tab.control().onNewTask());
-  let note: string | undefined = "unanswered";
+  let note: Failure | undefined = { reason: FAILURE_REASON.OTHER, text: "unanswered" };
   await act(async () => {
     note = await tab.control().newTask.start("", "acme/web", undefined, {
       handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice },
@@ -3446,7 +3447,7 @@ test("New task's agent start opens its page at once on the words as its agent's 
   );
   const prompt = "Make the sidebar keep its folds.";
   act(() => tab.control().onNewTask());
-  let note: Promise<string | undefined> = Promise.resolve("unsent");
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, {
       handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice: undefined },
@@ -3499,13 +3500,13 @@ test("New task's agent start refused after its page opened opens the card again 
     },
   };
   act(() => tab.control().onNewTask());
-  let note: Promise<string | undefined> = Promise.resolve(undefined);
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, { handed, card });
   });
   assert.equal(tab.control().newTask.open, false);
 
-  let refused: string | undefined;
+  let refused: Failure | undefined;
   await act(async () => {
     answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
     refused = await note;
@@ -3545,7 +3546,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
       ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
     },
   };
-  let note: Promise<string | undefined> = Promise.resolve(undefined);
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
     note = tab.control().newTask.start("", "acme/web", undefined, { handed, card });
   });
