@@ -215,6 +215,15 @@ describe("the developer tools", () => {
   });
 });
 
+describe("Reload", () => {
+  test("⌘R reloads the window chosen over, through View's system reload item", () => {
+    const view = appMenuTemplate("Luke").find((item) => item.label === "View");
+    const reload = Array.isArray(view?.submenu) ? view.submenu[0] : undefined;
+    assert.equal(reload?.role, "reload");
+    assert.equal(reload?.accelerator, "Command+R");
+  });
+});
+
 /** A window of Luke's, as the menu is handed the one it was chosen over. */
 function aWindow(): BaseWindow {
   return {} as BaseWindow;

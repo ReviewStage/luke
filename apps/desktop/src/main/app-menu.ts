@@ -278,8 +278,9 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
  * Close Tab, and Close Window as Chrome's File keeps them, and Reopen Closed
  * Tab beside New Tab; Edit is the
  * system's own, spelt out so its Find submenu can hold the window's find as
- * every Mac app's Edit does; the window's
- * columns, the system's full screen, and its zoom are View's, the zoom in
+ * every Mac app's Edit does; the system's reload, the window's
+ * columns, the system's full screen, and its zoom are View's, reload first
+ * as Safari's View keeps it, the zoom in
  * the order Chrome's View keeps it, the call's microphone and speaker are
  * Call's, back and forward are Go's as Finder and Safari keep them, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
@@ -476,6 +477,11 @@ function fullMenuTemplate(
     {
       label: "View",
       submenu: [
+        // Note that the role reloads the window chosen over, the panel or the
+        // call card, and never the hidden voice window, so a reload leaves a
+        // standing call up (`voice-window.ts`).
+        roleItem("reload", APP_COMMAND.RELOAD),
+        SEPARATOR,
         commandItem(APP_COMMAND.TOGGLE_SIDEBAR),
         commandItem(APP_COMMAND.TOGGLE_SIDE_PANEL),
         commandItem(APP_COMMAND.SHOW_TERMINAL),
