@@ -1,7 +1,13 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ConfirmDialog, type DialogQuestion, STATUS_TONE, useConfirmDialog } from "@luke/ui";
+import {
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  STATUS_TONE,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { CircleSlashIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
@@ -129,6 +135,7 @@ function closeQuestion(item: InboxItem): DialogQuestion {
       : "The agent reads that you resolved it the next time it reads its inbox. Only the agent can open it again.",
     verb: "Resolve",
     running: "Resolving…",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
   };
 }
 

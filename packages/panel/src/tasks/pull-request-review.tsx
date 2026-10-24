@@ -9,6 +9,7 @@ import {
   Button,
   ChoiceList,
   type ChoiceOption,
+  CONFIRM_LOSS,
   ConfirmDialog,
   CornerCount,
   type DialogQuestion,
@@ -71,6 +72,7 @@ const DISCARD_QUESTION: DialogQuestion = {
   body: "This deletes every pending comment you added to it. This can't be undone.",
   verb: "Discard review",
   running: "Discarding",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** What the review may say, in the order GitHub's own review box offers it, and what the two that need it mean. */

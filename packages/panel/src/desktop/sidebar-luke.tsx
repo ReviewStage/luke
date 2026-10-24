@@ -1,5 +1,6 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
+  CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   LIST_DENSITY,
@@ -43,6 +44,7 @@ const RESET_QUESTION: DialogQuestion = {
   body: "This one is archived; your memories stay.",
   verb: "Start fresh",
   running: "Starting",
+  loss: CONFIRM_LOSS.REVERSIBLE,
 };
 
 /** Luke's glyph: his face, giving way to the working mark while he works, or the live mark while a call into him stands. */

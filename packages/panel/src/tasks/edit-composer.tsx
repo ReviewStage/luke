@@ -7,6 +7,7 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
   useConfirmDialog,
@@ -57,6 +58,7 @@ const SEND_QUESTION: DialogQuestion = {
   body: "Everything after it will be removed from the conversation, and the agent stopped if it is working. Changes the agent made to its files stay as they are.",
   verb: "Send",
   running: "Sending",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
 
 /** What the box hands on as it sends, and the doors it is drawn with beside the tab's own box. */
