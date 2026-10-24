@@ -70,21 +70,21 @@ export const SKILLS_LINE = {
   /** Above the rows: where the rest come from, and when a change reaches an agent. */
   ABOUT:
     "Repository skills come from each repository's .agents/skills folder. Changes here reach only agents started afterwards.",
-  PERSONAL: "Personal",
+  PERSONAL: "Only you",
   PASTED: "pasted",
   NONE: "No skills installed yet.",
   READ_FAILED: "Your skills could not be read.",
   ADD_SKILL: "Add skill",
   PASTE_LABEL: "Command, GitHub link, or SKILL.md text",
   PASTE_HINT:
-    "Paste an npx skills add command, a GitHub link to a repo or skill folder, or a skill's SKILL.md text.",
+    "Paste an npx skills add command, a GitHub link to a repository or skill folder, or a skill's SKILL.md text.",
   READING: "Reading…",
   INSTALLED: "Installed",
   UPDATE_AVAILABLE: "Update available",
   INSTALL: "Install",
   INSTALL_FOR: "Install for",
-  JUST_ME: "Just me",
-  VIEW: "View",
+  ONLY_YOU: "Only you",
+  VIEW: "Open",
   SHARE: "Share with workspace",
   UPDATE: "Update",
   REMOVE: "Remove",
@@ -534,9 +534,9 @@ export function missingLine(preview: InstalledSkillPreview): string | undefined 
   return `No ${noun} named ${names} in ${preview.owner}/${preview.repo}. Pick from its ${countWords(preview.skills.length, TERM.SKILL)}.`;
 }
 
-/** "36 other skills in this repo", under the cards. */
+/** "36 other skills in this repository", under the cards. */
 export function othersLine(count: number): string {
-  return `${count} other ${count === 1 ? "skill" : "skills"} in this repo`;
+  return `${count} other ${count === 1 ? "skill" : "skills"} in this repository`;
 }
 
 /** What a found skill holds and where: "2 files · 0.4 kB · skills/productivity/grill-me". */
@@ -932,7 +932,7 @@ export function withRefusal(
 export function installScopes(
   workspace: Workspace,
 ): readonly { readonly value: InstalledSkillScope; readonly label: string }[] {
-  const mine = { value: INSTALLED_SKILL_SCOPE.PERSONAL, label: SKILLS_LINE.JUST_ME };
+  const mine = { value: INSTALLED_SKILL_SCOPE.PERSONAL, label: SKILLS_LINE.ONLY_YOU };
   if (workspace.personal === true) return [mine];
   return [mine, { value: INSTALLED_SKILL_SCOPE.WORKSPACE, label: everyoneIn(workspace) }];
 }

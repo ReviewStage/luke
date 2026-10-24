@@ -34,7 +34,7 @@ import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "./plan-template-page.js";
 
 /** What a revision that is the built-in default did, by its writer. */
 const DEFAULT_SUMMARY = {
-  RESET: "Reset to the default",
+  RESET: "Reset to defaults",
   EARLIER: "The default template",
 } as const;
 

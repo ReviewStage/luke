@@ -56,7 +56,7 @@ import type { SettingsWrites } from "./writes.js";
  */
 
 /** What the empty page says. */
-const NO_EXPERIMENTS_LINE = "No experiments";
+const NO_EXPERIMENTS_LINE = "No experiments.";
 
 /** Why a signed-out page holds no switches: experiments are an account's. */
 const SIGN_IN_NOTE = SIGNED_OUT_WORDS;

@@ -231,7 +231,7 @@ test("an installed skill's chip hangs a card saying where it comes from and nami
   const repository = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(
     -1,
   );
-  assert.equal(repository?.querySelector(".luke-hover-card-corner")?.textContent, "Repo");
+  assert.equal(repository?.querySelector(".luke-hover-card-corner")?.textContent, "Repository");
 });
 
 /** The lines a message's first paragraph is drawn on, each line's words as they read. */

@@ -1066,7 +1066,7 @@ test("on a phone a page is headed by the way back to the list and its reset in t
   assert.equal(listings, 1);
 });
 
-test("on a phone the plan template is headed by the way back and a ⋯ holding Version history and Reset to default, which leave its title's line", async () => {
+test("on a phone the plan template is headed by the way back and a ⋯ holding Version history and Reset to defaults, which leave its title's line", async () => {
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
   });
@@ -1097,9 +1097,9 @@ test("on a phone the plan template is headed by the way back and a ⋯ holding V
   pressInPhoneHead(page, "settings-page", "Plan template actions");
   assert.deepEqual(
     menuItems().map((item) => item.label),
-    ["Version history", "Reset to default"],
+    ["Version history", "Reset to defaults"],
   );
-  chooseMenuItem("Reset to default");
+  chooseMenuItem("Reset to defaults");
   assert.ok(
     document.querySelector('[role="alertdialog"], [role="dialog"]'),
     "the reset asks first",

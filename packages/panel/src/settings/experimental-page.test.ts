@@ -143,7 +143,7 @@ test("with no experiment standing, the page draws the empty state", () => {
   const page = draw({ entries: [], experiments: NO_EXPERIMENTS, signedIn: true });
 
   assert.equal(page.querySelector('[role="switch"]'), null);
-  assert.equal(page.textContent, "No experiments");
+  assert.equal(page.textContent, "No experiments.");
 });
 
 test("signed out, the page says to sign in rather than drawing switches no account holds", () => {
