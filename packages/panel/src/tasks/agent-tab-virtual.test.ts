@@ -306,6 +306,74 @@ test("⌘F counts a match in a closed call's answer far up the log, steps to it,
   assert.equal(output.closest("[hidden]"), null, "the fold around the answer stands open");
 });
 
+/** A finished reply of the agent's at index 7 of `messages`, holding `parts`. */
+function farReply(parts: readonly WireRecord[]): CodingAgentMessage {
+  return {
+    id: "m-7",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "step-start" }, ...parts],
+    startedAt: 7_000,
+    finishedAt: 7_500,
+  };
+}
+
+/** The tally a find for `query` reads over a 400-message log whose eighth message is `far`, while that row is not drawn. */
+async function farTally(far: CodingAgentMessage, query: string) {
+  const held = messages(0, 400);
+  held[7] = far;
+  const { follower } = following(page(held));
+  const { container, box } = await drawTab(
+    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
+  );
+  layOut(box);
+  assert.ok(!drawnRows(container).includes("m-7"), "the eighth message's row is not drawn");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind(query);
+  await act(settled);
+  return findTally();
+}
+
+test("⌘F finds a phrase across a far call's verb and subject, as its line reads", async () => {
+  const shown = {
+    type: "tool-show_page",
+    toolCallId: "m-7-page",
+    state: "output-available",
+    input: { title: "Pricing explorer", path: "/tmp/pricing.html" },
+    output: { status: "accepted" },
+  };
+  assert.equal(await farTally(farReply([shown]), "page: Pricing"), "1 of 1");
+});
+
+test("⌘F counts nothing in a far integration call's connection_execute, which its row never draws", async () => {
+  const wrapper = {
+    type: "tool-connection_execute",
+    toolCallId: "call-connection_execute",
+    state: "output-available",
+    input: {
+      connection: "linear",
+      tool: "list_issues",
+      input: { team: "LUKE" },
+      why: "quartermaster",
+    },
+    output: { issues: [] },
+  };
+  const remote = {
+    type: "tool-linear_remote",
+    toolCallId: "call-linear_remote",
+    state: "output-available",
+    input: {
+      remoteTool: "list_issues",
+      parentCallId: "call-connection_execute",
+      input: { team: "LUKE" },
+    },
+    output: { issues: [] },
+  };
+  assert.equal(await farTally(farReply([wrapper, remote]), "quartermaster"), "No results");
+});
+
 test("⌘F finds a word on a long fence's 55th line, past its cut, and opens the card on that line", async () => {
   const fence = Array.from({ length: 60 }, (_, at) =>
     at === 54 ? "const lantern = 55;" : `const line${at + 1} = ${at + 1};`,

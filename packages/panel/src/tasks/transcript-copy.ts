@@ -234,9 +234,9 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
 
 /**
  * A block's words as its row draws them, open: words and a thought as they
- * are; a call's line, its verb or a described command's purpose, its
- * subject where the body does not say it whole (`blockSays`), and where it
- * ran, then its input, and its error or else its answer.
+ * are; a call's line as one phrase, its verb or a described command's
+ * purpose, its subject where the body does not say it whole (`blockSays`),
+ * and where it ran; then its input, and its error or else its answer.
  */
 function drawnWords(block: CopiedBlock): readonly string[] {
   if (block.kind !== COPIED_BLOCK.CALL) return [block.text];
@@ -245,27 +245,24 @@ function drawnWords(block: CopiedBlock): readonly string[] {
   const said =
     input !== undefined &&
     ((isCommandKind(call) && input.kind === TOOL_BLOCK.COMMAND) || blockSays(input, subject));
-  const place = callPlace(call, server);
+  const lead = [line.verb, said ? undefined : line.subject, callPlace(call, server)];
   return [
-    line.verb,
-    ...(said || line.subject === undefined ? [] : [line.subject]),
-    ...(place === undefined ? [] : [place]),
+    lead.filter((words) => words !== undefined).join(" "),
     ...(input === undefined ? [] : [input.text]),
     ...(error !== undefined ? [error] : output === undefined ? [] : [output.text]),
   ];
 }
 
 /**
- * The words a part's row draws, its line and its body, as a find counts them
- * before the row is drawn: read as both copies read it (`agentBlock`), and a
- * part its page carried cut by its two ends, which stand in the whole the
- * fold reads as a find opens it.
+ * The words a message's rows draw, each line and body, as a find counts them
+ * before the rows are drawn: the parts the rows are drawn from (`agentRows`),
+ * each read as both copies read it (`agentBlock`). Note that a part its page
+ * carried cut counts none of the words left out, because its fold draws
+ * them only once read whole, and its ends are the stored JSON's, not the
+ * answer as drawn.
  */
-export function partWords(part: AgentPart): string {
-  const cut =
-    part.kind === AGENT_PART.TOOL || part.kind === AGENT_PART.REASONING ? part.cut : undefined;
-  const ends = cut === undefined ? [] : [cut.head, cut.tail];
-  return [...agentBlock(part).flatMap(drawnWords), ...ends].join("\n");
+export function drawnMessageWords(message: CodingAgentMessage): string {
+  return rowBlocks(agentRows(message, false)).flatMap(agentBlock).flatMap(drawnWords).join("\n");
 }
 
 /**
