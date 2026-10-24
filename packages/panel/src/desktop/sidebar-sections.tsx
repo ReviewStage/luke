@@ -3,12 +3,12 @@ import {
   TASK_SECTION_WRITE,
   type TaskSection,
   type TaskSectionIcon,
+  type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
   BUTTON_SIZE,
-  ConfirmDialog,
   DIALOG_TONE,
   Dialog,
   DialogActions,
@@ -32,6 +32,7 @@ import {
 } from "@luke/ui";
 import { TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
+  applySectionWrite,
   memberOf,
   memberSection,
   placeAllWrites,
@@ -50,6 +51,7 @@ import { useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
@@ -76,8 +78,10 @@ import { useRowDrag } from "./use-row-drag.js";
  * or onto Pinned, which pins it there and takes it out of every section too
  * (`use-row-drag.ts`'s drop zones); a section is dragged among the others
  * by its header. Every change is drawn at once and kept on the account
- * (`TasksControl.onWriteSections`). Deleting a section asks first, though
- * it deletes no task, because its title and icon are not brought back.
+ * (`TasksControl.onWriteSections`). Deleting a section deletes no task and
+ * asks nothing: it happens at once, and its toast's Undo makes the section
+ * again under its id, with its title and icon, where it stood, holding the
+ * rows it held that no other section has taken since.
  */
 
 /** The zone Tasks is as a drop zone, which takes a task out of every section; a section's is its id. */
@@ -91,6 +95,9 @@ const SECTION_HANDLE = ".luke-group-header-head";
 
 /** Why a blank title was not kept. */
 const TITLE_ASKED = "Name the section.";
+
+/** What the toast says once a section is deleted. */
+const SECTION_DELETED = "Section deleted";
 
 /** What the dialog was opened to do: make a section in a workspace, then perhaps more with it, or edit one. */
 type SectionAsk =
@@ -127,17 +134,57 @@ function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | un
 }
 
 /**
- * New section, Edit section, and Delete section's question, standing only
- * while `surfaceOpen` and an account is signed in. New and Edit ask a
- * title, held to the wire's bound, and an icon; Enter in the title answers.
- * Every answer is drawn at once, so the card never waits on the service.
+ * The writes an Undo of deleting `section` asks, read against the sections
+ * as they stood before, `before`, and as they stand now, `current`: the
+ * section made again under its id, stood back at its place among its
+ * workspace's, and its rows put back in it in their order. A row put in
+ * another section since stays there, since that was chosen anew. Note that
+ * each row is given a position, as `placeAllWrites` gives one, because rows
+ * put back together are stamped in the same instant.
+ */
+function undeleteWrites(
+  before: TaskSections,
+  current: TaskSections,
+  section: TaskSection,
+  now: number,
+): TaskSectionWrite[] {
+  const { id, workspaceId, title, icon } = section;
+  const made: TaskSectionWrite = {
+    kind: TASK_SECTION_WRITE.CREATE,
+    id,
+    workspaceId,
+    title,
+    ...(icon === undefined ? undefined : { icon }),
+  };
+  const remade = applySectionWrite(current, made, now);
+  const was = workspaceSections(before, workspaceId).findIndex((each) => each.id === id);
+  const order = workspaceSections(remade, workspaceId);
+  const from = order.findIndex((each) => each.id === id);
+  const at = Math.min(Math.max(was, 0), order.length - 1);
+  const moved = from === at ? [] : sectionMoveWrites(order, from, at);
+  const members = sectionOrder(before, id)
+    .map(memberOf)
+    .filter((member) => memberSection(current, member) === undefined);
+  return [made, ...moved, ...placeAllWrites(remade, members, id, now)];
+}
+
+/**
+ * New section and Edit section's dialog, standing only while `surfaceOpen`
+ * and an account is signed in, and Delete section, which asks nothing and
+ * offers Undo. New and Edit ask a title, held to the wire's bound, and an
+ * icon; Enter in the title answers. Every answer is drawn at once, so the
+ * card never waits on the service. Note that the Undo reads the sections as
+ * they stand when it is pressed (`latest`), since it lands renders after
+ * the delete.
  */
 export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): SectionDialogs {
   const [ask, setAsk] = useState<SectionAsk | undefined>(undefined);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState<TaskSectionIcon | undefined>(undefined);
-  const [doomed, setDoomed] = useState<TaskSection | undefined>(undefined);
   const field = useRef<HTMLInputElement | null>(null);
+  const toast = useToast();
+  const latest = useRef(tasks);
+  latest.current = tasks;
   // Note that a question about a section goes with the section, deleted on another Mac or by a refresh.
   const standing = (section: TaskSection | undefined) =>
     section !== undefined && tasks.taskSections.sections.some((each) => each.id === section.id);
@@ -150,15 +197,6 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
         return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: TITLE_ASKED });
       }
       tasks.onWriteSections(answerWrites(ask, trimmed, icon));
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
-  );
-  const deletion = useConfirmDialog(
-    { subject: tasks.signedIn && standing(doomed), surfaceOpen },
-    (): Promise<ActionResult> => {
-      if (doomed !== undefined) {
-        tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: doomed.id }]);
-      }
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
   );
@@ -218,15 +256,6 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           <ErrorLine>{form.refusal}</ErrorLine>
         </Dialog>
       ) : null}
-      <ConfirmDialog
-        confirm={deletion}
-        question={{
-          title: "Delete section?",
-          body: `“${doomed?.title ?? ""}” leaves your sidebar, and its tasks go back under Tasks. No task is deleted.`,
-          verb: "Delete section",
-          running: "Deleting",
-        }}
-      />
     </>
   );
   return {
@@ -235,8 +264,14 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
     askEdit: (section) =>
       open({ kind: TASK_SECTION_WRITE.EDIT, section }, section.title, section.icon),
     askDelete: (section) => {
-      setDoomed(section);
-      deletion.ask();
+      const before = tasks.taskSections;
+      tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: section.id }]);
+      toast(
+        undoToast(SECTION_DELETED, () => {
+          const now = latest.current;
+          now.onWriteSections(undeleteWrites(before, now.taskSections, section, Date.now()));
+        }),
+      );
     },
     dialog,
   };

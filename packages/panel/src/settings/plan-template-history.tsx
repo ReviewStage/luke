@@ -133,7 +133,6 @@ export function TemplateVersionHistory({
     versions,
     noun: "template",
     title: TEMPLATE_TITLE,
-    shown: true,
     agents: [],
     summary: templateRevisionSummary,
     onShowSource: undefined,

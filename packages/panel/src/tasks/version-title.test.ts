@@ -2,8 +2,6 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { useConfirmDialog } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -40,9 +38,7 @@ afterEach(() => {
 });
 
 function Version(): ReactNode {
-  const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-  );
+  const restore = { busy: false, onRestore: () => undefined };
   return createElement(VersionView, {
     onRetry: () => undefined,
     title: NAME,

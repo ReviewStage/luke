@@ -1,5 +1,6 @@
 import { CHAT_BOUNDS, type ChatAnswer, type ChatChannel } from "@luke/features/chat-wire";
 import {
+  CONFIRM_LOSS,
   ConfirmDialog,
   DIALOG_TONE,
   Dialog,
@@ -30,7 +31,9 @@ import { useFormDialog } from "./use-form-dialog.js";
  * and a purpose, which shows under the name and in every agent's read; the
  * act stands unavailable until there is a name to try, and Enter in either
  * field answers it. Archive is the one confirm, since an archived topic takes
- * no post. Each answer
+ * no post: it asks in the accent rather than red, archiving and bringing
+ * back alike, because either can be undone but reaches everyone in the
+ * channel. Each answer
  * waits on the service, and a refusal stands in the card until the next
  * key changes what was asked.
  */
@@ -199,13 +202,13 @@ export function useChannelDialogs(
       <ConfirmDialog
         confirm={archive}
         question={{
+          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           ...(doomed?.archived === true
             ? {
                 title: "Bring back channel?",
                 body: `#${doomed.name ?? ""} returns to the rail and takes posts again.`,
                 verb: "Bring back",
                 running: "Bringing back",
-                tone: DIALOG_TONE.PRIMARY,
               }
             : {
                 title: "Archive channel?",

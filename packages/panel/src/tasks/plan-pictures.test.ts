@@ -4,9 +4,8 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useConfirmDialog } from "@luke/ui";
 import { forgetPictures } from "@luke/ui/picture-cache";
-import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -207,9 +206,7 @@ test("a version draws the picture it struck and the one it wrote in, each in its
   const before = `## Approach\n\n![First mock](${picture(taskId, MOCK)})\n`;
   const after = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})\n`;
   function Version(): React.JSX.Element {
-    const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-      Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-    );
+    const restore = { busy: false, onRestore: () => undefined };
     return createElement(VersionView, {
       onRetry: () => undefined,
       viewing: {

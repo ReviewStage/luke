@@ -3,11 +3,6 @@ import { readFailedWords } from "@luke/features/words";
 import {
   BUTTON_VARIANT,
   Button,
-  CONFIRM_LOSS,
-  ConfirmDialog,
-  DIALOG_TONE,
-  type DialogConfirm,
-  type DialogQuestion,
   ErrorState,
   Fill,
   ONE_LINE_ELEMENT,
@@ -20,12 +15,12 @@ import {
   TOOLBAR_INSET,
   Toolbar,
   Tooltip,
-  useConfirmDialog,
 } from "@luke/ui";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message.js";
-import { TOAST_HOLD, type ToastNotice, undoToast } from "../toast.js";
+import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
@@ -54,10 +49,9 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * it is drawn with nothing marked. A section opened from its revision's
  * list is drawn alone, without the task's name over it, marked as the whole
  * version marks it, and a version still being read stands as
- * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks first,
- * in the window's dialog with the accent rather than red, since a restore is
- * itself a version the history keeps and can be undone by restoring the
- * one before it. Everything drawn is the plan's words, so the root is left
+ * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks nothing:
+ * a restore is itself a version the history keeps, so it happens at once
+ * and its toast's Undo restores the one before it. Everything drawn is the plan's words, so the root is left
  * out of the screen recording (`ph-no-capture`) as a second line behind the
  * recording's text masking.
  */
@@ -87,17 +81,8 @@ const RESTORE_UNDO_REFUSED_NOTE = "The restore could not be undone. Try again.";
 /** Why Restore this version is unavailable over the newest version. */
 const CURRENT_HINT = "This version is already current";
 
-/** The question Restore this version asks, naming the version and what it is of. */
-function restoreQuestion(at: number, noun: string): DialogQuestion {
-  return {
-    title: "Restore this version?",
-    body: `The ${noun} will go back to the version from ${dayAndTimeText(at)}. The ${noun} as it stands now stays in the history.`,
-    verb: "Restore",
-    running: "Restoring",
-    loss: CONFIRM_LOSS.REVERSIBLE,
-    tone: DIALOG_TONE.PRIMARY,
-  };
-}
+/** What Restore this version says while its restore is under way. */
+const RESTORING = "Restoring";
 
 /** The class a unit wears by how it stands. */
 const CHANGE_CLASS = {
@@ -243,25 +228,41 @@ function VersionContent({
   );
 }
 
+/** A version's restore as its controls press it: whether one is under way, and the press that restores the version `seq`, or the one chosen. */
+export interface VersionRestore {
+  readonly busy: boolean;
+  readonly onRestore: (seq?: number) => void;
+}
+
 /**
- * The restore of the version chosen, asked in the window's dialog: held by
- * the history around the page rather than the page itself, so a version
- * row's menu can choose its version and ask in one press. `shown` is
- * whether the window shows the history, which the question stands on, and
- * `onRestored` what follows a restore that landed. Note that the answer
- * restores whichever version is chosen when it is given, which is the one
- * the question names, since choosing another takes focus off the dialog.
+ * The restore of a version, which asks nothing and happens on the press:
+ * held by the history around the page rather than the page itself, so a
+ * version row's menu restores its own version in one press. `onRestored` is
+ * what follows a restore that landed, whose toast offers Undo
+ * (`sayRestored`); one refused says why in a toast. A press while one is
+ * under way does nothing. Note that the press reads a ref rather than
+ * `busy`, because a second press can land before the render that would
+ * disable the button.
  */
 export function useVersionRestore(
-  history: PlanHistoryControl,
-  shown: boolean,
+  history: Pick<PlanHistoryControl, "onRestore">,
   onRestored: () => void,
-): DialogConfirm {
-  return useConfirmDialog({ subject: true, surfaceOpen: shown }, async () => {
-    const result = await history.onRestore();
-    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
-    return result;
-  });
+): VersionRestore {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const restoring = useRef(false);
+  const onRestore = (seq?: number) => {
+    if (restoring.current) return;
+    restoring.current = true;
+    setBusy(true);
+    history.onRestore(seq).then((result) => {
+      restoring.current = false;
+      setBusy(false);
+      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
+      else toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+    });
+  };
+  return { busy, onRestore };
 }
 
 /**
@@ -334,19 +335,16 @@ export function VersionView({
   viewing,
   restore,
   title,
-  noun = "plan",
   section,
   task,
   lead,
   onRetry,
 }: {
   viewing: ViewedVersion;
-  /** The restore's question, held by the history around the page (`useVersionRestore`). */
-  restore: DialogConfirm;
+  /** The restore, held by the history around the page (`useVersionRestore`). */
+  restore: VersionRestore;
   /** The task's name, which every version is drawn under. */
   title?: string | undefined;
-  /** What the versions are of, as the restore's question names it. */
-  noun?: string;
   /** The one unit of the version to draw, alone and without the task's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;
   /** The task the versions are of, which their mentions are read against; none for the account's template. */
@@ -358,39 +356,38 @@ export function VersionView({
 }): React.JSX.Element {
   const { line } = viewing;
   return (
-    <>
-      <VersionPageFrame
-        lead={lead}
-        title={
-          <Tooltip label={momentText(line.lastEdit.at)}>
-            <time dateTime={new Date(line.lastEdit.at).toISOString()}>
-              {dayAndTimeText(line.lastEdit.at)}
-            </time>
-          </Tooltip>
-        }
-        actions={
-          <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
-            <Button
-              variant={BUTTON_VARIANT.PRIMARY}
-              disabled={viewing.current}
-              focusableWhenDisabled
-              onClick={restore.ask}
-            >
-              Restore this version
-            </Button>
-          </Tooltip>
-        }
-      >
-        <VersionContent
-          viewing={viewing}
-          title={title}
-          section={section}
-          task={task}
-          onRetry={onRetry}
-        />
-      </VersionPageFrame>
-      <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
-    </>
+    <VersionPageFrame
+      lead={lead}
+      title={
+        <Tooltip label={momentText(line.lastEdit.at)}>
+          <time dateTime={new Date(line.lastEdit.at).toISOString()}>
+            {dayAndTimeText(line.lastEdit.at)}
+          </time>
+        </Tooltip>
+      }
+      actions={
+        <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            disabled={viewing.current}
+            focusableWhenDisabled
+            busy={restore.busy}
+            busyLabel={RESTORING}
+            onClick={() => restore.onRestore()}
+          >
+            Restore this version
+          </Button>
+        </Tooltip>
+      }
+    >
+      <VersionContent
+        viewing={viewing}
+        title={title}
+        section={section}
+        task={task}
+        onRetry={onRetry}
+      />
+    </VersionPageFrame>
   );
 }
 
