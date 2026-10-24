@@ -13,7 +13,7 @@ import {
   Dialog,
   DialogActions,
   type DialogConfirm,
-  ErrorLine,
+  FormField,
   GAP,
   GROUP_HEADING,
   GroupHeader,
@@ -210,7 +210,8 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
     confirm.ask();
   };
   const editing = ask?.kind === TASK_SECTION_WRITE.EDIT;
-  const form = useFormDialog(confirm, title.trim() !== "");
+  const blank = title.trim() === "";
+  const form = useFormDialog(confirm, !blank);
   const dialog = (
     <>
       <Dialog
@@ -233,23 +234,28 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           />
         }
       >
-        <TextField
-          ref={field}
-          label="Section title"
-          spellCheck={false}
-          placeholder="Section title"
-          maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
-          value={title}
-          disabled={form.settling}
-          onEnter={form.submit}
-          onChange={(next) => {
-            setTitle(next);
-            // Note that a refused answer has settled, so the refusal alone holds
-            // the card up: the question is asked again rather than cleared, or
-            // the first key typed after it would close the card.
-            if (confirm.rejection !== undefined) confirm.ask();
-          }}
-        />
+        <FormField label="Section title" error={form.refusal}>
+          {(control) => (
+            <TextField
+              ref={field}
+              field={control}
+              spellCheck={false}
+              placeholder="Launch week"
+              maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
+              value={title}
+              disabled={form.settling}
+              // Note that Enter on a blank title is asked anyway, so the field says why it was not kept.
+              onEnter={blank ? confirm.run : form.submit}
+              onChange={(next) => {
+                setTitle(next);
+                // Note that a refused answer has settled, so the refusal alone holds
+                // the card up: the question is asked again rather than cleared, or
+                // the first key typed after it would close the card.
+                if (confirm.rejection !== undefined) confirm.ask();
+              }}
+            />
+          )}
+        </FormField>
         {/* Keyed by what was asked, so each opening starts its tab, color, and search afresh from the icon it opened with. */}
         <SectionIconPicker
           key={ask?.kind === TASK_SECTION_WRITE.EDIT ? ask.section.id : TASK_SECTION_WRITE.CREATE}
@@ -257,7 +263,6 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           disabled={form.settling}
           onIcon={setIcon}
         />
-        <ErrorLine>{form.refusal}</ErrorLine>
       </Dialog>
     </>
   );

@@ -44,6 +44,7 @@ function mounted(created: string[]): () => void {
 
 const card = () => document.querySelector('[role="dialog"], [role="alertdialog"]');
 const field = () => card()?.querySelector<HTMLInputElement>("input");
+const label = () => card()?.querySelector("label");
 const create = () =>
   [...(card()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
     (button) => button.textContent === "Create workspace",
@@ -71,12 +72,17 @@ test("New workspace is a labelled form whose Create waits on a name, and Enter s
   assert.equal(card()?.getAttribute("role"), "dialog", "a form is a dialog, not an alert");
   const input = field();
   assert.ok(input, "the name field stands");
-  assert.equal(input.getAttribute("aria-label"), "Workspace name", "the field is labelled");
+  assert.equal(label()?.textContent, "Workspace name", "a visible label stands above the field");
+  assert.equal(label()?.htmlFor, input.id, "the label names the field");
+  assert.equal(input.getAttribute("aria-label"), null, "the field is named by its label alone");
+  assert.notEqual(input.placeholder, "Workspace name", "the placeholder is not the label again");
   assert.equal(document.activeElement, input, "focus lands in the field, not on Cancel");
   assert.equal(create()?.disabled, true, "Create waits on a name");
 
-  press(input, "Enter");
-  assert.deepEqual(created, [], "Enter asks nothing of a blank form");
+  await act(async () => {
+    press(input, "Enter");
+  });
+  assert.deepEqual(created, [], "Enter creates nothing from a blank form");
 
   type(input, "  Northwind ");
   assert.equal(create()?.disabled, false, "a name frees Create");
@@ -95,4 +101,30 @@ test("Escape cancels a form without creating", () => {
   press(input, "Escape");
   assert.equal(card(), null, "Escape puts the card away");
   assert.deepEqual(created, []);
+});
+
+test("Enter on a blank name marks the field invalid and says why on it, and typing takes it away", async () => {
+  const created: string[] = [];
+  mounted(created)();
+  const input = field();
+  assert.ok(input);
+  assert.equal(input.getAttribute("aria-invalid"), null, "a fresh form is not marked");
+
+  await act(async () => {
+    press(input, "Enter");
+  });
+  const error = card()?.querySelector('[data-slot="field-error"]');
+  assert.equal(input.getAttribute("aria-invalid"), "true", "the field is marked invalid");
+  assert.equal(error?.textContent, "Name the workspace.");
+  assert.ok(
+    input
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .includes(error?.id ?? "missing"),
+    "the error describes the field",
+  );
+  assert.deepEqual(created, [], "nothing is created from a blank name");
+
+  type(input, "N");
+  assert.equal(input.getAttribute("aria-invalid"), null, "typing clears the mark");
 });

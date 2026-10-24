@@ -177,8 +177,13 @@ function typeInto(field: HTMLInputElement, words: string): void {
 
 /** The dialog's field labelled `label`, failing where none is drawn. */
 function dialogField(label: string): HTMLInputElement {
-  const found = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
-  return found ?? assert.fail(`no ${label} field`);
+  const named = [...document.querySelectorAll<HTMLLabelElement>("label")].find(
+    (candidate) => candidate.textContent === label,
+  );
+  const found =
+    (named === undefined ? null : document.getElementById(named.htmlFor)) ??
+    document.querySelector(`input[aria-label="${label}"]`);
+  return found instanceof HTMLInputElement ? found : assert.fail(`no ${label} field`);
 }
 
 /** The sidebar listing both tasks over `sections`, each write it asks heard by `writes`, and anything else `rest` says of the tasks. */
@@ -656,8 +661,7 @@ test("a new section starts with no icon and is made without one", async () => {
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section…").click());
   assert.equal(dialogButton("No icon").getAttribute("aria-pressed"), "true");
-  const title = document.querySelector<HTMLInputElement>('[aria-label="Section title"]');
-  assert.ok(title);
+  const title = dialogField("Section title");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(title, "Someday");
@@ -678,10 +682,8 @@ test("New section waits on a title, and Enter in it makes the section", async ()
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section…").click());
   assert.equal(dialogButton("Create section").disabled, true, "a blank title is not offered");
-  const title = document.querySelector<HTMLInputElement>(
-    '[role="dialog"] [aria-label="Section title"]',
-  );
-  assert.ok(title, "a form is a dialog, not an alert");
+  const title = dialogField("Section title");
+  assert.ok(title.closest('[role="dialog"]'), "a form is a dialog, not an alert");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(title, "S");
@@ -694,6 +696,32 @@ test("New section waits on a title, and Enter in it makes the section", async ()
 
   assert.equal(writes[0]?.kind, TASK_SECTION_WRITE.CREATE);
   assert.equal(writes[0]?.kind === TASK_SECTION_WRITE.CREATE && writes[0].title, "S");
+});
+
+test("New section's field is labelled, and Enter on a blank title marks it invalid with the reason on it", async () => {
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  const title = dialogField("Section title");
+  assert.equal(title.getAttribute("aria-label"), null, "the visible label names the field");
+  assert.notEqual(title.placeholder, "Section title", "the placeholder is not the label again");
+  assert.equal(title.getAttribute("aria-invalid"), null);
+
+  await act(async () => {
+    title.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  const error = document.querySelector('[role="dialog"] [data-slot="field-error"]');
+  assert.equal(title.getAttribute("aria-invalid"), "true");
+  assert.equal(error?.textContent, "Name the section.");
+  assert.ok(
+    title
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .includes(error?.id ?? "missing"),
+  );
+  assert.deepEqual(writes, [], "no section is made from a blank title");
 });
 
 test("choosing No icon and saving clears a section's icon", async () => {
