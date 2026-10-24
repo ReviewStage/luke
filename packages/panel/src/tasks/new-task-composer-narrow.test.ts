@@ -157,6 +157,18 @@ test("on a phone-wide card the placeholder wraps in the card's five lines rather
   assert.equal(await placeholder(CARD.DESKTOP), "nowrap");
 });
 
+test("at a phone's room the head's title stays one line at its own width, and the repository chip's name is the part that gives way, fading where cut", async () => {
+  layContainersAt({ composer: CARD.PHONE });
+  const container = await mount();
+  const title =
+    container.querySelector(".new-task-title > h2") ?? assert.fail("the head draws its title");
+  const style = getComputedStyle(title);
+  assert.equal(style.whiteSpace, "nowrap");
+  assert.equal(style.flexShrink, "0");
+  const chipName = container.querySelector(".new-task-title .luke-chip-name");
+  assert.notEqual(chipName, null, "the repository chip draws its name through the fading ChipName");
+});
+
 /** The model the account runs by default, whose name the chip draws. */
 const MODELS: readonly CatalogModel[] = [
   {

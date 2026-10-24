@@ -4819,6 +4819,14 @@ ul.actor-stack {
   gap: var(--luke-item-gap);
 }
 
+/* The title stays on one line at its own width, so a phone's narrow head
+   shortens the chips after it, which fade where they are cut, and never
+   wraps "New task". */
+.new-task-title > h2 {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* New task's chips are Settings pickers (`settings/picker-row.tsx`)
    standing alone at the head of their lines, not in a column, so each is as
    wide as its value and gives way, ellipsized, to a long one. */
