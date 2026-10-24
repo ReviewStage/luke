@@ -22,7 +22,7 @@ import { ActorRef, LukeCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { agentGlyphState, providerOf } from "./coding-agent-model.js";
+import { agentGlyphState, agentName, providerOf } from "./coding-agent-model.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 
 /**
@@ -38,6 +38,8 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * its tab on a press where the place offers that; one the task's list does
  * not hold is named alone. Luke's edit on a call names whose call it was
  * too: "your call" for the reader's own, and the teammate on their face.
+ * A conflict over the developer's own edit names its writer the same way,
+ * in its note and the button that takes their words.
  */
 
 /** The actor state an agent's tab glyph state stands for. */
@@ -93,6 +95,45 @@ function writerOf(edit: PlanLastEdit, place: EditPlace): Actor | undefined {
       ? undefined
       : { provider: providerOf(agent.model), state: ACTOR_OF_GLYPH[agentGlyphState(agent.status)] };
   return editActor(edit, place.reader, found);
+}
+
+/** What a conflict over the developer's edit says, and the button that takes the other writer's words. */
+export interface ConflictWords {
+  readonly note: string;
+  readonly take: string;
+}
+
+/** A conflict whose writer the service named nobody for, as a service from before it answers. */
+const UNNAMED_CONFLICT: ConflictWords = {
+  note: "This section changed while you were editing.",
+  take: "Use theirs",
+};
+
+/** A conflict with the reader's own words saved elsewhere, as from another window. */
+const OWN_CONFLICT: ConflictWords = {
+  note: "You changed this section elsewhere while you were editing.",
+  take: "Use the other",
+};
+
+/**
+ * What a conflict says, naming who wrote the text it met as the "Edited by"
+ * line names them: "Charles Pan changed this section while you were
+ * editing." and "Use Charles Pan’s"; Luke; a coding agent as the task's list
+ * names it, or its row where the list holds no such agent.
+ */
+export function conflictWords(edit: PlanLastEdit | undefined, place: EditPlace): ConflictWords {
+  const writer = edit === undefined ? undefined : writerOf(edit, place);
+  if (writer === undefined || edit === undefined) return UNNAMED_CONFLICT;
+  if (writer.kind === ACTOR_KIND.PERSON && writer.you) return OWN_CONFLICT;
+  const agent = agentOf(edit, place.agents);
+  const named =
+    agent === undefined || writer.kind !== ACTOR_KIND.AGENT
+      ? writer
+      : { ...writer, name: agentName(agent, place.agents?.control.models) };
+  return {
+    note: `${actorName(named)} changed this section while you were editing.`,
+    take: `Use ${actorName(named, { possessive: true })}`,
+  };
 }
 
 /** The words for whose call a card's line says Luke wrote on: "your call", "Charles Pan’s call", or "a call". */

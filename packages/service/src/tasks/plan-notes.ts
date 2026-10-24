@@ -22,6 +22,7 @@ import {
 import {
   PLAN_ACTOR,
   type PlanDocument,
+  type PlanLastEdit,
   type PlanSectionEdit,
   TASK_BOUNDS,
   type Task,
@@ -157,10 +158,12 @@ type LockedSave<T> =
     }
   | PlanNotSaved;
 
-/** A developer's edit that no longer lands in the text as it stands, with what the text holds; nothing was saved. */
+/** A developer's edit that no longer lands in the text as it stands, with what the text holds and who last wrote it; nothing was saved. */
 interface PlanConflict {
   readonly status: typeof PLAN_SAVE_STATUS.CONFLICT;
   readonly current: string;
+  /** The plan's last edit, whose writer wrote the text the edit met; none for a plan nobody has written. */
+  readonly by?: PlanLastEdit;
 }
 
 /**
@@ -301,14 +304,21 @@ export type PlanEditSaveResult =
   | PlanConflict
   | PlanNotSaved;
 
-/** The developer's edit of the whole text, taken into the text as it stands, or why it is not. */
+/**
+ * The developer's edit of the whole text, taken into the text as it stands,
+ * or the conflict it meets, naming the plan's last edit, as it was read
+ * under the same lock, as who wrote the text it met.
+ */
 function takeDocumentEdit(
   stored: StoredTask,
   edit: PlanEditRequest,
 ): Result.Result<TextTaken, PlanConflict> {
   const outcome = applyDocumentEdit(stored.text, edit);
   if ("conflict" in outcome) {
-    return Result.fail({ status: PLAN_SAVE_STATUS.CONFLICT, current: outcome.conflict.current });
+    const { current } = outcome.conflict;
+    const by = stored.task.lastEdit;
+    const status = PLAN_SAVE_STATUS.CONFLICT;
+    return Result.fail(by === undefined ? { status, current } : { status, current, by });
   }
   const anchors =
     edit.comments === undefined ? undefined : { text: edit.document.value, anchors: edit.comments };
@@ -323,8 +333,8 @@ function takeDocumentEdit(
  * The developer's own edit of the plan's whole text, taken into the plan the
  * service bound under its lock and kept as a revision of theirs: set where
  * the text still holds the edit's base, the developer's change laid over it
- * where Luke wrote meanwhile, and a conflict, with nothing saved, where it
- * cannot be (`@luke/features/plan-edit`).
+ * where another writer wrote meanwhile, and a conflict naming that writer,
+ * with nothing saved, where it cannot be (`@luke/features/plan-edit`).
  */
 export function saveDeveloperEdit(
   binding: PlanDocumentBinding,

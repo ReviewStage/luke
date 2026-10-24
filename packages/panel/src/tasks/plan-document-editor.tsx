@@ -1,9 +1,5 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import {
-  CONFLICT_NOTE,
-  DOCUMENT_EDITOR_STATE,
-  type DocumentEditor,
-} from "@luke/features/plan-edit-model";
+import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import {
   Button,
@@ -696,7 +692,7 @@ function useMergedAnswers(
   });
 }
 
-/** What stands under the editor: Luke's change and the choice it asks, or a failed save and its retry; a save under way says nothing. */
+/** What stands under the editor: someone else's change, named, and the choice it asks, or a failed save and its retry; a save under way says nothing. */
 function DocumentNote({
   editor,
   editing,
@@ -704,12 +700,12 @@ function DocumentNote({
   editor: DocumentEditor;
   editing: PlanEditing;
 }): React.JSX.Element | null {
-  if (editor.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT) {
+  if (editing.conflict !== undefined) {
     return (
       <div className="plan-editor-note" role="alert">
-        <span>{CONFLICT_NOTE}</span>
+        <span>{editing.conflict.note}</span>
         <Button onClick={editing.keepMine}>Keep mine</Button>
-        <Button onClick={editing.takeLukes}>Use Luke's</Button>
+        <Button onClick={editing.takeTheirs}>{editing.conflict.take}</Button>
       </div>
     );
   }

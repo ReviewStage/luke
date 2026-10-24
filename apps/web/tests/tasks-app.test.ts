@@ -2107,12 +2107,55 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.equal(merged.plan.document.body, mergedText);
         assert.deepEqual(conflicted, {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { conflict: { current: mergedText } },
+          body: { conflict: { current: mergedText, by: merged.plan.lastEdit } },
         });
         assert.deepEqual(oversized, {
           status: HOSTED_HTTP_STATUS.OK,
           body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
         });
+      }),
+  );
+
+  it.effect(
+    "a document edit that conflicts with a teammate's names the teammate as who wrote the text it met",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const shared = yield* openWorkspace(other);
+        yield* joinWorkspace(shared, owner);
+        const taskId = startedId(
+          yield* ask(
+            request(TASKS, owner, { method: "POST", body: { ...RELAY, workspaceId: shared } }),
+          ),
+        );
+        yield* makeSavedDocumentTask(taskId, INVITATIONS_TEXT);
+        const db = yield* Database;
+        yield* db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, other));
+        const edit = (as: string, value: string) =>
+          Effect.map(
+            ask(
+              request(EDIT(taskId), as, {
+                method: "POST",
+                body: { document: { base: INVITATIONS_TEXT, value } },
+              }),
+            ),
+            (answered) => readAnswer(planEditAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+
+        const theirs = yield* edit(
+          other,
+          INVITATIONS_TEXT.replace("Only an admin", "Only an owner"),
+        );
+        const conflicted = yield* edit(
+          owner,
+          INVITATIONS_TEXT.replace("Only an admin", "Only a workspace admin"),
+        );
+
+        assert.ok("plan" in theirs);
+        assert.ok("conflict" in conflicted);
+        assert.equal(conflicted.conflict.current, theirs.plan.document.body);
+        assert.equal(conflicted.conflict.by?.actor, PLAN_ACTOR.DEVELOPER);
+        assert.deepEqual(conflicted.conflict.by?.by, { userId: other, name: "Charles Pan" });
       }),
   );
 
