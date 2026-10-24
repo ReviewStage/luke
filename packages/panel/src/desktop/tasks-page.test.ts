@@ -1189,55 +1189,53 @@ test("a row dragged out of its section or Pinned onto a status the service refus
   assert.match(document.body.textContent ?? "", /The task could not be changed/);
 });
 
-test("a pin dragged onto a status the service refuses is pinned again under the pins that stood above it, though a pin given anew would lead them", async () => {
+/** The pins' order, by number, once the task numbered `key` among `pinned` is dragged out of Pinned, refused, and pinned again later than any, as the service would stand them. */
+async function pinsAfterRefusedDrop(pinned: readonly TaskSummary[], key: number) {
   keeps = false;
   const moved: PinMove[] = [];
-  // Note that Rate limit search was pinned last, so it leads, and the invitations' task, pinned before it, stands under it.
-  const pinned = TASKS.map((each) => (each.number === 39 ? { ...each, pinnedAt: 6 } : each));
   const page = await mountPage(pinned, SHELL_ROOM.WIDE, {
     onMovePins: (moves) => moved.push(...moves),
   });
   layRowsOut(page);
-  assert.deepEqual(groups(page)[0], ["Pinned", ["ACME-39", "ACME-44"]]);
+  const before = groups(page)[0];
 
-  dragRow(page, "ACME-44", "Backlog");
+  dragRow(page, `ACME-${key}`, "Backlog");
   await act(async () => undefined);
 
-  // The pins as the service would stand them once the invitations' task is pinned again, later than any.
   const positions = new Map(moved.map((move) => [move.id, move.position] as const));
   const after = pinned
-    .map((each) => (each.number === 44 ? { ...each, pinnedAt: 100 } : each))
     .filter((each) => each.pinnedAt !== undefined)
+    .map((each) => (each.number === key ? { ...each, pinnedAt: 100 } : each))
     .map((each) => ({ ...each, pinPosition: positions.get(each.id) ?? each.pinPosition }));
   const order = inPinOrder(after, (each) => ({
     position: each.pinPosition,
     at: each.pinnedAt ?? 0,
   }));
-  assert.deepEqual(
-    order.map((each) => each.number),
-    [39, 44],
-  );
+  return { before, after: ["Pinned", order.map((each) => `ACME-${each.number}`)] };
+}
+
+test("a pin dragged onto a status the service refuses is pinned again where it stood, though a pin given anew would lead the pins", async () => {
+  // Note that Rate limit search was pinned last, so it leads, and the invitations' task, pinned before it, stands under it.
+  const pinned = TASKS.map((each) => (each.number === 39 ? { ...each, pinnedAt: 6 } : each));
+
+  const { before, after } = await pinsAfterRefusedDrop(pinned, 44);
+
+  assert.deepEqual(before, ["Pinned", ["ACME-39", "ACME-44"]]);
+  assert.deepEqual(after, before);
 });
 
-test("a pin with a position of its own, dragged onto a status the service refuses, is pinned again at that very position", async () => {
-  keeps = false;
-  const moved: PinMove[] = [];
-  const pinned = TASKS.map((each) =>
-    each.number === 44
-      ? { ...each, pinPosition: "a5" }
-      : each.number === 39
-        ? { ...each, pinnedAt: 6, pinPosition: "a1" }
-        : each,
-  );
-  const page = await mountPage(pinned, SHELL_ROOM.WIDE, {
-    onMovePins: (moves) => moved.push(...moves),
+test("a pin with a position of its own, dragged onto a status the service refuses, is pinned again where it stood among pins with and without positions", async () => {
+  const pinned = TASKS.map((each) => {
+    if (each.number === 39) return { ...each, pinnedAt: 10, pinPosition: "a1" };
+    if (each.number === 40) return { ...each, pinnedAt: 8 };
+    if (each.number === 44) return { ...each, pinPosition: "a5" };
+    return each;
   });
-  layRowsOut(page);
 
-  dragRow(page, "ACME-44", "Backlog");
-  await act(async () => undefined);
+  const { before, after } = await pinsAfterRefusedDrop(pinned, 44);
 
-  assert.deepEqual(moved, [{ agent: false, id: "t-44", position: "a5" }]);
+  assert.deepEqual(before, ["Pinned", ["ACME-39", "ACME-40", "ACME-44"]]);
+  assert.deepEqual(after, before);
 });
 
 test("a section holding no task stands in the List, empty, and a row dragged into it is kept there", async () => {

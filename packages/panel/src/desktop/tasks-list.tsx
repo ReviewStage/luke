@@ -605,7 +605,7 @@ function listDrops(
       if (fromPins) tasks.onMarkTask(task.id, TASK_MARK.UNPIN);
       if (leaving.length > 0) tasks.onWriteSections(leaving);
     };
-    // Note that a row put back is pinned at the place it held: by its own position, or, where it had none, by one at its place among every pin of the workspace, the filter's hidden ones too, since a pin given anew with none would lead them; and kept in its section under the rows it stood under.
+    // Note that a row put back is pinned anew, so it is placed as a new pin dropped at its place among every pin of the workspace, the filter's hidden ones too, any neighbour its new pin instant would cross given a position, as a row dragged into Pinned is; and kept in its section under the rows it stood under.
     const before = tasks.taskSections;
     const allPins = inPinOrder(
       tasks.listed.tasks.filter((each) => each.pinnedAt !== undefined),
@@ -616,12 +616,10 @@ function listDrops(
       if (fromPins) {
         const others = allPins.filter((each) => each.id !== task.id);
         const at = allPins.findIndex((each) => each.id === task.id);
+        const { pinPosition: _position, ...rest } = task;
+        const again: TaskSummary = { ...rest, pinnedAt: Date.now() };
         now.onMarkTask(task.id, TASK_MARK.PIN);
-        now.onMovePins(
-          task.pinPosition === undefined
-            ? pinMoves(pinPositionsForInsert(others, task, at, pinPlaceOf))
-            : [{ agent: false, id: task.id, position: task.pinPosition }],
-        );
+        now.onMovePins(pinMoves(pinPositionsForInsert(others, again, at, pinPlaceOf)));
       }
       if (leaving.length === 0) return;
       const member = { agent: false, id: task.id };
