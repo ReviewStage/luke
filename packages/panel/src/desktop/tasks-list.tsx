@@ -911,6 +911,7 @@ function TasksListGroup({
     <section
       className="tasks-list-group"
       aria-label={head.name}
+      {...motionKey(groupKey(group.head))}
       data-row-drop={draggable ? zone : undefined}
       data-folded={folded ? "true" : undefined}
     >
@@ -932,6 +933,18 @@ function TasksListGroup({
       )}
     </section>
   );
+}
+
+/** The List's groups, each drawn on after its last task left it, or the filter took it away, until its exit has played (`ListMotion`); kept while the grouping stands, so changing it swaps every group at once. */
+function LeavingTasksGroups({
+  groups,
+  group,
+}: {
+  groups: readonly TasksGroup[];
+  group: (group: TasksGroup) => ReactNode;
+}): React.JSX.Element {
+  const drawn = useLeaving(groups, (each) => groupKey(each.head));
+  return <>{drawn.map(({ value }) => group(value))}</>;
 }
 
 /** A selection of several tasks as a chosen row's menu reads it: how many, and the bar's acts on them all. */
@@ -1126,42 +1139,48 @@ export function TasksList({
                 {NONE_STANDING}
               </Text>
             ) : null}
-            {groups.map((group) => (
-              <TasksListGroup
-                key={groupKey(group.head)}
-                group={group}
-                head={groupHead(group.head, tasks, repositories, people)}
-                folded={folds.folded(group.head)}
-                onToggle={() => folds.toggle(group.head)}
-                drops={drops}
-                draggable={!narrow}
-                onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
-                row={(task) => (
-                  <TaskListRow
-                    key={task.id}
-                    tasks={tasks}
-                    task={task}
-                    workspaceName={workspaceName}
-                    repositoryName={
-                      task.repository === null
-                        ? NO_REPOSITORY
-                        : repositoryLabel(task.repository, repositories)
-                    }
-                    waiting={waitingOn.get(task.id) ?? 0}
-                    now={now}
-                    properties={properties}
-                    assigneeHeld={
-                      !narrow &&
-                      group.head.kind === TASKS_GROUP.ASSIGNEE &&
-                      group.head.assigneeId === (task.assignee?.userId ?? null)
-                    }
-                    chosen={several !== undefined && selected.has(task.id) ? several : undefined}
-                    onOpen={() => tasks.onSelect(task.id)}
-                    onStanding={(standing) => setStanding(task, standing)}
-                  />
-                )}
-              />
-            ))}
+            <LeavingTasksGroups
+              key={display.grouping}
+              groups={groups}
+              group={(group) => (
+                <TasksListGroup
+                  key={groupKey(group.head)}
+                  group={group}
+                  head={groupHead(group.head, tasks, repositories, people)}
+                  folded={folds.folded(group.head)}
+                  onToggle={() => folds.toggle(group.head)}
+                  drops={drops}
+                  draggable={!narrow}
+                  onShowOlder={() =>
+                    frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })
+                  }
+                  row={(task) => (
+                    <TaskListRow
+                      key={task.id}
+                      tasks={tasks}
+                      task={task}
+                      workspaceName={workspaceName}
+                      repositoryName={
+                        task.repository === null
+                          ? NO_REPOSITORY
+                          : repositoryLabel(task.repository, repositories)
+                      }
+                      waiting={waitingOn.get(task.id) ?? 0}
+                      now={now}
+                      properties={properties}
+                      assigneeHeld={
+                        !narrow &&
+                        group.head.kind === TASKS_GROUP.ASSIGNEE &&
+                        group.head.assigneeId === (task.assignee?.userId ?? null)
+                      }
+                      chosen={several !== undefined && selected.has(task.id) ? several : undefined}
+                      onOpen={() => tasks.onSelect(task.id)}
+                      onStanding={(standing) => setStanding(task, standing)}
+                    />
+                  )}
+                />
+              )}
+            />
           </div>
         </ListMotion>
       </SelectionRegion>

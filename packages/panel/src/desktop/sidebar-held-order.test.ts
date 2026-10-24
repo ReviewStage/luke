@@ -6,11 +6,12 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
+import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
@@ -204,4 +205,55 @@ test("grouped by assignee, a task given to someone else moves to their group at 
     ["Ada Lovelace", ["Retry audit"]],
     ["Grace Hopper", ["Invite expiry", "Usage report"]],
   ]);
+});
+
+test("grouped by assignee, a group whose last task is given away slides out where it stood, out of reach, the groups that stay holding their order, and leaves once its exit has played", () => {
+  const motions = playListMotions();
+  onTestFinished(motions.remove);
+  const shared = { ...WORKSPACE, memberCount: 2 };
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({ [WORKSPACE.id]: { grouping: "assignee", order: "updated" } }),
+  );
+  const ada = { userId: "user-ada", name: "Ada Lovelace" };
+  const grace = { userId: "user-grace", name: "Grace Hopper" };
+  const rest = { workspace: shared, workspaces: [shared] };
+  const { container, draw } = mountSidebar([]);
+  draw(
+    [
+      { ...task("t-1", "Invite expiry", 3), assignee: ada },
+      { ...task("t-2", "Retry audit", 2), assignee: ada },
+      { ...task("t-3", "Usage report", 1), assignee: grace },
+    ],
+    rest,
+  );
+
+  draw(
+    [
+      { ...task("t-1", "Invite expiry", 3), assignee: ada },
+      { ...task("t-2", "Retry audit", 2), assignee: ada },
+      { ...task("t-3", "Usage report", 1), assignee: ada },
+    ],
+    rest,
+  );
+
+  const leaving = container.querySelector<HTMLElement>(".sidebar-repository[data-leaving]");
+  assert.match(leaving?.textContent ?? "", /Grace Hopper/u, "its group is drawn on");
+  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach while it goes");
+  const out = motions.played.find((each) => each.element === leaving);
+  assert.equal(out?.keyframes.at(-1)?.opacity, 0, "it fades out as it slides");
+  assert.deepEqual(
+    [
+      ...container.querySelectorAll(".sidebar-repository:not([data-leaving]) .luke-list-row-title"),
+    ].map((name) => name.firstChild?.textContent),
+    ["Invite expiry", "Retry audit", "Usage report"],
+    "the rows that stay keep the order they held",
+  );
+
+  act(() => out?.finish());
+  assert.equal(container.querySelector("[data-leaving]"), null);
+  assert.deepEqual(
+    groups(container).map(([heard]) => heard),
+    ["Ada Lovelace"],
+  );
 });

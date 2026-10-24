@@ -400,6 +400,11 @@ function creatorGroupKey(group: CreatorGroup): string {
   return group.creatorId ?? NO_REPOSITORY;
 }
 
+/** An assignee's group's key, by which it leaves the list. */
+function assigneeGroupKey(group: AssigneeGroup): string {
+  return group.assigneeId ?? UNASSIGNED_WORDS;
+}
+
 /** The view's groups, each drawn on after its last row took it out of the list until its exit has played (`ListMotion`). */
 function LeavingGroups<G>({
   groups,
@@ -1035,7 +1040,7 @@ function AssigneeSection({
   const standing = group.rows.filter(context.currentRow);
   const faces = { ...context.faces, assignee: false };
   return (
-    <div className="sidebar-repository">
+    <div className="sidebar-repository" {...motionKey(assigneeGroupKey(group))}>
       <GroupHeader
         heading={GROUP_HEADING.NONE}
         glyph={
@@ -1272,16 +1277,19 @@ function TaskGroups({
       );
     case TASK_GROUPING.ASSIGNEE:
       return (
-        <>
-          {sections.groups.map((group) => (
+        <LeavingGroups
+          key={sections.grouping}
+          groups={sections.groups}
+          keyOf={assigneeGroupKey}
+          group={(group) => (
             <AssigneeSection
-              key={group.assigneeId ?? UNASSIGNED_WORDS}
+              key={assigneeGroupKey(group)}
               group={group}
               folds={folds}
               context={context}
             />
-          ))}
-        </>
+          )}
+        />
       );
     case TASK_GROUPING.CREATOR:
       return (
@@ -2163,51 +2171,49 @@ function SidebarColumn({
                 />
               ) : (
                 <>
-                  {shownSections.length > 0 ? (
-                    <SidebarSections
-                      sections={shownSections}
-                      context={{
-                        tasks,
-                        dialogs: sectionDialogs,
-                        current: currentRow,
-                        unread,
-                        inSight: overlay.inSight,
-                        folded: folds.sectionFolded,
-                        onToggle: folds.toggleSection,
-                        row: (row) =>
-                          row.kind === TASK_ROW.TASK ? (
-                            <SidebarTask
-                              key={row.task.id}
-                              tasks={tasks}
-                              task={row.task}
-                              current={context.marked(row.task.id, undefined)}
-                              open={current(row.task.id)}
-                              unread={unread(row.task)}
-                              now={now}
-                              faces={context.faces}
-                              onOpen={() => context.onOpen(row.task.id)}
-                            />
-                          ) : (
-                            <SidebarAgent
-                              key={row.agent.id}
-                              agent={row.agent}
-                              agents={tasks.agents}
-                              current={currentRow(row)}
-                              unread={context.unseenAgent(row.agent.id)}
-                              now={now}
-                              at={taskRowTime(row, context.order)}
-                              face={context.faces.creator && context.faces.assignee}
-                              shown={tasks.shown && overlay.inSight}
-                              onOpen={() => context.onOpenAgent(row.agent.id)}
-                              onPin={pinOf(tasks, row.agent)}
-                              section={context.sectionEntry(row.agent)}
-                              onDeleted={context.onDeletedAgent(row.agent.id)}
-                            />
-                          ),
-                        onDropRow: dropRow,
-                      }}
-                    />
-                  ) : null}
+                  <SidebarSections
+                    sections={shownSections}
+                    context={{
+                      tasks,
+                      dialogs: sectionDialogs,
+                      current: currentRow,
+                      unread,
+                      inSight: overlay.inSight,
+                      folded: folds.sectionFolded,
+                      onToggle: folds.toggleSection,
+                      row: (row) =>
+                        row.kind === TASK_ROW.TASK ? (
+                          <SidebarTask
+                            key={row.task.id}
+                            tasks={tasks}
+                            task={row.task}
+                            current={context.marked(row.task.id, undefined)}
+                            open={current(row.task.id)}
+                            unread={unread(row.task)}
+                            now={now}
+                            faces={context.faces}
+                            onOpen={() => context.onOpen(row.task.id)}
+                          />
+                        ) : (
+                          <SidebarAgent
+                            key={row.agent.id}
+                            agent={row.agent}
+                            agents={tasks.agents}
+                            current={currentRow(row)}
+                            unread={context.unseenAgent(row.agent.id)}
+                            now={now}
+                            at={taskRowTime(row, context.order)}
+                            face={context.faces.creator && context.faces.assignee}
+                            shown={tasks.shown && overlay.inSight}
+                            onOpen={() => context.onOpenAgent(row.agent.id)}
+                            onPin={pinOf(tasks, row.agent)}
+                            section={context.sectionEntry(row.agent)}
+                            onDeleted={context.onDeletedAgent(row.agent.id)}
+                          />
+                        ),
+                      onDropRow: dropRow,
+                    }}
+                  />
                   <nav
                     className="sidebar-group"
                     aria-label="Tasks"

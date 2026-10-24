@@ -20,6 +20,7 @@ import {
   LAYOUT_ELEMENT,
   MarkDoneIcon,
   MoreButton,
+  motionKey,
   NOTE_LINE_LOOK,
   NoteLine,
   nextRowOrHead,
@@ -588,6 +589,11 @@ function placeWritesWithin(drawn: DrawnSection, from: number, to: number): TaskS
   return placeWrites(drawn.entries, memberOf(entry), drawn.section.id, to, Date.now());
 }
 
+/** A section's key, by which it leaves the list. */
+function sectionKeyOf(drawn: DrawnSection): string {
+  return drawn.section.id;
+}
+
 /**
  * The account's sections in the listed workspace, between Pinned and Tasks,
  * in the order dragged: a section's header is its handle, so a press on one
@@ -599,12 +605,16 @@ export function SidebarSections({
 }: {
   sections: readonly DrawnSection[];
   context: SectionContext;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const order = sections.map((drawn) => drawn.section);
   const move = (from: number, to: number) =>
     context.tasks.onWriteSections(sectionMoveWrites(order, from, to));
   const drag = useRowDrag(move, { handle: SECTION_HANDLE });
   const keys = useRowMoveKeys(move);
+  // Note that a section on its way out, deleted or moved away, is drawn on where it stood until its exit has played.
+  const shown = useLeaving(sections, sectionKeyOf);
+  const listedAt = new Map(sections.map((drawn, at) => [sectionKeyOf(drawn), at]));
+  if (shown.length === 0) return null;
   return (
     <nav className="sidebar-group" aria-label="Sections">
       <Stack
@@ -615,12 +625,12 @@ export function SidebarSections({
         onPointerDown={drag}
         {...keys}
       >
-        {sections.map((drawn, at) => (
-          <li key={drawn.section.id} className="sidebar-sections-item">
+        {shown.map(({ key, value: drawn }, drawnAt) => (
+          <li key={key} className="sidebar-sections-item" {...motionKey(key)}>
             <SidebarSection
               drawn={drawn}
               context={context}
-              place={{ at, count: sections.length, onMove: move }}
+              place={{ at: listedAt.get(key) ?? drawnAt, count: sections.length, onMove: move }}
             />
           </li>
         ))}
