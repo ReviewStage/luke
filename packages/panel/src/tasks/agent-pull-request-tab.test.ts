@@ -2665,13 +2665,12 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
   }
 });
 
-/** The agent's task as the task list pushes it, the line of its pull request saying its checks stand as given. */
-function tasksPushing(checks: CheckSummary): AppStateSnapshot["tasks"] {
+/** The agent's task as the task list pushes it, the line of its pull request saying its checks stand as given; none where the list holds no line of it. */
+function tasksPushing(checks: CheckSummary | undefined): AppStateSnapshot["tasks"] {
   const line = {
     number: PULL_REQUEST.number,
     title: PULL_REQUEST.title,
     state: PULL_REQUEST_STATE.OPEN,
-    checks,
     additions: 4,
     deletions: 1,
     url: PAGE,
@@ -2684,14 +2683,20 @@ function tasksPushing(checks: CheckSummary): AppStateSnapshot["tasks"] {
     createdAt: 1,
     updatedAt: 2,
     repository: "acme/relay",
-    agents: { total: 1, working: 0, agents: [], pullRequestTotal: 1, pullRequests: [line] },
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: checks === undefined ? [] : [{ ...line, checks }],
+    },
   };
   return { ...IDLE_TASKS_VIEW, tasks: [task] };
 }
 
-test("an open tab reads its checks and merge state again as the task list pushes its pull request's line moved, its checks finishing, and draws them with no press; a push that moves nothing reads nothing", async () => {
+test("an open tab reads its checks and merge state again as the task list pushes its pull request's line moved, its checks finishing or the line leaving the list as it merges, and draws them with no press; a push that moves nothing reads nothing", async () => {
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
-  const push = (checks: CheckSummary) => {
+  const push = (checks: CheckSummary | undefined) => {
     const delivery = deliveryOf(stateWith({}, { tasks: tasksPushing(checks) }));
     act(() => {
       for (const listener of listeners) listener(delivery);
@@ -2714,6 +2719,15 @@ test("an open tab reads its checks and merge state again as the task list pushes
       pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
         merge(MERGE_STATE.UNKNOWN),
         merge(MERGE_STATE.CLEAN),
+        {
+          pullRequest: {
+            ...PULL_REQUEST,
+            state: PULL_REQUEST_STATE.MERGED,
+            mergedAt: 9_000,
+            merge: MERGE_STATE.CLEAN,
+            merging: MERGING,
+          },
+        },
       ),
       checks: inTurn<CodingAgentOverviewChecksAnswerView>(
         { pullRequest: { checks: [check("build", CHECK_STATE.PENDING)] } },
@@ -2740,6 +2754,12 @@ test("an open tab reads its checks and merge state again as the task list pushes
   assert.deepEqual(words(tab, "li .luke-list-row-title"), ["build, passed"]);
   assert.equal(mergeShown(tab)?.chip, undefined);
   assert.equal(mergeShown(tab)?.press, "Squash and merge");
+
+  // The list holds only a few lines, so one merging can fall out of it, which is a move too.
+  push(undefined);
+  await settle();
+  assert.equal(standing(tab), "Merged");
+  assert.equal(mergeShown(tab), undefined, "a merged pull request offers no merge");
 });
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {

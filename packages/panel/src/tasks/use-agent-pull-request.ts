@@ -249,7 +249,7 @@ function samePushed(was: TaskPullRequestLine, now: TaskPullRequestLine): boolean
 
 /**
  * Runs `reread` as the pushed line of the pull request at `url` moves, its
- * state, checks, or place in the merge queue, so an open tab draws what
+ * state, checks, or place in the merge queue, or its leaving the list, so an open tab draws what
  * GitHub says now rather than what it read as it was first shown. The first
  * line seen is where the tab's own reads started from, and asks nothing; a
  * line that moved while the tab was out of sight asks once it is shown
@@ -269,10 +269,14 @@ export function usePushedLineMoved(
   const seen = useRef<TaskPullRequestLine | undefined>(undefined);
 
   useEffect(() => {
-    if (!shown || line === undefined) return;
+    if (!shown) return;
     const was = seen.current;
     seen.current = line;
-    if (was === undefined || was.url !== line.url || samePushed(was, line)) return;
+    // Note that a line gone from the list moved too, because the list holds
+    // only a few, the open first, so a pull request that merged can fall out
+    // of it as it merges.
+    if (was === undefined || was.url !== url) return;
+    if (line !== undefined && samePushed(was, line)) return;
     latest.current();
-  }, [shown, line]);
+  }, [shown, line, url]);
 }
