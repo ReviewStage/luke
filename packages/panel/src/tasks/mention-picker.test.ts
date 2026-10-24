@@ -123,6 +123,22 @@ test("an @ list closed with Escape stays drawn, inert, with its rows while it fa
   assert.equal(page.querySelector(".luke-rect-float"), null, "the list goes once it has faded");
 });
 
+test("the @ list's foot names its keys through Shortcut, ⏎ and ⇥ mention and Esc closes, and a search nothing matches says so as every menu does", () => {
+  const { picker, page } = mounted();
+  act(() => picker().onTrigger(word("mar")));
+  const foot = page.querySelector(".luke-menu-keys");
+  assert.ok(foot, "the list has a foot");
+  assert.deepEqual(
+    [...foot.children].map((item) => item.textContent),
+    ["↑↓Move", "⏎⇥Mention", "EscClose"],
+  );
+  assert.equal(foot.querySelectorAll("kbd.luke-shortcut").length, 5);
+
+  act(() => picker().onTrigger(word("zzzz")));
+  assert.deepEqual(rows(page), []);
+  assert.ok(page.textContent?.includes("No results match"));
+});
+
 /** The list drawn as a plan's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
 async function mountedOnPlan(chosen: MentionNode[]) {
   let latest: MentionPicker | undefined;

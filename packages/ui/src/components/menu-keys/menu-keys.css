@@ -16,9 +16,16 @@
     white-space: nowrap;
   }
 
+  .luke-menu-keys-item,
   .luke-menu-keys-key {
-    color: var(--luke-color-text-muted);
-    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-space-4);
+  }
+
+  /* The keys that do one thing sit closer than the words after them. */
+  .luke-menu-keys-key {
+    gap: var(--luke-space-2);
   }
 
   /* A finger picks a row by pressing it, so the keys say nothing there. */

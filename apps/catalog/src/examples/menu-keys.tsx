@@ -1,4 +1,5 @@
-import { MenuKeys } from "@luke/ui";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
+import { MenuKeys, menuKey } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -13,17 +14,17 @@ function MenuKeysExample(): React.JSX.Element {
       <CatalogSection id="menu-keys-full" title="Move, insert and close">
         <MenuKeys
           keys={[
-            { keys: "↑↓", does: "Move" },
-            { keys: "↵", does: "Insert" },
-            { keys: "esc", does: "Close" },
+            menuKey("Move", SHORTCUT_KEY.UP, SHORTCUT_KEY.DOWN),
+            menuKey("Insert", SHORTCUT_KEY.ENTER, SHORTCUT_KEY.TAB),
+            menuKey("Close", SHORTCUT_KEY.ESCAPE),
           ]}
         />
       </CatalogSection>
       <CatalogSection id="menu-keys-short" title="A list with no move">
         <MenuKeys
           keys={[
-            { keys: "↵", does: "Insert" },
-            { keys: "esc", does: "Close" },
+            menuKey("Insert", SHORTCUT_KEY.ENTER, SHORTCUT_KEY.TAB),
+            menuKey("Close", SHORTCUT_KEY.ESCAPE),
           ]}
         />
       </CatalogSection>

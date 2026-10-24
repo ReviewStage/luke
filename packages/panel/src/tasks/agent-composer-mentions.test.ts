@@ -1523,10 +1523,10 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
     ["Dates", "A day, a time, or a range"],
     ["Linear", "MCP server"],
   ]);
-  assert.deepEqual(wideKeys, ["↑↓ Move", "↵ Mention", "→ Open", "esc Close"]);
+  assert.deepEqual(wideKeys, ["↑↓Move", "⏎⇥Mention", "→Open", "EscClose"]);
   assert.equal(crumb(container), "Pages");
   assert.deepEqual(groupsListed(container), [["Pages", ["Invites by week"]]]);
-  assert.deepEqual(footKeys(container), ["↑↓ Move", "↵ Mention", "⌫ All kinds", "esc Close"]);
+  assert.deepEqual(footKeys(container), ["↑↓Move", "⏎⇥Mention", "⌫All kinds", "EscClose"]);
 });
 
 /** The highlighted row, by its group and its name. */
@@ -1669,7 +1669,7 @@ test("→ on a folder walks into it, its first row the folder and the rest what 
 
   assert.deepEqual(inApps, ["apps", ["apps/", "web/"]]);
   assert.deepEqual(inWeb, ["apps/web", ["web/", "invite-01.ts", "invite-02.ts"], 50]);
-  assert.deepEqual(keys, ["↑↓ Move", "↵ Mention", "→ Open", "⌫ Up", "esc Close"]);
+  assert.deepEqual(keys, ["↑↓Move", "⏎⇥Mention", "→Open", "⌫Up", "EscClose"]);
   assert.deepEqual([crumb(container), listed(container)], ["apps", ["apps/", "web/"]]);
   assert.equal(composerEditor(container).textContent, "See @files:");
 });

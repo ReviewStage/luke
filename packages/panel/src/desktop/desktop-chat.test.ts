@@ -689,7 +689,7 @@ test("a channel's composer offers the members a mention there tells under the ap
     "# Plan",
     "Teammate invitations · The whole plan",
   ]);
-  assert.deepEqual(menuKeys(page), ["↑↓ Move", "↵ Mention", "esc Close"]);
+  assert.deepEqual(menuKeys(page), ["↑↓Move", "⏎⇥Mention", "EscClose"]);
   const faces = [...page.querySelectorAll('.mention-menu [role="option"]')].map(
     (row) => row.querySelector(".luke-combobox-option-glyph")?.childElementCount ?? 0,
   );
@@ -1220,7 +1220,7 @@ test("a # at the start of a word offers the channels in the same list as an @, a
     "members-schema",
   ]);
   assert.deepEqual(menuRows(page), ["# Channels", "billing-export"]);
-  assert.deepEqual(menuKeys(page), ["↑↓ Move", "↵ Mention", "esc Close"]);
+  assert.deepEqual(menuKeys(page), ["↑↓Move", "⏎⇥Mention", "EscClose"]);
   pressInComposer(box, "Enter");
   assert.equal(boxWords(box), "see #billing-export ");
   assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
