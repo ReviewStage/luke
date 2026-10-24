@@ -1,10 +1,15 @@
-import type { PendingReviewComment, ReviewThread } from "@luke/features/coding-agent-wire";
+import type {
+  GitHubPerson,
+  PendingReviewComment,
+  ReviewThread,
+} from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import {
   Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  Comment,
   ConfirmDialog,
   type DialogQuestion,
   STATUS_TONE,
@@ -13,8 +18,10 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, Trash2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useState } from "react";
+import { ActorRef, commentAuthor } from "../actor-ref.js";
 import type { HeldBodies } from "./comment-drafts.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
+import { useNamer } from "./pull-request-people.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 
@@ -223,8 +230,8 @@ export function PendingComment({
   draft: PendingReviewComment;
   /** Whether it wears its own Pending mark; not where the card it starts already wears one in its head. */
   marked?: boolean;
-  /** Who wrote it and when, as every comment's head names them; none where the card it stands in names them beside it. */
-  head?: ReactNode;
+  /** Who wrote it and when, as every comment's head names them (`Comment`); none where the card it stands in names them beside it. */
+  head?: { readonly person: GitHubPerson; readonly at: number; readonly now: number } | undefined;
   /** Its words as every comment's are drawn. */
   words: ReactNode;
 }): React.JSX.Element {
@@ -243,14 +250,9 @@ export function PendingComment({
       ),
   );
   const out = writes.pending;
-  return (
+  const name = useNamer();
+  const body = (
     <div className="pull-request-pending-comment">
-      {head === undefined ? null : (
-        <span className="changes-comment-head">
-          {head}
-          {marked ? <PendingBadge /> : null}
-        </span>
-      )}
       {editing && writing !== undefined ? (
         <EditForm
           draft={draft}
@@ -296,5 +298,18 @@ export function PendingComment({
       <PullRequestWriteNote writes={writes} className="pull-request-thread-note" />
       <ConfirmDialog confirm={deleting} question={DELETE_QUESTION} />
     </div>
+  );
+  if (head === undefined) return body;
+  const writer = name(head.person);
+  return (
+    <Comment
+      author={commentAuthor(writer)}
+      nameRef={<ActorRef actor={writer} nameOnly />}
+      at={head.at}
+      now={head.now}
+      trailing={marked ? <PendingBadge /> : undefined}
+    >
+      {body}
+    </Comment>
   );
 }

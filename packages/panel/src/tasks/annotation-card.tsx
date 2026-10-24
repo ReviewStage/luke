@@ -4,6 +4,8 @@ import {
   CARD_ELEMENT,
   CARD_PADDING,
   Card,
+  Comment,
+  type CommentAuthor,
   DISCLOSURE_SUMMARY,
   DisclosureChevron,
   DisclosureSummary,
@@ -207,34 +209,56 @@ export function AnnotationComments({ children }: { children: ReactNode }): React
   );
 }
 
+/** A reply's head as `Comment` draws it: who wrote it, how long ago, and what stands at the head's end. */
+export interface AnnotationReply {
+  readonly author: CommentAuthor;
+  /** The name as the caller's own ref, hanging the writer's card. */
+  readonly nameRef: ReactNode;
+  readonly at: number;
+  readonly now: number;
+  readonly trailing?: ReactNode;
+}
+
 /**
  * One comment of a card: the first one's words alone, under the head's name,
- * since the head already says who and when; a reply's face in the faces'
- * column, its name and age beside it, and its words under them, in the
- * column the first comment's stand in.
+ * since the head already says who and when; a reply a comment (`Comment`),
+ * its face in the faces' column, its name and age beside it, and its words
+ * under them, in the column the first comment's stand in.
  */
 export function AnnotationComment({
   reply,
   className,
   children,
 }: {
-  /** A reply's face and the line beside it; none for the comment the card's head names. */
-  reply?: { readonly face: ReactNode; readonly meta: ReactNode } | undefined;
+  /** A reply's head; none for the comment the card's head names. */
+  reply?: AnnotationReply | undefined;
   className?: string | undefined;
   /** Its words, and what stands under them. */
   children: ReactNode;
 }): React.JSX.Element {
+  const words = <div className="annotation-comment-words">{children}</div>;
+  if (reply === undefined) {
+    return (
+      <li
+        className={
+          className === undefined ? "annotation-comment" : `annotation-comment ${className}`
+        }
+      >
+        {words}
+      </li>
+    );
+  }
   return (
-    <li
-      className={className === undefined ? "annotation-comment" : `annotation-comment ${className}`}
-    >
-      {reply === undefined ? null : (
-        <>
-          <span className="annotation-comment-face">{reply.face}</span>
-          <span className="annotation-comment-meta">{reply.meta}</span>
-        </>
-      )}
-      <div className="annotation-comment-words">{children}</div>
+    <li className={className}>
+      <Comment
+        author={reply.author}
+        nameRef={reply.nameRef}
+        at={reply.at}
+        now={reply.now}
+        trailing={reply.trailing}
+      >
+        {words}
+      </Comment>
     </li>
   );
 }
