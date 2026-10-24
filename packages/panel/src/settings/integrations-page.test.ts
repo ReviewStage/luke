@@ -577,7 +577,7 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
   const expired = rowNamed(page, "Notion");
   const refused = rowNamed(page, "Slack");
 
-  assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired.");
+  assert.equal(expired.querySelector(".luke-settings-row-state")?.textContent, "Sign-in expired");
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
   assert.equal(
     refused.querySelector(".luke-settings-row-state")?.textContent,
@@ -675,7 +675,7 @@ test("the window's focus still reads for the surfaces left once the first one dr
 
   touched.set(GRANOLA, INTEGRATION_STATUS.EXPIRED);
   await focusWindow();
-  assert.equal(granolaRow(other).line, "Sign-in expired.");
+  assert.equal(granolaRow(other).line, "Sign-in expired");
 });
 
 test("a sign-out leaves nothing of one account's integrations to the next account signed in", async () => {
