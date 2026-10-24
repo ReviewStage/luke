@@ -293,9 +293,7 @@ export function NewTaskComposer({
   );
   const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
-  const [note, setNote] = useState<Failure | undefined>(
-    refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused.note },
-  );
+  const [note, setNote] = useState<Failure | undefined>(refused?.note);
   // The last agent press's key and what it asked, until a start lands.
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   // How many times ⌘L asked the Issue chip to open its menu.
@@ -407,9 +405,7 @@ export function NewTaskComposer({
           pressed.current = undefined;
           draft.update(() => EMPTY_DRAFT);
         }
-        setNote(
-          refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused },
-        );
+        setNote(refused);
       })
       .finally(() => {
         setStarting(false);

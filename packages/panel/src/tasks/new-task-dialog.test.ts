@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import {
   GITHUB_AUTHOR_ASSOCIATION,
   type GitHubIssuePick,
@@ -27,7 +28,12 @@ import {
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import {
+  agentKeyLink,
+  SETTINGS_SECTION,
+  SETTINGS_VIEW,
+  type SettingsLink,
+} from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -127,7 +133,7 @@ async function settle(): Promise<void> {
  * answers, where the workspace has GitHub connected.
  */
 async function mount(
-  answer: string | undefined = undefined,
+  answer: string | Failure | undefined = undefined,
   preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[] | Error,
@@ -174,7 +180,9 @@ async function mount(
           fromIssues.push(from?.issues?.map((issue) => ("id" in issue ? issue.id : issue.number)));
           choices.push(from?.issues);
           startedIn.push(workspaceId);
-          return Promise.resolve(answer);
+          return Promise.resolve(
+            typeof answer === "string" ? { reason: FAILURE_REASON.OTHER, text: answer } : answer,
+          );
         },
         onClose: () => setOpen(false),
         linearIssuesIn: () =>
@@ -646,6 +654,22 @@ test("a refusal keeps the card and the words, says why under it, and Retry start
   act(() => card.button("Retry").click());
   await settle();
   assert.equal(card.starts.length, 2);
+});
+
+test("a start refused for a missing credential says which harness to connect, and the card offers the same press the draft agent tab does, opening Settings at its row", async () => {
+  const card = await mount({
+    reason: FAILURE_REASON.CONNECT_AGENTS,
+    text: "Connect Claude in Settings to start an agent.",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+  });
+  card.type("Dark mode toggle");
+  await card.key("Enter");
+
+  assert.match(card.note() ?? "", /Connect Claude in Settings to start an agent\./u);
+  act(() => card.button("Connect Claude").click());
+  await settle();
+  assert.deepEqual(card.links, [agentKeyLink(MODEL_PROVIDER.ANTHROPIC)]);
+  assert.equal(card.field().textContent, "Dark mode toggle", "the words stay");
 });
 
 test("Retry after an agent's start that did not land carries the same key, and other words carry another", async () => {
