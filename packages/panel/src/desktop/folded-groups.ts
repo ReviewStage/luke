@@ -1,6 +1,5 @@
 import { Schema, SchemaTransformation } from "effect";
 import { useCallback, useState } from "react";
-import { readKept, writeKept } from "../kept-storage.js";
 import {
   EVERYONES,
   INBOX_GROUPING,
@@ -152,16 +151,8 @@ const storedWhose = Schema.fromJsonString(
   ]),
 );
 
-/** Which scope the Inbox shows. */
-const storedShow = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_SHOW)));
-
 /** The tabs an earlier version kept, before the scopes: Needs you, Unread, and All open; Everything was kept as All is. */
 const EARLIER_SHOW = { NEEDS_YOU: "needs-you", UNREAD: "unread", OPEN: "open" } as const;
-
-/** Which scope, or tab before the scopes, the Inbox shows, as any version kept it. */
-const storedEarlierTab = Schema.fromJsonString(
-  Schema.NullOr(Schema.Literals([...Object.values(INBOX_SHOW), ...Object.values(EARLIER_SHOW)])),
-);
 
 /** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did. */
 const SHOW_OF_KEPT = {
@@ -175,16 +166,60 @@ const SHOW_OF_KEPT = {
   InboxShow
 >;
 
-/** Whether the Needs you button was pressed, before the tabs; null where nothing was kept. */
-const storedEarlierShow = Schema.fromJsonString(Schema.NullOr(Schema.Boolean));
+/**
+ * Which scope the Inbox shows, as any version kept it: a scope; a tab
+ * before the scopes, read as the scope that lists what it did
+ * (`SHOW_OF_KEPT`); or, as the key the Needs you button kept its press
+ * under is read, whether it was pressed, To do where it was and All, all it
+ * then listed, where it was not; and To do where nothing was kept.
+ */
+const storedShow = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Literals([...Object.values(INBOX_SHOW), ...Object.values(EARLIER_SHOW)]),
+    Schema.Boolean,
+    Schema.Null,
+  ]).pipe(
+    Schema.decodeTo(
+      Schema.Literals(Object.values(INBOX_SHOW)),
+      SchemaTransformation.transform({
+        decode: (kept) => {
+          if (kept === null) return INBOX_SHOW.TO_DO;
+          if (typeof kept === "boolean") return kept ? INBOX_SHOW.TO_DO : INBOX_SHOW.ALL;
+          return SHOW_OF_KEPT[kept];
+        },
+        encode: (show) => show,
+      }),
+    ),
+  ),
+);
 
 /** The Inbox's view choices, each kept on this Mac under its own key. */
 const KEPT = {
+  INBOX_SHOW: keptKey<InboxShow>(
+    STORAGE_KEY.INBOX_SHOW,
+    storedShow,
+    STORAGE_KEY.INBOX_WAITING_ONLY,
+  ),
+  TASK_INBOX_SHOW: keptKey<InboxShow>(
+    STORAGE_KEY.TASK_INBOX_SHOW,
+    storedShow,
+    STORAGE_KEY.TASK_INBOX_WAITING_ONLY,
+  ),
   GROUPING: keptKey<InboxGrouping>(STORAGE_KEY.INBOX_GROUPING, storedGrouping),
   SORT: keptKey<InboxSort>(STORAGE_KEY.INBOX_SORT, storedSort),
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
   MEDIA_PREVIEWS: keptKey(STORAGE_KEY.INBOX_MEDIA_PREVIEWS, storedFlag),
   SECOND_LINE: keptKey(STORAGE_KEY.INBOX_SECOND_LINE, storedFlag),
+  FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
+  FOLDED_CREATORS: keptKey(STORAGE_KEY.CREATORS, storedFolds),
+  FOLDED_ASSIGNEES: keptKey(STORAGE_KEY.ASSIGNEES, storedFolds),
+  PINNED_FOLDED: keptKey(STORAGE_KEY.PINNED, storedFlag),
+  FOLDED_SECTIONS: keptKey(STORAGE_KEY.SECTIONS, storedTasks),
+  INBOX_TASKS: keptKey(STORAGE_KEY.INBOX_TASKS, storedTasks, STORAGE_KEY.INBOX_TASKS_EARLIER),
+  INBOX_LIST_WIDTH: keptKey(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth),
+  CHAT_LIST_WIDTH: keptKey(STORAGE_KEY.CHAT_LIST_WIDTH, storedWidth),
+  FILE_TREE_WIDTH: keptKey(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth),
+  RUNS_PANEL: keptKey(STORAGE_KEY.RUNS_PANEL, storedRunsPanel),
 } as const;
 
 /** Every fold the sidebar keeps. */
@@ -197,31 +232,14 @@ interface Folds {
   readonly sections: readonly string[];
 }
 
-const OPEN: Folds = { groups: [], creators: [], assignees: [], pinned: false, sections: [] };
+/** No Inbox task group folded. */
+const NO_FOLDED_TASKS: readonly string[] = [];
 
-/** The kept folds, each open where none was kept. */
-function readFolds(): Folds {
-  return {
-    groups: readKept(STORAGE_KEY.GROUPS, storedFolds, OPEN.groups),
-    creators: readKept(STORAGE_KEY.CREATORS, storedFolds, OPEN.creators),
-    assignees: readKept(STORAGE_KEY.ASSIGNEES, storedFolds, OPEN.assignees),
-    pinned: readKept(STORAGE_KEY.PINNED, storedFlag, OPEN.pinned),
-    sections: readKept(STORAGE_KEY.SECTIONS, storedTasks, OPEN.sections),
-  };
-}
+const OPEN: Folds = { groups: [], creators: [], assignees: [], pinned: false, sections: [] };
 
 /** The folds with `held` folded where it was open, and open where it was folded. */
 function toggled(folded: readonly (string | null)[], held: string | null): (string | null)[] {
   return folded.includes(held) ? folded.filter((each) => each !== held) : [...folded, held];
-}
-
-/** Keeps every fold. */
-function writeFolds(folds: Folds): void {
-  writeKept(STORAGE_KEY.GROUPS, storedFolds, folds.groups);
-  writeKept(STORAGE_KEY.CREATORS, storedFolds, folds.creators);
-  writeKept(STORAGE_KEY.ASSIGNEES, storedFolds, folds.assignees);
-  writeKept(STORAGE_KEY.PINNED, storedFlag, folds.pinned);
-  writeKept(STORAGE_KEY.SECTIONS, storedTasks, folds.sections);
 }
 
 /** Whether each group is folded, and the presses that fold or unfold one. */
@@ -246,27 +264,29 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
   // Note that the fixture run's folds are a state of their own rather than
   // the kept ones reset, because the run is only known a render after the
   // kept folds were read, as `sidebar-collapse.ts` says of its own.
-  const [kept, setKept] = useState(readFolds);
+  const [groups, keepGroups] = useKept(KEPT.FOLDED_GROUPS, OPEN.groups);
+  const [creators, keepCreators] = useKept(KEPT.FOLDED_CREATORS, OPEN.creators);
+  const [assignees, keepAssignees] = useKept(KEPT.FOLDED_ASSIGNEES, OPEN.assignees);
+  const [pinned, keepPinned] = useKept(KEPT.PINNED_FOLDED, OPEN.pinned);
+  const [sections, keepSections] = useKept(KEPT.FOLDED_SECTIONS, OPEN.sections);
   const [stagedFolds, setStagedFolds] = useState<Folds>(OPEN);
-  const folds = staged ? stagedFolds : kept;
-  const fold = (next: Folds) => {
+  const folds = staged ? stagedFolds : { groups, creators, assignees, pinned, sections };
+  const fold = (next: Partial<Folds>) => {
     if (staged) {
-      setStagedFolds(next);
+      setStagedFolds({ ...stagedFolds, ...next });
       return;
     }
-    setKept(next);
-    writeFolds(next);
+    if (next.groups !== undefined) keepGroups(next.groups);
+    if (next.creators !== undefined) keepCreators(next.creators);
+    if (next.assignees !== undefined) keepAssignees(next.assignees);
+    if (next.pinned !== undefined) keepPinned(next.pinned);
+    if (next.sections !== undefined) keepSections(next.sections);
   };
-  const toggle = (repository: string | null) => {
-    const groups = folds.groups.includes(repository)
-      ? folds.groups.filter((held) => held !== repository)
-      : [...folds.groups, repository];
-    fold({ ...folds, groups });
-  };
+  const toggle = (repository: string | null) => fold({ groups: toggled(folds.groups, repository) });
   const toggleCreator = (creatorId: string | undefined) =>
-    fold({ ...folds, creators: toggled(folds.creators, creatorId ?? null) });
+    fold({ creators: toggled(folds.creators, creatorId ?? null) });
   const toggleAssignee = (assigneeId: string | undefined) =>
-    fold({ ...folds, assignees: toggled(folds.assignees, assigneeId ?? null) });
+    fold({ assignees: toggled(folds.assignees, assigneeId ?? null) });
   return {
     folded: (repository) => folds.groups.includes(repository),
     toggle,
@@ -275,11 +295,10 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
     assigneeFolded: (assigneeId) => folds.assignees.includes(assigneeId ?? null),
     toggleAssignee,
     pinnedFolded: folds.pinned,
-    togglePinned: () => fold({ ...folds, pinned: !folds.pinned }),
+    togglePinned: () => fold({ pinned: !folds.pinned }),
     sectionFolded: (sectionId) => folds.sections.includes(sectionId),
     toggleSection: (sectionId) =>
       fold({
-        ...folds,
         sections: folds.sections.includes(sectionId)
           ? folds.sections.filter((held) => held !== sectionId)
           : [...folds.sections, sectionId],
@@ -295,18 +314,13 @@ export interface InboxTaskFolds {
 
 /** The Inbox's task groups, each open until it is first folded, and kept as it is pressed. */
 export function useInboxTaskFolds(): InboxTaskFolds {
-  const [folded, setFolded] = useState(() =>
-    readKept(STORAGE_KEY.INBOX_TASKS, storedTasks, [], STORAGE_KEY.INBOX_TASKS_EARLIER),
-  );
+  const [folded, keep] = useKept(KEPT.INBOX_TASKS, NO_FOLDED_TASKS);
   return {
     folded: (taskId) => folded.includes(taskId),
-    toggle: (taskId) => {
-      const next = folded.includes(taskId)
-        ? folded.filter((held) => held !== taskId)
-        : [...folded, taskId];
-      setFolded(next);
-      writeKept(STORAGE_KEY.INBOX_TASKS, storedTasks, next);
-    },
+    toggle: (taskId) =>
+      keep(
+        folded.includes(taskId) ? folded.filter((held) => held !== taskId) : [...folded, taskId],
+      ),
   };
 }
 
@@ -336,40 +350,20 @@ export interface InboxWhoseChoice {
   onWhose: (whose: InboxWhose) => void;
 }
 
-/**
- * The scope kept under `key`, a tab kept there before the scopes read as
- * the scope that lists what it did (`SHOW_OF_KEPT`); or, where none is, the
- * one the Needs you button kept under `earlier` stood for: To do where it
- * was pressed, and All, all it then listed, where it was not; To do where
- * neither was kept.
- */
-function readShow(key: string, earlier: string): InboxShow {
-  const pressed = readKept(earlier, storedEarlierShow, null);
-  const fallback = pressed === false ? INBOX_SHOW.ALL : INBOX_SHOW.TO_DO;
-  const kept = readKept(key, storedEarlierTab, null);
-  return kept === null ? fallback : SHOW_OF_KEPT[kept];
-}
-
-/** An Inbox's scope, read from `key` (or `earlier`'s press) and kept there as it is chosen. */
-function useKeptShow(key: string, earlier: string): InboxShowChoice {
-  const [show, setShow] = useState<InboxShow>(() => readShow(key, earlier));
-  return {
-    show,
-    onShow: (next) => {
-      setShow(next);
-      writeKept(key, storedShow, next);
-    },
-  };
+/** An Inbox's scope, To do until first chosen, and kept under `key` as it is chosen. */
+function useKeptShow(key: typeof KEPT.INBOX_SHOW | typeof KEPT.TASK_INBOX_SHOW): InboxShowChoice {
+  const [show, onShow] = useKept(key, INBOX_SHOW.TO_DO);
+  return { show, onShow };
 }
 
 /** A task's own Inbox's scope, To do until first chosen, kept apart from the window's and shared by every task. */
 export function useTaskInboxShow(): InboxShowChoice {
-  return useKeptShow(STORAGE_KEY.TASK_INBOX_SHOW, STORAGE_KEY.TASK_INBOX_WAITING_ONLY);
+  return useKeptShow(KEPT.TASK_INBOX_SHOW);
 }
 
 /** The Inbox's view choices, To do of everyone's, grouped by nothing, the latest first, with no media shown, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
-  const shown = useKeptShow(STORAGE_KEY.INBOX_SHOW, STORAGE_KEY.INBOX_WAITING_ONLY);
+  const shown = useKeptShow(KEPT.INBOX_SHOW);
   const [grouping, onGrouping] = useKept(KEPT.GROUPING, INBOX_GROUPING.NONE);
   const [sort, onSort] = useKept(KEPT.SORT, INBOX_SORT.LATEST);
   const [whose, onWhose] = useKept(KEPT.WHOSE, EVERYONES);
@@ -405,29 +399,20 @@ export interface InboxListWidth {
 
 /** The Inbox list's width, the default until first dragged, and kept as it is. */
 export function useInboxListWidth(): InboxListWidth {
-  return useListWidth(STORAGE_KEY.INBOX_LIST_WIDTH);
+  return useListWidth(KEPT.INBOX_LIST_WIDTH);
 }
 
 /** Chat's rail's width, on the Inbox list's bounds, since it stands where the Inbox's list does, and kept apart from it. */
 export function useChatListWidth(): InboxListWidth {
-  return useListWidth(STORAGE_KEY.CHAT_LIST_WIDTH);
+  return useListWidth(KEPT.CHAT_LIST_WIDTH);
 }
 
 /** A list column's width beside the item it opens, the default until first dragged, and kept under its key. */
 function useListWidth(
-  key: typeof STORAGE_KEY.INBOX_LIST_WIDTH | typeof STORAGE_KEY.CHAT_LIST_WIDTH,
+  key: typeof KEPT.INBOX_LIST_WIDTH | typeof KEPT.CHAT_LIST_WIDTH,
 ): InboxListWidth {
-  const [width, setWidth] = useState(() =>
-    clampListWidth(readKept(key, storedWidth, INBOX_LIST_WIDTH.DEFAULT)),
-  );
-  return {
-    width,
-    onResize: (asked) => {
-      const next = clampListWidth(asked);
-      setWidth(next);
-      writeKept(key, storedWidth, next);
-    },
-  };
+  const [kept, keep] = useKept(key, INBOX_LIST_WIDTH.DEFAULT);
+  return { width: clampListWidth(kept), onResize: (asked) => keep(clampListWidth(asked)) };
 }
 
 /** How wide the tree beside File and Changes tabs stands, and the drag that asks for another width. */
@@ -445,16 +430,10 @@ function clampTreeWidth(width: number): number {
 
 /** The tree's width, the default until first dragged, and kept as it is. */
 export function useFileTreeWidth(): FileTreeWidth {
-  const [width, setWidth] = useState(() =>
-    clampTreeWidth(readKept(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth, FILE_TREE_WIDTH.DEFAULT)),
-  );
+  const [kept, keep] = useKept(KEPT.FILE_TREE_WIDTH, FILE_TREE_WIDTH.DEFAULT);
   // Note that the drag's door is the same door across draws, so the tree the panel hands every tab is the same tree while nothing changed.
-  const onResize = useCallback((asked: number) => {
-    const next = clampTreeWidth(asked);
-    setWidth(next);
-    writeKept(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth, next);
-  }, []);
-  return { width, onResize };
+  const onResize = useCallback((asked: number) => keep(clampTreeWidth(asked)), [keep]);
+  return { width: clampTreeWidth(kept), onResize };
 }
 
 /** A Runs panel width held within its bounds, in whole pixels. */
@@ -476,17 +455,8 @@ export interface RunsPanel {
 
 /** The Runs panel's width and fold, open at the default width until changed, and kept as they are. */
 export function useRunsPanel(): RunsPanel {
-  const [kept, setKept] = useState(() => {
-    const read = readKept(STORAGE_KEY.RUNS_PANEL, storedRunsPanel, {
-      width: RUNS_PANEL_WIDTH.DEFAULT,
-      open: true,
-    });
-    return { width: clampRunsWidth(read.width), open: read.open };
-  });
-  const keep = (next: { width: number; open: boolean }) => {
-    setKept(next);
-    writeKept(STORAGE_KEY.RUNS_PANEL, storedRunsPanel, next);
-  };
+  const [stored, keep] = useKept(KEPT.RUNS_PANEL, { width: RUNS_PANEL_WIDTH.DEFAULT, open: true });
+  const kept = { width: clampRunsWidth(stored.width), open: stored.open };
   return {
     ...kept,
     onResize: (asked) => keep({ ...kept, width: clampRunsWidth(asked) }),

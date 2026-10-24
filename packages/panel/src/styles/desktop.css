@@ -4707,18 +4707,9 @@ ul.actor-stack {
 /* A person's page (`person-page.tsx`), a `DetailPage` under its toolbar:
    Home's sections, headed by their face at the page's size beside their
    name and who they are here, and each block a section's gap under the
-   head. Show all stands close under the section it lists in full. */
+   head. */
 .person-top ~ * {
   margin-top: var(--luke-page-section-gap);
-}
-
-.person-top ~ .person-section-foot {
-  margin-top: var(--luke-tight-gap);
-}
-
-/* The way to the rest of their tasks, standing under the section's rows. */
-.person-section-foot {
-  margin-bottom: 0;
 }
 
 /* A new account's welcome: Luke's face on a tile and a title, centred over

@@ -26,10 +26,8 @@
 
 import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
 import { Effect, Option, Schema } from "effect";
-import { useSyncExternalStore } from "react";
-
-/** The storage key the choice is kept under. */
-const CONVERSATION_FILTERS_KEY = "luke.conversation-filters";
+import { useCallback } from "react";
+import { keptKey, useKept } from "../use-kept.js";
 
 /** A kept filter read on its own: as kept where it reads, its default where it is missing or does not. */
 function keptOr<S extends Schema.Codec<unknown, unknown>>(
@@ -63,7 +61,10 @@ type ConversationChoices = typeof conversationChoicesSchema.Type;
 /** What the filters leave out of a conversation. */
 export type ConversationFilters = Pick<ConversationChoices, "hideBots" | "hideResolved">;
 
-const decodeChoices = Schema.decodeUnknownOption(Schema.fromJsonString(conversationChoicesSchema));
+/** The choice, kept on this Mac under one key for every pull request. */
+const KEPT = {
+  CHOICES: keptKey("luke.conversation-filters", Schema.fromJsonString(conversationChoicesSchema)),
+} as const;
 
 /** How many entries each filter would leave out of a conversation, each counted on its own. */
 export interface ConversationHidden {
@@ -71,47 +72,6 @@ export interface ConversationHidden {
   readonly bots: number;
   /** The resolved review threads, a bot's among them. */
   readonly resolved: number;
-}
-
-/** The kept text, none where nothing is kept or storage refuses the read. */
-function readKept(): string | null {
-  try {
-    return window.localStorage.getItem(CONVERSATION_FILTERS_KEY);
-  } catch {
-    return null;
-  }
-}
-
-/** The choice last read, with the text it was read from, so a snapshot is the same object until what is kept changes. */
-let read: { readonly kept: string | null; readonly filters: ConversationChoices } | undefined;
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-/** The kept choice, each filter as kept where it reads and off otherwise, each section as kept and open otherwise. */
-function snapshot(): ConversationChoices {
-  const kept = readKept();
-  if (read?.kept !== kept) {
-    read = { kept, filters: Option.getOrElse(decodeChoices(kept), () => DEFAULT_CHOICES) };
-  }
-  return read.filters;
-}
-
-/** Changes one filter or section's fold for every conversation, kept where storage takes it. */
-function changeFilters(change: Partial<ConversationChoices>): void {
-  const filters = { ...snapshot(), ...change };
-  const kept = JSON.stringify(filters);
-  try {
-    window.localStorage.setItem(CONVERSATION_FILTERS_KEY, kept);
-  } catch {
-    // The choice holds for this window's life.
-  }
-  // Note that where storage refused the write, the text read back is what it already held, so the choice still stands until it changes.
-  read = { kept: readKept(), filters };
-  for (const listener of listeners) listener();
 }
 
 /** The threads a review started, none on a comment. */
@@ -165,6 +125,11 @@ export interface ConversationFiltersControl {
 }
 
 export function useConversationFilters(): ConversationFiltersControl {
-  const filters = useSyncExternalStore(subscribe, snapshot);
-  return { filters, change: changeFilters };
+  const [filters, , changeChoices] = useKept<ConversationChoices>(KEPT.CHOICES, DEFAULT_CHOICES);
+  // Note that a change is made over what is kept now, so every conversation's tab draws it at once, and a filter changed in one never undoes a section folded in another.
+  const change = useCallback(
+    (changed: Partial<ConversationChoices>) => changeChoices((held) => ({ ...held, ...changed })),
+    [changeChoices],
+  );
+  return { filters, change };
 }

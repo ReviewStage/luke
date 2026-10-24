@@ -91,3 +91,37 @@ test("a choice kept in a shape that no longer reads opens at its initial value",
   remount();
   expect(shown()).toBe(SORT.OLDEST);
 });
+
+/** Two surfaces holding the sort, and the doors the first drew with. */
+let doors:
+  | { choose: (next: Sort) => void; change: (change: (kept: Sort) => Sort) => void }
+  | undefined;
+
+function TwoLists(): React.JSX.Element {
+  const [sort, choose, change] = useKept(KEPT.SORT, SORT.LATEST);
+  doors = { choose, change };
+  const [other] = useKept(KEPT.SORT, SORT.LATEST);
+  return createElement("p", null, `${sort} ${other}`);
+}
+
+test("a choice made in one surface is drawn at once in every other that holds the key", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(TwoLists)));
+  expect(shown()).toBe(`${SORT.LATEST} ${SORT.LATEST}`);
+  act(() => doors?.choose(SORT.OLDEST));
+  expect(shown()).toBe(`${SORT.OLDEST} ${SORT.OLDEST}`);
+});
+
+test("a change is made over what storage holds now, and one that answers what it was handed keeps nothing", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(TwoLists)));
+  // Another window kept a sort after this one drew.
+  window.localStorage.setItem(KEPT.SORT.name, JSON.stringify(SORT.OLDEST));
+  act(() => doors?.change((held) => (held === SORT.OLDEST ? SORT.LATEST : SORT.OLDEST)));
+  expect(window.localStorage.getItem(KEPT.SORT.name)).toBe(JSON.stringify(SORT.LATEST));
+  window.localStorage.removeItem(KEPT.SORT.name);
+  act(() => doors?.change((held) => held));
+  expect(window.localStorage.getItem(KEPT.SORT.name)).toBeNull();
+});
