@@ -7,11 +7,13 @@ import {
   editorAnswered,
   editorCloseAsked,
   editorCloses,
+  editorLeft,
   editorOpened,
   editorRebased,
   editorRetried,
   editorSent,
   editorTyped,
+  leavingSave,
   pendingSave,
 } from "./plan-edit-model.js";
 import { TASK_CALL_FAILURE } from "./tasks-view.js";
@@ -94,4 +96,17 @@ test("an editor carrying comment anchors sends where they stand with its save, a
   assert.deepEqual(saved(typedOn).comments, anchors);
   assert.deepEqual(saved(cut).comments, deleted);
   assert.equal(saved(editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`)).comments, undefined);
+});
+
+test("an editor left tries a failed save once more, sends nothing over a conflict, and keeps whatever the service does not hold", () => {
+  const typed = editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`);
+  const out = editorSent(typed, saved(typed));
+  const failed = editorAnswered(out, { failure: TASK_CALL_FAILURE.UNANSWERED });
+  const conflicted = editorAnswered(out, { conflict: { current: `${TEXT}Luke's.\n` } });
+
+  assert.deepEqual(leavingSave(failed), { document: { base: TEXT, value: `${TEXT}Mine.\n` } });
+  assert.equal(leavingSave(conflicted), undefined);
+  assert.equal(editorLeft(conflicted)?.draft, `${TEXT}Mine.\n`);
+  assert.equal(editorLeft(failed)?.draft, `${TEXT}Mine.\n`);
+  assert.equal(editorLeft(editorAnswered(out, { saved: true })), undefined);
 });

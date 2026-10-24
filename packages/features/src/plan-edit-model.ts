@@ -20,7 +20,9 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer, type TasksEditFailure } from "
  * words and waits: it is tried again when the developer asks or types on,
  * never on its own, so a service that keeps refusing is not asked again and
  * again. A text past the bound a document may hold is refused here rather
- * than sent. Everything here is pure.
+ * than sent. An editor whose task is left tries a failed save once more,
+ * and words the service still does not hold of theirs outlive it, to open
+ * in its place when the developer comes back. Everything here is pure.
  */
 
 /** Where an editor stands with the service. */
@@ -156,6 +158,18 @@ export function editorRefused(editor: DocumentEditor, note: string): DocumentEdi
 export function editorRetried(editor: DocumentEditor): DocumentEditor {
   if (editor.state.kind !== DOCUMENT_EDITOR_STATE.FAILED) return editor;
   return { ...editor, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } };
+}
+
+/** The save to make as the editor's task is left: a failed save is tried once more, and a conflict still waits on the developer. */
+export function leavingSave(editor: DocumentEditor): PlanEditRequest | undefined {
+  return pendingSave(editorRetried(editor));
+}
+
+/** What of an editor outlives its task being left: its words where the service does not hold them, with nothing out and nothing closing; nothing where it does. */
+export function editorLeft(editor: DocumentEditor): DocumentEditor | undefined {
+  if (editor.draft === editor.base) return undefined;
+  const { sending: _sent, ...rest } = editor;
+  return { ...rest, closing: false };
 }
 
 /** The developer keeps their words over Luke's: what the text holds now becomes the base, so the next save sets theirs. */
