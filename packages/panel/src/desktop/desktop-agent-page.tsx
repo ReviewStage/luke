@@ -6,6 +6,7 @@ import {
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { readingWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ConfirmDialog,
@@ -22,7 +23,6 @@ import {
   ONE_LINE_END,
   OneLine,
   SidePanelIcon,
-  SpinnerRegion,
   STATUS_TONE,
   Toolbar,
   useMenu,
@@ -41,6 +41,7 @@ import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { agentSubject } from "../tasks/agent-ref.js";
+import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { peopleOf } from "../tasks/changes-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -584,7 +585,9 @@ export function DesktopAgentPage({
             {NOT_READ}
           </ErrorState>
         ) : (
-          <SpinnerRegion delay label="Loading agent" />
+          <Fill className="desktop-task-column">
+            <AgentTabSkeleton label={readingWords("the agent")} />
+          </Fill>
         )}
       </Fill>
     );

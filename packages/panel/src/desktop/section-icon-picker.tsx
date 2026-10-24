@@ -9,6 +9,7 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
+import { readingWords } from "@luke/features/words";
 import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
@@ -125,6 +126,12 @@ const GRID_STEPS = new Map([
 const LOAD_FAILED = {
   [ICON_TAB.ICONS]: "The icons could not be loaded.",
   [ICON_TAB.EMOJI]: "The emoji could not be loaded.",
+} as const satisfies Record<IconTab, string>;
+
+/** What the picker says while a set is loaded. */
+const READING = {
+  [ICON_TAB.ICONS]: readingWords("icons"),
+  [ICON_TAB.EMOJI]: readingWords("emoji"),
 } as const satisfies Record<IconTab, string>;
 
 /** Whether a value is an icon the wire takes. */
@@ -252,7 +259,7 @@ function PanelNote({
     ? LOAD_FAILED[tab]
     : AsyncResult.isSuccess(loaded)
       ? `Nothing matches “${query.trim()}”.`
-      : "Loading…";
+      : READING[tab];
   return <NoteLine look={NOTE_LINE_LOOK.LIST}>{words}</NoteLine>;
 }
 

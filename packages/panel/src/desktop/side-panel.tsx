@@ -12,6 +12,7 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -1820,7 +1821,7 @@ function TabContent({
   if (isCloudBrowserTab(tab)) {
     const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
     // The tab stands for one the service no longer lists only until the panel moves on, a render away.
-    if (drawn === undefined) return <SpinnerRegion delay label="Loading page" />;
+    if (drawn === undefined) return <SpinnerRegion delay label={readingWords("the browser")} />;
     if ("draft" in drawn) {
       return (
         <CloudBrowserDraftPane
@@ -1861,7 +1862,7 @@ function TabContent({
     const page = pages.find((each) => each.id === tab.page);
     // The tab stands for a page the plan no longer lists only until the panel moves on, a render away.
     return page === undefined ? (
-      <SpinnerRegion delay label="Loading page" />
+      <SpinnerRegion delay label={readingWords("the page")} />
     ) : (
       <PagePane
         key={page.id}
@@ -1879,7 +1880,7 @@ function TabContent({
     return (
       <PullRequestsOnGitHub key={tabKey(tab)}>
         {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
-        <Suspense fallback={<SpinnerRegion delay label="Loading pull request" />}>
+        <Suspense fallback={<SpinnerRegion delay label={readingWords("the pull request")} />}>
           <PULL_REQUEST_TAB.Route
             agentId={tab.changes}
             number={tab.number}
@@ -1904,7 +1905,7 @@ function TabContent({
     // Note that the task given another repository draws the file afresh,
     // because the lines held were read from the one before.
     return file === undefined ? (
-      <SpinnerRegion delay label="Loading file" />
+      <SpinnerRegion delay label={readingWords("the file")} />
     ) : (
       <Fragment key={repository ?? undefined}>
         <FileView
@@ -1961,7 +1962,7 @@ function TabContent({
       );
     }
     // A tab no delegation started, a task's own Luke's worker's, stands only until the panel moves back to the board, a render away.
-    return <SpinnerRegion delay label="Loading subagent" />;
+    return <SpinnerRegion delay label={readingWords("the worker")} />;
   }
   switch (tab) {
     case SIDE_PANEL_TAB.PLAN:
@@ -1985,7 +1986,7 @@ function TabContent({
           </ErrorState>
         );
       }
-      if (shownCode === undefined) return <SpinnerRegion delay label="Loading code" />;
+      if (shownCode === undefined) return <SpinnerRegion delay label={readingWords("the code")} />;
       return shownCode.length === 0 ? (
         <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
           {NO_CODE_LINE}

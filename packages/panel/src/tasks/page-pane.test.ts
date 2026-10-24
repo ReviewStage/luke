@@ -106,6 +106,16 @@ test("a page is drawn at its newest version in a frame that runs its own scripts
   assert.match(container.textContent ?? "", /Invite funnel.*Version 3 of 3/);
 });
 
+test("a page's frame says it is read until it loads, and the wait goes when it has", () => {
+  const { container, frame } = mount(FUNNEL);
+
+  assert.equal(container.querySelector('[role="status"]')?.textContent, "Reading the page");
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  assert.equal(container.querySelector('[role="status"]'), null);
+});
+
 test("View source draws the version's HTML as a File tab's numbered, coloured lines in the frame's place, and View page draws the frame again", async () => {
   const { container, press, frame, sourceLines } = mount(FUNNEL);
 

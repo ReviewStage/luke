@@ -3,7 +3,7 @@ import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { MentionLines, MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { CodeRef } from "@luke/features/task-wire";
-import { readFailedWords } from "@luke/features/words";
+import { readFailedWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -1429,7 +1429,7 @@ export function TaskChatTab({
             {CHAT_FAILED}
           </ErrorState>
         ) : read === undefined && view.available ? (
-          <SpinnerRegion delay label="Loading chat" />
+          <SpinnerRegion delay label={readingWords("the chat")} />
         ) : (
           // Note that a chat nothing could be read of says so, rather than that nothing is posted in it.
           <EmptyState icon={<MessagesSquareIcon />}>

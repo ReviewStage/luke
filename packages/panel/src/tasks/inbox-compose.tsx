@@ -24,7 +24,7 @@ import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-v
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { pasteCutWords } from "@luke/features/words";
+import { pasteCutWords, readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   BackButton,
@@ -490,7 +490,7 @@ function ComposeCard({
               noMatch={NO_MATCH}
               note={
                 asked !== "" ? undefined : read === undefined ? (
-                  <Spinner delay label="Loading agents" />
+                  <Spinner delay label={readingWords("agents")} />
                 ) : "failed" in read ? (
                   AGENTS_FAILED
                 ) : read.agents.length === 0 ? (

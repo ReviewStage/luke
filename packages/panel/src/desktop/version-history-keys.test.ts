@@ -204,7 +204,7 @@ test("the foot counts the older versions, and reading them is its press", async 
   expect(foot(view)?.textContent).toBe("Show 2 more");
 
   act(() => foot(view)?.click());
-  expect(foot(view)?.getAttribute("aria-label")).toBe("Loading older versions");
+  expect(foot(view)?.getAttribute("aria-label")).toBe("Reading older versions");
   act(() => foot(view)?.click());
   expect(read).toHaveLength(1);
 

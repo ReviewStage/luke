@@ -1161,18 +1161,22 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
   );
 });
 
-test("until the agent is read, its wait stands centred in the page's room rather than as a ring in its corner, and gives way to the agent once read", async () => {
+test("until the agent is read, the page stands in an agent tab's own shape saying Reading, and gives way to the agent once read", async () => {
   holdPage = true;
   const page = mount();
   await settle();
 
   const wait = page.querySelector('.agent-page [role="status"]');
-  assert.ok(wait, "the page says it is waiting");
-  assert.ok(wait.closest(".luke-spinner-region"), "the wait stands in a region filling the page");
+  assert.equal(wait?.textContent, "Reading the agent");
+  assert.ok(wait.closest(".agent-tab"), "the wait stands in the tab's own frame");
+  assert.ok(
+    page.querySelector(".agent-page .agent-tab-foot .luke-skeleton"),
+    "the composer's card stands under the log",
+  );
+  assert.equal(page.querySelector(".agent-page .luke-spinner-region"), null);
   assert.equal(page.querySelector("h1"), null);
   answerHeld();
   await settle();
-
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 

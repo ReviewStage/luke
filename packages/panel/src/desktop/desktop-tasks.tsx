@@ -3,6 +3,7 @@ import type { InboxItem } from "@luke/features/inbox-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -180,7 +181,7 @@ import {
  */
 
 /** What the task's page says to a reader while the task is read. */
-const TASK_LOADING_LABEL = "Loading task";
+const TASK_LOADING_LABEL = readingWords("the task");
 
 /** How wide the toolbar's worded actions stand while the task is read: a repository's chip, and Start with its model menu. */
 const ACTION_SKELETON_WIDTHS = { REPOSITORY: "112px", START: "104px" } as const;

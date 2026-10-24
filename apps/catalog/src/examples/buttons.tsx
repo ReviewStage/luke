@@ -137,7 +137,7 @@ function Buttons(): React.JSX.Element {
           <IconButton icon={<SidebarIcon />} label="Sidebar" pressed />
           <IconButton icon={<PlusIcon />} label="New task" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
-          <IconButton icon={<PinIcon />} label="Loading" busy busyLabel="Loading" />
+          <IconButton icon={<PinIcon />} label="Pin" busy busyLabel="Pinning" />
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-link" title="As a link">

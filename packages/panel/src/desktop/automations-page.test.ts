@@ -279,6 +279,8 @@ let sentryRead: WorkspaceSentry = {
   configured: true,
   installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
 };
+/** How many reads of the workspace's Sentry are refused before one answers. */
+let sentryRefusals = 0;
 /** Every workspace a Sentry install was asked for. */
 let sentryInstalls: string[] = [];
 /** What a change answers: the automation as changed, or why not. */
@@ -337,6 +339,7 @@ beforeEach(() => {
     installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
   };
   sentryInstalls = [];
+  sentryRefusals = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_FOLLOW) {
@@ -456,6 +459,10 @@ beforeEach(() => {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.WORKSPACE_SENTRY_READ) {
+        if (sentryRefusals > 0) {
+          sentryRefusals -= 1;
+          return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Unreachable." });
+        }
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: sentryRead });
       }
       if (request.kind === ACT_KIND.WORKSPACE_SENTRY_INSTALL) {
@@ -3629,6 +3636,20 @@ test("where the workspace has no Sentry installed, a Sentry trigger offers Insta
   act(() => button("Install Sentry").click());
   await settle();
   assert.deepEqual(sentryInstalls, [WORKSPACE.id]);
+});
+
+test("a Sentry read that fails says so above a saved trigger's rows, which stay editable, and Retry reads again", async () => {
+  sentryRefusals = 1;
+  standing = [SENTRY_ALERTS];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /The workspace's Sentry could not be read\./u);
+  assert.ok(page.querySelector("input[aria-label='Projects']"), "the saved trigger's rows stand");
+  act(() => button("Retry").click());
+  await settle();
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.ok(page.querySelector("input[aria-label='Projects']"));
 });
 
 test("Sentry stays listed but unpickable, saying why, where this deployment holds no Sentry integration, and one already fired by it keeps its rows", async () => {

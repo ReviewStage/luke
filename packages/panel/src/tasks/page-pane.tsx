@@ -7,6 +7,7 @@ import {
 } from "@luke/features/page-find";
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
+import { readingWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ERROR_STATE_PLACEMENT,
@@ -199,22 +200,37 @@ function useFrameFocus(frame: RefObject<HTMLIFrameElement | null>): void {
   }, [frame]);
 }
 
-/** The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`). */
+/**
+ * The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`).
+ * Note that the frame stands from the start, its ring over it until `onLoad`, because the page
+ * reads only as the frame loads it, and a frame left blank says nothing of that.
+ */
 function PageFrame({ title, src }: { title: string; src: string }): React.JSX.Element {
   const frame = useRef<HTMLIFrameElement>(null);
-  const loaded = useFrameFind(frame);
+  const [framed, setFramed] = useState(false);
+  const found = useFrameFind(frame);
   useFrameFocus(frame);
   return (
-    <iframe
-      ref={frame}
-      className="page-view-frame"
-      title={title}
-      src={src}
-      sandbox={PAGE_SANDBOX}
-      allow=""
-      referrerPolicy="no-referrer"
-      onLoad={loaded}
-    />
+    <div className="page-view-frame-room">
+      <iframe
+        ref={frame}
+        className="page-view-frame"
+        title={title}
+        src={src}
+        sandbox={PAGE_SANDBOX}
+        allow=""
+        referrerPolicy="no-referrer"
+        onLoad={() => {
+          setFramed(true);
+          found();
+        }}
+      />
+      {framed ? null : (
+        <div className="page-view-frame-wait">
+          <SpinnerRegion delay label={readingWords("the page")} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -306,7 +322,8 @@ function PageSource({
     () => (read.kind === SOURCE_READ.READY ? sourceText(read.lines) : ""),
     [read],
   );
-  if (read.kind === SOURCE_READ.READING) return <SpinnerRegion delay label="Loading source" />;
+  if (read.kind === SOURCE_READ.READING)
+    return <SpinnerRegion delay label={readingWords("the source")} />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>

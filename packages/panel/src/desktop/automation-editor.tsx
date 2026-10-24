@@ -224,11 +224,14 @@ import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
 /**
  * The workspace's Sentry as the editor offers it: the read, nothing while
- * it is out or where it failed, and the install, with whether one is under
- * way and why the last was refused.
+ * it is out or where it failed, whether it failed with the Retry that asks
+ * again, and the install, with whether one is under way and why the last
+ * was refused.
  */
 export interface SentryOffer {
   readonly read: WorkspaceSentry | undefined;
+  readonly failed: boolean;
+  readonly onRetry: () => void;
   readonly installing: boolean;
   readonly refusal: string | undefined;
   readonly onInstall: () => void;
@@ -257,6 +260,9 @@ const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
 
 /** What the page says where a Sentry trigger is held back from saving. */
 const SENTRY_WITHHELD = "Luke cannot receive Sentry events here. Choose another trigger.";
+
+/** What the Trigger card says where the read of the workspace's Sentry did not land. */
+const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
 
 /** The writes the editor makes, as the list's hook answers them (`use-automations.ts`). */
 export interface AutomationWrites {
@@ -1353,7 +1359,7 @@ function SentryRows({
       </SettingsRow>
     );
   }
-  // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable.
+  // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable, a failed one saying so above its rows.
   if (sentry.read !== undefined && sentry.read.installations.length === 0) {
     return (
       <SettingsRow label="Sentry isn't installed" error={sentry.refusal}>
@@ -1375,6 +1381,12 @@ function SentryRows({
     onDraft(withIntegrationFilters(draft, filters));
   return (
     <>
+      {sentry.failed ? (
+        <SettingsRow
+          label="Sentry"
+          below={() => <ErrorState onRetry={sentry.onRetry}>{SENTRY_UNREAD}</ErrorState>}
+        />
+      ) : null}
       <SelectRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Event"

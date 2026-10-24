@@ -1310,12 +1310,27 @@
   }
 }
 
+/* The frame in the room it fills, with its wait laid over it until it loads. */
+.page-view-frame-room {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
 .page-view-frame {
   display: block;
   width: 100%;
   min-height: 0;
   flex: 1;
   border: 0;
+}
+
+.page-view-frame-wait {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  pointer-events: none;
 }
 
 /* A cloud Browser tab (cloud-browser-pane.tsx): the steps and the address

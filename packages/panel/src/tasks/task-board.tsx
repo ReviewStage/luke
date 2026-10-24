@@ -2,6 +2,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { admittedElements } from "@luke/features/board-scene";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
+import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { ERROR_STATE_PLACEMENT, ErrorState, FILL_ELEMENT, Fill, SpinnerRegion } from "@luke/ui";
@@ -175,7 +176,7 @@ export function TaskBoard({
         </Fragment>
       ) : null}
       {!AsyncResult.isFailure(loaded) && (module === undefined || board === undefined) ? (
-        <SpinnerRegion delay label="Loading board" />
+        <SpinnerRegion delay label={readingWords("the board")} />
       ) : null}
     </Fill>
   );
