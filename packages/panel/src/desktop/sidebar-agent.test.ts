@@ -195,7 +195,7 @@ test("an agent the list read at rest but whose page reads it working is asked ab
 test("stopping a working agent to archive it draws its act in the accent, since Unarchive brings it back", async () => {
   standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
   const row = mount(RUN);
-  const archive = item(rightClick(row), "Archive agent");
+  const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
 
