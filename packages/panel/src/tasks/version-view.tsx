@@ -147,7 +147,6 @@ function VersionBody({
       {units.map((unit, at) => (
         <MarkdownMessage
           // A unit's heading may stand twice, struck and written again, so its place keys it.
-          // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
           key={at}
           words={unit.words}
           className={`plan-unit${CHANGE_CLASS[unit.change]}`}
@@ -182,7 +181,6 @@ function VersionSkeleton({
         {PAGE_SKELETON.map((unit) => (
           <NoteUnit key={unit.heading} heading={<Skeleton width={unit.heading} />}>
             {unit.lines.map((width, at) => (
-              // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
               <Skeleton key={at} width={width} />
             ))}
           </NoteUnit>
