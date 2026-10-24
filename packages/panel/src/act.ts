@@ -73,9 +73,12 @@ function stagedAnswer(
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
+  // Note that only a fixture run, which loads the fixture, reads the run, because a read starts the document's follow.
+  const fixture = loadedTasksFixture();
+  if (fixture === undefined) return undefined;
   const run = appStateNow()?.run;
   if (run?.fixtureMode !== true) return undefined;
-  return loadedTasksFixture()?.fixtureActAnswer(run, kind, payload);
+  return fixture.fixtureActAnswer(run, kind, payload);
 }
 
 /**
