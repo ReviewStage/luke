@@ -2366,13 +2366,8 @@ export function useTasksTab(input: {
     );
     return Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
-      setStatuses(
-        (held) =>
-          new Map(
-            [...held].filter(([pending, status]) =>
-              refused.every((each) => each.taskId !== pending || each.next !== status),
-            ),
-          ),
+      setStatuses((held) =>
+        refused.reduce((kept, each) => pendingWithout(kept, each.taskId, each.next), held),
       );
       const landed = asked.filter((_, index) => changed[index]).map(({ taskId }) => taskId);
       return { landed, refused: refused.length };

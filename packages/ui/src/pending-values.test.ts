@@ -71,3 +71,10 @@ test("a refusal lets go of its own value and never of a later press's", () => {
   assert.equal(pendingShown(pendingWithout(held, TASK, first)).get(TASK), "Launch plan");
   assert.equal(pendingShown(pendingWithout(held, TASK, second)).get(TASK), undefined);
 });
+
+test("a refusal answered after the clock read still lets go of its press", () => {
+  const pending = pendingValue(undefined, "Launch plan", "Draft", same);
+  const read = pendingSettled(new Map([[TASK, pending]]), () => "Draft", same, 1_000);
+
+  assert.equal(pendingShown(pendingWithout(read, TASK, pending)).get(TASK), undefined);
+});

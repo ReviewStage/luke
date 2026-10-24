@@ -33,6 +33,8 @@ export interface PendingValue<V> {
   readonly replaced: readonly V[];
   /** The runtime clock's first reading since the press, from which its time counts; none until the clock reads. */
   readonly since?: number;
+  /** Which press this is, kept across the clock's stamp, so a refusal lets go of its own press and never a later one's. */
+  readonly press: symbol;
 }
 
 /** The values given here that the view has yet to carry, by what each names. */
@@ -57,7 +59,7 @@ export function pendingValue<V>(
   for (const each of viewed === undefined ? earlier : [viewed, ...earlier]) {
     if (!same(each, value) && !replaced.some((kept) => same(kept, each))) replaced.push(each);
   }
-  return { value, replaced };
+  return { value, replaced, press: Symbol("press") };
 }
 
 /** The pending values with the one given let go, only while it is still the one standing, so a later press's stays. */
@@ -66,7 +68,7 @@ export function pendingWithout<K, V>(
   key: K,
   pending: PendingValue<V>,
 ): PendingValues<K, V> {
-  if (held.get(key) !== pending) return held;
+  if (held.get(key)?.press !== pending.press) return held;
   const next = new Map(held);
   next.delete(key);
   return next;
