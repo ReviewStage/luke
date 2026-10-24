@@ -512,6 +512,30 @@ test("a task's name, pin, and status still waiting on the service are let go wit
   assert.equal(drawn()?.status, listed().status);
 });
 
+test("a task given a name or a status here is pending until the view carries it, so a list held still moves it at once", async () => {
+  const never = () => new Promise<boolean>(() => undefined);
+  const tab = mount(
+    { shown: true, tasks: listRead([listed()]) },
+    { [ACT_KIND.TASKS_RENAME]: never, [ACT_KIND.TASKS_SET_STANDING]: never },
+  );
+  const before = tab.control().pendingTasks;
+
+  await act(async () => {
+    void tab.control().onRenameTask(TASK.id, "Launch plan");
+  });
+  const renaming = tab.control().pendingTasks;
+  tab.stand({ tasks: listRead([{ ...listed(), name: "Launch plan" }]) });
+  const named = tab.control().pendingTasks;
+  await act(async () => {
+    tab.control().onSettleTasks([TASK.id], TASK_STATUS.DONE);
+  });
+
+  assert.deepEqual([...(before ?? [])], []);
+  assert.deepEqual([...(renaming ?? [])], [TASK.id]);
+  assert.deepEqual([...(named ?? [])], []);
+  assert.deepEqual([...(tab.control().pendingTasks ?? [])], [TASK.id]);
+});
+
 it.effect(
   "a name the service kept but the list never carries gives way to the list once its time runs out",
   () =>
