@@ -8,7 +8,13 @@ import { readFailedWords } from "@luke/features/words";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { POPOVER_ALIGN, POPOVER_WIDTH, type PopoverWidth } from "../../index.js";
+import {
+  POPOVER_ALIGN,
+  POPOVER_BOUNDS,
+  POPOVER_WIDTH,
+  type PopoverBounds,
+  type PopoverWidth,
+} from "../../index.js";
 import { ErrorState } from "../error-state/error-state.js";
 import { type FootRow, type MenuRow, MenuRowList, SearchableMenu } from "./searchable-menu.js";
 
@@ -98,7 +104,8 @@ function mount(
     room?: boolean;
     rows?: readonly MenuRow[];
     note?: React.ReactNode;
-    width?: PopoverWidth;
+    width?: PopoverWidth | undefined;
+    bounds?: PopoverBounds | undefined;
   } = {},
 ) {
   const asked: Asked = { said: [], escapedPast: [] };
@@ -128,6 +135,7 @@ function mount(
         foot: options.foot === true ? footOf(asked.said) : undefined,
         align: POPOVER_ALIGN.START,
         width: options.width,
+        bounds: options.bounds,
       }),
     ),
   );
@@ -226,11 +234,12 @@ test("a read that failed says so in the list's place with Retry, and never that 
   mount({
     placeholder: "Search repositories",
     rows: [],
-    note: createElement(
-      ErrorState,
-      { onRetry: () => retried.push("retry") },
-      readFailedWords("your repositories"),
-    ),
+    note: createElement(ErrorState, {
+      onRetry: () => {
+        retried.push("retry");
+      },
+      children: readFailedWords("your repositories"),
+    }),
   });
   const list = document.querySelector('[role="listbox"]') ?? assert.fail("the list stands");
   const retry =
@@ -398,7 +407,7 @@ test("a list too short to search holds focus, names its highlight, and reads the
  * out, so the window, the room, the row, and the submenu, 200px wide and
  * drawn on the right, are answered as the panel would lay them.
  */
-function submenuIn(room: number, rowLeft: number, rowRight: number) {
+function submenuIn(room: number, rowLeft: number, rowRight: number, bounds?: PopoverBounds) {
   vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1200);
   vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -413,7 +422,7 @@ function submenuIn(room: number, rowLeft: number, rowRight: number) {
     }
     return new DOMRect(0, 0, 0, 0);
   });
-  mount({ placeholder: "Search models", foot: true, room: true });
+  mount({ placeholder: "Search models", foot: true, room: true, bounds });
   press({ key: "ArrowUp" });
   press({ key: "ArrowUp" });
   press({ key: "ArrowRight" });
@@ -427,6 +436,10 @@ function submenuIn(room: number, rowLeft: number, rowRight: number) {
 
 test("a submenu that would run past the room its menu keeps to turns to the left, though the window has room", () => {
   assert.deepEqual(submenuIn(800, 300, 600), { side: "left", shift: 0 });
+});
+
+test("a submenu of a menu bounded by the window alone opens to the right past its marked room, where the window has room", () => {
+  assert.deepEqual(submenuIn(400, 100, 350, POPOVER_BOUNDS.WINDOW), { side: "right", shift: 0 });
 });
 
 test("a submenu with room on neither side takes the side it runs past less, pushed back over the menu inside the room", () => {

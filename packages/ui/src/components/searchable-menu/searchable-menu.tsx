@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useSt
 import { cssCustomProperties } from "../../css.js";
 import {
   AnchoredPopover,
+  POPOVER_BOUNDS,
   POPOVER_WIDTH,
   type PopoverAlign,
   type PopoverBounds,
@@ -510,7 +511,8 @@ export function SearchableMenu(props: {
 
   // A submenu opens to the right and down from its row, turns to the left
   // where the room ends before it does (the window, or the box its menu
-  // keeps to, `data-popover-room`, the side panel or an agent's pane), and
+  // keeps to, `data-popover-room`, the side panel or an agent's pane, unless
+  // its owner bounds it by the window alone, as its popover is), and
   // where neither side holds it, takes the one it runs past less, pushed
   // back over the menu so it never runs past a column; it stands up where
   // the window's bottom would cut it. Measured before it is painted, and
@@ -527,13 +529,16 @@ export function SearchableMenu(props: {
     if (row === undefined || menu === undefined) return setRowBox(undefined);
     setRowBox({ top: row.top - menu.top, height: row.height });
   }, [listedAt, listId]);
+  const keepsToWindow = props.bounds === POPOVER_BOUNDS.WINDOW;
   useLayoutEffect(() => {
     const branch = panel.current?.parentElement;
     if (openAt === undefined || panel.current === null || branch == null) return;
     const bounds = panel.current.getBoundingClientRect();
     const row = branch.getBoundingClientRect();
     const page = document.documentElement;
-    const marked = panel.current.closest("[data-popover-room]")?.getBoundingClientRect();
+    const marked = keepsToWindow
+      ? undefined
+      : panel.current.closest("[data-popover-room]")?.getBoundingClientRect();
     const roomLeft = Math.max(marked?.left ?? 0, 0);
     const roomRight = Math.min(marked?.right ?? page.clientWidth, page.clientWidth);
     const pastRight = Math.max(row.right + SUBMENU_GAP + bounds.width - roomRight, 0);
@@ -547,7 +552,7 @@ export function SearchableMenu(props: {
       shift: side === SUBMENU_SIDE.RIGHT ? pastRight : pastLeft,
       stand: bounds.bottom > page.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
     });
-  }, [openAt, rowBox]);
+  }, [openAt, rowBox, keepsToWindow]);
 
   const moveTo = (index: number | undefined) => {
     setHighlight(index);
