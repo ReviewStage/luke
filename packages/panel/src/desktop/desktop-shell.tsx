@@ -2,15 +2,14 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
+  BACK_BUTTON_LOOK,
+  BackButton,
   COLLECTION_STATE,
   CollectionPage,
-  commandKeyshortcuts,
   DrawerScrim,
   IconButton,
-  NavItem,
   PAGE_FRAME,
   PANE_PIN_ELEMENT,
   PanePin,
@@ -19,7 +18,6 @@ import {
   SETTINGS_SKELETON_CONTROL,
   SettingsPageSkeleton,
   type SettingsSectionSkeletonShape,
-  Shortcut,
   SidebarIcon,
   Toolbar,
   Tooltip,
@@ -61,6 +59,7 @@ import {
   AutomationsToolbar,
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
+import { backPlaceOf } from "./back-place.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 import { DesktopChat, useChatSurface } from "./desktop-chat.js";
@@ -165,6 +164,9 @@ function PersonLoading({
   return <PersonPageSkeleton name={name} />;
 }
 
+/** Where a version history's way out leads where no step stands behind it, as a hint names it. */
+const HISTORY_EXIT_PLACE = "plan";
+
 /**
  * What stands while a version history's chunk loads: its frame, the list's
  * column where the sidebar stood, and its own way out, its Back row and
@@ -172,9 +174,12 @@ function PersonLoading({
  */
 function VersionHistoryLoading({
   onExit,
+  place,
   hidden,
 }: {
   onExit: () => void;
+  /** Where the way out leads, as its hint names it. */
+  place: string;
   hidden: HiddenColumns;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
@@ -182,14 +187,13 @@ function VersionHistoryLoading({
     <div className="desktop-version-history">
       <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
+        <BackButton
+          look={BACK_BUTTON_LOOK.COLUMN}
+          label="Back"
+          place={place}
+          command={APP_COMMAND.EXIT_VERSION_HISTORY}
+          onBack={onExit}
+        />
       </nav>
       <section className="version-page" aria-label="Version" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
@@ -703,6 +707,7 @@ export function DesktopShell({
               fallback={
                 <VersionHistoryLoading
                   onExit={exitHistory}
+                  place={backPlaceOf(history, HISTORY_EXIT_PLACE)}
                   hidden={hiddenColumns(room, tasks.history.listed)}
                 />
               }

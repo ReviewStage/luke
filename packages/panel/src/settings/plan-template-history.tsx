@@ -149,6 +149,7 @@ export function TemplateVersionHistory({
       account={account}
       onExit={onExit}
       onRestored={onExit}
+      exitPlace={TEMPLATE_TITLE}
     />
   );
 }

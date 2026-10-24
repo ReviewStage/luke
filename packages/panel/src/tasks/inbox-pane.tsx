@@ -17,7 +17,7 @@ import { LINK_PLACE, markdownLink } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
+  BackButton,
   Badge,
   Breadcrumbs,
   CARD_LOOK,
@@ -27,8 +27,6 @@ import {
   type Crumb,
   ErrorState,
   Fill,
-  FoldingButton,
-  type FoldingButtonHint,
   GAP,
   LAYOUT_ELEMENT,
   MoreButton,
@@ -209,19 +207,8 @@ const INBOX_FAILED_LINE = "The inbox could not be read.";
 /** What an answer says of the files whose read did not answer. */
 const FILES_FAILED_LINE = "Some files could not be read.";
 
-/** What the way back from an item standing alone to the list says it does. */
-const BACK_TO_INBOX = "Back to inbox";
-
-/**
- * The way back's pill, which says where it goes and names Back's chord
- * whether its word is folded away or not. Note that it drops the folded
- * label it is handed, because the pill says more than the word does.
- */
-const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-    {children}
-  </Tooltip>
-);
+/** Where the way back from an item standing alone leads, as its hint names it. */
+const INBOX_PLACE = "inbox";
 
 /**
  * A link block, drawn as a link alone in its paragraph of the item's own words is: the card of what it names where it earns one (`lone-link-card.tsx`), else its chip. Note that it is handed to the words as a markdown link, because that one path is what gives a link its mark, its live label, its card, and the door it opens; an address that opens nowhere keeps its label with the address beside it to copy.
@@ -1222,7 +1209,7 @@ export function InboxPane({
         lead={
           <div className="inbox-item-bar">
             {onBack === undefined ? null : (
-              <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
+              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
             )}
             <Crumbs
               holder={holder}

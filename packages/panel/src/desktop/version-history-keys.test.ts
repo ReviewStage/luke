@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -7,7 +8,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -23,7 +24,9 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
  * list then shows, rather than only moving the focus there; focus coming onto
  * a row from outside the list chooses nothing; and where older versions wait,
  * the list's foot says how many and reads the next page on its press, or says
- * the read failed and offers Retry. Synthetic plan and people.
+ * the read failed and offers Retry; and the Back row at the list's head goes
+ * back, its hint, raised by the keyboard's focus, saying where it leads.
+ * Synthetic plan and people.
  */
 
 declare global {
@@ -79,6 +82,8 @@ afterEach(() => {
 function drawn(
   chosen: number[],
   older: { earlier?: number; onLoadEarlier?: () => Promise<boolean> } = {},
+  onExit: () => void = ignore,
+  stepBehind: string | undefined = undefined,
 ): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
@@ -118,21 +123,34 @@ function drawn(
         },
         room: SHELL_ROOM.WIDE,
         history: {
-          canGoBack: false,
+          canGoBack: stepBehind !== undefined,
           canGoForward: false,
-          onBack: ignore,
+          onBack: onExit,
           onForward: ignore,
-          steps: { back: [], forward: [] },
+          steps: {
+            back:
+              stepBehind === undefined
+                ? []
+                : [{ at: 0, title: { label: stepBehind }, page: { kind: "inbox", of: undefined } }],
+            forward: [],
+          },
           onGoTo: ignore,
         },
         subject: taskVersionSubject(tasks),
         account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
-        onExit: ignore,
+        onExit,
         onRestored: ignore,
       }),
     ),
   );
   return container;
+}
+
+/** The Back row at the head of the versions' column. */
+function backRow(view: HTMLElement): HTMLButtonElement | undefined {
+  return [...view.querySelectorAll<HTMLButtonElement>(".version-log > button")].find(
+    (button) => button.textContent?.trim() === "Back",
+  );
 }
 
 /** The version rows' presses, newest first. */
@@ -216,4 +234,39 @@ test("a read of older versions that failed says so with Retry, which reads again
 
 test("a list with no older versions has no foot", () => {
   expect(foot(drawn([]))).toBeNull();
+});
+
+/** Rests the keyboard's focus on `button` past the hint's wait, on a faked clock, and answers what the hint says. */
+function hintOf(button: HTMLButtonElement): string | null | undefined {
+  document.documentElement.dataset.keyboard = "true";
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  act(() => button.focus());
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  vi.useRealTimers();
+  delete document.documentElement.dataset.keyboard;
+  return document.querySelector('[role="tooltip"]')?.textContent;
+}
+
+test("the Back row leaves the history when pressed, and its hint says where it leads", () => {
+  let exits = 0;
+  const view = drawn([], {}, () => {
+    exits += 1;
+  });
+  const back = backRow(view);
+  expect(back).toBeDefined();
+  if (back === undefined) return;
+  expect(hintOf(back)).toContain(`Back to ${DOCUMENT_TASK.name}`);
+
+  act(() => back.click());
+  expect(exits).toBe(1);
+});
+
+test("the Back row names the page the window goes back to, where the history opened from another", () => {
+  const view = drawn([], {}, ignore, "Inbox");
+  const back = backRow(view);
+  expect(back).toBeDefined();
+  if (back === undefined) return;
+  expect(hintOf(back)).toContain("Back to Inbox");
 });

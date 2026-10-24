@@ -2,8 +2,6 @@ import {
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
-  BREADCRUMBS_VARIANT,
-  Breadcrumbs,
   CollectionPage,
   type CollectionState,
   DetailPage,
@@ -63,21 +61,6 @@ export interface AdminWayBack {
   onBack: () => void;
 }
 
-/** A page under a section, headed by the way back to it and then its own name, in the toolbar's heading type. */
-function WayBackHeading({ title, back }: { title: string; back: AdminWayBack }): React.JSX.Element {
-  const section = adminPlace(back.tab);
-  return (
-    <Breadcrumbs
-      label="Path"
-      variant={BREADCRUMBS_VARIANT.TITLE}
-      crumbs={[
-        { label: section.label, icon: section.icon, onPress: back.onBack },
-        { label: title, current: true },
-      ]}
-    />
-  );
-}
-
 /**
  * What leads every admin toolbar under it, before the page's heading: the
  * app's way back to the section list where a narrow room stands a view
@@ -113,11 +96,17 @@ function AdminToolbar({
   controls: React.ReactNode;
 }): React.JSX.Element {
   const lead = useContext(AdminToolbarLeadContext);
+  const section = back === undefined ? undefined : adminPlace(back.tab);
   return (
     <Toolbar
       lead={lead}
       start={lead === undefined ? undefined : TOOLBAR_INSET.COLUMN}
-      title={back === undefined ? title : <WayBackHeading title={title} back={back} />}
+      title={title}
+      trail={
+        back === undefined || section === undefined
+          ? undefined
+          : [{ label: section.label, icon: section.icon, onPress: back.onBack }]
+      }
       tag={
         note === undefined ? undefined : (
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
