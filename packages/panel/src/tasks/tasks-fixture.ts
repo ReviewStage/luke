@@ -9,6 +9,7 @@ import {
   type TasksView,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@luke/host/fixture-stage";
@@ -433,10 +434,22 @@ export function fixtureSidePanel(run: {
 }
 
 /**
+ * A task's agents as a fixture run lists them where no agent profile stages
+ * one: none. Note that main answers a fixture run's list with nothing, which
+ * the task's column would wait on in its placeholder for good.
+ */
+function noAgentsAnswer(
+  kind: PortActKind,
+): { readonly answer: PortActResult<PortActKind> } | undefined {
+  return kind === ACT_KIND.CODING_AGENTS_LIST ? { answer: { agents: [] } } : undefined;
+}
+
+/**
  * What a fixture run answers an act with in place of main (`act.ts`), boxed
  * so an act that answers nothing is told from one left to main: its agent
- * profiles' tabs' reads, its signed-in profiles' pages' reads, and nothing
- * else, which goes to main as it would.
+ * profiles' tabs' reads, its signed-in profiles' pages' reads, every other
+ * profile's task as one with no agents, and nothing else, which goes to main
+ * as it would.
  */
 export function fixtureActAnswer(
   run: { readonly profile: string },
@@ -446,7 +459,8 @@ export function fixtureActAnswer(
   return (
     agentActAnswer(run.profile, kind, payload) ??
     automationsActAnswer(run.profile, kind, payload) ??
-    settingsActAnswer(run.profile, kind, payload)
+    settingsActAnswer(run.profile, kind, payload) ??
+    noAgentsAnswer(kind)
   );
 }
 
