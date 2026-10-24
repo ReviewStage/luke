@@ -101,6 +101,17 @@ test("each kind of actor stands on its own kind of mark, which a screen reader s
   assert.ok(view.querySelector('[data-kind="luke"] .luke-face'), "Luke wears his face");
 });
 
+test("an automation whose trigger is not known stands on the automation glyph, the one the sidebar and the editor wear", () => {
+  const view = draw(
+    createElement(ActorMark, {
+      actor: { kind: ACTOR_KIND.AUTOMATION, name: "Morning triage", state: ACTOR_STATE.REST },
+    }),
+  );
+
+  assert.ok(view.querySelector(".actor-mark .lucide-zap"), "the tile wears Zap");
+  assert.equal(view.querySelector(".lucide-clock"), null, "and no clock");
+});
+
 test("an agent whose harness is not known yet stands on an empty box, named by the words beside it", () => {
   const view = draw(
     createElement(
