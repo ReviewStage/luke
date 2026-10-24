@@ -75,7 +75,7 @@ import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
-import { SidePanelToggle } from "./side-panel.js";
+import { SidePanelChord, SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
@@ -639,7 +639,6 @@ export function DesktopShell({
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
   const chatSurface = useChatSurface(tasks);
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
@@ -777,8 +776,6 @@ export function DesktopShell({
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks, chatOn);
-  // A phone's Inbox, Tasks page, and Chat, each on its list, head themselves with one row of their own (`phone-head.tsx`).
-  const placeHeaded = barShown && (inboxOpen || boardOpen || chatOpen);
   return (
     <div
       ref={shell}
@@ -786,7 +783,7 @@ export function DesktopShell({
       data-room={room}
       data-sidebar-collapsed={String(sidebar.collapsed)}
       data-sidebar-overlay={sidebar.overlay}
-      data-panel-toggle={String(panelToggle)}
+      data-panel-toggle={String(panelToggle && room !== SHELL_ROOM.NARROW)}
       data-offline={String(offline)}
       data-mobile-bar={String(barShown)}
     >
@@ -822,7 +819,12 @@ export function DesktopShell({
               <DesktopInbox tasks={tasks} listing={sharedListing} room={room} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-              <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
+              <DesktopAgentPage
+                key={pageAgent}
+                tasks={tasks}
+                agentId={pageAgent}
+                away={room === SHELL_ROOM.NARROW ? away : undefined}
+              />
             ) : pagePerson !== undefined ? (
               // Keyed by the person, so another person's page holds nothing of the last, its find among it.
               <PageFind
@@ -841,6 +843,7 @@ export function DesktopShell({
                     userId={pagePerson}
                     name={tasks.personView.name}
                     staged={sidebar.staged}
+                    away={room === SHELL_ROOM.NARROW ? away : undefined}
                   />
                 </Suspense>
               </PageFind>
@@ -887,9 +890,9 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      {/* A phone's task and its places head themselves with one row of their own (`phone-head.tsx`), the task's way back
-          or the place's one control where these stood; the places bar's More opens the drawer the toggle did. */}
-      {room === SHELL_ROOM.NARROW && (taskDrawn || placeHeaded) ? (
+      {/* A phone's every page heads itself with one row of its own (`phone-head.tsx`), its way back or its one control
+          where these stood; the drawer opens from the places bar's More, or a swipe in from the screen's edge. */}
+      {room === SHELL_ROOM.NARROW ? (
         <SidebarChord sidebar={sidebar} />
       ) : (
         <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
@@ -898,7 +901,13 @@ export function DesktopShell({
           {sidebar.collapsed ? <OfflineMark /> : null}
         </PanePin>
       )}
-      {panelToggle ? (
+      {/* A phone's page offers the panel from its ⋯, and the panel, open, heads itself with its way out. */}
+      {panelToggle && room === SHELL_ROOM.NARROW ? (
+        <SidePanelChord
+          panel={tasks.sidePanel}
+          disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+        />
+      ) : panelToggle ? (
         <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}

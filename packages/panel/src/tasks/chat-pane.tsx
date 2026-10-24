@@ -78,6 +78,7 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
+import { PhoneHead } from "../desktop/phone-head.js";
 import { PictureBlock } from "../picture-block.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { SendingAgent } from "./agent-ref.js";
@@ -1106,6 +1107,7 @@ function PlaceHead({
   meta,
   lead,
   actions,
+  phone = false,
 }: {
   /** The place's name in words. */
   title: string;
@@ -1115,7 +1117,12 @@ function PlaceHead({
   lead: React.ReactNode;
   /** The place's own presses at the head's end, a channel's menu. */
   actions?: React.ReactNode;
+  /** Whether a phone heads the place (`phone-head.tsx`): the way back alone at its start, the name centred, its menu at its end, and what is said beside the name left to the place's own view. */
+  phone?: boolean;
 }): React.JSX.Element {
+  if (phone) {
+    return <PhoneHead place="chat-place" start={lead} title={title} end={actions} />;
+  }
   return (
     <PaneBar
       mark={
@@ -1183,6 +1190,7 @@ export const ChatPane = memo(function ChatPane({
   onBringBack,
   hidden,
   taskDoors,
+  phone = false,
 }: {
   chat: ChatAnswer;
   names: ChatNames;
@@ -1200,6 +1208,8 @@ export const ChatPane = memo(function ChatPane({
   readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
   /** What leads the place's head: the way back to the rail, where the place stands alone. */
   lead?: React.ReactNode;
+  /** Whether a phone heads the place (`phone-head.tsx`), `lead` its one start control. */
+  phone?: boolean;
   /** The presses a channel's head ends on, its menu; none where the channel offers none. */
   channelActions?: ((channel: ChatChannel) => React.ReactNode) | undefined;
   /** Shows a place of the chat, as For you's row opens its channel; none where no other place is shown here. */
@@ -1277,6 +1287,7 @@ export const ChatPane = memo(function ChatPane({
           hidden={hidden}
           channelActions={channelActions}
           onBringBack={onBringBack}
+          phone={phone}
         />
       </ChatReplyDoorsContext.Provider>
     </ChatReadContext.Provider>
@@ -1293,6 +1304,7 @@ function PlaceView({
   hidden,
   channelActions,
   onBringBack,
+  phone,
 }: {
   chat: ChatAnswer;
   place: ChatPlace;
@@ -1303,6 +1315,7 @@ function PlaceView({
   hidden: boolean | undefined;
   channelActions: ((channel: ChatChannel) => React.ReactNode) | undefined;
   onBringBack: ((channel: ChatChannel) => void) | undefined;
+  phone: boolean;
 }): React.JSX.Element {
   const { names, keywords, mentionsIn, doorsIn, send } = context;
   const channel = placeChannel(chat, place);
@@ -1330,7 +1343,13 @@ function PlaceView({
         aria-label="For you"
         hidden={hidden}
       >
-        <PlaceHead title={FOR_YOU_TITLE} channel={undefined} meta={undefined} lead={lead} />
+        <PlaceHead
+          title={FOR_YOU_TITLE}
+          channel={undefined}
+          meta={undefined}
+          lead={lead}
+          phone={phone}
+        />
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NEEDS_YOU.NONE}</EmptyState>
         ) : (
@@ -1371,6 +1390,7 @@ function PlaceView({
         meta={channelMeta(chat, names, channel)}
         lead={lead}
         actions={channelActions?.(channel)}
+        phone={phone}
       />
       {threads.length === 0 && !pending.some((each) => each.channelId === channel.id) ? (
         <EmptyState icon={channel.kind === CHANNEL_KIND.DM ? <AtSignIcon /> : <HashIcon />}>

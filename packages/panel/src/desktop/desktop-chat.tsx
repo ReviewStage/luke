@@ -1054,10 +1054,14 @@ function ChatView({
       ),
     [answer, names, dialogs, view.open, readChannels, onSelect],
   );
+  // A phone's way back is the glyph alone, named for where it goes, as every phone's page leads (`phone-head.tsx`).
+  const phone = room === SHELL_ROOM.NARROW;
   const lead = useMemo(
     () =>
-      single ? <BackButton label={CHAT_LIST} place={CHAT_RAIL_PLACE} onBack={onList} /> : undefined,
-    [single, onList],
+      phone || single ? (
+        <BackButton label={CHAT_LIST} place={CHAT_RAIL_PLACE} onBack={onList} />
+      ) : undefined,
+    [phone, single, onList],
   );
   if (read === undefined || view.failed || rail === undefined || groups === undefined) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
@@ -1184,6 +1188,7 @@ function ChatView({
         readPicture={view.readPicture}
         taskDoors={taskDoors}
         lead={lead}
+        phone={phone}
         hidden={hidden.item}
       />
       {dialogs.dialog}

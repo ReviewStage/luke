@@ -21,7 +21,6 @@ import {
   LIST_ROW_CURRENT,
   List,
   ListRow,
-  PageToolbar,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   SCROLL_FADE,
@@ -46,8 +45,11 @@ import { useOpenLink } from "../tasks/use-open-link.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
 import { usePaneSlide } from "./pane-motion.js";
+import { PhoneHead } from "./phone-head.js";
 import type { RunsRead } from "./use-automation-runs.js";
 
+/** What the runs' own screen is called on a phone. */
+const RUNS = "Runs";
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
  *
@@ -347,12 +349,12 @@ export function AutomationRunsScreen({
       aria-label="Runs"
       hidden={hidden}
     >
-      <PageToolbar
-        lead={
-          <div className="automation-runs-back">
-            <BackButton label={name} place={name} onBack={onBack} />
-          </div>
-        }
+      {/* A narrow room's screen alone, headed as a phone's page is (`phone-head.tsx`): the way back to the setup, Runs centred. */}
+      <PhoneHead
+        place="automation-runs-page"
+        start={<BackButton label={name} place={name} onBack={onBack} />}
+        title={RUNS}
+        end={null}
       />
       <RunsBody {...shown} />
     </Fill>

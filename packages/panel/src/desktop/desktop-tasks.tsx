@@ -91,6 +91,7 @@ import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
+import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import {
   COLUMN,
   changesTabOf,
@@ -249,6 +250,7 @@ function TaskPageSkeleton({
   summary,
   onColumn,
   starting,
+  head,
 }: {
   /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
   starting?: SentLine | undefined;
@@ -258,40 +260,76 @@ function TaskPageSkeleton({
   summary: Pick<SummaryLayout, "mode" | "holds">;
   /** Hands over the column, which the summary's room is measured on, as the page's own does. */
   onColumn: (column: HTMLElement | null) => void;
+  /** A phone's head over the page, as the page will be headed once it lands (`TaskWaitHead`); none elsewhere. */
+  head?: React.ReactNode;
 }): React.JSX.Element {
   const { panel, ...frame } = drawing;
   return (
-    <TaskPage
-      columnRef={onColumn}
-      panelOpen={panel !== undefined}
-      fullScreen={panel?.fullScreen === true}
-      column={
-        <>
-          <Toolbar
-            start={TOOLBAR_INSET.COLUMN}
-            look={TOOLBAR_LOOK.TABS}
-            measure
-            title={<MainTabStripSkeleton />}
-            actions={<TaskActionsSkeleton summary={summary.holds} />}
-          />
-          <TaskBody>
-            <Fill className="desktop-task-column">
-              <AgentColumn>
-                {starting === undefined ? (
-                  <AgentTabSkeleton label={TASK_LOADING_LABEL} />
-                ) : (
-                  <StartingAgentTab line={starting} />
-                )}
-              </AgentColumn>
-            </Fill>
-            <SummarySkeleton mode={summary.mode} />
-          </TaskBody>
-        </>
-      }
-    >
-      {panel === undefined ? null : <SidePanelSkeleton drawing={frame} panel={panel} />}
-    </TaskPage>
+    <>
+      {head}
+      <TaskPage
+        columnRef={onColumn}
+        panelOpen={panel !== undefined}
+        fullScreen={panel?.fullScreen === true}
+        column={
+          <>
+            <Toolbar
+              start={TOOLBAR_INSET.COLUMN}
+              look={TOOLBAR_LOOK.TABS}
+              measure
+              title={<MainTabStripSkeleton />}
+              actions={<TaskActionsSkeleton summary={summary.holds} />}
+            />
+            <TaskBody>
+              <Fill className="desktop-task-column">
+                <AgentColumn>
+                  {starting === undefined ? (
+                    <AgentTabSkeleton label={TASK_LOADING_LABEL} />
+                  ) : (
+                    <StartingAgentTab line={starting} />
+                  )}
+                </AgentColumn>
+              </Fill>
+              <SummarySkeleton mode={summary.mode} />
+            </TaskBody>
+          </>
+        }
+      >
+        {panel === undefined ? null : <SidePanelSkeleton drawing={frame} panel={panel} />}
+      </TaskPage>
+    </>
   );
+}
+
+/**
+ * A phone's head over a task that is not drawn yet, or cannot be: its way
+ * back, as the task's own head leads (`TaskHead`), and its title a block
+ * while it is read, nothing where it cannot be; no ⋯, since a task not
+ * drawn offers no menu.
+ */
+function TaskWaitHead({
+  away,
+  reading,
+}: {
+  away: TaskHeadBack;
+  reading: boolean;
+}): React.JSX.Element {
+  return (
+    <PhoneHead
+      place="task"
+      start={<PhoneBack back={away} />}
+      title={reading ? <TaskTitleSkeleton /> : null}
+      end={null}
+    />
+  );
+}
+
+/** How wide a phone's head's title stands as a block while the task is read. */
+const TASK_TITLE_SKELETON = "50%";
+
+/** The block standing in a phone's head's title while the task is read. */
+function TaskTitleSkeleton(): React.JSX.Element {
+  return <Skeleton width={TASK_TITLE_SKELETON} />;
 }
 
 /** The column showing an agent's tab before its agent lands: the placeholder or the line it starts on. */
@@ -943,8 +981,16 @@ function PlanDocument({
     agentLookDoor,
     pullRequestCardDoor,
   ]);
+  const phone = room === SHELL_ROOM.NARROW;
   if (region.kind === DOCUMENT_REGION.READING) {
-    return <TaskPageSkeleton drawing={drawing} summary={summaryLayout} onColumn={setColumn} />;
+    return (
+      <TaskPageSkeleton
+        drawing={drawing}
+        summary={summaryLayout}
+        onColumn={setColumn}
+        head={phone ? <TaskWaitHead away={away} reading /> : undefined}
+      />
+    );
   }
   if (
     region.kind !== DOCUMENT_REGION.READY ||
@@ -961,11 +1007,19 @@ function PlanDocument({
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
     // A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs.
     if (region.kind === DOCUMENT_REGION.MISSING) {
-      return <NotFound thing={NOT_FOUND_THING.TASK} bar={{}} action={close} />;
+      return (
+        <NotFound
+          thing={NOT_FOUND_THING.TASK}
+          bar={
+            phone ? phoneBar({ place: "task", start: <PhoneBack back={away} />, end: null }) : {}
+          }
+          action={close}
+        />
+      );
     }
     return (
       <>
-        <Toolbar />
+        {phone ? <TaskWaitHead away={away} reading={false} /> : <Toolbar />}
         <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
           {region.kind === DOCUMENT_REGION.FAILED ? (
             <ErrorState
@@ -1326,10 +1380,13 @@ function StartingTaskPage({
   tasks,
   line,
   summary,
+  phoneAway,
 }: {
   tasks: TasksControl;
   line: SentLine;
   summary: SummaryPin;
+  /** A phone's way back, which heads the page as the task's will be (`TaskWaitHead`); none elsewhere. */
+  phoneAway: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const [column, setColumn] = useState<HTMLElement | null>(null);
@@ -1341,6 +1398,7 @@ function StartingTaskPage({
       summary={summaryLayout}
       onColumn={setColumn}
       starting={line}
+      head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
     />
   );
 }
@@ -1376,7 +1434,18 @@ export const DesktopTasks = memo(function DesktopTasks({
   );
   // A task New task is starting with its agent stands as its page until the start answers.
   if (tasks.starting !== undefined) {
-    return <StartingTaskPage tasks={tasks} line={tasks.starting} summary={summary} />;
+    return (
+      <StartingTaskPage
+        tasks={tasks}
+        line={tasks.starting}
+        summary={summary}
+        phoneAway={
+          room === SHELL_ROOM.NARROW
+            ? (away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen })
+            : undefined
+        }
+      />
+    );
   }
   switch (tasks.page) {
     case TASKS_PAGE.DOCUMENT:
