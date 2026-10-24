@@ -68,7 +68,7 @@ import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
-import { INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
+import { INBOX_HOLDER, type InboxListed, inboxWaitsOn, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
 import { readAgentById } from "../tasks/use-coding-agents.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
@@ -299,7 +299,7 @@ function PersonActions({
   const email = member?.email;
   const slug = linkWorkspaceOf(tasks);
   const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
-  const showTasks = you ? "My tasks in sidebar" : "Their tasks in sidebar";
+  const showTasks = you ? "Show my tasks in the sidebar" : "Show their tasks in the sidebar";
   const actions: MenuAction[][] = [
     ...(phone && shared
       ? [[{ label: showTasks, icon: <ListFilterIcon />, onSelect: onShowTasks }]]
@@ -346,7 +346,7 @@ function PersonActions({
   return (
     <>
       {shared && !phone ? (
-        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ListFilterIcon />} onClick={onShowTasks}>
+        <Button variant={BUTTON_VARIANT.QUIET} icon={<ListFilterIcon />} onClick={onShowTasks}>
           {showTasks}
         </Button>
       ) : null}
@@ -728,7 +728,7 @@ function PersonColumn({
         {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
         {read.failed ? (
           <div className="home-note">
-            <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
+            <ErrorState onRetry={read.onRetry}>Some inbox items could not be read.</ErrorState>
           </div>
         ) : waiting.length === 0 && read.reading ? (
           <SectionSkeleton>
@@ -737,7 +737,7 @@ function PersonColumn({
         ) : null}
         {waiting.length === 0 ? null : (
           <PersonSection
-            title={you ? "Waiting on you" : "Waiting on their answer"}
+            title={you ? NEEDS_YOU.LABEL : "Waiting on their answer"}
             count={waiting.length}
           >
             {waiting.map((listed) => (

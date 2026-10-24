@@ -470,7 +470,7 @@ test("the reader's own page says You and what waits on them", async () => {
   assert.deepEqual(head(page), ["Dean Stratakos", "You Owner · dean@example.com"]);
   assert.deepEqual(sections(page), {
     "Working now": ["Limiter flag"],
-    "Waiting on you": ["Ship the limiter at 10%?"],
+    "Needs you": ["Ship the limiter at 10%?"],
     "Created by you": ["Edge cache keys"],
     Automations: ["Weekly dependency bumps"],
   });
@@ -558,7 +558,7 @@ test("an Inbox that could not be read says so and offers Retry, and never passes
   const { page } = mount("user-sam");
   await settle();
 
-  assert.match(page.textContent ?? "", /Some Inbox items could not be read\./u);
+  assert.match(page.textContent ?? "", /Some inbox items could not be read\./u);
   assert.ok(button(page, "Retry"));
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
@@ -589,7 +589,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
   });
   await settle();
 
-  assert.deepEqual(sections(page)["Waiting on you"], ["Ship the limiter at 10%?"]);
+  assert.deepEqual(sections(page)["Needs you"], ["Ship the limiter at 10%?"]);
 });
 
 /** The sidebar's views as this Mac keeps them, by workspace. */
@@ -597,7 +597,7 @@ function keptViews(): Record<string, { createdBy?: string; assignedTo?: string }
   return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
 }
 
-test("Their tasks in sidebar lists every task assigned to them, letting go of a filter by creator", async () => {
+test("Show their tasks in the sidebar lists every task assigned to them, letting go of a filter by creator", async () => {
   window.localStorage.setItem(
     "luke.sidebarTaskViews",
     JSON.stringify({
@@ -607,7 +607,7 @@ test("Their tasks in sidebar lists every task assigned to them, letting go of a 
   const { page } = mount(CHARLES.userId);
   await settle();
 
-  button(page, "Their tasks in sidebar").click();
+  button(page, "Show their tasks in the sidebar").click();
   const kept = keptViews()[ACME.id];
   assert.deepEqual([kept?.assignedTo, kept?.createdBy], [CHARLES.userId, undefined]);
 });
@@ -667,7 +667,7 @@ test("a workspace of one offers no sidebar filter, since its sidebar filters by 
   const { page } = mount(DEAN.userId, undefined, 1);
   await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /tasks in sidebar/u);
+  assert.doesNotMatch(page.textContent ?? "", /tasks in the sidebar/u);
 });
 
 test("the reader's own page offers nothing to edit: its header lists their tasks in the sidebar and ⋯ alone", async () => {
@@ -678,7 +678,12 @@ test("the reader's own page offers nothing to edit: its header lists their tasks
     [...page.querySelectorAll(".luke-page-header-actions button")].map(
       (each) => each.getAttribute("aria-label") ?? each.textContent,
     ),
-    ["My tasks in sidebar", "Person actions"],
+    ["Show my tasks in the sidebar", "Person actions"],
+  );
+  // Note that a filter act is quiet: only a page's one primary act is filled.
+  assert.equal(
+    page.querySelector(".luke-page-header-actions button")?.getAttribute("data-variant"),
+    "quiet",
   );
 });
 
@@ -928,7 +933,7 @@ test("on a phone the page is headed by its way back's glyph, their name centred,
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Person actions"]')?.click());
   assert.ok(
     [...document.querySelectorAll('[role="menuitem"]')].some(
-      (each) => each.textContent === "Their tasks in sidebar",
+      (each) => each.textContent === "Show their tasks in the sidebar",
     ),
     "the filter is in the ⋯",
   );
