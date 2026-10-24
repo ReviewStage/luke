@@ -31,17 +31,16 @@ import { useSideBundles } from "../bundle-loader.js";
 import { type ChatDraftPlace, DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
 import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
-import { imageFiles } from "../feedback-images.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
   type MentionNode,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { useFileDrop } from "../use-file-drop.js";
+import { useAttachedFiles } from "../use-attached-files.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { readFiles, withFiles } from "./attached-files.js";
+import { ATTACH_TAKES } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
@@ -114,9 +113,6 @@ const ATTACH = "Attach images";
 
 /** The pictures the system's picker offers: any image, re-encoded where it is none of the three a post keeps. */
 const PICKS_IMAGES = "image/*";
-
-/** Why a file that is no image did not come, in the words the box's note says. */
-const NOT_IMAGE = (name: string) => `${name} can't be attached. Attach images.`;
 
 /** What the box says where a post of its words would address more members than a post tells. */
 const CROWDED = `Only ${CHAT_BOUNDS.MAX_STEERS_PER_POST} members are notified of a post.`;
@@ -248,14 +244,22 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
   const { attachments } = kept;
   // How many posts the box has sent, each of which hands the caret back to it.
   const [sends, setSends] = useState(0);
-  // How many hand-offs of files are still being read, during which the post waits.
-  const [reading, setReading] = useState(0);
   const [note, setNote] = useState<ComposerNote | undefined>(undefined);
+  // Note that the post waits while pictures handed to the box are still read.
+  const files = useAttachedFiles({
+    holder: {
+      attachments,
+      update: (next) => update((was) => ({ ...was, attachments: next(was.attachments) })),
+    },
+    takes: ATTACH_TAKES.IMAGES,
+    most: CHAT_BOUNDS.MAX_POST_PICTURES,
+    onRefusal: (words) => setNote(plainNote(words)),
+  });
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
   const empty = draft.trim() === "" && attachments.length === 0;
   const send = () => {
-    if (empty || reading > 0) return;
+    if (empty || files.reading) return;
     const sent = kept;
     setNote(undefined);
     setCut(false);
@@ -279,41 +283,11 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
     setCut(false);
     update((was) => ({ ...was, text }));
   };
-  /** Reads the images among the files handed in and takes them after those the box holds; the first that cannot come says why. */
-  const attach = (files: readonly File[]) => {
-    if (files.length === 0) return;
-    const images = imageFiles(files);
-    const other = files.find((file) => !images.includes(file));
-    setNote(plainNote(other === undefined ? undefined : NOT_IMAGE(other.name)));
-    if (images.length === 0) return;
-    setReading((count) => count + 1);
-    readFiles(images)
-      .then((read) => {
-        // Taken after whatever the draft holds as the read lands, so neither a
-        // read that landed first nor a chip taken off meanwhile is undone.
-        let refusal = read.refusal;
-        update((was) => {
-          const taken = withFiles(was.attachments, read, CHAT_BOUNDS.MAX_POST_PICTURES);
-          refusal = taken.refusal;
-          return { ...was, attachments: taken.attachments };
-        });
-        const said = refusal;
-        if (said !== undefined) setNote((was) => was ?? plainNote(said));
-      })
-      .finally(() => setReading((count) => count - 1));
-  };
-  const remove = (index: number) => {
-    setNote(undefined);
-    update((was) => ({ ...was, attachments: was.attachments.filter((_, at) => at !== index) }));
-  };
   return {
     draft,
     setDraft,
-    attachments,
-    attach,
-    remove,
+    files,
     sends,
-    reading: reading > 0,
     empty,
     // Note that a note of the box's own, a refusal or a dictation's, is said before the cut paste's.
     note: note ?? (cut ? plainNote(pasteCutWords(CHAT_BOUNDS.MAX_TEXT_CHARS)) : undefined),
@@ -441,21 +415,10 @@ function EditorChatComposer({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
-  const fileDrop = useFileDrop((files) => attach(Array.from(files)));
-  const {
-    draft,
-    setDraft,
-    attachments,
-    attach,
-    remove,
-    sends,
-    reading,
-    empty,
-    note,
-    setNote,
-    cutPaste,
-    send,
-  } = useChatSend(chatPlace(channelId, replyTo), onSend);
+  const { draft, setDraft, files, sends, empty, note, setNote, cutPaste, send } = useChatSend(
+    chatPlace(channelId, replyTo),
+    onSend,
+  );
   const dictation = useDictation({
     editor,
     keywords,
@@ -506,16 +469,16 @@ function EditorChatComposer({
       ref={card}
       className="agent-composer chat-composer"
       data-compact={String(compact === true)}
-      {...fileDrop.target}
+      {...files.drop.target}
     >
       <PromptInput
-        dropping={fileDrop.dropping}
+        dropping={files.drop.dropping}
         onSubmit={() => {
           refocus.current = card.current?.contains(document.activeElement) === true;
           send();
         }}
       >
-        <AttachedFileChips files={attachmentChips(attachments)} onRemove={remove} />
+        <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
         <ComposerField
           module={module}
           editor={editor}
@@ -539,13 +502,7 @@ function EditorChatComposer({
           onEnter={() => {
             if (room.current !== null) submitPromptInput(room.current);
           }}
-          onPasteFiles={(files) => {
-            // Only images are taken from the clipboard; text pastes as it always does.
-            const pasted = imageFiles(files);
-            if (pasted.length === 0) return false;
-            attach(pasted);
-            return true;
-          }}
+          onPasteFiles={files.paste}
           onPasteCut={cutPaste}
           onTrigger={() => undefined}
           chip={() => null}
@@ -576,8 +533,8 @@ function EditorChatComposer({
           </PromptInputFooter>
         ) : (
           <ComposerFoot
-            empty={empty || reading}
-            lead={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={attach} />}
+            empty={empty || files.reading}
+            lead={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={files.attach} />}
           >
             <LengthCounter length={draft.length} limit={CHAT_BOUNDS.MAX_TEXT_CHARS} />
             <DictateButton dictation={dictation} disabled={module === undefined} />
