@@ -40,6 +40,7 @@ import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -367,6 +368,25 @@ test("a page is found by its name, above every setting the query finds", () => {
     "Settings · Keyboard shortcuts",
   ]);
   type("agents");
+  assert.equal(rows()[0], "Agents");
+});
+
+test("a key typed in ⌘K stands in its field at once, and the rows are ranked for it in a render of their own after", async () => {
+  openPalette();
+  chooseFilter("Settings");
+  const before = rows();
+
+  // Note that the key goes in outside `act`, which would draw the ranking's own render with it, so the paint the key gets is the one read.
+  const input = field();
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  flushSync(() => {
+    setValue?.call(input, "agents");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const painted = { typed: field().value, rows: rows() };
+  await act(() => Promise.resolve());
+
+  assert.deepEqual(painted, { typed: "agents", rows: before });
   assert.equal(rows()[0], "Agents");
 });
 
