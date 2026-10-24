@@ -4,7 +4,6 @@ import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
-import type { TasksPageParams } from "@luke/features/tasks-view";
 import type {
   AgentEndToast,
   AgentPlace,
@@ -24,7 +23,7 @@ import {
 } from "@luke/host/client";
 import { type EventPushName, PUSH, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
-import { callStaged, fixturePage } from "@luke/host/fixture-stage";
+import { callStaged } from "@luke/host/fixture-stage";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -493,13 +492,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // macOS asks only once, and a switch turned on later would otherwise
       // leave its first notification to ask, and be refused.
       if (runMode.observesProviders) askForNotifications();
-      // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone;
-      // a fixture run's, which reads no service, are its staged page.
-      const readPage = config.launch.fixtureMode
-        ? (page: TasksPageParams) => Effect.succeed(fixturePage(page))
-        : operator.host.tasksPage;
+      // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone.
       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
-        run(pageResponse(request.url, readPage)),
+        run(pageResponse(request.url, operator.host.tasksPage)),
       );
       // A development build writes its windows' errors where the run's own
       // lines go, from before the first window opens, and offers their

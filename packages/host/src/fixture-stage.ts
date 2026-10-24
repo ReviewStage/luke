@@ -14,6 +14,7 @@
 
 import { PAGE_SHOWER, type PageVersion } from "@luke/features/page-wire";
 import {
+  IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   type TasksPageAnswer,
   type TasksPageParams,
@@ -23,36 +24,57 @@ import { AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar"
 import { IDLE_VOICE_VIEW, type VoiceCallTranscript } from "@luke/voice/voice-view";
 import { type AppState, RUN_PROFILE } from "./app-state.js";
 
-/** The fixture's task, its coding agent, and the page that agent showed on it, by the ids every window names them by. */
+/** The fixture's workspace, its task, the task's coding agent, and the page that agent showed on it, by the ids every window names them by. */
 export const FIXTURE_IDS = {
+  WORKSPACE: "workspace-personal",
   TASK: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   AGENT: "4c8e2a6b-1d3f-4e5a-9b7c-2d4e6f8a0b1c",
   PAGE: "7a1c3e5b-9d2f-4a6c-8e0b-5f7a9c1e3b5d",
 } as const;
 
-/** The page the agent showed on the task: the invite funnel it measured, as one self-contained document. */
-export const FIXTURE_PAGE: PageVersion = {
-  id: FIXTURE_IDS.PAGE,
-  title: "Invite funnel",
-  version: 2,
-  at: Date.parse("2026-10-07T16:51:00Z"),
-  shownBy: { kind: PAGE_SHOWER.AGENT, agentId: FIXTURE_IDS.AGENT },
-  html: [
-    "<!doctype html><html><head><meta charset='utf-8'><title>Invite funnel</title><style>",
-    "body{font:14px/1.5 system-ui,sans-serif;margin:24px;color:#1f2328}",
-    "table{border-collapse:collapse;margin-top:12px}td,th{padding:6px 12px;border-bottom:1px solid #d0d7de;text-align:left}",
-    "td:last-child{text-align:right;font-variant-numeric:tabular-nums}",
-    "</style></head><body>",
-    "<h1>Invite funnel</h1>",
-    "<p>Invites sent in the staging workspace over seven days, and how far each got.</p>",
-    "<table><tr><th>Step</th><th>Invites</th></tr>",
-    "<tr><td>Sent</td><td>120</td></tr>",
-    "<tr><td>Opened</td><td>94</td></tr>",
-    "<tr><td>Accepted</td><td>71</td></tr>",
-    "<tr><td>Expired</td><td>9</td></tr></table>",
-    "</body></html>",
-  ].join(""),
-};
+/** The fixture's task by name, which the panel's list and the call's card both say. */
+export const FIXTURE_TASK_NAME = "Teammate invitations";
+
+/** One version of the funnel page: the steps it counts, in a self-contained document. */
+function funnelPage(version: number, at: string, steps: readonly (readonly [string, number])[]) {
+  const rows = steps.map(([step, invites]) => `<tr><td>${step}</td><td>${invites}</td></tr>`);
+  return {
+    id: FIXTURE_IDS.PAGE,
+    title: "Invite funnel",
+    version,
+    at: Date.parse(at),
+    shownBy: { kind: PAGE_SHOWER.AGENT, agentId: FIXTURE_IDS.AGENT },
+    html: [
+      "<!doctype html><html><head><meta charset='utf-8'><title>Invite funnel</title><style>",
+      "body{font:14px/1.5 system-ui,sans-serif;margin:24px;color:#1f2328}",
+      "table{border-collapse:collapse;margin-top:12px}td,th{padding:6px 12px;border-bottom:1px solid #d0d7de;text-align:left}",
+      "td:last-child{text-align:right;font-variant-numeric:tabular-nums}",
+      "</style></head><body>",
+      "<h1>Invite funnel</h1>",
+      "<p>Invites sent in the staging workspace over seven days, and how far each got.</p>",
+      "<table><tr><th>Step</th><th>Invites</th></tr>",
+      ...rows,
+      "</table></body></html>",
+    ].join(""),
+  } satisfies PageVersion;
+}
+
+/** The page the agent showed on the task, as it first showed it. */
+const FIXTURE_PAGE_FIRST = funnelPage(1, "2026-10-07T16:47:00Z", [
+  ["Sent", 120],
+  ["Opened", 94],
+  ["Accepted", 71],
+]);
+
+/** The page's newest version, as the task's pages list it, which counts the invites that expired too. */
+export const FIXTURE_PAGE: PageVersion = funnelPage(2, "2026-10-07T16:51:00Z", [
+  ["Sent", 120],
+  ["Opened", 94],
+  ["Accepted", 71],
+  ["Expired", 9],
+]);
+
+const FIXTURE_PAGE_VERSIONS: readonly PageVersion[] = [FIXTURE_PAGE_FIRST, FIXTURE_PAGE];
 
 /** The call each call profile stages into the agent: Luke's avatar down, or standing with its tile up. */
 const STAGED_AVATARS: ReadonlyMap<string, AvatarState> = new Map([
@@ -95,14 +117,14 @@ export function callStaged(launch: {
 }
 
 /**
- * The voice slice and the call's transcript a fixture run opens with: a call
- * standing into the fixture's agent, Luke listening, under a call profile;
- * none under any other, nor in a live run.
+ * The voice slice, the call's transcript, and the call's task a fixture run
+ * opens with: a call standing into the fixture's agent, Luke listening,
+ * under a call profile; none under any other, nor in a live run.
  */
-export function stagedVoice(launch: {
+export function stagedCallState(launch: {
   readonly profile: string;
   readonly fixtureMode: boolean;
-}): Pick<AppState, "voice" | "callTranscript"> | undefined {
+}): Pick<AppState, "voice" | "callTranscript" | "tasks"> | undefined {
   const avatar = STAGED_AVATARS.get(launch.profile);
   if (!launch.fixtureMode || avatar === undefined) return undefined;
   return {
@@ -116,12 +138,27 @@ export function stagedVoice(launch: {
       avatar,
     },
     callTranscript: STAGED_CALL_TRANSCRIPT,
+    // The call's task, which the floating call window's card names, as it reads no fixture of the panel's.
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      tasks: [
+        {
+          id: FIXTURE_IDS.TASK,
+          workspaceId: FIXTURE_IDS.WORKSPACE,
+          name: FIXTURE_TASK_NAME,
+          createdAt: 1,
+          updatedAt: 2,
+          repository: "ada/relay",
+        },
+      ],
+    },
   };
 }
 
-/** The fixture's page as a page frame reads it, by its id and version; that the service did not answer for any other. */
+/** One version of the fixture's page as a page frame and its source read it, by its id and version; that the service did not answer for any other. */
 export function fixturePage(page: TasksPageParams): TasksPageAnswer {
-  return page.pageId === FIXTURE_PAGE.id && page.version === FIXTURE_PAGE.version
-    ? { page: FIXTURE_PAGE }
-    : { failure: TASK_CALL_FAILURE.UNANSWERED };
+  const version = FIXTURE_PAGE_VERSIONS.find(
+    (each) => each.id === page.pageId && each.version === page.version,
+  );
+  return version === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page: version };
 }

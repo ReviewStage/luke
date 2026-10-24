@@ -16,7 +16,7 @@ import {
   type AppWindowFacts,
   NO_ACCESS,
 } from "../app-state.js";
-import { stagedVoice } from "../fixture-stage.js";
+import { stagedCallState } from "../fixture-stage.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -233,7 +233,7 @@ export function initialAppState(
 ): Omit<AppState, "version"> {
   const { launch, runMode } = config;
   // A call profile's fixture run opens on its staged call, as no voice window reports one.
-  const staged = stagedVoice(launch);
+  const staged = stagedCallState(launch);
   return {
     run: {
       profile: launch.profile,
@@ -252,7 +252,7 @@ export function initialAppState(
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     voice: staged?.voice ?? { avatar: AVATAR_OFF },
-    tasks: IDLE_TASKS_VIEW,
+    tasks: staged?.tasks ?? IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [], chat: [] },
     macCommands: { asks: [] },
