@@ -919,7 +919,7 @@ test("grouped by assignee, your tasks come first, then each teammate's by name, 
     ],
   );
   const headers = sidebar.querySelectorAll(
-    `${TASK_LIST} .luke-group-header-head:has(button[aria-expanded])`,
+    `${TASK_LIST} .luke-group-header-head:has(> .luke-group-header-heading button[aria-expanded])`,
   );
   assert.equal(
     headers[3]?.querySelector('.actor-mark[data-kind="unassigned"]') === null,

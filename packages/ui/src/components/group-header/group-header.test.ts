@@ -129,7 +129,12 @@ test("an action beside the fold is pressed without folding the group", () => {
 
 test("a head's actions wait for the pointer unless the head keeps them standing", () => {
   const shown = (extra: object) =>
-    render(group(undefined, { actions: createElement("button", null, "View options"), ...extra }))
+    render(
+      group(undefined, {
+        actions: createElement("button", { type: "button" }, "View options"),
+        ...extra,
+      }),
+    )
       .querySelector(".luke-group-header-actions")
       ?.getAttribute("data-shown");
 
@@ -142,7 +147,11 @@ test("a head that offers a search unfolds it over the label while the actions be
   let presses = 0;
   const container = render(
     group(undefined, {
-      actions: createElement("button", { onClick: () => (presses += 1) }, "View options"),
+      actions: createElement(
+        "button",
+        { type: "button", onClick: () => (presses += 1) },
+        "View options",
+      ),
       search: { label: "Search tasks", value: "", onChange: (value: string) => typed.push(value) },
     }),
   );
